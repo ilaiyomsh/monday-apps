@@ -1,0 +1,82 @@
+{
+	"id": "3f050954-3f91-472a-938f-d4abd8e7956f",
+	"acceptMappedClaims": null,
+	"accessTokenAcceptedVersion": 2,
+	"addIns": [],
+	"allowPublicClient": null,
+	"appId": "536344bf-d95e-4101-916b-e31b096b269b",
+	"appRoles": [],
+	"oauth2AllowUrlPathMatching": false,
+	"createdDateTime": "2026-04-27T15:42:14Z",
+	"description": null,
+	"certification": null,
+	"disabledByMicrosoftStatus": null,
+	"groupMembershipClaims": null,
+	"identifierUris": [],
+	"informationalUrls": {
+		"termsOfService": null,
+		"support": null,
+		"privacy": null,
+		"marketing": null
+	},
+	"keyCredentials": [],
+	"knownClientApplications": [],
+	"logoUrl": null,
+	"logoutUrl": null,
+	"name": "monday calendar sync — Outlook",
+	"notes": null,
+	"oauth2AllowIdTokenImplicitFlow": false,
+	"oauth2AllowImplicitFlow": false,
+	"oauth2Permissions": [],
+	"oauth2RequirePostResponse": false,
+	"optionalClaims": null,
+	"orgRestrictions": [],
+	"parentalControlSettings": {
+		"countriesBlockedForMinors": [],
+		"legalAgeGroupRule": "Allow"
+	},
+	"passwordCredentials": [
+		{
+			"customKeyIdentifier": null,
+			"endDate": "2028-04-26T15:43:17.424Z",
+			"keyId": "10650d1d-3103-41bd-8c5d-e6ae5dfd11aa",
+			"startDate": "2026-04-27T15:43:17.424Z",
+			"value": null,
+			"createdOn": "2026-04-27T15:43:34.2898808Z",
+			"hint": "GEw",
+			"displayName": "monday secret"
+		}
+	],
+	"preAuthorizedApplications": [],
+	"publisherDomain": "ilaitwystco.onmicrosoft.com",
+	"replyUrlsWithType": [
+		{
+			"url": "https://live1-service-27549619-d2f728f4.us.monday.app/oauth/microsoft/callback",
+			"type": "Web"
+		}
+	],
+	"requiredResourceAccess": [
+		{
+			"resourceAppId": "00000003-0000-0000-c000-000000000000",
+			"resourceAccess": [
+				{
+					"id": "465a38f9-76ea-45b9-9f34-9e8b0d4b0b42",
+					"type": "Scope"
+				},
+				{
+					"id": "7427e0e9-2fba-42fe-b0c0-848c9e6a8182",
+					"type": "Scope"
+				},
+				{
+					"id": "e1fe6dd8-ba31-4d61-89e7-88639da4683d",
+					"type": "Scope"
+				}
+			]
+		}
+	],
+	"samlMetadataUrl": null,
+	"signInUrl": null,
+	"signInAudience": "AzureADandPersonalMicrosoftAccount",
+	"tags": [],
+	"tokenEncryptionKeyId": null
+}

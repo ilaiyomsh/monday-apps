@@ -1,0 +1,4624 @@
+{
+  "searchParams": {
+    "query": null,
+    "category": null,
+    "limit": 1000,
+    "includeUsageExamples": false
+  },
+  "totalFound": 912,
+  "showing": 912,
+  "categoriesFound": 7,
+  "tokensByCategory": [
+    {
+      "category": "Motion",
+      "count": 10,
+      "tokens": [
+        {
+          "name": "--motion-productive-short",
+          "value": "70ms",
+          "file": "index.css"
+        },
+        {
+          "name": "--motion-productive-medium",
+          "value": "100ms",
+          "file": "index.css"
+        },
+        {
+          "name": "--motion-productive-long",
+          "value": "150ms",
+          "file": "index.css"
+        },
+        {
+          "name": "--motion-expressive-short",
+          "value": "250ms",
+          "file": "index.css"
+        },
+        {
+          "name": "--motion-expressive-long",
+          "value": "400ms",
+          "file": "index.css"
+        },
+        {
+          "name": "--motion-timing-enter",
+          "value": "cubic-bezier(0, 0, 0.35, 1)",
+          "file": "index.css"
+        },
+        {
+          "name": "--motion-timing-exit",
+          "value": "cubic-bezier(0.4, 0, 1, 1)",
+          "file": "index.css"
+        },
+        {
+          "name": "--motion-timing-transition",
+          "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+          "file": "index.css"
+        },
+        {
+          "name": "--motion-timing-emphasize",
+          "value": "cubic-bezier(0, 0, 0.2, 1.4)",
+          "file": "index.css"
+        },
+        {
+          "name": "--expand-animation-timing",
+          "value": "var(--motion-timing-enter)",
+          "file": "index.css"
+        }
+      ]
+    },
+    {
+      "category": "Spacing",
+      "count": 12,
+      "tokens": [
+        {
+          "name": "--space-2",
+          "value": "2px",
+          "file": "index.css"
+        },
+        {
+          "name": "--space-4",
+          "value": "4px",
+          "file": "index.css"
+        },
+        {
+          "name": "--space-8",
+          "value": "8px",
+          "file": "index.css"
+        },
+        {
+          "name": "--space-12",
+          "value": "12px",
+          "file": "index.css"
+        },
+        {
+          "name": "--space-16",
+          "value": "16px",
+          "file": "index.css"
+        },
+        {
+          "name": "--space-20",
+          "value": "20px",
+          "file": "index.css"
+        },
+        {
+          "name": "--space-24",
+          "value": "24px",
+          "file": "index.css"
+        },
+        {
+          "name": "--space-32",
+          "value": "32px",
+          "file": "index.css"
+        },
+        {
+          "name": "--space-40",
+          "value": "40px",
+          "file": "index.css"
+        },
+        {
+          "name": "--space-48",
+          "value": "48px",
+          "file": "index.css"
+        },
+        {
+          "name": "--space-64",
+          "value": "64px",
+          "file": "index.css"
+        },
+        {
+          "name": "--space-80",
+          "value": "80px",
+          "file": "index.css"
+        }
+      ]
+    },
+    {
+      "category": "Otherww",
+      "count": 5,
+      "tokens": [
+        {
+          "name": "--border-width",
+          "value": "1px",
+          "file": "index.css"
+        },
+        {
+          "name": "--border-style",
+          "value": "solid",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-component-opacity",
+          "value": "0.38",
+          "file": "index.css"
+        },
+        {
+          "name": "--title-font-family",
+          "value": "Poppins, Roboto, Noto Sans Hebrew, Noto Kufi Arabic, Noto Sans JP, sans-serif",
+          "file": "index.css"
+        },
+        {
+          "name": "--h1-font-family",
+          "value": "var(--title-font-family)",
+          "file": "index.css"
+        }
+      ]
+    },
+    {
+      "category": "Border Radius",
+      "count": 3,
+      "tokens": [
+        {
+          "name": "--border-radius-small",
+          "value": "4px",
+          "file": "index.css"
+        },
+        {
+          "name": "--border-radius-medium",
+          "value": "8px",
+          "file": "index.css"
+        },
+        {
+          "name": "--border-radius-big",
+          "value": "16px",
+          "file": "index.css"
+        }
+      ]
+    },
+    {
+      "category": "Typography",
+      "count": 73,
+      "tokens": [
+        {
+          "name": "--font-family",
+          "value": "Figtree, Roboto, Noto Sans Hebrew, Noto Kufi Arabic, Noto Sans JP, sans-serif",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-smoothing-webkit",
+          "value": "antialiased",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-smoothing-moz",
+          "value": "grayscale",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-weight-very-light",
+          "value": "200",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-weight-light",
+          "value": "300",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-weight-normal",
+          "value": "400",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-weight-bold",
+          "value": "500",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-10",
+          "value": "18px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-20",
+          "value": "24px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-30",
+          "value": "24px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-40",
+          "value": "24px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-50",
+          "value": "32px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-60",
+          "value": "42px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-10",
+          "value": "14px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-20",
+          "value": "14px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-30",
+          "value": "16px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-40",
+          "value": "18px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-50",
+          "value": "24px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-60",
+          "value": "30px",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-h1",
+          "value": "var(--font-size-60)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-h2",
+          "value": "var(--font-size-50)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-h3",
+          "value": "var(--font-size-50)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-h4",
+          "value": "var(--font-size-40)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-h5",
+          "value": "var(--font-size-30)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-general-label",
+          "value": "var(--font-size-20)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-paragraph",
+          "value": "var(--font-size-30)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-size-subtext",
+          "value": "var(--font-size-10)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-h1",
+          "value": "var(--font-line-height-60)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-h2",
+          "value": "var(--font-line-height-50)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-h3",
+          "value": "var(--font-line-height-50)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-h4",
+          "value": "var(--font-line-height-40)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-h5",
+          "value": "var(--font-line-height-30)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-general-label",
+          "value": "var(--font-line-height-20)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-paragraph",
+          "value": "var(--font-line-height-30)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-line-height-subtext",
+          "value": "var(--font-line-height-10)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h1",
+          "value": "var(--font-weight-bold) var(--font-size-h1) / var(--font-line-height-h1) var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h2",
+          "value": "var(--font-weight-bold) var(--font-size-h2) / var(--font-line-height-h2) var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h3",
+          "value": "var(--font-weight-light) var(--font-size-h3) / var(--font-line-height-h3) var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h4",
+          "value": "var(--font-weight-bold) var(--font-size-h4) / var(--font-line-height-h4) var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h5",
+          "value": "var(--font-weight-bold) var(--font-size-h5) / var(--font-line-height-h5) var(--font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-general-label",
+          "value": "var(--font-weight-normal) var(--font-size-general-label) / var(--font-line-height-general-label)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-paragraph",
+          "value": "var(--font-weight-normal) var(--font-size-paragraph) / var(--font-line-height-paragraph)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-subtext",
+          "value": "var(--font-weight-normal) var(--font-size-subtext) / var(--font-line-height-subtext)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h1-bold",
+          "value": "700 32px/40px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h1-medium",
+          "value": "600 32px/40px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h1-normal",
+          "value": "500 32px/40px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h1-light",
+          "value": "300 32px/40px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h2-bold",
+          "value": "700 24px/30px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h2-medium",
+          "value": "600 24px/30px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h2-normal",
+          "value": "500 24px/30px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h2-light",
+          "value": "300 24px/30px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h3-bold",
+          "value": "700 18px/24px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h3-medium",
+          "value": "600 18px/24px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h3-normal",
+          "value": "500 18px/24px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-h3-light",
+          "value": "300 18px/24px var(--title-font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-text1-bold",
+          "value": "700 16px/22px var(--font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-text1-medium",
+          "value": "600 16px/22px var(--font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-text1-normal",
+          "value": "400 16px/22px var(--font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-text2-bold",
+          "value": "700 14px/20px var(--font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-text2-medium",
+          "value": "600 14px/20px var(--font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-text2-normal",
+          "value": "400 14px/20px var(--font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-text3-bold",
+          "value": "700 12px/16px var(--font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-text3-medium",
+          "value": "600 12px/16px var(--font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--font-text3-normal",
+          "value": "400 12px/16px var(--font-family)",
+          "file": "index.css"
+        },
+        {
+          "name": "--letter-spacing-h1-bold",
+          "value": "-0.5px",
+          "file": "index.css"
+        },
+        {
+          "name": "--letter-spacing-h1-normal",
+          "value": "-0.5px",
+          "file": "index.css"
+        },
+        {
+          "name": "--letter-spacing-h1-light",
+          "value": "-0.5px",
+          "file": "index.css"
+        },
+        {
+          "name": "--letter-spacing-h2-bold",
+          "value": "-0.1px",
+          "file": "index.css"
+        },
+        {
+          "name": "--letter-spacing-h2-normal",
+          "value": "-0.1px",
+          "file": "index.css"
+        },
+        {
+          "name": "--letter-spacing-h2-light",
+          "value": "-0.1px",
+          "file": "index.css"
+        },
+        {
+          "name": "--letter-spacing-h3-bold",
+          "value": "-0.1px",
+          "file": "index.css"
+        },
+        {
+          "name": "--letter-spacing-h3-normal",
+          "value": "-0.1px",
+          "file": "index.css"
+        },
+        {
+          "name": "--letter-spacing-h3-light",
+          "value": "-0.1px",
+          "file": "index.css"
+        }
+      ]
+    },
+    {
+      "category": "Colors",
+      "count": 789,
+      "tokens": [
+        {
+          "name": "--primary-color",
+          "value": "#0073ea",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-hover-color",
+          "value": "#0060b9",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-color",
+          "value": "#cce5ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-hover-color",
+          "value": "#aed4fc",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-highlighted-color",
+          "value": "#f0f7ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-surface-color",
+          "value": "#eceff8",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-text-color",
+          "value": "#323338",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-text-color",
+          "value": "#676879",
+          "file": "index.css"
+        },
+        {
+          "name": "--text-color-on-inverted",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--text-color-on-primary",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-text-color",
+          "value": "rgba(50, 51, 56, var(--disabled-component-opacity))",
+          "file": "index.css"
+        },
+        {
+          "name": "--inverted-color-background",
+          "value": "#323338",
+          "file": "index.css"
+        },
+        {
+          "name": "--fixed-dark-color",
+          "value": "#323338",
+          "file": "index.css"
+        },
+        {
+          "name": "--fixed-light-color",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-color",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-hover-color",
+          "value": "rgba(103, 104, 121, 0.1)",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-background-color",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--allgrey-background-color",
+          "value": "#f6f7fb",
+          "file": "index.css"
+        },
+        {
+          "name": "--backdrop-color",
+          "value": "rgba(41, 47, 76, 0.7)",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-border-color",
+          "value": "#c3c6d4",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-background-color",
+          "value": "#e7e9ef",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-background-hover-color",
+          "value": "#d8d9e0",
+          "file": "index.css"
+        },
+        {
+          "name": "--layout-border-color",
+          "value": "#d0d4e4",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-color",
+          "value": "#676879",
+          "file": "index.css"
+        },
+        {
+          "name": "--icon-color",
+          "value": "#676879",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-background-color",
+          "value": "#ecedf5",
+          "file": "index.css"
+        },
+        {
+          "name": "--link-color",
+          "value": "#1f76c2",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-color",
+          "value": "#0073ea",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-hover-color",
+          "value": "#0060b9",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-selected-color",
+          "value": "#cce5ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-selected-hover-color",
+          "value": "#aed4fc",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color",
+          "value": "#00854d",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-hover",
+          "value": "#007038",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-selected",
+          "value": "#bbdbc9",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-selected-hover",
+          "value": "#b5cec0",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color",
+          "value": "#d83a52",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-hover",
+          "value": "#b63546",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-selected",
+          "value": "#f4c3cb",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-selected-hover",
+          "value": "#ecb7bf",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color",
+          "value": "#ffcb00",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-hover",
+          "value": "#eaaa15",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-selected",
+          "value": "#fceba1",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-selected-hover",
+          "value": "#f2d973",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-highlight_blue",
+          "value": "#cce5ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-basic_blue",
+          "value": "#0073ea",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_blue",
+          "value": "#0060b9",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bazooka",
+          "value": "#f65f7c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-snow_white",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-riverstone_gray",
+          "value": "#f6f7fb",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-ui_grey",
+          "value": "#dcdfec",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-wolf_gray",
+          "value": "#c3c6d4",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-asphalt",
+          "value": "#676879",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-mud_black",
+          "value": "#323338",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-black",
+          "value": "#000000",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-success",
+          "value": "#00854d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-success-hover",
+          "value": "#007038",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-success-highlight",
+          "value": "#bbdbc9",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-error",
+          "value": "#d83a52",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-error-hover",
+          "value": "#b63546",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-error-highlight",
+          "value": "#f4c3cb",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-link_color",
+          "value": "#1f76c2",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-surface",
+          "value": "#292f4c",
+          "file": "index.css"
+        },
+        {
+          "name": "--grey-background-color",
+          "value": "#f6f7fb",
+          "file": "index.css"
+        },
+        {
+          "name": "--text-color-on-brand",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-grass_green",
+          "value": "#037f4c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-grass_green-hover",
+          "value": "#116846",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-grass_green-selected",
+          "value": "#81bfa5",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green",
+          "value": "#00c875",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-hover",
+          "value": "#0f9b63",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-selected",
+          "value": "#80e3ba",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-selected-with-opacity",
+          "value": "rgba(128, 227, 186, 0.6)",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-green",
+          "value": "#9cd326",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-green-hover",
+          "value": "#7ca32b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-green-selected",
+          "value": "#cde992",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-saladish",
+          "value": "#cab641",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-saladish-hover",
+          "value": "#9d8f3e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-saladish-selected",
+          "value": "#e4daa0",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk",
+          "value": "#ffcb00",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-hover",
+          "value": "#eaaa15",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-selected",
+          "value": "#ffe580",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-rgb",
+          "value": "255, 213, 51",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-working_orange",
+          "value": "#fdab3d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-working_orange-hover",
+          "value": "#c0873c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-working_orange-selected",
+          "value": "#fed59e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-orange",
+          "value": "#ff6d3b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-orange-hover",
+          "value": "#c25531",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-orange-selected",
+          "value": "#ffb196",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-peach",
+          "value": "#ffadad",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-peach-hover",
+          "value": "#c2888a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-peach-selected",
+          "value": "#ffd6d6",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset",
+          "value": "#ff7575",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-hover",
+          "value": "#c26163",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-selected",
+          "value": "#ffbaba",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-selected-with-opacity",
+          "value": "rgba(255, 186, 186, 0.6)",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-stuck-red",
+          "value": "#df2f4a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-stuck-red-hover",
+          "value": "#ad3f51",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-stuck-red-selected",
+          "value": "#f0a1ad",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-red",
+          "value": "#bb3354",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-red-hover",
+          "value": "#92334c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-red-selected",
+          "value": "#dd99a9",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sofia_pink",
+          "value": "#e50073",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sofia_pink-hover",
+          "value": "#c20062",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sofia_pink-selected",
+          "value": "#ff8ac4",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lipstick",
+          "value": "#ff5ac4",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lipstick-hover",
+          "value": "#c24e9a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lipstick-selected",
+          "value": "#fface1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bubble",
+          "value": "#faa1f1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bubble-hover",
+          "value": "#be80ba",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bubble-selected",
+          "value": "#fcd0f8",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-purple",
+          "value": "#9d50dd",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-purple-hover",
+          "value": "#7d45b0",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-purple-selected",
+          "value": "#d0aeed",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_purple",
+          "value": "#784bd1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_purple-hover",
+          "value": "#6344a3",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_purple-selected",
+          "value": "#bba5e8",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-berry",
+          "value": "#7e3b8a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-berry-hover",
+          "value": "#673971",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-berry-selected",
+          "value": "#be9dc4",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo",
+          "value": "#401694",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo-hover",
+          "value": "#3c1f78",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo-selected",
+          "value": "#a08bc9",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-indigo",
+          "value": "#5559df",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-indigo-hover",
+          "value": "#4b4ead",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-indigo-selected",
+          "value": "#aaacef",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy",
+          "value": "#225091",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy-hover",
+          "value": "#274776",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy-selected",
+          "value": "#90a7c8",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-blue",
+          "value": "#579bfc",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-blue-hover",
+          "value": "#4c7cc1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-blue-selected",
+          "value": "#abcdfd",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-blue",
+          "value": "#007eb5",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-blue-hover",
+          "value": "#0f6d97",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-blue-selected",
+          "value": "#80c2df",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-aquamarine",
+          "value": "#4eccc6",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-aquamarine-hover",
+          "value": "#469e9b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-aquamarine-selected",
+          "value": "#a6e5e2",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-chili-blue",
+          "value": "#66ccff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-chili-blue-hover",
+          "value": "#569ec3",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-chili-blue-selected",
+          "value": "#b2e5ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-river",
+          "value": "#74afcc",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-river-hover",
+          "value": "#588095",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-river-selected",
+          "value": "#b3d0de",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-winter",
+          "value": "#9aadbd",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-winter-hover",
+          "value": "#7b8895",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-winter-selected",
+          "value": "#ccd6de",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-explosive",
+          "value": "#c4c4c4",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-explosive-hover",
+          "value": "#98999a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-explosive-selected",
+          "value": "#e1e1e1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-american_gray",
+          "value": "#757575",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-american_gray-hover",
+          "value": "#69696a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-american_gray-selected",
+          "value": "#bfbfbf",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish",
+          "value": "#333333",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish-hover",
+          "value": "#222222",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish-selected",
+          "value": "#999999",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brown",
+          "value": "#7f5347",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brown-hover",
+          "value": "#684943",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brown-selected",
+          "value": "#bfa9a3",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-orchid",
+          "value": "#e484bd",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-orchid-hover",
+          "value": "#ae5d8d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-orchid-selected",
+          "value": "#ecbad7",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-tan",
+          "value": "#bca58a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-tan-hover",
+          "value": "#8a7862",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-tan-selected",
+          "value": "#d6cabc",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sky",
+          "value": "#a1e3f6",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sky-hover",
+          "value": "#81b6c5",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sky-selected",
+          "value": "#d0f1fa",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-coffee",
+          "value": "#cd9282",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-coffee-hover",
+          "value": "#976758",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-coffee-selected",
+          "value": "#dec0b7",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-royal",
+          "value": "#216edf",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-royal-hover",
+          "value": "#225eb7",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-royal-selected",
+          "value": "#95bbf2",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal",
+          "value": "#175a63",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal-hover",
+          "value": "#12484f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal-selected",
+          "value": "#8bacb1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lavender",
+          "value": "#bda8f9",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lavender-hover",
+          "value": "#9786c7",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lavender-selected",
+          "value": "#ded4fc",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-steel",
+          "value": "#a9bee8",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-steel-hover",
+          "value": "#8798ba",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-steel-selected",
+          "value": "#d4dff4",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lilac",
+          "value": "#9d99b9",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lilac-hover",
+          "value": "#7e7a94",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lilac-selected",
+          "value": "#ceccdc",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan",
+          "value": "#563e3e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan-hover",
+          "value": "#453232",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan-selected",
+          "value": "#ab9f9f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_marble",
+          "value": "#f1f1f1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-marble",
+          "value": "#f7f7f7",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-gainsboro",
+          "value": "#e1e1e1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-extra_light_gray",
+          "value": "#edeef0",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-glitter",
+          "value": "#d9f0ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-ultra_light_gray",
+          "value": "#ebebeb",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-very_light_gray",
+          "value": "#a1a1a1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-jaco_gray",
+          "value": "#9699a6",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-storm_gray",
+          "value": "#6b6d77",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-trolley-grey",
+          "value": "#757575",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-basic_light_blue",
+          "value": "#c7e6fa",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-light_blue",
+          "value": "#61caf7",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-turquoise",
+          "value": "#66ccff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-aqua",
+          "value": "#00d1d1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-live_blue",
+          "value": "#009aff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-jeans",
+          "value": "#597bfc",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-burned_eggplant",
+          "value": "#181d37",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-light-pink",
+          "value": "#ff5ac4",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-pink",
+          "value": "#ff007f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_red",
+          "value": "#bb3354",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-yellow",
+          "value": "#ffcb00",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-mustered",
+          "value": "#cab641",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-orange",
+          "value": "#fdab3d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lime-green",
+          "value": "#9cd326",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-jade",
+          "value": "#03c875",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-green-haze",
+          "value": "#00a359",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-grass-green",
+          "value": "#037f4c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-amethyst",
+          "value": "#9d50dd",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-purple",
+          "value": "#784bd1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blue_links",
+          "value": "#007eb5",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blue-links",
+          "value": "#007eb5",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-private",
+          "value": "#f65f7c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-public",
+          "value": "#009aff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-board_views_grey",
+          "value": "#6e6f8f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-board_views_grey_hover",
+          "value": "#b2b3d0",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-board_views_blue",
+          "value": "#1c1f3b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-board_views_blue_secondary",
+          "value": "#363a52",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-border_light_gray",
+          "value": "#f5f6f8",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brand-blue",
+          "value": "#00a9ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brand-charcoal",
+          "value": "#2b2c5c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brand-gold",
+          "value": "#ffcc00",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brand-green",
+          "value": "#11dd80",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brand-iris",
+          "value": "#595ad4",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brand-light-blue",
+          "value": "#00cff4",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brand-malachite",
+          "value": "#00cd6f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brand-purple",
+          "value": "#a358d0",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brand-red",
+          "value": "#f74875",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-deadline_upcoming_indication",
+          "value": "#5d6387",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-default_group_color",
+          "value": "#579bfc",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-form_btn_hover",
+          "value": "#0083d9",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-form_purple",
+          "value": "#575c96",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-highlight",
+          "value": "#dff0ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-green_shadow",
+          "value": "#00c875",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-green-shadow",
+          "value": "#00c875",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-red_shadow",
+          "value": "#df2f4a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-red-shadow",
+          "value": "#df2f4a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pulse_bg",
+          "value": "#f0f0f0",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pulse_text_color",
+          "value": "#333333",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-placholder_gray",
+          "value": "#d8d8d8",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-placeholder_light_gray",
+          "value": "#efefef",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-excel-green",
+          "value": "#207245",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-media-blue",
+          "value": "#2ea2e9",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pdf-red",
+          "value": "#bb0706",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-ppt-orange",
+          "value": "#d64e2a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-word-blue",
+          "value": "#2a5699",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-zip-orange",
+          "value": "#e4901c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-like_red",
+          "value": "#fb275d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-scrollbar_gray",
+          "value": "#b2b2b2",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-timeline_grid_blue",
+          "value": "#454662",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-timeline_blue",
+          "value": "#1c1f3b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-highlight_blue-rgb",
+          "value": "204, 229, 255",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-snow_white-with-opacity",
+          "value": "rgba(255, 255, 255, 0.4)",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-wolf_gray-with-opacity",
+          "value": "rgba(195, 198, 212, 0.1)",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-asphalt-with-opacity",
+          "value": "rgba(103, 104, 121, 0.1)",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-on-secondary-color",
+          "value": "#0073ea",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-hover-on-secondary-color",
+          "value": "#0060b9",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-color-rgb",
+          "value": "204, 229, 255",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-on-secondary-color",
+          "value": "#cce5ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-text-on-secondary-color",
+          "value": "#323338",
+          "file": "index.css"
+        },
+        {
+          "name": "--text-color-on-primary-with-opacity",
+          "value": "rgba(255, 255, 255, 0.4)",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-text-on-secondary-color",
+          "value": "#676879",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-color-with-opacity",
+          "value": "rgba(103, 104, 121, 0.1)",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-on-secondary-color",
+          "value": "#676879",
+          "file": "index.css"
+        },
+        {
+          "name": "--icon-on-secondary-color",
+          "value": "#676879",
+          "file": "index.css"
+        },
+        {
+          "name": "--link-on-secondary-color",
+          "value": "#1f76c2",
+          "file": "index.css"
+        },
+        {
+          "name": "--label-background-color",
+          "value": "#cce5ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--label-background-on-secondary-color",
+          "value": "#cce5ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-color-rgb",
+          "value": "255, 255, 255",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-hover-on-secondary-color",
+          "value": "#dcdfec",
+          "file": "index.css"
+        },
+        {
+          "name": "--modal-background-color",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-background-color-rgb",
+          "value": "255, 255, 255",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-background-on-secondary-color",
+          "value": "#ecedf5",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-text-on-secondary-color",
+          "value": "rgba(50, 51, 56, var(--disabled-component-opacity))",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-border-on-secondary-color",
+          "value": "#c3c6d4",
+          "file": "index.css"
+        },
+        {
+          "name": "--layout-border-on-secondary-color",
+          "value": "#d0d4e4",
+          "file": "index.css"
+        },
+        {
+          "name": "--dark-background-color",
+          "value": "#f6f7fb",
+          "file": "index.css"
+        },
+        {
+          "name": "--dark-background-on-secondary-color",
+          "value": "#f6f7fb",
+          "file": "index.css"
+        },
+        {
+          "name": "--dialog-background-color",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-color",
+          "value": "#0073ea",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-hover-color",
+          "value": "#0060b9",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-color",
+          "value": "#133774",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-hover-color",
+          "value": "#0d2e65",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-highlighted-color",
+          "value": "#0d2753",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-surface-color",
+          "value": "#181b34",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-text-color",
+          "value": "#d5d8df",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-text-color",
+          "value": "#9699a6",
+          "file": "index.css"
+        },
+        {
+          "name": "--text-color-on-inverted",
+          "value": "#323338",
+          "file": "index.css"
+        },
+        {
+          "name": "--text-color-on-primary",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-text-color",
+          "value": "rgba(213, 216, 223, var(--disabled-component-opacity))",
+          "file": "index.css"
+        },
+        {
+          "name": "--inverted-color-background",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--fixed-dark-color",
+          "value": "#323338",
+          "file": "index.css"
+        },
+        {
+          "name": "--fixed-light-color",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-color",
+          "value": "#181b34",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-hover-color",
+          "value": "rgba(103, 104, 121, 0.3)",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-background-color",
+          "value": "#30324e",
+          "file": "index.css"
+        },
+        {
+          "name": "--allgrey-background-color",
+          "value": "#30324e",
+          "file": "index.css"
+        },
+        {
+          "name": "--backdrop-color",
+          "value": "rgba(41, 47, 76, 0.7)",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-border-color",
+          "value": "#797e93",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-background-color",
+          "value": "#434660",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-background-hover-color",
+          "value": "#35384d",
+          "file": "index.css"
+        },
+        {
+          "name": "--layout-border-color",
+          "value": "#4b4e69",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-color",
+          "value": "#c3c6d4",
+          "file": "index.css"
+        },
+        {
+          "name": "--icon-color",
+          "value": "#c3c6d4",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-background-color",
+          "value": "#3c3f59",
+          "file": "index.css"
+        },
+        {
+          "name": "--link-color",
+          "value": "#69a7ef",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-color",
+          "value": "#0073ea",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-hover-color",
+          "value": "#0060b9",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-selected-color",
+          "value": "#133774",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-selected-hover-color",
+          "value": "#0d2e65",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color",
+          "value": "#00854d",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-hover",
+          "value": "#007038",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-selected",
+          "value": "#025231",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-selected-hover",
+          "value": "#194733",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color",
+          "value": "#d83a52",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-hover",
+          "value": "#b63546",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-selected",
+          "value": "#642830",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-selected-hover",
+          "value": "#5a2027",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color",
+          "value": "#ffcb00",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-hover",
+          "value": "#eaaa15",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-selected",
+          "value": "#503e02",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-selected-hover",
+          "value": "#402f00",
+          "file": "index.css"
+        },
+        {
+          "name": "--grey-background-color",
+          "value": "#181b34",
+          "file": "index.css"
+        },
+        {
+          "name": "--text-color-on-brand",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-surface",
+          "value": "#292f4c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-grass_green-hover",
+          "value": "#116846",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-grass_green-selected",
+          "value": "#0f4f43",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-hover",
+          "value": "#0f9b63",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-selected",
+          "value": "#0e7358",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-selected-with-opacity",
+          "value": "rgba(14, 115, 88, 0.6)",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-green-hover",
+          "value": "#7ca32b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-green-selected",
+          "value": "#5c7930",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-saladish-hover",
+          "value": "#9d8f3e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-saladish-selected",
+          "value": "#736a3e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-hover",
+          "value": "#c29e11",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-selected",
+          "value": "#8d751e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-rgb",
+          "value": "255, 213, 51",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-working_orange-hover",
+          "value": "#c0873c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-working_orange-selected",
+          "value": "#8c653c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-orange-hover",
+          "value": "#c25531",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-orange-selected",
+          "value": "#8d4134",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-peach-hover",
+          "value": "#c2888a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-peach-selected",
+          "value": "#8d6674",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-hover",
+          "value": "#c26163",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-selected",
+          "value": "#8d4a58",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-selected-with-opacity",
+          "value": "rgba(141, 74, 88, 0.6)",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-stuck-red-hover",
+          "value": "#ad3f51",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-stuck-red-selected",
+          "value": "#7f314b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-red-hover",
+          "value": "#92334c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-red-selected",
+          "value": "#6b2947",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sofia_pink-hover",
+          "value": "#c21e71",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sofia_pink-selected",
+          "value": "#8d1a62",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lipstick-hover",
+          "value": "#c24e9a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lipstick-selected",
+          "value": "#8d3c7f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bubble-hover",
+          "value": "#be80ba",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bubble-selected",
+          "value": "#8b6096",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-purple-hover",
+          "value": "#8050ab",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-purple-selected",
+          "value": "#5f3e8b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_purple-hover",
+          "value": "#6344a3",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_purple-selected",
+          "value": "#4a3586",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-berry-hover",
+          "value": "#673971",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-berry-selected",
+          "value": "#4d2d62",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo",
+          "value": "#6129ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo-hover",
+          "value": "#4c18dc",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo-selected",
+          "value": "#3c13ae",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-indigo-hover",
+          "value": "#4b4ead",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-indigo-selected",
+          "value": "#383c8d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy",
+          "value": "#5684c5",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy-hover",
+          "value": "#3468b2",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy-selected",
+          "value": "#24508f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-blue-hover",
+          "value": "#4c7cc1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-blue-selected",
+          "value": "#395d9b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-blue-hover",
+          "value": "#0f6d97",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-blue-selected",
+          "value": "#0e527e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-aquamarine-hover",
+          "value": "#469e9b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-aquamarine-selected",
+          "value": "#357580",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-chili-blue-hover",
+          "value": "#569ec3",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-chili-blue-selected",
+          "value": "#41759d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-river-hover",
+          "value": "#588095",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-river-selected",
+          "value": "#42607c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-winter-hover",
+          "value": "#7b8895",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-winter-selected",
+          "value": "#5b667c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-explosive-hover",
+          "value": "#98999a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-explosive-selected",
+          "value": "#70717f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-american_gray-hover",
+          "value": "#69696a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-american_gray-selected",
+          "value": "#4e505e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish",
+          "value": "#7a7a7a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish-hover",
+          "value": "#525252",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish-selected",
+          "value": "#383838",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brown-hover",
+          "value": "#684943",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brown-selected",
+          "value": "#4d3941",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-orchid-hover",
+          "value": "#b4739a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-orchid-selected",
+          "value": "#85597b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-tan-hover",
+          "value": "#978977",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-tan-selected",
+          "value": "#716863",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sky-hover",
+          "value": "#90bac6",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sky-selected",
+          "value": "#6c8a9a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-coffee-hover",
+          "value": "#a27b6f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-coffee-selected",
+          "value": "#795e5d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-royal-hover",
+          "value": "#4474bb",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-royal-selected",
+          "value": "#375993",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal",
+          "value": "#4a8f98",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal-hover",
+          "value": "#347179",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal-selected",
+          "value": "#245960",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lavender-hover",
+          "value": "#a294c8",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lavender-selected",
+          "value": "#79709c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-steel-hover",
+          "value": "#95a2be",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-steel-selected",
+          "value": "#707a95",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lilac-hover",
+          "value": "#8e8a9f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lilac-selected",
+          "value": "#6b697f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan",
+          "value": "#806363",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan-hover",
+          "value": "#674c4c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan-selected",
+          "value": "#513939",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-on-secondary-color",
+          "value": "#0073ea",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-hover-on-secondary-color",
+          "value": "#0060b9",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-color-rgb",
+          "value": "19, 55, 116",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-on-secondary-color",
+          "value": "#133774",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-text-on-secondary-color",
+          "value": "#d5d8df",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-color-rgb",
+          "value": "24, 27, 52",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-hover-on-secondary-color",
+          "value": "#4b4e69",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-background-color-rgb",
+          "value": "48, 50, 78",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-text-on-secondary-color",
+          "value": "#9699a6",
+          "file": "index.css"
+        },
+        {
+          "name": "--link-on-secondary-color",
+          "value": "#69a7ef",
+          "file": "index.css"
+        },
+        {
+          "name": "--modal-background-color",
+          "value": "#181b34",
+          "file": "index.css"
+        },
+        {
+          "name": "--dark-background-color",
+          "value": "#393b53",
+          "file": "index.css"
+        },
+        {
+          "name": "--dark-background-on-secondary-color",
+          "value": "#4b4e69",
+          "file": "index.css"
+        },
+        {
+          "name": "--dialog-background-color",
+          "value": "#30324e",
+          "file": "index.css"
+        },
+        {
+          "name": "--label-background-color",
+          "value": "#404b69",
+          "file": "index.css"
+        },
+        {
+          "name": "--label-background-on-secondary-color",
+          "value": "#404b69",
+          "file": "index.css"
+        },
+        {
+          "name": "--icon-on-secondary-color",
+          "value": "#c3c6d4",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-color-with-opacity",
+          "value": "rgba(195, 198, 212, 0.1)",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-on-secondary-color",
+          "value": "#c3c6d4",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-border-on-secondary-color",
+          "value": "#797e93",
+          "file": "index.css"
+        },
+        {
+          "name": "--layout-border-on-secondary-color",
+          "value": "#4b4e69",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-background-on-secondary-color",
+          "value": "#3c3f59",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-text-on-secondary-color",
+          "value": "rgba(213, 216, 223, var(--disabled-component-opacity))",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-color",
+          "value": "#0073ea",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-hover-color",
+          "value": "#0060b9",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-color",
+          "value": "#133774",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-hover-color",
+          "value": "#0d2e65",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-highlighted-color",
+          "value": "#0b2858",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-surface-color",
+          "value": "#111111",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-text-color",
+          "value": "#eeeeee",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-text-color",
+          "value": "#aaaaaa",
+          "file": "index.css"
+        },
+        {
+          "name": "--text-color-on-inverted",
+          "value": "#111111",
+          "file": "index.css"
+        },
+        {
+          "name": "--text-color-on-primary",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-text-color",
+          "value": "rgba(238, 238, 238, var(--disabled-component-opacity))",
+          "file": "index.css"
+        },
+        {
+          "name": "--inverted-color-background",
+          "value": "#eeeeee",
+          "file": "index.css"
+        },
+        {
+          "name": "--fixed-dark-color",
+          "value": "#111111",
+          "file": "index.css"
+        },
+        {
+          "name": "--fixed-light-color",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-color",
+          "value": "#111111",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-hover-color",
+          "value": "rgba(103, 104, 121, 0.3)",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-background-color",
+          "value": "#2c2c2c",
+          "file": "index.css"
+        },
+        {
+          "name": "--allgrey-background-color",
+          "value": "#2c2c2c",
+          "file": "index.css"
+        },
+        {
+          "name": "--backdrop-color",
+          "value": "rgba(33, 33, 33, 0.7)",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-border-color",
+          "value": "#8d8d8d",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-background-color",
+          "value": "#4d4d4d",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-background-hover-color",
+          "value": "#3b3b3b",
+          "file": "index.css"
+        },
+        {
+          "name": "--layout-border-color",
+          "value": "#636363",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-color",
+          "value": "#aaaaaa",
+          "file": "index.css"
+        },
+        {
+          "name": "--icon-color",
+          "value": "#aaaaaa",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-background-color",
+          "value": "#3a3a3a",
+          "file": "index.css"
+        },
+        {
+          "name": "--link-color",
+          "value": "#69a7ef",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-color",
+          "value": "#0073ea",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-hover-color",
+          "value": "#0060b9",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-selected-color",
+          "value": "#133774",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-selected-hover-color",
+          "value": "#0d2e65",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color",
+          "value": "#00854d",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-hover",
+          "value": "#007038",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-selected",
+          "value": "#025231",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-selected-hover",
+          "value": "#194733",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color",
+          "value": "#d83a52",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-hover",
+          "value": "#b63546",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-selected",
+          "value": "#642830",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-selected-hover",
+          "value": "#5a2027",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color",
+          "value": "#ffcb00",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-hover",
+          "value": "#eaaa15",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-selected",
+          "value": "#503e02",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-selected-hover",
+          "value": "#402f00",
+          "file": "index.css"
+        },
+        {
+          "name": "--text-color-on-brand",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-surface",
+          "value": "#212121",
+          "file": "index.css"
+        },
+        {
+          "name": "--grey-background-color",
+          "value": "#111111",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-grass_green-hover",
+          "value": "#116846",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-grass_green-selected",
+          "value": "#0a482e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-hover",
+          "value": "#0f9b63",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-selected",
+          "value": "#096c43",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-selected-with-opacity",
+          "value": "rgba(9, 108, 67, 0.6)",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-green-hover",
+          "value": "#7ca32b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-green-selected",
+          "value": "#56721b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-saladish-hover",
+          "value": "#9d8f3e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-saladish-selected",
+          "value": "#6d6329",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-hover",
+          "value": "#c29e11",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-selected",
+          "value": "#886e09",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-rgb",
+          "value": "255, 213, 51",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-working_orange-hover",
+          "value": "#c0873c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-working_orange-selected",
+          "value": "#875e27",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-orange-hover",
+          "value": "#c25531",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-orange-selected",
+          "value": "#883a1f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-peach-hover",
+          "value": "#c2888a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-peach-selected",
+          "value": "#885f5f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-hover",
+          "value": "#c26163",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-selected",
+          "value": "#884343",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-selected-with-opacity",
+          "value": "rgba(136, 67, 67, 0.6)",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-stuck-red-hover",
+          "value": "#ad3f51",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-stuck-red-selected",
+          "value": "#792a36",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-red-hover",
+          "value": "#92334c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-red-selected",
+          "value": "#662232",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sofia_pink-hover",
+          "value": "#c21e71",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sofia_pink-selected",
+          "value": "#88134d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lipstick-hover",
+          "value": "#c24e9a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lipstick-selected",
+          "value": "#88356a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bubble-hover",
+          "value": "#be80ba",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bubble-selected",
+          "value": "#855981",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-purple-hover",
+          "value": "#8050ab",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-purple-selected",
+          "value": "#593776",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_purple-hover",
+          "value": "#6344a3",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_purple-selected",
+          "value": "#442e71",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-berry-hover",
+          "value": "#673971",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-berry-selected",
+          "value": "#47264d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo",
+          "value": "#6129ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo-hover",
+          "value": "#4c18dc",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo-selected",
+          "value": "#3c13ae",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-indigo-hover",
+          "value": "#4b4ead",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-indigo-selected",
+          "value": "#333578",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy",
+          "value": "#5684c5",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy-hover",
+          "value": "#3468b2",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy-selected",
+          "value": "#24508f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-blue-hover",
+          "value": "#4c7cc1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-blue-selected",
+          "value": "#345686",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-blue-hover",
+          "value": "#0f6d97",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-blue-selected",
+          "value": "#094b69",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-aquamarine-hover",
+          "value": "#469e9b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-aquamarine-selected",
+          "value": "#2f6e6b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-chili-blue-hover",
+          "value": "#569ec3",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-chili-blue-selected",
+          "value": "#3b6e88",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-river-hover",
+          "value": "#588095",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-river-selected",
+          "value": "#3c5967",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-winter-hover",
+          "value": "#7b8895",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-winter-selected",
+          "value": "#555f67",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-explosive-hover",
+          "value": "#98999a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-explosive-selected",
+          "value": "#6a6a6a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-american_gray-hover",
+          "value": "#69696a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-american_gray-selected",
+          "value": "#494949",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish",
+          "value": "#7a7a7a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish-hover",
+          "value": "#525252",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish-selected",
+          "value": "#383838",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brown-hover",
+          "value": "#684943",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brown-selected",
+          "value": "#48322c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-orchid-hover",
+          "value": "#b4739a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-orchid-selected",
+          "value": "#7e516c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-tan-hover",
+          "value": "#978977",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-tan-selected",
+          "value": "#6a6053",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sky-hover",
+          "value": "#90bac6",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sky-selected",
+          "value": "#65828b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-coffee-hover",
+          "value": "#a27b6f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-coffee-selected",
+          "value": "#71564e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-royal-hover",
+          "value": "#4474bb",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-royal-selected",
+          "value": "#305183",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal",
+          "value": "#4a8f98",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal-hover",
+          "value": "#347179",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal-selected",
+          "value": "#245960",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lavender-hover",
+          "value": "#a294c8",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lavender-selected",
+          "value": "#71688c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-steel-hover",
+          "value": "#95a2be",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-steel-selected",
+          "value": "#687185",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lilac-hover",
+          "value": "#8e8a9f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lilac-selected",
+          "value": "#63616f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan",
+          "value": "#806363",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan-hover",
+          "value": "#674c4c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan-selected",
+          "value": "#513939",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-on-secondary-color",
+          "value": "#0073ea",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-hover-on-secondary-color",
+          "value": "#0060b9",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-color-rgb",
+          "value": "19, 55, 116",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-on-secondary-color",
+          "value": "#133774",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-text-on-secondary-color",
+          "value": "#eeeeee",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-color-rgb",
+          "value": "17, 17, 17",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-hover-on-secondary-color",
+          "value": "#636363",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-background-color-rgb",
+          "value": "44, 44, 44",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-text-on-secondary-color",
+          "value": "#9699a6",
+          "file": "index.css"
+        },
+        {
+          "name": "--link-on-secondary-color",
+          "value": "#69a7ef",
+          "file": "index.css"
+        },
+        {
+          "name": "--modal-background-color",
+          "value": "#181b34",
+          "file": "index.css"
+        },
+        {
+          "name": "--dark-background-color",
+          "value": "#2c2c2c",
+          "file": "index.css"
+        },
+        {
+          "name": "--dark-background-on-secondary-color",
+          "value": "#4b4e69",
+          "file": "index.css"
+        },
+        {
+          "name": "--dialog-background-color",
+          "value": "#2c2c2c",
+          "file": "index.css"
+        },
+        {
+          "name": "--label-background-color",
+          "value": "#404b69",
+          "file": "index.css"
+        },
+        {
+          "name": "--label-background-on-secondary-color",
+          "value": "#404b69",
+          "file": "index.css"
+        },
+        {
+          "name": "--icon-on-secondary-color",
+          "value": "#aaaaaa",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-color-with-opacity",
+          "value": "rgba(170, 170, 170, 0.1)",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-on-secondary-color",
+          "value": "#aaaaaa",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-border-on-secondary-color",
+          "value": "#8d8d8d",
+          "file": "index.css"
+        },
+        {
+          "name": "--layout-border-on-secondary-color",
+          "value": "#636363",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-background-on-secondary-color",
+          "value": "#3a3a3a",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-text-on-secondary-color",
+          "value": "rgba(238, 238, 238, var(--disabled-component-opacity))",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-color",
+          "value": "#fe78c6",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-hover-color",
+          "value": "#fe5ab9",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-color",
+          "value": "#9f4077",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-hover-color",
+          "value": "#0d2e65",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-highlighted-color",
+          "value": "#0b2858",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-surface-color",
+          "value": "#111111",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-text-color",
+          "value": "#d5d8df",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-text-color",
+          "value": "#9699a6",
+          "file": "index.css"
+        },
+        {
+          "name": "--text-color-on-inverted",
+          "value": "#323338",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-text-color",
+          "value": "rgba(238, 238, 238, var(--disabled-component-opacity))",
+          "file": "index.css"
+        },
+        {
+          "name": "--inverted-color-background",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--fixed-dark-color",
+          "value": "#323338",
+          "file": "index.css"
+        },
+        {
+          "name": "--fixed-light-color",
+          "value": "#ffffff",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-color",
+          "value": "#282a36",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-hover-color",
+          "value": "#4b4e69",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-background-color",
+          "value": "#30324e",
+          "file": "index.css"
+        },
+        {
+          "name": "--allgrey-background-color",
+          "value": "#282a36",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-border-color",
+          "value": "#797e93",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-background-color",
+          "value": "#4b4e69",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-background-hover-color",
+          "value": "#3b3b3b",
+          "file": "index.css"
+        },
+        {
+          "name": "--layout-border-color",
+          "value": "#414458",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-color",
+          "value": "#c3c6d4",
+          "file": "index.css"
+        },
+        {
+          "name": "--icon-color",
+          "value": "#c3c6d4",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-background-color",
+          "value": "#3a3a3a",
+          "file": "index.css"
+        },
+        {
+          "name": "--link-color",
+          "value": "#bd93f9",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-color",
+          "value": "#fe78c6",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-hover-color",
+          "value": "#fe5ab9",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-selected-color",
+          "value": "#9f4077",
+          "file": "index.css"
+        },
+        {
+          "name": "--brand-selected-hover-color",
+          "value": "#0d2e65",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color",
+          "value": "#50fa7b",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-hover",
+          "value": "#007038",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-selected",
+          "value": "#26503e",
+          "file": "index.css"
+        },
+        {
+          "name": "--positive-color-selected-hover",
+          "value": "#194733",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color",
+          "value": "#ff5555",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-hover",
+          "value": "#b63546",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-selected",
+          "value": "#642830",
+          "file": "index.css"
+        },
+        {
+          "name": "--negative-color-selected-hover",
+          "value": "#5a2027",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color",
+          "value": "#ffcb00",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-hover",
+          "value": "#eaaa15",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-selected",
+          "value": "#503e02",
+          "file": "index.css"
+        },
+        {
+          "name": "--warning-color-selected-hover",
+          "value": "#402f00",
+          "file": "index.css"
+        },
+        {
+          "name": "--grey-background-color",
+          "value": "#282a36",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-grass_green",
+          "value": "#359970",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-grass_green-hover",
+          "value": "#116846",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-grass_green-selected",
+          "value": "#0a482e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green",
+          "value": "#33d391",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-hover",
+          "value": "#0f9b63",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-selected",
+          "value": "#096c43",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-done-green-selected-with-opacity",
+          "value": "rgba(9, 108, 67, 0.6)",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-green",
+          "value": "#b0dc51",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-green-hover",
+          "value": "#7ca32b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-green-selected",
+          "value": "#56721b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-saladish",
+          "value": "#d5c567",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-saladish-hover",
+          "value": "#9d8f3e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-saladish-selected",
+          "value": "#6d6329",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk",
+          "value": "#ffd533",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-hover",
+          "value": "#c29e11",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-selected",
+          "value": "#886e09",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-egg_yolk-rgb",
+          "value": "255, 213, 51",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-working_orange",
+          "value": "#fdbc64",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-working_orange-hover",
+          "value": "#c0873c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-working_orange-selected",
+          "value": "#875e27",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-orange",
+          "value": "#ff6d3b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-orange-hover",
+          "value": "#c25531",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-orange-selected",
+          "value": "#883a1f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-peach",
+          "value": "#ffbdbd",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-peach-hover",
+          "value": "#c2888a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-peach-selected",
+          "value": "#885f5f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset",
+          "value": "#ff9191",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-hover",
+          "value": "#c26163",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-selected",
+          "value": "#884343",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sunset-selected-with-opacity",
+          "value": "rgba(136, 67, 67, 0.6)",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-stuck-red",
+          "value": "#e8697d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-stuck-red-hover",
+          "value": "#ad3f51",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-stuck-red-selected",
+          "value": "#792a36",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-red",
+          "value": "#c95c76",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-red-hover",
+          "value": "#92334c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-red-selected",
+          "value": "#662232",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sofia_pink",
+          "value": "#ff44a1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sofia_pink-hover",
+          "value": "#c21e71",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sofia_pink-selected",
+          "value": "#88134d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lipstick",
+          "value": "#ff7bd0",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lipstick-hover",
+          "value": "#c24e9a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lipstick-selected",
+          "value": "#88356a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bubble",
+          "value": "#fbb4f4",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bubble-hover",
+          "value": "#be80ba",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bubble-selected",
+          "value": "#855981",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-purple",
+          "value": "#b57de3",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-purple-hover",
+          "value": "#8050ab",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-purple-selected",
+          "value": "#593776",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_purple",
+          "value": "#936fda",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_purple-hover",
+          "value": "#6344a3",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_purple-selected",
+          "value": "#442e71",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-berry",
+          "value": "#9862a1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-berry-hover",
+          "value": "#673971",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-berry-selected",
+          "value": "#47264d",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo",
+          "value": "#6645a9",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo-hover",
+          "value": "#3c1f78",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark_indigo-selected",
+          "value": "#291452",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-indigo",
+          "value": "#777ae5",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-indigo-hover",
+          "value": "#4b4ead",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-indigo-selected",
+          "value": "#333578",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy",
+          "value": "#4e73a7",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy-hover",
+          "value": "#274776",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-navy-selected",
+          "value": "#193151",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-blue",
+          "value": "#79affd",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-blue-hover",
+          "value": "#4c7cc1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-bright-blue-selected",
+          "value": "#345686",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-blue",
+          "value": "#339ecd",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-blue-hover",
+          "value": "#0f6d97",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-dark-blue-selected",
+          "value": "#094b69",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-aquamarine",
+          "value": "#71d6d1",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-aquamarine-hover",
+          "value": "#469e9b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-aquamarine-selected",
+          "value": "#2f6e6b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-chili-blue",
+          "value": "#85d6ff",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-chili-blue-hover",
+          "value": "#569ec3",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-chili-blue-selected",
+          "value": "#3b6e88",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-river",
+          "value": "#86b4ca",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-river-hover",
+          "value": "#588095",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-river-selected",
+          "value": "#3c5967",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-winter",
+          "value": "#aebdca",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-winter-hover",
+          "value": "#7b8895",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-winter-selected",
+          "value": "#555f67",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-explosive",
+          "value": "#d0d0d0",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-explosive-hover",
+          "value": "#98999a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-explosive-selected",
+          "value": "#6a6a6a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-american_gray",
+          "value": "#999999",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-american_gray-hover",
+          "value": "#69696a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-american_gray-selected",
+          "value": "#494949",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish",
+          "value": "#5c5c5c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish-hover",
+          "value": "#222222",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-blackish-selected",
+          "value": "#111111",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brown",
+          "value": "#99756c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brown-hover",
+          "value": "#684943",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-brown-selected",
+          "value": "#48322c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-orchid",
+          "value": "#e190c0",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-orchid-hover",
+          "value": "#b4739a",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-orchid-selected",
+          "value": "#7e516c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-tan",
+          "value": "#bdab95",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-tan-hover",
+          "value": "#978977",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-tan-selected",
+          "value": "#6a6053",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sky",
+          "value": "#b4e9f8",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sky-hover",
+          "value": "#90bac6",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-sky-selected",
+          "value": "#65828b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-coffee",
+          "value": "#ca9a8b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-coffee-hover",
+          "value": "#a27b6f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-coffee-selected",
+          "value": "#71564e",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-royal",
+          "value": "#5591ea",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-royal-hover",
+          "value": "#4474bb",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-royal-selected",
+          "value": "#305183",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal",
+          "value": "#457b82",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal-hover",
+          "value": "#376268",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-teal-selected",
+          "value": "#274549",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lavender",
+          "value": "#cab9fa",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lavender-hover",
+          "value": "#a294c8",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lavender-selected",
+          "value": "#71688c",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-steel",
+          "value": "#bacbed",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-steel-hover",
+          "value": "#95a2be",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-steel-selected",
+          "value": "#687185",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lilac",
+          "value": "#687185",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lilac-hover",
+          "value": "#8e8a9f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-lilac-selected",
+          "value": "#63616f",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan",
+          "value": "#786565",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan-hover",
+          "value": "#605151",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-pecan-selected",
+          "value": "#433939",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-success",
+          "value": "#50fa7b",
+          "file": "index.css"
+        },
+        {
+          "name": "--color-error",
+          "value": "#ff5555",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-on-secondary-color",
+          "value": "#fe78c6",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-hover-on-secondary-color",
+          "value": "#fe5ab9",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-color-rgb",
+          "value": "159, 64, 119",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-selected-on-secondary-color",
+          "value": "#9f4077",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-text-on-secondary-color",
+          "value": "#d5d8df",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-color-rgb",
+          "value": "40, 42, 54",
+          "file": "index.css"
+        },
+        {
+          "name": "--primary-background-hover-on-secondary-color",
+          "value": "#4b4e69",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-background-color-rgb",
+          "value": "48, 50, 78",
+          "file": "index.css"
+        },
+        {
+          "name": "--secondary-text-on-secondary-color",
+          "value": "#9699a6",
+          "file": "index.css"
+        },
+        {
+          "name": "--link-on-secondary-color",
+          "value": "#bd93f9",
+          "file": "index.css"
+        },
+        {
+          "name": "--modal-background-color",
+          "value": "#282a36",
+          "file": "index.css"
+        },
+        {
+          "name": "--dark-background-color",
+          "value": "#303241",
+          "file": "index.css"
+        },
+        {
+          "name": "--dark-background-on-secondary-color",
+          "value": "#595959",
+          "file": "index.css"
+        },
+        {
+          "name": "--dialog-background-color",
+          "value": "#30324e",
+          "file": "index.css"
+        },
+        {
+          "name": "--label-background-color",
+          "value": "#404b69",
+          "file": "index.css"
+        },
+        {
+          "name": "--label-background-on-secondary-color",
+          "value": "#404b69",
+          "file": "index.css"
+        },
+        {
+          "name": "--icon-on-secondary-color",
+          "value": "#c3c6d4",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-color-with-opacity",
+          "value": "rgba(195, 198, 212, 0.1)",
+          "file": "index.css"
+        },
+        {
+          "name": "--placeholder-on-secondary-color",
+          "value": "#c3c6d4",
+          "file": "index.css"
+        },
+        {
+          "name": "--ui-border-on-secondary-color",
+          "value": "#797e93",
+          "file": "index.css"
+        },
+        {
+          "name": "--layout-border-on-secondary-color",
+          "value": "#414458",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-background-on-secondary-color",
+          "value": "#3a3a3a",
+          "file": "index.css"
+        },
+        {
+          "name": "--disabled-text-on-secondary-color",
+          "value": "rgba(238, 238, 238, var(--disabled-component-opacity))",
+          "file": "index.css"
+        }
+      ]
+    },
+    {
+      "category": "Shadows",
+      "count": 20,
+      "tokens": [
+        {
+          "name": "--box-shadow-xs",
+          "value": "0px 4px 6px -4px rgba(0, 0, 0, 0.1)",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-small",
+          "value": "0px 4px 8px rgba(0, 0, 0, 0.2)",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-medium",
+          "value": "0px 6px 20px rgba(0, 0, 0, 0.2)",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-large",
+          "value": "0px 15px 50px rgba(0, 0, 0, 0.3)",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-mediun",
+          "value": "0px 6px 20px rgba(0, 0, 0, 0.2)",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-xs",
+          "value": "0px 4px 6px -4px rgba(9, 11, 25, 0.5)",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-small",
+          "value": "0px 4px 8px rgba(9, 11, 25, 0.5)",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-medium",
+          "value": "0px 6px 20px rgba(9, 11, 25, 0.5)",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-large",
+          "value": "0px 15px 50px rgba(9, 11, 25, 0.5)",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-mediun",
+          "value": "0px 6px 20px rgba(0, 0, 0, 0.2)",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-xs",
+          "value": "0px 4px 6px -4px #000000",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-small",
+          "value": "0px 4px 8px #000000",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-medium",
+          "value": "0px 6px 20px #000000",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-large",
+          "value": "0px 15px 50px #000000",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-mediun",
+          "value": "0px 6px 20px rgba(0, 0, 0, 0.2)",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-xs",
+          "value": "0px 4px 6px -4px #000000",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-small",
+          "value": "0px 4px 8px #000000",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-medium",
+          "value": "0px 6px 20px #000000",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-large",
+          "value": "0px 15px 50px #000000",
+          "file": "index.css"
+        },
+        {
+          "name": "--box-shadow-mediun",
+          "value": "0px 6px 20px rgba(0, 0, 0, 0.2)",
+          "file": "index.css"
+        }
+      ]
+    }
+  ],
+  "availableCategories": [
+    "Border Radius",
+    "Colors",
+    "Motion",
+    "Otherww",
+    "Shadows",
+    "Spacing",
+    "Typography"
+  ]
+}
