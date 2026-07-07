@@ -1,0 +1,120 @@
+import React, { useState, useEffect } from 'react';
+import { Button } from '@vibe/core';
+import mondayService from '../../services/mondayService';
+import { GET_COLUMN_VALUE, UPDATE_COLUMN_VALUE } from '../../services/graphqlQueries';
+import logger from '../../utils/logger';
+import LoadingState from '../shared/LoadingState';
+import ErrorState from '../shared/ErrorState';
+
+/**
+ * OnClickDialog - Shown when user clicks on the column cell
+ *
+ * Available context properties:
+ * - context.boardId: number
+ * - context.itemId: number
+ * - context.selectedItemIds: number[]
+ * - context.columnId: string
+ * - context.columnType: string
+ * - context.user.id: string
+ * - context.user.currentLanguage: string
+ * - context.theme: "light" | "dark"
+ */
+
+function OnClickDialog({ context }) {
+  const [value, setValue] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const { boardId, itemId, columnId } = context;
+
+  useEffect(() => {
+    loadValue();
+  }, [boardId, itemId, columnId]);
+
+  const loadValue = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const data = await mondayService.query(GET_COLUMN_VALUE, {
+        itemId: [itemId],
+      });
+
+      const item = data?.items?.[0];
+      const columnValue = item?.column_values?.find((cv) => cv.id === columnId);
+
+      setValue(columnValue);
+    } catch (err) {
+      // Record the error (never swallow), then surface it to the user via ErrorState.
+      logger.error('OnClickDialog', 'Failed to load column value', err);
+      setError(err.message || 'Failed to load value');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async (newValue) => {
+    try {
+      setSaving(true);
+      setError(null);
+
+      await mondayService.query(UPDATE_COLUMN_VALUE, {
+        boardId,
+        itemId,
+        columnId,
+        value: JSON.stringify(newValue),
+      });
+
+      mondayService.showNotice('Value updated successfully');
+      mondayService.closeDialog();
+    } catch (err) {
+      // Record the error (never swallow), then surface it to the user via ErrorState.
+      logger.error('OnClickDialog', 'Failed to save column value', err);
+      setError(err.message || 'Failed to save value');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    mondayService.closeDialog();
+  };
+
+  if (loading) {
+    return <LoadingState message="Loading column value..." />;
+  }
+
+  if (error) {
+    return <ErrorState message={error} onRetry={loadValue} />;
+  }
+
+  return (
+    <div className="onclick-dialog">
+      <div className="mb-4">
+        <h3 className="text-lg font-medium mb-2">Edit Value</h3>
+        <p className="text-sm text-gray-500">
+          Current: <span className="font-medium">{value?.text || 'None'}</span>
+        </p>
+      </div>
+
+      {/* Add your value editor component here */}
+      <div className="mb-4 p-4 bg-gray-50 rounded-md">
+        <p className="text-sm text-gray-600">
+          Customize this component based on your column type.
+        </p>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button kind="secondary" onClick={handleCancel} disabled={saving}>
+          Cancel
+        </Button>
+        <Button onClick={() => handleSave({})} loading={saving}>
+          Save
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export default OnClickDialog;

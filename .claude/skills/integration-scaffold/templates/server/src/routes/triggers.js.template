@@ -1,0 +1,89 @@
+/**
+ * Triggers Router
+ * Dynamic router for trigger block subscribe/unsubscribe.
+ */
+
+import { Router } from 'express';
+import { authenticationMiddleware, logger } from '__PACKAGE_SCOPE__/shared';
+import { getBlock, getTriggerBlocks } from './auto-loader.js';
+
+const TAG = 'triggers_router';
+const router = Router();
+
+function resolveBlockName(req) {
+  let blockName = req.params.blockName;
+
+  if (!blockName) {
+    blockName = req.body.payload?.blockMetadata?.name;
+  }
+
+  if (!blockName) {
+    const triggers = getTriggerBlocks();
+    if (triggers.length === 1) {
+      blockName = triggers[0].name;
+      logger.debug('Using single registered trigger', TAG, { blockName });
+    }
+  }
+
+  return blockName;
+}
+
+router.post('/monday/subscribe/:blockName?', authenticationMiddleware, async (req, res) => {
+  try {
+    const blockName = resolveBlockName(req);
+
+    if (!blockName) {
+      logger.warn('No trigger block name for subscribe', TAG);
+      return res.status(400).json({ error: 'Trigger block name not specified' });
+    }
+
+    const block = getBlock(blockName);
+
+    if (!block) {
+      return res.status(404).json({ error: `Trigger block '${blockName}' not found` });
+    }
+
+    if (!block.subscribeTrigger) {
+      logger.error('Block has no subscribeTrigger handler', TAG, { blockName });
+      return res.status(500).json({ error: `Block '${blockName}' is not a trigger block` });
+    }
+
+    logger.info('Routing subscribe to trigger block', TAG, { blockName });
+    return await block.subscribeTrigger(req, res);
+
+  } catch (err) {
+    logger.error('Error in subscribe router', TAG, { error: err });
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.post('/monday/unsubscribe/:blockName?', authenticationMiddleware, async (req, res) => {
+  try {
+    const blockName = resolveBlockName(req);
+
+    if (!blockName) {
+      logger.warn('No trigger block name for unsubscribe', TAG);
+      return res.status(400).json({ error: 'Trigger block name not specified' });
+    }
+
+    const block = getBlock(blockName);
+
+    if (!block) {
+      return res.status(404).json({ error: `Trigger block '${blockName}' not found` });
+    }
+
+    if (!block.unsubscribeTrigger) {
+      logger.error('Block has no unsubscribeTrigger handler', TAG, { blockName });
+      return res.status(500).json({ error: `Block '${blockName}' is not a trigger block` });
+    }
+
+    logger.info('Routing unsubscribe to trigger block', TAG, { blockName });
+    return await block.unsubscribeTrigger(req, res);
+
+  } catch (err) {
+    logger.error('Error in unsubscribe router', TAG, { error: err });
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default router;

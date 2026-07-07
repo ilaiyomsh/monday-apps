@@ -1,0 +1,48 @@
+import jwt from 'jsonwebtoken';
+import { getSecret } from '../helpers/secret-store.js';
+import logger from '../services/logger/index.js';
+
+const TAG = 'authentication_middleware';
+
+export const MONDAY_SIGNING_SECRET = 'MONDAY_SIGNING_SECRET';
+
+/**
+ * Middleware to verify the JWT token sent from monday.com.
+ * Extracts accountId, userId, and shortLivedToken.
+ */
+export async function authenticationMiddleware(req, res, next) {
+  logger.debug('Starting authentication', TAG, { path: req.path });
+
+  try {
+    let { authorization } = req.headers;
+    if (!authorization && req.query) {
+      authorization = req.query.token;
+    }
+
+    if (!authorization) {
+      logger.warn('Authorization header is missing', TAG, { path: req.path });
+      throw new Error('Authorization header is missing');
+    }
+
+    const signingSecret = getSecret(MONDAY_SIGNING_SECRET);
+    if (!signingSecret) {
+      logger.error('MONDAY_SIGNING_SECRET is not configured', TAG);
+      throw new Error('MONDAY_SIGNING_SECRET is not configured');
+    }
+
+    const { accountId, userId, backToUrl, shortLivedToken } = jwt.verify(
+      authorization,
+      signingSecret
+    );
+
+    logger.info('Authentication successful', TAG, { accountId, userId });
+    req.session = { accountId, userId, backToUrl, shortLivedToken };
+    next();
+  } catch (err) {
+    logger.error('Authentication failed', TAG, {
+      error: err.message,
+      path: req.path
+    });
+    res.status(401).json({ error: 'not authenticated' });
+  }
+}

@@ -1,0 +1,1 @@
+This app is wired to the error-guard standard (server variant): logger choke-point, asyncHandler on async routes, terminal error middleware, process guards, optional Axiom error sink. The mapps ship gate runs a blocking full-tree error-guard audit on apps carrying this marker. See .claude/skills/error-guard/references/server-patterns.md.

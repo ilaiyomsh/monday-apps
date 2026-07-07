@@ -1,0 +1,78 @@
+/**
+ * Example Trigger - Subscribe/Unsubscribe Handlers
+ *
+ * Subscribe: Called when a user adds this trigger to a workflow.
+ *   - Stores the webhookUrl for later trigger invocation.
+ *   - Returns { webhookId } to Monday.com.
+ *
+ * Unsubscribe: Called when a user removes/deletes the recipe.
+ *   - Deletes the stored subscription.
+ *   - Returns 200 OK.
+ *
+ * Fire trigger (called from your own code when an event occurs):
+ *   import { fireTrigger, getSubscription } from '__PACKAGE_SCOPE__/shared';
+ *
+ *   const sub = getSubscription(subscriptionId);
+ *   await fireTrigger(sub.webhookUrl, { eventType: 'example', eventData: '{}', timestamp: new Date().toISOString() });
+ */
+
+import {
+  logger,
+  saveSubscription,
+  deleteSubscription,
+} from '__PACKAGE_SCOPE__/shared';
+
+const TAG = 'example_trigger';
+
+/**
+ * Subscribe handler.
+ * Monday.com calls this when a user adds the trigger to a workflow.
+ */
+export async function subscribeTrigger(req, res) {
+  const { accountId, userId } = req.session;
+  const { payload } = req.body;
+
+  const {
+    webhookUrl,
+    subscriptionId,
+    inputFields,
+    recipeId,
+    integrationId,
+  } = payload;
+
+  logger.info('Subscribe received', TAG, {
+    accountId,
+    userId,
+    subscriptionId,
+    recipeId,
+    integrationId,
+    webhookUrl,
+  });
+
+  saveSubscription(subscriptionId, {
+    webhookUrl,
+    inputFields,
+    recipeId,
+    integrationId,
+    accountId,
+    userId,
+    createdAt: new Date().toISOString(),
+  });
+
+  return res.status(200).json({ webhookId: subscriptionId });
+}
+
+/**
+ * Unsubscribe handler.
+ * Monday.com calls this when a user removes or deletes the recipe.
+ */
+export async function unsubscribeTrigger(req, res) {
+  const { payload } = req.body;
+  const { webhookId } = payload;
+
+  logger.info('Unsubscribe received', TAG, { webhookId });
+
+  deleteSubscription(webhookId);
+
+  return res.status(200).json({});
+}

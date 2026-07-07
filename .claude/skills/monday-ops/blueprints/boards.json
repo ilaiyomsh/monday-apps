@@ -1,0 +1,125 @@
+{
+  "_doc": "Declarative model of the standard Axis system boards. provision.py reads this to CREATE missing boards/columns or MAP existing ones. Each column has a logical `key` (stable, used by the engine + settings templates), a Hebrew `title`, a monday `type`, and type-specific extras. Real monday column ids are resolved at runtime (returned on create, or matched by title/key on reuse) and written to state.json. STATUS labels: monday assigns its own stable label ids on creation — the engine ALWAYS reads them back via `settings` and records the real {labelKey -> labelId} map; never hardcode 0/1/2. Order in `labels` = display order in the column.",
+
+  "boards": {
+    "portfolio": {
+      "title": "תיק פרויקטים",
+      "role": "Projects portfolio. Planner reads it (projects + manager); Tracker reads it as project source in portfolio mode.",
+      "columns": [
+        { "key": "name", "title": "שם הפרויקט", "type": "name" },
+        { "key": "owner", "title": "מנהל הפרויקט", "type": "people" },
+        { "key": "rag", "title": "בריאות הפרויקט (RAG)", "type": "status",
+          "labels": [{"key":"ok","label":"תקין","color":"done_green"},{"key":"risk","label":"בסיכון","color":"working_orange"},{"key":"high_risk","label":"בסיכון גבוה","color":"stuck_red"}] },
+        { "key": "priority", "title": "עדיפות", "type": "status",
+          "labels": [{"key":"low","label":"נמוכה","color":"american_gray"},{"key":"medium","label":"בינונית","color":"working_orange"},{"key":"high","label":"גבוהה","color":"dark_orange"},{"key":"critical","label":"קריטית","color":"stuck_red"}] },
+        { "key": "step", "title": "סטטוס פרויקט", "type": "status",
+          "labels": [{"key":"in_progress","label":"בתהליך","color":"working_orange"},{"key":"done","label":"הושלם","color":"done_green"},{"key":"future","label":"עתידי","color":"american_gray"}] },
+        { "key": "planned_timeline", "title": "ציר זמן מתוכנן", "type": "timeline" },
+        { "key": "scope", "title": "תיאור הפרויקט", "type": "text" },
+        { "key": "doc", "title": "סיכום סטטוס הפרויקט", "type": "doc", "optional": true },
+        { "key": "client", "title": "לקוח", "type": "board_relation", "target": "customers", "reflection": false, "requires": "customers" },
+        { "key": "link", "title": "קישור למשימות הפרויקט", "type": "board_relation", "target": "projectStructure", "reflection": false, "requires": "projectStructure" }
+      ]
+    },
+
+    "timeLogs": {
+      "title": "דיווחי שעות",
+      "role": "Time Logs / hour-reporting board. The Tracker reports time here. Holds the two-tier classification.",
+      "columns": [
+        { "key": "name", "title": "כותרת הדיווח", "type": "name" },
+        { "key": "date", "title": "תאריך", "type": "date" },
+        { "key": "endTime", "title": "שעת סיום", "type": "date" },
+        { "key": "duration", "title": "משך (שעות)", "type": "numbers" },
+        { "key": "project", "title": "פרויקט", "type": "board_relation", "target": "portfolio", "reflection": false },
+        { "key": "assignment", "title": "הקצאה", "type": "board_relation", "target": "allocations", "reflection": true, "_note": "reflection so Allocations.reportedHours mirror can aggregate duration" },
+        { "key": "reporter", "title": "מדווח", "type": "people" },
+        { "key": "eventType", "title": "סוג דיווח", "type": "status",
+          "_note": "PRIMARY classification. Tracker eventTypeStatusColumnId. Add `routine` label only when includeRoutine.",
+          "labels": [{"key":"daily","label":"דיווח יומי","color":"working_orange"},{"key":"project","label":"פרויקט","color":"done_green"}],
+          "labels_routine": [{"key":"routine","label":"שוטף","color":"dark_blue"}] },
+        { "key": "stage", "title": "שלב פרויקט", "type": "status",
+          "_note": "SECONDARY for project reports. Tracker stageColumnId. Labels = the project stages chosen in the interview (config.stages).",
+          "labels_from": "config.stages" },
+        { "key": "dayType", "title": "סוג יום", "type": "status",
+          "_note": "SECONDARY for daily reports. Tracker allDayTypeStatusColumnId / Planner absenceClassificationColumnId.",
+          "labels": [{"key":"vacation","label":"חופשה","color":"done_green"},{"key":"sick","label":"מחלה","color":"stuck_red"},{"key":"reserve","label":"מילואים","color":"dark_blue"}] },
+        { "key": "routineType", "title": "סוג שוטף", "type": "status", "requires": "routine",
+          "_note": "SECONDARY for routine reports. Tracker nonBillableStatusColumnId. Only when includeRoutine.",
+          "labels": [{"key":"meeting","label":"פגישה","color":"working_orange"},{"key":"training","label":"הדרכה","color":"dark_blue"},{"key":"other","label":"אחר","color":"american_gray"}] },
+        { "key": "temporary", "title": "זמני", "type": "checkbox" },
+        { "key": "notes", "title": "הערות", "type": "long_text" },
+        { "key": "customer", "title": "לקוח", "type": "board_relation", "target": "customers", "reflection": false, "requires": "customers" }
+      ]
+    },
+
+    "allocations": {
+      "title": "הקצאות",
+      "role": "THE HINGE. Planner WRITES it (employee↔project↔dates↔hours↔role); Tracker READS it in assignments mode as each user's project source. Every shared column must satisfy both contracts.",
+      "columns": [
+        { "key": "name", "title": "שם ההקצאה", "type": "name" },
+        { "key": "employee", "title": "עובד", "type": "people", "_note": "Planner employeeColumnId + Tracker assignmentPersonColumnId" },
+        { "key": "project", "title": "פרויקט", "type": "board_relation", "target": "portfolio", "reflection": false, "_note": "Planner projectColumnId + Tracker assignmentProjectLinkColumnId" },
+        { "key": "startDate", "title": "תאריך התחלה", "type": "date" },
+        { "key": "endDate", "title": "תאריך סיום", "type": "date" },
+        { "key": "totalHours", "title": "סך שעות", "type": "numbers" },
+        { "key": "hoursPerDay", "title": "שעות ליום", "type": "numbers" },
+        { "key": "role", "title": "תפקיד בהקצאה", "type": "text", "_note": "MUST be text — Planner writes a raw string (roleColumnId)." },
+        { "key": "fte", "title": "אחוז משרה (FTE)", "type": "numbers" },
+        { "key": "cost", "title": "עלות הקצאה", "type": "numbers" },
+        { "key": "client", "title": "לקוח", "type": "board_relation", "target": "customers", "reflection": false, "requires": "customers" },
+        { "key": "reportedHours", "title": "שעות שדווחו", "type": "mirror", "mirror_via": "timeLogs.assignment", "mirror_column": "timeLogs.duration",
+          "_note": "Sums Time Logs duration through the reflection of Time Logs.assignment. Planner reportedHoursColumnId." }
+      ]
+    },
+
+    "employees": {
+      "title": "עובדים",
+      "role": "Employees master. Planner reads it; matches an allocation's person to an employee by linked monday user.",
+      "columns": [
+        { "key": "name", "title": "שם העובד", "type": "name", "_note": "Planner employeeNameColumnId" },
+        { "key": "linkedUser", "title": "משתמש מקושר", "type": "people", "_note": "Planner employeeUserIdColumnId — must match allocation person + report reporter" },
+        { "key": "orgRole", "title": "תפקיד ארגוני", "type": "text" },
+        { "key": "employmentPct", "title": "אחוז העסקה", "type": "text", "_note": "text like \"100%\"; Planner parses via parseInt" },
+        { "key": "cost", "title": "עלות עובד", "type": "numbers" },
+        { "key": "capabilities", "title": "כישורים", "type": "dropdown",
+          "dropdown_labels": ["אדריכלות","הנדסה אזרחית","הנדסת מבנים","ניהול פרויקטים","תכנון ערים","פיקוח ביצוע"] },
+        { "key": "status", "title": "סטטוס עובד", "type": "status",
+          "labels": [{"key":"active","label":"פעיל","color":"done_green"},{"key":"inactive","label":"לא פעיל","color":"stuck_red"}] }
+      ]
+    },
+
+    "customers": {
+      "title": "לקוחות",
+      "role": "Lean customers board. Connected to Portfolio + Allocations + Time Logs via their `client`/`customer` board_relation columns.",
+      "optional": true,
+      "columns": [
+        { "key": "name", "title": "שם הלקוח", "type": "name" },
+        { "key": "contact", "title": "איש קשר", "type": "text" },
+        { "key": "email", "title": "אימייל", "type": "email" },
+        { "key": "phone", "title": "טלפון", "type": "phone" }
+      ]
+    },
+
+    "projectStructure": {
+      "title": "מבנה פרויקט",
+      "role": "Optional WBS template board for ONE flagship project. 3-level: groups=stages, items=milestones (אבן דרך), subitems=main tasks (משימה עיקרית). Built by build-wbs.py from an Excel file. Linked from Portfolio.link.",
+      "optional": true,
+      "special": "wbs",
+      "columns": [
+        { "key": "name", "title": "אבן דרך / משימה", "type": "name" },
+        { "key": "status", "title": "סטטוס", "type": "status",
+          "labels": [{"key":"not_started","label":"לא התחיל","color":"american_gray"},{"key":"in_progress","label":"בתהליך","color":"working_orange"},{"key":"done","label":"הושלם","color":"done_green"}] },
+        { "key": "owner", "title": "אחראי", "type": "people" },
+        { "key": "timeline", "title": "טווח", "type": "timeline" },
+        { "key": "weeks", "title": "משך (שבועות)", "type": "numbers" }
+      ],
+      "subitem_columns": [
+        { "key": "name", "title": "משימה עיקרית", "type": "name" },
+        { "key": "status", "title": "סטטוס", "type": "status",
+          "labels": [{"key":"not_started","label":"לא התחיל","color":"american_gray"},{"key":"in_progress","label":"בתהליך","color":"working_orange"},{"key":"done","label":"הושלם","color":"done_green"}] },
+        { "key": "owner", "title": "אחראי", "type": "people" },
+        { "key": "weeks", "title": "משך (שבועות)", "type": "numbers" }
+      ]
+    }
+  }
+}

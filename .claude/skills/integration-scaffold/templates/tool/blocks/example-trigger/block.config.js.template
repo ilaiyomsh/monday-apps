@@ -1,0 +1,42 @@
+/**
+ * Example Trigger Block Configuration
+ *
+ * Developer Center setup:
+ * - Block type: Trigger
+ * - Subscribe URL:   {baseUrl}/monday/subscribe/example-trigger
+ * - Unsubscribe URL: {baseUrl}/monday/unsubscribe/example-trigger
+ */
+
+export default {
+  name: 'example-trigger',
+  displayName: 'Example Trigger',
+  description: 'Fires when an external event occurs',
+  type: 'trigger',
+  version: '1.0.0',
+
+  inputFields: [
+    {
+      key: 'boardId',
+      type: 'board',
+      description: 'The board this trigger is associated with',
+    },
+  ],
+
+  outputFields: [
+    {
+      key: 'eventType',
+      type: 'text',
+      description: 'The type of event that occurred',
+    },
+    {
+      key: 'eventData',
+      type: 'text',
+      description: 'JSON data from the event',
+    },
+    {
+      key: 'timestamp',
+      type: 'text',
+      description: 'When the event occurred (ISO 8601)',
+    },
+  ],
+};

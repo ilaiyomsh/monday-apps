@@ -1,0 +1,78 @@
+import React, { useState, useEffect } from 'react';
+import { Button } from '@vibe/core';
+import { Add } from '@vibe/icons';
+import mondayService from '../../services/mondayService';
+import { GET_BOARD_ITEMS } from '../../services/graphqlQueries';
+import logger from '../../utils/logger';
+import ItemList from './ItemList';
+import LoadingState from '../shared/LoadingState';
+import ErrorState from '../shared/ErrorState';
+
+function BoardView({ context }) {
+  const [board, setBoard] = useState(null);
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const { boardId } = context;
+
+  useEffect(() => {
+    loadBoardData();
+  }, [boardId]);
+
+  const loadBoardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const data = await mondayService.query(GET_BOARD_ITEMS, {
+        boardId: [boardId],
+        limit: 50,
+      });
+
+      const boardData = data?.boards?.[0];
+      if (boardData) {
+        setBoard(boardData);
+        setItems(boardData.items_page?.items || []);
+      }
+    } catch (err) {
+      // Record the error (never swallow), then surface it to the user via ErrorState.
+      logger.error('BoardView', 'Failed to load board data', err);
+      setError(err.message || 'Failed to load board data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleItemClick = (itemId) => {
+    mondayService.openItemCard(itemId);
+  };
+
+  if (loading) {
+    return <LoadingState message="Loading board..." />;
+  }
+
+  if (error) {
+    return <ErrorState message={error} onRetry={loadBoardData} />;
+  }
+
+  return (
+    <div className="board-view p-4">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold">{board?.name}</h1>
+          <p className="text-sm text-gray-500">
+            {items.length} items
+          </p>
+        </div>
+        <Button leftIcon={Add}>
+          Add Item
+        </Button>
+      </div>
+
+      <ItemList items={items} onItemClick={handleItemClick} />
+    </div>
+  );
+}
+
+export default BoardView;
