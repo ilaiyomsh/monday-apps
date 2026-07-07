@@ -1,0 +1,130 @@
+import React, { useState, useEffect } from 'react';
+import { Button, TextField } from '@vibe/core';
+import mondayService from '../../services/mondayService';
+import logger from '../../utils/logger';
+import LoadingState from '../shared/LoadingState';
+import ErrorState from '../shared/ErrorState';
+
+/**
+ * ColumnSettings - Shown when user opens column settings menu
+ *
+ * Available context properties:
+ * - context.boardId: number
+ * - context.columnId: string
+ * - context.columnType: string
+ * - context.user.id: string
+ * - context.user.currentLanguage: string
+ * - context.user.isAdmin: boolean
+ * - context.theme: "light" | "dark"
+ *
+ * NOTE: itemId is NOT available in settings context
+ */
+
+function ColumnSettings({ context }) {
+  const [settings, setSettings] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const { boardId, columnId } = context;
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const loadSettings = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load saved settings from instance storage
+      const storedSettings = await mondayService.getInstanceStorage('columnSettings');
+      setSettings(storedSettings || {});
+    } catch (err) {
+      // Record the error (never swallow), then surface it to the user via ErrorState.
+      logger.error('ColumnSettings', 'Failed to load settings', err);
+      setError(err.message || 'Failed to load settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setError(null);
+
+      await mondayService.setInstanceStorage('columnSettings', settings);
+      mondayService.showNotice('Settings saved successfully');
+      mondayService.closeDialog();
+    } catch (err) {
+      // Record the error (never swallow), then surface it to the user via ErrorState.
+      logger.error('ColumnSettings', 'Failed to save settings', err);
+      setError(err.message || 'Failed to save settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    mondayService.closeDialog();
+  };
+
+  const updateSetting = (key, value) => {
+    setSettings((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  if (loading) {
+    return <LoadingState message="Loading settings..." />;
+  }
+
+  if (error) {
+    return <ErrorState message={error} onRetry={loadSettings} />;
+  }
+
+  return (
+    <div className="column-settings">
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold mb-1">Column Settings</h2>
+        <p className="text-sm text-gray-500">
+          Configure your column behavior and appearance.
+        </p>
+      </div>
+
+      <div className="space-y-4 mb-6">
+        {/* Example setting - customize based on your needs */}
+        <div>
+          <label className="block text-sm font-medium mb-1">Display Format</label>
+          <TextField
+            placeholder="Enter display format..."
+            value={settings.displayFormat || ''}
+            onChange={(value) => updateSetting('displayFormat', value)}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Default Value</label>
+          <TextField
+            placeholder="Enter default value..."
+            value={settings.defaultValue || ''}
+            onChange={(value) => updateSetting('defaultValue', value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button kind="secondary" onClick={handleCancel} disabled={saving}>
+          Cancel
+        </Button>
+        <Button onClick={handleSave} loading={saving}>
+          Save Settings
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export default ColumnSettings;

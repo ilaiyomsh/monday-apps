@@ -1,0 +1,7 @@
+export default {
+  name: 'example-integration',
+  displayName: 'Example Integration',
+  description: 'Example integration tool with trigger and action blocks',
+  version: '1.0.0',
+  author: '__APP_NAME_PASCAL__'
+};

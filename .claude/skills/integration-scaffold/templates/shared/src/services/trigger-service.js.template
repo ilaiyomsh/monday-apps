@@ -1,0 +1,114 @@
+/**
+ * Trigger Service
+ * Handles JWT signing and webhook firing for trigger blocks.
+ */
+
+import jwt from 'jsonwebtoken';
+import fetch from 'node-fetch';
+import { getSecret } from '../helpers/secret-store.js';
+import logger from './logger/index.js';
+
+const TAG = 'trigger_service';
+
+/**
+ * Signs a JWT for trigger invocation.
+ * Monday.com requires the token to contain { appId } signed with the signing secret.
+ */
+export function signTriggerToken(appId, signingSecret) {
+  return jwt.sign({ appId }, signingSecret, { expiresIn: '1m' });
+}
+
+/**
+ * Fires a trigger by POSTing to the stored webhook URL.
+ * Called when your external event occurs and you want to start the workflow.
+ *
+ * @param {string} webhookUrl - The webhook URL from the subscribe payload
+ * @param {Object} outputFields - Data to pass to the workflow action blocks
+ */
+export async function fireTrigger(webhookUrl, outputFields) {
+  const appId = getSecret('MONDAY_APP_ID');
+  const signingSecret = getSecret('MONDAY_SIGNING_SECRET');
+
+  if (!appId || !signingSecret) {
+    throw new Error('MONDAY_APP_ID and MONDAY_SIGNING_SECRET must be set to fire triggers');
+  }
+
+  const token = signTriggerToken(appId, signingSecret);
+
+  logger.info('Firing trigger', TAG, { webhookUrl, outputFields });
+
+  const response = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      trigger: { outputFields }
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    logger.error('Trigger fire failed', TAG, { status: response.status, body: text });
+    throw new Error(`Trigger fire failed: ${response.status} ${text}`);
+  }
+
+  const result = await response.json().catch(() => ({}));
+  logger.info('Trigger fired successfully', TAG, { status: response.status });
+  return result;
+}
+
+/**
+ * Sends an async action completion callback.
+ * Used when your action block runs asynchronously.
+ *
+ * @param {string} callbackUrl - The callback URL from the action payload
+ * @param {boolean} success - Whether the action succeeded
+ * @param {Object} data - outputFields on success, or error details on failure
+ */
+export async function sendActionCallback(callbackUrl, success, data) {
+  const appId = getSecret('MONDAY_APP_ID');
+  const signingSecret = getSecret('MONDAY_SIGNING_SECRET');
+
+  if (!appId || !signingSecret) {
+    throw new Error('MONDAY_APP_ID and MONDAY_SIGNING_SECRET must be set for callbacks');
+  }
+
+  const token = signTriggerToken(appId, signingSecret);
+
+  const body = success
+    ? { success: true, outputFields: data }
+    : {
+        success: false,
+        severityCode: data.severityCode || 4000,
+        runtimeErrorDescription: data.runtimeErrorDescription || 'Action failed',
+        notificationErrorTitle: data.notificationErrorTitle || 'Action Error',
+        notificationErrorDescription: data.notificationErrorDescription || 'An error occurred'
+      };
+
+  logger.info('Sending action callback', TAG, { callbackUrl, success });
+
+  const response = await fetch(callbackUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    logger.error('Action callback failed', TAG, { status: response.status, body: text });
+    throw new Error(`Action callback failed: ${response.status}`);
+  }
+
+  logger.info('Action callback sent successfully', TAG);
+}
+
+export default {
+  signTriggerToken,
+  fireTrigger,
+  sendActionCallback,
+};

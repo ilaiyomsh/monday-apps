@@ -1,0 +1,27 @@
+import React from 'react';
+import { useMondayContext } from './hooks/useMondayContext';
+import ItemView from './components/ItemView/ItemView';
+import LoadingState from './components/shared/LoadingState';
+import ErrorState from './components/shared/ErrorState';
+
+function App() {
+  const { context, loading, error } = useMondayContext();
+
+  if (loading) {
+    return <LoadingState />;
+  }
+
+  if (error) {
+    return <ErrorState message={error} />;
+  }
+
+  const themeClass = context?.theme === 'dark' ? 'dark-app-theme' : 'light-app-theme';
+
+  return (
+    <div className={`min-h-screen ${themeClass}`}>
+      <ItemView context={context} />
+    </div>
+  );
+}
+
+export default App;

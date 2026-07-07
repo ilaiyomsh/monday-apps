@@ -1,0 +1,44 @@
+import express from 'express';
+import bodyParser from 'body-parser';
+import routes from './routes/index.js';
+import {
+  getSecret,
+  logger,
+  requestLoggerMiddleware,
+  errorMiddleware,
+  installProcessGuards,
+  setGracefulServer,
+  attachAxiomServerSink,
+  flushAxiom,
+} from '__PACKAGE_SCOPE__/shared';
+import { PORT } from './constants/index.js';
+
+const TAG = 'app';
+
+// Process nets FIRST — before anything else can throw (error-guard server-patterns §7).
+installProcessGuards(logger, { flush: flushAxiom });
+// Remote error shipping — inert unless AXIOM_TOKEN/AXIOM_DATASET/AXIOM_APP_NAME are set.
+attachAxiomServerSink(logger);
+
+const port = getSecret(PORT) || 8080;
+
+const app = express();
+
+logger.info('server_initializing', TAG, { app: '__APP_NAME_PASCAL__' });
+
+// Middlewares
+app.use(bodyParser.json());
+app.use(requestLoggerMiddleware);
+
+// Routes
+app.use(routes);
+
+// Terminal error middleware — registered LAST; logs once + safe JSON, never leaks
+// stack/message to the client. Async handlers reach it via asyncHandler(...).
+app.use(errorMiddleware(logger));
+
+const server = app.listen(port, () => {
+  logger.info('server_started', TAG, { port });
+  logger.info('health_check_ready', TAG, { url: `http://localhost:${port}/health` });
+});
+setGracefulServer(server); // SIGTERM/SIGINT close in-flight requests before exit

@@ -1,0 +1,149 @@
+# mapps CLI — verified cheat sheet + command reference
+
+This file has TWO sections. The refresh procedure (see SKILL.md, "Docs freshness")
+may rewrite ONLY section 2. Section 1 is curated from live `--help` output and
+hard-won incident discoveries — never clobber it with a web fetch.
+
+---
+
+## 1. VERIFIED FACTS (curated — do not overwrite on refresh)
+
+_Verified live against `@mondaycom/apps-cli 4.10.8` on 2026-07-02 via `mapps <cmd> --help` unless marked otherwise._
+
+### Traps that keep being re-derived — read these before typing any mapps command
+
+| Fact | Verified |
+|---|---|
+| There is **NO `app-version:promote`** subcommand. `app-version` has only `builds` and `list`. Promotion is `mapps app:promote -a <APP_ID> -i <APP_VERSION_ID>`. | live 4.10.8 |
+| `code:status` takes **`-i/--appVersionId`** — it does NOT accept `-a`. | live 4.10.8 |
+| `code:logs` takes **`-i/--appVersionId`** (not app id): `mapps code:logs -i <APP_VERSION_ID> -s live -t console`. | live 4.10.8 |
+| `app-features:build`: the short `-u <url>` form FAILS ("Unexpected argument") — use long form **`--customUrl=<url>`** (with `=`). Build types: `custom_url` \| `monday_code` \| `monday_code_cdn`. Running with `-t monday_code_cdn` and NO url drops into an interactive prompt ("Add your route to monday-code base url") and hangs agent sessions — always pass the full flag set. | incident-verified 2026-07-07 |
+| A plain `mapps code:push` **ALWAYS fails on single-live-version apps** ("The latest app version is live... use --force"). Never attempt a plain push first — go straight through `scripts/ship.sh`, which applies `--force` behind the one deploy gate. | incident-verified, repeatedly |
+| `code:push --force` (a.k.a. `deploy:force`) does **NOT rebuild** — it pushes whatever is in the build dir. Always build first (ship.sh does). | incident-verified |
+| `--force` push reuses the **same version id and CDN URL** → monday **mobile webview may serve a stale cached bundle**; the CDN files DO update. Not a failed deploy. | incident-verified |
+| Always `pnpm run deploy` / `pnpm run <script>` — **never bare `pnpm deploy`**, which collides with pnpm's builtin (`ERR_PNPM_CANNOT_DEPLOY`). | incident-verified, 3 projects |
+| The GraphQL `create_app` mutation (via mapps-api.sh, not the CLI) requires slug format **`{account}_{slug}`**, e.g. `yomsheni-il_myapp`. | incident-verified (3 sequential failures before discovery) |
+| `scheduler:create` targetUrl flag is **`-e/--targetUrl`** (older docs said `-u`), and the URL is relative to `/mndy-cronjob/<YOUR_ENDPOINT>`. | live 4.10.8 — doc correction |
+| There is **NO CLI/API to create a draft app version directly** (no `app-version:create`; no GraphQL mutation). The programmatic path: `mapps manifest:export -a <APP_ID> -p m.json` then `mapps manifest:import -a <APP_ID> --manifestPath m.json` — import with `-a` **creates a new draft version**. UI alternative: Developer Center → App versions → New version. Needed whenever the latest version is live and a non-force push must succeed (see monday-cicd skill). | live-docs-confirmed 2026-07-07 |
+| `manifest:import -a <id>` fails with **"App slug is required"** when the app's `slug` is `null` (common on older apps; check via API `query { app(id:<id>) { slug } }`). Fix: inject `"slug": "<account>_<name>"` (this account's pattern: `yomsheni-il_planner`) into the exported manifest's `app` object, then import — the import sets the slug AND creates the draft. Verified on Planner 10787117 + Tracker 10684862. | incident-verified 2026-07-07 |
+| `manifest:export -a <id> -p <path>` creates a **directory** at `<path>` containing `manifest.json` — it is NOT the file itself. `manifest:import --manifestPath` needs the inner `manifest.json` path, and must run from a user-writable dir (unlink EPERM when the manifest sits in sandbox-restricted `/tmp`). | incident-verified 2026-07-07 |
+| `app-version:builds` can show a **stale, manifest-copied build URL** after a fresh `code:push -c` to that version. Authoritative verification: the push log line "Using version - <id>" + fetching the printed CDN URL and matching hashed asset filenames against the local build. | incident-verified 2026-07-07 |
+| A `code:push` redeploy does **NOT rebind** an app feature whose build points at a `custom_url` — the external binding survives the push. To restore a client-side feature to the version's CDN deployment: `app-features:build --buildType monday_code_cdn --customUrl=/` (the CLI resolves "/" to the version's current CDN base). Used by monday-cicd's dev-live detach. | incident-verified 2026-07-07 |
+| CLI subcommands never invent themselves: for any unfamiliar flag, run `mapps <cmd> --help` or `ask_developer_docs` FIRST. Never guess flags. | rule |
+
+### App id vs version id per subcommand (verified live 4.10.8)
+
+| Subcommand | Takes APP id | Takes VERSION id |
+|---|---|---|
+| `app:promote` | `-a/--appId` | `-i/--appVersionId` |
+| `app-version:list` | `-i/--appId` (yes, `-i` means APP id here) | — |
+| `app-version:builds` | — | `-i/--appVersionId` |
+| `app-features:list` / `create` / `build` | `-a/--appId` | `-i/--appVersionId` (+ `-d/--appFeatureId` for build) |
+| `code:push` | `-a/--appId` | or `-i/--appVersionId` (either) |
+| `code:status` | — | `-i/--appVersionId` only |
+| `code:logs` | — | `-i/--appVersionId` only |
+| `code:report` | — | `-i/--appVersionId` |
+| `code:env` / `code:secret` | `-i/--appId` (yes, `-i` means APP id here) | — |
+| `scheduler:*` | `-a/--appId` | — |
+| `storage:*` | `-a/--appId` (+ `-c/--clientAccountId`) | — |
+| `manifest:export` | `-a/--appId` (exports live version) | `-i/--appVersionId` (specific version) |
+| `tunnel:create` | `-a/--appId` (+ `-p/--port`, default 8080) | — |
+| `database:connection-string` | `-a/--appId` | — |
+
+The `-i` flag is NOT consistent across subcommands — it means app id in
+`app-version:list` and `code:env`/`code:secret`, but version id in
+`code:status`/`code:logs`/`code:push`. Check the table; do not pattern-match.
+
+### Version lifecycle reality
+
+- There is no CLI command to create a new app version. `code:push` to a live-only
+  app creates/updates the draft implicitly; otherwise versions are managed in the
+  Developer Center.
+- Single-live-version apps: build → `code:push --force` (via ship.sh) is the whole
+  cycle. `app:promote` is only relevant for apps with a separate draft version.
+
+---
+
+## 2. FETCHED REFERENCE (refresh target — may be rewritten by the 30-day refresh)
+
+_Source: https://developer.monday.com/apps/docs/command-line-interface-cli — reconciled with live `--help` of 4.10.8 on 2026-07-02._
+
+### Installation & setup
+
+```bash
+npm install -g @mondaycom/apps-cli
+mapps init -t <SECRET_TOKEN>      # writes ~/.config/mapps/.mappsrc (never cat it)
+```
+
+Global flags (any command): `--print-command`, `--verbose`.
+Region flag where supported: `-z/--region` `us|eu|au|il`.
+
+### api
+
+- `mapps api:generate` — prepares environment for custom query development. Run from project root.
+
+### app
+
+- `mapps app:create -n <NAME> [-d <TARGET_DIR>]`
+- `mapps app:deploy` — deploy using manifest file: `-a`, `-d/--directoryPath`, `-v/--appVersionId`, `-f/--force`, `-z`
+- `mapps app:list` — list all apps (find app ids)
+- `mapps app:promote -a <APP_ID> -i <APP_VERSION_ID>`
+- `mapps app:scaffold [DEST] [TEMPLATE] [-c <npm-script>] [-s <signingSecret>]`
+
+### app-features
+
+- `mapps app-features:list -a <APP_ID> -i <APP_VERSION_ID>`
+- `mapps app-features:create -a <APP_ID> -i <APP_VERSION_ID> -n <NAME> -t <TYPE>`
+  - Types include: AppFeatureBoardView, AppFeatureItemView, AppFeatureDashboardWidget,
+    AppFeatureWorkspaceView, AppFeatureItemMenuAction, AppFeatureItemBatchAction,
+    AppFeatureGroupMenuAction, AppFeatureObject, AppFeatureIntegration,
+    AppFeatureAiBoardMainMenuHeader, AppFeatureAiDocQuickStart, AppFeatureAiDocTopBar,
+    AppFeatureAiDocSlashCommand, AppFeatureDocActions, AppFeatureProductView
+- `mapps app-features:build -a <APP_ID> -i <APP_VERSION_ID> -d <APP_FEATURE_ID> -t custom_url|monday_code|monday_code_cdn -u <CUSTOM_URL>`
+
+### app-version
+
+- `mapps app-version:list -i <APP_ID>`
+- `mapps app-version:builds -i <APP_VERSION_ID>`
+
+### code
+
+- `mapps code:push [-a <APP_ID> | -i <APP_VERSION_ID>] [-d <BUILD_DIR>] [-c/--client-side] [-f/--force] [-s/--security-scan] [-z]`
+  — `--client-side` uploads to CDN (requires index.html at the pushed directory root).
+  **Use `scripts/ship.sh`, not this directly** (a PreToolUse hook blocks raw pushes).
+- `mapps code:status -i <APP_VERSION_ID>`
+- `mapps code:logs -i <APP_VERSION_ID> -t http|console -s live|History [-r <regex>] [-f "MM/DD/YYYY HH:mm"] [-e "MM/DD/YYYY HH:mm"]`
+- `mapps code:env -i <APP_ID> -m list-keys|set|delete [-k <KEY>] [-v <VALUE>]`
+- `mapps code:secret -i <APP_ID> -m list-keys|set|delete [-k <KEY>] [-v <VALUE>]`
+- `mapps code:report -i <APP_VERSION_ID> [-o -d <OUTPUT_DIR>]`
+
+### scheduler (monday-code apps only)
+
+- `mapps scheduler:list -a <APP_ID>`
+- `mapps scheduler:create -a <APP_ID> -n <NAME(no spaces)> -s "<cron UTC>" -e "<endpoint>" [-d <desc>] [-r <maxRetries>] [-b <minBackoffSec>] [-t <timeoutSec>]`
+  — endpoint is relative to `/mndy-cronjob/<YOUR_ENDPOINT>`; targetUrl flag is `-e` (live-verified).
+- `mapps scheduler:run -a <APP_ID> -n <NAME>`
+- `mapps scheduler:update -a <APP_ID> -n <NAME> [same flags as create]`
+- `mapps scheduler:delete -a <APP_ID> -n <NAME>` — GATED: ask the user once before deleting.
+
+### storage
+
+- `mapps storage:search -a <APP_ID> -c <CLIENT_ACCOUNT_ID> -t <TERM>`
+- `mapps storage:export -a <APP_ID> -c <CLIENT_ACCOUNT_ID> [-d <FILE_DIR>] [-f CSV|JSON]`
+- `mapps storage:remove-data -a <APP_ID> -c <CLIENT_ACCOUNT_ID> [-f]` — GATED: ask the user once; never pass `-f` unprompted.
+
+### manifest
+
+- `mapps manifest:export -a <APP_ID> [-i <APP_VERSION_ID>] [-p <PATH>]` — `-a` alone exports the live version.
+- `mapps manifest:import -p <PATH> [-a <APP_ID>] [-i <APP_VERSION_ID>] [-n/--newApp] [-m/--allowMissingVariables]`
+
+### database
+
+- `mapps database:connection-string -a <APP_ID>`
+
+### tunnel / utility
+
+- `mapps tunnel:create -p <PORT> -a <APP_ID>` (port defaults to 8080)
+- `mapps init -t <TOKEN> [-l/--local]`
+- `mapps help <topic> [-n/--nested-commands]`
+- `mapps autocomplete zsh|bash|powershell [-r]`

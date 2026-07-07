@@ -1,0 +1,41 @@
+/**
+ * Example Trigger Block
+ * Demonstrates the trigger subscribe/unsubscribe/fire pattern.
+ */
+
+export { subscribeTrigger, unsubscribeTrigger } from './trigger.js';
+export { fieldHandlers } from './fields.js';
+
+export const metadata = {
+  name: 'example-trigger',
+  displayName: 'Example Trigger',
+  description: 'Fires when an external event occurs',
+  type: 'trigger',
+  version: '1.0.0',
+
+  inputFields: [
+    {
+      key: 'boardId',
+      type: 'board',
+      description: 'The board this trigger is associated with',
+    },
+  ],
+
+  outputFields: [
+    {
+      key: 'eventType',
+      type: 'text',
+      description: 'The type of event that occurred',
+    },
+    {
+      key: 'eventData',
+      type: 'text',
+      description: 'JSON data from the event',
+    },
+    {
+      key: 'timestamp',
+      type: 'text',
+      description: 'When the event occurred (ISO 8601)',
+    },
+  ],
+};

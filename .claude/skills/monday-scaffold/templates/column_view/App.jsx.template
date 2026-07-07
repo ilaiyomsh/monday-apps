@@ -1,0 +1,67 @@
+import React from 'react';
+import { useMondayContext } from './hooks/useMondayContext';
+import OnClickDialog from './components/OnClickDialog/OnClickDialog';
+import ColumnSettings from './components/ColumnSettings/ColumnSettings';
+import LoadingState from './components/shared/LoadingState';
+import ErrorState from './components/shared/ErrorState';
+
+/**
+ * Column View App
+ *
+ * Context structure from Monday SDK:
+ * {
+ *   placement: "columnPickers" | "settings",  // Determines which view to show
+ *   boardId: number,
+ *   columnId: string,
+ *   itemId: number,              // Only present in columnPickers (onclick)
+ *   selectedItemIds: number[],   // Only present in columnPickers (onclick)
+ *   columnType: string,
+ *   theme: "light" | "dark",
+ *   user: {
+ *     id: string,
+ *     currentLanguage: string,   // e.g., "en", "he"
+ *     isAdmin: boolean,
+ *     ...
+ *   },
+ *   account: { id: string },
+ *   app: { id: number, clientId: string },
+ *   ...
+ * }
+ */
+
+function App() {
+  const { context, loading, error } = useMondayContext();
+
+  if (loading) {
+    return <LoadingState />;
+  }
+
+  if (error) {
+    return <ErrorState message={error} />;
+  }
+
+  const themeClass = context?.theme === 'dark' ? 'dark-app-theme' : 'light-app-theme';
+  const placement = context?.placement;
+  const isRTL = context?.user?.currentLanguage === 'he';
+  const dir = isRTL ? 'rtl' : 'ltr';
+
+  return (
+    <div className={`min-h-screen p-4 ${themeClass}`} dir={dir}>
+      {placement === 'columnPickers' && (
+        <OnClickDialog context={context} />
+      )}
+      {placement === 'settings' && (
+        <ColumnSettings context={context} />
+      )}
+      {!placement && (
+        <div className="text-center py-8">
+          <p className="text-gray-500">
+            This app should be opened from a Monday.com column.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default App;

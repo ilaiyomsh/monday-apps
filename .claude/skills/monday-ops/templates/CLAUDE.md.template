@@ -1,0 +1,37 @@
+# Demo "{{DEMO_NAME}}" — Workspace Snapshot
+
+> Agent-facing context for this setup. Structure = **{{STRUCTURE_LABEL}}**.
+> {{STRUCTURE_SUMMARY}}
+> Everything is in Hebrew. Apps match columns by **id**, status by **label id**.
+> Keep this file in sync with the live state after every API mutation.
+
+## Access
+
+- monday account `{{ACCOUNT_NAME}}` (id `{{ACCOUNT_ID}}`), API user {{API_USER}}.
+- Work **only** against workspace `{{WORKSPACE_ID}}` ("{{DEMO_NAME}}").
+- API via the canonical `mapps-api.sh` at
+  `.claude/skills/mapps/mapps-api.sh` under the project root (token stays out of context).
+
+## Apps
+
+{{APPS_SECTION}}
+
+## Boards
+
+{{BOARDS_SECTION}}
+
+## Seeded demo data
+
+{{SEED_SECTION}}
+
+## Notes & gotchas
+
+- Tracker `settingsValidator` blocks if ANY configured column id no longer exists on the
+  reporting board — when restructuring, null out keys that point at deleted columns.
+- JSON import **merges** into existing settings (doesn't replace) — a stale value survives
+  unless its key is explicitly present in the imported file.
+- Status labels referenced by **label id** (read back via `settings`), never positional index.
+- Re-run `provision.py` (idempotent) to rebuild boards; re-run `seed.py` to reseed data.
+- Before importing any saved settings file, run the monday-ops schema-drift guard:
+  `python3 <monday-ops>/scripts/guard.py <settings.json>`. After any rebuild, run
+  `python3 <monday-ops>/scripts/validate.py <config.json>`.

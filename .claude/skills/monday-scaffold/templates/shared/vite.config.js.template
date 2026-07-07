@@ -1,0 +1,36 @@
+import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+// Dev harness: a monday-sdk-js stub with realistic fixtures so the app renders
+// OUTSIDE the monday iframe (pnpm dev:mock) and tests never hit the live API.
+// See src/dev-harness/README.md.
+const mockSdkPath = fileURLToPath(new URL('./src/dev-harness/monday-sdk-stub.js', import.meta.url));
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    // VITE_MONDAY_MOCK=1 (pnpm dev:mock) → the whole app uses the stub.
+    // Unset (tunnel / production build) → the real SDK.
+    alias: process.env.VITE_MONDAY_MOCK ? { 'monday-sdk-js': mockSdkPath } : {},
+  },
+  server: {
+    port: {{DEV_PORT}},
+    host: true,
+    allowedHosts: ['.apps-tunnel.monday.app'],
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+  },
+  define: {
+    global: 'globalThis',
+    // Version stamp for remote error records (utils/axiomErrorSink.js → `ver` field).
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
+  },
+  test: {
+    // vitest ALWAYS uses the stub — tests must run against harness fixtures.
+    alias: { 'monday-sdk-js': mockSdkPath },
+    environment: 'jsdom',
+  },
+});

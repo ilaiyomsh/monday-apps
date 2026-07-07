@@ -1,0 +1,31 @@
+/**
+ * errorMiddleware.js — the single terminal Express error handler.
+ *
+ * Contract (error-guard references/server-patterns.md):
+ * - Registered LAST, after all routes: app.use(errorMiddleware(logger)).
+ * - Logs exactly once through the logger (log-once marks the Error instance, so
+ *   an error already logged at a deeper catch is rendered but not re-shipped).
+ * - Responds with safe JSON: generic message + correlationId for support lookup.
+ *   NEVER leaks err.message or err.stack to the client (they may carry internals).
+ * - Honors an intentional HTTP status set upstream (err.status / err.statusCode);
+ *   anything else is a 500.
+ * - headersSent guard: if a response already started streaming, delegate to
+ *   Express's default handler (it closes the connection) — writing again would throw.
+ */
+
+export const errorMiddleware = (logger) => (err, req, res, next) => {
+  if (res.headersSent) {
+    return next(err);
+  }
+  logger.error('unhandled_route_error', 'http', {
+    error: err instanceof Error ? err : new Error(String(err)),
+    method: req.method,
+    path: req.path,
+  });
+  const raw = err?.status ?? err?.statusCode;
+  const status = Number.isInteger(raw) && raw >= 400 && raw <= 599 ? raw : 500;
+  res.status(status).json({
+    error: status === 500 ? 'internal_error' : 'request_failed',
+    correlationId: err?.correlationId,
+  });
+};

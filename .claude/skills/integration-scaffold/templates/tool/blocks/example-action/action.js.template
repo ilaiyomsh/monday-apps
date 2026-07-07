@@ -1,0 +1,61 @@
+/**
+ * Example Action - Execution Handler
+ * Receives data from the workflow and processes it.
+ *
+ * Replace this with your actual business logic.
+ */
+
+import { logger, extractFieldValues } from '__PACKAGE_SCOPE__/shared';
+
+const TAG = 'example_action';
+
+export async function executeAction(req, res) {
+  const { accountId, userId, shortLivedToken } = req.session;
+  const { inputFields } = req.body.payload;
+
+  const { boardId, itemId, inputText } = extractFieldValues(inputFields, [
+    'boardId',
+    'itemId',
+    'inputText',
+  ]);
+
+  logger.info('Action received', TAG, {
+    accountId,
+    userId,
+    boardId,
+    itemId,
+    inputText,
+  });
+
+  try {
+    // -------------------------------------------------------
+    // TODO: Replace with your actual action logic.
+    // Example: use createApiClient(shortLivedToken) to call Monday API,
+    // call an external service, update columns, create items, etc.
+    // -------------------------------------------------------
+
+    const result = `Processed item ${itemId} on board ${boardId}`;
+
+    logger.info('Action completed', TAG, { result });
+
+    return res.status(200).json({
+      outputFields: {
+        result,
+        success: 'true',
+      },
+    });
+  } catch (err) {
+    logger.error('Action failed', TAG, {
+      error: err,
+      boardId,
+      itemId,
+    });
+
+    return res.status(500).json({
+      severityCode: 4000,
+      notificationErrorTitle: 'Action failed',
+      notificationErrorDescription: 'An error occurred while processing the action',
+      runtimeErrorDescription: err.message,
+    });
+  }
+}

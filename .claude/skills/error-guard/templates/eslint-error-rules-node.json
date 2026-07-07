@@ -1,0 +1,44 @@
+{
+  "_install": "SERVER (Node/Express) variant of the kit — same 4 rules; catch-must-log additionally accepts `next(err)` (forwarding to the terminal error middleware, which owns logging). Add devDependency eslint-plugin-promise, merge rules+overrides into the server/shared package.json eslintConfig (env: node, es2022, sourceType: module), add \"promise\" to plugins. Generalize override paths to the app's real logger/sink locations. See references/server-patterns.md §ESLint.",
+  "plugins": ["promise"],
+  "rules": {
+    "no-console": "error",
+    "no-empty": ["error", { "allowEmptyCatch": false }],
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "CatchClause > BlockStatement:not(:has(CallExpression[callee.object.name='logger'])):not(:has(ThrowStatement)):not(:has(CallExpression[callee.name='next']))",
+        "message": "This catch block swallows the error silently. Do exactly one of: (1) call logger.error/logger.warn(...) to record it, (2) re-throw it with `throw` so an upstream catch or the process net handles it, or (3) forward it with `next(error)` so the terminal error middleware logs it and returns a safe JSON response. The only allowed silent path is an intentional AbortController cancel: `if (e.name === 'AbortError') return;`."
+      }
+    ],
+    "promise/catch-or-return": "error"
+  },
+  "overrides": [
+    {
+      "files": ["**/services/logger.js", "**/services/logger/**", "**/utils/logger.js"],
+      "rules": {
+        "no-console": "off",
+        "no-restricted-syntax": "off"
+      }
+    },
+    {
+      "files": [
+        "**/__tests__/**",
+        "**/*.test.js",
+        "**/*.test.ts",
+        "**/test-utils/**"
+      ],
+      "rules": {
+        "no-console": "off",
+        "no-restricted-syntax": "off"
+      }
+    },
+    {
+      "files": ["**/axiomServerSink.js", "**/processGuards.js"],
+      "rules": {
+        "no-console": "off",
+        "no-restricted-syntax": "off"
+      }
+    }
+  ]
+}

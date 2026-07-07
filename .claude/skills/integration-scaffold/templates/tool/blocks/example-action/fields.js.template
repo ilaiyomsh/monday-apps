@@ -1,0 +1,17 @@
+/**
+ * Example Action - Field Handlers
+ * Add custom field option handlers here if your action has custom fields.
+ *
+ * Example:
+ *   async function getColumnsHandler(req, res) {
+ *     const { shortLivedToken } = req.session;
+ *     const boardId = req.body?.payload?.dependencyData?.boardId?.value;
+ *     // fetch columns, return [{ title, value }]
+ *   }
+ *
+ *   export const fieldHandlers = {
+ *     'get_columns': getColumnsHandler,
+ *   };
+ */
+
+export const fieldHandlers = {};

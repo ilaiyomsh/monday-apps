@@ -1,0 +1,46 @@
+/**
+ * Example Action Block
+ * Demonstrates the action execution pattern.
+ */
+
+export { executeAction } from './action.js';
+export { fieldHandlers } from './fields.js';
+
+export const metadata = {
+  name: 'example-action',
+  displayName: 'Example Action',
+  description: 'Processes trigger data and performs an action',
+  type: 'action',
+  version: '1.0.0',
+
+  inputFields: [
+    {
+      key: 'boardId',
+      type: 'board',
+      description: 'The target board',
+    },
+    {
+      key: 'itemId',
+      type: 'item',
+      description: 'The target item',
+    },
+    {
+      key: 'inputText',
+      type: 'text',
+      description: 'Text input from the trigger or user configuration',
+    },
+  ],
+
+  outputFields: [
+    {
+      key: 'result',
+      type: 'text',
+      description: 'The result of the action',
+    },
+    {
+      key: 'success',
+      type: 'text',
+      description: 'Whether the action succeeded (true/false)',
+    },
+  ],
+};

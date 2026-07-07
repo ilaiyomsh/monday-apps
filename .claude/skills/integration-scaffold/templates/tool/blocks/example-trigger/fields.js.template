@@ -1,0 +1,6 @@
+/**
+ * Example Trigger - Field Handlers
+ * Add custom field option handlers here if your trigger has custom fields.
+ */
+
+export const fieldHandlers = {};

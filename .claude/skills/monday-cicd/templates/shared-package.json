@@ -1,0 +1,10 @@
+{
+  "name": "@monday-apps/shared",
+  "version": "0.0.1",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "lint": "echo no-lint-yet",
+    "build": "echo shared-is-source-only"
+  }
+}

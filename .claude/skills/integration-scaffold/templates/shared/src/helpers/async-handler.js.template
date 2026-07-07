@@ -1,0 +1,23 @@
+// SYNCED COPY — canonical source: .claude/skills/error-guard/templates/server/. Fix defects THERE first (error-guard SKILL.md §Self-correction rule 4), then re-sync consumers.
+/**
+ * asyncHandler.js — Express 4 async route wrapper.
+ *
+ * WHY THIS EXISTS: Express 4 does NOT catch rejected promises in route handlers.
+ * An `async (req, res) => { throw ... }` handler leaves the request hanging until
+ * the client times out, and the rejection becomes an unhandledRejection (which the
+ * process guards treat as fatal). EVERY async handler and async middleware must be
+ * wrapped — no exceptions. (Express 5 forwards rejections natively; this wrapper
+ * is then harmless but redundant.)
+ *
+ * Usage:
+ *   import { asyncHandler } from '.../asyncHandler.js';
+ *   router.post('/action', asyncHandler(async (req, res) => { ... }));
+ *
+ * The rejection is forwarded to next(err) → the terminal error middleware, which
+ * owns logging (log-once) and the safe JSON response. Do NOT add a try/catch that
+ * swallows inside the handler; throw and let the funnel work.
+ */
+
+export const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch(next);
+};

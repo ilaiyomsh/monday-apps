@@ -1,0 +1,40 @@
+/**
+ * Main Router
+ * Combines all routes and provides health check endpoints.
+ */
+
+import { Router } from 'express';
+import { loadTools, logRegistryStatus } from './auto-loader.js';
+import actionsRouter from './actions.js';
+import triggersRouter from './triggers.js';
+import fieldsRouter from './fields.js';
+
+const router = Router();
+
+// Load tools and blocks on startup
+await loadTools();
+logRegistryStatus();
+
+// Action routes - handles all block actions
+router.use(actionsRouter);
+
+// Trigger routes - handles subscribe/unsubscribe
+router.use(triggersRouter);
+
+// Field routes - handles all custom field requests
+router.use(fieldsRouter);
+
+// Health check endpoints
+router.get('/', (req, res) => {
+  res.json({
+    ok: true,
+    message: '__APP_NAME_PASCAL__ Integration is healthy',
+    version: '1.0.0'
+  });
+});
+
+router.get('/health', (req, res) => {
+  res.json({ ok: true, message: 'Healthy' });
+});
+
+export default router;

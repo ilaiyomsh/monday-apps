@@ -1,0 +1,98 @@
+import React, { useState, useEffect } from 'react';
+import { Tabs, TabList, Tab, TabPanels, TabPanel } from '@vibe/core';
+import mondayService from '../../services/mondayService';
+import logger from '../../utils/logger';
+import { GET_ITEM } from '../../services/graphqlQueries';
+import ItemDetails from './ItemDetails';
+import LoadingState from '../shared/LoadingState';
+import ErrorState from '../shared/ErrorState';
+
+function ItemView({ context }) {
+  const [item, setItem] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState(0);
+
+  const { boardId, itemId } = context;
+
+  useEffect(() => {
+    loadItemData();
+  }, [itemId]);
+
+  const loadItemData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const data = await mondayService.query(GET_ITEM, {
+        itemId: [itemId],
+      });
+
+      const itemData = data?.items?.[0];
+      setItem(itemData);
+    } catch (err) {
+      logger.error('ItemView', 'Failed to load item', err);
+      setError(err.message || 'Failed to load item');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <LoadingState message="Loading item..." />;
+  }
+
+  if (error) {
+    return <ErrorState message={error} onRetry={loadItemData} />;
+  }
+
+  if (!item) {
+    return <ErrorState message="Item not found" />;
+  }
+
+  return (
+    <div className="item-view p-4">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold mb-1">{item.name}</h1>
+        <p className="text-sm text-gray-500">
+          Board: {item.board?.name} | Group: {item.group?.title}
+        </p>
+      </div>
+
+      <Tabs activeTab={activeTab} onTabChange={setActiveTab}>
+        <TabList>
+          <Tab>Details</Tab>
+          <Tab>Subitems ({item.subitems?.length || 0})</Tab>
+          <Tab>Activity</Tab>
+        </TabList>
+        <TabPanels>
+          <TabPanel>
+            <ItemDetails item={item} onRefresh={loadItemData} />
+          </TabPanel>
+          <TabPanel>
+            <div className="py-4">
+              {item.subitems?.length > 0 ? (
+                <ul className="space-y-2">
+                  {item.subitems.map((subitem) => (
+                    <li key={subitem.id} className="p-3 bg-gray-50 rounded">
+                      {subitem.name}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-500">No subitems</p>
+              )}
+            </div>
+          </TabPanel>
+          <TabPanel>
+            <div className="py-4 text-gray-500">
+              Activity feed coming soon...
+            </div>
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
+    </div>
+  );
+}
+
+export default ItemView;

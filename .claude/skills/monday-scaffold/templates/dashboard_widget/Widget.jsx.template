@@ -1,0 +1,92 @@
+import React, { useState, useEffect } from 'react';
+import mondayService from '../../services/mondayService';
+import { GET_BOARD_ITEMS } from '../../services/graphqlQueries';
+import logger from '../../utils/logger';
+import LoadingState from '../shared/LoadingState';
+import ErrorState from '../shared/ErrorState';
+
+function Widget({ context }) {
+  const [data, setData] = useState(null);
+  const [settings, setSettings] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const { boardIds } = context;
+
+  useEffect(() => {
+    loadData();
+  }, [boardIds]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load widget settings
+      const storedSettings = await mondayService.getInstanceStorage('widgetSettings');
+      setSettings(storedSettings || {});
+
+      // Load board data
+      if (boardIds && boardIds.length > 0) {
+        const boardData = await mondayService.query(GET_BOARD_ITEMS, {
+          boardId: boardIds,
+          limit: 100,
+        });
+
+        setData(boardData?.boards || []);
+      }
+    } catch (err) {
+      // Record the error (never swallow), then surface it to the user via ErrorState.
+      logger.error('Widget', 'Failed to load widget data', err);
+      setError(err.message || 'Failed to load widget data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return <LoadingState message="Loading widget..." />;
+  }
+
+  if (error) {
+    return <ErrorState message={error} onRetry={loadData} />;
+  }
+
+  const totalItems = data?.reduce((sum, board) => {
+    return sum + (board.items_page?.items?.length || 0);
+  }, 0) || 0;
+
+  return (
+    <div className="widget p-4 h-full">
+      <div className="text-center">
+        <h2 className="text-lg font-semibold mb-4">
+          {settings.title || 'Dashboard Widget'}
+        </h2>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="p-4 bg-blue-50 rounded-lg">
+            <div className="text-3xl font-bold text-blue-600">
+              {data?.length || 0}
+            </div>
+            <div className="text-sm text-gray-600">Boards</div>
+          </div>
+
+          <div className="p-4 bg-green-50 rounded-lg">
+            <div className="text-3xl font-bold text-green-600">
+              {totalItems}
+            </div>
+            <div className="text-sm text-gray-600">Items</div>
+          </div>
+        </div>
+
+        {!boardIds || boardIds.length === 0 ? (
+          <p className="mt-4 text-sm text-gray-500">
+            No boards connected. Configure widget settings to add boards.
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export default Widget;

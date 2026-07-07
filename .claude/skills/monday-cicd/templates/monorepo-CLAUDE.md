@@ -2,7 +2,7 @@
 
 All monday.com client-side apps live here, wired to one CI/CD pipeline.
 Full model + onboarding procedures: the `monday-cicd` skill in
-`/Users/ilaish/monday_app/apps/.claude/skills/monday-cicd/`.
+`.claude/skills/monday-cicd/` in this repo.
 
 ## Branch rules (non-negotiable)
 
@@ -30,9 +30,3 @@ Full model + onboarding procedures: the `monday-cicd` skill in
 - `packages/shared/` — code shared across apps. A change here affects EVERY
   app that imports it; CI builds all apps on every PR for exactly this reason.
 - Per-app deploy workflows: `.github/workflows/deploy-{draft,live}-<name>.yml`.
-
-## Shared skills
-
-Team skills live in `.claude/skills/` (portable — no machine-specific paths).
-See `.claude/skills/README.md` for the catalog and one-time developer setup.
-`monday-cicd` is the authority on this repo's pipeline; `mapps` owns deploys/CLI.
