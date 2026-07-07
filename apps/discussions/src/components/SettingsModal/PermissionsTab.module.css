@@ -1,0 +1,310 @@
+/* "הרשאות" tab — LTR, monday Board-Permissions style. Class names are plain
+   (CSS Modules non-scoped); name distinctively to avoid cross-module clashes. */
+
+.root {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px 4px 0;
+  text-align: left;
+}
+
+/* Master enable bar */
+.masterBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--primary-background-color, #fff);
+}
+
+.masterText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.explainer {
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--primary-background-hover-color, #f5f6f8);
+  border: 1px dashed var(--ui-border-color, #c3c6d4);
+}
+
+/* Two-pane layout: left role list + main capabilities.
+   Fixed height so the box does NOT resize when switching roles — the main
+   pane scrolls internally instead. */
+/* +20% taller than the other tabs (permissions mode gets a bigger box). */
+/* Fills the height handed down by the flex chain (content → TabsContext →
+   TabPanels → TabPanel → .root). No pixel math — each grid column (left board
+   columns, right permission cards) then scrolls on its own; the outer settings
+   content never scrolls. */
+.layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 264px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+/* LEFT sidebar — flat role list grouped by tier with thin dividers */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 8px;
+  padding: 6px;
+  background: var(--primary-background-color, #fff);
+  overflow: hidden;
+}
+
+/* Scrollable role-groups area (discussions + tasks columns). */
+.roleScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* "People on this board" — pinned at the sidebar bottom, fixed height, its own
+   scroll if the member/owner lists grow. */
+.peopleFooter {
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+  margin-top: 6px;
+  padding-top: 8px;
+}
+
+.roleGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Board-source header above each role group ("לוח דיונים" / "לוח משימות").
+   Bold + dark to match the "People on this board" section title. */
+.groupHeader {
+  font-size: 15px;
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--text-color, #323338);
+  padding: 6px 10px 4px;
+}
+
+.divider {
+  height: 1px;
+  background: var(--ui-border-color, #e6e9ef);
+  margin: 6px 4px;
+}
+
+.roleList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Each role is a row: the selectable label + a hover "hide" (ignore) toggle. */
+.roleRow {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.roleRow:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+/* A hidden (ignored) role — dimmed label; the eye toggle stays visible. */
+.roleRowHidden .roleItem {
+  opacity: 0.45;
+}
+
+.roleItem {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--text-color, #323338);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The hide/ignore eye button — hidden until row hover, always shown when hidden. */
+.hideBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-inline-end: 4px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--secondary-text-color, #676879);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.roleRow:hover .hideBtn,
+.roleRowHidden .hideBtn {
+  opacity: 1;
+}
+
+.hideBtn:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #eceef3);
+  color: var(--text-color, #323338);
+}
+
+.hideBtn:disabled {
+  cursor: default;
+  opacity: 0;
+}
+
+.roleItemActive {
+  background: var(--primary-selected-color, #e6f3ff);
+  font-weight: 600;
+  color: var(--primary-color, #0073ea);
+}
+
+/* MAIN — selected role + category cards */
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-inline-end: 4px;
+}
+
+.roleHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Shown in the main pane when the selected role is hidden/ignored. */
+.hiddenNote {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-color, #323338);
+  background: var(--primary-background-hover-color, #f5f6f8);
+  border: 1px dashed var(--ui-border-color, #c3c6d4);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+/* Concise help line above the capability cards: explains the revoke/deny-wins
+   semantics and the owner exemption. Subtle, matches .hiddenNote's tone. */
+.matrixHelp {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--secondary-text-color, #676879);
+  background: var(--primary-background-hover-color, #f5f6f8);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.card {
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--primary-background-color, #fff);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Accordion header — the whole row is a toggle button (icon · title · chevron). */
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+}
+
+.cardChevron {
+  margin-inline-start: auto;
+  color: var(--secondary-text-color, #676879);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.cardChevronOpen {
+  transform: rotate(180deg);
+}
+
+.cardIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--primary-color, #0073ea);
+  flex-shrink: 0;
+}
+
+.cardIcon svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.capRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.capRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+.notes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+@media (max-width: 768px) {
+  .layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .sidebar,
+  .main {
+    overflow-y: visible;
+  }
+}

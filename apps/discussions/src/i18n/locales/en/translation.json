@@ -1,0 +1,75 @@
+{
+  "common": {
+    "loading": "Loading",
+    "close": "Close",
+    "cancel": "Cancel",
+    "save": "Save",
+    "retry": "Retry",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+  "toasts": {
+    "genericError": "An error occurred"
+  },
+  "errorBoundary": {
+    "title": "Something went wrong",
+    "refresh": "Refresh page",
+    "tryAgain": "Try again",
+    "details": "Details"
+  },
+  "errorDetailsModal": {
+    "title": "Error details",
+    "tabError": "Error",
+    "tabApi": "API",
+    "tabJson": "JSON",
+    "copyAll": "Copy all",
+    "copyQuery": "Copy query"
+  },
+  "network": {
+    "title": "Network problem",
+    "message": "We couldn't load settings. Check your connection and try again.",
+    "retry": "Retry"
+  },
+  "myTasks": {
+    "title": "My Tasks",
+    "viewDiscussions": "Discussions",
+    "viewMyTasks": "My Tasks",
+    "searchPlaceholder": "Search task",
+    "filterByCreator": "Filter by creator",
+    "allCreators": "All creators",
+    "groupBy": "Group by",
+    "filter": "Filter",
+    "clearFilters": "Clear filters",
+    "groupByDiscussion": "By discussion",
+    "groupByStatus": "By status",
+    "groupByPriority": "By priority",
+    "groupByGroup": "By board group",
+    "sortBy": "Sort",
+    "sortNone": "No sort",
+    "sortPriorityAsc": "Priority (high→low)",
+    "sortPriorityDesc": "Priority (low→high)",
+    "sortDeadlineAsc": "Deadline (asc)",
+    "sortDeadlineDesc": "Deadline (desc)",
+    "sortStatus": "Status",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all",
+    "loadMore": "Load more",
+    "empty": "You have no tasks",
+    "emptyHint": "Tasks assigned to you will show up here",
+    "notConfigured": "The tasks board connection isn't configured yet",
+    "error": "Failed to load tasks",
+    "colName": "Task",
+    "colDiscussion": "Discussion",
+    "colDeadline": "Deadline",
+    "colPriority": "Priority",
+    "colStatus": "Status",
+    "colNotes": "Notes",
+    "notesPlaceholder": "Add a note",
+    "noDiscussion": "No discussion",
+    "noStatus": "No status",
+    "noPriority": "No priority",
+    "noGroup": "No group",
+    "openItem": "Open item",
+    "allTasks": "All tasks"
+  }
+}

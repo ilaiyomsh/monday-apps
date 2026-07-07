@@ -1,0 +1,29 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-small, 8px);
+}
+
+.userMessage {
+  font-weight: var(--font-weight-bold, 500);
+}
+
+.meta {
+  color: var(--secondary-text-color, #676879);
+  font-size: var(--font-size-subtext, 14px);
+}
+
+.pre {
+  margin: 0;
+  padding: var(--spacing-small, 8px);
+  background: var(--ui-background-color, #e7e9ef);
+  border-radius: var(--border-radius-small, 4px);
+  font-family: monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 280px;
+  overflow: auto;
+  direction: ltr;
+  text-align: left;
+}

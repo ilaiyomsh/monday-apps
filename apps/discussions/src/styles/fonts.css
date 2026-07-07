@@ -1,0 +1,29 @@
+/* monday.com brand fonts, self-hosted so they render identically inside the
+   app iframe (the parent platform's fonts don't cascade in).
+
+   Figtree → Latin/numerals, Noto Sans Hebrew → Hebrew. Both are variable fonts
+   (the whole weight range lives in one file). Figtree carries no Hebrew glyphs,
+   so a `'Figtree', 'Noto Sans Hebrew'` stack routes each glyph to the right face
+   automatically — Latin to Figtree, Hebrew falling through to Noto Sans Hebrew.
+   See --font-family in index.css. */
+@font-face {
+  font-family: 'Figtree';
+  src: url('../assets/fonts/Figtree-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Figtree';
+  src: url('../assets/fonts/Figtree-Italic-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Sans Hebrew';
+  src: url('../assets/fonts/NotoSansHebrew-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}

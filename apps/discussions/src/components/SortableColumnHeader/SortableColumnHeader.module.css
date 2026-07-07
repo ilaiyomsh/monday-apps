@@ -1,0 +1,48 @@
+/* A draggable header cell. The grab cursor + a faint drag affordance hint on
+   header hover signal that the column can be moved (owners only — the cell is
+   only draggable when the table enables reordering). */
+.draggable {
+  user-select: none;
+}
+/* Subtle "grip" hint shown on header-row hover. .taskHead is the (non-scoped,
+   global) header-row class used by BOTH MyTasksTable and TaskTable. */
+.draggable::before {
+  content: '⋮⋮';
+  position: absolute;
+  inset-inline-start: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  line-height: 1;
+  letter-spacing: -2px;
+  color: var(--secondary-text-color, #9aa0ad);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  pointer-events: none;
+}
+.taskHead:hover .draggable::before {
+  opacity: 0.5;
+}
+
+/* Floating drag ghost — a TALL "column cube" that follows the cursor. The
+   DragOverlay sizes it to the column width; min-height makes it span well below
+   the header so it reads as the whole column being lifted. */
+.ghost {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 132px;
+  /* title sits at the TOP of the box (header position), not vertically centered */
+  padding: 9px 12px 0;
+  /* light-blue, semi-transparent, NO border (a soft floating "ghost cube"). */
+  background: rgba(0, 115, 234, 0.22);
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: grabbing;
+  opacity: 0.85;
+  box-sizing: border-box;
+}

@@ -1,0 +1,72 @@
+.calRoot {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.calHeader {
+  flex-shrink: 0;
+  padding: 8px var(--spacing-medium, 16px) 0;
+}
+.calHeaderRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+}
+
+.calTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-general-label, 14px);
+  font-weight: var(--font-weight-bold, 600);
+  color: var(--text-color, #323338);
+}
+
+.calNav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* "חודשי | שבועי" segmented toggle — styled after the list's filter trigger. */
+.calModeToggle {
+  display: flex;
+  flex-shrink: 0;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  overflow: hidden;
+}
+.calModeBtn {
+  padding: 4px 10px;
+  border: none;
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: 13px;
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+.calModeBtn + .calModeBtn {
+  border-inline-start: 1px solid var(--ui-border-color, #c3c6d4);
+}
+.calModeBtn:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+.calModeBtnActive {
+  background: var(--primary-selected-color, #cce5ff);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.calBody {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.calRefetching {
+  opacity: 0.6;
+}

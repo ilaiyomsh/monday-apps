@@ -1,0 +1,573 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.modal {
+  /* Wide enough that the "previous discussion" dropdown shows full discussion
+     names on one line. */
+  width: min(760px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--border-radius-big, 12px);
+  background: var(--primary-background-color, #fff);
+  box-shadow: var(--box-shadow-medium, 0 10px 30px rgba(0, 0, 0, 0.2));
+  overflow: visible;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ui-border-color);
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-color);
+}
+
+/* Editable discussion-name title in the header. */
+.titleInput {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 18px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-color, #323338);
+  padding: 4px 8px;
+  margin-inline-end: 8px;
+  border-radius: var(--border-radius-small, 4px);
+  text-align: start;
+}
+
+.titleInput:hover {
+  border-color: var(--ui-border-color, #c3c6d4);
+}
+
+.titleInput:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+  background: var(--primary-background-color, #fff);
+}
+
+.closeButton {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--secondary-text-color);
+}
+
+.content {
+  padding: 12px 16px 16px;
+  overflow: visible;
+}
+
+.form {
+  padding-block: var(--spacing-medium);
+  padding-bottom: calc(var(--spacing-large) + var(--spacing-small));
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  min-width: 0;
+  text-align: start;
+}
+
+/* Positioning context for a field's inline X-clear button. The modal body is
+   dir=ltr, so physical `left` IS the visual left edge as required. If the modal
+   is ever flipped to RTL, switch `left` -> `inset-inline-start` on .fieldClear. */
+.fieldWrap {
+  position: relative;
+}
+
+/* Inline X-clear button, anchored to the visual-left edge of the field. */
+.fieldClear {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  border-radius: var(--border-radius-small, 4px);
+  z-index: 2;
+}
+
+.fieldClear:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+  color: var(--text-color, #323338);
+}
+
+/* When a dropdown trigger carries a clear button, reserve space at the left so
+   the value text never collides with the X (chevron stays on the right). */
+.customDropdown:has(> .fieldClear) .dropdownValue {
+  padding-left: 22px;
+}
+
+/* Two fields side by side (creator+date, lead+participants, previous+template). */
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 560px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Full-width row (single field spanning the modal): סוג דיון, דיון קודם. */
+.rowSingle {
+  grid-template-columns: 1fr;
+}
+
+/* Red asterisk marking a required field label (תאריך). */
+.required {
+  color: var(--negative-color, #d83a52);
+  font-weight: var(--font-weight-bold, 700);
+}
+
+/* Native date input styled to match the custom dropdown triggers. */
+.dateInput {
+  position: relative;
+  width: 100%;
+  height: 40px;
+  padding: 0 var(--spacing-small, 8px);
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background-color: var(--primary-background-color, #fff);
+  /* visible calendar glyph at the trailing edge (the real indicator is made
+     full-cover + transparent below, so it no longer draws its own icon). */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 20 20' fill='none' stroke='%23676879' stroke-width='1.4'%3E%3Crect x='3' y='4.5' width='14' height='12' rx='2.2'/%3E%3Cpath d='M3 8h14M7 3v3M13 3v3' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-inline-end: 30px;
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  box-sizing: border-box;
+}
+/* Make the whole cell open the date picker: stretch the native picker indicator
+   to cover the field and hide its own glyph. A direct click on the indicator
+   opens the browser's date picker — which works inside monday's cross-origin
+   iframe, unlike showPicker() (blocked). */
+.dateInput::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+/* Reserve room for the X-clear button at the left edge when a date is set. */
+.dateInputClearable {
+  padding-left: 30px;
+}
+
+.dateInput:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+/* Date + hour side by side, each with its own (uniform) required label. */
+.dateTimeRow {
+  display: flex;
+  gap: var(--spacing-small, 8px);
+  align-items: flex-start;
+}
+.dateCol {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+.timeCol {
+  width: 140px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+.dateCol .dateInput {
+  flex: 0 0 auto;
+}
+.timeCol .timeDropdown {
+  width: 100%;
+}
+.timeOption {
+  direction: ltr;
+  text-align: center;
+}
+.dropdownPlaceholder {
+  color: var(--placeholder-color, #9699a6);
+}
+
+/* Color dot for a status ("סוג") option/value. */
+.typeSwatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-inline-end: 8px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+/* Read-only creator display (avatar + name). */
+.readonlyPeople {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.personChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.personName {
+  font-size: 13px;
+  color: var(--text-color, #323338);
+}
+
+.muted {
+  color: var(--secondary-text-color, #676879);
+}
+
+/* Footer creator block (avatar + name), sits bottom-left opposite the actions. */
+.creator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* "סוג דיון" chips trigger — like a dropdown column: chips wrap, auto height. */
+.chipsTrigger {
+  height: auto;
+  min-height: 40px;
+  align-items: center;
+  gap: 6px;
+  padding-block: 4px;
+  cursor: pointer;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.chipsPlaceholder {
+  color: var(--placeholder-color, #9699a6);
+}
+
+.previousDiscussionField {
+  margin-bottom: 0;
+}
+
+.customDropdown {
+  position: relative;
+}
+
+.dropdownTrigger {
+  width: 100%;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacing-small, 8px);
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  text-align: start;
+  cursor: pointer;
+}
+
+.dropdownTrigger:hover {
+  border-color: var(--ui-border-color, #aeb3c5);
+}
+
+.dropdownTrigger:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+.dropdownTrigger:disabled {
+  background: var(--disabled-background-color, #f5f6f8);
+  color: var(--placeholder-color, #676879);
+  cursor: not-allowed;
+}
+
+.dropdownValue {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdownChevron {
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 4100;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  box-shadow: var(--box-shadow-small, 0 4px 12px rgba(0, 0, 0, 0.16));
+}
+
+.dropdownItem {
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--text-color, #323338);
+}
+
+.dropdownItem:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+
+.dropdownItemSelected {
+  background: var(--primary-selected-color, #cce5ff);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+/* Sticky search row at the top of the previous-discussion menu. */
+.dropdownSearchRow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--primary-background-color, #fff);
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+}
+
+/* Magnifier icon inside the dropdown search field (like the discussion search). */
+.dropdownSearchIcon {
+  position: absolute;
+  inset-inline-start: 16px;
+  width: 16px;
+  height: 16px;
+  color: var(--secondary-text-color, #676879);
+  pointer-events: none;
+}
+
+.dropdownSearch {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  padding-inline-start: 30px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  box-sizing: border-box;
+}
+
+.dropdownSearch:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+.dropdownEmpty {
+  padding: 10px;
+  color: var(--secondary-text-color, #676879);
+  text-align: center;
+}
+
+/* "+ add new type" footer row + its inline editor. */
+.dropdownAddTrigger {
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--primary-color, #0073ea);
+  font-weight: var(--font-weight-medium, 500);
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+}
+
+.dropdownAddTrigger:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+
+.dropdownAddRow {
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+}
+
+.dropdownAddInput {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  box-sizing: border-box;
+}
+
+.dropdownAddInput:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+.dropdownAddConfirm {
+  flex: 0 0 auto;
+  min-width: 56px;
+  height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-size: var(--font-size-general-label, 14px);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dropdownAddConfirm:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* Small white spinner shown on the confirm button while the add request runs. */
+.addSpinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: addSpinnerRotate 0.6s linear infinite;
+}
+
+@keyframes addSpinnerRotate {
+  to { transform: rotate(360deg); }
+}
+
+.label {
+  color: var(--text-color);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+/* Label row with a trailing "apply participant template" affordance. */
+.labelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+}
+
+.templateChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--primary-color, #0073ea);
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: var(--border-radius-small, 4px);
+}
+
+.templateChip:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+
+/* Compact popover for the participant-template list (right-anchored so it
+   doesn't overflow the modal edge under the right-column field). */
+.templateMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: auto;
+  z-index: 4100;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  min-width: 200px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  box-shadow: var(--box-shadow-small, 0 4px 12px rgba(0, 0, 0, 0.16));
+}
+
+.footer {
+  margin-top: var(--spacing-large, 24px);
+  padding-top: calc(var(--spacing-large) + var(--spacing-small));
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+}
+
+@media (max-width: 768px) {
+  .overlay {
+    padding: 8px;
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: calc(100vh - 16px);
+    border-radius: 12px 12px 0 0;
+  }
+}
+

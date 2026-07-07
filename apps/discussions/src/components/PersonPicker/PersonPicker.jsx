@@ -1,0 +1,285 @@
+import React, { useState, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
+import { Avatar, AvatarGroup } from '@vibe/core';
+import { Check, CloseSmall, Search, Person } from '@vibe/icons';
+import { subscribe, getVersion, getAllUsers, getUser, hasRoster, ensureRoster } from '@generated/utils/usersStore.js';
+import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
+import { monday } from '@generated/utils/mondayApi/monday-client.js';
+import logger from '@generated/utils/logger.js';
+import styles from './PersonPicker.module.css';
+
+function initialsOf(name) {
+  return (name || '?')
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2);
+}
+
+/**
+ * People picker styled after monday's native people-column picker: removable
+ * chips for the current selection + a searchable list of account users with
+ * avatars. Uses a plain clickable button list inside a popover portaled to
+ * document.body — so it escapes table overflow/sticky headers AND renders exactly
+ * once (Vibe's Dialog double-rendered its content here). Same {selected,onChange}
+ * API. ("Invite by email" isn't available to embedded apps; omitted.)
+ *
+ * `single`: cap the selection at one person (task-assignee fields). A second
+ * pick is blocked and a notice tells the user to clear the current one first —
+ * deselecting the existing person is still allowed.
+ */
+export function PersonPicker({ selected = [], onChange, bordered = false, closeOnSelect = false, single = false }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [pos, setPos] = useState(null);
+  const triggerRef = useRef(null);
+  const popoverRef = useRef(null);
+
+  // The picker reads the account roster from the shared usersStore (already
+  // pre-warmed for managers). ensureRoster() loads it once if it isn't yet — the
+  // picker needs the full list to pick from, regardless of admin status.
+  useSyncExternalStore(subscribe, getVersion, getVersion);
+  const subscribers = getAllUsers();
+  const loading = !hasRoster() && subscribers.length === 0;
+
+  useEffect(() => { ensureRoster(); }, []);
+
+  // Close on click-outside / Escape.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (popoverRef.current?.contains(e.target) || triggerRef.current?.contains(e.target)) return;
+      setOpen(false);
+      setSearch('');
+    };
+    const onEsc = (e) => {
+      if (e.key === 'Escape') { setOpen(false); setSearch(''); }
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const reposition = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const next = computeFloatingPosition({
+        anchorRect: rect,
+        preferred: 'bottom-start',
+        popupWidth: Math.max(rect.width, 300),
+        popupHeight: 430,
+        offset: 4,
+      });
+      if (!next) return;
+      setPos({
+        top: next.top,
+        left: next.left,
+        minWidth: Math.max(rect.width, 280),
+      });
+    };
+    reposition();
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
+    return () => {
+      window.removeEventListener('resize', reposition);
+      window.removeEventListener('scroll', reposition, true);
+    };
+  }, [open]);
+
+  const selectedIds = useMemo(() => (selected || []).map((p) => String(p.id)), [selected]);
+
+  const removeUser = (id) => {
+    logger.info('PersonPicker', 'remove user', { id });
+    onChange(selected.filter((p) => String(p.id) !== String(id)));
+  };
+  const toggleUser = (user) => {
+    logger.info('PersonPicker', 'option clicked → toggle user', { id: user.id, name: user.name });
+    if (selectedIds.includes(String(user.id))) {
+      removeUser(user.id);
+    } else if (single && selected.length >= 1) {
+      // single-assignee mode: one person max. Block the extra pick (the popover
+      // stays open so the user can deselect the current person first) and surface
+      // a Hebrew notice. monday.execute is a no-op outside the iframe / in tests.
+      logger.info('PersonPicker', 'single mode → blocked extra selection', { id: user.id });
+      try {
+        monday.execute('notice', {
+          message: 'ניתן להקצות אחראי אחד בלבד',
+          type: 'error',
+          timeout: 4000,
+        });
+      } catch (err) {
+        logger.warn('PersonPicker', 'failed to show single-assignee notice', err);
+      }
+      return;
+    } else {
+      onChange([...selected, { id: user.id, kind: 'person', name: user.name }]);
+    }
+    if (closeOnSelect) {
+      setOpen(false);
+      setSearch('');
+    }
+  };
+
+  const toggleOpen = () => {
+    if (open) {
+      setOpen(false);
+      setSearch('');
+      return;
+    }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      const next = computeFloatingPosition({
+        anchorRect: rect,
+        preferred: 'bottom-start',
+        popupWidth: Math.max(rect.width, 300),
+        popupHeight: 430,
+        offset: 4,
+      });
+      if (next) {
+        setPos({ top: next.top, left: next.left, minWidth: Math.max(rect.width, 280) });
+      }
+    }
+    logger.info('PersonPicker', 'trigger clicked → opening', { loaded: subscribers.length, selected: selected.length });
+    setOpen(true);
+  };
+
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? subscribers.filter((u) => (u.name || '').toLowerCase().includes(q))
+    : subscribers;
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={`${styles.trigger} ${bordered ? styles.triggerBordered : ''}`}
+        onClick={toggleOpen}
+      >
+        {selected.length === 0 ? (
+          <span className={styles.placeholder} aria-label="לא הוקצה">
+            <Person size={16} />
+          </span>
+        ) : selected.length === 1 ? (
+          /* Single assignee (the common case): a plain Avatar centers exactly on
+             the same line as the header and the empty placeholder. AvatarGroup
+             carries stacking padding that would shift one avatar off-center. */
+          (() => {
+            const p = selected[0];
+            const u = getUser(p.id);
+            return (
+              <Avatar
+                size="small"
+                src={u?.photo_thumb}
+                text={initialsOf(p.name || u?.name)}
+                type={u?.photo_thumb ? 'img' : 'text'}
+                ariaLabel={p.name}
+              />
+            );
+          })()
+        ) : (
+          <AvatarGroup size="small" max={4}>
+            {selected.map((p) => {
+              const u = getUser(p.id);
+              return (
+                <Avatar
+                  key={p.id}
+                  size="small"
+                  src={u?.photo_thumb}
+                  text={initialsOf(p.name || u?.name)}
+                  type={u?.photo_thumb ? 'img' : 'text'}
+                  ariaLabel={p.name}
+                />
+              );
+            })}
+          </AvatarGroup>
+        )}
+      </button>
+
+      {open && pos && createPortal(
+        <div
+          ref={popoverRef}
+          className={styles.popover}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, minWidth: pos.minWidth, zIndex: 10000 }}
+        >
+          <div className={styles.menu}>
+            {selected.length > 0 && (
+              <div className={styles.chips}>
+                {selected.map((p) => {
+                  const u = getUser(p.id);
+                  const photo = u?.photo_thumb;
+                  const name = p.name || u?.name || '';
+                  return (
+                    <span key={p.id} className={styles.chip}>
+                      <Avatar size="small" src={photo} text={initialsOf(name)} type={photo ? 'img' : 'text'} ariaLabel={name} />
+                      <span className={styles.chipName}>{name}</span>
+                      <button
+                        type="button"
+                        className={styles.chipRemove}
+                        onClick={() => removeUser(p.id)}
+                        aria-label={`הסר ${name}`}
+                      >
+                        <CloseSmall size={12} />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className={styles.searchWrap}>
+              <Search className={styles.searchIcon} aria-hidden="true" />
+              <input
+                type="text"
+                className={styles.search}
+                aria-label="חיפוש שם"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <div className={styles.heading}>אנשים מוצעים</div>
+            <div className={styles.list}>
+              {loading ? (
+                <div className={styles.empty}>טוען...</div>
+              ) : filtered.length === 0 ? (
+                <div className={styles.empty}>לא נמצאו אנשים</div>
+              ) : (
+                filtered.map((user) => {
+                  const isSel = selectedIds.includes(String(user.id));
+                  return (
+                    <button
+                      key={user.id}
+                      type="button"
+                      className={`${styles.row} ${isSel ? styles.rowSelected : ''}`}
+                      onClick={() => toggleUser(user)}
+                    >
+                      <span className={styles.check}>{isSel && <Check size={16} />}</span>
+                      <Avatar
+                        size="small"
+                        src={user.photo_thumb}
+                        text={initialsOf(user.name)}
+                        type={user.photo_thumb ? 'img' : 'text'}
+                        ariaLabel={user.name}
+                      />
+                      <span className={styles.name}>{user.name}</span>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+export default PersonPicker;

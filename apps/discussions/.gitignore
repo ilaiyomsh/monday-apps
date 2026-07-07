@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+build.zip
+.env
+.env.local
+.env.*
+*.log
+.DS_Store
+.vite/
+
+# Claude Code local state (worktrees, settings, jobs) — never commit
+.claude/

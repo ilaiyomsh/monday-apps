@@ -1,0 +1,238 @@
+/*
+ * Pure grouping helpers for the "My Tasks" view. Kept separate from the React
+ * component so the bucketing rules can be unit-tested without rendering.
+ *
+ * A task here has the shape produced by BoardSDK.mapItem / useMyTasks:
+ *   { id, name, created_at, responsibilityID (people[]), deadlineID (Date|null),
+ *     statusID (status label id), discussionLinkID (board_relation), taskNotesID,
+ *     priority (status label id) }
+ *
+ * discussionLinkID is the discussion board_relation, parsed to
+ *   { ids: string[], linkedItems: [{ id, name }], text }
+ * so the discussion a task belongs to is discussionLinkID.linkedItems[0] (a task links
+ * to a single discussion). The board-group grouping reads the monday `group`
+ * carried on the item (item.group = { id, title }) when present.
+ *
+ * Each returned group is { key, label, color, status, items }:
+ *   key    — stable react/collapse key
+ *   label  — display text
+ *   color  — accent color (status/priority color for those groupings; null else)
+ *   status — the status label id this group represents (status grouping only;
+ *            null = "no status"; undefined = N/A for other groupings)
+ *   items  — the tasks in the group
+ */
+
+export const GROUP_MODES = ['none', 'discussion', 'status', 'priority'];
+
+export const NO_STATUS = '__none__';
+export const NO_PRIORITY = '__no_priority__';
+export const NO_DISCUSSION = '__no_discussion__';
+export const NO_GROUP = '__no_group__';
+export const ALL_TASKS = '__all__';
+
+// 20-color monday LABEL palette (hex), mirrors theme-tokens.css --topic-color-1..20
+// and the same string hash used by TopicsTab.topicColorStartIndex, so a
+// discussion's accent here matches the topics palette and is STABLE across
+// renders (no Math.random). Kept as literal hexes (not hsl(var(--topic-color-N)))
+// because grouping.js must stay CSS/DOM-free for jsdom unit tests, and grp.color
+// is already passed straight into style.color as a raw hex.
+export const DISCUSSION_PALETTE = [
+  '#00c875', '#037f4c', '#9cd326', '#cab641', '#ffcb00',
+  '#fdab3d', '#ff6d3b', '#ff7575', '#df2f4a', '#bb3354',
+  '#e50073', '#ff5ac4', '#9d50dd', '#784bd1', '#7e3b8a',
+  '#5559df', '#225091', '#579bfc', '#007eb5', '#4eccc6',
+];
+function discussionColor(id) {
+  const s = String(id);
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
+  return DISCUSSION_PALETTE[h % DISCUSSION_PALETTE.length];
+}
+
+// Resolve the single discussion a task is linked to via the discussionLinkID
+// board_relation. Returns { id, name } or null. parseValue('board_relation')
+// produces { linkedItems, ids, text }; we read linkedItems first (the canonical
+// shape, with `name`), tolerate a legacy `items` key, and fall back to ids +
+// the raw display string (rel.text) when no linked item object is present.
+export function getTaskDiscussion(task) {
+  const rel = task?.discussionLinkID;
+  if (!rel) return null;
+  const first = (Array.isArray(rel.linkedItems) ? rel.linkedItems[0] : null)
+    || (Array.isArray(rel.items) ? rel.items[0] : null);
+  if (first?.id != null) return { id: String(first.id), name: first.name || rel.text || '' };
+  const id = Array.isArray(rel.ids) ? rel.ids[0] : null;
+  if (id != null) return { id: String(id), name: rel.text || '' };
+  return null;
+}
+
+// Resolve the monday board group an item sits in. monday returns
+// item.group = { id, title }; we tolerate a few shapes.
+export function getTaskGroup(task) {
+  const g = task?.group;
+  if (!g) return null;
+  const id = g.id ?? g.group_id ?? null;
+  if (id == null) return null;
+  return { id: String(id), title: g.title ?? g.group_title ?? '' };
+}
+
+function sortByLabelHe(a, b) {
+  return (a.label || '').localeCompare(b.label || '', 'he');
+}
+
+// Group by the linked discussion. `order` is one of azAsc | azDesc | dateAsc |
+// dateDesc. Date ordering reads the parent discussion's date from the injected
+// `discussionDateById` map (id -> Date|number); undated discussions sort last.
+// The "No discussion" bucket always sorts LAST.
+function groupByDiscussion(tasks, { noDiscussionLabel, order = 'azAsc', discussionDateById = {} } = {}) {
+  const groups = new Map();
+  tasks.forEach((t) => {
+    const d = getTaskDiscussion(t);
+    const key = d ? `disc:${d.id}` : NO_DISCUSSION;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        discId: d ? d.id : null,
+        label: d ? d.name : (noDiscussionLabel || 'ללא דיון'),
+        color: d ? discussionColor(d.id) : null,
+        status: undefined,
+        items: [],
+      });
+    }
+    groups.get(key).items.push(t);
+  });
+  const all = [...groups.values()];
+  const noDisc = all.filter((g) => g.key === NO_DISCUSSION);
+  const valued = all.filter((g) => g.key !== NO_DISCUSSION);
+  if (order === 'dateAsc' || order === 'dateDesc') {
+    const dir = order === 'dateDesc' ? -1 : 1;
+    const timeOf = (g) => {
+      const v = discussionDateById[g.discId];
+      const t = v instanceof Date ? v.getTime() : (typeof v === 'number' ? v : null);
+      return t;
+    };
+    valued.sort((a, b) => {
+      const ta = timeOf(a); const tb = timeOf(b);
+      if (ta == null && tb == null) return sortByLabelHe(a, b);
+      if (ta == null) return 1; // undated last
+      if (tb == null) return -1;
+      return (ta - tb) * dir;
+    });
+  } else {
+    const dir = order === 'azDesc' ? -1 : 1;
+    valued.sort((a, b) => sortByLabelHe(a, b) * dir);
+  }
+  return [...valued, ...noDisc];
+}
+
+// Generic status-column grouping over `alias` (statusID = status, priority =
+// priority). Uses the status maps so labels/colors match the column. `order` is
+// one of labelAsc | labelDesc (by the column's display rank) or azAsc | azDesc
+// (alphabetical by label text, Hebrew collation). The "no value" bucket always
+// sorts LAST (an empty group at the bottom), regardless of direction.
+function groupByStatusColumn(tasks, alias, {
+  labelById = {}, colorById = {}, orderById = {}, isValidStatus,
+  noValueKey, noValueLabel, order = 'labelAsc',
+} = {}) {
+  const valid = typeof isValidStatus === 'function' ? isValidStatus : (v) => v != null && v !== '';
+  const groups = new Map();
+  tasks.forEach((t) => {
+    const raw = t[alias];
+    const id = valid(raw) && labelById[raw] != null ? raw : null;
+    const key = id == null ? noValueKey : String(id);
+    if (!groups.has(key)) groups.set(key, { key, statusId: id, items: [] });
+    groups.get(key).items.push(t);
+  });
+  const all = [...groups.values()].map((g) => ({
+    key: g.key,
+    label: g.statusId == null ? noValueLabel : (labelById[g.statusId] ?? noValueLabel),
+    color: g.statusId == null ? null : (colorById[g.statusId] || null),
+    status: g.statusId,
+    items: g.items,
+  }));
+  const noVal = all.filter((g) => g.status == null);
+  const valued = all.filter((g) => g.status != null);
+  if (order === 'azAsc' || order === 'azDesc') {
+    const dir = order === 'azDesc' ? -1 : 1;
+    valued.sort((a, b) => sortByLabelHe(a, b) * dir);
+  } else {
+    const dir = order === 'labelDesc' ? -1 : 1;
+    valued.sort((a, b) => ((orderById[a.status] ?? Infinity) - (orderById[b.status] ?? Infinity)) * dir);
+  }
+  return [...valued, ...noVal];
+}
+
+// Group by status label id (statusID). "No status" sorts last.
+function groupByStatus(tasks, opts = {}) {
+  return groupByStatusColumn(tasks, 'statusID', {
+    ...opts,
+    noValueKey: NO_STATUS,
+    noValueLabel: opts.noStatusLabel || 'ללא סטאטוס',
+  });
+}
+
+// Group by the priority status column. The label DISPLAY order defines priority
+// (orderById rank 0 = highest), so highest-priority groups sort first and the
+// "no priority" bucket sorts last. The priority status maps arrive under the
+// priority* keys so they don't collide with the statusID status maps.
+function groupByPriority(tasks, opts = {}) {
+  return groupByStatusColumn(tasks, 'priorityID', {
+    labelById: opts.priorityLabelById || {},
+    colorById: opts.priorityColorById || {},
+    orderById: opts.priorityOrderById || {},
+    isValidStatus: opts.isValidStatus,
+    noValueKey: NO_PRIORITY,
+    noValueLabel: opts.noPriorityLabel || 'ללא עדיפות',
+    order: opts.order,
+  });
+}
+
+// "No grouping" — a single bucket holding every task, titled by the caller
+// (the app passes the localized "משימות" / "Tasks").
+function groupNone(tasks, { allTasksLabel } = {}) {
+  return [{ key: ALL_TASKS, label: allTasksLabel || 'משימות', color: null, status: undefined, items: [...tasks] }];
+}
+
+// Group by the monday board group the item belongs to. "No group" sorts first.
+function groupByBoardGroup(tasks, { noGroupLabel } = {}) {
+  const groups = new Map();
+  tasks.forEach((t) => {
+    const g = getTaskGroup(t);
+    const key = g ? `group:${g.id}` : NO_GROUP;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        label: g ? g.title : (noGroupLabel || 'ללא קבוצה'),
+        color: null,
+        status: undefined,
+        items: [],
+      });
+    }
+    groups.get(key).items.push(t);
+  });
+  return [...groups.values()].sort((a, b) => {
+    if (a.key === NO_GROUP) return -1;
+    if (b.key === NO_GROUP) return 1;
+    return sortByLabelHe(a, b);
+  });
+}
+
+// Top-level dispatcher. `mode` is one of GROUP_MODES; `opts` carries the status
+// maps (for 'status'/'priority'), the chosen `order`, the injected
+// `discussionDateById` map (for discussion date order), and localized labels.
+export function groupMyTasks(tasks, mode, opts = {}) {
+  const list = Array.isArray(tasks) ? tasks : [];
+  switch (mode) {
+    case 'none':
+      return groupNone(list, opts);
+    case 'discussion':
+      return groupByDiscussion(list, opts);
+    case 'status':
+      return groupByStatus(list, opts);
+    case 'priority':
+      return groupByPriority(list, opts);
+    case 'group':
+      return groupByBoardGroup(list, opts);
+    default:
+      return groupByStatus(list, opts);
+  }
+}

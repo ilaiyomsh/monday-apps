@@ -1,0 +1,18 @@
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  inset-inline-end: 0; /* trailing edge; in the dir="ltr" tables this is the right edge */
+  width: 6px;
+  cursor: col-resize;
+  z-index: 4;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+}
+.handle:hover {
+  background: var(--ui-border-color, #d0d4e4);
+}
+.handle:active {
+  background: var(--primary-color, #0073ea);
+}
