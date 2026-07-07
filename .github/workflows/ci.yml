@@ -1,0 +1,43 @@
+name: CI
+
+# Gate 1 (spec section 5): runs on every PR into develop or main.
+# Blocks merge on failure. Type-check is tolerant of JS-only apps that have
+# no type-check script — "--if-present" makes it a no-op for those instead
+# of a failure.
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+
+jobs:
+  ci:
+    name: type-check, lint, build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check (skips packages with no type-check script)
+        run: pnpm -r --if-present run type-check
+
+      - name: Lint (skips packages with no lint script)
+        run: pnpm -r --if-present run lint
+
+      - name: Build (skips packages with no build script)
+        run: pnpm -r --if-present run build
