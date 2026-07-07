@@ -1,0 +1,550 @@
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Skeleton, Button } from '@vibe/core';
+import { DropdownChevronDown, Search, Filter, Sort, Group, Collapse, Expand, CloseSmall } from '@vibe/icons';
+import { useMyTasks } from '@generated/hooks/useMyTasks.js';
+import { usePermission } from '@generated/hooks/usePermission.js';
+import { useStatusOptions } from '@generated/hooks/useStatusOptions';
+import { useDiscussions } from '@generated/hooks/useDiscussions.js';
+import { useViewport } from '@generated/hooks/useViewport.js';
+import { isValidStatus } from '@generated/constants/statusConfig';
+import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
+import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { MyTasksTable } from './MyTasksTable.jsx';
+import { groupMyTasks } from './grouping.js';
+import { BuilderControl } from './controls/BuilderControl.jsx';
+import { Segment } from './controls/Segment.jsx';
+import { BuilderIcon } from './controls/BuilderIcon.jsx';
+import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import {
+  SORT_COLUMNS, GROUP_COLUMNS, FILTER_COLUMNS, OP_LABEL, DEADLINE_RANGES,
+  sortTasks, filterTasks, filterCount, emptyFilter, DEFAULT_SORT, DEFAULT_GROUP,
+  serializeFilter, deserializeFilter,
+} from './controls/controls.js';
+import styles from './MyTasksView.module.css';
+import bs from './controls/builder.module.css';
+
+const TYPE_ICON = { status: 'status', date: 'date', text: 'text', relation: 'relation' };
+
+const firstSortDir = (col) => (SORT_COLUMNS.find((c) => c.key === col) || SORT_COLUMNS[0]).dirs[0].key;
+const firstGroupOrder = (col) => (GROUP_COLUMNS.find((c) => c.key === col) || GROUP_COLUMNS[0]).orders[0].key;
+const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'Choose a date range';
+const rangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
+
+// Hidden loader: mounted ONLY when "group by discussion → order by date" is
+// active, so discussion dates (which tasks don't carry) are fetched lazily.
+function DiscussionDates({ onLoaded }) {
+  const { items, loading } = useDiscussions();
+  useEffect(() => {
+    if (loading) return;
+    const map = {};
+    items.forEach((d) => { if (d.discussionDateID instanceof Date) map[String(d.id)] = d.discussionDateID; });
+    onLoaded(map);
+  }, [items, loading, onLoaded]);
+  return null;
+}
+
+export function MyTasksView({ canManageSettings = false, onBackToDiscussions, onNotify }) {
+  const { t } = useTranslation();
+  const { context, currentUser } = useMondayContext();
+  const { isMobile } = useViewport();
+
+  const [search, setSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  // Seed a new task from the group it is created in: by-status group -> status,
+  // by-priority group -> priority (grp.status holds the label id for both); other
+  // groupings (discussion / none / board-group) seed nothing — a task created
+  // under discussion grouping is deliberately UNLINKED (lands in "ללא דיון").
+  const seedForGroup = (grp) => {
+    if (group.col === 'status') return grp.status != null ? { status: grp.status } : null;
+    if (group.col === 'priority') return grp.status != null ? { priority: grp.status } : null;
+    return null;
+  };
+  // Inline creation (no modal): create immediately with the fixed name; the
+  // optimistic row is APPENDED by useMyTasks, i.e. shows at its group's bottom.
+  const addTask = (seed = null) =>
+    createTask({ name: 'משימה חדשה', status: seed?.status ?? null, priority: seed?.priority ?? null });
+  // Shared saved view (settings.preferences.savedViews.myTasks) is the LOAD-TIME
+  // state for everyone; local changes are session-only. Empty when nothing saved.
+  const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('myTasks', { canManageSettings });
+  const [sort, setSort] = useState(() => {
+    const s = savedView?.sort;
+    // A saved-but-inactive sort means "saved empty" — load as the empty state.
+    if (!s || !s.active || !SORT_COLUMNS.some((c) => c.key === s.col)) return { ...DEFAULT_SORT };
+    return { col: s.col, dir: s.dir || firstSortDir(s.col), active: true };
+  });
+  const [group, setGroup] = useState(() => {
+    const g = savedView?.group;
+    if (!g || !GROUP_COLUMNS.some((c) => c.key === g.col)) return { ...DEFAULT_GROUP };
+    return { col: g.col, order: g.order || firstGroupOrder(g.col) };
+  });
+  const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
+  const [filterRows, setFilterRows] = useState(() => { // visible "Where" rows (one column each)
+    // Empty default: no pre-seeded "Where" row — the panel offers "+ New filter".
+    return Array.isArray(savedView?.filterRows)
+      ? savedView.filterRows.filter((k) => FILTER_COLUMNS.some((c) => c.key === k))
+      : [];
+  });
+  const [collapsed, setCollapsed] = useState({});
+  const [discDateMap, setDiscDateMap] = useState({});
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const toggleSelect = (id, checked) =>
+    setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
+  const clearSelection = () => setSelectedIds(new Set());
+  // Bulk edit: when >1 rows are selected and the edited row is among them, the
+  // change applies to the WHOLE selection (mirrors הנחיות קודמות). Otherwise it's
+  // a single-row edit. Notes stays single-row (bulk notes is meaningless).
+  // Bulk targets are filtered per capability: a mixed selection (allowed +
+  // disallowed) applies ONLY to the allowed subset (mirrors TasksTab).
+  const resolveTargetIds = (originId, cap) => {
+    const base = (selectedIds.size > 1 && selectedIds.has(originId)) ? [...selectedIds] : [originId];
+    return cap ? base.filter((id) => allow(cap, id)) : base;
+  };
+  const applyStatus = (taskId, status) => resolveTargetIds(taskId, 'editTaskStatus').forEach((id) => updateTaskStatus(id, status));
+  const applyPriority = (taskId, value) => resolveTargetIds(taskId, 'editTaskPriority').forEach((id) => updateTaskPriority(id, value));
+  const applyDeadline = (taskId, date) => resolveTargetIds(taskId, 'editTaskDeadline').forEach((id) => updateTaskDeadline(id, date));
+  const deleteSelected = () => {
+    const ids = [...selectedIds].filter((id) => allow('deleteTask', id));
+    if (ids.length === 0) return;
+    clearSelection();
+    const { undo } = softDeleteTasks(ids);
+    const msg = ids.length === 1 ? 'המשימה נמחקה' : `${ids.length} משימות נמחקו`;
+    onNotify?.(msg, 'info', 6000, { label: 'בטל', onClick: undo });
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  const {
+    items, loading, loadingMore, hasMore, error, loadMore,
+    updateTaskStatus, updateTaskPriority, updateTaskNotes, updateTaskDeadline, updateTaskName,
+    softDeleteTasks, createTask,
+  } = useMyTasks({ currentUser, context, search: debouncedSearch });
+
+  // Per-task permission gate. Task-tier caps resolve from the TASK's own people
+  // columns (creator/responsible) — there is no parent discussion in this
+  // surface, so resolveCan takes { item } alone. The board/object OWNER
+  // (canManageSettings) bypasses the matrix as everywhere else.
+  const can = usePermission({ canManageSettings, currentUser });
+  const canTask = useCallback((cap, task) => can(cap, { boardKey: 'tasks', item: task }), [can]);
+  const itemById = useMemo(() => new Map(items.map((t) => [String(t.id), t])), [items]);
+  const allow = useCallback((cap, taskId) => canTask(cap, itemById.get(String(taskId))), [canTask, itemById]);
+
+  const { options: statusOptions, labelById, colorById, orderById } = useStatusOptions('tasks', 'statusID');
+  const {
+    options: priorityOptions,
+    labelById: priorityLabelById,
+    colorById: priorityColorById,
+    orderById: priorityOrderById,
+  } = useStatusOptions('tasks', 'priorityID');
+
+  // --- client pipeline: filter -> sort -> group (all instant, no re-fetch) ---
+  const filteredItems = useMemo(() => filterTasks(items, filter), [items, filter]);
+  const sortedItems = useMemo(
+    () => sortTasks(filteredItems, sort, { orderById, labelById, priorityOrderById, priorityLabelById }),
+    [filteredItems, sort, orderById, labelById, priorityOrderById, priorityLabelById]
+  );
+  const grouped = useMemo(
+    () => groupMyTasks(sortedItems, group.col, {
+      labelById, colorById, orderById,
+      priorityLabelById, priorityColorById, priorityOrderById,
+      isValidStatus,
+      order: group.order,
+      discussionDateById: discDateMap,
+      noStatusLabel: t('myTasks.noStatus'),
+      noPriorityLabel: t('myTasks.noPriority'),
+      noDiscussionLabel: t('myTasks.noDiscussion'),
+      allTasksLabel: t('myTasks.allTasks'),
+    }),
+    [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t]
+  );
+
+  // Prune selected ids that are no longer loaded (filter/search/pagination churn).
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (current.size === 0) return current;
+      const valid = new Set(items.map((t) => t.id));
+      const next = new Set();
+      current.forEach((id) => { if (valid.has(id)) next.add(id); });
+      return next.size === current.size ? current : next;
+    });
+  }, [items]);
+
+  // ---- sort handlers ----
+  const setSortCol = useCallback((col) => setSort({ col, dir: firstSortDir(col), active: true }), []);
+  const setSortDir = useCallback((dir) => setSort((s) => ({ ...s, dir, active: true })), []);
+  const clearSort = useCallback(() => setSort({ ...DEFAULT_SORT }), []);
+
+  // ---- group handlers (session-only; persisting is the explicit Save action) ----
+  const setGroupCol = useCallback((col) => { setGroup({ col, order: firstGroupOrder(col) }); setCollapsed({}); }, []);
+  const setGroupOrder = useCallback((order) => setGroup((g) => ({ ...g, order })), []);
+  const clearGroup = useCallback(() => { setGroup({ col: 'none' }); setCollapsed({}); }, []);
+
+  // ---- filter handlers (immutable updates so the pipeline memo re-runs) ----
+  const resetCol = (col) => (col === 'deadline' ? { op: 'within', range: null, date: null } : { op: 'is', values: new Set() });
+  const setFilterOp = useCallback((col, op) => setFilter((f) => ({ ...f, [col]: { ...f[col], op } })), []);
+  const toggleFilterVal = useCallback((col, id) => setFilter((f) => {
+    const next = new Set(f[col].values);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return { ...f, [col]: { ...f[col], values: next } };
+  }), []);
+  const setDeadlineRange = useCallback((range) => setFilter((f) => ({ ...f, deadline: { op: 'within', range, date: null } })), []);
+  const setDeadlineDate = useCallback((date) => setFilter((f) => ({ ...f, deadline: { ...f.deadline, date } })), []);
+  const addFilterRow = useCallback(() => setFilterRows((rows) => {
+    const next = FILTER_COLUMNS.map((c) => c.key).find((k) => !rows.includes(k));
+    return next ? [...rows, next] : rows;
+  }), []);
+  const removeFilterRow = useCallback((col) => {
+    setFilterRows((rows) => rows.filter((k) => k !== col));
+    setFilter((f) => ({ ...f, [col]: resetCol(col) }));
+  }, []);
+  const retargetFilterRow = useCallback((fromCol, toCol) => {
+    if (fromCol === toCol) return;
+    setFilterRows((rows) => rows.map((k) => (k === fromCol ? toCol : k)));
+    setFilter((f) => ({ ...f, [fromCol]: resetCol(fromCol), [toCol]: resetCol(toCol) }));
+  }, []);
+  const clearFilter = useCallback(() => { setFilter(emptyFilter()); setFilterRows([]); }, []);
+
+  const fc = filterCount(filter);
+
+  // ---- Save (shared saved view): each panel persists ITS selection for all users ----
+  const notifySaved = () => onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
+  const saveSortView = () => { saveView({ sort }); notifySaved(); };
+  const saveGroupView = () => { saveView({ group }); notifySaved(); };
+  const saveFilterView = () => { saveView({ filter: serializeFilter(filter), filterRows }); notifySaved(); };
+
+  // ---- collapse ----
+  const setGroupModePersist = setGroupCol; // alias for clarity in render
+  const allCollapsed = grouped.length > 0 && grouped.every((g) => collapsed[g.key]);
+  const toggleAll = () => {
+    if (allCollapsed) setCollapsed({});
+    else { const c = {}; grouped.forEach((g) => { c[g.key] = true; }); setCollapsed(c); }
+  };
+
+  // Blue toolbar button: create at the BOTTOM of the TOPMOST group, seeded with
+  // that group's value; expand it if collapsed so the new row is visible.
+  const addTaskToTopGroup = () => {
+    const top = grouped[0] || null;
+    if (top && collapsed[top.key]) setCollapsed((p) => ({ ...p, [top.key]: false }));
+    return addTask(top ? seedForGroup(top) : null);
+  };
+
+  const COL_NAME = {
+    priority: t('myTasks.colPriority'),
+    deadline: t('myTasks.colDeadline'),
+    status: t('myTasks.colStatus'),
+    name: t('myTasks.colName'),
+    discussion: t('myTasks.colDiscussion'),
+  };
+  const field = (mobile, label, seg) => (mobile
+    ? <div className={bs.bField} key={label}><div className={bs.bFieldLabel}>{label}</div>{seg}</div>
+    : seg);
+
+  // ---------- Sort panel body ----------
+  const renderSortBody = ({ mobile, openId, setOpenId }) => {
+    const colOptions = SORT_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === sort.col }));
+    // Empty state — no column chosen yet: a placeholder segment, like Group's.
+    if (!sort.col) {
+      const emptySeg = (
+        <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+          text="Choose a column" placeholder options={colOptions} onPick={setSortCol} />
+      );
+      return mobile ? field(true, 'Column', emptySeg) : <div className={bs.bRow}>{emptySeg}</div>;
+    }
+    const sc = SORT_COLUMNS.find((c) => c.key === sort.col) || SORT_COLUMNS[0];
+    const dir = sc.dirs.find((d) => d.key === sort.dir) || sc.dirs[0];
+    const colSeg = (
+      <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+        icon={TYPE_ICON[sc.type]} text={COL_NAME[sc.key]}
+        options={colOptions}
+        onPick={setSortCol} />
+    );
+    const dirSeg = (
+      <Segment id="dir" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Direction" note={sc.note}
+        icon={dir.icon} text={dir.label}
+        options={sc.dirs.map((d) => ({ key: d.key, label: d.label, icon: d.icon, selected: d.key === sort.dir }))}
+        onPick={setSortDir} />
+    );
+    return mobile
+      ? <>{field(true, 'Column', colSeg)}{field(true, 'Direction', dirSeg)}</>
+      : <div className={bs.bRow}>{colSeg}{dirSeg}</div>;
+  };
+
+  // ---------- Group panel body ----------
+  const renderGroupBody = ({ mobile, openId, setOpenId }) => {
+    const colOptions = GROUP_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === group.col }));
+    if (group.col === 'none') {
+      const colSeg = (
+        <Segment id="gcol" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+          text="Choose a column" placeholder options={colOptions} onPick={setGroupModePersist} />
+      );
+      return mobile ? field(true, 'Column', colSeg) : <div className={bs.bRow}>{colSeg}</div>;
+    }
+    const gc = GROUP_COLUMNS.find((c) => c.key === group.col) || GROUP_COLUMNS[0];
+    const ord = gc.orders.find((o) => o.key === group.order) || gc.orders[0];
+    const colSeg = (
+      <Segment id="gcol" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+        icon={TYPE_ICON[gc.type]} text={COL_NAME[gc.key]} options={colOptions} onPick={setGroupModePersist} />
+    );
+    const ordSeg = (
+      <Segment id="gord" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Order"
+        icon={ord.icon} text={ord.label}
+        options={gc.orders.map((o) => ({ key: o.key, label: o.label, icon: o.icon, selected: o.key === group.order }))}
+        onPick={setGroupOrder} />
+    );
+    return mobile
+      ? <>{field(true, 'Column', colSeg)}{field(true, 'Order', ordSeg)}</>
+      : <div className={bs.bRow}>{colSeg}{ordSeg}</div>;
+  };
+
+  // ---------- Filter panel body ----------
+  const valueChips = (col) => {
+    const opts = col === 'status' ? statusOptions : priorityOptions;
+    return opts.filter((o) => filter[col].values.has(String(o.id))).map((o) => ({ color: o.color, text: o.label }));
+  };
+  const renderFilterRow = (col, i, mobile, openId, setOpenId) => {
+    const fcfg = FILTER_COLUMNS.find((c) => c.key === col);
+    const colSeg = (
+      <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+        icon={TYPE_ICON[fcfg.type]} text={COL_NAME[col]}
+        options={FILTER_COLUMNS.map((c) => ({
+          key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type],
+          selected: c.key === col, disabled: c.key !== col && filterRows.includes(c.key),
+        }))}
+        onPick={(to) => retargetFilterRow(col, to)} />
+    );
+    const opSeg = (
+      <Segment id={`fop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Condition"
+        text={OP_LABEL[filter[col].op]}
+        options={fcfg.ops.map((op) => ({ key: op, label: OP_LABEL[op], selected: filter[col].op === op }))}
+        onPick={(op) => setFilterOp(col, op)} />
+    );
+    let valueCtl = null;
+    if (col === 'deadline') {
+      const f = filter.deadline;
+      if (f.op === 'within') {
+        valueCtl = (
+          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="When"
+            icon={f.range ? rangeIcon(f.range) : 'date'} text={f.range ? rangeLabel(f.range) : 'Choose a date range'} placeholder={!f.range}
+            options={DEADLINE_RANGES.map((r) => ({ key: r.key, label: r.label, icon: r.icon, selected: f.range === r.key }))}
+            onPick={setDeadlineRange} />
+        );
+      } else {
+        valueCtl = (
+          <div className={mobile ? bs.bDateWrapFull : bs.bDateWrap}>
+            <DatePickerPopover value={f.date || null} onChange={setDeadlineDate} />
+          </div>
+        );
+      }
+    } else {
+      const opts = col === 'status' ? statusOptions : priorityOptions;
+      valueCtl = (
+        <Segment id={`fval-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle={COL_NAME[col]} multi
+          chips={valueChips(col)}
+          options={opts.map((o) => ({ key: String(o.id), label: o.label, dot: o.color, selected: filter[col].values.has(String(o.id)) }))}
+          onPick={(id) => toggleFilterVal(col, id)} />
+      );
+    }
+    const lead = i === 0 ? 'Where' : 'And';
+    const removeBtn = (
+      <button type="button" className={bs.bIconBtn} onClick={() => removeFilterRow(col)} aria-label="Remove filter">
+        <BuilderIcon name="x" size={16} />
+      </button>
+    );
+    if (mobile) {
+      return (
+        <div className={bs.bWhere} style={{ display: 'block' }} key={col}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span className={bs.bWhereLead}>{lead}</span>
+            {removeBtn}
+          </div>
+          {field(true, 'Column', colSeg)}
+          {field(true, 'Condition', opSeg)}
+          {valueCtl ? field(true, 'Value', valueCtl) : null}
+        </div>
+      );
+    }
+    return (
+      <div className={bs.bWhere} key={col}>
+        <span className={bs.bWhereLead}>{lead}</span>
+        {colSeg}{opSeg}{valueCtl}{removeBtn}
+      </div>
+    );
+  };
+  const renderFilterBody = ({ mobile, openId, setOpenId }) => (
+    <>
+      {filterRows.map((col, i) => renderFilterRow(col, i, mobile, openId, setOpenId))}
+      {filterRows.length === 0 ? <div className={bs.bEmpty}>No filters — showing all tasks</div> : null}
+      {filterRows.length < FILTER_COLUMNS.length
+        ? <button type="button" className={bs.bAddLink} onClick={addFilterRow}>+ New filter</button>
+        : null}
+    </>
+  );
+
+  const showSearch = searchOpen || search.length > 0;
+  const needDiscDates = group.col === 'discussion' && (group.order === 'dateAsc' || group.order === 'dateDesc');
+
+  return (
+    <div className={styles.root}>
+      {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
+
+      {/* Top row: back to discussions (its own row, above the toolbar). */}
+      {onBackToDiscussions && (
+        <div className={styles.topBar} dir="ltr">
+          <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
+            דיונים
+          </Button>
+        </div>
+      )}
+
+      {/* monday-style toolbar: "משימה חדשה" + English pills, left-aligned (LTR) */}
+      <div className={styles.toolbar} dir="ltr">
+        <Button kind={"primary"} size={"small"} onClick={addTaskToTopGroup}>
+          משימה חדשה
+        </Button>
+
+        {showSearch ? (
+          <div className={styles.searchPill}>
+            <Search className={styles.pillIcon} aria-hidden="true" />
+            <input
+              className={styles.searchInput}
+              type="text"
+              autoFocus
+              value={search}
+              placeholder="Search"
+              onChange={(e) => setSearch(e.target.value)}
+              onBlur={() => { if (!search) setSearchOpen(false); }}
+              aria-label="Search"
+            />
+          </div>
+        ) : (
+          <button type="button" className={styles.pill} onClick={() => setSearchOpen(true)}>
+            <Search className={styles.pillIcon} />
+            <span>Search</span>
+          </button>
+        )}
+
+        <BuilderControl
+          icon={Filter} label="Filter" title="Filter by" mobile={isMobile} width={isMobile ? undefined : 620}
+          applied={fc > 0} badge={fc}
+          onClear={fc > 0 ? clearFilter : null}
+          onSave={canSaveView ? saveFilterView : null}
+          renderBody={renderFilterBody}
+        />
+        <BuilderControl
+          icon={Sort} label="Sort" title="Sort by" mobile={isMobile} width={isMobile ? undefined : 360}
+          applied={sort.active} badge={1}
+          onClear={sort.active ? clearSort : null}
+          onSave={canSaveView ? saveSortView : null}
+          renderBody={renderSortBody}
+        />
+        <BuilderControl
+          icon={Group} label="Group by" title="Group items by" mobile={isMobile} width={isMobile ? undefined : 360}
+          applied={group.col !== 'none'} badge={1}
+          onClear={group.col !== 'none' ? clearGroup : null}
+          onSave={canSaveView ? saveGroupView : null}
+          renderBody={renderGroupBody}
+        />
+
+        <button type="button" className={styles.pill} onClick={toggleAll}>
+          {allCollapsed ? <Expand className={styles.pillIcon} /> : <Collapse className={styles.pillIcon} />}
+          <span>{allCollapsed ? 'Expand all' : 'Collapse all'}</span>
+        </button>
+      </div>
+
+      {selectedIds.size > 0 && (
+        <div className={styles.actionBar} role="region" aria-label="פעולות על משימות נבחרות">
+          <div className={styles.actionBarLeft}>
+            <span>{selectedIds.size} נבחרו</span>
+          </div>
+          <div className={styles.actionBarCenter}>
+            <Button kind={"secondary"} size={"small"} onClick={deleteSelected}>מחיקה</Button>
+          </div>
+          <div className={styles.actionBarRight}>
+            <button type="button" className={styles.closeSelectionBtn} onClick={clearSelection} aria-label="בטל בחירה">
+              <CloseSmall size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={styles.board}>
+      {loading ? (
+        <div className={styles.skeletonStack}>
+          {[1, 2, 3, 4].map((i) => <Skeleton key={i} type="rectangle" height={36} fullWidth />)}
+        </div>
+      ) : error ? (
+        <div className={styles.empty}>{t('myTasks.error')}</div>
+      ) : items.length === 0 ? (
+        <div className={styles.empty}>
+          <div className={styles.emptyTitle}>{t('myTasks.empty')}</div>
+          <div className={styles.emptyHint}>{t('myTasks.emptyHint')}</div>
+        </div>
+      ) : (
+        <div className={styles.groupScrollInner}>
+          <div className={styles.groupStack}>
+            {grouped.map((grp) => (
+              <div key={grp.key}>
+                <button
+                  type="button"
+                  onClick={() => setCollapsed((p) => ({ ...p, [grp.key]: !p[grp.key] }))}
+                  className={styles.groupHeader}
+                >
+                  <DropdownChevronDown
+                    className={`${styles.chevron} ${collapsed[grp.key] ? styles.chevronCollapsed : ''}`}
+                    style={grp.color ? { color: grp.color } : undefined}
+                  />
+                  <span
+                    className={styles.groupTitle}
+                    style={{ color: grp.color || 'var(--secondary-text-color)' }}
+                  >
+                    {grp.label}
+                  </span>
+                  <span className={styles.groupCount}>{grp.items.length}</span>
+                </button>
+                {!collapsed[grp.key] && (
+                  <MyTasksTable
+                    tasks={grp.items}
+                    color={grp.color}
+                    canManageSettings={canManageSettings}
+                    canTask={canTask}
+                    onStatusChange={applyStatus}
+                    onPriorityChange={applyPriority}
+                    onNotesChange={updateTaskNotes}
+                    onDeadlineChange={applyDeadline}
+                    onRenameTask={updateTaskName}
+                    selectable
+                    selectedIds={selectedIds}
+                    onToggleSelect={toggleSelect}
+                    selectAllChecked={grp.items.length > 0 && grp.items.every((t) => selectedIds.has(t.id))}
+                    selectAllIndeterminate={grp.items.some((t) => selectedIds.has(t.id)) && !grp.items.every((t) => selectedIds.has(t.id))}
+                    onToggleSelectAll={(checked) => setSelectedIds((prev) => {
+                      const n = new Set(prev);
+                      grp.items.forEach((t) => (checked ? n.add(t.id) : n.delete(t.id)));
+                      return n;
+                    })}
+                    onAddTask={() => addTask(seedForGroup(grp))}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          {hasMore && (
+            <div className={styles.loadMore}>
+              <button type="button" className={styles.pill} disabled={loadingMore} onClick={loadMore}>
+                <span>{t('myTasks.loadMore')}</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      </div>
+
+    </div>
+  );
+}
+
+export default MyTasksView;

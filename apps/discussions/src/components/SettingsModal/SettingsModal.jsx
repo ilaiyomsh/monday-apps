@@ -1,0 +1,726 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, TabPanels, TabPanel } from '@vibe/core';
+import { useStatusOptions } from '@generated/hooks/useStatusOptions';
+import { useSettings } from '../../contexts/SettingsContext.jsx';
+import { useMondayContext } from '../../contexts/MondayContext.jsx';
+import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE } from '../../utils/mondayApi/boards.config.js';
+import { api } from '../../utils/mondayApi/monday-client.js';
+import { detectManagedColumnId } from '../../utils/mondayApi/managedColumns.js';
+import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js';
+import SearchablePicker from './SearchablePicker';
+import PermissionsTab from './PermissionsTab.jsx';
+import ExportTemplateTab from './ExportTemplateTab.jsx';
+import { TemplateManagerModal as TemplatesPanel } from '@generated/components/TemplateManagerModal';
+import styles from './SettingsModal.module.css';
+
+// Seed the editable export-template draft from stored settings, back-filling any
+// keys added to the schema after the instance was last saved (so new sections/
+// fields appear). A shallow merge over the default is enough for the top-level
+// keys; `sections` is taken verbatim when present (the user owns its order).
+function seedExportTemplate(stored) {
+  const base = { ...DEFAULT_EXPORT_TEMPLATE, ...(stored || {}) };
+  if (!Array.isArray(base.sections) || !base.sections.length) base.sections = DEFAULT_EXPORT_TEMPLATE.sections;
+  base.header = { ...DEFAULT_EXPORT_TEMPLATE.header, ...(stored?.header || {}) };
+  base.footer = { ...DEFAULT_EXPORT_TEMPLATE.footer, ...(stored?.footer || {}) };
+  return base;
+}
+
+// Merge the alias schema over the stored mapping so columns added to the schema
+// AFTER a user saved settings (summaryFileID, topicNotForDiscussionID,
+// pointNotForDiscussionID) still render in the modal — preserving any id/verified
+// the user already mapped. Without this, new fields are invisible to existing instances.
+function mergeColumnsWithSchema(stored) {
+  const empty = buildEmptyConfig().columns;
+  const out = {};
+  for (const boardKey of Object.keys(empty)) {
+    out[boardKey] = {};
+    for (const alias of Object.keys(empty[boardKey])) {
+      // Stored carries id/verified, but `type`/`title` are CODE-authoritative —
+      // force them from the schema so a schema change (e.g. סוג dropdown→status)
+      // re-filters the column picker even for already-configured instances.
+      out[boardKey][alias] = {
+        ...empty[boardKey][alias],
+        ...(stored?.[boardKey]?.[alias] || {}),
+        type: empty[boardKey][alias].type,
+        title: empty[boardKey][alias].title,
+      };
+    }
+    for (const alias of Object.keys(stored?.[boardKey] || {})) {
+      if (!out[boardKey][alias]) out[boardKey][alias] = stored[boardKey][alias];
+    }
+  }
+  return out;
+}
+
+// Column-type sections for the mapping screen (discussions + tasks). Fields are
+// bucketed by their monday column TYPE into ordered sections, each with a Hebrew
+// header. A field whose type matches no section falls into the trailing "אחר".
+const COLUMN_TYPE_GROUPS = [
+  { key: 'people', title: 'אנשים', types: ['people', 'person', 'multiple_person'] },
+  { key: 'date', title: 'תאריכים', types: ['date'] },
+  { key: 'status', title: 'סטטוס', types: ['status', 'color'] },
+  { key: 'dropdown', title: 'רשימה נפתחת', types: ['dropdown'] },
+  { key: 'relation', title: 'חיבורי לוחות', types: ['board_relation', 'connect_boards'] },
+  { key: 'file', title: 'קבצים', types: ['file'] },
+  { key: 'text', title: 'טקסט', types: ['text', 'long_text'] },
+  { key: 'formula', title: 'נוסחאות ושיקופים', types: ['formula', 'mirror', 'lookup'] },
+];
+
+// Which section a column type belongs to (falls back to a trailing "אחר").
+function typeGroupKey(type) {
+  const t = String(type || '').toLowerCase().replace(/-/g, '_');
+  const found = COLUMN_TYPE_GROUPS.find((g) => g.types.includes(t));
+  return found ? found.key : 'other';
+}
+
+// Board permissions are ALWAYS ON (no enable toggle). Seed the editable draft
+// with enabled:true and pre-fill roles from the LOCKED seed when none are stored
+// yet, so the matrix is never empty and saving persists the always-on state.
+function seedPermissions(stored) {
+  const base = { ...DEFAULT_PERMISSIONS, ...(stored || {}), enabled: true };
+  if (!base.roles || Object.keys(base.roles).length === 0) {
+    base.roles = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED));
+  }
+  return base;
+}
+
+const PREVIOUS_TASKS_MODE_OPTIONS = [
+  { value: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION, text: 'לפי דיון קודם' },
+  { value: PREVIOUS_TASKS_MODES.DISCUSSION_TYPE, text: 'לפי סוג דיון' },
+  // Hybrid: per-discussion — typed discussions resolve by type, untyped ones by
+  // the previous-discussion link.
+  { value: PREVIOUS_TASKS_MODES.AUTO, text: 'אוטומטי' },
+];
+
+/**
+ * Minimal in-product settings editor: edit the per-board id + each
+ * alias→real-column-id mapping that the SDK reads, then persist via
+ * SettingsContext.updateSettings (monday.storage, per instance).
+ */
+export function SettingsModal({ isOpen, onClose }) {
+  const { settings, updateSettings } = useSettings();
+  const { context } = useMondayContext();
+  // settings is null until a mapping is stored; seed the editable draft from an
+  // empty scaffold (alias/type/title with blank ids) so first-time config works.
+  const draft = settings || buildEmptyConfig();
+  const [boards, setBoards] = useState(draft.boards);
+  const [columns, setColumns] = useState(mergeColumnsWithSchema(draft.columns));
+  const [preferences, setPreferences] = useState({ ...DEFAULT_PREFERENCES, ...(draft.preferences || {}) });
+  // Live tasks-status labels for the "delayed done statuses" preference (empty
+  // until the tasks board/column are mapped and published — first-run modal).
+  const { options: taskStatusOptions } = useStatusOptions('tasks', 'statusID');
+  // Export-template draft + its heavy assets (logos / uploaded .docx). Assets load
+  // async from their own storage key when the modal opens; both persist on Save.
+  const [exportTemplate, setExportTemplate] = useState(seedExportTemplate(draft.exportTemplate));
+  const [exportAssets, setExportAssets] = useState({ headerLogo: null, footerLogo: null, templateDocx: null });
+  const [assetError, setAssetError] = useState(null);
+  // Permissions draft: whole `permissions` object edited in the "הרשאות" tab and
+  // persisted as one write on save. Seeded from stored settings or the inert
+  // DEFAULT_PERMISSIONS (enabled:false ⇒ no behavior change).
+  const [permissions, setPermissions] = useState(seedPermissions(draft.permissions));
+  const [selectedRoleKey, setSelectedRoleKey] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState(0); // 0 = מיפוי, 1 = העדפות, 2 = הרשאות
+  const [openBoardKey, setOpenBoardKey] = useState(null);
+  const [boardOptions, setBoardOptions] = useState([]);
+  const [loadingBoards, setLoadingBoards] = useState(false);
+  const [columnsByBoardId, setColumnsByBoardId] = useState({});
+  const [loadingColumnsByBoardId, setLoadingColumnsByBoardId] = useState({});
+  const [subitemsBoardByBoard, setSubitemsBoardByBoard] = useState({});
+  const [importMsg, setImportMsg] = useState(null);
+  const fileInputRef = useRef(null);
+
+  // re-seed local draft from the live settings whenever the modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const seed = settings || buildEmptyConfig();
+      setBoards(seed.boards);
+      setColumns(mergeColumnsWithSchema(seed.columns));
+      setPreferences({ ...DEFAULT_PREFERENCES, ...(seed.preferences || {}) });
+      setPermissions(seedPermissions(seed.permissions));
+      setExportTemplate(seedExportTemplate(seed.exportTemplate));
+      setAssetError(null);
+      loadExportAssets(context).then(setExportAssets);
+      setOpenBoardKey(null);
+    }
+  }, [isOpen, settings, context]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const loadBoards = async () => {
+      setLoadingBoards(true);
+      try {
+        const LIMIT = 500;
+        const allBoards = [];
+
+        const seen = new Set();
+        const appendBoards = (boardsPage) => {
+          (boardsPage || []).forEach((board) => {
+            const id = String(board?.id || '');
+            if (!id || seen.has(id)) return;
+            seen.add(id);
+            allBoards.push(board);
+          });
+        };
+
+        // Page-based pagination: keep requesting pages until a short page
+        // (fewer than LIMIT) signals the last one.
+        const loadByPage = async () => {
+          let page = 1;
+          let hasMore = true;
+          let guard = 0;
+          while (hasMore && guard < 100) {
+            const data = await api(
+              `query ($limit: Int!, $page: Int!) {
+                boards(limit: $limit, page: $page) {
+                  id
+                  name
+                  type
+                }
+              }`,
+              { limit: LIMIT, page },
+              'SettingsModal.loadBoards.page'
+            );
+            const pageBoards = data?.boards || [];
+            appendBoards(pageBoards);
+            hasMore = pageBoards.length === LIMIT;
+            page += 1;
+            guard += 1;
+          }
+        };
+
+        await loadByPage();
+
+        const options = allBoards
+          .filter((board) => board.type === 'board')
+          .map((board) => ({ value: String(board.id), label: board.name }));
+        setBoardOptions(options);
+      } catch (err) {
+        console.error('Error loading boards for settings:', err);
+      } finally {
+        setLoadingBoards(false);
+      }
+    };
+
+    loadBoards();
+  }, [isOpen]);
+
+  const setBoardId = (boardKey, id) =>
+    setBoards((b) => ({ ...b, [boardKey]: { ...b[boardKey], id } }));
+
+  const setColId = (boardKey, alias, id) =>
+    setColumns((c) => ({
+      ...c,
+      [boardKey]: {
+        ...c[boardKey],
+        [alias]: {
+          ...c[boardKey][alias],
+          id,
+          // Manual selection is treated as user verification.
+          verified: Boolean(String(id || '').trim()),
+        },
+      },
+    }));
+
+  const normalizeType = (type) =>
+    String(type || '')
+      .toLowerCase()
+      .replace(/-/g, '_');
+
+  const isColumnTypeCompatible = (expectedType, actualType) => {
+    const expected = normalizeType(expectedType);
+    const actual = normalizeType(actualType);
+
+    if (!expected || !actual) return true;
+    if (expected === actual) return true;
+
+    if ((expected === 'people' || expected === 'person') && (actual === 'people' || actual === 'person' || actual === 'multiple_person')) {
+      return true;
+    }
+    if ((expected === 'long_text' || expected === 'text') && (actual === 'long_text' || actual === 'text')) {
+      return true;
+    }
+    if (expected === 'board_relation' && (actual === 'board_relation' || actual === 'connect_boards')) {
+      return true;
+    }
+    if (expected === 'checkbox' && (actual === 'checkbox' || actual === 'boolean')) {
+      return true;
+    }
+    if (expected === 'mirror' && (actual === 'mirror' || actual === 'lookup')) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const getTypedColumnOptions = (boardId, expectedType) => {
+    const source = columnsByBoardId[String(boardId || '')] || [];
+    return source
+      .filter((opt) => isColumnTypeCompatible(expectedType, opt.type))
+      .map((opt) => ({ id: opt.value, name: opt.label }));
+  };
+
+  const BOARD_ROLE_TITLES = {
+    discussions: 'דיונים',
+    tasks: 'משימות',
+    topics: 'נושאים לדיון',
+  };
+
+  const DISCUSSIONS_SETTINGS_FIELDS = [
+    'discussionCreatorID',
+    'discussionLeadID',
+    'discussionCoordinatorID', // מרכז דיון — optional people column / full role
+    'participantsID',
+    'creationDateID',
+    'discussionDateID',
+    'discussionTypeID',
+    'summaryFileID',
+    'previousDiscussionID',
+    'tasksBoardLinkID',
+    'topicsBoardLinkID',
+  ];
+  const TASKS_SETTINGS_FIELDS = [
+    'taskCreatorID',
+    'responsibilityID',
+    'deadlineID',
+    'statusID',
+    'discussionLinkID',
+    'taskNotesID', // הערות — inline-editable notes column, "My Tasks" tab only
+    'priorityID', // עדיפות — status column whose label order defines priorityID, "My Tasks" tab only
+    'taskTypeID', // סוג דיון — status column auto-filled with the parent discussion's type
+    // 'פרטים' (detailsID) and 'חיבור לנושאי דיון' (topicsLinkID) intentionally omitted —
+    // not needed in the tasks mapping.
+  ];
+  const TOPICS_SETTINGS_FIELDS = [
+    'discussionLinkID', // 'דיון' — connection to the discussion
+    'topicCreatorID', // 'יוצר נושא' — people column; avatar shown on the topic group header
+    'topicPriorityID', // per-topic priority (status column on the topics board)
+    'topicNotForDiscussionID', // topic-level "not for discussion" checkbox (drives export filter)
+    'pointNotForDiscussionID', // point-level "not for discussion" checkbox (on the subitems board)
+    'pointCheckedID', // 'האם נידונה' — discussed checkbox on the SUBITEMS board (topics table)
+    'pointCreatorID', // 'יוצר נקודה' — people column on the SUBITEMS board; avatar per point
+    // 'pointResponsesID' ('התייחסויות') intentionally NOT mapped here — the topics-table
+    // redesign removed the responses cell, so the field is hidden from Settings.
+  ];
+
+  // Aliases whose real column lives on the board's SUBITEMS board, not the board itself.
+  const SUBITEM_FIELDS = new Set([
+    'pointCheckedID',
+    'pointNotForDiscussionID',
+    'pointCreatorID',
+  ]);
+
+  const loadBoardColumns = async (boardId) => {
+    const id = String(boardId || '');
+    if (!id || columnsByBoardId[id] || loadingColumnsByBoardId[id]) return;
+
+    setLoadingColumnsByBoardId((prev) => ({ ...prev, [id]: true }));
+    try {
+      const data = await api(
+        `query ($boardId: [ID!]) {
+          boards(ids: $boardId) {
+            columns {
+              id
+              title
+              type
+              settings_str
+            }
+          }
+        }`,
+        { boardId: [id] },
+        'SettingsModal.loadBoardColumns'
+      );
+
+      const rawCols = data?.boards?.[0]?.columns || [];
+      const cols = rawCols.map((col) => ({
+        value: String(col.id),
+        label: col.title,
+        type: col.type,
+      }));
+      setColumnsByBoardId((prev) => ({ ...prev, [id]: cols }));
+
+      // Discover this board's SUBITEMS board (from the subtasks column settings)
+      // and load its columns too, so subitem-level fields (pointCheckedID) are mappable.
+      const subCol = rawCols.find((c) => c.type === 'subtasks' || c.type === 'subitems');
+      if (subCol?.settings_str) {
+        try {
+          const parsed = JSON.parse(subCol.settings_str);
+          const subBoardId = String((parsed.boardIds || parsed.allowedBoardIds || [])[0] || '');
+          if (subBoardId) {
+            setSubitemsBoardByBoard((prev) => ({ ...prev, [id]: subBoardId }));
+            loadBoardColumns(subBoardId);
+          }
+        } catch { /* no subitems board discoverable */ }
+      }
+    } catch (err) {
+      console.error(`Error loading columns for board ${id}:`, err);
+    } finally {
+      setLoadingColumnsByBoardId((prev) => ({ ...prev, [id]: false }));
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const uniqueBoardIds = Array.from(
+      new Set(Object.values(boards || {}).map((b) => String(b?.id || '')).filter(Boolean))
+    );
+    uniqueBoardIds.forEach((id) => {
+      loadBoardColumns(id);
+    });
+  }, [isOpen, boards]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setAssetError(null);
+    try {
+      // Persist the heavy export assets first — if they exceed the 6MB quota this
+      // throws, and we abort WITHOUT saving settings so config and assets can't
+      // drift out of sync. The friendly quota message is shown in the tab.
+      await saveExportAssets(context, exportAssets);
+      // Detect whether the discussion-type status column is backed by an account
+      // MANAGED column and persist its UUID, so addStatusLabel (create-modal) uses
+      // update_status_managed_column instead of the board-level mutation (which a
+      // managed column rejects). Best-effort — a failed detection just leaves the
+      // column marked regular; the create-modal re-detects lazily as a fallback.
+      let columnsToSave = columns;
+      const typeEntry = columns?.discussions?.discussionTypeID;
+      const typeBoardId = boards?.discussions?.id;
+      if (typeEntry?.id && typeBoardId) {
+        try {
+          const uuid = await detectManagedColumnId(typeBoardId, typeEntry.id);
+          columnsToSave = {
+            ...columns,
+            discussions: {
+              ...columns.discussions,
+              discussionTypeID: { ...typeEntry, managed: !!uuid, managedColumnId: uuid || null },
+            },
+          };
+        } catch { /* detection best-effort */ }
+      }
+      await updateSettings({ boards, columns: columnsToSave, preferences, permissions, exportTemplate });
+      onClose();
+    } catch (err) {
+      setActiveTab(3);
+      setAssetError(err?.message || 'שמירת נכסי הייצוא נכשלה');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleExportJson = () => {
+    const exportPayload = {
+      ...(settings || {}),
+      boards,
+      columns,
+      preferences,
+    };
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], {
+      type: 'application/json;charset=utf-8',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `discussions-settings-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  // Import a previously-exported settings JSON into the editable draft. The user
+  // reviews the loaded mapping and clicks "שמור" to persist it (same path as a
+  // manual edit). This is the only way to map fields the picker can't reach
+  // (e.g. the subitem-level "נדון" checkbox) without re-mapping by hand.
+  const handleImportClick = () => {
+    setImportMsg(null);
+    fileInputRef.current?.click();
+  };
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-importing the same file
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text());
+      if (!parsed || typeof parsed !== 'object' || !parsed.boards || !parsed.columns) {
+        throw new Error('invalid settings shape');
+      }
+      setBoards((prev) => ({ ...prev, ...parsed.boards }));
+      setColumns((prev) => ({ ...prev, ...parsed.columns }));
+      if (parsed.preferences) setPreferences((prev) => ({ ...prev, ...parsed.preferences }));
+      setImportMsg({ ok: true, text: 'הקובץ נטען. בדקו את המיפוי ולחצו "שמור" להחלה.' });
+    } catch (err) {
+      console.error('Error importing settings JSON:', err);
+      setImportMsg({ ok: false, text: 'ייבוא נכשל — ודאו שזהו קובץ JSON תקין של הגדרות (boards + columns).' });
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className={styles.overlay} onClick={(e) => {
+      if (e.target === e.currentTarget) onClose();
+    }}>
+      <div
+        className={`${styles.modal} ${activeTab <= 2 ? styles.modalFixed : ''} ${activeTab >= 3 ? styles.modalWide : ''}`}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label="הגדרות"
+      >
+        <div className={styles.header}>
+          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="סגירה">
+            ×
+          </button>
+          <Heading type="h4">הגדרות</Heading>
+        </div>
+        <div className={styles.content}>
+          <TabsContext activeTabId={activeTab} className={styles.tabsCtx}>
+            <TabList className={styles.tabList}>
+              <Tab onClick={() => setActiveTab(0)}>מיפוי</Tab>
+              <Tab onClick={() => setActiveTab(1)}>העדפות</Tab>
+              <Tab onClick={() => setActiveTab(2)}>תבניות</Tab>
+              <Tab onClick={() => setActiveTab(3)}>תבנית ייצוא</Tab>
+              <Tab onClick={() => setActiveTab(4)}>הרשאות</Tab>
+            </TabList>
+            <TabPanels className={styles.tabPanels}>
+              <TabPanel className={styles.tabPanelFill}>
+          <div className={styles.body}>
+            {Object.keys(boards || {}).map((boardKey) => (
+              <div key={boardKey} className={styles.board}>
+                <button
+                  type="button"
+                  className={styles.accordionHeader}
+                  onClick={() => setOpenBoardKey((prev) => (prev === boardKey ? null : boardKey))}
+                >
+                  <span className={styles.accordionTitle}>{BOARD_ROLE_TITLES[boardKey] || boardKey}</span>
+                  <span
+                    className={`${styles.accordionChevron} ${openBoardKey === boardKey ? styles.accordionChevronOpen : ''}`}
+                    aria-hidden="true"
+                  >
+                    ▾
+                  </span>
+                </button>
+
+                {openBoardKey === boardKey && (
+                  <div className={styles.accordionContent}>
+                    <div className={styles.boardId}>
+                      <Text type={"text3"} color={"secondary"}>לוח</Text>
+                      <SearchablePicker
+                        options={boardOptions.map((option) => ({ id: option.value, name: option.label }))}
+                        value={String(boards[boardKey].id || '')}
+                        onChange={(id) => setBoardId(boardKey, id)}
+                        placeholder={loadingBoards ? 'טוען לוחות' : 'חפש ובחר לוח'}
+                        isLoading={loadingBoards}
+                        disabled={loadingBoards}
+                      />
+                    </div>
+                    <div className={styles.cols}>
+                      {(() => {
+                        const aliases = boardKey === 'discussions'
+                          ? DISCUSSIONS_SETTINGS_FIELDS
+                          : boardKey === 'tasks'
+                            ? TASKS_SETTINGS_FIELDS
+                            : boardKey === 'topics'
+                              ? TOPICS_SETTINGS_FIELDS
+                              : Object.keys(columns?.[boardKey] || {});
+                        const entries = aliases
+                          .map((alias) => [alias, columns?.[boardKey]?.[alias]])
+                          .filter(([, col]) => Boolean(col));
+                        const ownBoardId = String(boards?.[boardKey]?.id || '');
+                        const renderRow = ([alias, col]) => {
+                          // subitem-level fields map against the SUBITEMS board's columns
+                          const boardId = SUBITEM_FIELDS.has(alias)
+                            ? String(subitemsBoardByBoard[ownBoardId] || '')
+                            : ownBoardId;
+                          const typedOptions = getTypedColumnOptions(boardId, col.type);
+                          return (
+                            <div key={alias} className={styles.colRow}>
+                              <div className={styles.colLabel}>
+                                <Text type={"text2"}>{col.title || alias}</Text>
+                              </div>
+                              <SearchablePicker
+                                options={typedOptions}
+                                value={String(col.id || '')}
+                                onChange={(id) => setColId(boardKey, alias, id || '')}
+                                placeholder={
+                                  loadingColumnsByBoardId[boardId]
+                                    ? 'טוען עמודות'
+                                    : typedOptions.length === 0
+                                      ? 'אין עמודות תואמות'
+                                      : 'בחר עמודה'
+                                }
+                                isLoading={loadingColumnsByBoardId[boardId]}
+                                disabled={loadingColumnsByBoardId[boardId] || typedOptions.length === 0}
+                              />
+                            </div>
+                          );
+                        };
+
+                        // The "סטאטוס בוצע" control lives beside the tasks status
+                        // column: a multi-select of the status column's own labels
+                        // that defines which statuses count as done for the
+                        // EffectivenessTab delayed KPI (past-deadline tasks in these
+                        // statuses are NOT delayed). Empty = the column's is_done
+                        // label. Its labels come from the LIVE published mapping, so
+                        // they appear once the tasks status column is mapped + saved.
+                        const doneStatusOptions = taskStatusOptions.map((o) => ({ id: o.id, name: o.label }));
+                        const renderDoneStatusRow = () => (
+                          <div key="delayedDone" className={styles.colRow}>
+                            <div className={styles.colLabel}>
+                              <Text type={"text2"}>סטאטוס "בוצע"</Text>
+                            </div>
+                            <SearchablePicker
+                              multiple
+                              options={doneStatusOptions}
+                              value={preferences.delayedDoneStatusIds || []}
+                              onChange={(ids) => setPreferences((p) => ({
+                                ...p,
+                                delayedDoneStatusIds: ids && ids.length ? ids : null,
+                              }))}
+                              placeholder={doneStatusOptions.length === 0 ? 'מפו ושמרו קודם עמודת סטטוס' : 'ברירת מחדל: התווית "בוצע"'}
+                              disabled={doneStatusOptions.length === 0}
+                            />
+                          </div>
+                        );
+
+                        // Topics board: split into item-level ("נושא") and
+                        // subitem-level ("נקודה") column groups so it's clear which
+                        // board each mapping targets.
+                        if (boardKey === 'topics') {
+                          const itemEntries = entries.filter(([alias]) => !SUBITEM_FIELDS.has(alias));
+                          const subEntries = entries.filter(([alias]) => SUBITEM_FIELDS.has(alias));
+                          return (
+                            <>
+                              <div className={styles.colGroupTitle}>
+                                <Text type={"text2"} weight={"medium"}>עמודות נושא (אייטם)</Text>
+                              </div>
+                              {itemEntries.map(renderRow)}
+                              <div className={styles.colGroupTitle}>
+                                <Text type={"text2"} weight={"medium"}>עמודות נקודה (סאב־אייטם)</Text>
+                                <Text type={"text3"} color={"secondary"}>נקודה = סאב־אייטם תחת הנושא. עמודות אלו ממופות מלוח הסאב־אייטמים.</Text>
+                              </div>
+                              {subEntries.map(renderRow)}
+                            </>
+                          );
+                        }
+
+                        // discussions + tasks: bucket the fields into typed
+                        // sections (אנשים / תאריכים / סטטוס / חיבורי לוחות / …),
+                        // preserving each section's field order. Empty sections
+                        // are skipped; unmatched types fall into a trailing "אחר".
+                        const sections = [...COLUMN_TYPE_GROUPS, { key: 'other', title: 'אחר', types: [] }];
+                        return sections.map((group) => {
+                          const groupEntries = entries.filter(
+                            ([, col]) => typeGroupKey(col.type) === group.key
+                          );
+                          if (!groupEntries.length) return null;
+                          // On the tasks board, render the "סטאטוס בוצע" multi-select
+                          // right after the status column so they sit side by side.
+                          const isTasksStatus = boardKey === 'tasks' && group.key === 'status';
+                          return (
+                            <React.Fragment key={group.key}>
+                              <div className={styles.colGroupTitle}>
+                                <Text type={"text2"} weight={"medium"}>{group.title}</Text>
+                              </div>
+                              {groupEntries.map((entry) => (
+                                isTasksStatus && entry[0] === 'statusID' ? (
+                                  <React.Fragment key="statusID">
+                                    {renderRow(entry)}
+                                    {renderDoneStatusRow()}
+                                  </React.Fragment>
+                                ) : renderRow(entry)
+                              ))}
+                            </React.Fragment>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+              </TabPanel>
+
+              <TabPanel className={styles.tabPanelFill}>
+                <div className={styles.prefs}>
+                  {/* How the "הנחיות קודמות" tab resolves its tasks — via the linked
+                      previous discussion, or by the discussion TYPE (taskTypeID). */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>מקור המשימות בהנחיות קודמות</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <ButtonGroup
+                        options={PREVIOUS_TASKS_MODE_OPTIONS}
+                        value={preferences.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION}
+                        onSelect={(value) => setPreferences((p) => ({ ...p, previousTasksMode: value || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION }))}
+                        size="small"
+                        kind="secondary"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </TabPanel>
+
+              <TabPanel className={styles.tabPanelFill}>
+                {/* Templates manager — persists on its own (independent of the
+                    Settings "שמור"); owner-only since it lives inside Settings. */}
+                <TemplatesPanel />
+              </TabPanel>
+
+              <TabPanel className={styles.tabPanelFill}>
+                <ExportTemplateTab
+                  template={exportTemplate}
+                  setTemplate={setExportTemplate}
+                  assets={exportAssets}
+                  setAssets={setExportAssets}
+                  assetError={assetError}
+                />
+              </TabPanel>
+
+              <TabPanel className={styles.tabPanelFill}>
+                <PermissionsTab
+                  permissions={permissions}
+                  setPermissions={setPermissions}
+                  columns={columns}
+                  selectedRoleKey={selectedRoleKey}
+                  onSelectRole={setSelectedRoleKey}
+                />
+              </TabPanel>
+            </TabPanels>
+          </TabsContext>
+        </div>
+
+        <div className={styles.footerBar}>
+          {importMsg && (
+            <Text type={"text3"} color={importMsg.ok ? 'positive' : 'negative'} className={styles.importMsg}>
+              {importMsg.text}
+            </Text>
+          )}
+          <Flex justify="end" gap={8} className={styles.footer}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              style={{ display: 'none' }}
+              onChange={handleImportFile}
+            />
+            <Button kind={"secondary"} onClick={handleImportClick}>
+              ייבוא JSON
+            </Button>
+            <Button kind={"secondary"} onClick={handleExportJson}>
+              ייצוא JSON
+            </Button>
+            <Button kind={"tertiary"} onClick={onClose}>ביטול</Button>
+            <Button kind={"primary"} loading={saving} onClick={handleSave}>שמור</Button>
+          </Flex>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default SettingsModal;

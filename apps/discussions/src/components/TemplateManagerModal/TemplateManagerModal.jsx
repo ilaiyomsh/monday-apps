@@ -1,0 +1,835 @@
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
+import { Button, TextField, Text, Loader, ColorPicker } from '@vibe/core';
+import { Search } from '@vibe/icons';
+import { Plus, Trash2, Pencil, ChevronLeft, ChevronDown, X, GripVertical } from 'lucide-react';
+import {
+  ensurePeopleColumns,
+  getColumnTitle,
+  subscribe as subscribePeopleColumns,
+  getVersion as getPeopleColumnsVersion,
+} from '@generated/utils/mondayApi/peopleColumns.js';
+import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
+import { countPoints } from '@generated/utils/templates.js';
+import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
+import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
+import { MONDAY_COLOR_NAMES, colorNameToCss } from '@generated/constants/mondayPalette.js';
+import { PersonPicker } from '@generated/components/PersonPicker';
+import logger from '@generated/utils/logger.js';
+import styles from './TemplateManagerModal.module.css';
+
+/* "סוג דיון" picker styled to match the app's custom dropdowns, with a color
+   swatch per type. "סוג" is a DROPDOWN column, so value = the label TEXT (or
+   null). Colors come from app storage via `colorFn(name)`. */
+function TypeDropdown({ value, onChange, options, colorFn, takenNames }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+  // The menu is portaled to document.body (position:fixed) so the modal's
+  // scroll/overflow never clips it — same pattern as PersonPicker / FilterSelect.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (e) => {
+      if (menuRef.current?.contains(e.target) || triggerRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    const onEsc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } };
+    const reposition = () => setOpen(false); // close on scroll/resize rather than chase
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc, true);
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc, true);
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  }, [open]);
+  const toggle = () => {
+    if (open) { setOpen(false); return; }
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    setOpen(true);
+  };
+  const swatch = (name) => <span className={styles.typeSwatch} style={{ background: colorFn(name) }} />;
+  return (
+    <div className={styles.typeDropdown}>
+      <button ref={triggerRef} type="button" className={styles.typeTrigger} onClick={toggle} aria-haspopup="listbox" aria-expanded={open}>
+        {value
+          ? <span className={styles.typeValue}>{swatch(value)}{value}</span>
+          : <span className={`${styles.typeValue} ${styles.typePlaceholder}`}>ללא סוג</span>}
+        <span className={styles.typeTrailing}>
+          {value != null && (
+            <span
+              role="button"
+              tabIndex={0}
+              className={styles.typeClear}
+              aria-label="נקה סוג"
+              onClick={(e) => { e.stopPropagation(); onChange(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onChange(null); } }}
+            >
+              <X size={14} />
+            </span>
+          )}
+          <ChevronDown className={styles.typeChevron} size={16} aria-hidden="true" />
+        </span>
+      </button>
+      {open && pos && createPortal(
+        <ul
+          ref={menuRef}
+          className={styles.typeMenu}
+          role="listbox"
+          dir="rtl"
+          style={{ position: 'fixed', top: pos.top, left: pos.left, minWidth: pos.width, zIndex: 10000 }}
+        >
+          <li role="option" aria-selected={value == null} className={`${styles.typeItem} ${value == null ? styles.typeItemSelected : ''}`} onClick={() => { onChange(null); setOpen(false); }}>
+            ללא סוג
+          </li>
+          {options.map((o) => {
+            const disabled = takenNames?.has(o.label) && o.label !== value;
+            return (
+              <li
+                key={o.id ?? o.label}
+                role="option"
+                aria-selected={o.label === value}
+                aria-disabled={disabled || undefined}
+                className={`${styles.typeItem} ${o.label === value ? styles.typeItemSelected : ''} ${disabled ? styles.typeItemDisabled : ''}`}
+                onClick={() => { if (disabled) return; onChange(o.label); setOpen(false); }}
+              >
+                {swatch(o.label)}{o.label}
+              </li>
+            );
+          })}
+        </ul>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+/* One draggable point row inside a topic (keyed by stable _uid). */
+function SortablePointRow({ topicUid, point, onChange, onRemove, onEnterAddPoint }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: point._uid });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
+  return (
+    <div ref={setNodeRef} style={style} className={styles.pointRow}>
+      <button type="button" className={styles.dragGrip} {...attributes} {...listeners} aria-label="גרור נקודה">
+        <GripVertical size={14} />
+      </button>
+      <div className={styles.pointField}>
+        <TextField
+          value={point.text}
+          onChange={(v) => onChange(topicUid, point._uid, v)}
+          placeholder="נקודה"
+          size="small"
+          onKeyDown={(e) => { if (e.key === 'Enter' && point.text.trim()) { e.preventDefault(); onEnterAddPoint(topicUid); } }}
+        />
+      </div>
+      <button type="button" className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => onRemove(topicUid, point._uid)} aria-label="מחק נקודה">
+        <X size={16} />
+      </button>
+    </div>
+  );
+}
+
+/* One draggable topic card with its own sortable points list. */
+function SortableTopicCard({ topic, sensors, canRemove, onSetName, onRemove, onAddPoint, onRemovePoint, onSetPoint, onPointsDragEnd }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: topic._uid });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
+  return (
+    <div ref={setNodeRef} style={style} className={styles.topicCard}>
+      <div className={styles.topicHeader}>
+        <button type="button" className={styles.dragGrip} {...attributes} {...listeners} aria-label="גרור נושא">
+          <GripVertical size={16} />
+        </button>
+        <div className={styles.topicNameField}>
+          <TextField value={topic.name} onChange={(v) => onSetName(topic._uid, v)} placeholder="שם הנושא" size="small" />
+        </div>
+        <button type="button" className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => onRemove(topic._uid)} aria-label="מחק נושא" disabled={!canRemove}>
+          <Trash2 size={16} />
+        </button>
+      </div>
+      <div className={styles.pointsWrap}>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onPointsDragEnd(topic._uid, e)}>
+          <SortableContext items={topic.points.map((p) => p._uid)} strategy={verticalListSortingStrategy}>
+            {topic.points.map((point) => (
+              <SortablePointRow key={point._uid} topicUid={topic._uid} point={point} onChange={onSetPoint} onRemove={onRemovePoint} onEnterAddPoint={onAddPoint} />
+            ))}
+          </SortableContext>
+        </DndContext>
+        <button type="button" className={styles.addPointBtn} onClick={() => onAddPoint(topic._uid)}>
+          <Plus size={12} /> הוסף נקודה
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/*
+ * The editor works on a DRAFT whose topics/points carry an ephemeral `_uid`
+ * (session-local, never persisted) so React keys stay stable while rows are
+ * added/removed mid-edit. draftToTemplate() strips the uids back to the stored
+ * shape ({ name, topics:[{ name, points:string[] }] }) on save.
+ */
+let _uidSeq = 0;
+const uid = () => `k${(_uidSeq += 1)}`;
+const makePoint = (text = '') => ({ _uid: uid(), text });
+const makeTopic = (name = '') => ({ _uid: uid(), name, points: [] });
+const emptyDraft = () => ({ id: null, name: '', discussionType: null, topics: [makeTopic()] });
+const emptyParticipantDraft = () => ({ id: null, name: '', discussionType: null, lead: [], coordinator: [], participants: [] });
+
+function templateToDraft(t) {
+  return {
+    id: t.id,
+    name: t.name,
+    discussionType: t.discussionType ?? null,
+    topics: t.topics.map((tp) => ({
+      _uid: uid(),
+      name: tp.name,
+      points: tp.points.map((p) => makePoint(p)),
+    })),
+  };
+}
+function draftToTemplate(draft) {
+  return {
+    name: draft.name,
+    discussionType: draft.discussionType ?? null,
+    topics: draft.topics.map((t) => ({ name: t.name, points: t.points.map((p) => p.text) })),
+  };
+}
+
+/*
+ * Templates manager PANEL — rendered as the "תבניות" tab inside the Settings
+ * dialog (owner-only). Three kinds, switched by an inner tab bar:
+ *   • לפי סוג דיון (default) — one UNIFIED template per discussion TYPE, bundling
+ *     topics + people (lead/coordinator/participants) + the type's display color.
+ *   • נושאים   — a named set of fixed topics, each with a list of points.
+ *   • משתתפים  — a named set of people.
+ * Persists via TemplatesContext (immediately, independent of the Settings save).
+ * People pickers for a role column appear ONLY when that column is mapped in
+ * Settings (the "יוצר" creator column is intentionally never shown/edited here).
+ */
+export function TemplateManagerModal() {
+  const {
+    templates,
+    participantTemplates,
+    typeTemplates,
+    loading,
+    createTemplate,
+    updateTemplate,
+    deleteTemplate,
+    createParticipantTemplate,
+    updateParticipantTemplate,
+    deleteParticipantTemplate,
+    upsertTypeTemplate,
+    deleteTypeTemplate,
+    typeColor,
+    typeColorName,
+    setTypeColor,
+  } = useTemplates();
+  // "סוג דיון" is a DROPDOWN column — its labels are the assignable types.
+  const { options: typeOptions } = useDropdownOptions('discussions', 'discussionTypeID');
+  // Which discussion people columns are mapped (creator is intentionally ignored):
+  // only mapped roles get a picker in the template editors.
+  const discCols = getColumns('discussions') || {};
+  const leadMapped = !!discCols.discussionLeadID?.id;
+  const coordinatorMapped = !!discCols.discussionCoordinatorID?.id;
+  const participantsMapped = !!discCols.participantsID?.id;
+  // People-picker labels come from the LIVE board column titles (fall back to the
+  // schema title until the live columns load, then re-render on the version bump).
+  useEffect(() => { ensurePeopleColumns(); }, []);
+  const peopleColumnsVersion = useSyncExternalStore(subscribePeopleColumns, getPeopleColumnsVersion, getPeopleColumnsVersion);
+  const roleTitle = (alias, fallback) => getColumnTitle('discussions', alias) || fallback;
+  // Reference the version so the labels recompute once the live titles arrive.
+  void peopleColumnsVersion;
+  // Drag-reorder sensor — declared with the other hooks, BEFORE any early return.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // kind: 'types' | 'topics' | 'participants' (tab) · view: 'list' | 'edit'.
+  // Default tab is "by discussion type".
+  const [kind, setKind] = useState('types');
+  const [view, setView] = useState('list');
+  const [draft, setDraft] = useState(null); // topic draft (also holds the topics + selected type when kind==='types')
+  const [pDraft, setPDraft] = useState(null); // participant draft
+  // Type-template editor reuses `draft` for its topics (and draft.discussionType
+  // for the fixed type); people + color live in their own state.
+  const [typeLead, setTypeLead] = useState([]);
+  const [typeCoordinator, setTypeCoordinator] = useState([]);
+  const [typeParticipants, setTypeParticipants] = useState([]);
+  const [typeColorDraft, setTypeColorDraft] = useState(null); // a monday color NAME
+  const [isNew, setIsNew] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [typeSearch, setTypeSearch] = useState(''); // filters the "סוג דיון" list
+  // Color popover (opened by the color circle in the type-editor header).
+  const [colorOpen, setColorOpen] = useState(false);
+  const [colorPos, setColorPos] = useState(null);
+  const colorTriggerRef = useRef(null);
+  const colorPopoverRef = useRef(null);
+
+  useEffect(() => {
+    if (!colorOpen) return undefined;
+    const onDown = (e) => {
+      if (colorPopoverRef.current?.contains(e.target) || colorTriggerRef.current?.contains(e.target)) return;
+      setColorOpen(false);
+    };
+    const onEsc = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setColorOpen(false); } };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc, true);
+    };
+  }, [colorOpen]);
+
+  const openColorPopover = () => {
+    if (colorOpen) { setColorOpen(false); return; }
+    const rect = colorTriggerRef.current?.getBoundingClientRect();
+    if (rect) setColorPos({ top: rect.bottom + 6, left: rect.left });
+    setColorOpen(true);
+  };
+
+  const switchKind = (next) => {
+    if (next === kind) return;
+    setKind(next);
+    setView('list');
+    setDraft(null);
+    setPDraft(null);
+    setTypeLead([]);
+    setTypeCoordinator([]);
+    setTypeParticipants([]);
+    setTypeColorDraft(null);
+    setIsNew(false);
+    setConfirmDeleteId(null);
+    setTypeSearch('');
+  };
+
+  const startNew = () => {
+    if (kind === 'topics') setDraft(emptyDraft());
+    else setPDraft(emptyParticipantDraft());
+    setIsNew(true);
+    setView('edit');
+  };
+  const startEdit = (t) => {
+    if (kind === 'topics') setDraft(templateToDraft(t));
+    else setPDraft({ id: t.id, name: t.name, discussionType: t.discussionType ?? null, lead: t.lead || [], coordinator: t.coordinator || [], participants: t.participants || [] });
+    setIsNew(false);
+    setView('edit');
+  };
+  // Open the unified editor for a discussion TYPE (kind==='types'). `typeName` is
+  // the dropdown label; the existing type template (if any) seeds topics + people.
+  const startEditType = (typeName) => {
+    const existing = typeTemplates.find((t) => t.discussionType === typeName);
+    const topics = existing?.topics?.length ? existing.topics : [{ name: '', points: [] }];
+    setDraft({
+      id: existing?.id ?? null,
+      name: '',
+      discussionType: typeName,
+      topics: topics.map((tp) => ({ _uid: uid(), name: tp.name, points: tp.points.map((p) => makePoint(p)) })),
+    });
+    setTypeLead(existing?.lead || []);
+    setTypeCoordinator(existing?.coordinator || []);
+    setTypeParticipants(existing?.participants || []);
+    setTypeColorDraft(typeColorName(typeName));
+    setIsNew(!existing);
+    setView('edit');
+  };
+  const backToList = () => {
+    setView('list');
+    setDraft(null);
+    setPDraft(null);
+    setTypeLead([]);
+    setTypeCoordinator([]);
+    setTypeParticipants([]);
+    setTypeColorDraft(null);
+    setIsNew(false);
+  };
+
+  // ---- topic draft mutations (keyed by stable _uid, never by index) ----
+  const update = (fn) => setDraft((d) => fn(d));
+  // Drag-reorder topics, and points within a topic (by stable _uid).
+  const onTopicsDragEnd = ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    update((d) => {
+      const ids = d.topics.map((t) => t._uid);
+      return { ...d, topics: arrayMove(d.topics, ids.indexOf(active.id), ids.indexOf(over.id)) };
+    });
+  };
+  const onPointsDragEnd = (tuid, { active, over }) => {
+    if (!over || active.id === over.id) return;
+    update((d) => ({
+      ...d,
+      topics: d.topics.map((t) => {
+        if (t._uid !== tuid) return t;
+        const ids = t.points.map((p) => p._uid);
+        return { ...t, points: arrayMove(t.points, ids.indexOf(active.id), ids.indexOf(over.id)) };
+      }),
+    }));
+  };
+  const setName = (v) => update((d) => ({ ...d, name: v }));
+  const addTopic = () => update((d) => ({ ...d, topics: [...d.topics, makeTopic()] }));
+  const removeTopic = (tuid) => update((d) => ({ ...d, topics: d.topics.filter((t) => t._uid !== tuid) }));
+  const setTopicName = (tuid, v) =>
+    update((d) => ({ ...d, topics: d.topics.map((t) => (t._uid === tuid ? { ...t, name: v } : t)) }));
+  const addPoint = (tuid) =>
+    update((d) => ({
+      ...d,
+      topics: d.topics.map((t) => (t._uid === tuid ? { ...t, points: [...t.points, makePoint()] } : t)),
+    }));
+  const removePoint = (tuid, puid) =>
+    update((d) => ({
+      ...d,
+      topics: d.topics.map((t) =>
+        t._uid === tuid ? { ...t, points: t.points.filter((p) => p._uid !== puid) } : t
+      ),
+    }));
+  const setPoint = (tuid, puid, v) =>
+    update((d) => ({
+      ...d,
+      topics: d.topics.map((t) =>
+        t._uid === tuid
+          ? { ...t, points: t.points.map((p) => (p._uid === puid ? { ...p, text: v } : p)) }
+          : t
+      ),
+    }));
+
+  const items = kind === 'topics' ? templates : participantTemplates;
+  const canSave =
+    kind === 'topics'
+      ? !!draft && draft.name.trim() && draft.topics.some((t) => t.name.trim())
+      : kind === 'participants'
+      ? !!pDraft && pDraft.name.trim() && (pDraft.participants || []).length > 0
+      // types: the type is fixed; require at least one topic or any person.
+      : !!draft && (draft.topics.some((t) => t.name.trim()) || typeLead.length > 0 || typeCoordinator.length > 0 || typeParticipants.length > 0);
+
+  const handleSave = async () => {
+    if (!canSave || saving) return;
+    // Per-kind uniqueness: at most one template of the current kind may be
+    // assigned to a given "סוג דיון". Re-check here (the UI already greys taken
+    // types) so a stale/edge case can't slip a duplicate through.
+    const chosenType = kind === 'topics' ? (draft?.discussionType ?? null) : (pDraft?.discussionType ?? null);
+    const currentId = kind === 'topics' ? draft?.id : pDraft?.id;
+    if (kind !== 'types' && chosenType != null) {
+      const clash = items.some((t) => t.id !== currentId && t.discussionType === chosenType);
+      if (clash) {
+        logger.error('TemplateManagerModal', `כבר קיימת תבנית מסוג זה עבור "${chosenType}". בחרו סוג אחר או הסירו את השיוך.`);
+        return;
+      }
+    }
+    setSaving(true);
+    try {
+      if (kind === 'topics') {
+        const payload = draftToTemplate(draft);
+        if (isNew) await createTemplate(payload);
+        else await updateTemplate(draft.id, payload);
+      } else if (kind === 'participants') {
+        const payload = { name: pDraft.name, discussionType: pDraft.discussionType ?? null, lead: pDraft.lead, coordinator: pDraft.coordinator, participants: pDraft.participants };
+        if (isNew) await createParticipantTemplate(payload);
+        else await updateParticipantTemplate(pDraft.id, payload);
+      } else {
+        // types: keyed by discussionType (name) — upsert replaces any existing entry.
+        await upsertTypeTemplate({
+          id: draft.id,
+          discussionType: draft.discussionType,
+          topics: draft.topics.map((t) => ({ name: t.name, points: t.points.map((p) => p.text) })),
+          lead: typeLead,
+          coordinator: typeCoordinator,
+          participants: typeParticipants,
+        });
+        // Persist the chosen color for this type.
+        if (typeColorDraft) await setTypeColor(draft.discussionType, typeColorDraft);
+      }
+      backToList();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (kind === 'topics') await deleteTemplate(id);
+    else if (kind === 'participants') await deleteParticipantTemplate(id);
+    else await deleteTypeTemplate(id); // for types `id` IS the discussionType (name)
+    setConfirmDeleteId(null);
+  };
+
+  const topicsTitle = view === 'list' ? 'תבניות דיון' : isNew ? 'תבנית חדשה' : 'עריכת תבנית';
+  const participantsTitle = view === 'list' ? 'תבניות משתתפים' : isNew ? 'תבנית משתתפים חדשה' : 'עריכת תבנית משתתפים';
+  const typesTitle = view === 'list' ? 'תבניות סוג דיון' : (draft?.discussionType || 'תבנית סוג דיון');
+  const title = kind === 'topics' ? topicsTitle : kind === 'participants' ? participantsTitle : typesTitle;
+
+  return (
+    <div className={styles.panel} dir="ltr">
+      {view === 'edit' && (
+        <div className={styles.panelHeader}>
+          <button type="button" className={styles.backBtn} onClick={backToList} aria-label="חזרה">
+            <ChevronLeft size={19} />
+          </button>
+          <h3 className={styles.title}>{title}</h3>
+          {/* Types editor: a large color circle beside the name — click to open the
+              monday ColorPicker (5-wide) in a popover. Shows the type name ONCE. */}
+          {kind === 'types' && (
+            <>
+              <button
+                ref={colorTriggerRef}
+                type="button"
+                className={styles.colorCircle}
+                style={{ background: colorNameToCss(typeColorDraft || typeColorName(draft.discussionType)) }}
+                onClick={openColorPopover}
+                aria-label="בחירת צבע לסוג"
+                aria-expanded={colorOpen}
+              />
+              {colorOpen && colorPos && createPortal(
+                <div
+                  ref={colorPopoverRef}
+                  className={styles.colorPopover}
+                  style={{ position: 'fixed', top: colorPos.top, left: colorPos.left, zIndex: 10000 }}
+                >
+                  <ColorPicker
+                    value={[typeColorDraft || typeColorName(draft.discussionType)]}
+                    onSave={(vals) => {
+                      if (!vals || !vals[0]) return;
+                      setTypeColorDraft(vals[0]);
+                      setColorOpen(false);
+                      // Persist the color IMMEDIATELY — it's a standalone per-type
+                      // setting, independent of the template's topics/people (which
+                      // gate the "שמור תבנית" button). So a color-only change takes
+                      // effect + survives refresh even without saving a template.
+                      setTypeColor(draft.discussionType, vals[0]);
+                    }}
+                    colorsList={MONDAY_COLOR_NAMES}
+                    /* CRITICAL: isBlackListMode defaults to TRUE in @vibe/core, which
+                       treats colorsList as colors to EXCLUDE — hiding everything and
+                       rendering an empty picker. false = colorsList is a whitelist. */
+                    isBlackListMode={false}
+                    colorShape="circle"
+                    colorSize="medium"
+                    numberOfColorsInLine={5}
+                    focusOnMount={false}
+                  />
+                </div>,
+                document.body
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {view === 'list' && (
+        <div className={styles.tabs} role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={kind === 'types'}
+            className={`${styles.tab} ${kind === 'types' ? styles.tabActive : ''}`}
+            onClick={() => switchKind('types')}
+          >
+            סוג דיון
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={kind === 'topics'}
+            className={`${styles.tab} ${kind === 'topics' ? styles.tabActive : ''}`}
+            onClick={() => switchKind('topics')}
+          >
+            נושאים
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={kind === 'participants'}
+            className={`${styles.tab} ${kind === 'participants' ? styles.tabActive : ''}`}
+            onClick={() => switchKind('participants')}
+          >
+            משתתפים
+          </button>
+        </div>
+      )}
+
+      <div className={styles.content}>
+        {view === 'list' && kind === 'types' ? (
+          loading ? (
+            <div className={styles.empty}><Loader size={24} /></div>
+          ) : typeOptions.length === 0 ? (
+            <div className={styles.empty}>
+              <Text type="text2" color="secondary">
+                לא הוגדרו סוגי דיון בעמודת ה"סוג". הוסיפו סוגים (ביצירת דיון) כדי ליצור תבנית לכל סוג.
+              </Text>
+            </div>
+          ) : (
+            <>
+              <div className={styles.searchWrap}>
+                <Search className={styles.searchIcon} aria-hidden="true" />
+                <input
+                  type="text"
+                  className={styles.search}
+                  aria-label="חיפוש סוג דיון"
+                  value={typeSearch}
+                  onChange={(e) => setTypeSearch(e.target.value)}
+                />
+              </div>
+            <div className={styles.list}>
+              {typeOptions
+                .filter((opt) => !typeSearch.trim() || (opt.label || '').toLowerCase().includes(typeSearch.trim().toLowerCase()))
+                .map((opt) => {
+                const tpl = typeTemplates.find((t) => t.discussionType === opt.label);
+                const hasTpl = !!tpl;
+                return (
+                  <div key={opt.id ?? opt.label} className={styles.listItem}>
+                    <button type="button" className={styles.listItemMain} onClick={() => startEditType(opt.label)}>
+                      <p className={styles.listItemName}>
+                        <span className={styles.typeSwatch} style={{ background: typeColor(opt.label) }} />
+                        {opt.label}
+                      </p>
+                      <p className={styles.listItemMeta}>
+                        <span>
+                          {hasTpl
+                            ? `${tpl.topics.length} נושאים · ${(tpl.participants || []).length} משתתפים`
+                            : 'ללא תבנית — הקליקו להגדרה'}
+                        </span>
+                      </p>
+                    </button>
+                    {hasTpl && (
+                      confirmDeleteId === opt.label ? (
+                        <div className={styles.confirmDelete}>
+                          <span className={styles.confirmText}>למחוק?</span>
+                          <button type="button" className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => handleDelete(opt.label)} aria-label="אישור מחיקה">
+                            <Trash2 size={16} />
+                          </button>
+                          <button type="button" className={styles.iconBtn} onClick={() => setConfirmDeleteId(null)} aria-label="ביטול מחיקה">
+                            <X size={16} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className={styles.listItemActions}>
+                          <button type="button" className={styles.iconBtn} onClick={() => startEditType(opt.label)} aria-label="עריכה">
+                            <Pencil size={16} />
+                          </button>
+                          <button type="button" className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmDeleteId(opt.label)} aria-label="מחיקה">
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      )
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            </>
+          )
+        ) : view === 'list' ? (
+          loading ? (
+            <div className={styles.empty}><Loader size={24} /></div>
+          ) : items.length === 0 ? (
+            <div className={styles.empty}>
+              <Text type="text2" color="secondary">
+                {kind === 'topics'
+                  ? 'עדיין אין תבניות. צרו תבנית ראשונה של נושאי דיון קבועים.'
+                  : 'עדיין אין תבניות משתתפים. צרו תבנית ראשונה של קבוצת משתתפים קבועה.'}
+              </Text>
+            </div>
+          ) : (
+            <div className={styles.list}>
+              {items.map((t) => (
+                <div key={t.id} className={styles.listItem}>
+                  <button type="button" className={styles.listItemMain} onClick={() => startEdit(t)}>
+                    <p className={styles.listItemName}>{t.name}</p>
+                    <p className={styles.listItemMeta}>
+                      <span>
+                        {kind === 'topics'
+                          ? `${t.topics.length} נושאים · ${countPoints(t)} נקודות`
+                          : `${(t.participants || []).length} משתתפים`}
+                      </span>
+                      {t.discussionType && (
+                        <span className={styles.listItemType}>
+                          <span className={styles.typeSwatch} style={{ background: typeColor(t.discussionType) }} />
+                          {t.discussionType}
+                        </span>
+                      )}
+                    </p>
+                  </button>
+                  {confirmDeleteId === t.id ? (
+                    <div className={styles.confirmDelete}>
+                      <span className={styles.confirmText}>למחוק?</span>
+                      <button type="button" className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => handleDelete(t.id)} aria-label="אישור מחיקה">
+                        <Trash2 size={16} />
+                      </button>
+                      <button type="button" className={styles.iconBtn} onClick={() => setConfirmDeleteId(null)} aria-label="ביטול מחיקה">
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className={styles.listItemActions}>
+                      <button type="button" className={styles.iconBtn} onClick={() => startEdit(t)} aria-label="עריכה">
+                        <Pencil size={16} />
+                      </button>
+                      <button type="button" className={`${styles.iconBtn} ${styles.iconBtnDanger}`} onClick={() => setConfirmDeleteId(t.id)} aria-label="מחיקה">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        ) : kind === 'topics' ? (
+          <>
+            <div className={styles.nameTypeRow}>
+              <div className={styles.nameCol}>
+                <TextField value={draft.name} onChange={(v) => setName(v)} placeholder="שם התבנית" size="small" autoFocus />
+              </div>
+              <div className={styles.typeCol}>
+                <TypeDropdown
+                  value={draft.discussionType ?? null}
+                  onChange={(name) => update((d) => ({ ...d, discussionType: name }))}
+                  options={typeOptions}
+                  colorFn={typeColor}
+                  takenNames={new Set(templates.filter((t) => t.id !== draft.id && t.discussionType != null).map((t) => t.discussionType))}
+                />
+              </div>
+            </div>
+
+            <div className={styles.topicsWrap}>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onTopicsDragEnd}>
+                <SortableContext items={draft.topics.map((t) => t._uid)} strategy={verticalListSortingStrategy}>
+                  {draft.topics.map((topic) => (
+                    <SortableTopicCard
+                      key={topic._uid}
+                      topic={topic}
+                      sensors={sensors}
+                      canRemove={draft.topics.length > 1}
+                      onSetName={setTopicName}
+                      onRemove={removeTopic}
+                      onAddPoint={addPoint}
+                      onRemovePoint={removePoint}
+                      onSetPoint={setPoint}
+                      onPointsDragEnd={onPointsDragEnd}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </div>
+
+            <Button kind="secondary" size="small" leftIcon={Plus} onClick={addTopic} className={styles.addTopicBtn}>
+              הוסף נושא
+            </Button>
+          </>
+        ) : kind === 'participants' ? (
+          <>
+            <div className={styles.nameTypeRow}>
+              <div className={styles.nameCol}>
+                <TextField value={pDraft.name} onChange={(v) => setPDraft((d) => ({ ...d, name: v }))} placeholder="שם התבנית" size="small" autoFocus />
+              </div>
+              <div className={styles.typeCol}>
+                <TypeDropdown
+                  value={pDraft.discussionType ?? null}
+                  onChange={(name) => setPDraft((d) => ({ ...d, discussionType: name }))}
+                  options={typeOptions}
+                  colorFn={typeColor}
+                  takenNames={new Set(participantTemplates.filter((t) => t.id !== pDraft.id && t.discussionType != null).map((t) => t.discussionType))}
+                />
+              </div>
+            </div>
+
+            <div className={styles.peopleRow}>
+              {leadMapped && (
+                <div className={styles.peopleCol}>
+                  <Text type="text2" className={styles.label}>{roleTitle('discussionLeadID', 'מוביל דיון')}</Text>
+                  <PersonPicker selected={pDraft.lead || []} onChange={(next) => setPDraft((d) => ({ ...d, lead: next }))} bordered />
+                </div>
+              )}
+              {coordinatorMapped && (
+                <div className={styles.peopleCol}>
+                  <Text type="text2" className={styles.label}>{roleTitle('discussionCoordinatorID', 'מרכז דיון')}</Text>
+                  <PersonPicker selected={pDraft.coordinator || []} onChange={(next) => setPDraft((d) => ({ ...d, coordinator: next }))} bordered />
+                </div>
+              )}
+              {participantsMapped && (
+                <div className={styles.peopleCol}>
+                  <Text type="text2" className={styles.label}>{roleTitle('participantsID', 'משתתפים')}</Text>
+                  <PersonPicker selected={pDraft.participants || []} onChange={(next) => setPDraft((d) => ({ ...d, participants: next }))} bordered />
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          /* types editor — the type name + its color circle live in the header
+             (name shown ONCE); here just the people (mapped columns only) + the
+             unified topics editor. */
+          <>
+            <div className={styles.peopleRow}>
+              {leadMapped && (
+                <div className={styles.peopleCol}>
+                  <Text type="text2" className={styles.label}>{roleTitle('discussionLeadID', 'מוביל דיון')}</Text>
+                  <PersonPicker selected={typeLead} onChange={setTypeLead} bordered />
+                </div>
+              )}
+              {coordinatorMapped && (
+                <div className={styles.peopleCol}>
+                  <Text type="text2" className={styles.label}>{roleTitle('discussionCoordinatorID', 'מרכז דיון')}</Text>
+                  <PersonPicker selected={typeCoordinator} onChange={setTypeCoordinator} bordered />
+                </div>
+              )}
+              {participantsMapped && (
+                <div className={styles.peopleCol}>
+                  <Text type="text2" className={styles.label}>{roleTitle('participantsID', 'משתתפים')}</Text>
+                  <PersonPicker selected={typeParticipants} onChange={setTypeParticipants} bordered />
+                </div>
+              )}
+            </div>
+
+            <Text type="text2" className={styles.sectionLabel}>נושאים קבועים</Text>
+            <div className={styles.topicsWrap}>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onTopicsDragEnd}>
+                <SortableContext items={draft.topics.map((t) => t._uid)} strategy={verticalListSortingStrategy}>
+                  {draft.topics.map((topic) => (
+                    <SortableTopicCard
+                      key={topic._uid}
+                      topic={topic}
+                      sensors={sensors}
+                      canRemove={draft.topics.length > 1}
+                      onSetName={setTopicName}
+                      onRemove={removeTopic}
+                      onAddPoint={addPoint}
+                      onRemovePoint={removePoint}
+                      onSetPoint={setPoint}
+                      onPointsDragEnd={onPointsDragEnd}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </div>
+
+            <Button kind="secondary" size="small" leftIcon={Plus} onClick={addTopic} className={styles.addTopicBtn}>
+              הוסף נושא
+            </Button>
+          </>
+        )}
+      </div>
+
+      <div className={styles.footer}>
+        {view === 'list' ? (
+          kind !== 'types' ? (
+            <Button kind="primary" size="small" leftIcon={Plus} onClick={startNew}>
+              תבנית חדשה
+            </Button>
+          ) : <span />
+        ) : (
+          <div className={styles.footerEnd}>
+            <Button kind="tertiary" size="small" onClick={backToList} disabled={saving}>ביטול</Button>
+            <Button kind="primary" size="small" onClick={handleSave} loading={saving} disabled={!canSave || saving}>
+              שמור תבנית
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default TemplateManagerModal;

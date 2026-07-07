@@ -1,0 +1,144 @@
+/* Week view — one vertical scroll container; the sticky day header shares the
+   body's grid template (gutter + 5 work days) so columns align.
+   Container is dir="rtl": the gutter (first column) lands on the RIGHT and
+   Sunday is the rightmost day column. */
+.calWkScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+}
+.calWkLoading {
+  opacity: 0.6;
+}
+
+.calWkDayHeader {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: 48px repeat(5, 1fr);
+  height: 36px;
+  background: var(--primary-background-color, #fff);
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.calWkGutterCorner {
+  border-inline-end: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.calWkDayHead {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+}
+.calWkDayHeadToday {
+  color: var(--text-color, #323338);
+}
+.calWkDayHeadName {
+  font-size: 12px;
+}
+.calWkDayHeadNum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 13px;
+  font-weight: var(--font-weight-medium, 500);
+}
+.calWkDayHeadNumToday {
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+}
+
+.calWkBody {
+  display: grid;
+  grid-template-columns: 48px repeat(5, 1fr);
+}
+
+/* Hour gutter — labels absolutely positioned ON their grid line. */
+.calWkGutter {
+  position: relative;
+  height: 864px; /* 18 hours (06:00-23:00) * HOUR_PX */
+  border-inline-end: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.calWkGutterLabel {
+  position: absolute;
+  inset-inline-start: 0;
+  inset-inline-end: 4px;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--secondary-text-color, #676879);
+  text-align: center;
+  direction: ltr;
+}
+
+.calWkDayCol {
+  position: relative;
+  height: 864px; /* 18 hours (06:00-23:00) * HOUR_PX */
+  min-width: 0;
+  border-inline-end: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.calWkDayCol:last-child {
+  border-inline-end: none;
+}
+.calWkDayColToday {
+  background: rgba(0, 115, 234, 0.04);
+}
+
+/* Clickable empty hour slot — draws the hour line; a faint + appears on hover
+   as the create-discussion affordance. */
+.calWkSlot {
+  position: absolute;
+  inset-inline: 0;
+  height: 48px; /* HOUR_PX */
+  padding: 0;
+  border: none;
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+  background: transparent;
+  cursor: pointer;
+  z-index: 1;
+}
+.calWkSlot::after {
+  content: '+';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 16px;
+  color: var(--secondary-text-color, #676879);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.calWkSlot:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+.calWkSlot:hover::after {
+  opacity: 1;
+}
+.calWkSlot:focus-visible {
+  outline: 2px solid var(--primary-color, #0073ea);
+  outline-offset: -2px;
+}
+
+/* "Now" indicator across today's column. */
+.calWkNow {
+  position: absolute;
+  inset-inline: 0;
+  height: 2px;
+  background: hsl(var(--status-stuck, 351 73% 53%));
+  z-index: 3;
+  pointer-events: none;
+}
+.calWkNowDot {
+  position: absolute;
+  inset-inline-start: -3px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: hsl(var(--status-stuck, 351 73% 53%));
+}

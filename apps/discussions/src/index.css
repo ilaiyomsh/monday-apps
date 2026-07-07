@@ -1,0 +1,40 @@
+/*
+ * Global base styles. Tailwind has been removed; design tokens come from
+ * @vibe/core/tokens (imported first in index.jsx). The app's status/department
+ * color tokens live in styles/theme-tokens.css (imported by App.jsx).
+ */
+:root {
+  /* monday brand stack — Figtree for Latin/numerals, Noto Sans Hebrew for Hebrew
+     (Figtree carries no Hebrew glyphs, so Hebrew falls through). Overrides the
+     @vibe/core --font-family token so every Vibe component inherits it too.
+     @font-face lives in styles/fonts.css. */
+  --font-family: 'Figtree', 'Noto Sans Hebrew', 'Roboto', system-ui, -apple-system, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family, 'Figtree', 'Noto Sans Hebrew', 'Roboto', system-ui, sans-serif);
+  background-color: var(--primary-background-color, #ffffff);
+  color: var(--text-color, #323338);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Touch: drop the legacy double-tap-zoom / click delay on tappable controls so
+   taps register instantly on phones. Purely an interaction hint — no layout effect. */
+button,
+a,
+[role='button'] {
+  touch-action: manipulation;
+}

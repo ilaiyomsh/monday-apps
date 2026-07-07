@@ -1,0 +1,569 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.modal {
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--border-radius-big, 12px);
+  background: var(--primary-background-color, #fff);
+  box-shadow: var(--box-shadow-medium, 0 10px 30px rgba(0, 0, 0, 0.2));
+  overflow: hidden;
+}
+
+/* Embedded panel (rendered inside the Settings "תבניות" tab, no modal chrome). */
+.panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Header/tabs/footer stay fixed; only the body (.panel .content) scrolls. */
+.panel .panelHeader,
+.panel .tabs,
+.panel .footer {
+  flex-shrink: 0;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  margin-bottom: 8px;
+}
+
+/* Clickable color circle beside the type name (opens the color popover). Sized
+   to sit at the text's height so it doesn't crowd the divider above the header. */
+.colorCircle {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 2px solid var(--primary-background-color, #fff);
+  box-shadow: 0 0 0 1px var(--ui-border-color, #d0d4e4);
+  cursor: pointer;
+  padding: 0;
+}
+
+.colorCircle:hover {
+  box-shadow: 0 0 0 2px var(--primary-color, #0073ea);
+}
+
+/* Search box above the "סוג דיון" template list — icon + input, like the
+   discussion search. */
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.searchIcon {
+  position: absolute;
+  inset-inline-start: 8px;
+  width: 16px;
+  height: 16px;
+  color: var(--secondary-text-color, #676879);
+  pointer-events: none;
+}
+.search {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  padding-inline-start: 30px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  box-sizing: border-box;
+}
+.search:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+/* Popover card holding the Vibe ColorPicker (portaled to body). */
+.colorPopover {
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  box-shadow: var(--box-shadow-medium, 0 6px 20px rgba(0, 0, 0, 0.2));
+  padding: 8px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ui-border-color);
+}
+
+.headerTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.closeButton {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--secondary-text-color);
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  padding: 4px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--border-radius-small, 4px);
+}
+
+.backBtn:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+
+/* ---- tab bar (נושאים / משתתפים) ---- */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--ui-border-color);
+}
+
+.tab {
+  position: relative;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 10px 12px;
+  font-size: var(--font-size-general-label, 14px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--secondary-text-color, #676879);
+}
+
+.tab:hover {
+  color: var(--text-color, #323338);
+}
+
+.tabActive {
+  color: var(--primary-color, #0073ea);
+}
+
+.tabActive::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--primary-color, #0073ea);
+}
+
+.content {
+  padding: 14px 16px;
+  overflow-y: auto;
+}
+
+/* Embedded in Settings: drop the modal's horizontal padding + inner scroll so
+   the panel flows within the Settings content area (which owns the scroll). */
+.panel .tabs,
+.panel .content,
+.panel .footer {
+  padding-left: 0;
+  padding-right: 0;
+}
+.panel .content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.panel .footer {
+  border-top: none;
+}
+
+
+.hint {
+  margin-top: 6px;
+}
+
+.footer {
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-top: 1px solid var(--ui-border-color);
+}
+
+.footerEnd {
+  display: flex;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+/* ---- list view ---- */
+.empty {
+  padding: 28px 12px;
+  text-align: center;
+  color: var(--secondary-text-color, #676879);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.listItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  background: var(--primary-background-color, #fff);
+}
+
+.listItemMain {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  text-align: start;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.listItemName {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-color, #323338);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.listItemMeta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+}
+
+.listItemActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--border-radius-small, 4px);
+  background: transparent;
+  cursor: pointer;
+  color: var(--secondary-text-color, #676879);
+}
+
+.iconBtn:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+  color: var(--text-color, #323338);
+}
+
+.iconBtnDanger:hover {
+  background: var(--negative-color-selected, #fce4e4);
+  color: var(--negative-color, #d83a52);
+}
+
+.confirmDelete {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.confirmText {
+  font-size: 12px;
+  color: var(--negative-color, #d83a52);
+}
+
+/* ---- edit view ---- */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 4px);
+  margin-bottom: 16px;
+}
+
+.label {
+  color: var(--text-color);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+/* "סוג דיון" custom dropdown — matches the app's other dropdowns, color swatch. */
+.typeDropdown {
+  position: relative;
+  width: 100%;
+}
+.typeTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--spacing-small, 8px);
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-family: var(--font-family);
+  font-size: var(--font-size-general-label, 14px);
+  cursor: pointer;
+}
+.typeTrigger:hover { border-color: var(--ui-border-color, #aeb3c5); }
+.typeValue {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.typePlaceholder { color: var(--placeholder-color, #9699a6); }
+.typeChevron { flex-shrink: 0; color: var(--secondary-text-color, #676879); }
+.typeTrailing { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.typeClear {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  color: var(--secondary-text-color, #676879); cursor: pointer;
+}
+.typeClear:hover { background: var(--primary-background-hover-color, #f0f3ff); color: var(--text-color, #323338); }
+.typeItemDisabled { opacity: 0.45; cursor: not-allowed; }
+.typeItemDisabled:hover { background: transparent; }
+/* Portaled to document.body — position is set inline (fixed). */
+.typeMenu {
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-small, 6px);
+  box-shadow: var(--box-shadow-medium, 0 6px 20px rgba(0, 0, 0, 0.2));
+}
+.typeItem {
+  display: flex;
+  align-items: center;
+  padding: 7px 8px;
+  border-radius: var(--border-radius-small, 4px);
+  font-size: var(--font-size-general-label, 14px);
+  color: var(--text-color, #323338);
+  cursor: pointer;
+}
+.typeItem:hover { background: var(--primary-background-hover-color, #f0f3ff); }
+.typeItemSelected { background: var(--primary-selected-color, rgba(0, 115, 234, 0.08)); }
+
+/* Color dot for a status ("סוג") option/value. */
+.typeSwatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-inline-end: 8px;
+  flex-shrink: 0;
+}
+
+/* שם התבנית (75%) + סוג דיון (25%) on one row. */
+.nameTypeRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+  margin-bottom: 16px;
+}
+.nameCol { flex: 0 0 75%; min-width: 0; }
+.typeCol { flex: 1 1 25%; min-width: 0; }
+
+/* Assigned type chip in the template list meta line. */
+.listItemType {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 8px;
+  color: var(--text-color, #323338);
+}
+
+/* Fixed-type header chip atop the type-template editor. */
+.typeHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 4px);
+  margin-bottom: 16px;
+}
+
+/* Sub-section label inside the type-template editor (e.g. "נושאים קבועים"). */
+.sectionLabel {
+  display: block;
+  margin: 16px 0 8px;
+  color: var(--text-color, #323338);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+/* מוביל דיון + משתתפים side by side. */
+.peopleRow {
+  display: flex;
+  gap: var(--spacing-medium, 12px);
+}
+.peopleCol {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 4px);
+}
+
+/* Drag handle for topics / points in the editor. */
+.dragGrip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #9699a6);
+  cursor: grab;
+  touch-action: none;
+}
+.dragGrip:active { cursor: grabbing; }
+
+.topicsWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.topicCard {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  padding: 10px;
+  background: var(--allgrey-background-color, #f6f7fb);
+}
+
+.topicHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topicNameField {
+  flex: 1;
+  min-width: 0;
+}
+
+.pointsWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 4px;
+  padding-inline-start: 6px;
+}
+
+.pointRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pointDot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ui-border-color, #c3c6d4);
+}
+
+.pointField {
+  flex: 1;
+  min-width: 0;
+}
+
+.addPointBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--primary-color, #0073ea);
+  font-size: 13px;
+  padding: 4px 6px;
+  border-radius: var(--border-radius-small, 4px);
+  align-self: flex-start;
+}
+
+.addPointBtn:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+
+.addTopicBtn {
+  margin-top: 12px;
+}
+
+@media (max-width: 768px) {
+  .overlay {
+    padding: 8px;
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100%;
+    max-height: calc(100vh - 16px);
+    border-radius: 12px 12px 0 0;
+  }
+}

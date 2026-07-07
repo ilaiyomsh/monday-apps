@@ -1,0 +1,270 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## ⚠️ Parallel work in progress (coordination note)
+
+Two agents are working on this repo at the same time, each in its own git worktree:
+
+- **This dir** (`apps/discussions`, branch `feat/board-permissions`) — board **permissions**:
+  `SettingsModal/PermissionsTab`, `BoardPeoplePicker`, `subscribers.js`, `usersStore.js`, `BoardSDK.js`,
+  `monday-client.js`.
+- **`apps/discussions-topics`** (branch `feat/topics`) — **נושאים לדיון (topics)**:
+  `TopicsTab`, `hooks/useTopics.js`, the topics board, and related topic ordering/templates.
+
+To avoid collisions: stay within your area's files. Watch for shared touch-points — `DiscussionCard`'s
+`canEdit` gate threads into `TopicsTab`, and both areas may reach into `BoardSDK.js` — coordinate before
+editing those. Merge via git when both branches are done. Remove this note once the parallel work is over.
+
+## What this is
+
+`discussions` (ניהול דיונים) is a monday.com **client-side board-view app** — React 19 + Vite 8,
+served statically from monday's CDN (no server). It was exported from the monday Vibe builder
+(`10387085`) and then rebuilt to follow the `Axis/tracker` app's architecture: one unified `src/`,
+`@vibe/core` design system, a `monday-sdk-js` API layer wrapped in `safeApi`/`MondayApiError`, and a
+single-funnel observability stack. The UI is **Hebrew-first and RTL**.
+
+## Commands
+
+```bash
+npm run dev            # Vite dev server at http://localhost:5180
+npm run build          # production build -> build/  (NOT dist/)
+npm run preview        # preview the build/ output
+npm test               # vitest in watch mode
+npm run test:run       # run the whole suite once (CI)
+npm run tunnel         # expose :5180 to monday for in-product testing (app 11457413)
+```
+
+Run a **single test**:
+```bash
+npx vitest run src/components/__tests__/componentRender.smoke.test.jsx   # one file
+npx vitest run -t "renders the status text"                              # by test-name pattern
+```
+
+There is **no separate `vitest.config.js`** — test config lives in the `test:` block of
+`vite.config.js` (jsdom, `setupFiles: ./src/setupTests.js`, CSS modules `classNameStrategy:
+'non-scoped'`). `setupTests.js` imports `./i18n` (so Hebrew strings resolve) and stubs
+`matchMedia`/`ResizeObserver`/`IntersectionObserver` (jsdom lacks them; `@vibe/core` needs them).
+
+**Deploy is manual — do not deploy unless explicitly asked.** Deploy via the mapps skill ship
+procedure (one gated confirmation question; it rebuilds and force-pushes internally) — do not run
+`npm run deploy`/`mapps code:push` directly. Because the app is client-side,
+the monday-code server tooling (`code:logs`, `code:status`) does **not** apply — runtime
+observability is client-side only (see below).
+
+## Path aliases (`vite.config.js`)
+
+`@generated` → `src` · `@components` → `src/components` · `@api` → `src/utils/mondayApi`.
+These appear everywhere, including `index.jsx` importing the app as `@generated/App.jsx`.
+
+## Architecture (the parts that span multiple files)
+
+### Boot order is load-bearing — see `src/index.jsx`
+`@vibe/core/tokens` → `index.css` → `init` (window.global polyfill) → `i18n` →
+`setupGlobalErrorHandlers()` (before React mounts) → `<ErrorBoundary><MondayProvider>
+<SettingsProvider><SettingsGate><TemplatesProvider><App/>`. **`SettingsGate` blocks render**
+until settings are loaded and published to the SDK store, so every API call already has its
+board/column mapping: it shows a `<Loader>` while loading, and if nothing is stored yet
+(`isConfigured === false`) it **force-mounts `SettingsModal`** (no `onClose`) so the owner must
+map boards/columns before any app content or SDK call runs. `TemplatesProvider` sits *inside* the
+gate (it reads `monday.storage` but, unlike settings, never blocks render — see below). Reordering
+or skipping a step breaks styling or SDK init.
+
+### Settings-driven board/column mapping — the central idea
+Nothing hardcodes board or column IDs. The code refers to columns by per-board **aliases** that
+follow a uniform convention — descriptive English camelCase + an UPPER `ID` suffix
+(`discussionDateID`, `detailsID`, `topicsLinkID`, `responsibilityID`, `statusID`, …), namespaced
+per board (so `discussionLinkID` legitimately exists on both tasks and topics). The real monday IDs
+(e.g. `date_mkz5k0wf`) live **only** in `src/utils/mondayApi/boards.config.js` (`COLUMN_SCHEMA`,
+`BOARD_CLASS_TO_KEY`). These aliases were renamed from the original Vibe generic names
+(`column1`, `tasksLink`, …); the OLD→NEW map is `ALIAS_MIGRATIONS` in the same file, and
+`SettingsContext.load` calls `migrateColumnAliases()` once to re-key any stored mapping so renames
+never lose an instance's config. **To rename an alias, edit BOTH `COLUMN_SCHEMA` and
+`ALIAS_MIGRATIONS`.**
+Flow:
+- `boards.config.js` is the seed/default mapping. **To fix a wrong mapping, edit it HERE.**
+- `SettingsContext` loads a per-instance override from `monday.storage` (key
+  `discussions_settings_${instanceId}`, falling back to `boardId`/`'default'`), merges it over
+  the defaults, and calls `setActiveConfig(...)` to publish into the module-level singleton
+  `board-config-store.js`.
+- `BoardSDK.js` resolves aliases→IDs at query time via `getBoardId(boardKey)`/`getColumns(boardKey)`.
+  Config changes are therefore instant (the store isn't cached per query).
+- `components/SettingsModal` (gear button, owner-only) edits the mapping at runtime and persists
+  via `updateSettings`. Each `COLUMNS[board][alias]` carries `verified`: `true` = confirmed write
+  path; `false` = best-effort read-only/display field (formula/mirror) — safe to correct.
+
+### monday API layer — every call goes through one boundary
+`src/utils/mondayApi/`:
+- `client.js` — **`safeApi`** is the single SDK wrapper: validates the query (warns on
+  `undefined`/`null`/`NaN` ids), logs (`logger.api`/`apiResponse`/`apiError`), retries transient
+  failures (`executeWithRetry`, ≤2 retries, 429/500/502/503 + rate-limit/complexity/network
+  patterns, exponential 2s/4s), and wraps hard errors in **`MondayApiError`** (carries query,
+  variables, response, duration, correlationId for log-once dedup). It returns the **raw response
+  and does NOT throw on GraphQL soft-errors** — it only logs them.
+- `monday-client.js` — exposes `api(query, vars, fnName)` which calls `safeApi` then
+  `assertNoGraphQLErrors`, returning `res.data`; also `parseValue`/`formatValue` (the only place
+  that (de)serializes monday `column_values` ↔ app shapes: date, status, dropdown, checkbox,
+  people, `board_relation`, etc.) and the `monday` SDK singleton. Auth is seamless inside the
+  monday iframe; for local dev set `VITE_MONDAY_TOKEN` in `.env.local`.
+- `assertGraphQL.js` — `assertNoGraphQLErrors` throws on soft-errors **without re-logging**
+  (inherits the soft-error's correlationId so one failure = one log = one toast).
+- `BoardSDK.js` — fluent query/mutation builder reimplementing the Vibe API on top of `api()`.
+  Board classes are **Hebrew-named** (`דיונים1Board`, `משימות1Board`, `נושאיםלדיון1Board`),
+  imported from `@api/BoardSDK.js`. Supports `items_page` with `query_params` (server-side filter),
+  `.orderBy()`, `.withPagination({limit|cursor})`, `.withColumns([...])` (narrows fetched columns),
+  and `.withGroup()` (adds `group { id title }` per item — used by the My Tasks board grouping).
+  **People-column filters MUST use the `"person-<id>"` compare_value form** — a bare user id is
+  silently ignored by monday and matches nothing (verified against the live API + official docs);
+  `"assigned_to_me"` is passed through. `_buildQueryParams` emits `person-<id>` for `people` columns.
+
+### Domain model — three related boards
+`discussions` (root) → `topics` (linked via a `board_relation`) → `tasks`; `tasks` also link back
+to a discussion. The data hooks `useDiscussions` / `useTopics` / `useTasks` (in `src/hooks/`) drive
+a `*Board` class each. `useTasks` notably has **three fallback layers** (direct relation query →
+client-side relation scan → resolve via topics) to tolerate misconfigured relation columns —
+expect that complexity to be intentional.
+
+### "My Tasks" tab + per-discussion edit permission
+A top-level **`appView`** toggle in `App.jsx` (`'discussions' | 'myTasks'`, persisted to
+localStorage `discussions_app_view`, rendered top-left) switches the whole view between the
+discussions workspace and a personal **"המשימות שלי"** list. Shared toasts/error modals render for
+both views; the discussions-only modals (Settings/Templates/Create) stay inside the discussions branch.
+
+- **My Tasks** (`src/components/MyTasksView/` + `src/hooks/useMyTasks.js`) is **client-only** (no
+  server): it reads the TASKS board directly (not a discussion relation), filtered **server-side** to
+  the current user via the responsibility people column `responsibilityID` (`assigned-to-me`, `person-<id>`),
+  with cursor pagination. **Filter / Sort / Group all run CLIENT-SIDE** over the loaded page so they
+  never re-fetch (no skeleton flash). Grouping by discussion/status/priority lives in `grouping.js`;
+  defaults are **EMPTY** (no sort/group/filter) unless a **shared saved view** exists — see below. The name column is **sticky-left
+  (frozen)** and clicking the name (only) opens the item card on Updates
+  (`monday.execute('openItemCard', { itemId, kind:'updates' })`). The toolbar is monday-style English
+  pills (Search/Filter/Sort/Group by/Collapse) using **`@vibe/icons`**.
+- **Shared saved views** — every builder panel (Filter/Sort/Group in My Tasks; Group in TasksTab;
+  Filter/Group in PreviousTasksTab) has a **Save** button next to Clear that persists that control's
+  current selection as the LOAD-TIME state for **all users** of the instance, under
+  `settings.preferences.savedViews.{myTasks|tasksTab|previousTasks}` (hook `useSavedViews`; filters
+  are JSON-safe via `serializeFilter`/`deserializeFilter` in `controls.js` — Sets/Date don't survive
+  storage). In-session changes stay session-only (the old `my_tasks_group_by` localStorage
+  persistence was removed). Save visibility is gated by the system capability **`saveViewDefaults`**
+  (default owners-only; the owner can open it to all members via a checkbox in the permissions tab's
+  "כללי" card).
+- Two TASKS columns exist for this tab **ONLY** — added to `COLUMN_SCHEMA.tasks` +
+  `TASKS_SETTINGS_FIELDS`, but deliberately NOT rendered in the existing TasksTab/PreviousTasksTab
+  tables: **`priorityID`** (a SECOND status column whose label DISPLAY order defines priority) and
+  **`taskNotesID`** (long_text, inline-editable notes). The owner maps them in Settings;
+  `useStatusOptions('tasks', alias)` is parameterized to read either status column's labels/order.
+
+### "Previous tasks" tab — three resolution modes
+`PreviousTasksTab` resolves the tasks it shows in one of three modes, chosen by the owner in Settings
+and stored under **`settings.preferences.previousTasksMode`** (`'linkedDiscussion'` default |
+`'discussionType'` | `'auto'`; constants `PREVIOUS_TASKS_MODES` / `DEFAULT_PREFERENCES` in
+`boards.config.js`). A single derived `byType` flag drives every downstream effect/branch in the tab
+(and `CreateDiscussionModal.hidePreviousDiscussion`).
+`settings.preferences` is a top-level settings key alongside `boards`/`columns` (merged by
+`updateSettings`), NOT a board mapping.
+- **`linkedDiscussion`** (original): reads the current discussion's `previousDiscussionID`
+  board_relation → loads that discussion's tasks off its `tasksBoardLinkID` relation.
+- **`discussionType`**: shows ALL tasks of the current discussion's TYPE, regardless of link. Backed
+  by a THIRD TASKS status column **`taskTypeID`** ("סוג דיון") that MIRRORS the discussions board's
+  `discussionTypeID` labels. `useTasks(discussionId, discussionTypeId)` stamps every newly-created
+  task's `taskTypeID` with the parent discussion's type, bridging the two INDEPENDENT status columns
+  **by label TEXT** (their label ids differ) via `useStatusOptions`. The tab then filters the TASKS
+  board **server-side** with `BoardSDK.where({ taskTypeID })` (status `any_of`). Only NEW tasks are
+  classified — existing tasks aren't backfilled. If `taskTypeID` is unmapped or has no same-text
+  label, stamping/filtering degrade gracefully (no write, empty view). The owner maps `taskTypeID`
+  in Settings (`TASKS_SETTINGS_FIELDS`); a managed column shares labels automatically.
+- **`auto`**: a per-DISCUSSION hybrid — a discussion that HAS a type resolves by type (as
+  `discussionType`), one WITHOUT a type falls back to the `linkedDiscussion` link path. Implemented
+  purely by making `byType` also true when `mode === auto && discussion.discussionTypeID != null`; no
+  new resolution code. `CreateDiscussionModal` shows "דיון קודם" only for untyped discussions in this
+  mode (its `hidePreviousDiscussion` is derived from the live `discussionType` selection).
+
+**Per-discussion edit gate** — now that the app is open to all users, discussion **content is
+read-only** unless the current user is a board owner (`canManageSettings`), the discussion creator
+(`discussionCreatorID`), or its lead (`discussionLeadID`). `DiscussionCard` computes a single `canEdit`
+and threads it through every edit surface — `TasksTab`, `TopicsTab`/`TopicPointRow`, `SummaryTab`
+(RichTextEditor `editable={false}`), `PreviousTasksTab`, the inline title edit, and the new-task FAB
+— each degrading to read-only (mutation handlers omitted/no-op, add/delete/drag controls hidden, a
+"צפייה בלבד" chip shown). `DiscussionList` enforces the same gate **per row** on the edit/delete
+kebab (`discussionCreatorID`/`discussionLeadID` were added to its list query). The My Tasks tab **is
+matrix-gated per task** (since 2026-07-03): status/priority/deadline/name edits + bulk delete each check
+their task-tier capability (`editTask*`/`deleteTask`) against the TASK's own people columns
+(creator/responsible) — there is no parent discussion in that surface, so `resolveCan` takes `{ item }`
+alone (readiness + the fail-open path fall back to the task item; see `usePermission.js`). With the
+permissions feature OFF this resolves to "creator/responsible edit their own tasks", which — because the
+view only shows tasks assigned to me — reproduces the old ungated behavior. Notes stays ungated (no
+matrix capability). Deadline is a `DatePickerPopover` cell; rename is a hover-pencil (name click still
+opens the item card).
+
+### Two `monday.storage`-only subsystems — no board backing
+monday's public API has no item-position mutation and no place to hang reusable presets, so two
+features live entirely in `monday.storage` (each mirrors `SettingsContext`'s pattern: JSON value,
+5s timeout, `instanceId`→`boardId`→`'default'` key fallback). They do **not** gate render and
+start empty when storage is unavailable (local dev):
+- **Templates** (`src/utils/templates.js` + `src/contexts/TemplatesContext.jsx`, available to all
+  users). Two independent stores under separate keys: *topic* templates
+  (`discussions_templates_${instanceId}`, shape `{id, name, topics:[{name, points:string[]}]}` —
+  **names only, no monday ids**) and *participant* templates
+  (`discussions_participant_templates_${instanceId}`, a named set of people matching the
+  `PersonPicker` selection shape). `createTopicsFromTemplate()` reuses the **same**
+  `create_item`/`create_subitem` paths as `useTopics.addTopic`/`addPoint`;
+  `readDiscussionTopicsAsTemplate()` reads a discussion's topics back into template shape to power
+  "duplicate discussion". Applied at creation (`CreateDiscussionModal`) or into an existing
+  discussion (`ApplyTemplateMenu` in `TopicsTab`); edited in `TemplateManagerModal`.
+- **Topic/point ordering** (`src/utils/topicOrder.js`). Drag-reorder can't persist as native board
+  order, so an explicit per-discussion order map (`discussions_topic_order_${discussionId}`, shape
+  `{topics:string[], points:{[topicId]:string[]}}`) is saved on drop and re-applied via
+  `applyOrder()` on every read. Defensive: saved ids first, unknown ids keep API order at the end,
+  deleted ids drop out.
+
+### Observability — one funnel, do not bypass it
+Every error converges on **`logger.emit`** (`src/utils/logger.js`), which stamps `__loggedId` for
+dedup and fans out to sinks. `useUiErrorSink` (mounted once) registers a sink that turns every
+`ERROR`-level record into a Hebrew **toast** with a "details" action (`ErrorDetailsModal`).
+Layered catches all feed the same logger: `ErrorBoundary` (render crashes), `globalErrorHandler`
+(`window.onerror`/`unhandledrejection`), `safeApi` (API), `SettingsContext` (storage), and
+`NetworkErrorScreen` (boot-time storage failure). `lazyRetry` handles code-split chunk-load
+failures with one sessionStorage-guarded reload. The remote `flush` transport is stubbed (no URL
+wired yet).
+
+### UI conventions
+- One folder per component: `Component.jsx` + `Component.module.css` + `index.js` re-export.
+  CSS Modules use `classNameStrategy: 'non-scoped'`, so class names are plain (`.root`, `.item`) —
+  name deliberately to avoid collisions, and use `:global(...)` to reach `@vibe/core` internals.
+- `@vibe/core` is **v4**: pass string literals (`kind="primary"`, `size="small"`), not the old
+  enums; `Modal` needs `show` + `id`; `TextField` `onChange(value, event)` vs `TextArea`
+  `onChange(event)`. `docs/vibe-core-api.md` is the v3→v4 quick reference.
+- Domain colors come from `src/styles/theme-tokens.css` (`--status-*`, `--dept-*`), consumed inline
+  (e.g. `hsl(var(--status-done))`) and keyed off **hardcoded Hebrew** status/department strings
+  (`constants/deptConfig.js`) — a board schema label change breaks the color mapping.
+- i18n (`react-i18next`, `he` default) is **scaffolded but mostly unused** — most UI strings are
+  inline Hebrew; only error/toast/network screens call `t()`. Use `useStableT()` (memoized `t`)
+  when `t` is in a hook's dependency array.
+- Multi-select UX in task lists is intentionally monday-like and duplicated in both
+  `src/components/TasksTab/TasksTab.jsx` and `src/components/PreviousTasksTab/PreviousTasksTab.jsx`:
+  a floating selection bar (`left: selected count`, `center: actions`, `right: close/X`) plus
+  a per-group header checkbox that selects/clears all tasks in that group. Keep behavior/style
+  aligned between both tabs unless explicitly diverging product requirements.
+
+## Pitfalls / don'ts
+
+- **Never `console.*` in app code** — log through `logger.*` or the error is invisible to the toast
+  funnel and skips dedup.
+- **Write paths must call `assertNoGraphQLErrors` right after `safeApi`** — `safeApi` won't throw on
+  soft-errors, so a skipped assert means a silent failure that looks like success.
+- **`BoardSDK.withColumns([...])` now DOES narrow** the fetched columns (older comments claiming it
+  is ignored are stale). When `.withColumns` is omitted it fetches every configured column so
+  `mapItem` can deserialize; columns referenced in the `where`-filter are always included regardless.
+- **People-column server filters need `"person-<id>"`**, never a bare user id (monday silently
+  returns zero matches) — go through `BoardSDK` `where`, which formats it for you.
+- **`manualChunks` in `vite.config.js` must stay a function** — Vite 8 / rolldown rejects the object
+  form.
+- **Stale comments reference files that don't exist**: `client.js` mentions
+  `items.js/boards.js/columns.js/mirror.js` and `boards.config.js` mentions `board-sdk-core.js` —
+  the real fetch/format logic lives in `BoardSDK.js` + `monday-client.js`. Don't go looking for
+  those files.
+- Build output is **`build/`** (deployed), while `dist/` may exist as a stale artifact — don't
+  confuse them.
+- App id used by the npm scripts/tunnel/deploy AND `.env` APPID is **`11457413`**; the Vibe
+  builder URL id is `10387085` (not deployable). `11452469` is the OLD app 'ניהול דיונים'
+  (an earlier iteration) — never deploy to it. (.env aligned to 11457413 on 2026-07-02.)

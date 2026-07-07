@@ -1,0 +1,196 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  background: var(--primary-background-color, #fff);
+  overflow: visible;
+}
+
+/* ---- toolbar: icon-only, horizontal. Icons flow from the LEFT; the size
+   picker is pinned to the RIGHT (see .sizeWrap). ---- */
+.toolbar {
+  display: flex;
+  direction: ltr;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
+  background: var(--primary-background-hover-color, #f6f7fb);
+  border-radius: var(--border-radius-medium, 8px) var(--border-radius-medium, 8px) 0 0;
+}
+
+.divider {
+  width: 1px;
+  align-self: stretch;
+  margin: 2px 4px;
+  background: var(--ui-border-color, #d0d4e4);
+}
+
+.btn,
+.menuItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  font: inherit;
+}
+
+.btn {
+  justify-content: center;
+  height: 30px;
+  min-width: 30px;
+  padding: 0 4px;
+}
+
+.btn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+}
+
+.btnActive {
+  background: var(--primary-selected-color, #cce5ff);
+  color: var(--primary-color, #0073ea);
+}
+
+/* ---- popovers ---- */
+.menuWrap {
+  position: relative;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  z-index: 30;
+  min-width: 150px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  direction: rtl;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+}
+
+.menu li { margin: 0; }
+
+.menuItem {
+  width: 100%;
+  justify-content: space-between;
+  padding: 7px 10px;
+  text-align: start;
+}
+
+.menuItem:hover {
+  background: var(--primary-background-hover-color, #f0f2f7);
+}
+
+.menuItemActive {
+  color: var(--primary-color, #0073ea);
+}
+
+/* color swatches */
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  padding: 4px;
+}
+
+.swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.swatchActive {
+  outline: 2px solid var(--primary-color, #0073ea);
+  outline-offset: 1px;
+}
+
+.noColor {
+  font-weight: 700;
+  color: var(--primary-text-color, #323338);
+}
+
+/* link popover */
+.linkMenu {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  align-items: center;
+}
+
+.linkInput {
+  width: 200px;
+  padding: 6px 8px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-small, 4px);
+  font: inherit;
+}
+
+.linkApply {
+  border: none;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  border-radius: var(--border-radius-small, 4px);
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* ---- editor surface ---- */
+.editorWrap {
+  padding: 12px 14px;
+}
+
+.content {
+  min-height: 220px;
+  outline: none;
+  line-height: 1.6;
+  color: var(--primary-text-color, #323338);
+  font-size: 16px;
+}
+
+.content:focus { outline: none; }
+
+.content p { margin: 0 0 0.6em; }
+.content h1 { font-size: 1.6em; font-weight: 700; margin: 0.4em 0 0.3em; }
+.content h2 { font-size: 1.35em; font-weight: 700; margin: 0.4em 0 0.3em; }
+.content h3 { font-size: 1.15em; font-weight: 600; margin: 0.4em 0 0.3em; }
+.content ul,
+.content ol { margin: 0 0 0.6em; padding-inline-start: 1.6em; }
+.content li { margin: 0.15em 0; }
+.content li > p { margin: 0; }
+.content a { color: var(--link-color, #0073ea); text-decoration: underline; }
+.content :first-child { margin-top: 0; }
+
+/* checklist (TipTap taskList) inside the editor */
+.content ul[data-type="taskList"] { list-style: none; padding: 0; margin: 0 0 0.6em; }
+.content ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 8px; }
+.content ul[data-type="taskList"] li > label { flex: 0 0 auto; margin-top: 3px; user-select: none; }
+.content ul[data-type="taskList"] li > div { flex: 1 1 auto; }
+.content ul[data-type="taskList"] li[data-checked="true"] > div {
+  text-decoration: line-through;
+  color: var(--secondary-text-color, #9699a6);
+}
+
+/* placeholder (TipTap Placeholder extension) — shows only when empty, RTL */
+.content .is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--secondary-text-color, #9699a6);
+  pointer-events: none;
+  height: 0;
+  float: right;
+}

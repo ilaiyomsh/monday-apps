@@ -1,0 +1,469 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-right: 1px solid var(--ui-border-color, #d0d4e4);
+  background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
+}
+
+/* Sticky header */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
+}
+.header::after {
+  content: '';
+  display: block;
+  height: 1px;
+  background: var(--ui-border-color, #d0d4e4);
+  margin-inline: var(--section-rule-inset, 16px);
+}
+
+.gradientBar {
+  height: 6px;
+  width: 100%;
+}
+
+.headerInner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-small, 8px);
+  padding: var(--spacing-medium, 16px);
+  /* Gap between the filters and the header rule below them. */
+  padding-bottom: var(--spacing-medium, 12px);
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  color: var(--text-color, #323338);
+}
+
+.titleActions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 4px);
+}
+
+/* Search field — leading magnifying-glass icon, no placeholder text (matches
+   monday's native search look, same pattern as PersonPicker). */
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.searchIcon {
+  position: absolute;
+  inset-inline-start: 8px;
+  width: 16px;
+  height: 16px;
+  color: var(--secondary-text-color, #676879);
+  pointer-events: none;
+}
+.search {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  padding-inline-start: 30px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  font-family: var(--font-family);
+}
+.search:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+.filterRow {
+  display: flex;
+  gap: var(--spacing-small, 8px);
+}
+
+/* Calendar view: search + type filter share one row (month nav lives in the grid). */
+.calendarFilterRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+  /* headerInner already supplies the gap before the header rule. */
+  padding-bottom: 0;
+}
+.calendarFilterRow .searchWrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.calendarTypeCell {
+  flex: 0 0 140px;
+  min-width: 0;
+}
+
+/* Custom filter select — trigger styled like a small Vibe dropdown; the menu
+   is rendered position:fixed (inline style) with a high z-index. */
+.filterSelect {
+  position: relative;
+  width: 100%;
+}
+.filterTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+.filterTrigger:hover {
+  border-color: var(--primary-color, #0073ea);
+}
+.filterValue {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filterChevron {
+  flex-shrink: 0;
+  color: var(--secondary-text-color, #676879);
+  transition: transform var(--motion-productive-short, 0.15s) ease;
+}
+.filterChevronOpen {
+  transform: rotate(180deg);
+}
+.filterMenu {
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  box-shadow: var(--box-shadow-medium, 0 6px 20px rgba(0, 0, 0, 0.2));
+}
+/* Search row pinned at the top of a searchable filter menu (icon + input). */
+.filterSearchRow {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--primary-background-color, #fff);
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.filterSearchIcon {
+  position: absolute;
+  inset-inline-start: 16px;
+  width: 16px;
+  height: 16px;
+  color: var(--secondary-text-color, #676879);
+  pointer-events: none;
+}
+.filterSearch {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  padding-inline-start: 30px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  box-sizing: border-box;
+}
+.filterSearch:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+.filterItem {
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  white-space: nowrap;
+}
+.filterItem:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+.filterItemSelected {
+  background: var(--primary-selected-color, #cce5ff);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.filterCell {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Scroll area */
+.scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.refetching {
+  opacity: 0.6;
+}
+
+/* Match the real .list spacing (gap/padding) so rows don't shift when the
+   skeleton is replaced by real content. */
+.skeletonList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spacing-xs, 4px);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 192px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spacing-xs, 4px);
+}
+
+/* Row wrapper holds the selectable item button + the hover edit affordance. */
+.itemWrap {
+  position: relative;
+}
+
+/* Row action affordances (duplicate + edit) — appear on row hover/focus at the
+   trailing edge. */
+.itemActions {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 8px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Kebab (⋯) trigger — hidden until the row is hovered/selected or the menu is
+   open (monday-like). */
+.kebabBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: var(--border-radius-small, 4px);
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--motion-productive-short, 0.15s) ease,
+    background-color var(--motion-productive-short, 0.15s) ease;
+}
+.itemWrap:hover .kebabBtn,
+.kebabBtn:focus-visible,
+.kebabBtnOpen {
+  opacity: 1;
+}
+.kebabBtn:hover,
+.kebabBtnOpen {
+  background: var(--primary-background-hover-color, #f0f3ff);
+  color: var(--text-color, #323338);
+}
+.kebabIcon {
+  width: 18px;
+  height: 18px;
+}
+
+/* Popup menu (fixed-positioned by JS so it's never clipped by the scroll area). */
+.rowMenu {
+  min-width: 176px;
+  padding: 4px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 8px);
+  box-shadow: var(--box-shadow-medium, 0 6px 20px rgba(0, 0, 0, 0.2));
+  text-align: start;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--border-radius-small, 4px);
+  background: transparent;
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  font-family: var(--font-family);
+  cursor: pointer;
+  text-align: start;
+}
+.menuItem:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+.menuItem:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.menuItemIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.menuItemDanger {
+  color: var(--negative-color, #d83a52);
+}
+.menuItemDanger:hover:not(:disabled) {
+  background: var(--negative-color-selected, #fce8eb);
+}
+.menuDivider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--ui-border-color, #e6e9ef);
+}
+
+/* Inline delete confirmation (replaces window.confirm). */
+.menuConfirm {
+  padding: 8px 10px;
+}
+.menuConfirmText {
+  display: block;
+  font-size: var(--font-size-general-label, 14px);
+  color: var(--text-color, #323338);
+  font-family: var(--font-family);
+  margin-bottom: 8px;
+}
+.menuConfirmActions {
+  display: flex;
+  gap: 8px;
+}
+.menuConfirmBtn {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: 13px;
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+.menuConfirmBtn:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+.menuConfirmYes {
+  border-color: var(--negative-color, #d83a52);
+  background: var(--negative-color, #d83a52);
+  color: #fff;
+}
+.menuConfirmYes:hover {
+  background: var(--negative-color-hover, #c43141);
+}
+/* Spinner shown on the export action while the .docx is being generated. */
+.spinning {
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Discussion item button */
+.item {
+  width: 100%;
+  /* Pin the rendered height so the loading Skeleton (ROW_SKELETON_H in
+     DiscussionList.jsx, = --list-row-height) matches exactly and rows never
+     jump on load. Name is single-line (nowrap + ellipsis) so this can't clip. */
+  min-height: var(--list-row-height, 36px);
+  text-align: left;
+  padding: var(--spacing-small, 8px) var(--spacing-small, 12px);
+  /* Just enough trailing room for the kebab (⋯, 28px @ inset 8px) so the date
+     sits right beside it; the name truncates on the left and never collides. */
+  padding-inline-end: 42px;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: var(--border-radius-medium, 8px);
+  background: transparent;
+  cursor: pointer;
+  transition: background-color var(--motion-productive-medium, 0.2s) ease,
+    border-color var(--motion-productive-medium, 0.2s) ease;
+}
+
+.item:hover {
+  background-color: var(--primary-background-hover-color, rgba(41, 47, 76, 0.06));
+}
+
+.itemSelected {
+  background-color: var(--primary-selected-color, rgba(0, 115, 234, 0.08));
+}
+
+.itemContent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* One line: name flush left, date flush right. */
+.itemBody {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.itemName {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  text-align: left;
+  font-size: var(--font-size-general-label, 14px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-color, #323338);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemDate {
+  flex-shrink: 0;
+  direction: ltr;
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  white-space: nowrap;
+}
+
+.loadMoreRow {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-small, 12px);
+}

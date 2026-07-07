@@ -1,0 +1,181 @@
+/*
+ * monday-style "inline builder" controls for the My Tasks toolbar (Sort / Filter
+ * / Group). CSS Modules here use classNameStrategy:'non-scoped' (see
+ * vite.config), so every class name is GLOBAL — all classes are prefixed `b`
+ * to avoid colliding with MyTasksView.module.css (.pill, .menu, …) and others.
+ *
+ * Panels are LTR (English chrome); content reads left-to-right. Column display
+ * names + status values stay Hebrew (set inline by the caller).
+ */
+
+/* ---- toolbar pill (Filter / Sort / Group by) — matches MyTasksView .pill ---- */
+.bPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+}
+.bPill:hover { background: var(--primary-background-hover-color, #f0f1f3); }
+.bPillIcon { flex-shrink: 0; width: 20px; height: 20px; color: currentColor; }
+.bPillCount { margin-inline-start: 2px; opacity: 0.85; }
+/* Applied/selected pill: light-blue fill but BLACK text (per request). */
+.bPillApplied { background: var(--primary-selected-color, #e6f1ff); color: var(--primary-text-color, #323338); }
+.bPillApplied:hover { background: var(--primary-selected-hover-color, #d6e8ff); }
+.bPillOpen { box-shadow: inset 0 0 0 1px var(--primary-color, #0073ea); }
+/* phone: icon-only, with a dot when applied (mirrors MyTasksView mobile rule) */
+.bBadgeDot { position: absolute; top: 2px; inset-inline-end: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--primary-color, #0073ea); }
+/* Mobile-app only (gated on `.mobile-app`, not viewport width). */
+:global(.mobile-app) .bPill { width: 32px; height: 32px; padding: 0; gap: 0; justify-content: center; flex-shrink: 0; }
+
+/* ---- desktop panel (inside @vibe DialogContentContainer) ---- */
+.bPanel {
+  direction: ltr;
+  font-size: 14px;
+  color: var(--primary-text-color, #323338);
+  font-family: var(--font-family);
+}
+.bHead { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 2px 10px; border-bottom: 1px solid var(--ui-border-color, #e6e9ef); margin-bottom: 10px; }
+.bTitle { font-size: 14px; font-weight: 600; }
+.bClear { background: none; border: none; color: var(--primary-color, #0073ea); font-size: 13px; cursor: pointer; font-family: var(--font-family); padding: 4px; border-radius: 4px; }
+.bClear:hover { text-decoration: underline; }
+.bHeadActions { display: flex; align-items: center; gap: 6px; }
+.bAddLink { background: none; border: none; color: var(--primary-color, #0073ea); font-size: 13px; cursor: pointer; font-family: var(--font-family); padding: 9px 2px 2px; text-align: start; display: block; border-radius: 4px; }
+.bAddLink:hover { text-decoration: underline; }
+.bEmpty { color: var(--secondary-text-color, #676879); font-size: 13px; padding: 4px 2px; text-align: start; }
+
+/* a single sort/group row, or a filter "Where" row */
+.bRow { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.bWhere { background: #f6f7fb; border-radius: 8px; padding: 9px 10px; display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.bWhere + .bWhere { margin-top: 8px; }
+.bWhereLead { font-size: 12px; font-weight: 600; color: var(--secondary-text-color, #676879); margin-inline-end: 2px; white-space: nowrap; }
+.bIconBtn { background: none; border: none; cursor: pointer; color: var(--secondary-text-color, #676879); width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; flex: none; }
+.bIconBtn:hover { background: var(--primary-background-hover-color, #f0f1f3); color: var(--negative-color, #d83a52); }
+
+/* ---- segment cell (the inline mini-dropdown) — FIXED uniform width ---- */
+.bSegWrap { position: relative; flex: none; }
+.bSeg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  width: 160px;
+  padding: 0 10px;
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: 6px;
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  font-size: 13.5px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.bSeg:hover { background: var(--primary-background-hover-color, #f0f1f3); }
+.bSegOpen { border-color: var(--primary-color, #0073ea); background: var(--primary-selected-color, #e6f1ff); color: var(--primary-color, #0073ea); }
+.bSegDisabled { opacity: 0.5; cursor: default; }
+.bSegDisabled:hover { background: var(--primary-background-color, #fff); }
+.bSegIcon { flex: none; width: 16px; height: 16px; color: var(--secondary-text-color, #676879); }
+.bSegOpen .bSegIcon { color: var(--primary-color, #0073ea); }
+.bSegText { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: start; }
+.bSegPh { color: var(--secondary-text-color, #676879); }
+.bSegChev { flex: none; width: 15px; height: 15px; color: var(--secondary-text-color, #676879); margin-inline-start: auto; }
+.bSegOpen .bSegChev { color: var(--primary-color, #0073ea); }
+
+/* selected value chips inside a value segment */
+.bChips { display: inline-flex; align-items: center; gap: 4px; flex: 1; min-width: 0; overflow: hidden; }
+.bChip { display: inline-flex; align-items: center; gap: 5px; background: #eef1f6; border-radius: 4px; padding: 2px 7px; font-size: 12px; max-width: 96px; }
+.bChipText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bChipDot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.bChipMore { font-size: 12px; color: var(--secondary-text-color, #676879); }
+
+/* ---- desktop flyout (option list under a segment, inside the panel) ---- */
+.bFlyout {
+  position: absolute;
+  z-index: 70;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  min-width: 190px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--primary-background-color, #fff);
+  border-radius: 8px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--ui-border-color, #e6e9ef);
+  padding: 5px;
+  direction: ltr;
+}
+.bMItem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--primary-text-color, #323338);
+  font-size: 13.5px;
+  font-family: var(--font-family);
+  text-align: start;
+  cursor: pointer;
+}
+.bMItem:hover { background: var(--primary-background-hover-color, #f0f1f3); }
+.bMItemSel { background: var(--primary-selected-color, #e6f1ff); color: var(--primary-color, #0073ea); }
+.bMItemDisabled { opacity: 0.4; cursor: default; }
+.bMItemDisabled:hover { background: none; }
+.bMIcon { flex: none; width: 16px; height: 16px; color: var(--secondary-text-color, #676879); }
+.bMItemSel .bMIcon { color: var(--primary-color, #0073ea); }
+.bMLabel { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bMDot { flex: none; width: 12px; height: 12px; border-radius: 3px; }
+.bMCheck { flex: none; width: 16px; height: 16px; color: var(--primary-color, #0073ea); margin-inline-start: auto; }
+.bNote { font-size: 11.5px; color: var(--secondary-text-color, #676879); padding: 6px 2px 0; }
+
+/* date trigger (deadline before/after) — reuses DatePickerPopover, just sized */
+.bDateWrap { flex: none; width: 160px; }
+
+/* ---- mobile bottom sheet ---- */
+.bBackdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); z-index: 1200; animation: bFade 0.2s ease; }
+@keyframes bFade { from { opacity: 0; } to { opacity: 1; } }
+.bSheet {
+  position: fixed; inset-inline: 0; bottom: 0; z-index: 1210;
+  background: var(--primary-background-color, #fff);
+  border-radius: 18px 18px 0 0;
+  direction: ltr;
+  color: var(--primary-text-color, #323338);
+  font-family: var(--font-family);
+  max-height: 88%;
+  display: flex; flex-direction: column;
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.2);
+  animation: bRise 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.bSheetNested { z-index: 1220; }
+@keyframes bRise { from { transform: translateY(100%); } to { transform: none; } }
+.bGrab { width: 36px; height: 4px; border-radius: 2px; background: #cfd3de; margin: 9px auto 4px; flex: none; }
+.bSHead { display: flex; align-items: center; gap: 8px; padding: 6px 16px 12px; }
+.bSTitle { font-size: 16px; font-weight: 700; flex: 1; }
+.bSClose, .bSBack { background: none; border: none; cursor: pointer; color: var(--secondary-text-color, #676879); width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; flex: none; }
+.bSBody { padding: 4px 16px 12px; overflow-y: auto; }
+.bSFoot { padding: 10px 16px; border-top: 1px solid var(--ui-border-color, #e6e9ef); display: flex; gap: 8px; }
+.bGhostBtn { width: 100%; height: 46px; border: 1px solid var(--ui-border-color, #e6e9ef); background: var(--primary-background-color, #fff); border-radius: 9px; color: var(--primary-color, #0073ea); font-size: 15px; font-weight: 600; font-family: var(--font-family); cursor: pointer; }
+
+/* stacked field in a sheet */
+.bField { margin: 6px 0 4px; }
+.bFieldLabel { font-size: 12px; color: var(--secondary-text-color, #676879); margin: 0 0 6px; font-weight: 600; }
+.bSegFull { width: 100%; height: 48px; justify-content: space-between; font-size: 15px; }
+.bDateWrapFull { width: 100%; }
+.bMItemBig { padding: 14px 12px; font-size: 15.5px; }
+.bMDotBig { width: 14px; height: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .bBackdrop, .bSheet { animation: none; }
+}

@@ -1,0 +1,207 @@
+/* Discussion chip on the calendar. The accent color arrives via --cal-accent
+   as a COMPLETE css color (the "סוג" status label color, or an hsl(var(--token))
+   fallback), set by the inline style. */
+.calChip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 1px 4px;
+  border: 1.5px solid transparent;
+  border-radius: var(--border-radius-small, 4px);
+  background: transparent;
+  color: var(--text-color, #323338);
+  font-size: 12px;
+  font-family: var(--font-family);
+  line-height: 17px;
+  cursor: pointer;
+  text-align: start;
+  overflow: hidden;
+}
+.calChip:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+.calChip:focus-visible {
+  outline: 2px solid var(--primary-color, #0073ea);
+  outline-offset: -2px;
+}
+.calChipSelected {
+  border-color: var(--primary-color, #0073ea);
+  background: var(--primary-selected-color, rgba(0, 115, 234, 0.08));
+}
+
+.calChipDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--cal-accent);
+}
+
+.calChipTime {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--secondary-text-color, #676879);
+  direction: ltr;
+}
+/* Month view: the time is revealed only while hovering the event. */
+.calChip > .calChipTime {
+  display: none;
+}
+.calChip:hover > .calChipTime {
+  display: inline;
+}
+
+.calChipName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Timed variant — absolutely positioned block on the week-view hour grid; the
+   accent paints the start edge (right edge in RTL). */
+.calChipTimed {
+  position: absolute;
+  display: block;
+  width: auto;
+  padding: 2px 6px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-inline-start: 3px solid var(--cal-accent);
+  box-shadow: var(--box-shadow-xs, 0 2px 4px rgba(0, 0, 0, 0.08));
+  z-index: 2;
+}
+.calChipTimed:hover {
+  /* Stay solid (not washed/transparent) on hover — just lift it. */
+  background: var(--primary-background-color, #fff);
+  box-shadow: var(--box-shadow-small, 0 4px 8px rgba(0, 0, 0, 0.12));
+  z-index: 4;
+}
+.calChipTimed.calChipSelected {
+  border-color: var(--primary-color, #0073ea);
+  border-inline-start-color: var(--cal-accent);
+  background: var(--primary-selected-color, rgba(0, 115, 234, 0.08));
+}
+/* Name + time on ONE line: name fills (right in RTL), time pinned to the left. */
+.calChipTimedBody {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  overflow: hidden;
+}
+.calChipTimedBody .calChipName {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: var(--font-weight-medium, 500);
+  font-size: 12px;
+}
+.calChipTimedBody .calChipTime {
+  flex-shrink: 0;
+  text-align: start;
+}
+
+/* Hover actions card — full name first, then the standard four row actions. */
+.calHoverCard {
+  padding: 8px 4px 4px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 8px);
+  box-shadow: var(--box-shadow-medium, 0 6px 20px rgba(0, 0, 0, 0.2));
+  text-align: start;
+}
+.calHoverName {
+  padding: 0 8px;
+  font-size: var(--font-size-general-label, 14px);
+  font-weight: var(--font-weight-bold, 600);
+  color: var(--text-color, #323338);
+  font-family: var(--font-family);
+  word-break: break-word;
+}
+.calHoverTime {
+  padding: 2px 8px 0;
+  font-size: 11px;
+  color: var(--secondary-text-color, #676879);
+}
+.calHoverDivider {
+  height: 1px;
+  margin: 8px 0 4px;
+  background: var(--ui-border-color, #e6e9ef);
+}
+.calHoverItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--border-radius-small, 4px);
+  background: transparent;
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  font-family: var(--font-family);
+  cursor: pointer;
+  text-align: start;
+}
+.calHoverItem:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+.calHoverItem:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.calHoverIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.calHoverDanger {
+  color: var(--negative-color, #d83a52);
+}
+.calHoverDanger:hover:not(:disabled) {
+  background: var(--negative-color-selected, #fce8eb);
+}
+.calHoverSpinning {
+  animation: calHoverSpin 0.8s linear infinite;
+}
+@keyframes calHoverSpin {
+  to { transform: rotate(360deg); }
+}
+.calHoverConfirm {
+  padding: 4px 8px 8px;
+}
+.calHoverConfirmText {
+  display: block;
+  font-size: var(--font-size-general-label, 14px);
+  color: var(--text-color, #323338);
+  font-family: var(--font-family);
+  margin-bottom: 8px;
+}
+.calHoverConfirmActions {
+  display: flex;
+  gap: 8px;
+}
+.calHoverConfirmBtn {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: 13px;
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+.calHoverConfirmBtn:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+.calHoverConfirmYes {
+  border-color: var(--negative-color, #d83a52);
+  background: var(--negative-color, #d83a52);
+  color: #fff;
+}
+.calHoverConfirmYes:hover {
+  background: var(--negative-color-hover, #c43141);
+}

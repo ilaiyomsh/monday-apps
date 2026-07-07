@@ -1,0 +1,114 @@
+@reference "../index.css";
+
+:root {
+  --radius: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+
+  /* Always prefer monday/vibe font token; keep a Hebrew-safe fallback chain. */
+  --font-heading: var(--font-family, 'Figtree', 'Noto Sans Hebrew', 'Roboto', system-ui, -apple-system, sans-serif);
+  --font-body: var(--font-family, 'Figtree', 'Noto Sans Hebrew', 'Roboto', system-ui, -apple-system, sans-serif);
+
+  --background: 225 18% 97%;
+  --foreground: 225 25% 12%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 225 25% 12%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 225 25% 12%;
+
+  --primary: 232 65% 55%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 225 18% 95%;
+  --secondary-foreground: 225 25% 12%;
+
+  --muted: 225 14% 94%;
+  --muted-foreground: 225 10% 44%;
+
+  --accent: 232 28% 93%;
+  --accent-foreground: 232 50% 40%;
+
+  --destructive: 351 73% 53%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 225 14% 90%;
+  --input: 225 14% 90%;
+  --ring: 232 65% 55%;
+
+  /* Chart colors - vibrant */
+  --chart-1: 232 65% 55%;
+  --chart-2: 273 66% 59%;
+  --chart-3: 155 100% 39%;
+  --chart-4: 34 98% 62%;
+  --chart-5: 351 73% 53%;
+
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 225 25% 12%;
+  --sidebar-primary: 232 65% 55%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 232 28% 95%;
+  --sidebar-accent-foreground: 232 50% 40%;
+  --sidebar-border: 225 14% 90%;
+  --sidebar-ring: 232 65% 55%;
+
+  /* Horizontal rules under section chrome — inset from panel edges (not edge-to-edge). */
+  --section-rule-inset: 16px;
+  --section-rule-inset-wide: 24px;
+
+  /* Exact status colors from tasks board schema */
+  --status-working: 34 98% 62%;
+  --status-done: 155 100% 39%;
+  --status-stuck: 351 73% 53%;
+  --status-default: 0 0% 77%;
+
+  /* Exact department colors from topics board schema */
+  --dept-engineering: 0 100% 73%;
+  --dept-finance: 48 100% 50%;
+  --dept-ceo: 177 49% 55%;
+  --dept-strategy: 198 100% 35%;
+  --dept-hr: 273 66% 59%;
+  --dept-it: 155 95% 25%;
+  --dept-legal: 215 97% 67%;
+
+  /* Topic accent palette — 20 monday LABEL colors from @vibe/style colors.json
+     (HSL triplets so `hsl(var(--topic-color-N))` and `hsl(var(--topic-color-N) / a)`
+     both work). Each topic picks one stably via hash(id) % 20 (see TopicsTab). */
+  --topic-color-1: 155 100% 39%;   /* done_green     #00c875 */
+  --topic-color-2: 155 95% 25%;    /* grass_green    #037f4c */
+  --topic-color-3: 79 69% 49%;     /* bright_green   #9cd326 */
+  --topic-color-4: 51 56% 52%;     /* saladish       #cab641 */
+  --topic-color-5: 48 100% 50%;    /* egg_yolk       #ffcb00 */
+  --topic-color-6: 34 98% 62%;     /* working_orange #fdab3d */
+  --topic-color-7: 15 100% 62%;    /* dark_orange    #ff6d3b */
+  --topic-color-8: 0 100% 73%;     /* sunset         #ff7575 */
+  --topic-color-9: 351 73% 53%;    /* stuck_red      #df2f4a */
+  --topic-color-10: 345 57% 47%;   /* dark_red       #bb3354 */
+  --topic-color-11: 330 100% 45%;  /* sofia_pink     #e50073 */
+  --topic-color-12: 321 100% 68%;  /* lipstick       #ff5ac4 */
+  --topic-color-13: 273 67% 59%;   /* purple         #9d50dd */
+  --topic-color-14: 260 59% 56%;   /* dark_purple    #784bd1 */
+  --topic-color-15: 291 40% 39%;   /* berry          #7e3b8a */
+  --topic-color-16: 238 68% 60%;   /* indigo         #5559df */
+  --topic-color-17: 215 62% 35%;   /* navy           #225091 */
+  --topic-color-18: 215 96% 66%;   /* bright_blue    #579bfc */
+  --topic-color-19: 198 100% 35%;  /* dark_blue      #007eb5 */
+  --topic-color-20: 177 55% 55%;   /* aquamarine     #4eccc6 */
+
+  /* Single source of truth for the discussion-list row height. Drives both the
+     real .item min-height and the loading Skeleton (ROW_SKELETON_H in
+     DiscussionList.jsx, which mirrors this number) so they never drift. */
+  --list-row-height: 36px;
+}
+
+body {
+  font-family: var(--font-body);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}

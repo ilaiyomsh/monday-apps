@@ -1,0 +1,307 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  padding: 16px;
+}
+
+.modal {
+  width: min(1000px, 95vw);
+  max-height: 90vh;
+  background: var(--primary-background-color, #fff);
+  border-radius: var(--border-radius-big, 12px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--box-shadow-medium, 0 10px 30px rgba(0, 0, 0, 0.2));
+}
+
+/* Mapping / Preferences / Templates tabs share ONE fixed height so the modal
+   doesn't grow or shrink with content (e.g. as search filters the list). The
+   content area scrolls internally; the footer stays pinned. */
+.modalFixed {
+  height: min(760px, 88vh);
+}
+
+/* Permissions AND Export-template tabs share ONE fixed, larger box (wider than
+   the mapping/prefs/templates tabs) so switching between them doesn't resize. */
+.modalWide {
+  width: min(1200px, 96vw);
+  height: min(690px, 92vh);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--ui-border-color, #c3c6d4);
+}
+
+.closeButton {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 28px;
+  line-height: 1;
+  color: var(--secondary-text-color);
+}
+
+.content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* Children fill via the flex chain below (TabsContext → TabPanels → TabPanel
+     → the tab body); each body scrolls internally, so the OUTER content never
+     scrolls. */
+  overflow: hidden;
+  padding: 0 20px 20px;
+}
+
+/* Flex chain through the Vibe Tabs wrappers so the active tab body fills the
+   content area (height:100% can't cascade through them; flex does). */
+.tabsCtx {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tabPanels {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tabPanelFill {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* !important beats Vibe's own `.tabPanelsWrapper .tabPanel.active { display:block }`
+     (specificity 0,3,0) so the panel stays a flex column and its body fills. */
+  display: flex !important;
+  flex-direction: column;
+}
+
+.tabList {
+  flex-shrink: 0;
+  padding-top: 8px;
+  background: var(--primary-background-color, #fff);
+}
+
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 4px 0;
+}
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 0;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 10px;
+  background: var(--primary-background-color, #fff);
+}
+
+.accordionHeader {
+  width: 100%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  cursor: pointer;
+  border-radius: 10px;
+}
+
+.accordionHeader:hover {
+  background: var(--primary-selected-color, #e6f3ff);
+}
+
+.accordionTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-color, #323338);
+}
+
+.accordionChevron {
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+  transition: transform 0.2s ease;
+}
+
+.accordionChevronOpen {
+  transform: rotate(180deg);
+}
+
+.accordionContent {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--ui-border-color, #c3c6d4);
+}
+
+.boardId {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 360px;
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.colRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--primary-background-color, #fff);
+}
+
+.colLabel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+/* Pinned footer bar (outside the scrolling content) so it stays at the modal
+   bottom regardless of the tab's content height. */
+.footerBar {
+  flex-shrink: 0;
+  padding: 12px 20px;
+  border-top: 1px solid var(--ui-border-color, #c3c6d4);
+}
+
+.footer {
+  /* border/spacing now handled by .footerBar */
+}
+
+/* Sub-section header inside the topics column grid ("עמודות נושא" /
+   "עמודות נקודה"). Spans both grid columns and separates the two groups. */
+.colGroupTitle {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.colGroupTitle:first-child {
+  margin-top: 0;
+}
+
+.importMsg {
+  display: block;
+  margin-top: 12px;
+  text-align: end;
+}
+
+.prefs {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ui-border-color, #c3c6d4);
+}
+
+.prefsTitle {
+  margin-bottom: 10px;
+}
+
+.prefRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--primary-background-color, #fff);
+}
+
+.prefLabel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.prefControl {
+  flex: 0 0 auto;
+}
+
+/* Wider control slot for the multi-select preference (status labels chips). */
+.prefControlWide {
+  flex: 0 0 auto;
+  width: 300px;
+  max-width: 100%;
+}
+
+/* Short explanatory line under a preference control (e.g. the "אוטומטי"
+   previous-tasks mode). Right-aligned and width-capped so it reads as a caption
+   beneath the control rather than stretching the whole row. */
+.prefHint {
+  display: block;
+  margin-top: 6px;
+  max-width: 320px;
+  text-align: end;
+  line-height: 1.35;
+}
+
+@media (max-width: 768px) {
+  .prefRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 900px) {
+  .cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .overlay {
+    padding: 0;
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 100dvh;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .content {
+    padding: 0 16px 16px;
+  }
+}
