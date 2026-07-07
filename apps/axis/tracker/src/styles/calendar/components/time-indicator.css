@@ -1,0 +1,74 @@
+/* Time Indicator - Current time line with dot */
+
+/* Main time indicator line */
+.rbc-current-time-indicator {
+    background-color: var(--gc-time-indicator);
+    height: 2px;
+    z-index: var(--gc-z-now-indicator);
+    pointer-events: none;
+    position: absolute;
+    left: 0;
+    right: 0;
+    box-shadow: 0 0 2px rgba(234, 67, 53, 0.3);
+  }
+
+  /* Dot at the start (gutter side) of the time indicator line — RTL: right, LTR: left */
+  .rbc-current-time-indicator::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: -6px;
+    top: -4px;
+    width: 10px;
+    height: 10px;
+    background-color: var(--gc-time-indicator);
+    border-radius: 50%;
+    box-shadow: 0 0 4px rgba(234, 67, 53, 0.5);
+  }
+
+  /* Subtle glow effect */
+  .rbc-current-time-indicator::after {
+    content: '';
+    position: absolute;
+    inset-inline-start: -8px;
+    top: -6px;
+    width: 14px;
+    height: 14px;
+    background-color: var(--gc-time-indicator);
+    border-radius: 50%;
+    opacity: 0.1;
+    animation: timeIndicatorPulse 2s ease-in-out infinite;
+  }
+
+  /* Pulse animation for time indicator */
+  @keyframes timeIndicatorPulse {
+    0%, 100% {
+      opacity: 0.1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.3;
+      transform: scale(1.2);
+    }
+  }
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .rbc-current-time-indicator {
+    height: 2px;
+  }
+
+  .rbc-current-time-indicator::before {
+    width: 8px;
+    height: 8px;
+    inset-inline-start: -4px;
+    top: -3px;
+  }
+
+  .rbc-current-time-indicator::after {
+    width: 12px;
+    height: 12px;
+    inset-inline-start: -6px;
+    top: -5px;
+  }
+}
+

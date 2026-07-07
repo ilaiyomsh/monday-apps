@@ -1,0 +1,18 @@
+diff --git a/node_modules/react-big-calendar/lib/addons/dragAndDrop/EventContainerWrapper.js b/node_modules/react-big-calendar/lib/addons/dragAndDrop/EventContainerWrapper.js
+index 06fac89..03bb626 100644
+--- a/node_modules/react-big-calendar/lib/addons/dragAndDrop/EventContainerWrapper.js
++++ b/node_modules/react-big-calendar/lib/addons/dragAndDrop/EventContainerWrapper.js
+@@ -242,6 +242,13 @@ var EventContainerWrapper = /*#__PURE__*/function (_React$Component) {
+       var _this$context$draggab = this.context.draggable.dragAndDropAction,
+         event = _this$context$draggab.event,
+         direction = _this$context$draggab.direction;
++      
++      // PATCH: Guard against horizontal resize directions (LEFT/RIGHT)
++      // This handler only supports vertical resizing (UP/DOWN)
++      if (direction !== 'UP' && direction !== 'DOWN') {
++        return;
++      }
++      
+       var newTime = slotMetrics.closestSlotFromPoint(point, bounds);
+       var _eventTimes3 = (0, _common.eventTimes)(event, accessors, localizer),
+         start = _eventTimes3.start,

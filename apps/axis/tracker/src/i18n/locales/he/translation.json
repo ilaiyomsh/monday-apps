@@ -1,0 +1,938 @@
+{
+  "common": {
+    "save": "שמירה",
+    "cancel": "ביטול",
+    "close": "סגירה",
+    "delete": "מחיקה",
+    "edit": "עריכה",
+    "loading": "טוען...",
+    "error": "שגיאה",
+    "search": "חיפוש",
+    "notAvailable": "לא זמין",
+    "undo": "ביטול",
+    "yes": "כן",
+    "no": "לא",
+    "confirm": {
+      "title": "אישור",
+      "message": "האם אתה בטוח?",
+      "confirmText": "אישור",
+      "cancelText": "ביטול"
+    },
+    "dropdown": {
+      "searchPlaceholder": "חפש ברשימה...",
+      "noOptions": "אין אפשרויות זמינות",
+      "noResultsFor": "לא נמצאו תוצאות עבור \"{{term}}\""
+    },
+    "multiselect": {
+      "selectedCount_one": "{{count}} נבחר",
+      "selectedCount_other": "{{count}} נבחרו"
+    },
+    "datePicker": {
+      "placeholder": "בחר תאריך",
+      "today": "היום"
+    },
+    "timeSelect": {
+      "placeholder": "בחר שעה ...",
+      "noTimes": "אין זמנים זמינים"
+    },
+    "taskSelect": {
+      "placeholder": "בחר משימה...",
+      "creating": "מוסיף משימה חדשה...",
+      "searchPlaceholder": "חפש משימה...",
+      "createSuggestion": "צור משימה חדשה: \"{{term}}\"",
+      "noTasks": "אין משימות זמינות",
+      "addNew": "+ הוסף משימה חדשה",
+      "newTaskName": "שם המשימה"
+    }
+  },
+  "selection": {
+    "contextMenu": {
+      "deleteEvent": "מחק אירוע"
+    },
+    "actionBar": {
+      "oneSelected": "אירוע אחד נבחר",
+      "manySelected": "{{count}} אירועים נבחרו",
+      "duplicate": "שכפל",
+      "delete": "מחק",
+      "duplicateTooltip": "שכפל אירועים נבחרים",
+      "deleteTooltip": "מחק אירועים נבחרים",
+      "clearTooltip": "בטל בחירה"
+    }
+  },
+  "filterBar": {
+    "trigger": "סינון",
+    "showPlanned": "הצג מתוכננים",
+    "peopleColumn": "אנשים",
+    "projectsColumn": "פרויקטים",
+    "searchPlaceholder": "חיפוש...",
+    "loading": "טוען...",
+    "noResults": "לא נמצאו תוצאות",
+    "noPeopleAvailable": "אין אנשים זמינים",
+    "noProjectsAvailable": "אין פרויקטים זמינים",
+    "clearSelection": "נקה בחירה"
+  },
+  "calendarToolbar": {
+    "today": "היום",
+    "previous": "קודם",
+    "next": "הבא",
+    "dashboard": "דשבורד",
+    "dashboardTitle": "דשבורד דיווחי שעות",
+    "settings": "הגדרות",
+    "settingsIncomplete": "יש להשלים הגדרות",
+    "projectColors": "פלטת צבעים",
+    "selectReports": "בחירת דיווחים",
+    "selectReportsForApproval": "בחירת דיווחים לאישור",
+    "cancelSelection": "בטל בחירה",
+    "approveAll": "אשר הכל",
+    "views": {
+      "month": "חודש",
+      "week": "שבוע",
+      "work_week": "שבוע עבודה",
+      "three_day": "3 ימים",
+      "day": "יום",
+      "agenda": "סדר יום"
+    }
+  },
+  "eventModal": {
+    "title": "דיווח שעות",
+    "convertTitle": "המרת אירוע מתוכנן",
+    "closeAria": "סגור",
+    "originalEvent": "אירוע מקורי:",
+    "futureEventWarning": "⚠️ לא ניתן לערוך אירוע עתידי",
+    "convertHint": "בחר פרויקט להמרת האירוע המתוכנן לדיווח שעות",
+    "modes": {
+      "external": "פרויקטים חיצוניים",
+      "internal": "פרויקטים פנימיים",
+      "projects": "פרויקטים",
+      "routine": "שוטף"
+    },
+    "fields": {
+      "nonBillableType": "סוג דיווח שוטף",
+      "project": "פרויקט",
+      "task": "משימה",
+      "stage": "סיווג",
+      "notes": "מלל חופשי"
+    },
+    "placeholders": {
+      "projectSearch": "חיפוש פרויקט...",
+      "task": "בחר משימה...",
+      "notes": "הוסף הערות כאן..."
+    },
+    "states": {
+      "loading": "טוען...",
+      "noProjectSelected": "לא נבחר פרויקט",
+      "noStageSelected": "לא נבחר סיווג",
+      "noProjectsFound": "לא נמצאו פרויקטים",
+      "noTask": "ללא משימה",
+      "noProject": "ללא פרויקט",
+      "nonBillableDefault": "לא לחיוב"
+    },
+    "validation": {
+      "nonBillableType": "יש לבחור סוג דיווח שוטף",
+      "project": "יש לבחור פרויקט",
+      "task": "יש לבחור משימה",
+      "stage": "יש לבחור סיווג"
+    },
+    "actions": {
+      "delete": "מחק",
+      "approve": "אשר",
+      "reject": "דחה",
+      "close": "סגור",
+      "cancel": "ביטול",
+      "convert": "המר לדיווח",
+      "update": "עדכן",
+      "save": "שמור"
+    },
+    "unsavedChanges": {
+      "title": "שינויים שלא נשמרו",
+      "message": "יש שינויים שלא נשמרו. האם ברצונך לצאת?",
+      "confirm": "צא ללא שמירה",
+      "cancel": "המשך עריכה"
+    }
+  },
+  "settings": {
+    "title": "הגדרות דיווח",
+    "tabs": {
+      "structure": "מבנה דיווח",
+      "mapping": "מיפוי נתונים",
+      "additional": "הגדרות נוספות",
+      "projectColors": "פלטת צבעים",
+      "calendar": "הגדרות יומן"
+    },
+    "projectColors": {
+      "title": "פלטת צבעים",
+      "noProjects": "אין פרויקטים זמינים",
+      "noResults": "לא נמצאו פרויקטים תואמים",
+      "searchPlaceholder": "חיפוש פרויקט…",
+      "loading": "טוען פרויקטים…",
+      "routineRow": "שוטף"
+    },
+    "tabHasErrors": "יש להשלים שדות בטאב זה",
+    "exportLabel": "ייצוא",
+    "exportTitle": "ייצוא הגדרות לקובץ JSON",
+    "importLabel": "ייבוא",
+    "importTitle": "ייבוא הגדרות מקובץ JSON",
+    "lastModifiedBy": "שונה לאחרונה ע\"י {{name}}",
+    "lastModifiedAnonymous": "שונה לאחרונה",
+    "modifiedOnDate": "בתאריך {{date}}",
+    "modifiedAtTime": "בשעה {{time}}",
+    "actions": {
+      "cancel": "ביטול",
+      "back": "חזרה: {{tab}}",
+      "next": "הבא: {{tab}}",
+      "save": "שמור הגדרות"
+    },
+    "messages": {
+      "saved": "ההגדרות נשמרו בהצלחה",
+      "saveError": "שגיאה בשמירת ההגדרות",
+      "exported": "ההגדרות יוצאו לקובץ",
+      "imported": "ההגדרות יובאו — לחץ \"שמור הגדרות\" להחלה",
+      "invalidStructure": "מבנה הקובץ אינו תקין",
+      "invalidJson": "הקובץ אינו JSON תקין של הגדרות",
+      "readError": "שגיאה בקריאת הקובץ"
+    },
+    "partialSave": {
+      "title": "שמירה חלקית",
+      "messageSuffix": "האם לשמור בכל זאת?",
+      "confirm": "שמור בכל זאת",
+      "cancel": "חזרה לעריכה"
+    },
+    "import": {
+      "title": "ייבוא הגדרות",
+      "message": "האם להחליף את ההגדרות הנוכחיות בתוכן של \"{{fileName}}\"?\n\nההגדרות יוחלו רק לאחר שמירה.",
+      "confirm": "ייבוא",
+      "cancel": "ביטול"
+    },
+    "structure": {
+      "fields": {
+        "task": {
+          "label": "משימה",
+          "description": "קישור למשימה מלוח משימות נפרד"
+        },
+        "stage": {
+          "label": "סיווג (פרויקטים)",
+          "description": "עמודת סטטוס לסיווג הדיווח"
+        },
+        "nonBillableType": {
+          "label": "סיווג (שוטף)",
+          "description": "סיווג משנה לדיווחים שוטפים"
+        },
+        "notes": {
+          "label": "הערות",
+          "description": "מלל חופשי לדיווח"
+        }
+      },
+      "configTitle": "הגדרת שדות דיווח",
+      "headers": {
+        "field": "שדה",
+        "required": "חובה",
+        "optional": "רשות",
+        "hidden": "מוסתר"
+      },
+      "projectField": "פרויקט",
+      "projectDescription": "קישור ללוח פרויקטים",
+      "billableToggleTitle": "אפשר בחירה פרויקטים/שוטף",
+      "billableToggleDescription": "כשמוסתר, כל הדיווחים ייחשבו כפרויקטים",
+      "advancedTitle": "מתקדם",
+      "xorToggleTitle": "הגדר בחירה בין שדות חובה",
+      "xorToggleDescription": "כשמופעל, מספיק למלא אחד מהשדות שנבחרו",
+      "xorSelectPlaceholder": "בחר שדה...",
+      "xorOr": "או"
+    },
+    "mapping": {
+      "validation": {
+        "customerSourceMissing": "עמודת מקור הלקוח מוגדרת אך עמודה זו חסרה — לקוח לא יירשם בדיווחים",
+        "customerTargetMissing": "עמודה זו מוגדרת אך עמודת מקור הלקוח חסרה — לקוח לא יילקח מהפרויקט",
+        "eventTypeMappingRequired": "יש להגדיר מיפוי סוגי דיווח",
+        "sectionHasErrors": "יש להשלים שדות בסעיף זה"
+      },
+      "eventTypeCategories": {
+        "unmapped": "ללא מיפוי",
+        "billable": "פרויקטים",
+        "nonBillable": "שוטף",
+        "allDay": "יומי",
+        "internalProject": "פנימי",
+        "externalProject": "חיצוני",
+        "routine": "שוטף"
+      },
+      "projectType": {
+        "columnLabel": "עמודת סוג פרויקט (בלוח פרויקטים)",
+        "toggleTitle": "הבחנה פנימי/חיצוני",
+        "toggleDescription": "כשמופעל, סוג הדיווח ייקבע אוטומטית לפי עמודת סוג פרויקט (פנימי/חיצוני) בלוח הפרויקטים.",
+        "mappingLabel": "מיפוי לייבלים לסוג פרויקט",
+        "loadingLabels": "טוען לייבלים...",
+        "needBoardFirst": "יש להגדיר לוח פרויקטים כדי לבחור עמודת סוג פרויקט",
+        "rolesUnmapped": "ללא מיפוי",
+        "rolesInternal": "פנימי",
+        "rolesExternal": "חיצוני",
+        "takenSuffix": " (תפוס)",
+        "selectMirrorPlaceholder": "בחר עמודת Mirror...",
+        "selectStatusPlaceholder": "בחר עמודת סטטוס..."
+      },
+      "assignmentsToggle": {
+        "title": "השתמש בלוח הקצאות למשיכת פרויקטים",
+        "description": "כאשר פעיל, הפרויקטים יימשכו מלוח ההקצאות לפי המשתמש והתאריך הנוכחי. אחרת, יימשכו מלוח הפרויקטים."
+      },
+      "portfolioToggle": {
+        "title": "מקור פרויקטים: פורטפוליו",
+        "description": "כאשר פעיל, לוח הפרויקטים הוא Portfolio של monday — לוח המשימות לפר פרויקט מזוהה אוטומטית, וסוג הפרויקט נקרא ישירות מהפורטפוליו (ללא mirror).",
+        "infoBoardMode": "מקור הפרויקטים: לוח פרויקטים קלאסי.",
+        "infoPortfolioMode": "מקור הפרויקטים: לוח Portfolio — לוח המשימות מזוהה אוטומטית לפר פרויקט.",
+        "validationInvalid": "הלוח הנבחר אינו לוח Portfolio (חסרה עמודת portfolio_project_link מסוג hierarchy).",
+        "validationEmpty": "לפורטפוליו זה לא חוברו עדיין פרויקטים."
+      },
+      "projects": {
+        "sectionTitle": "לוח פרויקטים",
+        "boardLabel": "בחר את לוח הפרויקטים",
+        "boardPlaceholder": "בחר לוח...",
+        "peopleColumnsLabel": "עמודות לשיוך (אנשים)",
+        "peopleColumnsPlaceholder": "בחר עמודות אנשים...",
+        "statusFilterTitle": "סינון פרויקטים לפי סטטוס",
+        "statusColumnLabel": "עמודת סטטוס",
+        "statusColumnPlaceholder": "בחר עמודת סטטוס...",
+        "statusValuesLabel": "ערכי סטטוס פעילים",
+        "statusValuesPlaceholder": "בחר ערכי סטטוס...",
+        "customerColumnLabel": "עמודת לקוח (Connect Boards בלוח פרויקטים)",
+        "customerColumnPlaceholder": "בחר עמודת לקוח..."
+      },
+      "assignments": {
+        "sectionTitle": "לוח הקצאות",
+        "description": "הקצאות מאפשרות סינון פרויקטים לפי טווח תאריכים. אם לא מוגדר, ייעשה שימוש בעמודות אנשים מלוח הפרויקטים.",
+        "boardLabel": "לוח הקצאות",
+        "boardPlaceholder": "בחר לוח הקצאות...",
+        "peopleColumnLabel": "עמודת אנשים",
+        "peopleColumnPlaceholder": "בחר עמודת אנשים...",
+        "startDateColumnLabel": "עמודת תאריך התחלה",
+        "startDateColumnPlaceholder": "בחר עמודת תאריך התחלה...",
+        "endDateColumnLabel": "עמודת תאריך סיום",
+        "endDateColumnPlaceholder": "בחר עמודת תאריך סיום...",
+        "projectLinkColumnLabel": "עמודת קישור לפרויקט",
+        "projectLinkColumnPlaceholder": "בחר עמודת קישור לפרויקט...",
+        "projectsSubSectionTitle": "פרויקטים"
+      },
+      "tasks": {
+        "sectionTitle": "לוח משימות",
+        "projectTasksColumnLabel": "עמודת משימות בלוח פרויקטים",
+        "projectTasksColumnPlaceholder": "בחר עמודת משימות...",
+        "boardLabel": "לוח משימות",
+        "boardPlaceholder": "בחר לוח משימות...",
+        "statusFilterTitle": "סינון משימות לפי סטטוס",
+        "statusColumnLabel": "עמודת סטטוס במשימות",
+        "statusColumnPlaceholder": "בחר עמודת סטטוס...",
+        "statusValuesLabel": "ערכי סטטוס פעילים",
+        "statusValuesPlaceholder": "בחר ערכי סטטוס..."
+      },
+      "timesheet": {
+        "sectionTitle": "לוח דיווחי שעות",
+        "useCurrentBoardTitle": "שימוש בלוח הנוכחי",
+        "useCurrentBoardDescription": "כאשר פעיל, הדיווחים יישמרו בלוח שבו האפליקציה מותקנת",
+        "boardLabel": "בחר לוח דיווחי שעות",
+        "boardCustomObjectDescription": "האפליקציה רצה כ-Custom Object - יש לבחור לוח דיווחים",
+        "boardPlaceholder": "בחר לוח דיווחי שעות...",
+        "noBoardWarning": "לא נבחר לוח דיווחים - יש לבחור לוח או להפעיל את האפליקציה מתוך לוח",
+        "projectLinkColumnLabel": "עמודת קישור לפרויקט",
+        "projectLinkColumnPlaceholder": "בחר עמודת קישור...",
+        "taskLinkColumnLabel": "עמודת קישור למשימה",
+        "taskLinkColumnPlaceholder": "בחר עמודת קישור למשימה...",
+        "assignmentLinkColumnLabel": "עמודת קישור להקצאה",
+        "assignmentLinkColumnPlaceholder": "בחר עמודת קישור להקצאה...",
+        "startDateColumnLabel": "עמודת תאריך (התחלה)",
+        "startDateColumnPlaceholder": "בחר עמודת תאריך התחלה...",
+        "endDateColumnLabel": "עמודת תאריך סיום",
+        "endDateColumnPlaceholder": "בחר עמודת תאריך סיום...",
+        "endDateColumnDescription": "זמן הסיום של האירוע (נדרש לקריאת אירועים מסוג עתידי)",
+        "durationColumnLabel": "עמודת משך זמן",
+        "durationColumnPlaceholder": "בחר עמודת משך זמן...",
+        "reporterColumnLabel": "עמודת מדווח",
+        "reporterColumnPlaceholder": "בחר עמודת מדווח...",
+        "eventTypeColumnLabel": "עמודת סוג דיווח",
+        "eventTypeColumnPlaceholder": "בחר עמודת סוג דיווח...",
+        "temporaryCheckboxColumnLabel": "עמודת סימון אירוע עתידי",
+        "temporaryCheckboxColumnPlaceholder": "בחר עמודת Checkbox...",
+        "temporaryCheckboxColumnDescription": "עמודת Checkbox שמסמנת אירוע מתוכנן (עתידי). בעת המרה לאירוע אמיתי הסימון מוסר אוטומטית.",
+        "allDayTypeColumnLabel": "עמודת תת-סוג אירוע יומי",
+        "allDayTypeColumnPlaceholder": "בחר עמודת Status...",
+        "allDayTypeColumnDescription": "עמודת Status שמכילה את התת-סוגים של אירועים יומיים (חופשה, מחלה, מילואים וכו'). הלייבלים בעמודה הם האפשרויות שיוצגו ביצירת אירוע יומי.",
+        "mappingSectionTitle": "מיפוי סוגי דיווח",
+        "mappingSectionDesc": "שייך כל לייבל לקטגוריה (שני מיפויים בשורה)",
+        "mappingValid": "✓ מיפוי תקין",
+        "creatingColumn": "יוצר עמודה...",
+        "createColumnButton": "או צור עמודה חדשה \"סוג דיווח\"",
+        "nonBillableColumnLabel": "עמודת סיווג - שוטף",
+        "nonBillableColumnPlaceholder": "בחר עמודת סטטוס...",
+        "stageColumnLabel": "עמודת סיווג - פרויקטים",
+        "stageColumnPlaceholder": "בחר עמודת סיווג...",
+        "notesColumnLabel": "עמודת הערות",
+        "notesColumnPlaceholder": "בחר עמודת הערות...",
+        "customerColumnLabel": "עמודת לקוח בלוח דיווחים",
+        "customerColumnPlaceholder": "בחר עמודת לקוח...",
+        "customerColumnDescription": "עמודת Connect Boards שתקשר כל דיווח ללקוח (אופציונלי)"
+      },
+      "absences": {
+        "sectionTitle": "לוח חופשות (Day-off)",
+        "sectionDescription": "מיפוי לוח החופשות של רכיב Day-off — מקור האמת להיעדרויות. ההתאמה נעשית לפי מזהי עמודות ותוויות קבועים (label IDs), לא לפי טקסט.",
+        "sourceToggleTitle": "דיווח היעדרויות דרך Day-off",
+        "sourceToggleDescription": "כשפעיל, הזנת ימי חופשה/מחלה עוברת לרכיב Day-off והיומן מציג את ההיעדרויות מלוח החופשות לקריאה בלבד",
+        "showAbsencesTitle": "הצג היעדרויות מלוח החופשות",
+        "showAbsencesDescription": "שכבת תצוגה נפרדת ביומן עבור היעדרויות מלוח החופשות",
+        "appUrlLabel": "קישור לרכיב Day-off (אופציונלי)",
+        "appUrlDescription": "כתובת ה-URL של רכיב Day-off בחשבון (http/https בלבד). מוצגת כקישור בהודעת ההפניה במודל הדיווח היומי כשמקור ההיעדרויות הוא Day-off",
+        "appUrlPlaceholder": "https://...",
+        "boardLabel": "לוח החופשות",
+        "boardPlaceholder": "בחר לוח חופשות...",
+        "personColumnLabel": "עמודת עובד (People)",
+        "personColumnPlaceholder": "בחר עמודת אנשים...",
+        "startDateColumnLabel": "עמודת תאריך התחלה",
+        "startDateColumnPlaceholder": "בחר עמודת תאריך...",
+        "endDateColumnLabel": "עמודת תאריך סיום (כולל)",
+        "endDateColumnPlaceholder": "בחר עמודת תאריך...",
+        "kindColumnLabel": "עמודת סוג רשומה (אישי/כללי)",
+        "kindColumnPlaceholder": "בחר עמודת סטטוס...",
+        "kindGeneralLabelLabel": "תווית \"כללי\" (יום חברה)",
+        "kindPersonalLabelLabel": "תווית \"אישי\" (בקשת היעדרות)",
+        "kindLabelPlaceholder": "בחר תווית...",
+        "typeColumnLabel": "עמודת סוג היעדרות",
+        "typeColumnPlaceholder": "בחר עמודת סטטוס...",
+        "typeColumnDescription": "סוגי ההיעדרות (חופשה/מחלה/...) נטענים מהתוויות של עמודה זו — הסט דינמי לפי הלוח",
+        "approvalToggleTitle": "נדרש אישור להיעדרויות",
+        "approvalToggleDescription": "כשפעיל, היעדרות שממתינה לאישור תוצג חלולה ביומן ומיפוי עמודת האישור הופך חובה",
+        "approvalColumnLabel": "עמודת סטטוס אישור",
+        "approvalColumnPlaceholder": "בחר עמודת סטטוס...",
+        "approvedLabelsLabel": "תוויות \"מאושר\"",
+        "pendingLabelsLabel": "תוויות \"ממתין לאישור\"",
+        "rejectedLabelsLabel": "תוויות \"נדחה\" (אופציונלי)",
+        "rejectedLabelsDescription": "בקשות עם תוויות אלה לא יוצגו ביומן. תווית אישור שאינה משויכת לאף קבוצה תדווח כשגיאת תצורה",
+        "approvalLabelsPlaceholder": "בחר תוויות..."
+      }
+    },
+    "additional": {
+      "appearance": {
+        "sectionTitle": "מראה",
+        "sectionDescription": "התאם את ערכת הצבעים של האפליקציה",
+        "light": "בהיר",
+        "dark": "כהה",
+        "auto": "אוטומטי"
+      },
+      "approval": {
+        "sectionTitle": "אישור מנהל",
+        "toggleTitle": "אישור מנהל על דיווחים",
+        "toggleDescription": "כשפעיל, דיווחים ידרשו אישור מנהל מורשה",
+        "managersLabel": "מנהלים מורשים לאישור",
+        "userFallbackName": "משתמש {{id}}",
+        "loadingUsersPlaceholder": "טוען משתמשים...",
+        "searchUsersPlaceholder": "חפש משתמש להוספה...",
+        "statusColumnLabel": "עמודת סטטוס אישור",
+        "statusColumnPlaceholder": "בחר עמודת סטטוס אישור...",
+        "needTimesheetBoard": "יש להגדיר תחילה לוח דיווחי שעות בטאב \"מיפוי נתונים\"",
+        "mappingSectionTitle": "מיפוי סטטוסי אישור",
+        "mappingSectionDesc": "שייך כל לייבל לקטגוריה",
+        "mappingValid": "✓ מיפוי תקין",
+        "mappingRequired": "יש להגדיר מיפוי סטטוס אישור",
+        "sectionHasErrors": "יש להשלים שדות בסעיף זה"
+      },
+      "editLock": {
+        "sectionTitle": "נעילת עריכת דיווחים",
+        "lockAfterApprovalTitle": "נעילה לאחר אישור מנהל",
+        "lockAfterApprovalDescription": "אירועים שאושרו ע\"י מנהל יינעלו לעריכה",
+        "managersExempt": "מנהלים מורשים פטורים מנעילת עריכה",
+        "modes": {
+          "none": "ללא הגבלה",
+          "days_after": "עד {{days}} ימים מתאריך הדיווח"
+        },
+        "daysAfterPrefix": "עד",
+        "daysAfterSuffix": "ימים מתאריך הדיווח",
+        "daysLabel": "מספר ימים",
+        "reasons": {
+          "days_after": "הדיווח נעול - עברו יותר מ-{{days}} ימים מתאריך הדיווח",
+          "default": "הדיווח נעול לעריכה"
+        }
+      },
+      "filters": {
+        "projectsSourceTitle": "מקור פרויקטים לפילטר",
+        "directModeIntro": "מצב ישיר:",
+        "directModeDesc": "רשימת הפרויקטים לפילטר נלקחת אוטומטית מלוח הפרויקטים שהוגדר.",
+        "currentBoardLabel": "לוח נוכחי:",
+        "assignmentsModeIntro": "מצב הקצאות:",
+        "assignmentsModeDesc": "בחר את הלוח שממנו יימשכו הפרויקטים לפילטר. הלוחות המוצגים הם אלה המקושרים דרך עמודת קישור הפרויקט בלוח ההקצאות.",
+        "needAssignmentsLink": "יש להגדיר תחילה את עמודת קישור הפרויקט בלוח ההקצאות (בטאב \"מיפוי נתונים\")",
+        "filterBoardLabel": "לוח פרויקטים לפילטר",
+        "filterBoardDescription": "בחר את הלוח שממנו יימשכו כל הפרויקטים להצגה בפילטר",
+        "filterBoardPlaceholder": "בחר לוח פרויקטים...",
+        "statusColumnLabel": "עמודת סטטוס לסינון הפילטר",
+        "statusColumnDescription": "רשות. כשמוגדרת, ניתן לבחור אילו לייבלים בפרויקט יוצגו ברשימת הפרויקטים בסרגל הסינון (מעל היומן/דשבורד)",
+        "statusColumnNoneOption": "— ללא — הצגת כל הפרויקטים מהלוח",
+        "statusColumnPlaceholder": "בחרו עמודה או ללא סינון",
+        "statusValuesLabel": "ערכי סטטוס להצגה בפילטר",
+        "statusValuesDescription": "בחירה מרובה. אם אין בחירה, כל הפרויקטים מהלוח מוצגים. עם בחירה — רק פרויקטים שסטטוסם באחת מהאפשרויות שנבחרו",
+        "statusValuesPlaceholder": "בחר לייבלים...",
+        "employeesSourceTitle": "מקור עובדים לפילטר",
+        "employeesIntro": "בחר לוח ועמודת אנשים שמכילים את רשימת העובדים המלאה. לרוב זהו לוח HR/עובדים או לוח ההקצאות.",
+        "employeesBoardLabel": "לוח עובדים/HR",
+        "employeesBoardDescription": "הלוח שמכיל את רשימת העובדים",
+        "employeesBoardPlaceholder": "בחר לוח עובדים...",
+        "employeesColumnLabel": "עמודת עובדים (People)",
+        "employeesColumnDescription": "עמודת ה-People שמכילה את רשימת העובדים",
+        "employeesColumnPlaceholder": "בחר עמודת אנשים...",
+        "employeesEmptyNote": "אם לא יוגדר לוח עובדים, הפילטר יציג רק את המדווחים שכבר דיווחו שעות בלוח הדיווחים"
+      }
+    },
+    "calendar": {
+      "showTemporary": "הצג אירועים זמניים בלוח",
+      "temporaryDescription": "אירועים עם סטטוס \"עתידי\" יוצגו בעיצוב חלול. לחיצה עליהם תפתח טופס המרה.",
+      "workDays": "ימי עבודה",
+      "weekStart": "יום ראשון בשבוע",
+      "dayLabels": [
+        "א׳",
+        "ב׳",
+        "ג׳",
+        "ד׳",
+        "ה׳",
+        "ו׳",
+        "ש׳"
+      ],
+      "hoursTargetTitle": "יעד שעות",
+      "dailyTargetLabel": "יומי — אורך יום עבודה (שעות)",
+      "weeklyTargetLabel": "שבועי — יעד שעות",
+      "monthlyTargetLabel": "חודשי — יעד שעות",
+      "languagePickerTitle": "שפת ממשק",
+      "languagePickerDescription": "השפה תידרס מעל ברירת המחדל של Monday. ברירת מחדל = שימוש בשפה של החשבון.",
+      "languageOptionDefault": "ברירת מחדל (Monday)",
+      "languageOptionHe": "עברית",
+      "languageOptionEn": "English"
+    }
+  },
+  "allDayModal": {
+    "menuTitle": "סוג דיווח ליום זה",
+    "daysSelectionTitle": "הגדרת {{type}}",
+    "splitTitle": "דיווח שעות מרוכז",
+    "selectedMark": "✓ נבחר",
+    "multipleReports": "דיווחים מרובים / שעות עבודה",
+    "emptyState": "בחר פרויקט מהרשימה בצד שמאל כדי להתחיל",
+    "dayoffButton": "דיווח היעדרות",
+    "dayoffButtonNoUrl": "לא מוגדר קישור לאפליקציית היעדרות",
+    "labels": {
+      "fromDate": "מתאריך:",
+      "toDate": "עד תאריך:",
+      "pickDate": "בחר תאריך",
+      "oneDay": "יום אחד",
+      "manyDays": "{{count}} ימים",
+      "startTime": "שעת התחלה",
+      "endTime": "שעת סיום",
+      "timePlaceholder": "שעה",
+      "notes": "הערות / מלל חופשי",
+      "notesPlaceholder": "הערות / מלל חופשי...",
+      "totalHours": "סה\"כ שעות"
+    },
+    "search": {
+      "projectPlaceholder": "חיפוש פרויקט...",
+      "loadingProjects": "טוען פרויקטים...",
+      "noResults": "לא נמצאו פרויקטים",
+      "noProjectsAvailable": "אין פרויקטים זמינים",
+      "externalGroup": "פרויקטים חיצוניים",
+      "internalGroup": "פרויקטים פנימיים"
+    },
+    "tooltips": {
+      "deleteRow": "מחק שורה",
+      "decrement15": "הפחת 15 דקות",
+      "increment15": "הוסף 15 דקות",
+      "addNonBillable": "הוסף דיווח לא לחיוב",
+      "clickToAdd": "לחץ להוספה"
+    },
+    "placeholders": {
+      "task": "בחר משימה..."
+    },
+    "states": {
+      "loading": "טוען...",
+      "noTask": "ללא משימה",
+      "nonBillableDefault": "שוטף"
+    },
+    "validation": {
+      "noReports": "יש להוסיף לפחות פרויקט אחד עם שעות",
+      "task": "יש לבחור משימה",
+      "nonBillableType": "יש לבחור סוג דיווח לא לחיוב",
+      "stage": "יש לבחור סיווג"
+    },
+    "actions": {
+      "delete": "מחק",
+      "approve": "אשר",
+      "reject": "דחה",
+      "close": "סגור",
+      "cancel": "ביטול",
+      "back": "חזרה",
+      "save": "שמור דיווחים",
+      "create": "צור אירוע"
+    },
+    "unsaved": {
+      "title": "שמירת דיווחים",
+      "message": "יש דיווחים שלא נשמרו. האם ברצונך לשמור את הדיווחים לפני סגירה?",
+      "confirm": "שמור דיווחים",
+      "cancel": "בטל"
+    }
+  },
+  "celebration": {
+    "dayStart": "יאללה, התחלנו את היום!",
+    "fullDay": "כל הכבוד, סגרת יום מלא!",
+    "halfDay": "עברת את חצי היום, ממשיכים!"
+  },
+  "toasts": {
+    "futureTimeBlocked": "לא ניתן לדווח שעות על זמן עתידי",
+    "missingDataCreate": "חסרים נתונים נדרשים ליצירת האירוע",
+    "missingDataUpdate": "חסרים נתונים נדרשים לעדכון האירוע",
+    "missingDataConvert": "חסרים נתונים נדרשים להמרת האירוע",
+    "eventCreated": "האירוע נוצר בהצלחה",
+    "eventUpdated": "האירוע עודכן בהצלחה",
+    "eventConverted": "האירוע הומר לדיווח שעות בהצלחה",
+    "reportsCreated": "הדיווחים נוצרו בהצלחה",
+    "deleteEventNotFound": "שגיאה: לא נמצא מזהה אירוע למחיקה",
+    "noPendingApprovals": "אין דיווחים ממתינים לאישור",
+    "approvalApproved": "הדיווח אושר בהצלחה",
+    "approvalRejected": "הדיווח נדחה",
+    "bulkApprovalSucceeded": "{{count}} דיווחים אושרו בהצלחה",
+    "bulkApprovalFailed": "{{count}} דיווחים נכשלו באישור",
+    "eventsDuplicated": "{{count}} אירועים שוכפלו בהצלחה",
+    "duplicateEventsError": "שגיאה בשכפול האירועים",
+    "moveAllDayToTimedBlocked": "לא ניתן להעביר אירוע יומי לאזור השעתי",
+    "moveTimedToAllDayBlocked": "לא ניתן להעביר אירוע שעתי לאזור היומי",
+    "deleteEventsError": "שגיאה במחיקת האירועים",
+    "updateEventNotFound": "שגיאה: לא נמצא מזהה אירוע לעדכון",
+    "invalidEventType": "סוג אירוע לא תקין",
+    "settingsSaved": "ההגדרות נשמרו"
+  },
+  "dashboard": {
+    "title": "דשבורד דיווחי שעות",
+    "backToCalendar": "חזרה ליומן",
+    "exportCsv": "ייצוא CSV",
+    "exportExcel": "ייצוא לאקסל",
+    "settings": "הגדרות",
+    "search": "חיפוש...",
+    "exportFilename": "דיווח-שעות",
+    "exportError": "שגיאה בייצוא לאקסל",
+    "recordsCount": "{{count}} רשומות",
+    "stats": {
+      "totalHours": "סה״כ שעות",
+      "projectsPercent": "אחוז פרויקטים",
+      "projectsHours": "שעות פרויקטים",
+      "internalHours": "שעות פנימי",
+      "externalHours": "שעות חיצוני",
+      "routineHours": "שעות שוטף"
+    },
+    "filters": {
+      "allCustomers": "כל הלקוחות",
+      "allProjects": "כל הפרויקטים",
+      "allEmployees": "כל העובדים",
+      "fromDate": "מתאריך",
+      "toDate": "עד תאריך",
+      "previousPeriod": "תקופה קודמת",
+      "nextPeriod": "תקופה הבאה"
+    },
+    "billFilter": {
+      "all": "הכל",
+      "billable": "פרויקטים",
+      "nonBillable": "שוטף",
+      "internalProject": "פנימי",
+      "externalProject": "חיצוני",
+      "routine": "שוטף"
+    },
+    "granularity": {
+      "day": "יום",
+      "week": "שבוע",
+      "month": "חודש",
+      "year": "שנה",
+      "between": "טווח"
+    },
+    "charts": {
+      "byPeriod": "שעות לפי {{granularity}}",
+      "byPeriodAvg": "שעות לפי {{granularity}} (ממוצע)",
+      "byEmployee": "שעות לפי עובד",
+      "distribution": "התפלגות שעות",
+      "projectsDistribution": "התפלגות שעות פרויקטים",
+      "routineDistribution": "התפלגות שעות שוטף",
+      "categoryDrillTitle": "סיווג — בחר חלק בפאי",
+      "noData": "אין נתונים בטווח שנבחר",
+      "noDataShort": "אין נתונים",
+      "noProjectsData": "אין נתוני שעות פרויקטים",
+      "noRoutineData": "אין נתוני שעות שוטף",
+      "noCategoryData": "אין נתוני סיווג",
+      "clickPie": "לחץ על חלק בפאי הראשי",
+      "hoursLabel": "{{value}} שעות",
+      "hoursUnit": "שעות",
+      "categoryNames": {
+        "internalProject": "סיווג שעות פנימי",
+        "externalProject": "סיווג שעות חיצוני",
+        "routine": "סיווג שעות שוטף"
+      },
+      "legend": {
+        "internal": "פנימי",
+        "external": "חיצוני",
+        "routine": "שוטף",
+        "billable": "פרויקטים",
+        "nonBillable": "שוטף"
+      }
+    }
+  },
+  "errorDetailsModal": {
+    "title": "פרטי שגיאה",
+    "tabs": {
+      "error": "שגיאה",
+      "api": "קריאת API",
+      "json": "JSON מלא"
+    },
+    "labels": {
+      "userMessage": "הודעה למשתמש:",
+      "errorCode": "קוד שגיאה:",
+      "techMessage": "הודעה טכנית:",
+      "statusCode": "קוד סטטוס:",
+      "errorData": "נתוני שגיאה:",
+      "actionRequired": "פעולה נדרשת:",
+      "operationName": "שם הפעולה:",
+      "queryMutation": "Query/Mutation:",
+      "requestId": "Request ID:",
+      "stackTrace": "Stack Trace:",
+      "variables": "Variables:"
+    },
+    "emptyApi": "אין פרטי קריאת API זמינים",
+    "copyAll": "📋 העתק הכל",
+    "copyQuery": "📋 העתק שאילתה",
+    "copied": "✓ הועתק!"
+  },
+  "settingsValidation": {
+    "title": "נדרש עדכון הגדרות",
+    "messageOwner": "יש להשלים את הגדרות האפליקציה כדי להתחיל להשתמש ביומן דיווח השעות.",
+    "messageViewer": "הגדרות האפליקציה טרם הושלמו. יש לפנות למנהל הלוח כדי להשלים את ההגדרות.",
+    "dismissOwner": "אחר כך",
+    "openSettings": "פתח הגדרות"
+  },
+  "mobileResize": {
+    "dragStartAria": "גרור לשינוי שעת התחלה",
+    "dragEndAria": "גרור לשינוי שעת סיום"
+  },
+  "wizard": {
+    "title": "Time Tracker",
+    "eyebrow": "אשף התקנה",
+    "dialogAria": "אשף התקנה",
+    "stepperAria": "שלבי אשף",
+    "close": "סגירה",
+    "closeAria": "סגור אשף",
+    "back": "חזרה",
+    "next": "הבא",
+    "getStarted": "בואו נתחיל",
+    "steps": {
+      "welcome": {
+        "label": "ברוכים הבאים",
+        "headline": "ברוכים הבאים ל-Time Tracker",
+        "lede": "שלוש שאלות מהירות ונקים לכם את כל מה שצריך — לוחות, עמודות ונתוני דוגמה. אפשר לשנות הכל מאוחר יותר מההגדרות.",
+        "cards": {
+          "zeroSetup": {
+            "title": "ללא התקנה",
+            "desc": "אנחנו יוצרים את הלוחות (לקוחות, פרויקטים, משימות, דיווחי שעות) וממפים בשבילכם כל עמודה."
+          },
+          "sampleData": {
+            "title": "נתוני דוגמה",
+            "desc": "שני פרויקטים לדוגמה וכמה דיווחי שעות נזרעים סביב התאריך הנוכחי כדי שהיומן יהיה פעיל מהפתיחה הראשונה."
+          },
+          "fullControl": {
+            "title": "שליטה מלאה",
+            "desc": "כל הגדרה תישאר ניתנת לעריכה ממסך ההגדרות הרגיל לאחר סיום האשף."
+          }
+        }
+      },
+      "questions": {
+        "label": "התאמה",
+        "sub": "התאם את האפליקציה לצוות שלך",
+        "source": {
+          "title": "איפה מנוהלים הפרויקטים שלך?",
+          "hint": "אפשר ליצור הכל מאפס, או להתחבר ללוח Portfolio קיים של monday.",
+          "createLabel": "ליצור הכל מאפס",
+          "portfolioLabel": "יש לי Portfolio קיים"
+        },
+        "tasks": {
+          "title": "האם אתם עוקבים אחר משימות בתוך פרויקטים?",
+          "hint": "אפשר לחלק פרויקט למשימות (למשל: גילוי, פיתוח, QA)."
+        },
+        "stages": {
+          "title": "האם אתם מסווגים דיווחי זמן לפי סוג עבודה?",
+          "hint": "לדוגמה: פגישות פנימיות / פגישות חיצוניות / עבודה עצמאית."
+        },
+        "distinction": {
+          "title": "להבחין בין פרויקטים פנימיים לחיצוניים?",
+          "hint": "פרויקטים פנימיים מול פרויקטים של לקוח (חיצוניים)."
+        }
+      },
+      "portfolio": {
+        "label": "Portfolio",
+        "sub": "חבר את לוח ה-Portfolio שלך",
+        "title": "בחר את לוח ה-Portfolio שלך",
+        "hint": "מציג רק לוחות Portfolio קיימים (עם עמודת hierarchy פעילה).",
+        "boardLabel": "לוח Portfolio",
+        "boardPlaceholder": "בחר לוח...",
+        "loading": "טוען לוחות...",
+        "noneFound": "לא נמצאו לוחות Portfolio בסביבת העבודה.",
+        "noneFoundHelp": "כדי ליצור Portfolio: היכנס ל-monday → 'הוסף לוח חדש' → תבנית Portfolio. לאחר מכן חזור לכאן.",
+        "projectTypeColumnLabel": "עמודת סוג פרויקט (פנימי/חיצוני)",
+        "projectTypeColumnPlaceholder": "בחר עמודת Status...",
+        "projectTypeColumnHint": "עמודת Status על לוח ה-Portfolio שמבחינה בין פנימי לחיצוני.",
+        "mappingLabel": "מיפוי תוויות",
+        "mappingHint": "סמן כל תווית כפנימי או חיצוני.",
+        "mappingInternal": "פנימי",
+        "mappingExternal": "חיצוני",
+        "mappingNone": "ללא"
+      },
+      "install": {
+        "label": "התקנה",
+        "sub": "יוצרים לוחות וזורעים נתונים",
+        "yourChoices": "הבחירות שלך",
+        "summary": {
+          "tasks": "משימות: {{value}}",
+          "stages": "שלבים: {{value}}",
+          "distinction": "פנימי/חיצוני: {{value}}"
+        },
+        "createButton": "יצירת לוחות והתקנה",
+        "starting": "מתחיל...",
+        "errorPrefix": "שגיאה",
+        "donePrefix": "סיום",
+        "showDetails": "הצג פרטים",
+        "hideDetails": "הסתר פרטים",
+        "errorLogPrefix": "שגיאה: {{message}}",
+        "successTitle": "✓ ההתקנה הושלמה",
+        "successText": "{{count}} לוחות נוצרו וההגדרות נשמרו.",
+        "openApp": "פתח את היומן",
+        "tryAgain": "נסה שוב"
+      }
+    }
+  },
+  "calendar": {
+    "gutter": {
+      "dayPrefix": "יום {{day}}"
+    }
+  },
+  "monthlyBattery": {
+    "hoursUnit": "שעות",
+    "total": "סה״כ"
+  },
+  "approval": {
+    "lockReason": "הדיווח נעול - אושר ע\"י מנהל",
+    "actionBar": {
+      "selectedCount_one": "דיווח אחד נבחר לאישור",
+      "selectedCount_other": "{{count}} דיווחים נבחרו לאישור",
+      "approveSelectedTitle": "אשר נבחרים",
+      "approving": "מאשר...",
+      "approve": "אשר",
+      "clearSelection": "בטל בחירה"
+    }
+  },
+  "errors": {
+    "toast": {
+      "copyDetails": "העתק פרטים",
+      "retry": "נסה שוב",
+      "details": "פרטים",
+      "close": "סגור",
+      "copied": "הועתק!"
+    },
+    "codes": {
+      "unauthorized": {
+        "message": "אין לך הרשאות לבצע פעולה זו בלוח. יש לפנות לבעל הלוח לשינוי הרשאות.",
+        "actionRequired": "פנה לבעל הלוח לשינוי הרשאות"
+      },
+      "columnNotFound": {
+        "message": "אחת העמודות המוגדרות אינה קיימת בלוח. אנא היכנס להגדרות ובחר את העמודות מחדש.",
+        "actionRequired": "היכנס להגדרות ובחר את העמודות מחדש"
+      },
+      "complexityBudget": {
+        "message": "העומס על המערכת גבוה מדי כרגע. אנא המתן מספר שניות ונסה שנית.",
+        "actionRequired": "המתן מספר שניות ונסה שוב"
+      },
+      "columnValue": {
+        "message": "הנתונים שהוזנו אינם תואמים את סוג העמודה בלוח. אנא בדוק את הקלט.",
+        "actionRequired": "בדוק את הנתונים שהוזנו"
+      },
+      "correctedValue": {
+        "message": "הנתונים שהוזנו תוקנו אוטומטית. אנא בדוק את הערכים בלוח.",
+        "actionRequired": "בדוק את הערכים בלוח"
+      },
+      "internalServerError": {
+        "message": "אירעה תקלה בתקשורת עם השרת של Monday. אנא נסה שוב.",
+        "actionRequired": "נסה שוב בעוד כמה רגעים"
+      },
+      "networkError": {
+        "message": "אין חיבור לרשת. אנא בדוק את החיבור ונסה שוב.",
+        "actionRequired": "בדוק את חיבור הרשת ונסה שוב"
+      },
+      "apiTemporarilyBlocked": {
+        "message": "השירות זמנית לא זמין. אנא נסה שוב בעוד כמה רגעים.",
+        "actionRequired": "נסה שוב בעוד כמה רגעים"
+      },
+      "boardNotFound": {
+        "message": "הלוח לא נמצא או שאין לך גישה אליו.",
+        "actionRequired": "בדוק את הגדרות הלוח"
+      },
+      "invalidArgument": {
+        "message": "הנתונים שהוזנו אינם תקינים. אנא בדוק את הקלט.",
+        "actionRequired": "בדוק את הנתונים שהוזנו"
+      },
+      "rateLimit": {
+        "message": "חרגת ממגבלת הבקשות. אנא המתן מספר שניות ונסה שנית.",
+        "actionRequired": "המתן מספר שניות ונסה שוב"
+      },
+      "concurrencyLimit": {
+        "message": "חרגת ממגבלת הבקשות המקבילות. אנא המתן מספר שניות ונסה שנית.",
+        "actionRequired": "המתן מספר שניות ונסה שוב"
+      },
+      "tokenUnauthorized": {
+        "message": "אין הרשאות לגשת לנתונים. יש לוודא שה-API token תקין.",
+        "actionRequired": "בדוק את ה-API token"
+      },
+      "ipRestricted": {
+        "message": "הגישה חסומה מכתובת ה-IP שלך. פנה לאדמין של החשבון.",
+        "actionRequired": "פנה לאדמין של החשבון"
+      },
+      "missingPermissions": {
+        "message": "לאפליקציה חסרות הרשאות OAuth נדרשות. פנה למפתח האפליקציה.",
+        "actionRequired": "יש לעדכן את הרשאות האפליקציה"
+      },
+      "jsonParse": {
+        "message": "שגיאה בפורמט הנתונים שנשלחו. אנא נסה שוב.",
+        "actionRequired": "בדוק את הנתונים שהוזנו"
+      },
+      "invalidUser": {
+        "message": "המשתמש לא נמצא או שאינו משויך ללוח.",
+        "actionRequired": "בדוק את הגדרות המשתמש"
+      },
+      "itemNameTooLong": {
+        "message": "שם הפריט ארוך מדי (מקסימום 255 תווים).",
+        "actionRequired": "קצר את שם הפריט"
+      },
+      "itemsLimit": {
+        "message": "הלוח הגיע למגבלת 10,000 פריטים. יש למחוק או לארכב פריטים ישנים.",
+        "actionRequired": "מחק או ארכב פריטים ישנים מהלוח"
+      },
+      "fieldLimit": {
+        "message": "חרגה ממגבלת שדות. אנא המתן מספר שניות ונסה שנית.",
+        "actionRequired": "המתן מספר שניות ונסה שוב"
+      },
+      "queryComplexity": {
+        "message": "השאילתה מורכבת מדי. אנא נסה שוב בעוד כמה רגעים.",
+        "actionRequired": "נסה שוב בעוד כמה רגעים"
+      },
+      "dailyLimit": {
+        "message": "חרגת ממגבלת הבקשות היומית. נסה שוב מחר.",
+        "actionRequired": "המתן עד מחר או שדרג את התוכנית"
+      },
+      "resourceLocked": {
+        "message": "הלוח נעול כרגע עקב עדכון מקביל. נסה שוב בעוד רגע.",
+        "actionRequired": "נסה שוב בעוד כמה שניות"
+      },
+      "unknown": {
+        "message": "אירעה שגיאה לא צפויה. אנא נסה שוב."
+      }
+    }
+  },
+  "errorBoundary": {
+    "title": "אירעה שגיאה",
+    "message": "אנא רענן את הדף או פנה לתמיכה.",
+    "detailsSummary": "פרטי שגיאה",
+    "details": "פרטים",
+    "refresh": "רענן את הדף",
+    "chunkTitle": "טעינת רכיב נכשלה",
+    "chunkMessage": "ייתכן שיצאה גרסה חדשה או שאין חיבור לרשת. רענן את הדף כדי להמשיך."
+  }
+}

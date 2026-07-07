@@ -1,0 +1,134 @@
+.container {
+    position: relative;
+    width: 100%;
+}
+
+.trigger {
+    width: 100%;
+    background-color: var(--color-bg-primary);
+    border: 1px solid var(--color-border-medium);
+    border-radius: var(--radius-xs);
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all var(--transition-base);
+    box-sizing: border-box;
+    position: relative;
+}
+
+.trigger:hover {
+    border-color: var(--color-primary);
+}
+
+.trigger:focus-within {
+    border-color: var(--color-primary);
+    outline: none;
+}
+
+.trigger:disabled,
+.trigger.disabled {
+    background-color: var(--color-bg-select);
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: var(--spacing-sm) 2px;
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    text-align: center;
+    outline: none;
+    min-width: 0;
+    font-family: inherit;
+}
+
+.input::placeholder {
+    color: var(--color-text-disabled);
+}
+
+.input:disabled {
+    cursor: not-allowed;
+}
+
+.triggerIcon {
+    color: var(--color-text-secondary);
+    font-size: 10px;
+    margin-right: 2px;
+    padding: var(--spacing-sm) 2px;
+    cursor: pointer;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.triggerIcon:hover {
+    color: var(--color-primary);
+}
+
+.trigger.disabled .triggerIcon {
+    cursor: not-allowed;
+}
+
+.dropdown {
+    position: fixed;
+    z-index: 10020;
+    background-color: var(--color-bg-primary);
+    border: 1px solid var(--color-border-medium);
+    border-radius: var(--radius-xs);
+    box-shadow: var(--shadow-hover);
+    max-height: 240px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 100px;
+    width: 100px;
+}
+
+.timesList {
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
+    padding: var(--spacing-sm);
+    min-width: 0;
+}
+
+.timeItem {
+    padding: 10px var(--spacing-md);
+    font-size: 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+    background-color: transparent;
+    color: var(--color-text);
+    font-weight: normal;
+    white-space: nowrap;
+    text-align: center;
+    min-width: 60px;
+}
+
+.timeItem:hover {
+    background-color: var(--color-bg-select);
+    color: var(--color-text);
+}
+
+.timeItem.selected {
+    background-color: var(--color-info-soft);
+    color: var(--color-primary);
+    font-weight: var(--font-weight-medium);
+}
+
+.timeItem.selected:hover {
+    background-color: var(--color-info-soft);
+    color: var(--color-primary);
+}
+
+.emptyState {
+    padding: var(--spacing-lg);
+    text-align: center;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+}

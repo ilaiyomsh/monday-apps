@@ -1,0 +1,1182 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: calc(var(--z-modal) + 5);
+  backdrop-filter: blur(2px);
+  overflow-y: auto; /* מאפשר גלילה של כל ה-overlay אם המסך קטן מדי */
+  padding: var(--spacing-xl) 0;
+}
+
+.modal {
+  background-color: var(--color-bg-primary);
+  border-radius: var(--radius-modal);
+  width: 90%;
+  max-width: 750px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  transition: max-height var(--transition-slow), max-width var(--transition-slow);
+  overflow: hidden;
+  position: relative; /* הוספת position יחסי למודאל */
+}
+
+.modalVisible {
+  overflow: visible !important;
+  max-height: 80vh !important; /* צמצום קל של גובה המודאל כדי להשאיר מקום ללוח השנה שצף */
+}
+
+.modalWide {
+  max-width: 1500px;
+  height: 80vh;
+  max-height: 80vh;
+}
+
+.header {
+  padding: var(--spacing-xl);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-modal) var(--radius-modal) 0 0;
+  flex-shrink: 0; /* מונע התכווצות של ה-header */
+}
+
+.header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-xs);
+}
+
+.closeButton:hover {
+  background-color: var(--color-border);
+}
+
+.content {
+  padding: var(--spacing-2xl);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.contentVisible {
+  overflow: visible !important;
+}
+
+/* תוכן במצב form - מאפשר גלילה */
+.contentForm {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 0; /* חשוב: flex-basis: 0 מאלץ אותו להתחיל מגובה 0 */
+}
+
+/* --- תפריט ראשי --- */
+.menuContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.menuTopRow {
+  display: flex;
+  flex-direction: row;
+  gap: var(--spacing-md);
+}
+
+.menuTopRow .menuButton {
+  flex: 1;
+}
+
+.menuButton {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: var(--spacing-xl);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-input);
+  background: var(--color-bg-primary);
+  cursor: pointer;
+  transition: background-color var(--transition-base), border-color var(--transition-base), transform var(--transition-base), box-shadow var(--transition-base);
+  font-size: 1.1rem;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  position: relative;
+  overflow: hidden;
+}
+
+.menuButton:hover {
+  background-color: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.menuButton.selected {
+  border-right: 6px solid;
+  background-color: var(--color-primary-soft);
+}
+
+.btnVacation:hover { border-right: 6px solid var(--color-event-vacation); }
+.btnSick:hover { border-right: 6px solid var(--color-event-sick); }
+.btnReserves:hover { border-right: 6px solid var(--color-event-reserves); }
+
+.btnAllDay:hover { border-right: 6px solid var(--color-event-reserves); }
+
+.colorDot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.colorDotLarge {
+  width: var(--spacing-xl);
+  height: var(--spacing-xl);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.btnMultiple {
+  background-color: var(--color-bg-tertiary);
+  border: 1px dashed var(--color-text-secondary);
+}
+.btnMultiple:hover {
+  background-color: var(--color-bg-primary);
+  border-style: solid;
+  border-right: 6px solid var(--color-event-multiple);
+}
+
+/* הודעה במקום כפתור "דיווחים מרובים" כשהתאריך עתידי */
+.futureNotice {
+  padding: var(--spacing-md) var(--spacing-lg);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-tertiary);
+  border: 1px dashed var(--color-border-dashed);
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+
+/* דיווח היעדרות במצב dayoff (W4.4, D5) — כפתור שפותח את רכיב Day-off בטאב חדש */
+.btnDayoff:hover {
+  border-right: 6px solid var(--color-event-vacation);
+}
+
+.btnDayoff:disabled {
+  cursor: default;
+  background-color: var(--color-bg-tertiary);
+  opacity: 0.7;
+}
+
+.btnDayoff:disabled:hover {
+  border: 1px solid var(--color-border-medium);
+  transform: none;
+  box-shadow: none;
+  background-color: var(--color-bg-tertiary);
+}
+
+/* הסבר מינימלי בתוך הכפתור המושבת — לא מוגדר קישור לאפליקציית ההיעדרות */
+.dayoffNoUrl {
+  margin-inline-start: auto;
+  font-size: 12px;
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+.icon {
+  margin-left: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: rgba(0,0,0,0.05);
+}
+
+/* --- תצוגה מפוצלת --- */
+.splitView {
+  display: flex;
+  gap: var(--spacing-xl);
+  min-height: 0; /* מאפשר ל-flex children להתכווץ */
+  flex: 1 1 0; /* חשוב: flex-basis: 0 מאלץ אותו להתחיל מגובה 0 ולגדול */
+  overflow: hidden;
+}
+
+/* ב-RTL: dir=rtl + row → sidebar נופל ויזואלית משמאל (טבעי).
+   ב-LTR: row היה שם sidebar בצד ימין — הופכים ל-row-reverse כדי
+   לשמור את ה-sidebar (עמודת הפרויקטים) בצד שמאל בשתי השפות. */
+[dir="ltr"] .splitView {
+  flex-direction: row-reverse;
+}
+
+.sidebar {
+  width: 25%;
+  border-left: 1px solid var(--color-border);
+  padding-left: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg-faint);
+  border-radius: var(--radius-input);
+  min-height: 0; /* מאפשר ל-flex child להתכווץ */
+  overflow: hidden;
+  padding-top: var(--spacing-lg); /* הוספת ריווח למעלה מאחר והכותרת הוסרה */
+  gap: var(--spacing-md); /* רווח אחיד בין האלמנטים בסיידבר */
+}
+
+.searchBox {
+  width: 90%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-xs);
+  font-size: 0.9rem;
+}
+
+.searchBox:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.projectList {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  padding-right: 2px;
+}
+
+.projectItem {
+  padding: 10px var(--spacing-md);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: 0.2s;
+  text-align: right;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.projectItem:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.projectSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  font-size: 11px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+  padding: var(--spacing-sm) var(--spacing-xs) var(--spacing-xs);
+  letter-spacing: 0.3px;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  background: transparent;
+  cursor: pointer;
+  text-align: right;
+  margin-top: var(--spacing-xs);
+  transition: color var(--transition-fast);
+}
+
+.projectSectionHeader:hover {
+  color: var(--color-text);
+}
+
+.projectSectionHeader:first-child {
+  margin-top: 0;
+}
+
+.sectionChevron {
+  transition: transform var(--transition-base);
+  flex-shrink: 0;
+  transform: rotate(-90deg);
+}
+
+.sectionChevronOpen {
+  transform: rotate(0deg);
+}
+
+.mainForm {
+  flex: 1 1 0; /* חשוב: flex-basis: 0 מאלץ אותו להתחיל מגובה 0 */
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: var(--spacing-xs);
+  padding-bottom: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-width: 0;
+  min-height: 0; /* מאפשר ל-flex child להתכווץ ולהציג גלילה */
+}
+
+.reportRow {
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  padding: var(--spacing-lg) var(--spacing-xl);
+  border-radius: var(--radius-input);
+  position: relative;
+  transition: box-shadow var(--transition-base), border-color var(--transition-base);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  box-shadow: var(--shadow-xs);
+  overflow: visible;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.reportRow:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: var(--color-border-medium);
+}
+
+.rowHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.rowMainContent {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-lg);
+  width: 100%;
+  flex-wrap: nowrap;
+}
+
+.selectorsGroup {
+  flex: 4 1 0;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.projectName {
+  font-size: 1.05rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Times Group - All Editable */
+.timesGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-shrink: 0;
+}
+
+.timeGridContainer {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 40px 40px;
+    gap: var(--spacing-sm);
+    flex: 3 1 0;
+    min-width: 140px;
+    height: 88px;
+}
+
+.timeFieldWrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+    min-width: 0;
+    overflow: visible;
+    height: 40px;
+    position: relative;
+}
+
+.timeFieldWrapper .timeLabelSmall {
+    position: absolute;
+    top: -18px;
+    right: 0;
+    left: 0;
+    text-align: center;
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+}
+
+/* Ensure labels are small and tight */
+.timeLabelSmall {
+    font-size: 11px;
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+    margin-bottom: 2px;
+}
+
+.timeSeparatorInline {
+  color: var(--color-border-strong);
+  font-weight: 300;
+  font-size: 1.2rem;
+  margin-top: 18px; /* Alignment with inputs */
+}
+
+/* Visual Separator */
+.visualSeparator {
+  width: 1px;
+  height: 88px;
+  background-color: var(--color-border);
+  margin: 0 var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+/* Duration */
+.durationWrapper {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+    height: 40px;
+}
+
+.durationControl {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid var(--color-border-medium);
+    border-radius: var(--radius-xs);
+    overflow: hidden;
+    background-color: var(--color-bg-primary);
+    transition: border-color var(--transition-base);
+    height: 40px;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.durationInputInline {
+  font-size: var(--font-size-md);
+  color: var(--color-text-dark-strong);
+  letter-spacing: 0.05em;
+  width: 60px;
+  text-align: center;
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  cursor: text;
+  transition: background-color var(--transition-base);
+}
+
+.durationInputInline:hover:not(:disabled) {
+  background-color: var(--color-bg-neutral);
+  border-radius: var(--radius-xs);
+}
+
+.durationInputInline:focus:not(:disabled) {
+  outline: none;
+  background-color: var(--color-bg-neutral);
+  border-radius: var(--radius-xs);
+}
+
+.durationInputInline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Notes */
+.notesWrapper {
+  flex: 3 1 0;
+  min-width: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 88px; /* 2 rows × 40px + 8px gap */
+}
+
+.notesWrapper .timeLabelSmall {
+    display: none;
+}
+
+.notesInput {
+  width: 100%;
+  min-width: 0;
+  background-color: var(--color-bg-faint);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  padding: var(--spacing-sm) 10px;
+  transition: border-color var(--transition-base), background-color var(--transition-base), box-shadow var(--transition-base);
+  height: 88px;
+  box-sizing: border-box;
+  text-align: start; /* RTL → ימין, LTR → שמאל. אוטומטי לפי dir. */
+  resize: none;
+  font-family: inherit;
+}
+
+.notesInput:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-bg-primary);
+}
+
+.notesInput:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  background-color: var(--color-bg-primary);
+  box-shadow: 0 0 0 2px rgba(0, 115, 234, 0.1);
+  text-overflow: clip; /* ביטול שלוש נקודות בזמן עריכה כדי לראות את כל הטקסט */
+}
+
+/* Delete Button — מתהפך עם dir: ב-RTL בצד שמאל של הכרטיסיה (הצד הרחוק
+   מכותרת הפרויקט שמופיעה מימין). ב-LTR בצד ימין (הצד הרחוק מהכותרת
+   שמופיעה משמאל). inset-inline-end עושה את זה אוטומטית. */
+.deleteButtonTop {
+  position: absolute;
+  top: var(--spacing-sm);
+  inset-inline-end: var(--spacing-sm);
+  color: var(--color-text-disabled);
+  padding: var(--spacing-xs);
+  border-radius: var(--radius-xs);
+  border: none;
+  background: none;
+  cursor: pointer;
+  transition: color var(--transition-base), background-color var(--transition-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  opacity: 0.6;
+}
+
+.reportRow:hover .deleteButtonTop {
+  opacity: 1;
+}
+
+.deleteButtonTop:hover {
+  color: var(--color-alert);
+  background-color: var(--color-danger-soft);
+}
+
+.input, .select {
+  padding: var(--spacing-sm);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-xs);
+  width: 100%;
+  font-size: 0.9rem;
+  transition: border-color var(--transition-base);
+  background-color: var(--color-bg-primary);
+}
+
+.input:focus, .select:focus {
+  border-color: var(--color-primary);
+  outline: none;
+}
+
+.footer {
+  padding: var(--spacing-xl);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-shrink: 0; /* מונע התכווצות של ה-footer */
+  background-color: var(--color-bg-secondary);
+  border-radius: 0 0 var(--radius-modal) var(--radius-modal);
+}
+
+.footer .deleteBtn {
+  margin-right: auto;
+}
+
+.lockMessage {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  margin-right: auto;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--color-bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.lockBanner {
+  background: var(--color-warning-bg);
+  color: var(--color-warning-text);
+  padding: 10px var(--spacing-xl);
+  font-size: 14px;
+  text-align: center;
+  border-bottom: 1px solid var(--color-warning);
+}
+
+.totalHours {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-sm);
+  margin-right: auto;
+  margin-left: var(--spacing-xl);
+}
+
+.totalHoursLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+  margin-bottom: 2px;
+}
+
+.totalHoursValue {
+  font-size: 1.875rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+.button {
+  padding: var(--spacing-sm) var(--spacing-2xl);
+  border-radius: var(--radius-button);
+  cursor: pointer;
+  font-size: var(--font-size-button);
+  font-weight: var(--font-weight-medium);
+  border: none;
+  transition: background-color var(--transition-base), color var(--transition-base);
+}
+
+.cancelBtn {
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border-medium);
+  color: var(--color-text);
+}
+
+.cancelBtn:hover {
+  background-color: var(--color-bg-button-gray);
+}
+
+.saveBtn {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.saveBtn:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.deleteBtn {
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-danger);
+  color: var(--color-danger);
+}
+
+.deleteBtn:hover {
+  background-color: var(--color-danger-bg);
+}
+
+.approveBtn {
+  background-color: var(--color-approval-green);
+  color: var(--color-text-inverse);
+  border: 1px solid var(--color-approval-green);
+}
+
+.approveBtn:hover {
+  background-color: var(--color-approval-green-hover);
+}
+
+.approveUnbillableBtn {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+  border: 1px solid var(--color-primary);
+}
+
+.approveUnbillableBtn:hover {
+  background-color: var(--color-primary-strong);
+}
+
+.rejectBtn {
+  background-color: var(--color-bg-primary);
+  color: var(--color-danger);
+  border: 1px solid var(--color-danger);
+}
+
+.rejectBtn:hover {
+  background-color: var(--color-danger-bg);
+}
+
+.emptyState {
+  text-align: center;
+  color: var(--color-text-secondary);
+  margin-top: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-lg);
+}
+
+/* --- בחירת מספר ימים --- */
+.daysSelectionContainer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg); /* צמצום מ-24px */
+  padding: 10px var(--spacing-xl); /* צמצום פאדינג */
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.daysSelectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  padding-bottom: var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.daysSelectionContent {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-lg);
+}
+
+.daysLabel {
+  font-size: var(--font-size-md);
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.daysSelect {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-input);
+  font-size: var(--font-size-md);
+  min-width: 150px;
+  cursor: pointer;
+  background-color: var(--color-bg-primary);
+  transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.daysSelect:hover {
+  border-color: var(--color-primary);
+}
+
+.daysSelect:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 115, 234, 0.1);
+}
+
+.daysSelectionPreview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--radius-input);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-body);
+}
+
+/* --- בחירת תאריך סיום --- */
+.dateRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+}
+
+.dateDisplay {
+  padding: var(--spacing-md) var(--spacing-lg);
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  font-size: var(--font-size-md);
+  min-width: 150px;
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.datePickerWrapper {
+  position: relative;
+}
+
+.datePickerButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-input);
+  font-size: var(--font-size-md);
+  min-width: 150px;
+  cursor: pointer;
+  background-color: var(--color-bg-primary);
+  transition: border-color var(--transition-base), background-color var(--transition-base), box-shadow var(--transition-base);
+  color: var(--color-text);
+}
+
+.datePickerButton:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-soft);
+}
+
+.datePickerButton:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 115, 234, 0.1);
+}
+
+.datePickerDropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-modal); /* Z-index גבוה מאוד כדי להיות מעל ה-footer */
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25); /* צל חזק יותר להדגשת הגובה */
+  border-radius: var(--radius-input);
+  animation: fadeIn 0.15s ease-out;
+  background: var(--color-bg-primary);
+}
+
+/* אם המסך נמוך מאוד, נפתח את לוח השנה כלפי מעלה */
+@media (max-height: 750px) {
+  .datePickerDropdown {
+    top: auto;
+    bottom: calc(100% + 8px);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Stage Buttons */
+.stageButtons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.stageButton {
+  padding: 6px var(--spacing-sm);
+  border: 1px solid var(--color-border-medium);
+  border-radius: var(--radius-sm);
+  background-color: var(--color-bg-primary);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 40px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.stageButton:hover {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-soft);
+}
+
+.stageButtonSelected {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.stageButtonSelected:hover {
+  background-color: var(--color-primary-strong);
+}
+
+.loadingSmall {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* Duration Control hover state */
+.durationControl:hover {
+  border-color: var(--color-primary);
+}
+
+.durationBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 100%;
+  background-color: var(--color-bg-tertiary);
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), color var(--transition-fast);
+  color: var(--color-text-secondary);
+}
+
+.durationBtn:hover {
+  background-color: var(--color-border);
+  color: var(--color-primary);
+}
+
+.durationBtn:active {
+  background-color: var(--color-border-medium);
+}
+
+.durationValue {
+  min-width: 50px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  padding: 0 var(--spacing-xs);
+}
+
+/* TimeSelect override for uniform 40px height */
+.timeFieldWrapper :global(.trigger) {
+  height: 40px;
+  box-sizing: border-box;
+}
+
+.timeFieldWrapper :global(.container) {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Inline Validation Errors */
+.formError {
+    text-align: center;
+    padding: var(--spacing-md) var(--spacing-lg);
+    background-color: var(--color-danger-bg);
+    border: 1px solid var(--color-danger);
+    border-radius: var(--radius-input);
+    color: var(--color-danger);
+    font-size: 0.9rem;
+    font-weight: var(--font-weight-medium);
+}
+
+.reportRowError {
+    border-color: var(--color-danger) !important;
+    background-color: var(--color-danger-bg) !important;
+}
+
+.rowErrorMessages {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    width: 100%;
+}
+
+.fieldError {
+    font-size: 0.8rem;
+    color: var(--color-danger);
+    font-weight: var(--font-weight-medium);
+}
+
+/* ===== Mobile Responsive ===== */
+@media (max-width: 768px) {
+  .overlay {
+    align-items: flex-end;
+    overscroll-behavior: contain;
+    padding: 0;
+  }
+
+  .modal {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: var(--radius-modal) var(--radius-modal) 0 0;
+    animation: slideUpMobile 0.3s ease-out;
+    will-change: transform;
+  }
+
+  .modalWide {
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+  }
+
+  @keyframes slideUpMobile {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
+  /* פס "אחיזה" עליון לסגירה בגרירה (סגנון bottom-sheet) */
+  .dragGrabber {
+    width: 36px;
+    height: 4px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 2px;
+    margin: var(--spacing-sm) auto 0;
+    flex-shrink: 0;
+    touch-action: none;
+    cursor: grab;
+  }
+
+  .header {
+    padding: var(--spacing-lg);
+    border-radius: var(--radius-modal) var(--radius-modal) 0 0;
+    touch-action: none;
+  }
+
+  .header h2 {
+    font-size: 1.1rem;
+  }
+
+  .closeButton {
+    min-width: var(--touch-target);
+    min-height: var(--touch-target);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .content {
+    padding: var(--spacing-lg);
+  }
+
+  /* Stack split view on mobile */
+  .splitView {
+    flex-direction: column;
+    gap: var(--spacing-md);
+  }
+
+  .sidebar {
+    width: 100%;
+    border-left: none;
+    border-bottom: 1px solid var(--color-border);
+    padding-left: 0;
+    padding: var(--spacing-md);
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .mainForm {
+    padding-right: 0;
+  }
+
+  /* Report rows - stack content */
+  .rowMainContent {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--spacing-md);
+  }
+
+  .timeGridContainer {
+    grid-template-columns: 1fr 1fr;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .notesWrapper {
+    height: auto;
+    min-height: 60px;
+  }
+
+  .notesInput {
+    height: 60px;
+  }
+
+  .visualSeparator {
+    display: none;
+  }
+
+  /* Menu buttons */
+  .menuTopRow {
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-sm);
+  }
+
+  .menuTopRow .menuButton {
+    flex: 0 1 auto;
+    width: 88%;
+    max-width: 320px;
+  }
+
+  .menuButton {
+    padding: 14px 18px;
+    font-size: var(--font-size-md);
+    gap: var(--spacing-md);
+  }
+
+  /* Footer */
+  .footer {
+    padding: var(--spacing-lg);
+    padding-bottom: calc(var(--spacing-lg) + env(safe-area-inset-bottom, 0px));
+    border-radius: 0;
+  }
+
+  .button {
+    min-height: var(--touch-target);
+    padding: 10px var(--spacing-xl);
+  }
+
+  /* Date picker */
+  .datePickerDropdown {
+    left: auto;
+    right: 0;
+    transform: none;
+  }
+
+  .daysSelectionContainer {
+    padding: 10px;
+    max-width: 100%;
+  }
+
+  /* Touch-friendly duration controls */
+  .durationBtn {
+    min-width: 40px;
+  }
+
+  .projectItem {
+    min-height: var(--touch-target);
+  }
+
+  .searchBox {
+    width: 100%;
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+  .modal {
+    animation: none;
+  }
+}

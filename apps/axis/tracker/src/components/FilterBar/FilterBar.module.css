@@ -1,0 +1,441 @@
+/* SplitFilter Container */
+.filterContainer {
+    position: relative;
+}
+/* --- Trigger Button Container --- */
+.trigger {
+    /* Layout & Alignment */
+    display: flex !important;    /* חובה כדי למנוע דריסה */
+    flex-direction: row;         /* מסדר את האייקון והטקסט אחד ליד השני */
+    align-items: center;
+    justify-content: center;
+    gap: var(--spacing-sm);      /* הוקטן מ-12 ל-8 כדי להתאים לכפתורים שליד */
+
+    /* Box Model */
+    height: 36px;                /* גובה זהה לכפתור "שבוע עבודה" */
+    padding: 0 var(--spacing-lg);/* ריפוד פנימי */
+    min-width: fit-content;      /* מונע מהכפתור להימעך */
+
+    /* Shape & Border */
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-divider);
+    border-radius: 50px !important; /* !important מבטיח שזה יהיה אליפטי ולא מרובע */
+
+    /* Typography */
+    font-size: 14px;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text);
+    white-space: nowrap;         /* מונע שבירת שורה של הטקסט */
+
+    /* Interaction */
+    cursor: pointer;
+    transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base);
+}
+
+/* --- States (Hover, Active, Open) --- */
+
+.trigger:hover {
+    background-color: var(--color-bg-tertiary);
+    border-color: var(--color-border-strong-alt);
+}
+
+/* Active State (כשהפילטר פעיל) */
+.triggerActive {
+    background-color: var(--color-primary-light);
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.triggerActive:hover {
+    background-color: var(--color-primary-lighter);
+    border-color: var(--color-primary);
+}
+
+/* Open State (כשהתפריט פתוח) */
+.triggerOpen {
+    border-color: var(--color-primary); /* משאיר רק מסגרת כחולה כשהתפריט נפתח */
+}
+
+/* --- Inner Elements --- */
+
+/* Text Wrapper */
+.triggerText {
+    line-height: normal; /* תיקון כדי שאותיות לא ייחתכו */
+    display: block;      /* או flex, תלוי בקונטקסט */
+}
+
+/* Icon Wrapper */
+.filterIcon {
+    display: flex;       /* מבטיח שה-SVG ייושר לאמצע */
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;      /* מונע מהאייקון להתכווץ */
+    font-size: var(--icon-sm); /* גודל אייקון אופטימלי */
+    color: var(--color-text-secondary); /* אפור ניטרלי */
+    transition: color var(--transition-base);
+}
+
+/* שינוי צבע האייקון כשהכפתור פעיל */
+.triggerActive .filterIcon {
+    color: var(--color-primary);
+}
+/* Badge (Total Count) */
+.badge {
+    background-color: var(--color-secondary);
+    color: var(--color-text-inverse);
+    font-size: 11px;
+    font-weight: var(--font-weight-semibold);
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+    margin: 0 -4px; /* Bring badge closer to text */
+}
+
+/* Chevron Icon */
+.chevron {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-secondary);
+    transition: transform var(--transition-base);
+}
+
+.triggerActive .chevron {
+    color: var(--color-primary);
+}
+
+.chevronOpen {
+    transform: rotate(180deg);
+}
+
+/* Dropdown */
+.dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    width: 480px;
+    background-color: var(--color-bg-primary);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-input);
+    box-shadow: var(--shadow-hover);
+    z-index: var(--z-popover);
+    animation: dropdownSlide 0.15s ease;
+    overflow: hidden;
+}
+
+@keyframes dropdownSlide {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Toggle Row */
+.toggleRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px var(--spacing-md);
+    border-bottom: 1px solid var(--color-border-light);
+    background-color: var(--color-bg-subtle);
+}
+
+.toggleLabel {
+    font-size: 14px;
+    font-weight: var(--font-weight-medium);
+    color: var(--color-text-dark);
+}
+
+/* Toggle Switch */
+.toggleSwitch {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.toggleSwitch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggleSlider {
+    position: absolute;
+    inset: 0;
+    background-color: var(--color-disabled-icon);
+    border-radius: 20px;
+    transition: background-color var(--transition-base);
+}
+
+.toggleSlider::before {
+    content: '';
+    position: absolute;
+    width: var(--spacing-lg);
+    height: var(--spacing-lg);
+    left: 2px;
+    bottom: 2px;
+    background-color: var(--color-bg-primary);
+    border-radius: 50%;
+    transition: transform var(--transition-base);
+}
+
+.toggleSwitch input:checked + .toggleSlider {
+    background-color: var(--color-primary);
+}
+
+.toggleSwitch input:checked + .toggleSlider::before {
+    transform: translateX(16px);
+}
+
+/* Two Columns Layout */
+.columns {
+    display: flex;
+}
+
+/* Vertical Divider */
+.divider {
+    width: 1px;
+    background-color: var(--color-border-light);
+    flex-shrink: 0;
+}
+
+/* Single Column */
+.column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* Column Header */
+.columnHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--spacing-md);
+    font-size: 14px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-dark);
+    border-bottom: 1px solid var(--color-bg-neutral);
+    background-color: var(--color-bg-subtle);
+    position: sticky;
+    top: 0;
+}
+
+/* Column Badge (Selection Count) */
+.columnBadge {
+    background-color: var(--color-info-lighter);
+    color: var(--color-secondary-hover);
+    font-size: 11px;
+    font-weight: var(--font-weight-semibold);
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* Search Container */
+.searchContainer {
+    padding: var(--spacing-sm);
+    border-bottom: 1px solid var(--color-bg-neutral);
+    position: relative;
+}
+
+.searchIcon {
+    position: absolute;
+    right: var(--spacing-lg);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-disabled);
+    pointer-events: none;
+}
+
+.searchInput {
+    width: 100%;
+    padding: var(--spacing-sm) 10px;
+    padding-right: 32px;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    outline: none;
+    transition: border-color var(--transition-base);
+}
+
+.searchInput:focus {
+    border-color: var(--color-accent);
+}
+
+.searchInput::placeholder {
+    color: var(--color-text-disabled);
+}
+
+/* Options List */
+.optionsList {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: var(--spacing-xs);
+}
+
+/* Option Item */
+.option {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+    font-size: 13px;
+    color: var(--color-text-dark);
+}
+
+.option:hover {
+    background-color: var(--color-bg-neutral);
+}
+
+.optionSelected {
+    background-color: var(--color-accent-soft);
+}
+
+.optionSelected:hover {
+    background-color: var(--color-info-lighter);
+}
+
+/* Checkbox */
+.checkbox {
+    width: var(--spacing-lg);
+    height: var(--spacing-lg);
+    accent-color: var(--color-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* Option Name */
+.optionName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* No Results */
+.noResults {
+    padding: var(--spacing-lg);
+    text-align: center;
+    color: var(--color-text-tertiary);
+    font-size: 13px;
+}
+
+/* Loading State */
+.loading {
+    padding: var(--spacing-lg);
+    text-align: center;
+    color: var(--color-text-tertiary);
+    font-size: 13px;
+}
+
+/* Footer */
+.footer {
+    padding: var(--spacing-md);
+    border-top: 1px solid var(--color-bg-neutral);
+    background-color: var(--color-bg-subtle);
+}
+
+/* Clear Button */
+.clearButton {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background-color: var(--color-danger-soft);
+    border: 1px solid var(--color-danger-border);
+    border-radius: var(--radius-sm);
+    color: var(--color-danger-text);
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: background-color var(--transition-base), border-color var(--transition-base);
+}
+
+.clearButton:hover {
+    background-color: var(--color-danger-soft-hover);
+    border-color: var(--color-danger-border-hover);
+}
+
+/* Scrollbar Styling */
+.optionsList::-webkit-scrollbar {
+    width: 6px;
+}
+
+.optionsList::-webkit-scrollbar-track {
+    background: var(--color-bg-neutral);
+    border-radius: 3px;
+}
+
+.optionsList::-webkit-scrollbar-thumb {
+    background: var(--color-border-strong);
+    border-radius: 3px;
+}
+
+.optionsList::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-disabled);
+}
+
+/* Responsive - Smaller Screens */
+@media (max-width: 768px) {
+    .dropdown {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        max-width: 100%;
+        border-radius: var(--radius-modal) var(--radius-modal) 0 0;
+        max-height: 70vh;
+        overflow-y: auto;
+        animation: slideUpFilter 0.3s ease-out;
+        z-index: calc(var(--z-popover) + 1);
+    }
+
+    @keyframes slideUpFilter {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+
+    .columns {
+        flex-direction: column;
+    }
+
+    .divider {
+        width: 100%;
+        height: 1px;
+    }
+
+    .optionsList {
+        max-height: 200px;
+    }
+
+    .option {
+        min-height: var(--touch-target);
+        padding: var(--spacing-md);
+    }
+
+    .searchInput {
+        min-height: var(--touch-target);
+        font-size: var(--font-size-md);
+    }
+
+    .clearButton {
+        min-height: var(--touch-target);
+    }
+
+    .trigger {
+        height: 36px;
+    }
+}

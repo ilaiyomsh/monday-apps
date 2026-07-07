@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Initialization Flow - Calendar 2.0</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            direction: ltr;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border-bottom: 1px solid #334155;
+            padding: 24px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header h1 {
+            font-size: 22px;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .header .subtitle {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 8px 20px;
+            border-radius: 8px;
+            border: 1px solid #475569;
+            background: #1e293b;
+            color: #e2e8f0;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .btn:hover { background: #334155; border-color: #64748b; }
+
+        .btn.primary {
+            background: #6366f1;
+            border-color: #6366f1;
+            color: white;
+        }
+
+        .btn.primary:hover { background: #4f46e5; }
+
+        .btn.active { background: #6366f1; border-color: #6366f1; color: white; }
+
+        .speed-label {
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 32px 40px;
+        }
+
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding-right: 0;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 28px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #334155;
+        }
+
+        .step {
+            position: relative;
+            margin-bottom: 12px;
+            padding-left: 68px;
+            opacity: 0.3;
+            transition: opacity 0.5s, transform 0.5s;
+            transform: translateY(8px);
+        }
+
+        .step.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .step.completed {
+            opacity: 0.7;
+            transform: translateY(0);
+        }
+
+        .step-dot {
+            position: absolute;
+            left: 20px;
+            top: 16px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid #475569;
+            background: #1e293b;
+            z-index: 1;
+            transition: all 0.3s;
+        }
+
+        .step.active .step-dot {
+            border-color: #6366f1;
+            background: #6366f1;
+            box-shadow: 0 0 12px rgba(99, 102, 241, 0.5);
+        }
+
+        .step.completed .step-dot {
+            border-color: #22c55e;
+            background: #22c55e;
+        }
+
+        .step.completed .step-dot::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10px;
+            color: white;
+            font-weight: bold;
+        }
+
+        .step-card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            overflow: hidden;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+
+        .step.active .step-card {
+            border-color: #6366f1;
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+        }
+
+        .step-header {
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .step-number {
+            font-size: 11px;
+            font-weight: 700;
+            color: #6366f1;
+            background: rgba(99, 102, 241, 0.15);
+            padding: 3px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .step-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .step-file {
+            margin-left: auto;
+            font-size: 11px;
+            color: #64748b;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            background: rgba(100, 116, 139, 0.15);
+            padding: 3px 8px;
+            border-radius: 4px;
+        }
+
+        .step-time {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-left: 8px;
+            white-space: nowrap;
+        }
+
+        .step-body {
+            padding: 0 20px 16px;
+        }
+
+        .step-desc {
+            font-size: 13px;
+            color: #94a3b8;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        /* Sub-steps */
+        .substeps {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .substep {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-size: 12px;
+            color: #64748b;
+            padding: 6px 10px;
+            background: rgba(15, 23, 42, 0.5);
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+
+        .substep.active {
+            color: #e2e8f0;
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .substep.completed {
+            color: #94a3b8;
+        }
+
+        .substep-icon {
+            flex-shrink: 0;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+        }
+
+        .substep.active .substep-icon { color: #6366f1; }
+        .substep.completed .substep-icon { color: #22c55e; }
+
+        /* Parallel container */
+        .parallel-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .parallel-branch {
+            flex: 1;
+            position: relative;
+        }
+
+        .parallel-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: #f59e0b;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .parallel-card {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .parallel-card.active {
+            border-color: #6366f1;
+        }
+
+        .parallel-card h4 {
+            font-size: 13px;
+            font-weight: 600;
+            color: #e2e8f0;
+            margin-bottom: 6px;
+        }
+
+        .parallel-card p {
+            font-size: 12px;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+
+        /* Retry animation */
+        .retry-loop {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+            border-radius: 8px;
+            margin-top: 8px;
+        }
+
+        .retry-loop .retry-icon {
+            animation: spin 1s linear infinite;
+            color: #f59e0b;
+            font-size: 14px;
+        }
+
+        .retry-loop span {
+            font-size: 12px;
+            color: #f59e0b;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse { animation: pulse 1.5s ease-in-out infinite; }
+
+        /* User screen preview */
+        .screen-preview {
+            margin-top: 12px;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            overflow: hidden;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .screen-blank {
+            background: #ffffff;
+            width: 100%;
+            height: 100%;
+        }
+
+        .screen-loader {
+            background: #ffffff;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .screen-loader .stopwatch {
+            width: 36px;
+            height: 36px;
+            border: 2px solid #6366f1;
+            border-radius: 50%;
+            position: relative;
+            animation: spin 2s linear infinite;
+        }
+
+        .screen-loader .stopwatch::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 2px;
+            height: 10px;
+            background: #181B34;
+            transform-origin: bottom center;
+            transform: translate(-50%, -100%);
+        }
+
+        .screen-loader span {
+            font-size: 11px;
+            color: #475569;
+            font-family: -apple-system, sans-serif;
+        }
+
+        .screen-calendar {
+            background: #ffffff;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .screen-calendar .cal-toolbar {
+            height: 28px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            padding: 0 8px;
+            gap: 6px;
+        }
+
+        .screen-calendar .cal-btn {
+            width: 40px;
+            height: 16px;
+            background: #e2e8f0;
+            border-radius: 3px;
+        }
+
+        .screen-calendar .cal-grid {
+            flex: 1;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 1px;
+            background: #e2e8f0;
+            padding: 1px;
+        }
+
+        .screen-calendar .cal-day {
+            background: white;
+            position: relative;
+        }
+
+        .screen-calendar .cal-event {
+            position: absolute;
+            left: 2px;
+            right: 2px;
+            height: 12px;
+            border-radius: 2px;
+            font-size: 6px;
+            color: white;
+            display: flex;
+            align-items: center;
+            padding: 0 2px;
+        }
+
+        .screen-label {
+            position: absolute;
+            bottom: 4px;
+            right: 8px;
+            font-size: 9px;
+            color: #94a3b8;
+            background: rgba(15, 23, 42, 0.7);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        /* Progress bar */
+        .progress-container {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: #0f172a;
+            padding: 12px 0;
+            border-bottom: 1px solid #1e293b;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: #1e293b;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #6366f1, #8b5cf6);
+            border-radius: 2px;
+            transition: width 0.5s ease;
+            width: 0%;
+        }
+
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        /* Connection line for parallel steps */
+        .parallel-connector {
+            position: relative;
+            margin: 4px 0 4px 68px;
+            padding: 8px 0;
+        }
+
+        .parallel-connector::before {
+            content: 'PARALLEL';
+            font-size: 9px;
+            letter-spacing: 2px;
+            color: #f59e0b;
+            font-weight: 700;
+            background: #0f172a;
+            padding: 2px 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .bug-fix-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            color: #22c55e;
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 8px;
+        }
+
+        .arrow-down {
+            text-align: center;
+            color: #475569;
+            font-size: 20px;
+            margin: -4px 0;
+            padding-left: 68px;
+        }
+
+        .step-counter {
+            font-size: 13px;
+            color: #94a3b8;
+            font-weight: 600;
+            min-width: 50px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div>
+        <h1>Calendar 2.0 — App Initialization Flow</h1>
+        <div class="subtitle">From user opening the app to calendar appearing</div>
+    </div>
+    <div class="controls">
+        <span class="speed-label">Auto:</span>
+        <button class="btn" onclick="setSpeed(0.5)" id="speed-slow">0.5x</button>
+        <button class="btn active" onclick="setSpeed(1)" id="speed-normal">1x</button>
+        <button class="btn" onclick="setSpeed(2)" id="speed-fast">2x</button>
+        <button class="btn primary" onclick="startAnimation()" id="play-btn">▶ Play</button>
+        <button class="btn" onclick="resetAnimation()">↺ Reset</button>
+        <span class="speed-label" style="margin-left: 12px; border-left: 1px solid #475569; padding-left: 12px;">Manual:</span>
+        <button class="btn" onclick="goToPrev()" id="prev-btn">◀ Prev</button>
+        <span class="step-counter" id="step-counter">0 / 9</span>
+        <button class="btn" onclick="goToNext()" id="next-btn">Next ▶</button>
+    </div>
+</div>
+
+<div class="container">
+    <div class="progress-container">
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-info">
+            <span id="progress-step">Ready</span>
+            <span id="progress-time">~0ms</span>
+        </div>
+    </div>
+
+    <div class="timeline" id="timeline">
+
+        <!-- Step 1: Browser Load -->
+        <div class="step" data-step="1">
+            <div class="step-dot"></div>
+            <div class="step-card">
+                <div class="step-header">
+                    <span class="step-number">STEP 1</span>
+                    <span class="step-title">Browser Loads Bundle</span>
+                    <span class="step-file">index.html → index.jsx</span>
+                    <span class="step-time">~0ms</span>
+                </div>
+                <div class="step-body">
+                    <div class="substeps">
+                        <div class="substep" data-sub="1-1">
+                            <span class="substep-icon">○</span>
+                            <span>index.html loads bundled JS (~915KB)</span>
+                        </div>
+                        <div class="substep" data-sub="1-2">
+                            <span class="substep-icon">○</span>
+                            <span>init.js → <code>window.global ||= window</code></span>
+                        </div>
+                        <div class="substep" data-sub="1-3">
+                            <span class="substep-icon">○</span>
+                            <span>setupGlobalErrorHandlers() — catches unhandled errors</span>
+                        </div>
+                        <div class="substep" data-sub="1-4">
+                            <span class="substep-icon">○</span>
+                            <span>createRoot().render(&lt;App /&gt;)</span>
+                        </div>
+                    </div>
+                    <div class="screen-preview">
+                        <div class="screen-blank"></div>
+                        <span class="screen-label">User sees: blank</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow-down">↓</div>
+
+        <!-- Step 2: App Component -->
+        <div class="step" data-step="2">
+            <div class="step-dot"></div>
+            <div class="step-card">
+                <div class="step-header">
+                    <span class="step-number">STEP 2</span>
+                    <span class="step-title">App Component Mounts</span>
+                    <span class="step-file">App.jsx</span>
+                    <span class="step-time">~5ms</span>
+                </div>
+                <div class="step-body">
+                    <div class="substeps">
+                        <div class="substep" data-sub="2-1">
+                            <span class="substep-icon">○</span>
+                            <span><code>const monday = mondaySdk()</code> — SDK object created</span>
+                        </div>
+                        <div class="substep" data-sub="2-2">
+                            <span class="substep-icon">○</span>
+                            <span>Renders provider tree: MondayProvider → SettingsProvider → AppContent</span>
+                        </div>
+                        <div class="substep" data-sub="2-3">
+                            <span class="substep-icon">○</span>
+                            <span>AppContent: <code>isLoading = true</code> → shows StopwatchLoader</span>
+                        </div>
+                    </div>
+                    <div class="screen-preview">
+                        <div class="screen-loader">
+                            <div class="stopwatch"></div>
+                            <span>...טוען הגדרות</span>
+                        </div>
+                        <span class="screen-label">User sees: loader</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow-down">↓</div>
+
+        <!-- Step 3: Parallel - Context + Settings Wait -->
+        <div class="step" data-step="3">
+            <div class="step-dot"></div>
+            <div class="step-card">
+                <div class="step-header">
+                    <span class="step-number">STEP 3</span>
+                    <span class="step-title">MondayProvider Loads Context</span>
+                    <span class="step-file">MondayContext.jsx</span>
+                    <span class="step-time">~100-300ms</span>
+                </div>
+                <div class="step-body">
+                    <div class="substeps">
+                        <div class="substep" data-sub="3-1">
+                            <span class="substep-icon">○</span>
+                            <span><code>monday.get('context')</code> — async call to parent frame</span>
+                        </div>
+                        <div class="substep" data-sub="3-2">
+                            <span class="substep-icon">○</span>
+                            <span>Returns: boardId, userId, theme, mode (mobile/desktop), etc.</span>
+                        </div>
+                        <div class="substep" data-sub="3-3">
+                            <span class="substep-icon">○</span>
+                            <span><code>setContext(res.data)</code> → triggers SettingsProvider effect</span>
+                        </div>
+                    </div>
+                    <p class="step-desc" style="margin-top: 8px;">
+                        Meanwhile, SettingsProvider is waiting: <code>if (!context) return</code> — won't load settings until context is ready.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow-down">↓</div>
+
+        <!-- Step 4: Settings Loading -->
+        <div class="step" data-step="4">
+            <div class="step-dot"></div>
+            <div class="step-card">
+                <div class="step-header">
+                    <span class="step-number">STEP 4</span>
+                    <span class="step-title">Settings Loading with Retry</span>
+                    <span class="step-file">SettingsContext.jsx</span>
+                    <span class="step-time">~0-1600ms</span>
+                    <span class="bug-fix-badge">✓ FIXED</span>
+                </div>
+                <div class="step-body">
+                    <p class="step-desc">
+                        Context is ready → <code>loadSettings()</code> fires. Calls <code>monday.storage.instance.getItem('customSettings')</code> with retry logic.
+                    </p>
+                    <div class="substeps">
+                        <div class="substep" data-sub="4-1">
+                            <span class="substep-icon">○</span>
+                            <span><strong>Attempt 1:</strong> getItem('customSettings')</span>
+                        </div>
+                        <div class="substep" data-sub="4-2">
+                            <span class="substep-icon">○</span>
+                            <span>Has value? → parse JSON, run migrations, setCustomSettings → <strong style="color:#22c55e">done</strong></span>
+                        </div>
+                        <div class="substep" data-sub="4-3">
+                            <span class="substep-icon">○</span>
+                            <span>Empty? → wait 400ms, retry (up to 4 attempts)</span>
+                        </div>
+                        <div class="substep" data-sub="4-4">
+                            <span class="substep-icon">○</span>
+                            <span>Error? → wait 400ms, retry (up to 4 attempts)</span>
+                        </div>
+                        <div class="substep" data-sub="4-5">
+                            <span class="substep-icon">○</span>
+                            <span>All 4 empty → truly new instance, use DEFAULT_SETTINGS</span>
+                        </div>
+                    </div>
+                    <div class="retry-loop" id="retry-indicator" style="display: none;">
+                        <span class="retry-icon">⟳</span>
+                        <span id="retry-text">Retry 1/4 — waiting 400ms...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow-down">↓</div>
+
+        <!-- Step 5: Migrations -->
+        <div class="step" data-step="5">
+            <div class="step-dot"></div>
+            <div class="step-card">
+                <div class="step-header">
+                    <span class="step-number">STEP 5</span>
+                    <span class="step-title">Settings Migration</span>
+                    <span class="step-file">SettingsContext.jsx:112-156</span>
+                    <span class="step-time">~1ms</span>
+                </div>
+                <div class="step-body">
+                    <div class="substeps">
+                        <div class="substep" data-sub="5-1">
+                            <span class="substep-icon">○</span>
+                            <span>Rename legacy keys: products → tasks</span>
+                        </div>
+                        <div class="substep" data-sub="5-2">
+                            <span class="substep-icon">○</span>
+                            <span>Auto-detect structureMode if missing</span>
+                        </div>
+                        <div class="substep" data-sub="5-3">
+                            <span class="substep-icon">○</span>
+                            <span>Migrate eventTypeMapping from text-based to index-based</span>
+                        </div>
+                        <div class="substep" data-sub="5-4">
+                            <span class="substep-icon">○</span>
+                            <span>Remove deprecated fields → merge with DEFAULT_SETTINGS</span>
+                        </div>
+                        <div class="substep" data-sub="5-5">
+                            <span class="substep-icon">○</span>
+                            <span><code>setIsLoading(false)</code> → AppContent unblocks</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow-down">↓</div>
+
+        <!-- Step 6: AppContent Renders -->
+        <div class="step" data-step="6">
+            <div class="step-dot"></div>
+            <div class="step-card">
+                <div class="step-header">
+                    <span class="step-number">STEP 6</span>
+                    <span class="step-title">AppContent Renders MondayCalendar</span>
+                    <span class="step-file">App.jsx → MondayCalendar.jsx</span>
+                    <span class="step-time">~10ms</span>
+                </div>
+                <div class="step-body">
+                    <p class="step-desc">
+                        <code>isLoading = false</code> → AppContent passes the loading gate and renders the full component tree.
+                    </p>
+                    <div class="substeps">
+                        <div class="substep" data-sub="6-1">
+                            <span class="substep-icon">○</span>
+                            <span>ErrorBoundary wraps everything</span>
+                        </div>
+                        <div class="substep" data-sub="6-2">
+                            <span class="substep-icon">○</span>
+                            <span>ToastContainer + ErrorDetailsModal mount (global)</span>
+                        </div>
+                        <div class="substep" data-sub="6-3">
+                            <span class="substep-icon">○</span>
+                            <span>MondayCalendar mounts → all hooks initialize</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow-down">↓</div>
+
+        <!-- Step 7: Hooks Initialize -->
+        <div class="step" data-step="7">
+            <div class="step-dot"></div>
+            <div class="step-card">
+                <div class="step-header">
+                    <span class="step-number">STEP 7</span>
+                    <span class="step-title">Hooks Initialize (Parallel)</span>
+                    <span class="step-file">MondayCalendar.jsx:87-270</span>
+                    <span class="step-time">~5ms</span>
+                </div>
+                <div class="step-body">
+                    <div class="parallel-connector"></div>
+                    <div class="parallel-group">
+                        <div class="parallel-branch">
+                            <div class="parallel-card" data-sub="7-1">
+                                <h4>Core State</h4>
+                                <p>effectiveBoardId computed<br>calendarFilter initialized<br>useEventModals, useToast, useMultiSelect</p>
+                            </div>
+                        </div>
+                        <div class="parallel-branch">
+                            <div class="parallel-card" data-sub="7-2">
+                                <h4>Data Hooks</h4>
+                                <p>useProjects → fetch projects<br>useFilterOptions → fetch reporters<br>useBoardOwner → check ownership</p>
+                            </div>
+                        </div>
+                        <div class="parallel-branch">
+                            <div class="parallel-card" data-sub="7-3">
+                                <h4>Feature Hooks</h4>
+                                <p>useIsraeliHolidays<br>useMonthlyHours<br>useCelebration, useApproval</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow-down">↓</div>
+
+        <!-- Step 8: Parallel validation + events + migration -->
+        <div class="step" data-step="8">
+            <div class="step-dot"></div>
+            <div class="step-card">
+                <div class="step-header">
+                    <span class="step-number">STEP 8</span>
+                    <span class="step-title">Validation + Events + Migration (Parallel)</span>
+                    <span class="step-file">MondayCalendar.jsx:340-495</span>
+                    <span class="step-time">~200-500ms</span>
+                </div>
+                <div class="step-body">
+                    <div class="parallel-connector"></div>
+                    <div class="parallel-group">
+                        <div class="parallel-branch">
+                            <div class="parallel-card" data-sub="8-1">
+                                <h4>Validate Settings <span class="bug-fix-badge">✓ FIXED</span></h4>
+                                <p>Guard: <code>settingsLoading?</code> → skip<br>
+                                validateSettings() checks columns exist on board<br>
+                                Invalid → show validation dialog<br>
+                                Valid → continue</p>
+                            </div>
+                        </div>
+                        <div class="parallel-branch">
+                            <div class="parallel-card" data-sub="8-2">
+                                <h4>Load Events</h4>
+                                <p>Guard: boardId + dateColumnId + filter.isInitialized<br>
+                                loadEvents(weekStart, weekEnd, filterRules)<br>
+                                GraphQL query with pagination</p>
+                            </div>
+                        </div>
+                        <div class="parallel-branch">
+                            <div class="parallel-card" data-sub="8-3">
+                                <h4>Auto-Migrate Mapping</h4>
+                                <p>If eventTypeMapping is null:<br>
+                                Fetch labels from status column<br>
+                                createLegacyMapping() → updateSettings()</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="arrow-down">↓</div>
+
+        <!-- Step 9: Calendar Renders -->
+        <div class="step" data-step="9">
+            <div class="step-dot"></div>
+            <div class="step-card">
+                <div class="step-header">
+                    <span class="step-number">STEP 9</span>
+                    <span class="step-title">Calendar Renders</span>
+                    <span class="step-file">MondayCalendar.jsx render</span>
+                    <span class="step-time">~50ms</span>
+                </div>
+                <div class="step-body">
+                    <div class="substeps">
+                        <div class="substep" data-sub="9-1">
+                            <span class="substep-icon">○</span>
+                            <span>StopwatchLoader visible while <code>eventsLoading = true</code></span>
+                        </div>
+                        <div class="substep" data-sub="9-2">
+                            <span class="substep-icon">○</span>
+                            <span>CalendarToolbar + FilterBar render</span>
+                        </div>
+                        <div class="substep" data-sub="9-3">
+                            <span class="substep-icon">○</span>
+                            <span>DnDCalendar renders work_week view (or 3-day on mobile)</span>
+                        </div>
+                        <div class="substep" data-sub="9-4">
+                            <span class="substep-icon">○</span>
+                            <span>Events loaded → StopwatchLoader fades out (400ms)</span>
+                        </div>
+                        <div class="substep" data-sub="9-5">
+                            <span class="substep-icon">○</span>
+                            <span>Calendar is fully interactive — drag, click, resize ready</span>
+                        </div>
+                    </div>
+                    <div class="screen-preview">
+                        <div class="screen-calendar">
+                            <div class="cal-toolbar">
+                                <div class="cal-btn" style="width:20px;background:#6366f1;border-radius:3px"></div>
+                                <div class="cal-btn"></div>
+                                <div class="cal-btn"></div>
+                                <div class="cal-btn" style="width:60px"></div>
+                                <div class="cal-btn" style="margin-left:auto;width:24px;background:#6366f1;border-radius:3px"></div>
+                            </div>
+                            <div class="cal-grid">
+                                <div class="cal-day">
+                                    <div class="cal-event" style="background:#6366f1;top:15px">Project A</div>
+                                    <div class="cal-event" style="background:#22c55e;top:35px">Project B</div>
+                                </div>
+                                <div class="cal-day">
+                                    <div class="cal-event" style="background:#f59e0b;top:20px">Meeting</div>
+                                </div>
+                                <div class="cal-day">
+                                    <div class="cal-event" style="background:#6366f1;top:10px;height:20px">Project A</div>
+                                </div>
+                                <div class="cal-day">
+                                    <div class="cal-event" style="background:#ef4444;top:25px">Review</div>
+                                    <div class="cal-event" style="background:#22c55e;top:45px">Deploy</div>
+                                </div>
+                                <div class="cal-day">
+                                    <div class="cal-event" style="background:#8b5cf6;top:15px">Planning</div>
+                                </div>
+                            </div>
+                        </div>
+                        <span class="screen-label">User sees: calendar</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script>
+    const STEPS = [
+        { step: 1, subs: ['1-1', '1-2', '1-3', '1-4'], duration: 800, label: 'Browser loading bundle', time: '0ms' },
+        { step: 2, subs: ['2-1', '2-2', '2-3'], duration: 600, label: 'App component mounting', time: '~5ms' },
+        { step: 3, subs: ['3-1', '3-2', '3-3'], duration: 1200, label: 'Loading Monday SDK context', time: '~100-300ms' },
+        { step: 4, subs: ['4-1', '4-2', '4-3', '4-4', '4-5'], duration: 1800, label: 'Loading settings from storage (with retry)', time: '~0-1600ms', showRetry: true },
+        { step: 5, subs: ['5-1', '5-2', '5-3', '5-4', '5-5'], duration: 800, label: 'Running settings migrations', time: '~1ms' },
+        { step: 6, subs: ['6-1', '6-2', '6-3'], duration: 700, label: 'AppContent renders MondayCalendar', time: '~10ms' },
+        { step: 7, subs: ['7-1', '7-2', '7-3'], duration: 900, label: 'Hooks initializing in parallel', time: '~5ms' },
+        { step: 8, subs: ['8-1', '8-2', '8-3'], duration: 1400, label: 'Validation + Events + Migration', time: '~200-500ms' },
+        { step: 9, subs: ['9-1', '9-2', '9-3', '9-4', '9-5'], duration: 1200, label: 'Calendar renders and becomes interactive', time: '~50ms' },
+    ];
+
+    let speed = 1;
+    let animating = false;
+    let animationAbort = null;
+    let currentStepIndex = -1; // -1 = not started
+
+    function setSpeed(s) {
+        speed = s;
+        document.querySelectorAll('.controls .btn:not(.primary)').forEach(b => b.classList.remove('active'));
+        document.getElementById(`speed-${s === 0.5 ? 'slow' : s === 1 ? 'normal' : 'fast'}`).classList.add('active');
+    }
+
+    function sleep(ms) {
+        return new Promise((resolve, reject) => {
+            const id = setTimeout(resolve, ms / speed);
+            if (animationAbort) {
+                animationAbort.signal.addEventListener('abort', () => { clearTimeout(id); reject('aborted'); });
+            }
+        });
+    }
+
+    function updateCounter() {
+        document.getElementById('step-counter').textContent = `${currentStepIndex + 1} / ${STEPS.length}`;
+        document.getElementById('prev-btn').disabled = currentStepIndex < 0;
+        document.getElementById('next-btn').disabled = currentStepIndex >= STEPS.length - 1;
+    }
+
+    function updateProgress(index, label, time) {
+        const pct = index < 0 ? 0 : ((index + 1) / STEPS.length) * 100;
+        document.getElementById('progress-fill').style.width = `${pct}%`;
+        document.getElementById('progress-step').textContent = label || 'Ready';
+        document.getElementById('progress-time').textContent = time || '~0ms';
+    }
+
+    // Clear all visual state for all steps
+    function clearAllSteps() {
+        document.querySelectorAll('.step').forEach(s => s.classList.remove('active', 'completed'));
+        document.querySelectorAll('.substep').forEach(s => {
+            s.classList.remove('active', 'completed');
+            const icon = s.querySelector('.substep-icon');
+            if (icon) icon.textContent = '○';
+        });
+        document.querySelectorAll('.parallel-card').forEach(s => s.classList.remove('active'));
+        document.getElementById('retry-indicator').style.display = 'none';
+    }
+
+    // Instantly render all steps up to and including targetIndex
+    function renderUpTo(targetIndex) {
+        clearAllSteps();
+
+        // Mark all steps before targetIndex as completed
+        for (let i = 0; i < targetIndex; i++) {
+            const s = STEPS[i];
+            const stepEl = document.querySelector(`[data-step="${s.step}"]`);
+            stepEl.classList.add('completed');
+            s.subs.forEach(sub => {
+                const subEl = document.querySelector(`[data-sub="${sub}"]`);
+                if (subEl) {
+                    subEl.classList.add('completed');
+                    const icon = subEl.querySelector('.substep-icon');
+                    if (icon) icon.textContent = '✓';
+                }
+            });
+        }
+
+        // Mark targetIndex as active with all subs active
+        if (targetIndex >= 0 && targetIndex < STEPS.length) {
+            const s = STEPS[targetIndex];
+            const stepEl = document.querySelector(`[data-step="${s.step}"]`);
+            stepEl.classList.add('active');
+            s.subs.forEach(sub => {
+                const subEl = document.querySelector(`[data-sub="${sub}"]`);
+                if (subEl) subEl.classList.add('active');
+            });
+            stepEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            updateProgress(targetIndex, s.label, s.time);
+        }
+    }
+
+    function resetAnimation() {
+        if (animationAbort) animationAbort.abort();
+        animating = false;
+        currentStepIndex = -1;
+        document.getElementById('play-btn').textContent = '▶ Play';
+        clearAllSteps();
+        updateProgress(-1, 'Ready', '~0ms');
+        updateCounter();
+    }
+
+    // Manual navigation: next step
+    function goToNext() {
+        // Stop auto-play if running
+        if (animating) {
+            if (animationAbort) animationAbort.abort();
+            animating = false;
+            document.getElementById('play-btn').textContent = '▶ Play';
+        }
+
+        if (currentStepIndex >= STEPS.length - 1) return;
+        currentStepIndex++;
+        renderUpTo(currentStepIndex);
+        updateCounter();
+
+        if (currentStepIndex === STEPS.length - 1) {
+            updateProgress(currentStepIndex, 'Calendar ready!', '~400-2500ms total');
+        }
+    }
+
+    // Manual navigation: previous step
+    function goToPrev() {
+        // Stop auto-play if running
+        if (animating) {
+            if (animationAbort) animationAbort.abort();
+            animating = false;
+            document.getElementById('play-btn').textContent = '▶ Play';
+        }
+
+        if (currentStepIndex < 0) return;
+        currentStepIndex--;
+
+        if (currentStepIndex < 0) {
+            clearAllSteps();
+            updateProgress(-1, 'Ready', '~0ms');
+        } else {
+            renderUpTo(currentStepIndex);
+        }
+        updateCounter();
+    }
+
+    async function startAnimation() {
+        if (animating) return;
+        resetAnimation();
+
+        await new Promise(r => setTimeout(r, 100));
+        animating = true;
+        animationAbort = new AbortController();
+        document.getElementById('play-btn').textContent = '⏸ Playing';
+
+        try {
+            for (let i = 0; i < STEPS.length; i++) {
+                currentStepIndex = i;
+                updateCounter();
+
+                const s = STEPS[i];
+                const stepEl = document.querySelector(`[data-step="${s.step}"]`);
+
+                // Activate step
+                stepEl.classList.add('active');
+                stepEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                updateProgress(i, s.label, s.time);
+
+                // Animate substeps one by one
+                const subDelay = s.duration / (s.subs.length + 1);
+                for (let j = 0; j < s.subs.length; j++) {
+                    await sleep(subDelay);
+                    const subEl = document.querySelector(`[data-sub="${s.subs[j]}"]`);
+                    if (subEl) {
+                        subEl.classList.add('active');
+
+                        // Show retry indicator for step 4
+                        if (s.showRetry && j >= 2 && j <= 3) {
+                            const retryEl = document.getElementById('retry-indicator');
+                            retryEl.style.display = 'flex';
+                            document.getElementById('retry-text').textContent =
+                                j === 2 ? 'Retry 2/4 — waiting 400ms...' : 'Retry 3/4 — waiting 400ms...';
+                        }
+                    }
+                }
+
+                if (s.showRetry) {
+                    document.getElementById('retry-indicator').style.display = 'none';
+                }
+
+                // Pause on the fully active step before completing
+                await sleep(subDelay * 1.5);
+
+                // Complete step
+                stepEl.classList.remove('active');
+                stepEl.classList.add('completed');
+
+                // Mark substeps completed
+                s.subs.forEach(sub => {
+                    const subEl = document.querySelector(`[data-sub="${sub}"]`);
+                    if (subEl) {
+                        subEl.classList.remove('active');
+                        subEl.classList.add('completed');
+                        const icon = subEl.querySelector('.substep-icon');
+                        if (icon) icon.textContent = '✓';
+                    }
+                });
+            }
+
+            updateProgress(STEPS.length - 1, 'Calendar ready!', '~400-2500ms total');
+
+        } catch (e) {
+            if (e !== 'aborted') throw e;
+        }
+
+        animating = false;
+        document.getElementById('play-btn').textContent = '▶ Play';
+    }
+
+    // Keyboard navigation
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+            e.preventDefault();
+            goToNext();
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            goToPrev();
+        } else if (e.key === 'r' || e.key === 'R') {
+            resetAnimation();
+        } else if (e.key === 'p' || e.key === 'P') {
+            startAnimation();
+        }
+    });
+
+    // Initialize counter
+    updateCounter();
+</script>
+
+</body>
+</html>

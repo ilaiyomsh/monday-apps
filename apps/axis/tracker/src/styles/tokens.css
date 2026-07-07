@@ -1,0 +1,471 @@
+/* ============================================================
+ * Design Tokens — shared CSS custom properties
+ * ============================================================
+ *
+ * Structure:
+ *   :root                       → Monday theme (default)
+ *   [data-theme="google"]       → Google Calendar theme overrides
+ *
+ * Categories:
+ *   1. Colors — brand, semantic, text, background, border, events
+ *   2. Spacing
+ *   3. Border radius
+ *   4. Typography
+ *   5. Shadows
+ *   6. Z-index
+ *   7. Sizing (icons, touch targets)
+ *   8. Transitions
+ *   9. Component-scoped palettes (single-component visual identities)
+ *
+ * NOTE: Calendar-specific layout tokens (`--gc-*`) live in
+ *       styles/calendar/variables.css. They're domain-specific
+ *       to react-big-calendar grid layout, not theme-level.
+ *
+ * RULE: 100% of UI colors must be defined here. No `.module.css`
+ *       file may contain a literal hex/rgba color (except inside
+ *       url() data-URIs, which CSS variables cannot reach).
+ *       Component-only shades live under §9 with a note linking
+ *       them to the consuming component.
+ * ============================================================ */
+
+:root {
+  /* ============================================================
+   * 1. COLORS — Monday theme (default)
+   * ============================================================ */
+
+  /* --- Brand --- */
+  --color-primary: #0073ea;
+  --color-primary-hover: #0060b9;
+  --color-primary-strong: #0060c2;
+  --color-primary-soft: #f0f3ff;
+  --color-primary-light: #e5f3ff;
+  --color-primary-lighter: #cce5ff;
+  --color-secondary: #2563eb;
+  --color-secondary-hover: #1d4ed8;
+  --color-accent: #3b82f6;
+  --color-accent-soft: #eff6ff;
+
+  /* --- Semantic --- */
+  --color-success: #16a34a;
+  --color-success-soft: #dcfce7;
+  --color-success-strong: #15803d;
+  --color-approval-green: #0d7c3f;
+  --color-approval-green-hover: #0a6633;
+  --color-approval-green-soft: #e8f5ee;
+  --color-success-text-deep: #14532d;
+  --color-success-text-strong: #166534;
+  --color-warning: #f59e0b;
+  --color-warning-soft: #fef3c7;
+  --color-warning-bg: #fff3cd;
+  --color-warning-bg-light: #fff8e6;
+  --color-warning-border: #ffd666;
+  --color-warning-text: #856404;
+  --color-warning-text-dark: #915900;
+  --color-warning-text-deep: #92400e;
+  --color-warning-text-deeper: #78350f;
+  --color-warning-text-amber: #a16207;
+  --color-warning-amber: #fbbf24;
+  --color-danger: #e2445c;
+  --color-danger-hover: #d0394e;
+  --color-danger-strong: #e44258;
+  --color-danger-bg: #fff0f2;
+  --color-danger-soft: #fee2e2;
+  --color-danger-soft-hover: #fecaca;
+  --color-danger-border: #fca5a5;
+  --color-danger-border-hover: #f87171;
+  --color-danger-text: #dc2626;
+  --color-alert: #ef4444;
+  --color-info: #1a73e8;
+  --color-info-soft: #e3f2fd;
+  --color-info-lighter: #dbeafe;
+  --color-info-bg: #f0f7ff;
+  --color-info-bg-hover: #e6f3ff;
+  --color-info-border: #d0e3ff;
+  --color-info-track: #d0e4f5;
+  --color-info-border-soft: #cce5ff;
+  --color-info-border-tint: #bfdbfe;
+  --color-info-text-deep: #1e40af;
+  --color-info-accent-border: #93c5fd;
+
+  /* --- Text --- */
+  --color-text: #323338;
+  --color-text-secondary: #676879;
+  --color-text-tertiary: #6b7280;
+  --color-text-dark: #374151;
+  --color-text-dark-strong: #1f2937;
+  --color-text-muted: #4b5563;
+  --color-text-mute: #475569;
+  --color-text-soft: #555555;
+  --color-text-medium: #666666;
+  --color-text-strong-alt: #333333;
+  --color-text-disabled: #9ca3af;
+  --color-text-placeholder: #999999;
+  --color-text-disabled-strong: #b0b0b0;
+  --color-text-disabled-soft: #c5c7d0;
+  --color-text-inverse: #ffffff;
+  --color-text-on-dark: #111827;
+
+  /* --- Background --- */
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #f7f9fa;
+  --color-bg-tertiary: #f5f6f8;
+  --color-bg-neutral: #f3f4f6;
+  --color-bg-neutral-light: #f5f5f5;
+  --color-bg-neutral-strong: #e5e5e5;
+  --color-bg-faint: #fcfcfd;
+  --color-bg-subtle: #fafafa;
+  --color-bg-input: #f9f9f9;
+  --color-bg-select: #f6f7fb;
+  --color-bg-button-gray: #dcdfec;
+  --color-bg-hover-neutral: #e4e6eb;
+  --color-bg-hover-soft: #e8e9ed;
+  --color-bg-active-soft: #eef0f4;
+  --color-bg-gradient-end: #eef1f3;
+  --color-bg-overlay: rgba(0, 0, 0, 0.5);
+
+  /* --- Borders --- */
+  --color-border: #e6e9ef;
+  --color-border-medium: #d0d4e4;
+  --color-border-light: #e5e7eb;
+  --color-border-strong: #d1d5db;
+  --color-border-dashed: #c3c6d4;
+  --color-border-input: #e1e1e1;
+  --color-border-separator: #f0f0f0;
+  --color-border-loader: #f3f3f3;
+  --color-border-faint: #c4c8cf;
+  --color-border-strong-alt: #c0c0c0;
+  --color-divider: #e0e0e0;
+  --color-disabled-icon: #c5c7d0;
+
+  /* --- Event-type colors (shared across calendar + dashboard) --- */
+  --color-event-sick: #e2445c;
+  --color-event-vacation: #00c875;
+  --color-event-reserves: #579bfc;
+  --color-event-default: #3174ad;
+  --color-event-multiple: #a25ddc;
+  --color-project-external: #00ca72;
+  --color-project-routine: #fdab3d;
+  --color-event-orange: #ff642e;
+  --color-pct-warning: #d4a017;
+
+  /* ============================================================
+   * 2. SPACING
+   * ============================================================ */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 20px;
+  --spacing-2xl: 24px;
+  --spacing-3xl: 32px;
+
+  /* ============================================================
+   * 3. BORDER RADIUS
+   * ============================================================ */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-input: 8px;
+  --radius-button: 8px;
+  --radius-card: 12px;
+  --radius-modal: 16px;
+  --radius-full: 9999px;
+
+  /* ============================================================
+   * 4. TYPOGRAPHY
+   * ============================================================ */
+  --font-family: 'Rubik', sans-serif;
+
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.85rem;
+  --font-size-label: 0.85rem;
+  --font-size-button: 0.9rem;
+  --font-size-body: 0.95rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ============================================================
+   * 5. SHADOWS
+   * ============================================================ */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.2);
+  --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.15);
+  --shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.15);
+  --shadow-drag: 0 6px 10px rgba(0, 0, 0, 0.14);
+
+  /* ============================================================
+   * 6. Z-INDEX
+   * ============================================================ */
+  --z-base: 1;
+  --z-grid: 1;
+  --z-event: 10;
+  --z-event-dragging: 15;
+  --z-now-indicator: 20;
+  --z-header: 30;
+  --z-dropdown: 100;
+  --z-popover: 1000;
+  --z-modal: 10000;
+  --z-overlay: 10010;
+  --z-toast: 10030;
+
+  /* ============================================================
+   * 7. SIZING
+   * ============================================================ */
+  --icon-xs: 12px;
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+  --touch-target: 44px;
+
+  /* ============================================================
+   * 8. TRANSITIONS
+   * ============================================================ */
+  --transition-fast: 0.15s ease-in-out;
+  --transition-base: 0.2s ease-in-out;
+  --transition-slow: 0.3s ease-in-out;
+
+  /* ============================================================
+   * 9. COMPONENT-SCOPED PALETTES
+   * ------------------------------------------------------------
+   * Centralized here so every color in the app lives in one file.
+   * These tokens are NOT part of the shared semantic palette —
+   * each group is used by a single component and represents that
+   * component's local visual identity. Listed alphabetically.
+   * ============================================================ */
+
+  /* Loader (`StopwatchLoader.jsx` / `StopwatchLoader.module.css`)
+     SVG strokes for the stopwatch icon and its accent ring. */
+  --color-loader-dark: #181b34;
+  --color-loader-accent: #6161ff;
+
+  /* Mobile resize overlay (`MobileResizeOverlay.module.css`)
+     Frame highlight when resizing an event on touch devices. */
+  --color-resize-frame: #1f76c2;
+
+  /* Toast (`Toast.module.css` / `ErrorToast.module.css`)
+     Bootstrap-flavor palette for the four toast variants.
+     Kept distinct from semantic --color-success/--color-danger
+     because toasts use a denser, higher-contrast color scheme. */
+  --color-toast-success-bg: #d4edda;
+  --color-toast-success-border: #28a745;
+  --color-toast-success-text: #155724;
+  --color-toast-danger-bg: #f8d7da;
+  --color-toast-danger-border: #dc3545;
+  --color-toast-danger-text: #721c24;
+  --color-toast-warning-border: #ffc107;
+  --color-toast-info-bg: #d1ecf1;
+  --color-toast-info-border: #17a2b8;
+  --color-toast-info-text: #0c5460;
+
+  /* Wizard (`SettingsWizard.module.css` and `steps/*`)
+     Indigo + violet accent palette used only by the onboarding
+     wizard. Distinct from --color-primary (Monday blue) by design
+     — the wizard intentionally has its own visual identity. */
+  --color-wizard-primary-softer: #f8fafc;  /* slate-50 — wizard chart bg */
+  --color-wizard-accent: #6366f1;          /* indigo-500 */
+  --color-wizard-accent-hover: #4f46e5;    /* indigo-600 */
+  --color-wizard-accent-strong: #4338ca;   /* indigo-700 */
+  --color-wizard-accent-bg: #eef2ff;       /* indigo-50 */
+  --color-wizard-accent-border: #c7d2fe;   /* indigo-200 */
+  --color-wizard-accent-gradient-end: #818cf8; /* indigo-400 */
+  --color-wizard-violet: #7c3aed;
+  --color-wizard-violet-soft: #f3e8ff;
+  --color-wizard-success-gradient-end: #22c55e;
+  --color-wizard-danger-gradient-end: #f87171;
+  --color-wizard-success-bg: #f0fdf4;
+  --color-wizard-success-border: #86efac;
+  --color-wizard-log-bg: #0f172a;           /* slate-900 */
+  --color-wizard-log-text: #e2e8f0;         /* slate-200 */
+  --color-wizard-log-error: #fca5a5;        /* red-300 */
+  --color-wizard-card-info-border: #c2dcfc;
+  --color-wizard-card-warning-border: #ffe4b3;
+  --color-wizard-card-warning-text: #8a5100;
+  --color-wizard-card-success-border: #b8e4d0;
+  --color-wizard-card-success-gradient-end: #bbf7d0;
+  --color-wizard-toggle-on-border: #b8d7f7;
+}
+
+/* ============================================================
+ * GOOGLE CALENDAR THEME — applied via <html data-theme="google">
+ * Overrides only the keys that differ from Monday.
+ * ============================================================ */
+[data-theme="google"] {
+  --color-primary: #1a73e8;
+  --color-primary-hover: #1765c8;
+  --color-primary-soft: #e8f0fe;
+
+  --color-text: #3c4043;
+  --color-text-secondary: #70757a;
+  --color-text-on-dark: #202124;
+
+  --color-border: #dadce0;
+}
+
+/* ============================================================
+ * DARK THEME — applied via <html data-theme="dark">
+ * Brand + event colors preserved; bg/text/border/shadow flipped.
+ * Auto mode is resolved in JS (App.jsx) to either "dark" or "light".
+ * ============================================================ */
+[data-theme="dark"] {
+  /* --- Brand (slightly brightened for dark bg) --- */
+  --color-primary: #4a9eff;
+  --color-primary-hover: #6ab0ff;
+  --color-primary-strong: #2b87f0;
+  --color-primary-soft: #1a2942;
+  --color-primary-light: #1e3a5f;
+  --color-primary-lighter: #234976;
+  --color-secondary: #60a5fa;
+  --color-secondary-hover: #93c5fd;
+  --color-accent: #60a5fa;
+  --color-accent-soft: #15243a;
+
+  /* --- Semantic (softened bg variants for dark) --- */
+  --color-success: #22c55e;
+  --color-success-soft: #0f2e1f;
+  --color-success-strong: #16a34a;
+  --color-approval-green: #22c55e;
+  --color-approval-green-hover: #4ade80;
+  --color-approval-green-soft: #0f2e1f;
+  --color-success-text-deep: #86efac;
+  --color-success-text-strong: #bbf7d0;
+  --color-warning: #fbbf24;
+  --color-warning-soft: #3a2c0f;
+  --color-warning-bg: #2e2412;
+  --color-warning-bg-light: #25200f;
+  --color-warning-border: #92750a;
+  --color-warning-text: #fde68a;
+  --color-warning-text-dark: #fbbf24;
+  --color-warning-text-deep: #fcd34d;
+  --color-warning-text-deeper: #fde68a;
+  --color-warning-text-amber: #fbbf24;
+  --color-warning-amber: #fbbf24;
+  --color-danger: #f87171;
+  --color-danger-hover: #fca5a5;
+  --color-danger-strong: #ef4444;
+  --color-danger-bg: #3a1a1f;
+  --color-danger-soft: #3a1a1f;
+  --color-danger-soft-hover: #4a2229;
+  --color-danger-border: #7f1d1d;
+  --color-danger-border-hover: #991b1b;
+  --color-danger-text: #fca5a5;
+  --color-alert: #f87171;
+  --color-info: #60a5fa;
+  --color-info-soft: #15243a;
+  --color-info-lighter: #1e3a5f;
+  --color-info-bg: #15243a;
+  --color-info-bg-hover: #1e3a5f;
+  --color-info-border: #234976;
+  --color-info-track: #2b3a55;
+  --color-info-border-soft: #234976;
+  --color-info-border-tint: #2b4774;
+  --color-info-text-deep: #93c5fd;
+  --color-info-accent-border: #3b82f6;
+
+  /* --- Text --- */
+  --color-text: #e8eaed;
+  --color-text-secondary: #9aa0a6;
+  --color-text-tertiary: #80868b;
+  --color-text-dark: #d1d5db;
+  --color-text-dark-strong: #f3f4f6;
+  --color-text-muted: #b0b3b8;
+  --color-text-mute: #a8aeb8;
+  --color-text-soft: #c0c4cc;
+  --color-text-medium: #b0b3b8;
+  --color-text-strong-alt: #f3f4f6;
+  --color-text-disabled: #6b7280;
+  --color-text-placeholder: #6b7280;
+  --color-text-disabled-strong: #4b5563;
+  --color-text-disabled-soft: #4b5563;
+  --color-text-inverse: #1f2937;
+  --color-text-on-dark: #f3f4f6;
+
+  /* --- Backgrounds --- */
+  --color-bg-primary: #1a1d24;
+  --color-bg-secondary: #22252d;
+  --color-bg-tertiary: #2a2e37;
+  --color-bg-neutral: #2f333d;
+  --color-bg-neutral-light: #262931;
+  --color-bg-neutral-strong: #3a3f4a;
+  --color-bg-faint: #1f2229;
+  --color-bg-subtle: #1d2027;
+  --color-bg-input: #252830;
+  --color-bg-select: #252830;
+  --color-bg-button-gray: #3a3f4a;
+  --color-bg-hover-neutral: #3a3f4a;
+  --color-bg-hover-soft: #2f333d;
+  --color-bg-active-soft: #353a45;
+  --color-bg-gradient-end: #2a2e37;
+  --color-bg-overlay: rgba(0, 0, 0, 0.75);
+
+  /* --- Borders --- */
+  --color-border: #3a3f4a;
+  --color-border-medium: #4a4f5c;
+  --color-border-light: #2f333d;
+  --color-border-strong: #4a4f5c;
+  --color-border-dashed: #4a4f5c;
+  --color-border-input: #3a3f4a;
+  --color-border-separator: #2f333d;
+  --color-border-loader: #2f333d;
+  --color-border-faint: #3a3f4a;
+  --color-border-strong-alt: #4a4f5c;
+  --color-divider: #2f333d;
+  --color-disabled-icon: #4b5563;
+
+  /* --- Shadows (stronger black for dark bg) --- */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.6);
+  --shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.7);
+  --shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.5);
+  --shadow-drag: 0 6px 10px rgba(0, 0, 0, 0.55);
+
+  /* --- Toast (§9) — dark variants --- */
+  --color-toast-success-bg: #1e3a26;
+  --color-toast-success-border: #22c55e;
+  --color-toast-success-text: #86efac;
+  --color-toast-danger-bg: #3a1a1f;
+  --color-toast-danger-border: #f87171;
+  --color-toast-danger-text: #fca5a5;
+  --color-toast-warning-border: #fbbf24;
+  --color-toast-info-bg: #15243a;
+  --color-toast-info-border: #60a5fa;
+  --color-toast-info-text: #93c5fd;
+
+  /* --- Wizard (§9) — dark variants --- */
+  --color-wizard-primary-softer: #1a1d24;
+  --color-wizard-accent: #818cf8;
+  --color-wizard-accent-hover: #a5b4fc;
+  --color-wizard-accent-strong: #c7d2fe;
+  --color-wizard-accent-bg: #1e1b4b;
+  --color-wizard-accent-border: #3730a3;
+  --color-wizard-accent-gradient-end: #6366f1;
+  --color-wizard-violet: #a78bfa;
+  --color-wizard-violet-soft: #2e1065;
+  --color-wizard-success-gradient-end: #4ade80;
+  --color-wizard-danger-gradient-end: #fca5a5;
+  --color-wizard-success-bg: #0f2e1f;
+  --color-wizard-success-border: #166534;
+  --color-wizard-card-info-border: #234976;
+  --color-wizard-card-warning-border: #92750a;
+  --color-wizard-card-warning-text: #fde68a;
+  --color-wizard-card-success-border: #166534;
+  --color-wizard-card-success-gradient-end: #16a34a;
+  --color-wizard-toggle-on-border: #234976;
+}
+
+/* ============================================================
+ * MOBILE OVERRIDES
+ * ============================================================ */
+@media (max-width: 768px) {
+  :root {
+    --icon-md: 18px;
+  }
+}

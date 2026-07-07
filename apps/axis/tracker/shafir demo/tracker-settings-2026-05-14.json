@@ -1,0 +1,115 @@
+{
+  "__type": "tracker-settings",
+  "version": 1,
+  "exportedAt": "2026-05-14T12:00:00.000Z",
+  "settings": {
+    "structureMode": "PROJECT_ONLY",
+    "enableNotes": true,
+    "showHolidays": true,
+    "fieldConfig": {
+      "task": "hidden",
+      "stage": "required",
+      "notes": "optional",
+      "billableToggle": "visible",
+      "nonBillableType": "required"
+    },
+    "projectsSourceMode": "portfolio",
+    "connectedBoardId": "18413142225",
+    "peopleColumnIds": [
+      "portfolio_project_owner"
+    ],
+    "projectTypeColumnId": null,
+    "enableProjectTypeDistinction": false,
+    "projectTypeMapping": null,
+    "projectTypeSourceBoardId": null,
+    "projectTypeSourceColumnId": null,
+    "projectStatusFilterEnabled": false,
+    "projectStatusColumnId": null,
+    "projectActiveStatusValues": [],
+    "tasksBoardId": null,
+    "tasksProjectColumnId": null,
+    "taskStatusFilterEnabled": false,
+    "taskStatusColumnId": null,
+    "taskActiveStatusValues": [],
+    "useAssignmentsMode": false,
+    "assignmentsBoardId": null,
+    "assignmentPersonColumnId": null,
+    "assignmentEndDateColumnId": null,
+    "assignmentStartDateColumnId": null,
+    "assignmentProjectLinkColumnId": null,
+    "useCurrentBoardForReporting": false,
+    "timeReportingBoardId": "18413144191",
+    "dateColumnId": "date_mm3bqyqj",
+    "endTimeColumnId": "date_mm3bzrqg",
+    "durationColumnId": "numeric_mm3b9baz",
+    "projectColumnId": "board_relation_mm3bg3vz",
+    "taskColumnId": null,
+    "assignmentColumnId": null,
+    "reporterColumnId": "multiple_person_mm3bz1jp",
+    "eventTypeStatusColumnId": "color_mm3bb7rt",
+    "allDayTypeStatusColumnId": "color_mm3be653",
+    "nonBillableStatusColumnId": "color_mm3bzz0b",
+    "stageColumnId": "color_mm3bqskb",
+    "notesColumnId": "long_text_mm3bygjc",
+    "customerColumnId": null,
+    "customerReportColumnId": null,
+    "temporaryCheckboxColumnId": "boolean_mm3baycm",
+    "showTemporaryEvents": true,
+    "eventTypeMapping": {
+      "1": "externalProject",
+      "7": "allDay",
+      "9": "internalProject",
+      "108": "routine"
+    },
+    "eventTypeLabelMeta": {
+      "1": {
+        "label": "External",
+        "color": "#00c875"
+      },
+      "7": {
+        "label": "All Day",
+        "color": "#579bfc"
+      },
+      "9": {
+        "label": "Internal",
+        "color": "#ffcb00"
+      },
+      "108": {
+        "label": "Rutine",
+        "color": "#4eccc6"
+      }
+    },
+    "enableApproval": false,
+    "approvalStatusColumnId": null,
+    "approvalStatusMapping": null,
+    "approvalStatusLabelMeta": null,
+    "approvedManagerIds": [],
+    "filterProjectsBoardId": "18413142225",
+    "filterProjectsStatusColumnId": null,
+    "filterProjectsStatusValues": [],
+    "filterEmployeesBoardId": null,
+    "filterEmployeesColumnId": null,
+    "advancedValidation": {
+      "enabled": false,
+      "xorFields": [
+        null,
+        null
+      ]
+    },
+    "editLockMode": "none",
+    "lockAfterApproval": false,
+    "monthlyHoursTarget": 182.5,
+    "weeklyHoursTarget": null,
+    "workdayLength": 8.5,
+    "workDays": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "weekStartDay": 0,
+    "languageOverride": null,
+    "themeMode": "auto"
+  }
+}

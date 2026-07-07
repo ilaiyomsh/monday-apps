@@ -1,0 +1,16 @@
+/* Calendar Style Entry Point */
+
+/* Theme variables - must be outside layers to work properly */
+@import './variables.css';
+
+/* RBC reset - remove default styling */
+@import './reset.css';
+
+/* Structure - Grid, headers, and layout */
+@import './structure/grid.css';
+@import './structure/header.css';
+
+/* Components - Events, toolbar, indicators */
+@import './components/toolbar.css';
+@import './components/events.css';
+@import './components/time-indicator.css';

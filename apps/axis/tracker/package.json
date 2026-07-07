@@ -1,0 +1,129 @@
+{
+  "name": "axis-tracker",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "postinstall": "patch-package",
+    "start": "pnpm run stop && concurrently \"pnpm run server\" \"pnpm run expose\"",
+    "build": "vite build",
+    "deploy:build": "vite build",
+    "deploy:push": "mapps code:push --client-side -d \"build\"",
+    "deploy": "pnpm run deploy:build && pnpm run deploy:push",
+    "expose": "mapps tunnel:create -p 8301",
+    "server": "vite",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:tz:il": "TZ=Asia/Jerusalem vitest run",
+    "test:tz:utc": "TZ=UTC vitest run",
+    "test:tz:ny": "TZ=America/New_York vitest run",
+    "test:tz:matrix": "pnpm run test:tz:il; pnpm run test:tz:utc; pnpm run test:tz:ny",
+    "eject": "react-scripts eject",
+    "stop": "kill-port 8301 && kill-port 4049 && kill-port 4040",
+    "agent:builder": "bash ./scripts/agent-builder.sh",
+    "agent:review-merge": "bash ./scripts/agent-review-merge.sh",
+    "agent:findings-table": "python3 ./scripts/generate-findings-table.py",
+    "lint": "echo no-lint-configured",
+    "type-check": "echo no-typescript"
+  },
+  "dependencies": {
+    "@axis/app-core": "workspace:*",
+    "@vibe/core": "^3.77.0",
+    "@vibe/icons": "^1.16.0",
+    "canvas-confetti": "^1.9.4",
+    "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
+    "i18next": "^26.0.8",
+    "lucide-react": "^0.555.0",
+    "monday-sdk-js": "^0.5.7",
+    "react-big-calendar": "^1.19.4",
+    "react-i18next": "^17.0.6",
+    "react-swipeable": "^7.0.2",
+    "recharts": "^3.7.0"
+  },
+  "eslintConfig": {
+    "extends": "react-app",
+    "globals": {
+      "__APP_VERSION__": "readonly"
+    },
+    "rules": {
+      "no-console": "error",
+      "no-empty": [
+        "error",
+        {
+          "allowEmptyCatch": false
+        }
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          "selector": "CatchClause > BlockStatement:not(:has(CallExpression[callee.object.name='logger'])):not(:has(ThrowStatement)):not(:has(CallExpression[callee.name='showErrorWithDetails']))",
+          "message": "כל catch חייב לקרוא ל-logger, לזרוק מחדש (throw), או להציג דרך showErrorWithDetails (בליעת AbortError-בלבד מסומנת בכוונה)"
+        }
+      ]
+    },
+    "overrides": [
+      {
+        "files": [
+          "src/utils/logger.js"
+        ],
+        "rules": {
+          "no-console": "off",
+          "no-restricted-syntax": "off"
+        }
+      },
+      {
+        "files": [
+          "**/__tests__/**",
+          "**/*.test.js",
+          "**/*.test.jsx",
+          "src/test-utils/**",
+          "src/setupTests.js"
+        ],
+        "rules": {
+          "no-console": "off",
+          "no-restricted-syntax": "off"
+        }
+      },
+      {
+        "files": [
+          "src/utils/axiomSink.js",
+          "vite.config.js"
+        ],
+        "rules": {
+          "no-console": "off",
+          "no-restricted-syntax": "off"
+        }
+      }
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@mondaycom/apps-cli": "^4.10.5",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^5.1.1",
+    "concurrently": "^5.2.0",
+    "cross-port-killer": "^1.2.1",
+    "eslint-config-react-app": "^7.0.1",
+    "jsdom": "^29.1.1",
+    "patch-package": "^8.0.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "sass": "^1.54.8",
+    "vite": "^7.2.4",
+    "vitest": "^4.1.2"
+  },
+  "type": "module"
+}

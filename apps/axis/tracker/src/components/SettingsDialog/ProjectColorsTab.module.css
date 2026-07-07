@@ -1,0 +1,116 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 8px 4px;
+}
+
+.searchWrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.searchIcon {
+    position: absolute;
+    inset-inline-start: 10px;
+    color: var(--color-text-secondary);
+    pointer-events: none;
+}
+
+.searchInput {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 12px 8px 36px;
+    font-size: 14px;
+    border: 1px solid var(--color-border-default, #e6e9ef);
+    border-radius: 8px;
+    background: var(--color-bg-primary, #ffffff);
+    color: var(--color-text-primary);
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+[dir="rtl"] .searchInput {
+    padding: 8px 36px 8px 12px;
+}
+
+.searchInput:focus {
+    border-color: var(--color-info, #1a73e8);
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.15);
+}
+
+.empty {
+    padding: 32px 16px;
+    text-align: center;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+}
+
+.list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--color-border-default, #e6e9ef);
+    border-radius: 8px;
+    background: var(--color-bg-secondary, #ffffff);
+}
+
+.name {
+    flex: 1;
+    min-width: 0;
+    font-size: 14px;
+    color: var(--color-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.actions {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.swatch {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 2px solid var(--color-border-default, #e6e9ef);
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.1s ease;
+}
+
+.swatch:hover {
+    transform: scale(1.05);
+}
+
+.popover {
+    position: absolute;
+    top: 36px;
+    inset-inline-end: 0;
+    z-index: 100;
+    background: var(--color-bg-primary, #ffffff);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* עוקף את הרוחב המחושב פנימית של Vibe — הם מקצים 32px לכל משבצת small,
+   אך בפועל המשבצת מקבלת border + margin של ~36-40px, מה שגורם ל-flex-wrap.
+   7 עמודות × ~38px + padding ≈ 280px. */
+.popover > [data-vibe="color-picker"] {
+    width: 290px !important;
+}

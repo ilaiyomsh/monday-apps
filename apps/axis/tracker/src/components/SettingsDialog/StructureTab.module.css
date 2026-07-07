@@ -1,0 +1,567 @@
+.container {
+  animation: slideIn var(--transition-slow);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(var(--spacing-lg));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.optionsGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.notesToggle {
+  margin-top: 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: var(--spacing-lg) 18px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-card);
+  cursor: pointer;
+  transition: all var(--transition-base);
+  background-color: var(--color-bg-primary);
+}
+
+.notesToggle:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+.notesCheckbox {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.notesCheckbox input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--color-secondary);
+  cursor: pointer;
+}
+
+.notesContent {
+  flex: 1;
+}
+
+.notesTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-on-dark);
+  margin-bottom: var(--spacing-xs);
+}
+
+.notesIcon {
+  color: var(--color-text-tertiary);
+}
+
+.notesDescription {
+  display: block;
+  font-size: 14px;
+  color: var(--color-text-tertiary);
+  line-height: 1.5;
+}
+
+/* === אישור מנהל - People Picker === */
+
+.approvalManagersSection {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-lg) 18px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-card);
+  background-color: var(--color-bg-tertiary);
+}
+
+.approvalLabel {
+  display: block;
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-dark);
+  margin-bottom: 10px;
+}
+
+.managersList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-bottom: 10px;
+}
+
+.managerChip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--spacing-xs) 10px;
+  border-radius: 20px;
+  background-color: var(--color-info-lighter);
+  font-size: 13px;
+  color: var(--color-secondary-hover);
+}
+
+.managerAvatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.managerRemoveBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-secondary);
+  padding: 2px;
+  border-radius: 50%;
+  transition: background-color var(--transition-fast);
+}
+
+.managerRemoveBtn:hover {
+  background-color: var(--color-info-lighter);
+}
+
+.managerSearchWrapper {
+  position: relative;
+}
+
+.managerSearchInput {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  font-size: 14px;
+  outline: none;
+  transition: border-color var(--transition-base);
+  box-sizing: border-box;
+}
+
+.managerSearchInput:focus {
+  border-color: var(--color-secondary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.managerDropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  z-index: var(--z-dropdown);
+  max-height: 200px;
+  overflow-y: auto;
+  margin-top: var(--spacing-xs);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  box-shadow: var(--shadow-md);
+}
+
+.managerDropdownItem {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-size: 14px;
+  color: var(--color-text-on-dark);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: right;
+  transition: background-color var(--transition-fast);
+}
+
+.managerDropdownItem:hover {
+  background-color: var(--color-bg-neutral);
+}
+
+/* === נעילת עריכה === */
+
+.editLockSection {
+  margin-top: 18px;
+  padding: var(--spacing-lg) 18px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-card);
+  background-color: var(--color-bg-primary);
+}
+
+.editLockHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: var(--spacing-md);
+}
+
+.editLockTitle {
+  font-size: 16px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-on-dark);
+}
+
+.sectionErrorDot {
+  display: inline-block;
+  width: var(--spacing-sm);
+  height: var(--spacing-sm);
+  border-radius: 50%;
+  background-color: var(--color-danger);
+  flex-shrink: 0;
+  margin-inline-start: var(--spacing-xs);
+  box-shadow: 0 0 0 2px var(--color-bg-primary);
+}
+
+.editLockOptions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.editLockOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-radius: var(--radius-input);
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--color-text-dark);
+  transition: background-color var(--transition-fast);
+}
+
+.editLockOption:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+.editLockOption input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.editLockNote {
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  padding: 6px 10px;
+  background-color: var(--color-bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+/* === יעד שעות חודשי === */
+
+.monthlyTargetInputs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-lg);
+  align-items: end;
+}
+@media (max-width: 640px) {
+  .monthlyTargetInputs {
+    grid-template-columns: 1fr;
+  }
+}
+
+.monthlyTargetField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-dark);
+}
+
+.monthlyTargetInput {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  font-size: 14px;
+  direction: ltr;
+  text-align: center;
+  outline: none;
+  transition: border-color var(--transition-base);
+  box-sizing: border-box;
+}
+
+.monthlyTargetInput:focus {
+  border-color: var(--color-secondary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+/* === ימי עבודה === */
+
+.workDaysRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+  margin-top: var(--spacing-xs);
+}
+
+.workDayChips {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.workDayChip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border-strong);
+  background: var(--color-bg-tertiary);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  user-select: none;
+  transition: all var(--transition-fast);
+}
+
+.workDayChip:hover {
+  border-color: var(--color-secondary);
+  color: var(--color-secondary);
+}
+
+.workDayChipActive {
+  border-color: var(--color-secondary);
+  background: var(--color-secondary);
+  color: var(--color-text-inverse);
+}
+
+.workDayCheckbox {
+  display: none;
+}
+
+.weekStartSelector {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  white-space: nowrap;
+}
+
+.weekStartLabel {
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-dark);
+}
+
+.weekStartSelect {
+  padding: 6px 28px 6px 10px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  background: var(--color-bg-primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat left 10px center;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--transition-base);
+  min-width: 70px;
+}
+
+/* Dark theme: lighter chevron */
+:global([data-theme="dark"]) .weekStartSelect {
+  background: var(--color-bg-primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239aa0a6' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat left 10px center;
+}
+
+.weekStartSelect:focus {
+  border-color: var(--color-secondary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+/* === הגדרת שדות דיווח === */
+
+.fieldConfigTable {
+  margin-top: var(--spacing-lg);
+  border: 1px solid var(--color-border-light);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.fieldConfigHeader {
+  display: grid;
+  grid-template-columns: 1fr 60px 60px 60px;
+  padding: var(--spacing-sm) 14px;
+  background-color: var(--color-bg-neutral);
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.fieldConfigHeaderLabel {
+  text-align: right;
+}
+
+.fieldConfigHeaderOption {
+  text-align: center;
+}
+
+.fieldConfigRow {
+  display: grid;
+  grid-template-columns: 1fr 60px 60px 60px;
+  align-items: center;
+  padding: var(--spacing-md) 14px;
+  border-bottom: 1px solid var(--color-bg-neutral);
+  transition: background-color var(--transition-fast);
+}
+
+.fieldConfigRow:last-child {
+  border-bottom: none;
+}
+
+.fieldConfigRow:hover {
+  background-color: var(--color-bg-tertiary);
+}
+
+.fieldConfigLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fieldConfigLabel > span:first-child {
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-on-dark);
+}
+
+.fieldConfigDesc {
+  font-size: 12px;
+  color: var(--color-text-disabled);
+}
+
+.fieldConfigRadio {
+  display: flex;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.fieldConfigRadio input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-secondary);
+  cursor: pointer;
+}
+
+.fieldConfigRowDisabled {
+  opacity: 0.6;
+  pointer-events: none;
+  background-color: var(--color-bg-tertiary);
+}
+
+.fieldConfigToggleRow {
+  padding: var(--spacing-sm) 14px;
+  border-bottom: 1px solid var(--color-bg-neutral);
+  background-color: var(--color-primary-soft);
+}
+
+.fieldConfigToggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.fieldConfigToggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.fieldConfigToggleContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fieldConfigToggleTitle {
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-on-dark);
+}
+
+/* === ולידציה מתקדמת (XOR) === */
+
+.advancedToggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.advancedToggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.advancedToggleContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.advancedToggleTitle {
+  font-size: 14px;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-on-dark);
+}
+
+.xorSelectors {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md) 14px;
+  background-color: var(--color-bg-tertiary);
+  border-radius: var(--radius-input);
+}
+
+.xorSelect {
+  flex: 1;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  font-size: 14px;
+  outline: none;
+  background: var(--color-bg-primary);
+  cursor: pointer;
+  transition: border-color var(--transition-base);
+}
+
+.xorSelect:focus {
+  border-color: var(--color-secondary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.xorOrLabel {
+  font-size: 14px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
