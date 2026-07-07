@@ -32,3 +32,4 @@
 
 ## Onboarding debt (2026-07-07)
 - **planner**: `lint` stubbed in the monorepo copy — 268 pre-existing eslint errors (mostly `no-explicit-any`). Re-enable `eslint .` after a cleanup pass.
+- **sync-calender**: new app 11666315 created at onboarding (old 11119011 was stale). Server env vars (MONDAY_SIGNING_SECRET, Google/Microsoft OAuth, Axiom keys) are NOT in the repo — set them once via `mapps code:env -i 11666315` before first real run. Feature setup (views/webhooks) still needs Developer Center configuration.
