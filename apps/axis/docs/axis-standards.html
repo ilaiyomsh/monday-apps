@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Axis · החלטות סטנדרטיזציה</title>
+<style>
+  :root{
+    --bg:#0f1117; --card:#1a1d27; --card2:#222633; --border:#2c3140;
+    --text:#e6e8ee; --muted:#9aa0b0; --accent:#6c8cff; --accent2:#a78bfa;
+    --green:#34d399; --amber:#fbbf24; --red:#f87171; --cyan:#22d3ee;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    font-family:-apple-system,"Segoe UI","Heebo","Arial Hebrew",Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 80% -10%,#1c2030 0%,var(--bg) 60%);
+    color:var(--text); line-height:1.7; padding:36px 18px 140px;
+  }
+  .wrap{max-width:1000px; margin:0 auto;}
+  .en{direction:ltr; unicode-bidi:isolate;}
+
+  header.hero{text-align:center; margin-bottom:30px;}
+  header.hero .badge{display:inline-block; font-size:13px; letter-spacing:2px; color:var(--accent2);
+    border:1px solid var(--border); border-radius:999px; padding:6px 16px; margin-bottom:16px;}
+  header.hero h1{font-size:38px; font-weight:800; letter-spacing:-.5px; margin-bottom:12px;}
+  header.hero h1 .ax{background:linear-gradient(90deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;}
+  header.hero p{color:var(--muted); font-size:16px; max-width:760px; margin:0 auto;}
+  header.hero p .en{color:var(--cyan);}
+
+  .lede{background:rgba(167,139,250,.07); border:1px dashed rgba(167,139,250,.45);
+    border-radius:14px; padding:14px 18px; margin-bottom:18px; font-size:14px; color:var(--muted);}
+  .lede b{color:var(--accent2);}
+
+  .progress-wrap{position:sticky; top:0; z-index:30; background:rgba(15,17,23,.92);
+    backdrop-filter:blur(8px); padding:12px 0 14px; margin-bottom:8px; border-bottom:1px solid var(--border);}
+  .progress-bar{height:8px; background:var(--card); border-radius:999px; overflow:hidden; border:1px solid var(--border);}
+  .progress-fill{height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--green)); transition:width .3s;}
+  .progress-txt{font-size:13px; color:var(--muted); margin-top:6px; text-align:center;}
+
+  h2.section{font-size:20px; margin:34px 0 14px; padding-right:13px; border-right:4px solid var(--accent); display:flex; align-items:center; gap:10px;}
+  h2.section.crit{border-color:var(--red);}
+  h2.section.imp{border-color:var(--amber);}
+  h2.section.proc{border-color:var(--accent2);}
+  h2.section.doc{border-color:var(--green);}
+  h2.section .cnt{font-size:12px; color:var(--muted); font-weight:400;}
+
+  .dcard{background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px 20px; margin-bottom:14px;}
+  .dcard.answered{border-color:rgba(52,211,153,.5);}
+  .dhead{display:flex; align-items:flex-start; gap:13px; margin-bottom:6px;}
+  .didx{flex:0 0 36px; width:36px; height:36px; border-radius:10px; display:grid; place-items:center;
+    font-weight:800; font-size:16px; color:#0f1117; background:var(--accent);}
+  .crit .didx{background:var(--red);} .imp .didx{background:var(--amber);}
+  .proc .didx{background:var(--accent2);} .doc .didx{background:var(--green);}
+  .dtitle{font-size:17px; font-weight:700; padding-top:5px;}
+  .dstate{color:var(--muted); font-size:13.5px; margin:2px 0 12px 0; padding-right:49px;}
+
+  .opts{display:flex; flex-direction:column; gap:8px;}
+  .opt{display:flex; align-items:flex-start; gap:10px; background:var(--bg); border:1px solid var(--border);
+    border-radius:10px; padding:10px 13px; cursor:pointer; transition:border-color .12s, background .12s;}
+  .opt:hover{border-color:var(--accent); background:var(--card2);}
+  .opt.sel{border-color:var(--accent); background:rgba(108,140,255,.1);}
+  .opt input{margin-top:5px; accent-color:var(--accent); flex:0 0 auto;}
+  .opt .otxt{font-size:14px;}
+  .opt .otxt .lbl{font-weight:600; color:var(--accent);}
+  .crit .opt.sel{border-color:var(--red); background:rgba(248,113,113,.1);} .crit .opt input{accent-color:var(--red);}
+  .imp .opt.sel{border-color:var(--amber); background:rgba(251,191,36,.1);} .imp .opt input{accent-color:var(--amber);}
+  .proc .opt.sel{border-color:var(--accent2); background:rgba(167,139,250,.1);} .proc .opt input{accent-color:var(--accent2);}
+  .doc .opt.sel{border-color:var(--green); background:rgba(52,211,153,.1);} .doc .opt input{accent-color:var(--green);}
+
+  .freebox{margin-top:8px; display:none;}
+  .freebox.show{display:block;}
+  textarea{width:100%; background:var(--bg); border:1px solid var(--border); border-radius:10px;
+    color:var(--text); font-family:inherit; font-size:14px; padding:10px 12px; resize:vertical; min-height:60px;}
+  textarea:focus{outline:none; border-color:var(--accent);}
+  .note-row{margin-top:10px;}
+  .note-row label{font-size:12.5px; color:var(--muted); display:block; margin-bottom:4px;}
+
+  .exportbar{position:fixed; bottom:0; right:0; left:0; z-index:40;
+    background:rgba(15,17,23,.95); backdrop-filter:blur(10px); border-top:1px solid var(--border);
+    padding:14px 18px; display:flex; gap:12px; align-items:center; justify-content:center; flex-wrap:wrap;}
+  .btn{font-family:inherit; font-size:15px; font-weight:700; border:none; border-radius:11px;
+    padding:12px 22px; cursor:pointer; transition:transform .1s, opacity .15s;}
+  .btn:active{transform:scale(.97);}
+  .btn.primary{background:linear-gradient(90deg,var(--accent),var(--accent2)); color:#0f1117;}
+  .btn.ghost{background:var(--card); color:var(--text); border:1px solid var(--border);}
+  .btn.danger{background:transparent; color:var(--red); border:1px solid rgba(248,113,113,.4);}
+  .exportbar .summary{font-size:13px; color:var(--muted);}
+
+  footer{text-align:center; color:var(--muted); font-size:13px; margin-top:36px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="badge">STANDARDIZATION · DECISIONS</div>
+    <h1>החלטות סטנדרטיזציה · <span class="ax">Axis</span></h1>
+    <p>לכל נקודה בחר/י אחת מ-3 ההצעות או כתוב/י תשובה חופשית. בסיום — כפתור <b style="color:var(--cyan)">ייצוא</b> שיוריד קובץ עם כל ההחלטות להחזרה אליי.</p>
+  </header>
+
+  <div class="lede">
+    🎯 <b>היעד הסופי:</b> כל החלטה כאן תתורגם לקובץ <span class="en">CLAUDE.md</span> <b>אחיד</b> בכל פרויקט —
+    אותו מבנה, אותם סעיפים, אותם סטנדרטים. ההחלטות שתחזיר/י יהפכו לתבנית <span class="en">CLAUDE.md</span> + מסמך <span class="en">STANDARDS.md</span>.
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-bar"><div class="progress-fill" id="pfill"></div></div>
+    <div class="progress-txt" id="ptxt">0 מתוך 0 הוכרעו</div>
+  </div>
+
+  <div id="root"></div>
+
+  <footer>
+    Axis · החלטות סטנדרטיזציה · ההחלטות נשמרות אוטומטית בדפדפן (<span class="en">localStorage</span>)
+  </footer>
+</div>
+
+<div class="exportbar">
+  <span class="summary" id="esum">0 הוכרעו</span>
+  <button class="btn primary" onclick="exportDecisions()">⬇ ייצוא ההחלטות לקובץ</button>
+  <button class="btn ghost" onclick="copyDecisions()">📋 העתקה ללוח</button>
+  <button class="btn danger" onclick="resetAll()">איפוס</button>
+</div>
+
+<script>
+const DATA = [
+  { cat:"תשתית וגרסאות", cls:"crit", points:[
+    { id:"react-vite", title:"גרסת React ו-Vite",
+      state:"Tracker על React 18 / Vite 6; Planner ו-sync-calender על 19 / 7.",
+      opts:[
+        "לשדרג את Tracker ל-React 19 + Vite 7 — יישור מלא של כל האפליקציות.",
+        "יישור הדרגתי: Vite 7 עכשיו, React 19 בהמשך.",
+        "להקפיא גרסה פר-אפליקציה — ללא יישור מחייב."
+      ]},
+    { id:"language", title:"שפה — TypeScript או JavaScript",
+      state:"Tracker כולו JS+JSX; שרת sync-calender לא מטופס; Planner מטופס מלא.",
+      opts:[
+        "TypeScript חובה בכל מקום — להגר את Tracker ואת שרת sync-calender.",
+        "TypeScript חובה לקוד חדש בלבד; קוד קיים נשאר כפי שהוא.",
+        "להשאיר מעורב — ללא חובת TypeScript."
+      ]},
+    { id:"sdk", title:"גרסת @mondaycom/apps-sdk",
+      state:"שלוש גרסאות שונות: 0.1.4 / 3.2.1 / 4.7.4 — סיכון לאי-תאימות.",
+      opts:[
+        "ליישר את כולם ל-4.x (העדכנית).",
+        "ליישר ל-3.x (היציבה והמוכרת).",
+        "לבדוק מטריצת תאימות פר-סוג-אפליקציה ואז להחליט."
+      ]},
+  ]},
+  { cat:"שכבת השירות המשותפת", cls:"crit", points:[
+    { id:"api", title:"שכבת גישה ל-API (MondayAPI)",
+      state:"כל אפליקציה עטפה את monday-sdk-js בעצמה; אף אחת לא משתמשת ב-typed operations.",
+      opts:[
+        "Monday-api-service הוא השכבה היחידה המחייבת בכל האפליקציות.",
+        "Monday-api-service + codegen לטיפוסים (typed GraphQL operations).",
+        "כל אפליקציה שומרת wrapper משלה — רק חוזה-ממשק אחיד מחייב."
+      ]},
+    { id:"logging", title:"Logging",
+      state:"Planner ו-Tracker עם logger כמעט-זהה (console בלבד); sync-calender שולח גם ל-Axiom.",
+      opts:[
+        "logger אחיד מ-Monday-api-service + Axiom חובה בכל האפליקציות.",
+        "פורמט-לוג אחיד מבוסס-tags; Axiom אופציונלי (env).",
+        "console בצד-לקוח, Axiom רק בשרת (sync-calender)."
+      ]},
+    { id:"errors", title:"טיפול בשגיאות ו-Error UX",
+      state:"Tracker: ErrorBoundary + modal + global handler · Planner: banner בלבד · sync-calender: שרת בלבד.",
+      opts:[
+        "ErrorBanner + useErrorHandler מ-Monday-api-service כסטנדרט + ErrorBoundary גלובלי.",
+        "מדיניות retry/דיווח אחידה, אבל UI שגיאה פר-אפליקציה.",
+        "לאמץ את מודל Tracker (modal + global handler) בכל האפליקציות."
+      ]},
+    { id:"i18n", title:"i18n / עברית",
+      state:"רק Planner אוכף ב-ESLint שאין מחרוזות עברית מחוץ ל-t().",
+      opts:[
+        "i18next חובה + כלל ESLint שאוסר מחרוזות עברית מחוץ ל-t() — בכל אפליקציה דו-לשונית.",
+        "i18next חובה, ללא אכיפת ESLint.",
+        "עברית-בלבד מותרת באפליקציות פנימיות; דו-לשוני רק בצד-לקוח ציבורי."
+      ]},
+  ]},
+  { cat:"איכות קוד", cls:"imp", points:[
+    { id:"settings", title:"אחסון הגדרות ו-validation",
+      state:"Planner/Tracker על monday.storage.instance; sync-calender על SecureStorage מחולק. כל אחת מאמתת אחרת.",
+      opts:[
+        "סכמת Zod משותפת לכל ההגדרות, עם validation אחיד.",
+        "validation פר-אפליקציה, אבל חוזה-הגדרות אחיד ומתועד.",
+        "להשאיר כל אפליקציה עם המנגנון הנוכחי שלה."
+      ]},
+    { id:"lint", title:"ESLint / Prettier",
+      state:"Planner: flat config + כללי-אכיפה · Tracker: react-app ישן + כלל catch-block · sync-calender: ללא.",
+      opts:[
+        "flat config אחיד + Prettier + כללי-אכיפה (i18n, catch-block) בכל האפליקציות.",
+        "flat config אחיד, ללא Prettier.",
+        "כל אפליקציה שומרת קונפיג; רק כללי-ליבה משותפים."
+      ]},
+    { id:"tests", title:"בדיקות (טסטים)",
+      state:"sync-calender ללא בדיקות כלל; Tracker עם הסוויטה הבוגרת (71 קבצים, test:tz).",
+      opts:[
+        "Vitest חובה + רף כיסוי מינימלי + test:tz בכל האפליקציות.",
+        "Vitest חובה לקוד חדש, ללא רף כיסוי.",
+        "בדיקות מומלצות — לא חובה."
+      ]},
+  ]},
+  { cat:"מבנה CLAUDE.md ותהליך עבודה", cls:"proc", points:[
+    { id:"claude-md", title:"מבנה CLAUDE.md אחיד",
+      state:"לשלוש האפליקציות יש CLAUDE.md אך במבנה שונה לגמרי (Bug log / Error Handling Pattern / Module Layout).",
+      opts:[
+        "תבנית CLAUDE.md אחידה ומחייבת בכל פרויקט — כל הסעיפים, אותו סדר.",
+        "סעיפי-ליבה חובה + סעיפים אופציונליים פר-אפליקציה.",
+        "checklist המלצה בלבד — מבנה חופשי."
+      ]},
+    { id:"meta-sections", title:"סעיפי מטא ב-CLAUDE.md",
+      state:"מתוך הסטנדרט שלך: תיאור האפליקציה · מטרה ושימוש · טכנולוגיות · קבועים · איך עושים דיפלוי.",
+      opts:[
+        "כל חמשת הסעיפים חובה בראש כל CLAUDE.md.",
+        "חובה: תיאור + טכנולוגיות + דיפלוי; השאר מומלץ.",
+        "להגדיר את הסעיפים בנפרד לכל סוג-אפליקציה (client / server)."
+      ]},
+    { id:"workflow", title:"תהליך עבודה — 'לפני הכל' / 'אחרי הכל'",
+      state:"מתוך הסטנדרט שלך: הנחיות לפני שינוי, סיווג השינוי (התנהגות / באג / רכיב חדש), והנחיות אחרי שינוי.",
+      opts:[
+        "לאכוף 'לפני הכל' / 'אחרי הכל' + סיווג שינוי דרך change-tracker בכל פרויקט.",
+        "לתעד את ההנחיות בתוך CLAUDE.md, ללא אכיפה אוטומטית.",
+        "לא לכלול תהליך-עבודה בסטנדרט."
+      ]},
+    { id:"arch-buglog", title:"עדכון קובץ ארכיטקטורה + תיעוד באג שתוקן",
+      state:"מתוך הסטנדרט שלך: 'עדכון קובץ ארכיטקטורה' ו'תיעוד באג שתוקן'. ל-Planner כבר יש Bug log.",
+      opts:[
+        "כל שינוי מעדכן ARCHITECTURE.md + מתעד באגים שתוקנו ב-Bug log אחיד.",
+        "רק שינויים מבניים מעדכנים ארכיטקטורה; תיעוד באגים אופציונלי.",
+        "להשאיר פר-אפליקציה — ללא חובה."
+      ]},
+  ]},
+  { cat:"לתיעוד (לא חוסם)", cls:"doc", points:[
+    { id:"folders", title:"מבנה תיקיות",
+      state:"שלוש פרדיגמות: domain-driven (Planner) · feature-driven (Tracker) · client+server (sync-calender).",
+      opts:[
+        "מבנה src/ אחיד מחייב: api → services → hooks/components.",
+        "מבנה מומלץ ומתועד, לא מחייב.",
+        "להשאיר פר-אפליקציה."
+      ]},
+    { id:"env-deploy", title:"משתני סביבה ופריסה",
+      state:"מוסכמות .env שונות; כולם על mapps code:push אבל סקריפטים שונים.",
+      opts:[
+        ".env.example אחיד + סקריפטי deploy אחידים ב-package.json בכל אפליקציה.",
+        "רק תיעוד מוסכמות .env ו-deploy, ללא קבצים אחידים.",
+        "להשאיר כל אפליקציה עם המוסכמות הנוכחיות."
+      ]},
+  ]},
+];
+
+const STORE_KEY = "axis-standards-decisions-v1";
+let answers = JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
+
+function totalPoints(){ return DATA.reduce((n,c)=>n+c.points.length,0); }
+function answeredCount(){
+  return Object.values(answers).filter(a=>a && (a.choice!=null) && (a.choice!=="free" || (a.free||"").trim())).length;
+}
+
+function render(){
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+  DATA.forEach(cat=>{
+    const h = document.createElement("h2");
+    h.className = "section " + cat.cls;
+    h.innerHTML = `${cat.cat} <span class="cnt">· ${cat.points.length} נקודות</span>`;
+    root.appendChild(h);
+    const group = document.createElement("div");
+    group.className = cat.cls;
+    cat.points.forEach((p, pi)=>{
+      const globalIdx = globalNumber(cat, pi);
+      const a = answers[p.id] || {};
+      const card = document.createElement("div");
+      card.className = "dcard" + ((a.choice!=null && (a.choice!=="free"||(a.free||"").trim())) ? " answered":"");
+      let optsHtml = "";
+      p.opts.forEach((o,oi)=>{
+        const sel = a.choice===oi ? "sel":"";
+        const labels = ["א","ב","ג"];
+        optsHtml += `<label class="opt ${sel}">
+          <input type="radio" name="${p.id}" ${a.choice===oi?"checked":""} onchange="pick('${p.id}',${oi})">
+          <span class="otxt"><span class="lbl">${labels[oi]}.</span> ${o}</span></label>`;
+      });
+      const freeSel = a.choice==="free" ? "sel":"";
+      optsHtml += `<label class="opt ${freeSel}">
+        <input type="radio" name="${p.id}" ${a.choice==="free"?"checked":""} onchange="pick('${p.id}','free')">
+        <span class="otxt"><span class="lbl">✎</span> תשובה חופשית משלי</span></label>`;
+      card.innerHTML = `
+        <div class="dhead">
+          <div class="didx">${globalIdx}</div>
+          <div class="dtitle">${p.title}</div>
+        </div>
+        <div class="dstate">${p.state}</div>
+        <div class="opts">${optsHtml}</div>
+        <div class="freebox ${a.choice==="free"?"show":""}" id="free-${p.id}">
+          <textarea placeholder="כתוב/י כאן את ההחלטה שלך…" oninput="setFree('${p.id}',this.value)">${a.free||""}</textarea>
+        </div>
+        <div class="note-row">
+          <label>הערה (אופציונלי) — סייג, תנאי, או נימוק:</label>
+          <textarea placeholder="הערה חופשית…" oninput="setNote('${p.id}',this.value)">${a.note||""}</textarea>
+        </div>`;
+      group.appendChild(card);
+    });
+    root.appendChild(group);
+  });
+  updateProgress();
+}
+
+function globalNumber(cat, pi){
+  let n=0;
+  for(const c of DATA){ if(c===cat){ return n+pi+1; } n+=c.points.length; }
+  return n+pi+1;
+}
+
+function pick(id, choice){
+  answers[id] = answers[id] || {};
+  answers[id].choice = choice;
+  save();
+  const fb = document.getElementById("free-"+id);
+  if(fb) fb.classList.toggle("show", choice==="free");
+  // toggle sel classes without full re-render jolt
+  document.querySelectorAll(`input[name="${id}"]`).forEach(inp=>{
+    inp.closest(".opt").classList.toggle("sel", inp.checked);
+  });
+  const card = document.getElementById("free-"+id)?.closest(".dcard");
+  if(card){ const ok = choice!=="free" || (answers[id].free||"").trim(); card.classList.toggle("answered", !!ok); }
+  updateProgress();
+}
+function setFree(id,val){ answers[id]=answers[id]||{}; answers[id].free=val; save(); updateProgress();
+  const card=document.getElementById("free-"+id)?.closest(".dcard");
+  if(card){ const a=answers[id]; const ok=a.choice!=="free"||(a.free||"").trim(); card.classList.toggle("answered",!!ok);} }
+function setNote(id,val){ answers[id]=answers[id]||{}; answers[id].note=val; save(); }
+
+function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(answers)); }
+
+function updateProgress(){
+  const done = answeredCount(), tot = totalPoints();
+  const pct = tot? Math.round(done/tot*100):0;
+  document.getElementById("pfill").style.width = pct+"%";
+  document.getElementById("ptxt").textContent = `${done} מתוך ${tot} הוכרעו (${pct}%)`;
+  document.getElementById("esum").textContent = `${done}/${tot} הוכרעו`;
+}
+
+function buildMarkdown(){
+  const done = answeredCount(), tot = totalPoints();
+  let md = `# החלטות סטנדרטיזציה · Axis\n\n`;
+  md += `התקדמות: ${done}/${tot} הוכרעו\n\n`;
+  DATA.forEach(cat=>{
+    md += `## ${cat.cat}\n\n`;
+    cat.points.forEach((p,pi)=>{
+      const a = answers[p.id] || {};
+      const n = globalNumber(cat,pi);
+      md += `### ${n}. ${p.title}\n`;
+      md += `מצב היום: ${p.state}\n\n`;
+      let decision = "— (לא הוכרע)";
+      if(a.choice==="free"){ decision = (a.free||"").trim() ? `מלל חופשי: ${a.free.trim()}` : "מלל חופשי: (ריק)"; }
+      else if(typeof a.choice==="number"){ const lbl=["א","ב","ג"][a.choice]; decision = `אופציה ${lbl}: ${p.opts[a.choice]}`; }
+      md += `**החלטה:** ${decision}\n`;
+      if((a.note||"").trim()) md += `**הערה:** ${a.note.trim()}\n`;
+      md += `\n`;
+    });
+  });
+  return md;
+}
+
+function exportDecisions(){
+  const md = buildMarkdown();
+  const blob = new Blob([md], {type:"text/markdown;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "axis-standards-decisions.md";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function copyDecisions(){
+  try{ await navigator.clipboard.writeText(buildMarkdown());
+    const b=event.target; const t=b.textContent; b.textContent="✓ הועתק"; setTimeout(()=>b.textContent=t,1500);
+  }catch(e){ alert("לא ניתן להעתיק אוטומטית — השתמש/י בכפתור הייצוא."); }
+}
+
+function resetAll(){
+  if(confirm("לאפס את כל ההחלטות?")){ answers={}; save(); render(); }
+}
+
+render();
+</script>
+</body>
+</html>

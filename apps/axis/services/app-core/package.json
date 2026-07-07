@@ -1,0 +1,33 @@
+{
+  "name": "@axis/app-core",
+  "version": "0.1.0",
+  "description": "Shared startup + infrastructure for Axis monday.com apps: bootstrap, MondayContext, settings module, logging, error pipeline, API queue (standard #17).",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles": "./src/index.ts"
+  },
+  "types": "./src/index.ts",
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "monday-sdk-js": ">=0.5.7",
+    "react": ">=19.0.0",
+    "react-dom": ">=19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "monday-sdk-js": "^0.5.7",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.2"
+  }
+}
