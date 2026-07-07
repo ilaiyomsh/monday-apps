@@ -1,0 +1,173 @@
+/* Grid Structure - Clean lines, gaps, and layout */
+
+/* Month view grid lines */
+.rbc-month-view {
+  border-top: 1px solid var(--gc-border);
+}
+
+.rbc-month-row {
+  border-bottom: 1px solid var(--gc-border);
+}
+
+/* Day cells in month view */
+.rbc-day-bg {
+  border-left: 1px solid var(--gc-border);
+  background: var(--color-bg-primary);
+}
+
+/* Remove border from first day cell */
+.rbc-month-row .rbc-day-bg:first-child {
+  border-left: none;
+}
+
+/* Time view structures */
+.rbc-time-view {
+  border-top: 1px solid var(--gc-border);
+  background: var(--color-bg-primary);
+  display: flex;
+  flex-direction: column;
+}
+
+.rbc-time-content {
+  display: flex;
+  flex: 1 0 0%;
+  align-items: flex-start;
+  width: 100%;
+  /* border-top מוגדר במקום אחר - הוסר כדי למנוע כפילות */
+}
+
+.rbc-time-header {
+  border-bottom: none !important;
+  /* min-height מוגדר דינמית דרך JS - הוסר קונפליקט */
+}
+
+.rbc-time-header-gutter {
+  border-bottom: none !important;
+  min-height: 0 !important;
+  width: var(--gc-gutter-width) !important;
+  min-width: var(--gc-gutter-width) !important;
+  max-width: var(--gc-gutter-width) !important;
+  flex: none !important;
+}
+
+/* Time slots (individual time periods) */
+.rbc-time-slot {
+  border-top: none !important;
+  height: 100%;
+}
+
+/* First time slot doesn't need top border */
+.rbc-time-content .rbc-time-slot:first-child {
+  border-top: none;
+}
+
+/* Day columns */
+.rbc-day-slot .rbc-time-slot {
+  background: var(--color-bg-primary);
+}
+
+/* All-day row */
+.rbc-allday-cell {
+  background: var(--color-bg-primary);
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  padding-bottom: 0 !important;
+  /* padding-top מוגדר ב-header.css */
+  margin: 0 !important;
+  /* min-height מוגדר ב-header.css - הוסר קונפליקט */
+}
+
+.rbc-allday-row {
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.rbc-time-header-content {
+  /* min-height מוגדר ב-header.css - הוסר קונפליקט */
+  border-left: none !important;
+  border-right: none !important; /* ביטול גבול wrapper - הגבולות האנכיים מוגדרים על תאים בודדים בלבד */
+}
+
+/* Vertical column borders in the time grid */
+.rbc-time-content > * + * > * {
+  border-right: 1px solid var(--gc-border) !important;
+  border-left: none !important;
+}
+
+/* Event gap - space between overlapping events */
+.rbc-event {
+  margin: 0 !important;
+}
+
+/* Gutter (time labels column) */
+.rbc-time-gutter {
+  background: var(--color-bg-primary);
+  border-right: none !important;
+  width: var(--gc-gutter-width) !important;
+  flex: none !important;
+}
+
+.rbc-time-gutter .rbc-timeslot-group {
+  border-bottom: none !important;
+  position: relative;
+}
+
+.rbc-time-gutter .rbc-timeslot-group::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 5px;
+  border-bottom: 1px solid var(--gc-border);
+}
+
+.rbc-time-gutter .rbc-label {
+  position: relative !important;
+  top: -10px !important;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--gc-text-secondary);
+  text-align: left;
+  padding-left: 8px !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.rbc-timeslot-group {
+  border-bottom: 1px solid var(--gc-border);
+  height: var(--gc-slot-height) !important;
+  min-height: var(--gc-slot-height) !important;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 768px) {
+  /* Reduce gutter width on mobile - both header and grid gutters */
+  .rbc-time-gutter,
+  .rbc-time-header-gutter {
+    width: 42px !important;
+    min-width: 42px !important;
+    max-width: 42px !important;
+  }
+
+  .rbc-time-gutter .rbc-label {
+    font-size: 11px;
+    padding-left: 4px !important;
+  }
+
+  /* Slot groups — מוגדל לרזולוציה גבוהה יותר במובייל (טווח 09–17 נראה ברור) */
+  .rbc-timeslot-group {
+    height: 64px !important;
+    min-height: 64px !important;
+  }
+
+  /* Sticky header במובייל — שם היום + רצועת all-day נצמדים לראש בזמן גלילה
+     כך משתמש מסגנון Google Calendar רואה תמיד באיזה יום הוא */
+  .rbc-time-view .rbc-time-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--gc-bg, var(--color-bg-primary));
+    box-shadow: 0 1px 0 var(--gc-border, var(--color-border));
+  }
+}
+

@@ -1,0 +1,151 @@
+.wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-lg);
+    max-width: 720px;
+
+    /* Wizard step accent palette — aliased to globals in tokens.css §9 */
+    --step-accent: var(--color-wizard-accent);
+    --step-accent-hover: var(--color-wizard-accent-hover);
+    --step-accent-strong: var(--color-wizard-accent-strong);
+    --step-accent-bg: var(--color-wizard-accent-bg);
+    --step-accent-border: var(--color-wizard-accent-border);
+    --step-accent-gradient-end: var(--color-wizard-accent-gradient-end);
+    --step-success-gradient-end: var(--color-wizard-success-gradient-end);
+    --step-danger-gradient-end: var(--color-wizard-danger-gradient-end);
+    --step-success-bg: var(--color-wizard-success-bg);
+    --step-success-border: var(--color-wizard-success-border);
+    --step-success-text: var(--color-success-text-strong);
+    --step-log-bg: var(--color-wizard-log-bg);
+    --step-log-text: var(--color-wizard-log-text);
+    --step-log-error: var(--color-wizard-log-error);
+}
+
+.summary {
+    background: var(--step-accent-bg);
+    border: 1px solid var(--step-accent-border);
+    border-radius: var(--radius-card);
+    padding: var(--spacing-md) var(--spacing-lg);
+}
+.summaryTitle {
+    font-weight: var(--font-weight-semibold);
+    color: var(--step-accent-strong);
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--spacing-xs);
+}
+.summaryText {
+    color: var(--color-text-dark);
+    font-size: var(--font-size-body);
+}
+
+.installBtn {
+    background: var(--step-accent);
+    color: var(--color-text-inverse);
+    border: none;
+    border-radius: var(--radius-card);
+    padding: var(--spacing-md);
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+}
+.installBtn:hover { background: var(--step-accent-hover); }
+
+.progressBlock {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+.progressBar {
+    height: 10px;
+    background: var(--color-border-light);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+    position: relative;
+}
+.progressFill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--step-accent), var(--step-accent-gradient-end));
+    border-radius: var(--radius-full);
+    transition: width .35s ease;
+}
+.progressFill[data-state="done"]  { background: linear-gradient(90deg, var(--color-success), var(--step-success-gradient-end)); }
+.progressFill[data-state="error"] { background: linear-gradient(90deg, var(--color-danger), var(--step-danger-gradient-end)); }
+
+.progressMeta {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    font-size: var(--font-size-sm);
+    color: var(--color-text-dark);
+}
+.progressPct {
+    font-weight: var(--font-weight-bold);
+    color: var(--step-accent-strong);
+    min-width: 40px;
+}
+.progressNow {
+    flex: 1;
+    color: var(--color-text-tertiary);
+    font-size: 12.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.detailsBtn {
+    background: none;
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    padding: var(--spacing-xs) 10px;
+    font-size: var(--font-size-xs);
+    color: var(--color-text);
+    cursor: pointer;
+}
+.detailsBtn:hover { background: var(--color-bg-neutral); }
+
+.log {
+    background: var(--step-log-bg);
+    color: var(--step-log-text);
+    border-radius: var(--radius-card);
+    padding: var(--spacing-lg);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: var(--font-size-xs);
+    max-height: 320px;
+    overflow-y: auto;
+    direction: ltr;
+    text-align: left;
+}
+.logLine  { white-space: pre-wrap; }
+.logError { color: var(--step-log-error); margin-top: var(--spacing-sm); }
+
+.success {
+    background: var(--step-success-bg);
+    border: 1px solid var(--step-success-border);
+    border-radius: var(--radius-card);
+    padding: 18px var(--spacing-xl);
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+.successTitle {
+    font-weight: var(--font-weight-bold);
+    color: var(--color-approval-green);
+    font-size: var(--font-size-md);
+}
+.successText {
+    color: var(--step-success-text);
+    font-size: var(--font-size-body);
+}
+
+.openBtn {
+    margin-top: var(--spacing-sm);
+    background: var(--color-success);
+    color: var(--color-text-inverse);
+    border: none;
+    border-radius: var(--radius-card);
+    padding: var(--spacing-md);
+    font-size: 15px;
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+    align-self: flex-start;
+}
+.openBtn:hover { background: var(--color-approval-green-hover); }

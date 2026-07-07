@@ -1,0 +1,132 @@
+/* Bootstrap-flavor error toast palette — see tokens.css §9 (--color-toast-*) */
+.errorToast {
+    min-width: 300px;
+    max-width: 500px;
+    padding: var(--spacing-lg) var(--spacing-xl);
+    border-radius: var(--radius-button);
+    box-shadow: var(--shadow-md);
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+    pointer-events: auto;
+    animation: slideIn 0.3s ease-out;
+    background-color: var(--color-toast-danger-bg);
+    border: 2px solid var(--color-toast-danger-border);
+    color: var(--color-toast-danger-text);
+    position: relative;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.icon {
+    font-size: var(--icon-md);
+    flex-shrink: 0;
+}
+
+.message {
+    flex: 1;
+    font-size: 14px;
+    font-weight: var(--font-weight-medium);
+    line-height: 1.4;
+}
+
+.actions {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    flex-shrink: 0;
+}
+
+.actionButton {
+    background: none;
+    border: none;
+    font-size: var(--icon-sm);
+    cursor: pointer;
+    padding: var(--spacing-xs) var(--spacing-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.7;
+    transition: opacity var(--transition-base), transform 0.1s;
+    border-radius: var(--radius-xs);
+    min-width: 28px;
+    height: 28px;
+}
+
+.actionButton:hover {
+    opacity: 1;
+    background-color: rgba(0, 0, 0, 0.05);
+    transform: scale(1.1);
+}
+
+.actionButton:active {
+    transform: scale(0.95);
+}
+
+.retryButton {
+    font-size: 18px;
+    font-weight: var(--font-weight-bold);
+}
+
+.closeButton {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0;
+    width: var(--icon-lg);
+    height: var(--icon-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.7;
+    transition: opacity var(--transition-base);
+    flex-shrink: 0;
+}
+
+.closeButton:hover {
+    opacity: 1;
+}
+
+.copiedIndicator {
+    position: absolute;
+    top: -30px;
+    right: 0;
+    background-color: var(--color-toast-success-border);
+    color: var(--color-text-inverse);
+    padding: var(--spacing-xs) var(--spacing-sm);
+    border-radius: var(--radius-xs);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    animation: fadeInOut 2s ease-in-out;
+    pointer-events: none;
+}
+
+@keyframes fadeInOut {
+    0%, 100% {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+    10%, 90% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* RTL Support */
+[dir="rtl"] .errorToast {
+}
+
+[dir="rtl"] .copiedIndicator {
+    right: auto;
+    left: 0;
+}

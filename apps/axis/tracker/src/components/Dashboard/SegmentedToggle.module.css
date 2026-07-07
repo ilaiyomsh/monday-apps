@@ -1,0 +1,36 @@
+.container {
+    display: inline-flex;
+    border: 1px solid var(--color-border-medium);
+    border-radius: var(--radius-button);
+    overflow: hidden;
+    background: var(--color-bg-tertiary);
+}
+
+.option {
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+    transition: background-color var(--transition-base), color var(--transition-base);
+    white-space: nowrap;
+}
+
+.option:not(:last-child) {
+    border-left: 1px solid var(--color-border-medium);
+}
+
+.option:hover {
+    background-color: var(--color-bg-hover-soft);
+}
+
+.active {
+    background-color: var(--color-primary);
+    color: var(--color-text-inverse);
+}
+
+.active:hover {
+    background-color: var(--color-primary-hover);
+}

@@ -1,0 +1,109 @@
+{
+  "data": {
+    "boards": [
+      {
+        "activity_logs": [
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"date_mkzy8rtn\",\"column_type\":\"date\",\"column_title\":\"שעת סיום\",\"value\":{\"date\":\"2026-05-18\",\"icon\":null,\"time\":\"14:45:00\",\"changed_at\":\"2026-05-18T14:43:47.354Z\"},\"previous_value\":{\"date\":\"2026-05-18\",\"icon\":null,\"time\":\"14:30:00\",\"changed_at\":\"2026-05-18T14:43:35.761Z\"},\"is_column_with_hide_permissions\":false,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":\"41e98cbc-9b15-488b-81c5-59b2438fc92e\",\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791154263714040",
+            "event": "update_column_value",
+            "user_id": "73880535"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"date_mkzy8rtn\",\"column_type\":\"date\",\"column_title\":\"שעת סיום\",\"value\":{\"date\":\"2026-05-18\",\"icon\":null,\"time\":\"14:30:00\",\"changed_at\":\"2026-05-18T14:43:35.761Z\"},\"previous_value\":{\"date\":\"2026-05-19\",\"icon\":null,\"time\":\"14:30:00\",\"changed_at\":\"2026-05-18T14:42:47.703Z\"},\"is_column_with_hide_permissions\":false,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":\"cc29dcda-cae4-4a10-adb7-6bcb9c9b9446\",\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791154154307700",
+            "event": "update_column_value",
+            "user_id": "73880535"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"color_mm06fg3v\",\"column_type\":\"color\",\"column_title\":\"עדכן עלות דיווח\",\"value\":null,\"previous_value\":{\"label\":{\"index\":3,\"text\":\"עדכן עלות דיווח\",\"style\":{\"color\":\"#ff6d3b\",\"border\":\"#e05828\",\"var_name\":\"dark-orange\"},\"is_done\":false},\"post_id\":null},\"is_column_with_hide_permissions\":true,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791154124841426",
+            "event": "update_column_value",
+            "user_id": "-4"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"numeric_mm06hxv8\",\"column_type\":\"numeric\",\"column_title\":\"עלות דיווח\",\"value\":{\"value\":2425,\"unit\":null},\"previous_value\":{\"value\":24.25,\"unit\":null},\"is_column_with_hide_permissions\":true,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791154100729918",
+            "event": "update_column_value",
+            "user_id": "-4"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"numeric_mm06hxv8\",\"column_type\":\"numeric\",\"column_title\":\"עלות דיווח\",\"value\":{\"value\":24.25,\"unit\":null},\"previous_value\":{\"value\":50,\"unit\":null},\"is_column_with_hide_permissions\":true,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791154085898942",
+            "event": "update_column_value",
+            "user_id": "-4"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"color_mm06fg3v\",\"column_type\":\"color\",\"column_title\":\"עדכן עלות דיווח\",\"value\":{\"label\":{\"index\":3,\"text\":\"עדכן עלות דיווח\",\"style\":{\"color\":\"#ff6d3b\",\"border\":\"#e05828\",\"var_name\":\"dark-orange\"},\"is_done\":false},\"post_id\":null},\"previous_value\":null,\"is_column_with_hide_permissions\":true,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791153844118468",
+            "event": "update_column_value",
+            "user_id": "-4"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"date_mkzy8rtn\",\"column_type\":\"date\",\"column_title\":\"שעת סיום\",\"value\":{\"date\":\"2026-05-19\",\"icon\":null,\"time\":\"14:30:00\",\"changed_at\":\"2026-05-18T14:42:47.703Z\"},\"previous_value\":{\"date\":\"2026-05-18\",\"icon\":null,\"time\":\"14:30:00\",\"changed_at\":\"2026-05-18T14:42:41.171Z\"},\"is_column_with_hide_permissions\":false,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791153680864632",
+            "event": "update_column_value",
+            "user_id": "73880535"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"numeric_mky7eqsf\",\"column_type\":\"numeric\",\"column_title\":\"משך זמן\",\"value\":{\"value\":24.25,\"unit\":null},\"previous_value\":{\"value\":0,\"unit\":null},\"is_column_with_hide_permissions\":false,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791153680736472",
+            "event": "update_column_value",
+            "user_id": "73880535"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"date4\",\"column_type\":\"date\",\"column_title\":\"תאריך דיווח\",\"value\":{\"date\":\"2026-05-18\",\"icon\":null,\"time\":\"14:15:00\",\"changed_at\":\"2026-05-18T14:42:47.700Z\"},\"previous_value\":{\"date\":\"2026-05-18\",\"icon\":null,\"time\":\"14:30:00\",\"changed_at\":null},\"is_column_with_hide_permissions\":false,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791153680581934",
+            "event": "update_column_value",
+            "user_id": "73880535"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"date_mkzy8rtn\",\"column_type\":\"date\",\"column_title\":\"שעת סיום\",\"value\":{\"date\":\"2026-05-18\",\"icon\":null,\"time\":\"14:30:00\",\"changed_at\":\"2026-05-18T14:42:41.171Z\"},\"previous_value\":{\"date\":\"2026-05-18\",\"icon\":null,\"time\":\"15:00:00\",\"changed_at\":null},\"is_column_with_hide_permissions\":false,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791153615818586",
+            "event": "update_column_value",
+            "user_id": "73880535"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"numeric_mky7eqsf\",\"column_type\":\"numeric\",\"column_title\":\"משך זמן\",\"value\":{\"value\":0,\"unit\":null},\"previous_value\":{\"value\":0.5,\"unit\":null},\"is_column_with_hide_permissions\":false,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791153615722020",
+            "event": "update_column_value",
+            "user_id": "73880535"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"color_mm06fg3v\",\"column_type\":\"color\",\"column_title\":\"עדכן עלות דיווח\",\"value\":null,\"previous_value\":{\"label\":{\"index\":3,\"text\":\"עדכן עלות דיווח\",\"style\":{\"color\":\"#ff6d3b\",\"border\":\"#e05828\",\"var_name\":\"dark-orange\"},\"is_done\":false},\"post_id\":null},\"is_column_with_hide_permissions\":true,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791153042563274",
+            "event": "update_column_value",
+            "user_id": "-4"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"numeric_mm06hxv8\",\"column_type\":\"numeric\",\"column_title\":\"עלות דיווח\",\"value\":{\"value\":50,\"unit\":null},\"previous_value\":{\"value\":0.5,\"unit\":null},\"is_column_with_hide_permissions\":true,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791153026343492",
+            "event": "update_column_value",
+            "user_id": "-4"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"numeric_mm06hxv8\",\"column_type\":\"numeric\",\"column_title\":\"עלות דיווח\",\"value\":{\"value\":0.5,\"unit\":null},\"previous_value\":null,\"is_column_with_hide_permissions\":true,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791153009924520",
+            "event": "update_column_value",
+            "user_id": "-4"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"column_id\":\"color_mm06fg3v\",\"column_type\":\"color\",\"column_title\":\"עדכן עלות דיווח\",\"value\":{\"label\":{\"index\":3,\"text\":\"עדכן עלות דיווח\",\"style\":{\"color\":\"#ff6d3b\",\"border\":\"#e05828\",\"var_name\":\"dark-orange\"},\"is_done\":false},\"post_id\":null},\"previous_value\":null,\"is_column_with_hide_permissions\":true,\"is_rollup_column\":false,\"is_undo_action\":null,\"action_record_uuid\":null,\"parent_board_id\":null,\"parent_item_id\":null}",
+            "created_at": "17791152790948846",
+            "event": "update_column_value",
+            "user_id": "-4"
+          },
+          {
+            "data": "{\"board_id\":18390430440,\"group_id\":\"topics\",\"group_name\":\"דיווחים\",\"group_color\":\"#579bfc\",\"is_top_group\":true,\"pulse_id\":12040060770,\"pulse_name\":\"עיריית באר שבע - הקמה - עבודה עצמית\",\"parent_board_id\":null,\"parent_item_id\":null,\"is_batch_action\":null,\"is_subtasks_action\":false,\"column_values_json\":\"{\\\"date4\\\":{\\\"date\\\":\\\"2026-05-18\\\",\\\"icon\\\":null,\\\"time\\\":\\\"14:30:00\\\",\\\"changed_at\\\":null},\\\"numeric_mky7eqsf\\\":{\\\"value\\\":0.5,\\\"unit\\\":null},\\\"board_relation_mkyg2zeq\\\":{\\\"linkedPulseIds\\\":[{\\\"linkedPulseId\\\":8948317101}]},\\\"board_relation_mm00yzj2\\\":{\\\"linkedPulseIds\\\":[{\\\"linkedPulseId\\\":11152727451}]},\\\"text_mkzsm5wd\\\":{\\\"value\\\":\\\"עדכון לוח סיכומי פגישות בשרת הישראלי\\\"},\\\"person\\\":{\\\"personsAndTeams\\\":[{\\\"id\\\":73880535,\\\"kind\\\":\\\"person\\\"}]},\\\"color_mm008jha\\\":{\\\"label\\\":{\\\"index\\\":3,\\\"text\\\":\\\"פרויקט חיצוני\\\",\\\"style\\\":{\\\"color\\\":\\\"#007eb5\\\",\\\"border\\\":\\\"#3db0df\\\",\\\"var_name\\\":\\\"blue-links\\\"},\\\"is_done\\\":false},\\\"post_id\\\":null},\\\"color_mkzsg4t1\\\":{\\\"label\\\":{\\\"index\\\":2,\\\"text\\\":\\\"עבודה עצמית\\\",\\\"style\\\":{\\\"color\\\":\\\"#a1e3f6\\\",\\\"border\\\":\\\"#a1e3f6\\\",\\\"var_name\\\":\\\"sail\\\"},\\\"is_done\\\":false},\\\"post_id\\\":null},\\\"date_mkzy8rtn\\\":{\\\"date\\\":\\\"2026-05-18\\\",\\\"icon\\\":null,\\\"time\\\":\\\"15:00:00\\\",\\\"changed_at\\\":null},\\\"board_relation_mm2bjxk4\\\":{\\\"linkedPulseIds\\\":[{\\\"linkedPulseId\\\":11529892506}]},\\\"boolean_mm33rkve\\\":{\\\"checked\\\":false}}\"}",
+            "created_at": "17791152641616632",
+            "event": "create_pulse",
+            "user_id": "73880535"
+          }
+        ]
+      }
+    ]
+  },
+  "extensions": {
+    "request_id": "b2b02f8b-2e59-9f2d-bee9-f18bd035545a"
+  }
+}

@@ -1,0 +1,115 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: transparent;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: var(--z-overlay);
+  pointer-events: none;
+}
+
+.dialog {
+  background-color: var(--color-bg-primary);
+  border-radius: var(--radius-card);
+  width: 90%;
+  max-width: 450px;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.header {
+  padding: var(--spacing-xl);
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--color-bg-secondary);
+}
+
+.header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.closeButton {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: var(--spacing-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  transition: color var(--transition-base);
+}
+
+.closeButton:hover {
+  color: var(--color-text);
+}
+
+.content {
+  padding: var(--spacing-2xl) var(--spacing-xl);
+  color: var(--color-text);
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+}
+
+.content p {
+  margin: 0;
+}
+
+.footer {
+  padding: var(--spacing-lg) var(--spacing-xl);
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-start;
+  gap: var(--spacing-md);
+  background-color: var(--color-bg-secondary);
+}
+
+.button {
+  padding: var(--spacing-sm) var(--spacing-2xl);
+  border-radius: var(--radius-button);
+  cursor: pointer;
+  font-size: var(--font-size-button);
+  font-weight: var(--font-weight-medium);
+  border: none;
+  transition: all var(--transition-base);
+}
+
+.cancelBtn {
+  background-color: var(--color-bg-primary);
+  border: 1px solid var(--color-border-medium);
+  color: var(--color-text);
+}
+
+.cancelBtn:hover {
+  background-color: var(--color-bg-button-gray);
+}
+
+.confirmBtn {
+  background-color: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+
+.confirmBtn:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.dangerBtn {
+  background-color: var(--color-danger);
+  color: var(--color-text-inverse);
+}
+
+.dangerBtn:hover {
+  background-color: var(--color-danger-hover);
+}

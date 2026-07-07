@@ -1,0 +1,629 @@
+/* Event Styling - Google Calendar Style (Stable Method) */
+
+/* Main event container (BCR Wrapper) - Transparent to allow internal spacing */
+.rbc-calendar .rbc-event {
+    background-color: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    overflow: visible !important; /* Allow internal gap to be visible */
+    box-shadow: none !important;
+    cursor: grab !important; /* שינוי סמן לגרירה */
+}
+
+.rbc-calendar .rbc-event:active {
+    cursor: grabbing !important;
+}
+
+/* הסרת אילוץ רוחב מלא ששבר את תצוגת האירועים החופפים */
+.rbc-day-slot .rbc-event {
+    /* מאפשר ל-BCR לחשב את הרוחב והמיקום אוטומטית עבור אירועים חופפים */
+    width: auto; 
+    min-width: 0;
+}
+
+/* אירועים יומיים - הספרייה מנהלת את המיקום והרוחב */
+.rbc-allday-cell .rbc-event {
+    /* הספרייה משתמשת ב-absolute positioning עם left/width/right */
+    /* לא לדרוס את הערכים האלה */
+    height: 23px !important; /* גובה קבוע */
+    margin: 0 1px 2px 1px !important; /* הפרדה קבועה של 2px למטה ו-1px בצדדים */
+}
+
+/* Inner colored wrapper - This is where the actual styling happens */
+.gc-event-wrapper {
+    position: relative;
+    width: calc(100% - 2px); /* השארת רווח קטן לצדדים */
+    margin-right: 1px;
+    height: calc(100% - 1px); /* השארת רווח קטן רק בתחתית */
+    margin-bottom: 1px;
+    border-radius: var(--gc-event-radius, 8px);
+    padding: 3px 10px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: filter 0.2s ease;
+    border: 1.5px solid var(--color-text-inverse); /* גבול לבן דק להפרדה בחפיפה */
+    box-shadow: var(--shadow-sm); /* צל עדין לעומק */
+}
+
+/* אירועים שעתיים בלבד - הזזה קלה למעלה כדי לחפוף עם קו השעה */
+.rbc-day-slot .gc-event-wrapper {
+    position: relative;
+    top: -1px;
+}
+
+/* Event in month view - same gap as week view */
+.rbc-month-view .gc-event-wrapper {
+    height: calc(100% - 2px); /* הפרדה קבועה של 2px */
+    margin-bottom: 2px;
+}
+
+/* Content styling */
+.gc-event-title {
+    font-weight: 500;
+    font-size: 15px; /* הקטנה מ-16px */
+    line-height: 1.2;
+    text-align: right;
+    white-space: normal; /* מאפשר גלישת טקסט */
+    word-wrap: break-word;
+    overflow: visible;
+    color: var(--color-text-inverse) !important;
+}
+
+.gc-event-time {
+    font-size: 13px; /* הקטנה מ-14px */
+    font-weight: 500;
+    opacity: 0.95;
+    margin-bottom: 1px;
+    text-align: right; /* חזרה ליישור ימין לאירועים ארוכים */
+    color: var(--color-text-inverse) !important;
+    font-variant-numeric: tabular-nums;
+}
+
+.gc-event-notes {
+    font-size: 13px; /* הקטנה מ-14px */
+    opacity: 0.9;
+    margin-top: 1px;
+    text-align: right;
+    white-space: normal; /* מאפשר גלישת טקסט */
+    word-wrap: break-word;
+    overflow: visible;
+    color: var(--color-text-inverse) !important;
+}
+
+/* אירועים קצרים (30 דקות) - כותרת ושעה באותה שורה */
+.gc-event-wrapper.gc-event-short {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 2px 8px;
+}
+
+.gc-event-wrapper.gc-event-short .gc-event-title {
+    flex-shrink: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+}
+
+.gc-event-wrapper.gc-event-short .gc-event-time {
+    flex-shrink: 0;
+    font-size: 12px;
+    opacity: 0.9;
+    margin-bottom: 0;
+    margin-right: auto; /* דוחף את השעה לשמאל בתוך השורה */
+    text-align: left; /* יישור טקסט לשמאל */
+}
+
+/* הסתרת הערות באירועים קצרים - אין מספיק מקום */
+.gc-event-wrapper.gc-event-short .gc-event-notes {
+    display: none;
+}
+
+/* Hover & Selected States */
+.rbc-event:hover .gc-event-wrapper {
+    filter: brightness(0.9);
+}
+
+/* שיפור חווית הגרירה והזזה של אירועים */
+.rbc-addons-dnd-resizable {
+    height: 100%;
+    width: 100%;
+}
+
+/* הקטנת אזור ה"ידיות" של שינוי הגודל כדי להשאיר יותר מקום לגרירה (Move) */
+/* זה פותר את הצורך לדייק בדיוק למרכז האירוע כדי להזיז אותו */
+.rbc-addons-dnd-resize-ns-anchor {
+    height: 10px !important;
+    z-index: 2;
+}
+
+.rbc-addons-dnd-resize-ns-anchor:first-child {
+    top: 0;
+}
+
+.rbc-addons-dnd-resize-ns-anchor:last-child {
+    bottom: 0;
+}
+
+.rbc-event.rbc-selected .gc-event-wrapper {
+    box-shadow: 0 0 0 2px var(--color-text-inverse), 0 0 0 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Long-press feedback (mobile) — אפקט "לחיצה" קצר לפני שה-overlay נפתח */
+.gc-event-wrapper.gc-event-pressing {
+    transform: scale(0.98);
+    transition: transform 80ms ease-out;
+}
+
+/* מגע על אירוע במובייל לא מפעיל גלילת יומן — ה-JS שולט בהזזה.
+   חיוני כדי שאחרי long-press תמשיך גרירה רציפה ולא תיהפך לגלילה.
+   המשתמש יכול עדיין לגלול ע"י מגע באזור ריק שבין אירועים. */
+@media (max-width: 768px) {
+    .gc-event-wrapper {
+        touch-action: none;
+    }
+}
+
+/* Multi-select - אירוע נבחר בבחירה מרובה (CTRL+click) */
+.gc-event-wrapper.gc-event-selected {
+    box-shadow: 0 0 0 2px var(--gc-primary), 0 0 0 4px rgba(26, 115, 232, 0.3) !important;
+    transform: scale(1.02);
+    z-index: 10;
+    animation: selectPulse 0.3s ease-out;
+}
+
+@keyframes selectPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1.02); }
+}
+
+/* All-day events - עיצוב אירועים יומיים עם הפרדה */
+.gc-event-wrapper.gc-event-allday {
+    height: 23px !important; /* גובה קבוע פחות 2px להפרדה */
+    width: calc(100% - 2px) !important; /* רוחב עם הפרדה אופקית */
+    margin: 0 1px 2px 1px !important; /* הפרדה קבועה של 2px */
+    padding: 0 8px !important; /* פאדינג מצומצם */
+    font-size: 13px !important;
+    line-height: 23px !important; /* יישור אנכי של הטקסט */
+    box-sizing: border-box !important;
+    border-radius: 4px !important; /* פינות מעוגלות */
+    display: flex;
+    align-items: center;
+    
+    /* אפקט צל מינימלי לתחושת עומק והפרדה */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15) !important;
+    border: 1px solid rgba(0, 0, 0, 0.08) !important; /* גבול עדין להפרדה */
+}
+
+/* אירועים יומיים - ניתנים לגרירה ו-resize אופקי */
+.rbc-allday-cell .rbc-event {
+    cursor: grab !important;
+}
+
+.rbc-allday-cell .rbc-event:active {
+    cursor: grabbing !important;
+}
+
+/* ביטול אפקט הדהייה על כל האירועים בזמן גרירה */
+.rbc-addons-dnd.rbc-addons-dnd-is-dragging .rbc-event:not(.rbc-addons-dnd-dragged-event):not(.rbc-addons-dnd-drag-preview) {
+    opacity: 1 !important;
+}
+
+/* שורת הגרירה של אירועים יומיים - מיקום נכון */
+.rbc-allday-cell .rbc-addons-dnd-drag-row {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    z-index: 100 !important; /* מעל הכל */
+}
+
+/* וודא שה-row-body תופס את כל המקום */
+.rbc-allday-cell .rbc-addons-dnd-row-body {
+    position: relative !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* וודא שהאירוע הנגרר מוסתר לחלוטין */
+.rbc-allday-cell .rbc-addons-dnd-dragged-event {
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* הסתרת drag preview של אירוע יומי באזור השעתי */
+.rbc-time-content .rbc-addons-dnd-drag-preview .gc-event-allday,
+.rbc-day-slot .rbc-addons-dnd-drag-preview .gc-event-allday {
+    display: none !important;
+}
+
+/* הסתרת drag preview של אירוע שעתי באזור היומי */
+.rbc-allday-cell .rbc-addons-dnd-drag-preview .gc-event-wrapper:not(.gc-event-allday) {
+    display: none !important;
+}
+
+/* ידיות resize אופקיות לאירועים יומיים */
+.rbc-allday-cell .rbc-addons-dnd-resize-ew-anchor {
+    position: absolute;
+    top: 0 !important; /* דריסת ה-top: 4px מהספרייה */
+    bottom: 0 !important;
+    width: 8px;
+    z-index: 10;
+    cursor: ew-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* RTL: ידית ימנית להתחלה (first-child) */
+.rbc-allday-cell .rbc-addons-dnd-resize-ew-anchor:first-child {
+    right: 0;
+    left: auto !important;
+}
+
+/* RTL: ידית שמאלית לסיום (last-child) */
+.rbc-allday-cell .rbc-addons-dnd-resize-ew-anchor:last-child {
+    left: 0;
+    right: auto !important;
+}
+
+/* אייקון הידית האופקית - מוסתר כברירת מחדל, ממורכז */
+.rbc-allday-cell .rbc-addons-dnd-resize-ew-icon {
+    display: none !important;
+    border-left: 2px solid rgba(255, 255, 255, 0.7);
+    height: 12px;
+    margin: 0 !important;
+}
+
+/* Hover state - הצגת הידיות רק בעת ריחוף */
+.rbc-allday-cell .rbc-event:hover .rbc-addons-dnd-resize-ew-icon {
+    display: block !important;
+}
+
+/* Accessibility */
+.rbc-event:focus-visible .gc-event-wrapper {
+    outline: 2px solid var(--gc-primary, #1a73e8);
+    outline-offset: 1px;
+}
+
+/* BCR Overrides - Remove labels because we render them in CustomEvent */
+.rbc-event-label {
+    display: none !important;
+}
+
+/* ===== Approval Status Indicators ===== */
+
+/* X קטן אדום בפינה השמאלית העליונה לאירועים שנדחו */
+.gc-event-rejected-x {
+    position: absolute;
+    top: 1px;
+    left: 3px;
+    font-size: 10px;
+    line-height: 1;
+    color: var(--color-danger);
+    font-weight: var(--font-weight-bold);
+    z-index: 1;
+    pointer-events: none;
+    text-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
+}
+
+/* ===== Approval Selection Mode ===== */
+
+/* Checkbox באירועים במצב בחירה לאישור */
+.gc-event-approval-checkbox {
+    font-size: 14px;
+    line-height: 1;
+    margin-left: 4px;
+    flex-shrink: 0;
+    color: white;
+    opacity: 0.9;
+}
+
+/* אירוע שנבחר לאישור */
+.gc-event-wrapper.gc-event-approval-selected {
+    box-shadow: 0 0 0 2px var(--color-approval-green), 0 0 0 4px rgba(13, 124, 63, 0.3) !important;
+}
+
+/* ===== Temporary/Planned Events Styling ===== */
+
+/* אירועים מתוכננים - עיצוב חלול (hollow) עם גבול צבעוני */
+.gc-event-wrapper.gc-event-temporary {
+    background: transparent !important;
+    border: 2px solid var(--event-color, var(--color-primary)) !important;
+    border-radius: 8px;
+}
+
+/* טקסט באירועים מתוכננים - צבע האירוע במקום לבן */
+.gc-event-temporary .gc-event-title,
+.gc-event-temporary .gc-event-time,
+.gc-event-temporary .gc-event-notes {
+    color: var(--event-color, var(--color-primary)) !important;
+}
+
+/* הסרת הצל מאירועים מתוכננים */
+.gc-event-wrapper.gc-event-temporary {
+    box-shadow: none !important;
+}
+
+/* Hover state לאירועים מתוכננים */
+.rbc-event:hover .gc-event-wrapper.gc-event-temporary {
+    background: rgba(var(--event-color-rgb, 0, 115, 234), 0.1) !important;
+    filter: none;
+}
+
+/* ===== Mobile Responsive ===== */
+@media (max-width: 768px) {
+    /* Event wrapper - compact on mobile, עם מרווח מהקצוות כדי שהאירוע לא ייצמד לקצה המסך */
+    .gc-event-wrapper {
+        padding: 2px 6px;
+        border-radius: 6px;
+        border-width: 1px;
+        width: calc(100% - 12px);
+        margin-inline-start: 6px;
+        margin-inline-end: 6px;
+    }
+
+    .gc-event-title {
+        font-size: 12px;
+        line-height: 1.1;
+    }
+
+    .gc-event-time {
+        font-size: 10px;
+    }
+
+    /* Hide notes on mobile - too small to read */
+    .gc-event-notes {
+        display: none;
+    }
+
+    /* Short events on mobile */
+    .gc-event-wrapper.gc-event-short {
+        padding: 1px 6px;
+        gap: 4px;
+    }
+
+    .gc-event-wrapper.gc-event-short .gc-event-title {
+        font-size: 11px;
+    }
+
+    .gc-event-wrapper.gc-event-short .gc-event-time {
+        font-size: 10px;
+    }
+
+    /* All-day events */
+    .gc-event-wrapper.gc-event-allday {
+        height: 20px !important;
+        line-height: 20px !important;
+        font-size: 11px !important;
+        padding: 0 6px !important;
+    }
+
+    /* Resize handles - larger for touch */
+    .rbc-addons-dnd-resize-ns-anchor {
+        height: 16px !important;
+    }
+
+    /* Touch-friendly event interaction */
+    .rbc-event {
+        -webkit-touch-callout: none;
+        user-select: none;
+    }
+
+    /* Dragged event feedback */
+    .rbc-addons-dnd-dragged-event .gc-event-wrapper {
+        opacity: 0.7;
+        transform: scale(1.03);
+    }
+
+    /* Month view events */
+    .rbc-month-view .gc-event-wrapper {
+        padding: 1px 4px;
+        font-size: 11px;
+    }
+}
+
+/* ===== אירוע בטעינה (Skeleton / Loading) ===== */
+
+/* אנימציית pulse על כל השלד */
+.gc-event-wrapper.gc-event-loading {
+    animation: skeletonPulse 1.5s ease-in-out infinite;
+    pointer-events: none; /* מניעת אינטראקציה בזמן טעינה */
+    cursor: default !important;
+}
+
+@keyframes skeletonPulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 0.4; }
+}
+
+/* ספינר קטן בפינה שמאלית עליונה (RTL) */
+.gc-event-loader {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: var(--color-text-inverse);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    pointer-events: none;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ספינר לאירועים יומיים - קטן יותר */
+.gc-event-wrapper.gc-event-allday .gc-event-loader {
+    width: 10px;
+    height: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    border-width: 1.5px;
+}
+
+/* מניעת גרירה ושינוי גודל לאירועים בטעינה */
+.gc-event-loading .rbc-addons-dnd-resize-ns-anchor,
+.gc-event-loading .rbc-addons-dnd-resize-ew-anchor {
+    display: none !important;
+}
+
+/* מובייל - ספינר קטן יותר */
+@media (max-width: 768px) {
+    .gc-event-loader {
+        width: 10px;
+        height: 10px;
+        border-width: 1.5px;
+    }
+
+    .gc-event-wrapper.gc-event-allday .gc-event-loader {
+        width: 8px;
+        height: 8px;
+    }
+}
+
+/* רצועת all-day במובייל — pills אופקיים בסגנון Google Calendar */
+@media (max-width: 768px) {
+    .rbc-allday-cell {
+        min-height: 44px;
+        /* גדל כדי למלא את החלל מתחת לשורת שם-היום עד גובה ה-gutter (88px),
+           אחרת נוצר פס ריק לא-לחיץ בין ה-all-day לבין הגריד */
+        flex: 1 1 auto !important;
+    }
+
+    /* הסרת ה"קפסולות" הריקות באזור all-day כשאין אירועים —
+       רקע ה-day-bg והגבול הצדדי שלו יוצרים מלבן ריק מיותר */
+    .rbc-time-view .rbc-allday-cell .rbc-row-bg .rbc-day-bg {
+        border-right: none !important;
+        background: transparent !important;
+    }
+
+    /* תצוגת יום במובייל — מערך אופקי עם גלילה */
+    .rbc-time-view .rbc-allday-cell .rbc-row-content {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 6px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 6px 8px;
+        scroll-snap-type: x proximity;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* שורה ריקה (ללא events) לא צריכה לתפוס מקום ויזואלי */
+    .rbc-time-view .rbc-allday-cell .rbc-row-content > .rbc-row:empty {
+        display: none !important;
+    }
+
+    /* כל row הופך ל-pill אינלייני */
+    .rbc-time-view .rbc-allday-cell .rbc-row-content > .rbc-row {
+        flex: 0 0 auto;
+        width: auto !important;
+        display: inline-flex;
+        scroll-snap-align: start;
+    }
+
+    /* segment-ים — מסירים את ה-positioning המוחלט */
+    .rbc-time-view .rbc-allday-cell .rbc-row-segment {
+        position: static !important;
+        left: auto !important;
+        right: auto !important;
+        width: auto !important;
+        padding: 0 !important;
+        flex: 0 0 auto;
+    }
+
+    /* האירוע עצמו — סגנון pill מעוגל */
+    .rbc-time-view .rbc-allday-cell .gc-event-wrapper.gc-event-allday {
+        height: 28px !important;
+        line-height: 28px !important;
+        border-radius: 14px !important;
+        padding: 0 14px !important;
+        font-size: 12px !important;
+        white-space: nowrap;
+        flex-shrink: 0;
+        margin: 0 !important;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* האזור הריק של all-day — לחיץ אבל ללא pill ויזואלי. הקליק מטופל
+       ע"י handleCalendarTap ב-MondayCalendar שמחשב יום לפי x-coordinate. */
+}
+
+/* ===== Day-off Absence Events (W4.3) ===== */
+
+/* היעדרויות מלוח החופשות (Day-off) — שכבת תצוגה לקריאה בלבד.
+   הצבע מגיע מתווית סוג ההיעדרות (eventTypeColor, inline style מ-CustomEvent).
+   כל המאפיינים כאן ניטרליים לכיוון (RTL-safe) ולא תחומים לתצוגה מסוימת —
+   תקף בחודש/שבוע/יום. */
+.gc-event-wrapper.gc-event-dayoff {
+    /* לא ניתן לגרור/ללחוץ — סמן רגיל */
+    cursor: default !important;
+}
+
+.gc-event-wrapper.gc-event-dayoff:hover,
+.rbc-event:hover .gc-event-wrapper.gc-event-dayoff {
+    cursor: default !important;
+    filter: none; /* ביטול אפקט ההכהה בריחוף — אין אינטראקציה */
+}
+
+/* מניעת ידיות גרירה ושינוי גודל (הגנת עומק — ה-accessors כבר מחזירים false) */
+.gc-event-dayoff .rbc-addons-dnd-resize-ns-anchor,
+.gc-event-dayoff .rbc-addons-dnd-resize-ew-anchor {
+    display: none !important;
+}
+
+/* בקשה שממתינה לאישור (D2, כשמדיניות האישור פעילה) — רינדור חלול (hollow):
+   רקע שקוף, מסגרת וטקסט בצבע סוג ההיעדרות. מאושרת — רינדור מלא רגיל.
+   שלושת ה-class-ים בסלקטור מקנים עדיפות על border/box-shadow ה-!important
+   של .gc-event-wrapper.gc-event-allday */
+.gc-event-wrapper.gc-event-dayoff.gc-event-dayoff-pending {
+    background: transparent !important;
+    border: 2px solid var(--event-color, var(--color-primary)) !important;
+    box-shadow: none !important;
+}
+
+/* טקסט בהיעדרות ממתינה — צבע ההיעדרות במקום לבן */
+.gc-event-dayoff-pending .gc-event-title,
+.gc-event-dayoff-pending .gc-event-time,
+.gc-event-dayoff-pending .gc-event-notes {
+    color: var(--event-color, var(--color-primary)) !important;
+}
+
+/* ===== Hover affordances — invite click on empty slots & emphasize events ===== */
+@media (hover: hover) {
+    /* Empty time slots — subtle tint + cursor */
+    .rbc-day-slot .rbc-time-slot:hover {
+        background: var(--color-info-bg, rgba(0, 115, 234, 0.06));
+        cursor: pointer;
+        transition: background 120ms ease;
+    }
+
+    /* All-day cells — same invite */
+    .rbc-allday-cell .rbc-day-bg:hover,
+    .rbc-time-header-content .rbc-day-bg:hover {
+        background: var(--color-info-bg, rgba(0, 115, 234, 0.06));
+        cursor: pointer;
+        transition: background 120ms ease;
+    }
+
+    /* Existing event — slightly stronger hover lift */
+    .rbc-event:hover .gc-event-wrapper {
+        filter: brightness(0.92);
+        box-shadow: var(--gc-shadow-hover, 0 2px 6px rgba(0, 0, 0, 0.15));
+        transition: filter 120ms ease, box-shadow 120ms ease;
+    }
+}

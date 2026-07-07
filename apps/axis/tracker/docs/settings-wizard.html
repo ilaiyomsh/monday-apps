@@ -1,0 +1,3404 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>אשף הגדרות · Time Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet">
+<template id="__bundler_thumbnail">
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <rect width="100" height="100" fill="#eff6ff"/>
+    <rect x="18" y="18" width="64" height="64" rx="12" fill="#2563eb"/>
+    <path d="M32 52 L44 64 L68 38" stroke="#fff" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</template>
+<style>
+  :root {
+    /* מיושר ל־SettingsDialog.module.css: primary #2563eb, save #16a34a, טקסט/גבולות, danger #ef4444; tokens משלימים */
+    --color-primary: #2563eb;
+    --color-primary-hover: #1d4ed8;
+    --color-danger: #ef4444;
+    --color-danger-hover: #dc2626;
+    --color-danger-bg: #fef2f2;
+    --color-text: #323338;
+    --color-text-secondary: #676879;
+    --color-border: #e5e7eb;
+    --color-bg-secondary: #f3f4f6;
+    --color-bg-input: #f9f9f9;
+    --color-bg-footer: #fafafa;
+
+    --primary: var(--color-primary);
+    --primary-hover: var(--color-primary-hover);
+    --primary-soft: #eff6ff;
+    --primary-softer: #f8fafc;
+    --accent: #3b82f6;
+    --accent-soft: #dbeafe;
+    --violet: #7c3aed;
+    --violet-soft: #f3e8ff;
+    --danger: var(--color-danger);
+    --danger-soft: var(--color-danger-bg);
+    --success: #16a34a;
+    --success-hover: #15803d;
+    --success-soft: #dcfce7;
+    --warning: #f59e0b;
+    --warning-soft: #fef3c7;
+
+    --ink: #111827;
+    --ink-2: var(--color-text);
+    --muted: var(--color-text-secondary);
+    --muted-2: #9ca3af;
+    --line: var(--color-border);
+    --line-2: #e5e7eb;
+    --bg: var(--color-bg-secondary);
+    --bg-2: var(--color-bg-input);
+    --card: #ffffff;
+
+    --r-card: 14px;
+    --r-modal: 18px;
+    --r-input: 8px;
+    --r-pill: 999px;
+
+    --shadow-card: 0 1px 2px rgba(29,34,64,.04), 0 1px 3px rgba(29,34,64,.03);
+    --shadow-modal: 0 30px 60px -20px rgba(29,34,64,.30), 0 10px 30px -10px rgba(29,34,64,.18);
+    --shadow-pop: 0 10px 30px -10px rgba(29,34,64,.2);
+
+    font-family: 'Rubik', system-ui, sans-serif;
+  }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink-2); }
+  body { min-height: 100vh; font-size: 15px; line-height: 1.45; }
+  button { font-family: inherit; }
+
+  /* ============= App Shell ============= */
+  .app {
+    width: 100%;
+    max-width: min(1420px, calc(100vw - 24px));
+    margin: 0 auto;
+    padding: 16px 12px 40px;
+    box-sizing: border-box;
+  }
+
+  /* ============= Header ============= */
+  .header {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--r-modal);
+    padding: 18px 22px 20px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow-card);
+  }
+  .header .top-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 22px;
+  }
+  .header .brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .header .logo {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    display: grid; place-items: center;
+    box-shadow: 0 4px 10px rgba(37, 99, 235, 0.3);
+  }
+  .header .logo svg { color: #fff; }
+  .header h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .header .eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .save-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 12px;
+    background: var(--success-soft);
+    color: var(--success);
+    border-radius: var(--r-pill);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .save-badge .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.22);
+    animation: pulse 2.5s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .4; }
+  }
+
+  /* ============= Stepper (horizontal) ============= */
+  .stepper {
+    display: flex;
+    gap: 4px;
+    align-items: stretch;
+  }
+  .stepper .step {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: start;
+    color: inherit;
+    font-family: inherit;
+  }
+  .stepper .step:disabled { cursor: not-allowed; }
+  .stepper .bar {
+    height: 4px;
+    background: var(--line);
+    border-radius: 2px;
+    transition: background .2s;
+  }
+  .stepper .step.done .bar { background: var(--success); }
+  .stepper .step.active .bar { background: var(--primary); }
+  .stepper .step-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted-2);
+  }
+  .stepper .step.done .step-label,
+  .stepper .step.active .step-label { color: var(--ink); }
+  .stepper .step-num {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--line);
+    color: var(--muted);
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+    transition: .2s;
+  }
+  .stepper .step.active .step-num { background: var(--primary); color: #fff; }
+  .stepper .step.done .step-num { background: var(--success); color: #fff; }
+
+  /* ============= Content ============= */
+  .content-card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--r-modal);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+  .content-body {
+    padding: 20px 22px 24px;
+    min-height: 420px;
+  }
+  .step-title {
+    margin: 0 0 4px;
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+  .step-sub {
+    margin: 0 0 16px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--muted);
+  }
+
+  /* ============= Footer ============= */
+  .content-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 36px;
+    background: var(--color-bg-footer);
+    border-top: 1px solid var(--line-2);
+  }
+  .btn {
+    padding: 10px 20px;
+    border-radius: var(--r-input);
+    border: 1px solid var(--line);
+    background: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-2);
+    cursor: pointer;
+    transition: background-color .15s, border-color .15s, box-shadow .15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover { background: var(--bg); }
+  .btn.primary {
+    background: var(--primary);
+    border-color: var(--primary);
+    color: #fff;
+  }
+  .btn.primary:hover { background: var(--primary-hover); }
+  .btn.success {
+    background: var(--success);
+    border-color: var(--success);
+    color: #fff;
+  }
+  .btn.success:hover { background: var(--success-hover); }
+  .btn.ghost {
+    background: none;
+    border: none;
+    color: var(--muted);
+    padding: 10px 12px;
+  }
+  .btn.ghost:hover { color: var(--ink); background: var(--bg); }
+  .btn.lg { padding: 14px 32px; font-size: 15px; }
+
+  /* ============= Fields ============= */
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-2);
+    margin-bottom: 6px;
+  }
+  .field label .req { color: var(--danger); }
+  .field .hint { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .input, .select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-input);
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--ink-2);
+    background: #fff;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .input:focus, .select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+  }
+  .select { appearance: none; background: #fff url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23676879' stroke-width='2.5'><path d='M6 9l6 6 6-6'/></svg>") no-repeat; background-position: left 12px center; padding-inline-end: 14px; padding-inline-start: 32px; cursor: pointer; }
+
+  /* ============= Welcome ============= */
+  .welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 20px 20px 0;
+  }
+  .welcome .mark {
+    width: 96px; height: 96px;
+    border-radius: 28px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    display: grid; place-items: center;
+    color: #fff;
+    box-shadow: 0 20px 40px -10px rgba(37, 99, 235, 0.3);
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+  .welcome .mark::before {
+    content: '';
+    position: absolute;
+    inset: -20% -10% auto auto;
+    width: 60%; height: 60%;
+    background: radial-gradient(circle, rgba(255,255,255,.4), transparent 60%);
+  }
+  .welcome h2 {
+    font-size: 34px;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0 0 10px;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+  }
+  .welcome .lede {
+    font-size: 16px;
+    color: var(--muted);
+    max-width: min(640px, 100%);
+    margin: 0 0 28px;
+    line-height: 1.55;
+  }
+  .welcome-feats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    width: 100%;
+    max-width: 100%;
+    margin-bottom: 32px;
+  }
+  .wf-card {
+    background: var(--bg-2);
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-card);
+    padding: 20px 18px;
+    text-align: start;
+  }
+  .wf-card .ic {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--primary-soft);
+    color: var(--primary);
+    display: grid; place-items: center;
+    margin-bottom: 12px;
+  }
+  .wf-card h4 {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0 0 4px;
+  }
+  .wf-card p {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  /* ============= Preset Cards (Step 2) ============= */
+  .preset-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+  .preset-cd {
+    border: 2px solid var(--line);
+    background: #fff;
+    border-radius: var(--r-card);
+    overflow: hidden;
+    cursor: pointer;
+    text-align: start;
+    position: relative;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+    display: flex;
+    flex-direction: column;
+    font-family: inherit;
+    padding: 0;
+  }
+  .preset-cd:hover { border-color: #d1d5db; transform: translateY(-1px); }
+  .preset-cd.on { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.14); }
+  .preset-cd .pvisual {
+    background: linear-gradient(180deg, var(--color-bg-secondary) 0%, #eef1f3 100%);
+    padding: 22px 18px; display: flex; flex-direction: column; gap: 6px; min-height: 130px;
+  }
+  .preset-cd .pchip {
+    background: #fff; border-radius: 6px; padding: 7px 11px; font-size: 12px; font-weight: 600;
+    color: var(--ink-2); box-shadow: 0 1px 2px rgba(0,0,0,.06); display: flex; align-items: center; gap: 6px;
+  }
+  .preset-cd .pchip .dotc { width: 8px; height: 8px; border-radius: 2px; background: var(--primary); }
+  .preset-cd .pchip .dotc.t { background: var(--accent); }
+  .preset-cd .pchip .dotc.s { background: var(--warning); }
+  .preset-cd .pchip .dotc.n { background: var(--muted-2); }
+  .preset-cd .pchip.opt { opacity: .55; border: 1px dashed var(--muted-2); box-shadow: none; background: transparent; }
+  .preset-cd .pmeta { padding: 16px 18px; border-top: 1px solid var(--line-2); flex: 1; }
+  .preset-cd .pmeta .tag {
+    font-size: 10px; font-weight: 700; color: var(--primary); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; display: block;
+  }
+  .preset-cd .pmeta h4 { margin: 0 0 4px; font-size: 15px; font-weight: 700; color: var(--ink); }
+  .preset-cd .pmeta p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+  .preset-cd.on::after {
+    content: '✓'; position: absolute; top: 12px; inset-inline-start: 12px; width: 26px; height: 26px;
+    background: var(--primary); color: #fff; border-radius: 50%;
+    display: grid; place-items: center; font-size: 14px; font-weight: 700;
+    box-shadow: 0 4px 8px rgba(37, 99, 235, 0.28);
+  }
+
+  /* ============= Template step: מקטעים מופרדים (תבניות / התאמה / תצוגה) ============= */
+  .tpl-section {
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-card);
+    background: #fff;
+    padding: 18px 20px 20px;
+    margin-top: 16px;
+    box-shadow: var(--shadow-card);
+  }
+  .tpl-section:first-of-type { margin-top: 0; }
+  .tpl-section--presets { background: linear-gradient(180deg, #fff 0%, var(--primary-softer) 100%); }
+  .tpl-section--custom { padding-bottom: 18px; }
+  .tpl-section-head {
+    display: flex; align-items: flex-start; gap: 12px;
+    margin-bottom: 16px; padding-bottom: 14px;
+    border-bottom: 1px solid var(--line-2);
+  }
+  .tpl-section-num {
+    width: 30px; height: 30px; border-radius: 10px; flex-shrink: 0;
+    background: var(--primary-soft); color: var(--primary);
+    font-size: 14px; font-weight: 800; display: grid; place-items: center;
+    line-height: 1; margin-top: 2px;
+  }
+  .tpl-section__title { margin: 0; font-size: 16px; font-weight: 800; color: var(--ink); letter-spacing: -0.01em; }
+  .tpl-section__sub { margin: 4px 0 0; font-size: 13px; color: var(--muted); line-height: 1.45; max-width: 72ch; }
+  .tpl-section--presets .preset-grid { margin-bottom: 0; }
+  .two-col.tpl-split {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    align-items: start;
+    gap: 20px 28px;
+  }
+  .tpl-preview-column { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .tpl-col-cap {
+    padding: 8px 10px 0;
+  }
+  .tpl-col-cap__title { margin: 0; font-size: 14px; font-weight: 700; color: var(--ink); }
+  .tpl-col-cap__hint { margin: 3px 0 0; font-size: 12px; color: var(--muted); line-height: 1.35; }
+
+  /* ============= Callout ============= */
+  .callout {
+    display: flex;
+    gap: 10px;
+    padding: 14px 16px;
+    background: var(--primary-soft);
+    border: 1px solid #c2dcfc;
+    border-radius: var(--r-card);
+    color: var(--color-primary-hover);
+    font-size: 13px;
+    line-height: 1.55;
+    margin-bottom: 20px;
+  }
+  .callout svg { flex-shrink: 0; margin-top: 1px; color: var(--primary); }
+  .callout.warn {
+    background: var(--warning-soft);
+    border-color: #ffe4b3;
+    color: #8a5100;
+  }
+  .callout.warn svg { color: var(--warning); }
+  .callout.success {
+    background: var(--success-soft);
+    border-color: #b8e4d0;
+    color: #14532d;
+  }
+  .callout.success svg { color: var(--success); }
+  .callout strong { font-weight: 700; }
+
+  /* ============= Two-column (form + preview) ============= */
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 24px;
+  }
+
+  /* ============= Live Form Preview (mini) ============= */
+  .mini-form {
+    background: linear-gradient(180deg, #fff 0%, var(--bg-2) 100%);
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    padding: 18px 18px 20px;
+    position: sticky;
+    top: 16px;
+    direction: rtl;
+    unicode-bidi: isolate;
+    text-align: start;
+  }
+  .mini-form-header {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px;
+    color: var(--success);
+    font-weight: 700;
+    margin-bottom: 14px;
+    letter-spacing: .05em;
+  }
+  .mini-form-header .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--success);
+    box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.22);
+  }
+  /* report-dialog preview (matches real app) */
+  .rp-title-row { display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+  .rp-title-row .x {
+    width: 32px; height: 32px; padding: 0; border: none; background: transparent;
+    color: var(--muted-2); display: grid; place-items: center; cursor: pointer; border-radius: 6px;
+  }
+  .rp-title-row .x:hover { background: var(--line-2); color: var(--ink-2); }
+  .rp-title-row h6 { margin: 0; font-size: 14px; font-weight: 700; color: var(--ink); }
+  .rp-title-row .rp-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .rp-tabs {
+    display: grid; grid-template-columns: 1fr 1fr;
+    background: var(--bg); border-radius: 6px; padding: 3px; gap: 3px;
+    margin-bottom: 14px;
+  }
+  .rp-tab {
+    padding: 7px 0; text-align: center; font-size: 11.5px; font-weight: 600;
+    color: var(--muted); border-radius: 4px;
+    border: 1px solid transparent; background: transparent;
+  }
+  .rp-tab.on { background: #fff; color: var(--primary); border-color: var(--primary); font-weight: 700; }
+  .rp-field { margin-bottom: 12px; }
+  .rp-field > label {
+    display: block; font-size: 11px; color: var(--ink-2); font-weight: 700; margin-bottom: 6px; text-align: end;
+  }
+  .rp-field > label .req { color: var(--danger); }
+  .rp-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-start; }
+  .rp-chip {
+    padding: 5px 9px; border: 1px solid var(--line); border-radius: 5px;
+    background: #fff; color: var(--ink-2); font-size: 10.5px; font-weight: 500;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    cursor: pointer;
+  }
+  .rp-chip.on { background: var(--primary); color: #fff; border-color: var(--primary); font-weight: 600; }
+  .rp-text {
+    width: 100%; min-height: 52px; padding: 8px 10px; background: var(--color-bg-input);
+    border: 1px solid var(--line); border-radius: 5px;
+    font-size: 11px; color: var(--ink-2); text-align: end;
+    resize: vertical; font: inherit; box-sizing: border-box;
+  }
+  .rp-select {
+    width: 100%;
+    min-height: 40px;
+    font-size: 12px;
+    text-align: end;
+  }
+  .rp-select option.rp-opt-add { color: var(--primary); font-weight: 600; }
+  .rp-actions {
+    display: flex; flex-direction: row; gap: 6px; padding-top: 12px;
+    border-top: 1px solid var(--line-2); margin-top: 10px;
+    justify-content: flex-start; /* ב-RTL: כפתור ראשון (שמור) מימין */
+  }
+  .mini-form--interactive {
+    cursor: default;
+    outline: none;
+    box-shadow: var(--shadow-card);
+    transition: box-shadow .2s, border-color .2s;
+  }
+  .mini-form--interactive:focus-visible {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--primary);
+  }
+  .xor-selectors {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+  }
+  @media (max-width: 640px) {
+    .xor-selectors { flex-wrap: wrap; }
+  }
+  .xor-selectors .select.xor-select {
+    flex: 1;
+    min-width: 0;
+    min-height: 40px;
+  }
+  .xor-or {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .rp-btn {
+    padding: 6px 14px; border-radius: 5px; font-size: 11.5px; font-weight: 700;
+    border: 1px solid var(--line); background: #fff; color: var(--ink-2);
+  }
+  .rp-btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  [data-prev].hidden-soft { display: none; }
+
+  /* ============= Board Picker Cards (Step 3 — redesigned) ============= */
+  .bp-stack { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+  .bp-card {
+    --bp-accent: var(--primary);
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    padding: 18px 20px;
+    position: relative;
+  }
+  .bp-card::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0;
+    inset-inline-start: 0;
+    width: 4px;
+    background: var(--bp-accent);
+    /* פינות בקצה inline-start (ימין ב-RTL) — לא פיזי שמאל-שמאל */
+    border-radius: 0;
+    border-start-start-radius: var(--r-card);
+    border-end-start-radius: var(--r-card);
+  }
+  .bp-card.bp-acc { padding: 0; overflow: hidden; }
+  .bp-acc-head {
+    width: 100%;
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 16px 18px 0;
+    margin: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font: inherit;
+    text-align: start;
+    color: inherit;
+  }
+  .bp-acc-head:hover { background: var(--color-bg-input); }
+  .bp-card.bp-acc-collapsed .bp-acc-head { padding-bottom: 16px; }
+  .bp-acc-caret { margin-inline-start: auto; font-size: 12px; color: var(--muted-2); flex-shrink: 0; padding-top: 4px; }
+  .bp-card.bp-acc-open .bp-acc-caret { transform: scaleY(1); }
+  .bp-card.bp-acc-collapsed .bp-acc-caret { transform: scaleY(-1); }
+  .bp-acc-panel { padding: 0 18px 18px; }
+  .bp-card.bp-acc-collapsed .bp-acc-panel { display: none; }
+
+  .bp-card-head {
+    display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px;
+  }
+  .bp-icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: color-mix(in oklch, var(--bp-accent) 14%, #fff);
+    color: var(--bp-accent);
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .bp-head-text { flex: 1; }
+  .bp-head-text h3 { margin: 0 0 2px; font-size: 15px; font-weight: 700; color: var(--ink); }
+  .bp-head-text p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+  .bp-chip-ok {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 999px;
+    background: var(--success-soft); color: var(--success);
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+  }
+  .bp-chip-nf {
+    padding: 4px 10px; border-radius: 999px;
+    background: var(--warning-soft); color: #92400e;
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+  }
+  .bp-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .bp-row label { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .bp-board-pick__row {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .bp-board-pick__row .select { flex: 1; min-width: 0; }
+  .bp-map-board-wrap {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .bp-map-board-wrap .select { flex: 1; min-width: 0; }
+
+  .bp-modes {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px;
+  }
+  .bp-mode {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    border: 1.5px solid var(--line); border-radius: 10px;
+    background: #fff; cursor: pointer; text-align: start;
+    transition: border-color .15s, background-color .15s; font-family: inherit;
+  }
+  .bp-mode:hover { border-color: #d1d5db; }
+  .bp-mode.on { border-color: var(--bp-accent); background: color-mix(in oklch, var(--bp-accent) 6%, #fff); }
+  .bp-mode-ic {
+    width: 30px; height: 30px; border-radius: 8px;
+    background: var(--bg); color: var(--muted);
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .bp-mode.on .bp-mode-ic { background: color-mix(in oklch, var(--bp-accent) 18%, #fff); color: var(--bp-accent); }
+  .bp-mode-t { font-size: 13px; font-weight: 700; color: var(--ink); }
+  .bp-mode-d { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+
+  .bp-inline-note {
+    padding: 10px 12px; background: var(--success-soft); color: #14532d;
+    border-radius: 8px; font-size: 12.5px; display: flex; gap: 6px; align-items: center;
+  }
+
+  .bp-mapping {
+    margin-top: 8px;
+    padding: 14px;
+    background: var(--bg-2);
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+  }
+  .bp-mapping-head {
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .08em;
+    margin-bottom: 10px;
+  }
+  .bp-mapping-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;
+  }
+  .bp-map-row {
+    display: flex; flex-direction: column; gap: 4px;
+    min-width: 0; /* בגריד דו-עמודי — ה-select לא יופע לרוחב הכרטיס */
+  }
+  .bp-map-row .select { width: 100%; max-width: 100%; }
+  .bp-map-label {
+    font-size: 12px; font-weight: 600; color: var(--ink-2);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .bp-map-label .req { color: var(--danger); }
+  .bp-type {
+    font-size: 10px; font-weight: 600; color: var(--muted-2);
+    padding: 2px 7px; background: #fff; border: 1px solid var(--line-2); border-radius: 999px;
+    margin-inline-start: auto;
+    font-family: inherit;
+  }
+
+  @media (max-width: 720px) {
+    .bp-modes { grid-template-columns: 1fr; }
+    .bp-mapping-grid { grid-template-columns: 1fr; }
+  }
+
+  .bp-card.bp-derived {
+    background: var(--bg-2);
+    border-style: dashed;
+  }
+  .bp-chip-derived {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 10px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+  }
+  .bp-derived-note {
+    display: flex; gap: 10px; padding: 12px 14px;
+    background: #fff;
+    border: 1px solid var(--line-2);
+    border-radius: 10px;
+    font-size: 12.5px; color: var(--ink-2); line-height: 1.5;
+  }
+  .bp-derived-note svg { color: var(--primary); flex-shrink: 0; margin-top: 2px; }
+
+  /* ============= Advanced settings panel (inside bp-card) ============= */
+  .bp-advanced {
+    margin-top: 10px;
+    border: 1px solid var(--line-2);
+    border-radius: 10px;
+    background: #fff;
+    overflow: hidden;
+  }
+  .bp-advanced.open { border-color: var(--line); }
+  .bp-advanced-toggle {
+    width: 100%;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: right;
+    transition: background .15s;
+  }
+  .bp-advanced-toggle:hover { background: var(--bg-2); }
+  .bp-advanced-left {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px; font-weight: 600; color: var(--ink);
+  }
+  .bp-advanced-left svg { color: var(--muted); }
+  .bp-advanced-summary {
+    font-size: 12px; font-weight: 500;
+    color: var(--muted);
+    padding: 3px 10px; border-radius: 999px;
+    background: var(--primary-softer);
+    color: var(--primary);
+  }
+  .bp-advanced-summary.bp-advanced-empty {
+    background: var(--line-2); color: var(--muted-2);
+  }
+  .bp-advanced-caret {
+    color: var(--muted-2); font-size: 14px; font-weight: 700;
+  }
+  .bp-advanced-body {
+    padding: 0 14px 14px;
+    border-top: 1px solid var(--line-2);
+  }
+
+  .adv-section {
+    padding: 14px 0;
+    border-bottom: 1px dashed var(--line-2);
+  }
+  .adv-section:last-child { border-bottom: none; padding-bottom: 4px; }
+  .adv-section-head {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 14px; margin-bottom: 10px;
+  }
+  .adv-section-head h4 {
+    font-size: 13.5px; font-weight: 700; color: var(--ink);
+    margin: 0 0 3px;
+  }
+  .adv-section-head p {
+    font-size: 12px; color: var(--muted);
+    margin: 0; line-height: 1.45; max-width: 480px;
+  }
+  /* מיפוי סוג פרויקט: 2 מיפויים (תווית+תפקיד) בכל שורה */
+  .pt-type-map {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--line-2);
+    border-radius: 8px;
+    margin-top: 6px;
+  }
+  @media (max-width: 560px) { .pt-type-map { grid-template-columns: 1fr; } }
+  .pt-type-item {
+    display: grid;
+    grid-template-columns: 1fr minmax(0, 140px);
+    gap: 8px 10px;
+    align-items: center;
+    min-width: 0;
+    padding: 8px 10px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-2);
+    border-radius: 6px;
+  }
+  .pt-type-item .select { max-width: 100%; }
+  .pt-type-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .pt-type-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+  .pt-type-text { font-size: 13px; font-weight: 600; color: var(--ink); }
+
+  .adv-field { margin-top: 10px; }
+  .adv-field > label {
+    display: block;
+    font-size: 11px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .06em;
+    margin-bottom: 6px;
+  }
+  .adv-field .select { max-width: 280px; }
+  .adv-field .hint { margin-top: 6px; font-size: 11.5px; color: var(--muted-2); }
+
+  .adv-split {
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr;
+    gap: 14px;
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--bg-2);
+    border-radius: 10px;
+  }
+  .adv-split-divider { background: var(--line-2); }
+  .adv-split-head {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 700; color: var(--ink);
+    margin-bottom: 8px;
+  }
+  .adv-dot { width: 8px; height: 8px; border-radius: 999px; }
+  @media (max-width: 640px) {
+    .adv-split { grid-template-columns: 1fr; }
+    .adv-split-divider { display: none; }
+  }
+
+  .chip-picker {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .status-chip {
+    --sc: var(--muted);
+    position: relative;
+    padding: 5px 10px 5px 22px;
+    border-radius: 999px;
+    border: 1.5px solid transparent;
+    background: color-mix(in oklab, var(--sc) 14%, white);
+    color: color-mix(in oklab, var(--sc) 75%, var(--color-text));
+    font-family: inherit;
+    font-size: 12px; font-weight: 600;
+    cursor: pointer;
+    transition: transform .1s, box-shadow .15s;
+  }
+  .status-chip::before {
+    content: '';
+    position: absolute;
+    inset-inline-start: 8px;
+    top: 50%; transform: translateY(-50%);
+    width: 8px; height: 8px;
+    border-radius: 999px;
+    background: var(--sc);
+  }
+  .status-chip:hover { transform: translateY(-1px); }
+  .status-chip.on {
+    background: var(--sc);
+    color: #fff;
+    border-color: color-mix(in oklab, var(--sc) 80%, black);
+    box-shadow: 0 2px 8px -2px color-mix(in oklab, var(--sc) 50%, transparent);
+  }
+  .status-chip.on::before { background: #fff; }
+
+  /* ============= Timesheet mapping (Step 4) ============= */
+  .ts-map-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 10px;
+  }
+  .ts-map-title {
+    font-size: 15px; font-weight: 700; color: var(--ink);
+    margin: 0 0 3px;
+  }
+  .ts-map-sub {
+    font-size: 13px; color: var(--muted); margin: 0;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .ts-auto-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 9px; border-radius: 999px;
+    background: var(--primary-softer); color: var(--primary);
+    font-size: 11px; font-weight: 700;
+  }
+  .btn.sm { padding: 7px 12px; font-size: 12px; }
+
+  /* קבוצות מיפוי — אקורדיון; תוכן פנימי: תמיד גריד 2 עמודות (לא 3) */
+  .ts-map-acc {
+    margin-bottom: 10px;
+    border: 1px solid var(--line-2);
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .ts-map-acc-toggle {
+    width: 100%;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border: none;
+    background: var(--bg-2);
+    cursor: pointer;
+    text-align: start;
+    font: inherit;
+    color: inherit;
+  }
+  .ts-map-acc.is-open .ts-map-acc-toggle {
+    background: #fff;
+    border-bottom: 1px solid var(--line-2);
+  }
+  .ts-map-acc-h {
+    font-size: 13.5px; font-weight: 700; color: var(--ink);
+    margin: 0 0 3px;
+  }
+  .ts-map-acc-d {
+    font-size: 12px; color: var(--muted);
+    margin: 0;
+    line-height: 1.45;
+  }
+  .ts-map-acc-caret {
+    flex-shrink: 0;
+    font-size: 14px;
+    color: var(--muted-2);
+    line-height: 1.2;
+  }
+  .ts-map-acc-body {
+    padding: 12px 14px;
+  }
+  .ts-map-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+  }
+  @media (max-width: 680px) { .ts-map-grid { grid-template-columns: 1fr; } }
+
+  /* מיפוי סוגי דיווח: 2 מיפויים (תווית|קטגוריה) בכל שורה */
+  .et-map-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 16px;
+    padding: 10px 12px;
+    border: 1px solid var(--line-2);
+    border-radius: 8px;
+    background: #fff;
+  }
+  @media (max-width: 680px) {
+    .et-map-list { grid-template-columns: 1fr; }
+  }
+  .et-map-item {
+    display: grid;
+    grid-template-columns: 1fr minmax(0, 1fr);
+    gap: 8px 10px;
+    align-items: center;
+    min-width: 0;
+    padding: 8px 10px;
+    background: var(--bg-2);
+    border: 1px solid var(--line-2);
+    border-radius: 6px;
+  }
+  .et-map-item .select { min-width: 0; }
+  .et-map-label { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .et-map-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+  .et-map-text { font-size: 13px; font-weight: 600; }
+  .et-map-select-cell { min-width: 0; }
+
+  .ts-map-cell label {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    font-size: 12px; font-weight: 600; color: var(--ink);
+    margin-bottom: 6px;
+  }
+  .ts-map-cell .req { color: var(--danger); font-weight: 700; margin-inline-start: -2px; }
+  .ts-col-type {
+    font-size: 10.5px; font-weight: 600; color: var(--muted-2);
+    padding: 2px 6px; border-radius: 4px;
+    background: var(--line-2);
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .ts-auto-pill {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 10.5px; font-weight: 700;
+    padding: 2px 7px; border-radius: 999px;
+    background: var(--success-soft); color: var(--success);
+  }
+  .ts-map-desc {
+    font-size: 11.5px; color: var(--muted);
+    margin-bottom: 6px;
+    line-height: 1.4;
+  }
+
+  /* ============= Field config tri-state (Step 2) ============= */
+  .fc-list { display: flex; flex-direction: column; gap: 10px; }
+  .fc-row {
+    display: grid;
+    grid-template-columns: 40px 1fr auto;
+    gap: 14px;
+    align-items: center;
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-card);
+  }
+  .fc-row .fc-ic {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--primary-soft);
+    color: var(--primary);
+    display: grid; place-items: center;
+  }
+  .fc-row .fc-ic.t { background: var(--accent-soft); color: var(--accent); }
+  .fc-row .fc-ic.s { background: var(--warning-soft); color: var(--warning); }
+  .fc-row .fc-ic.n { background: var(--violet-soft); color: var(--violet); }
+  .fc-row h5 {
+    font-size: 14px; font-weight: 700; color: var(--ink); margin: 0 0 2px;
+  }
+  .fc-row p {
+    margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4;
+  }
+  .fc-row.locked { opacity: .88; }
+  .fc-row.locked .tri { pointer-events: none; }
+  .tri {
+    display: inline-flex;
+    padding: 3px;
+    background: var(--bg);
+    border-radius: var(--r-pill);
+    gap: 2px;
+  }
+  .tri button {
+    border: none;
+    background: none;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    border-radius: var(--r-pill);
+    cursor: pointer;
+    transition: background-color .15s, color .15s;
+    font-family: inherit;
+  }
+  .tri button.on {
+    background: var(--ink);
+    color: #fff;
+  }
+  .tri button.on.required { background: var(--primary); }
+  .tri button.on.optional { background: var(--muted-2); }
+  .tri button.on.hidden { background: var(--muted-2); }
+
+  /* ============= Detect Cards (Step 3) ============= */
+  .detect-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+  .detect-card {
+    background: #fff;
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-card);
+    padding: 18px;
+    position: relative;
+  }
+  .detect-card.ok { border-color: var(--success); }
+  .detect-card.nf { border-color: var(--warning); border-style: dashed; }
+  .detect-card .head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .detect-card .icon-box {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--primary-soft); color: var(--primary);
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .detect-card.ok .icon-box { background: var(--success-soft); color: var(--success); }
+  .detect-card.nf .icon-box { background: var(--warning-soft); color: var(--warning); }
+  .detect-card h3 { font-size: 15px; font-weight: 700; color: var(--ink); margin: 0; flex: 1; }
+  .detect-card .status {
+    font-size: 12px; font-weight: 700;
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .detect-card .status.ok { color: var(--success); }
+  .detect-card .status.warn { color: var(--warning); }
+  .detect-card .found {
+    font-size: 13px; color: var(--ink-2); font-weight: 600;
+    background: var(--bg); padding: 10px 12px; border-radius: 8px;
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 6px;
+  }
+  .detect-card .found svg { color: var(--success); flex-shrink: 0; }
+  .detect-card .nf-text { font-size: 13px; color: var(--muted); line-height: 1.5; margin-bottom: 10px; }
+  .detect-card .sub-info { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .detect-card .link-row {
+    font-size: 13px; color: var(--primary); font-weight: 600; cursor: pointer; margin-top: 10px;
+    background: none; border: none; padding: 0; font-family: inherit; display: inline-flex; gap: 4px; align-items: center;
+  }
+  .detect-card .link-row:hover { text-decoration: underline; }
+
+  /* board mini preview */
+  .board-preview {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    overflow: hidden;
+    margin-top: 16px;
+  }
+  .bp-head {
+    padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+    background: var(--bg-2); border-bottom: 1px solid var(--line-2);
+  }
+  .bp-head .dot-color { width: 14px; height: 14px; border-radius: 4px; background: var(--primary); }
+  .bp-head h5 { font-size: 14px; margin: 0; font-weight: 700; color: var(--ink); }
+  .bp-head .bp-sub { font-size: 11px; color: var(--muted-2); margin-inline-start: auto; }
+  .board-preview table { width: 100%; border-collapse: collapse; font-size: 12px; font-family: inherit; }
+  .board-preview th, .board-preview td {
+    padding: 9px 12px; text-align: start; border-bottom: 1px solid var(--line-2); white-space: nowrap;
+  }
+  .board-preview th {
+    background: var(--bg-2); font-size: 10px; color: var(--muted); font-weight: 700;
+    text-transform: uppercase; letter-spacing: .08em;
+  }
+  .board-preview tr:last-child td { border-bottom: none; }
+  .col-chip {
+    display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 700;
+  }
+  .col-chip.status-green { background: var(--success-soft); color: var(--success); }
+  .col-chip.status-amber { background: var(--warning-soft); color: #92400e; }
+  .col-chip.status-blue { background: var(--primary-soft); color: var(--primary); }
+  .col-chip.status-violet { background: var(--violet-soft); color: var(--violet); }
+  .col-chip.status-gray { background: var(--bg); color: var(--muted); }
+  .col-avatar {
+    width: 22px; height: 22px; border-radius: 50%; background: var(--primary); color: #fff;
+    display: inline-grid; place-items: center; font-size: 10px; font-weight: 700;
+  }
+  .col-avatar.acc { background: var(--accent); }
+  .col-avatar.warn-c { background: var(--warning); }
+
+  /* ============= Choice rows (Step 5 approvals, edit lock) ============= */
+  .choice-list { display: flex; flex-direction: column; gap: 10px; }
+  @media (min-width: 860px) {
+    .choice-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+  }
+  .choice {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 14px;
+    border: 2px solid var(--line);
+    border-radius: var(--r-card);
+    cursor: pointer; background: #fff;
+    transition: border-color .15s, background-color .15s;
+  }
+  .choice:hover { border-color: #d1d5db; }
+  .choice.on { border-color: var(--primary); background: var(--primary-softer); }
+  .choice .tick {
+    width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--line);
+    flex-shrink: 0; background: #fff; margin-top: 2px; transition: background-color .15s, border-color .15s, box-shadow .15s;
+  }
+  .choice.on .tick {
+    background: var(--primary); border-color: var(--primary);
+    box-shadow: inset 0 0 0 3px #fff;
+  }
+  .choice .title { font-size: 14px; font-weight: 700; color: var(--ink); margin: 0; }
+  .choice .desc { font-size: 12.5px; color: var(--muted); margin: 3px 0 0; line-height: 1.5; }
+
+  /* ============= Toggle row ============= */
+  .toggle-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px;
+    border: 1px solid var(--line);
+    border-radius: var(--r-card);
+    background: #fff;
+    margin-bottom: 10px;
+    cursor: pointer;
+    gap: 16px;
+  }
+  .toggle-row.on { border-color: #b8d7f7; background: var(--primary-softer); }
+  .toggle-row-body { flex: 1; }
+  .toggle-row-body .t { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .toggle-row-body .d { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.45; }
+  .switch {
+    flex-shrink: 0;
+    width: 44px; height: 24px; border-radius: 12px; background: var(--line); position: relative;
+    transition: background .2s;
+    border: none; cursor: pointer; padding: 0;
+  }
+  .switch::after {
+    content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; top: 3px; inset-inline-end: 3px; transition: transform .2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+  }
+  .switch.on { background: var(--primary); }
+  .switch.on::after { transform: translateX(20px); }
+
+  /* ============= Calendar step (Step 6) ============= */
+  .cal-section {
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-card);
+    background: #fff;
+  }
+  .cal-section-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .cal-ic {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .cal-section-head h3 { margin: 0 0 4px; font-size: 16px; font-weight: 700; color: var(--ink); }
+  .cal-section-head p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+  .cal-week-row {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  @media (min-width: 720px) {
+    .cal-week-row {
+      flex-direction: row;
+      align-items: flex-end;
+      gap: 20px;
+    }
+    .cal-week-row .cal-fdow-field { flex: 0 0 min(260px, 32%); }
+    .cal-week-row .cal-workdays-field { flex: 1; min-width: 0; }
+  }
+  .cal-targets-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px 16px;
+    align-items: end;
+  }
+  @media (max-width: 720px) {
+    .cal-targets-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ============= Day chips (Step 6) ============= */
+  .day-chips {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .day-chip {
+    padding: 12px 0;
+    min-width: 52px;
+    text-align: center;
+    border: 1.5px solid var(--line);
+    border-radius: 12px;
+    font-size: 14px; font-weight: 700;
+    color: var(--muted);
+    cursor: pointer; background: #fff;
+    transition: background-color .15s, border-color .15s, color .15s;
+    user-select: none;
+    font-family: inherit;
+  }
+  .day-chip:hover { border-color: var(--primary); color: var(--primary); }
+  .day-chip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+  /* ============= Multi chips (for multi-select) ============= */
+  .chip-picker {
+    border: 1px solid var(--line);
+    border-radius: var(--r-input);
+    padding: 8px;
+    background: #fff;
+    display: flex; flex-wrap: wrap; gap: 6px;
+    min-height: 44px;
+    align-items: center;
+  }
+  .m-chip {
+    background: var(--primary-soft);
+    color: var(--primary);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    font-weight: 600;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .m-chip button {
+    background: none; border: none; cursor: pointer;
+    color: var(--primary); opacity: .65; padding: 0; display: flex;
+  }
+  .m-chip button:hover { opacity: 1; }
+  .chip-placeholder { color: var(--muted-2); font-size: 13px; padding: 0 4px; }
+  .popover {
+    position: absolute; z-index: 50;
+    background: #fff; border: 1px solid var(--line);
+    border-radius: var(--r-input);
+    box-shadow: var(--shadow-pop);
+    min-width: 260px; max-height: 280px; overflow-y: auto;
+    padding: 4px;
+  }
+  .popover-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px; color: var(--ink-2);
+  }
+  .popover-item:hover { background: var(--bg); }
+  .popover-item .box {
+    width: 16px; height: 16px; border-radius: 4px;
+    border: 1.5px solid var(--line);
+    display: grid; place-items: center; flex-shrink: 0;
+  }
+  .popover-item.sel .box { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+  /* ============= Summary (Step 7) ============= */
+  .summary-hero {
+    display: flex; align-items: center; gap: 18px;
+    padding: 22px 24px;
+    background: linear-gradient(135deg, var(--success-soft), #bbf7d0);
+    border: 1px solid #b8e4d0;
+    border-radius: var(--r-card);
+    margin-bottom: 24px;
+  }
+  .summary-hero .ic {
+    width: 56px; height: 56px; border-radius: 16px;
+    background: var(--success); color: #fff;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+    box-shadow: 0 8px 16px -4px rgba(22, 163, 74, 0.35);
+  }
+  .summary-hero h3 { margin: 0 0 4px; font-size: 22px; color: #14532d; font-weight: 700; }
+  .summary-hero p { margin: 0; font-size: 14px; color: #166534; }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .sum-card {
+    background: #fff;
+    border: 1px solid var(--line-2);
+    border-radius: var(--r-card);
+    padding: 18px 20px;
+  }
+  .sum-card h4 {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 700; color: var(--ink);
+    margin: 0 0 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line-2);
+  }
+  .sum-card h4 svg { color: var(--primary); }
+  .sum-card dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 12px;
+    font-size: 13px;
+    margin: 0;
+  }
+  .sum-card dt { color: var(--muted); font-weight: 500; }
+  .sum-card dd { margin: 0; font-weight: 600; color: var(--ink); text-align: end; }
+  .sum-card dd.muted { color: var(--muted-2); font-weight: 500; }
+  .sum-card dd .chip {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    background: var(--primary-soft); color: var(--primary);
+    font-size: 11px; font-weight: 700;
+  }
+  .sum-card dd .chip.off { background: var(--bg); color: var(--muted); }
+
+  /* helpers */
+  .hide { display: none !important; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .mb-0 { margin-bottom: 0 !important; }
+  .fadeIn { animation: fadeIn .3s ease; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      transition-duration: .01ms !important;
+    }
+  }
+
+  @media (max-width: 960px) {
+    .two-col, .two-col.tpl-split { grid-template-columns: 1fr; }
+    .mini-form { position: static; }
+    .preset-grid { grid-template-columns: 1fr; }
+    .tpl-section { padding: 14px 14px 16px; }
+    .tpl-section__sub { max-width: none; }
+    .detect-grid, .grid-2, .summary-grid { grid-template-columns: 1fr; }
+    .welcome-feats { grid-template-columns: 1fr; }
+    .stepper .step-label { display: none; }
+    .content-body { padding: 18px 16px; }
+    .content-footer { padding: 12px 16px; }
+  }
+</style>
+</head>
+<body data-screen-label="Wizard v2 — Card/Live">
+
+<div class="app" id="app">
+  <!-- Header -->
+  <header class="header">
+    <div class="top-row">
+      <div class="brand">
+        <div class="logo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </div>
+        <div>
+          <div class="eyebrow">אשף הגדרה</div>
+          <h1>Time Tracker</h1>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        <div class="save-badge">
+          <span class="dot"></span>
+          <span>שמירה אוטומטית</span>
+        </div>
+        <div style="font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:5px">
+          <span>עודכן ע"י <strong id="meta-name">—</strong></span>
+          <span>·</span>
+          <span id="meta-date">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Horizontal stepper -->
+    <div class="stepper" id="stepper">
+      <!-- injected by JS -->
+    </div>
+  </header>
+
+  <!-- Content card -->
+  <div class="content-card">
+    <div class="content-body" id="body">
+      <!-- injected by JS -->
+    </div>
+    <div class="content-footer" id="footer">
+      <!-- injected by JS -->
+    </div>
+  </div>
+</div>
+
+<script>
+/* ======================================================================
+   State & Data
+====================================================================== */
+const STEPS = [
+  { id: 'welcome',   title: 'ברוכים הבאים',          sub: '',                                   icon: '✨' },
+  { id: 'template',  title: 'בחירת תבנית',           sub: 'מה הצוות שלכם עוקב?',               icon: '📋' },
+  { id: 'boards',    title: 'זיהוי לוחות',            sub: 'הראו לנו איפה הנתונים שלכם',       icon: '🗂' },
+  { id: 'timesheet', title: 'לוח דיווחי שעות',       sub: 'איפה ליצור את הדיווחים החדשים',    icon: '📊' },
+  { id: 'flow',      title: 'אישורים ונעילה',        sub: 'מי מאשר ומתי נועלים עריכה',        icon: '🔐' },
+  { id: 'calendar',  title: 'לוח שנה ויעדים',       sub: 'ימי עבודה ויעדי שעות',              icon: '📅' },
+  { id: 'summary',   title: 'סיום',                   sub: 'הכול מוכן — הפעילו',               icon: '🎉' },
+];
+
+/* 3 templates — wizard-only shortcuts, not persisted to customSettings */
+const TEMPLATES = {
+  simple: {
+    label: 'פרויקט בלבד',
+    tag: 'הפשוט ביותר',
+    tagColor: 'var(--muted)',
+    desc: 'רק פרויקט ושעות. התחלה מהירה — אפשר להוסיף שדות כשצריך.',
+    fc: { task: 'hidden', stage: 'hidden', notes: 'optional', billableToggle: 'hidden', nonBillableType: 'hidden' },
+    chips: [
+      { d: '', l: 'פרויקט' },
+      { d: '', l: 'הערות', opt: true },
+    ],
+  },
+  stage: {
+    label: 'פרויקט + שלב',
+    tag: 'נפוץ',
+    tagColor: 'var(--accent)',
+    desc: 'דיווח לפי פרויקט עם סיווג שלב (פיתוח, עיצוב, QA...). מבנה שטוח ופשוט.',
+    fc: { task: 'hidden', stage: 'required', notes: 'optional', billableToggle: 'visible', nonBillableType: 'required' },
+    chips: [
+      { d: '', l: 'פרויקט' },
+      { d: 's', l: 'סיווג' },
+      { d: '', l: 'הערות', opt: true },
+    ],
+  },
+  task: {
+    label: 'פרויקטים ומשימות',
+    tag: 'מומלץ',
+    tagColor: 'var(--primary)',
+    desc: 'דיווח לפי פרויקט + משימה ספציפית. מתאים לבתי תוכנה, עיצוב, ייעוץ.',
+    fc: { task: 'required', stage: 'optional', notes: 'optional', billableToggle: 'visible', nonBillableType: 'required' },
+    chips: [
+      { d: '', l: 'פרויקט' },
+      { d: 't', l: 'משימה' },
+      { d: 'n', l: 'הערות', opt: true },
+    ],
+  },
+};
+
+/* Default state — מפתחות תואמים ל-customSettings */
+const state = {
+  step: 0,
+
+  /* === wizard-only (לא נשמרים ב-customSettings) === */
+  _template: 'stage',           /* wizard-only shortcut */
+  _timesheetMode: 'existing',   /* wizard-only — no customSettings key */
+  previewTab: 'project',
+  /** שלב לוחות: 'main' | 'tasks' | null — null = כל הכרטיסים סגורים; לחיצה חוזרת על כותרת פתוחה סוגרת */
+  openBoardsCard: null,
+  /** שלב אישורים/נעילה/פילטרים: 'approval' | 'lock' | 'filters' | null */
+  openFlowCard: null,
+
+  /** שלב מיפוי לוח דיווחים: קבוצות נושא — כל סעיף נפרד; הכול סגור בברירת מחדל */
+  tsMapGroupOpen: {
+    essential: false,
+    structure: false,
+    billable: false,
+    eventMap: false,
+  },
+
+  /* === fieldConfig (StructureTab) === */
+  fieldConfig: {
+    task:            'hidden',
+    stage:           'required',
+    notes:           'optional',
+    billableToggle:  'visible',   /* היה: billable: true — תוקן ל-'visible'|'hidden' */
+    nonBillableType: 'required',
+  },
+
+  /* === advancedValidation (StructureTab) === */
+  advancedValidation: {
+    enabled: true,
+    xorFields: [null, null],     /* מצב XOR מופעל אך לא מוגדר → יופיע banner */
+  },
+
+  /* === לוח פרויקטים === */
+  connectedBoardId: null,
+  peopleColumnIds: [],
+  projectStatusFilterEnabled: false,
+  projectStatusColumnId: null,
+  projectActiveStatusValues: [],
+  enableProjectTypeDistinction: true,
+  projectTypeColumnId: 'color_mm19gaez',
+  projectTypeMapping: { '0': 'internal', '1': 'external' }, /* index → 'internal'|'external' */
+  projectTypeSourceBoardId: null,
+  projectTypeSourceColumnId: null,
+  customerColumnId: 'board_relation_mm2bw67',
+
+  /* === מצב הקצאות (Assignments) — היה: employees.mode === 'allocations' === */
+  useAssignmentsMode: true,
+  assignmentsBoardId: '18397378295',
+  assignmentPersonColumnId: 'person',
+  assignmentStartDateColumnId: 'date_mkzcyg4a',
+  assignmentEndDateColumnId: 'date_mkzc5yxj',
+  assignmentProjectLinkColumnId: 'board_relation_mkzc6g38',
+
+  /* === לוח משימות === */
+  tasksBoardId: null,
+  tasksProjectColumnId: null,
+  taskStatusFilterEnabled: false,
+  taskStatusColumnId: null,
+  taskActiveStatusValues: [],
+
+  /* === לוח דיווחים === (במוקאפ: תמיד בחירת לוח — ללא מצב "לוח נוכחי") */
+  timeReportingBoardId: '18390430440',
+  dateColumnId: 'date4',
+  endTimeColumnId: 'date_mkzy8rtn',
+  durationColumnId: 'numeric_mky7eqsf',
+  projectColumnId: 'board_relation_mkyg2zeq',
+  taskColumnId: '',
+  assignmentColumnId: 'board_relation_mm00yzj2',
+  reporterColumnId: 'person',
+  eventTypeStatusColumnId: 'color_mm008jha',
+  nonBillableStatusColumnId: 'color_mkzk9xes',
+  stageColumnId: 'color_mkzsg4t1',
+  notesColumnId: 'text_mkzsm5wd',
+  customerReportColumnId: 'board_relation_mm2bjxk4',
+
+  /* === eventTypeMapping — N-to-1, כולל אינדקסים לא-רציפים === */
+  eventTypeMapping: {
+    '0': 'allDay', '1': 'temporary', '2': 'allDay',
+    '3': 'externalProject', '4': 'internalProject',
+    '5': 'routine', '6': 'allDay', '101': 'routine',
+  },
+  eventTypeLabelMeta: {
+    '0':   { label: 'חופשה',           color: '#fdab3d' },
+    '1':   { label: 'עתידי',            color: '#bb3354' },
+    '2':   { label: 'מילואים',          color: '#037f4c' },
+    '3':   { label: 'פרויקט חיצוני',    color: '#007eb5' },
+    '4':   { label: 'פרויקט פנימי',     color: '#9cd326' },
+    '5':   { label: 'שוטף',             color: '#ff7575' },
+    '6':   { label: 'מילואים',          color: '#037f4c' },
+    '101': { label: 'שוטף',             color: '#ff7575' },
+  },
+
+  /* === אישורים — היה: approval: true, approvalManagers, editLock === */
+  enableApproval: false,
+  approvedManagerIds: [],
+  approvalStatusColumnId: null,
+  approvalStatusMapping: null,
+  approvalStatusLabelMeta: null,
+  lockAfterApproval: false,
+  editLockMode: 'none',
+
+  /* === פילטרים === */
+  filterProjectsBoardId: '78999',
+  filterEmployeesBoardId: null,
+  filterEmployeesColumnId: 'person',
+
+  /* === יומן — תוקנו שמות מפתח לתואם customSettings === */
+  showHolidays: true,
+  showTemporaryEvents: true,       /* היה: showTemporary */
+  weekStartDay: 0,                 /* היה: firstDayOfWeek */
+  workDays: [0, 1, 2, 3, 4, 5],
+  workdayLength: 8.5,              /* היה: workdayHours */
+  weeklyHoursTarget: 42.5,         /* היה: weeklyTarget */
+  monthlyHoursTarget: 182.5,       /* היה: monthlyTarget */
+
+  /* === metadata (read-only) === */
+  lastModifiedBy: { id: '48274917', name: 'עילי שלם' },
+  lastModifiedAt: '2026-04-23T20:22:43.823Z',
+};
+
+const USERS = [
+  { id: 'u1', name: 'רונית שחר', color: '#fdab3d' },
+  { id: 'u2', name: 'עמית לוי', color: '#2563eb' },
+  { id: 'u3', name: 'דנה כהן', color: '#16a34a' },
+  { id: 'u4', name: 'יוסי מזרחי', color: '#3b82f6' },
+  { id: 'u5', name: 'שירה אברהם', color: '#ec4899' },
+  { id: 'u6', name: 'אלון פרידמן', color: '#ef4444' },
+  { id: 'u7', name: 'מיכל רוזן', color: '#06b6d4' },
+];
+
+const DAYS_HE = ['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
+const DAYS_FULL = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'];
+
+/* Field config helper */
+function fcDesc(key) {
+  const m = state.fieldConfig[key];
+  return { required: 'חובה', optional: 'רשות', hidden: 'מוסתר' }[m];
+}
+
+/* ======================================================================
+   Icons (inline SVG strings)
+====================================================================== */
+const ICON = {
+  arrowLeft:  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
+  arrowRight: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>',
+  check:      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  check2:     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  info:       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
+  warn:       '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01"/></svg>',
+  sparkles:   '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 14 9 20 11 14 13 12 19 10 13 4 11 10 9 Z"/><path d="M19 3 20 6 23 7 20 8 19 11 18 8 15 7 18 6 Z"/><path d="M5 15 6 17 8 18 6 19 5 21 4 19 2 18 4 17 Z"/></svg>',
+  zap:        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"/></svg>',
+  layers:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>',
+  settings:   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  briefcase:  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>',
+  listChecks: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 17 2 2 4-4M3 7l2 2 4-4M13 6h8M13 12h8M13 18h8"/></svg>',
+  users:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  fileText:   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>',
+  calendar:   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  shield:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10ZM9 12l2 2 4-4"/></svg>',
+  lock:       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+  table:      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/></svg>',
+  target:     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>',
+  party:      '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.8 11.3 2 22l10.7-3.79M4 3h.01M22 8h.01M15 2h.01M22 20h.01M22 2l-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10M22 13.06c-.86 0-1.63.75-1.56 1.62 0 .8-.6 1.55-1.38 1.55-.86 0-1.56.7-1.56 1.58"/></svg>',
+  x:          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
+  refresh:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
+};
+
+/* ======================================================================
+   Rendering
+====================================================================== */
+function render() {
+  renderStepper();
+  renderBody();
+  renderFooter();
+  renderHeaderMeta();
+}
+
+function renderHeaderMeta() {
+  const d = new Date(state.lastModifiedAt);
+  const nameEl = document.getElementById('meta-name');
+  const dateEl = document.getElementById('meta-date');
+  if (nameEl) nameEl.textContent = state.lastModifiedBy.name;
+  if (dateEl) dateEl.textContent = new Intl.DateTimeFormat('he-IL', {
+    day: 'numeric', month: 'long', year: 'numeric'
+  }).format(d);
+}
+
+function renderStepper() {
+  const el = document.getElementById('stepper');
+  el.innerHTML = STEPS.map((s, i) => {
+    const done = i < state.step;
+    const active = i === state.step;
+    return `
+      <button class="step ${active ? 'active' : ''} ${done ? 'done' : ''}" data-step="${i}">
+        <div class="bar"></div>
+        <div class="step-label">
+          <span class="step-num">${done ? '✓' : i + 1}</span>
+          <span>${s.title}</span>
+        </div>
+      </button>
+    `;
+  }).join('');
+  el.querySelectorAll('.step').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.step);
+      if (idx <= state.step) go(idx);
+    });
+  });
+}
+
+/** מנוע עדכון תצוגה מקדימה (שלב תבנית) בלי רינדור מלא — מונע הקפצה בכל לחיצה */
+let _lastBodyStep = -1;
+function renderBody() {
+  const el = document.getElementById('body');
+  const s = STEPS[state.step];
+  const fn = {
+    welcome: renderWelcome,
+    template: renderTemplate,
+    boards: renderBoards,
+    timesheet: renderTimesheet,
+    flow: renderFlow,
+    calendar: renderCalendar,
+    summary: renderSummary,
+  }[s.id];
+  const stepChanged = _lastBodyStep !== state.step;
+  _lastBodyStep = state.step;
+  el.innerHTML = (stepChanged ? '<div class="fadeIn">' : '<div class="body-rerender">') + fn() + '</div>';
+  attachHandlers();
+}
+
+function syncPreviewTabsFromState() {
+  document.querySelectorAll('[data-prev-tab]').forEach(el => {
+    const on = el.dataset.prevTab === state.previewTab;
+    el.classList.toggle('on', on);
+  });
+}
+
+function updatePreviewVisibility() {
+  const isBillable = state.fieldConfig.billableToggle === 'visible';
+  document.querySelectorAll('[data-prev]').forEach(el => {
+    const key = el.dataset.prev;
+    const tabShow = el.dataset.tabShow;
+    el.classList.remove('hidden-soft');
+    if (key && key !== 'billable') {
+      const req = el.querySelector('.req-' + key);
+      if (req) req.style.removeProperty('display');
+    }
+    if (tabShow) {
+      if (!isBillable) {
+        if (tabShow === 'ongoing') {
+          el.classList.add('hidden-soft');
+          return;
+        }
+      } else if (state.previewTab !== tabShow) {
+        el.classList.add('hidden-soft');
+        return;
+      }
+    }
+    if (['date', 'time'].includes(key)) return;
+    if (key === 'billable') {
+      if (!isBillable) el.classList.add('hidden-soft');
+      return;
+    }
+    const mode = state.fieldConfig[key];
+    if (mode === 'hidden') el.classList.add('hidden-soft');
+    else if (mode === 'optional') {
+      const req = el.querySelector('.req-' + key);
+      if (req) req.style.display = 'none';
+    }
+  });
+}
+
+function renderFooter() {
+  const el = document.getElementById('footer');
+  const isWelcome = state.step === 0;
+  const isSummary = state.step === STEPS.length - 1;
+  el.innerHTML = `
+    <div>
+      ${!isWelcome ? `<button class="btn ghost" id="btn-back">${ICON.arrowRight} חזור</button>` : ''}
+    </div>
+    <div style="display:flex; gap: 8px; align-items: center">
+      ${!isSummary && !isWelcome ? `<span style="font-size: 12px; color: var(--muted-2)">שלב ${state.step + 1} מתוך ${STEPS.length}</span>` : ''}
+      ${isWelcome ? `<button class="btn primary lg" id="btn-next">בואו נתחיל ${ICON.arrowLeft}</button>` : ''}
+      ${!isWelcome && !isSummary ? `<button class="btn primary" id="btn-next">המשך ${ICON.arrowLeft}</button>` : ''}
+      ${isSummary ? `<button class="btn success lg" id="btn-finish">${ICON.check2} סיום והתחלת שימוש</button>` : ''}
+    </div>
+  `;
+  document.getElementById('btn-back')?.addEventListener('click', () => go(state.step - 1));
+  document.getElementById('btn-next')?.addEventListener('click', () => go(state.step + 1));
+  document.getElementById('btn-finish')?.addEventListener('click', () => {
+    celebrate();
+    toast('האפליקציה מוכנה לשימוש 🎉');
+  });
+}
+
+function go(i) {
+  if (i < 0 || i >= STEPS.length) return;
+  state.step = i;
+  render();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  postSlide(i);
+}
+
+function postSlide(i) {
+  try { window.parent.postMessage({ slideIndexChanged: i }, '*'); } catch {}
+}
+
+/* ======================================================================
+   Step 1: Welcome
+====================================================================== */
+function renderWelcome() {
+  return `
+    <div class="welcome">
+      <div class="mark">${ICON.sparkles}</div>
+      <h2>ברוכים הבאים לאפליקציית הזמנים שלכם</h2>
+      <p class="lede">תוך 3 דקות נתאים את האפליקציה לדרך שבה הצוות שלכם עובד. אין מה להיבהל — כל הגדרה ניתנת לשינוי גם אחר כך.</p>
+      <div class="welcome-feats">
+        <div class="wf-card">
+          <div class="ic">${ICON.zap}</div>
+          <h4>זיהוי אוטומטי</h4>
+          <p>נזהה את לוחות הפרויקטים, המשימות והעובדים שכבר קיימים אצלכם — לא תצטרכו לבחור ידנית.</p>
+        </div>
+        <div class="wf-card">
+          <div class="ic">${ICON.layers}</div>
+          <h4>שמירה חכמה</h4>
+          <p>כל שלב שמושלם נשמר מיידית. אפשר לחזור ולהמשיך מאיפה שהפסקתם, בכל רגע.</p>
+        </div>
+        <div class="wf-card">
+          <div class="ic">${ICON.settings}</div>
+          <h4>שליטה מלאה</h4>
+          <p>כל ההגדרות פתוחות לשינוי גם אחרי שתסיימו, מתוך מסך ההגדרות הרגיל של האפליקציה.</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ======================================================================
+   Step 2: Template (preset cards + live form preview)
+====================================================================== */
+function renderTemplate() {
+  return `
+    <h2 class="step-title">בחרו תבנית דיווח</h2>
+    <p class="step-sub">מלמעלה למטה: <strong>תבנית מהירה</strong> (קיצור דרך) ↓ <strong>התאמה מלאה</strong> (שדות / טוגל / XOR) לצד <strong>תצוגה מקדימה</strong> של הטופס — כדי לצמצם עומס, כל בלוק מחודד בנפרד.</p>
+
+    <section class="tpl-section tpl-section--presets" aria-labelledby="tpl-h-presets">
+      <header class="tpl-section-head" id="tpl-h-presets">
+        <span class="tpl-section-num" aria-hidden="true">1</span>
+        <div>
+          <h3 class="tpl-section__title">תבניות מוכנות</h3>
+          <p class="tpl-section__sub">בוחרים מבנה התחלתי בקליק — קיצור דרך. הכול ניתן לשינוי בשלב 2.</p>
+        </div>
+      </header>
+      <div class="preset-grid" role="group" aria-label="תבניות דיווח">
+      ${Object.entries(TEMPLATES).map(([key, t]) => `
+        <button type="button" class="preset-cd ${state._template === key ? 'on' : ''}" data-preset="${key}">
+          <div class="pvisual">
+            ${t.chips.map(c => `
+              <span class="pchip ${c.opt ? 'opt' : ''}"><span class="dotc ${c.d}"></span>${c.l}</span>
+            `).join('')}
+          </div>
+          <div class="pmeta">
+            <span class="tag" style="color: ${t.tagColor}">${t.tag}</span>
+            <h4>${t.label}</h4>
+            <p>${t.desc}</p>
+          </div>
+        </button>
+      `).join('')}
+      </div>
+    </section>
+
+    <section class="tpl-section tpl-section--custom" aria-labelledby="tpl-h-custom">
+      <header class="tpl-section-head" id="tpl-h-custom">
+        <span class="tpl-section-num" aria-hidden="true">2</span>
+        <div>
+          <h3 class="tpl-section__title">התאמה מלאה (ולידציית XOR) + תצוגה בזמן אמת</h3>
+          <p class="tpl-section__sub">העמודה הראשית: שלוש מצבים לכל שדה. בלוק XOR מוצג רק אם מוגדרים לפחות שני &quot;חובה&quot; — כמו בטאב &quot;מבנה דיווח&quot; באפליקציה. בצד: דימוי של טופס הדיווח (משתנה לפי הלשונית שוטף/פרויקטים).</p>
+        </div>
+      </header>
+
+    <div class="two-col tpl-split">
+      <div class="tpl-custom-body">
+        <h4 class="sr-only">שדות מבנה הדיווח</h4>
+        <div class="fc-list">
+          ${fcRow('project', 'פרויקט', 'קישור ללוח הפרויקטים — תמיד חובה', ICON.briefcase, '', true)}
+          ${fcRow('task', 'משימה', 'קישור למשימה ספציפית בלוח משימות', ICON.listChecks, 't')}
+          ${fcRow('stage', 'סיווג (פרויקטים)', 'עמודת סטטוס לסיווג הדיווח', ICON.layers, 's')}
+          ${fcRow('notes', 'הערות', 'מלל חופשי לדיווח', ICON.fileText, 'n')}
+        </div>
+        ${(() => {
+          const isBillableVisible = state.fieldConfig.billableToggle === 'visible';
+          return `
+          <div class="toggle-row ${isBillableVisible ? 'on' : ''}" data-toggle="billableToggle" style="margin-top: 14px">
+            <div class="toggle-row-body">
+              <div class="t">אפשר בחירה פרויקטים / שוטף</div>
+              <div class="d">מציג טוגל בטופס — מאפשר להפריד בין עבודה שוטפת לפרויקטים חיוביים</div>
+            </div>
+            <button type="button" class="switch ${isBillableVisible ? 'on' : ''}" aria-label="הפעל/כבה בחירת סוג דיווח"></button>
+          </div>
+          ${isBillableVisible ? fcRow('nonBillableType', 'סיווג (שוטף)', 'סיווג משנה לדיווחים שוטפים', ICON.listChecks, '') : ''}
+          ${renderXorBlock()}`;
+        })()}
+      </div>
+
+      <div class="tpl-preview-column">
+        <div class="tpl-col-cap">
+          <p class="tpl-col-cap__title" id="tpl-h-preview">תצוגה מקדימה</p>
+          <p class="tpl-col-cap__hint">דימוי לטופס דיווח — לחצו על צ&rsquo;יפים, שמירה/ביטול. משתנה לפי שדות ולשונית שוטף/פרויקטים.</p>
+        </div>
+      <aside class="mini-form mini-form--interactive" tabindex="0" role="region" aria-labelledby="tpl-h-preview" aria-label="תצוגה מקדימה — ניתן ללחוץ על צ'יפים, שמור או ביטול לדימוי">
+        <div class="mini-form-header">
+          <span class="dot"></span>
+          <span>תצוגה מקדימה · דיווח שעות</span>
+        </div>
+        <div class="rp-title-row">
+          <button type="button" class="x" data-rp-close title="סגירה (דמו)">✕</button>
+          <div style="text-align: end">
+            <h6>דיווח שעות</h6>
+            <div class="rp-sub">יום שלישי, 21 באפריל</div>
+          </div>
+        </div>
+
+        <div class="rp-tabs" data-prev="billable">
+          <button type="button" class="rp-tab ${state.previewTab === 'ongoing' ? 'on' : ''}" data-prev-tab="ongoing">שוטף</button>
+          <button type="button" class="rp-tab ${state.previewTab === 'project' ? 'on' : ''}" data-prev-tab="project">פרויקטים</button>
+        </div>
+
+        <div class="rp-field" data-prev="project" data-tab-show="project">
+          <label>פרויקט <span class="req">*</span></label>
+          <div class="rp-chips">
+            <span class="rp-chip">ועדת הבחירות</span>
+            <span class="rp-chip">המשרד להגנת ה...</span>
+            <span class="rp-chip on">אפליקציות ופיתוחים</span>
+            <span class="rp-chip">אימפקט - גנרי...</span>
+            <span class="rp-chip">Tracker & Planner</span>
+            <span class="rp-chip">LTU - הקמה ו...</span>
+          </div>
+        </div>
+
+        <div class="rp-field" data-prev="task" data-tab-show="project">
+          <label for="rp-task-sel">משימה <span class="req req-task">*</span></label>
+          <select id="rp-task-sel" class="select rp-select" aria-label="בחירת משימה">
+            <option value="1">תכנון ארכיטקטורה</option>
+            <option value="2" selected>פיתוח API</option>
+            <option value="3">בדיקות QA</option>
+            <option value="" disabled>──────────</option>
+            <option value="add" class="rp-opt-add">הוסף משימה</option>
+          </select>
+        </div>
+
+        <div class="rp-field" data-prev="stage" data-tab-show="project">
+          <label>סיווג (פרויקטים) <span class="req req-stage">*</span></label>
+          <div class="rp-chips">
+            <span class="rp-chip">עבודה עצמית</span>
+            <span class="rp-chip on">פגישות פנימיות</span>
+            <span class="rp-chip">פגישות חיצוניות</span>
+          </div>
+        </div>
+
+        <div class="rp-field" data-prev="nonBillableType" data-tab-show="ongoing">
+          <label>סיווג (שוטף) <span class="req req-nonBillableType">*</span></label>
+          <div class="rp-chips">
+            <span class="rp-chip on">עבודה שוטפת כללית</span>
+            <span class="rp-chip">הכשרה והדרכה</span>
+            <span class="rp-chip">מחקר ופיתוח</span>
+          </div>
+        </div>
+
+        <div class="rp-field" data-prev="notes">
+          <label>מלל חופשי <span class="req req-notes" style="display:none">*</span></label>
+          <textarea class="rp-text" rows="2" data-rp-notes placeholder="הוסף הערות כאן..."></textarea>
+        </div>
+
+        <div class="rp-actions">
+          <button type="button" class="rp-btn primary" data-rp-save>שמור</button>
+          <button type="button" class="rp-btn" data-rp-cancel>ביטול</button>
+        </div>
+      </aside>
+      </div>
+    </div>
+    </section>
+  `;
+}
+
+function fcRow(key, title, desc, icon, iconClass = '', locked = false) {
+  const mode = state.fieldConfig[key];
+  return `
+    <div class="fc-row ${locked ? 'locked' : ''}" data-fc="${key}">
+      <div class="fc-ic ${iconClass}">${icon}</div>
+      <div>
+        <h5>${title}${locked ? ' <span style="font-size: 11px; font-weight: 500; color: var(--muted-2)">· תמיד חובה</span>' : ''}</h5>
+        <p>${desc}</p>
+      </div>
+      <div class="tri">
+        <button class="required ${mode === 'required' ? 'on' : ''}" data-mode="required">חובה</button>
+        <button class="optional ${mode === 'optional' ? 'on' : ''}" data-mode="optional">רשות</button>
+        <button class="hidden ${mode === 'hidden' ? 'on' : ''}" data-mode="hidden">מוסתר</button>
+      </div>
+    </div>
+  `;
+}
+
+function applyTemplate(key) {
+  state._template = key;
+  state.fieldConfig = { ...TEMPLATES[key].fc };
+  render();
+}
+
+function setFc(key, mode) {
+  state.fieldConfig[key] = mode;
+  if (key === 'task' && mode === 'hidden') {
+    state.openBoardsCard = null;
+  }
+  renderBody();
+}
+
+function setBillableToggle(on) {
+  state.fieldConfig.billableToggle = on ? 'visible' : 'hidden';
+  if (!on) {
+    state.fieldConfig.nonBillableType = 'hidden';
+    state.previewTab = 'project';
+  } else if (state.fieldConfig.nonBillableType === 'hidden') {
+    state.fieldConfig.nonBillableType = 'required';
+  }
+  renderBody();
+}
+
+const XOR_LABELS = { task: 'משימה', stage: 'סיווג (פרויקטים)', nonBillableType: 'סיווג (שוטף)', notes: 'הערות' };
+function requiredFieldsForXor() {
+  const fc = state.fieldConfig;
+  const isBill = fc.billableToggle === 'visible';
+  const list = [
+    { key: 'task', label: XOR_LABELS.task },
+    { key: 'stage', label: XOR_LABELS.stage },
+    ...(isBill ? [{ key: 'nonBillableType', label: XOR_LABELS.nonBillableType }] : []),
+    { key: 'notes', label: XOR_LABELS.notes },
+  ];
+  return list.filter(f => fc[f.key] === 'required');
+}
+function canShowXorBlock() {
+  return requiredFieldsForXor().length >= 2;
+}
+
+function renderXorBlock() {
+  if (!canShowXorBlock()) return '';
+  const { enabled, xorFields } = state.advancedValidation;
+  const opts0 = requiredFieldsForXor().filter(f => f.key !== xorFields[1]);
+  const opts1 = requiredFieldsForXor().filter(f => f.key !== xorFields[0]);
+  return `
+    <div class="xor-block" style="margin-top: 16px; padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--r-card); background: #fff; box-shadow: var(--shadow-card)">
+      <div style="font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 10px; display: flex; align-items: center; gap: 8px">
+        <span style="color: var(--primary)" aria-hidden="true">⚡</span>
+        מתקדם: בחירה בין שדות חובה
+      </div>
+      <p style="margin: 0 0 12px; font-size: 12px; color: var(--muted); line-height: 1.45">כאן מחליטים אם <strong>ולידציית XOR</strong> פעילה. כאשר היא <strong>מופעלת</strong>, בוחרים <strong>שני</strong> שדות חובה; מספיק שאחד מהם יהיה מלא (כמו בטאב &quot;מבנה דיווח&quot;). סטטוס ה-XOR (כולל &quot;לא הוגדר&quot;) מסוכם <strong>בשלב הסיום</strong>.</p>
+      <div class="toggle-row ${enabled ? 'on' : ''}" data-toggle="advancedValidationEnabled" style="margin: 0">
+        <div class="toggle-row-body">
+          <div class="t">הפעל בחירה בין שדות חובה</div>
+          <div class="d">המתג קובע אם כלל ה-XOR פעיל. כבוי = אין ולידציה מסוג זה.</div>
+        </div>
+        <button type="button" class="switch ${enabled ? 'on' : ''}" aria-pressed="${enabled}" aria-label="הפעל או כבה ולידציית XOR"></button>
+      </div>
+      ${enabled ? `
+      <div class="xor-selectors" aria-label="בחירת שני שדות ל-XOR">
+        <span class="sr-only" id="xor-sr-a">שדה ראשון ל-XOR</span>
+        <select class="select xor-select" data-xor-idx="0" aria-labelledby="xor-sr-a">
+          <option value="">בחר שדה…</option>
+          ${opts0.map(f => `<option value="${f.key}" ${xorFields[0] === f.key ? 'selected' : ''}>${f.label}</option>`).join('')}
+        </select>
+        <span class="xor-or" aria-hidden="true">או</span>
+        <span class="sr-only" id="xor-sr-b">שדה שני ל-XOR</span>
+        <select class="select xor-select" data-xor-idx="1" aria-labelledby="xor-sr-b">
+          <option value="">בחר שדה…</option>
+          ${opts1.map(f => `<option value="${f.key}" ${xorFields[1] === f.key ? 'selected' : ''}>${f.label}</option>`).join('')}
+        </select>
+      </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+/* ======================================================================
+   Step 3: Boards + column mapping (per-entity cards)
+====================================================================== */
+const AVAILABLE_BOARDS = [
+  { id: 'b1', name: 'Projects Master', rows: 47, color: '#2563eb' },
+  { id: 'b2', name: 'Tasks 2026',       rows: 413, color: '#a25ddc' },
+  { id: 'b3', name: 'HR · עובדים',       rows: 18,  color: '#16a34a' },
+  { id: 'b4', name: 'Allocations',      rows: 86,  color: '#fdab3d' },
+  { id: 'b5', name: 'Time Reports 2026',rows: 0,   color: '#3b82f6' },
+  { id: 'b6', name: 'Legacy Timesheets',rows: 1240,color: '#676879' },
+];
+const COLS_SAMPLE = ['Name','Owner','Status','Type','Project','Email','Role','Manager','Department','Hours','Date','Assignee','Tags','Priority'];
+
+/* Mock values for a Status column — monday-style label+color pills */
+const STATUS_VALUES = {
+  // "Status" on projects
+  Status: [
+    { v: 'Active',      c: '#16a34a' },
+    { v: 'In Progress', c: '#fdab3d' },
+    { v: 'On Hold',     c: '#a25ddc' },
+    { v: 'Done',        c: '#0086c0' },
+    { v: 'Archived',    c: '#c4c4c4' },
+  ],
+  // "Type" on projects (internal/external)
+  Type: [
+    { v: 'Internal',         c: '#9cd326', label: 'פנימי' },
+    { v: 'External',         c: '#007eb5', label: 'לקוח חיצוני' },
+    { v: 'פנימי',            c: '#9cd326' },
+    { v: 'לקוח חיצוני',      c: '#007eb5' },
+    { v: 'R&D',              c: '#a25ddc' },
+  ],
+  // Tasks status
+  Priority: [
+    { v: 'Working on it', c: '#fdab3d' },
+    { v: 'In Review',     c: '#a25ddc' },
+    { v: 'Done',          c: '#16a34a' },
+    { v: 'Stuck',         c: '#ef4444' },
+    { v: 'Backlog',       c: '#c4c4c4' },
+  ],
+};
+function statusValuesFor(colName) {
+  return STATUS_VALUES[colName] || STATUS_VALUES.Status;
+}
+
+const BOARD_CARDS = {
+  projects: { title: 'לוח פרויקטים', desc: 'רשימת הפרויקטים שעליהם מדווחים.', icon: ICON.briefcase, accent: 'var(--primary)',
+    cols: [
+      { key: 'name', label: 'שם פרויקט', req: true, hint: 'Text' },
+      { key: 'manager', label: 'מנהל', req: false, hint: 'People' },
+      { key: 'status', label: 'סטטוס', req: false, hint: 'Status' },
+      { key: 'type', label: 'סוג', req: false, hint: 'Dropdown' },
+    ]
+  },
+  tasks: { title: 'לוח משימות', desc: 'משימות מקושרות לפרויקטים.', icon: ICON.listChecks, accent: 'var(--accent)',
+    cols: [
+      { key: 'name', label: 'שם משימה', req: true, hint: 'Text' },
+      { key: 'project', label: 'פרויקט מקושר', req: true, hint: 'Connect Boards' },
+      { key: 'assignee', label: 'אחראי', req: false, hint: 'People' },
+      { key: 'status', label: 'סטטוס', req: false, hint: 'Status' },
+    ]
+  },
+  timesheet: { title: 'לוח דיווחי שעות', desc: 'כאן יישמרו כל הדיווחים. אפשר לבחור קיים או ליצור חדש בשלב הבא.', icon: ICON.calendar, accent: 'var(--violet)',
+    cols: []
+  },
+};
+
+function renderBoards() {
+  const tasksShown = state.fieldConfig.task !== 'hidden';
+  const mainOpen = state.openBoardsCard === 'main';
+  const tasksOpen = state.openBoardsCard === 'tasks';
+  return `
+    <h2 class="step-title">לוחות נתונים</h2>
+    <p class="step-sub">הגדירו מאיפה האפליקציה שואבת פרויקטים, ומפו את עמודות הלוח. כל לוח בכרטיס נפרד — בברירת מחדל כל הכרטיסים סגורים; לחיצה פותחת אחד (האחרים נסגרים), לחיצה שוב על אותו כותרת סוגרת. ליד כל בורר לוח: &quot;צור לוח&quot; (הדמיה במוקאפ). סינון פרויקטים/עובדים לרשימות נמצא בשלב &quot;אישורים ופילטרים&quot;.</p>
+
+    <!-- Assignments Mode Toggle -->
+    <div class="toggle-row ${state.useAssignmentsMode ? 'on' : ''}" data-toggle="useAssignmentsMode" style="margin-bottom:14px">
+      <div class="toggle-row-body">
+        <div class="t">מצב הקצאות (Assignments Mode)</div>
+        <div class="d">משוך פרויקטים מלוח הקצאות ייעודי במקום לוח פרויקטים ישיר — מגדיר אוטומטית אילו פרויקטים מוצגים לכל עובד</div>
+      </div>
+      <button class="switch ${state.useAssignmentsMode ? 'on' : ''}" aria-label="הפעל/כבה מצב הקצאות"></button>
+    </div>
+
+    <div class="bp-stack">
+      ${state.useAssignmentsMode ? renderAssignmentsCard(mainOpen) : renderProjectsDirectCard(mainOpen)}
+      ${tasksShown ? renderTasksCard(tasksOpen) : ''}
+    </div>
+  `;
+}
+
+function renderProjectsDirectCard(isOpen) {
+  return `
+    <div class="bp-card bp-acc ${isOpen ? 'bp-acc-open' : 'bp-acc-collapsed'}" style="--bp-accent: var(--primary)">
+      <button type="button" class="bp-acc-head" data-bp-acc="main" aria-expanded="${isOpen}">
+        <div class="bp-icon">${ICON.briefcase}</div>
+        <div class="bp-head-text" style="flex:1;min-width:0">
+          <h3 style="margin:0">לוח פרויקטים</h3>
+          <p style="margin:2px 0 0">לוח ה-monday שמכיל את רשימת הפרויקטים לדיווח.</p>
+        </div>
+        ${state.connectedBoardId ? `<span class="bp-chip-ok">${ICON.check} נבחר</span>` : `<span class="bp-chip-nf">○ טרם נבחר</span>`}
+        <span class="bp-acc-caret" aria-hidden="true">⌃</span>
+      </button>
+      <div class="bp-acc-panel">
+      <div class="bp-row">
+        <label>לוח פרויקטים</label>
+        <div class="bp-board-pick__row">
+          <select class="select" data-key-state="connectedBoardId">
+            <option value="">— בחרו לוח —</option>
+            ${AVAILABLE_BOARDS.map(b => `<option value="${b.id}" ${state.connectedBoardId === b.id ? 'selected' : ''}>${b.name} · ${b.rows} שורות</option>`).join('')}
+          </select>
+          <button type="button" class="btn ghost sm" data-mock="create-board" title="יוצר לוח ב־monday (מוקאפ)">צור לוח</button>
+        </div>
+      </div>
+
+      <div class="bp-mapping" style="margin-top:10px">
+        <div class="bp-mapping-head">מיפוי עמודות (שני עמודות — עמודה + בורר)</div>
+        <div class="bp-mapping-grid">
+          <div class="bp-map-row">
+            <div class="bp-map-label">עמודות People <span class="req">*</span><span class="bp-type">People</span></div>
+            <select class="select" data-key-state="peopleColumnIds">
+              <option value="person" selected>Person</option>
+              <option value="col_people2">People Column 2</option>
+            </select>
+          </div>
+          <div class="bp-map-row">
+            <div class="bp-map-label">עמודת לקוח <span class="bp-type">Connect Boards</span></div>
+            <select class="select" data-key-state="customerColumnId">
+              <option value="">ללא</option>
+              <option value="board_relation_mm2bw67" ${state.customerColumnId === 'board_relation_mm2bw67' ? 'selected' : ''}>Customer Link</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      ${renderProjectTypePanel()}
+      </div>
+    </div>
+  `;
+}
+
+function renderAssignmentsCard(isOpen) {
+  return `
+    <div class="bp-card bp-acc ${isOpen ? 'bp-acc-open' : 'bp-acc-collapsed'}" style="--bp-accent: var(--accent)">
+      <button type="button" class="bp-acc-head" data-bp-acc="main" aria-expanded="${isOpen}">
+        <div class="bp-icon">${ICON.target}</div>
+        <div class="bp-head-text" style="flex:1;min-width:0">
+          <h3 style="margin:0">לוח הקצאות</h3>
+          <p style="margin:2px 0 0">לוח ה-monday שמכיל הקצאות עובד–פרויקט. הפרויקטים נשאבים ממנו לפי המשתמש.</p>
+        </div>
+        ${state.assignmentsBoardId ? `<span class="bp-chip-ok">${ICON.check} ${(AVAILABLE_BOARDS.find(b => String(b.id) === String(state.assignmentsBoardId)) || {}).name || 'נבחר'}</span>` : `<span class="bp-chip-nf">○ טרם נבחר</span>`}
+        <span class="bp-acc-caret" aria-hidden="true">⌃</span>
+      </button>
+      <div class="bp-acc-panel">
+      <div class="bp-row" style="margin-top:0">
+        <label>לוח הקצאות <span class="req">*</span></label>
+        <div class="bp-board-pick__row">
+          <select class="select" data-key-state="assignmentsBoardId">
+            <option value="">— בחרו לוח —</option>
+            ${AVAILABLE_BOARDS.map(b => `<option value="${b.id}" ${String(state.assignmentsBoardId) === String(b.id) ? 'selected' : ''}>${b.name} · ${b.rows} שורות</option>`).join('')}
+          </select>
+          <button type="button" class="btn ghost sm" data-mock="create-board" title="יוצר לוח ב־monday (מוקאפ)">צור לוח</button>
+        </div>
+      </div>
+
+      <div class="bp-mapping" style="margin-top:10px">
+        <div class="bp-mapping-head">מיפוי עמודות ללוח (גריד 2 עמודות: תיאור + בורר עמודה)</div>
+        <div class="bp-mapping-grid">
+          <div class="bp-map-row">
+            <div class="bp-map-label">עמודת Person <span class="req">*</span><span class="bp-type">People</span></div>
+            <select class="select" data-key-state="assignmentPersonColumnId">
+              <option value="person" ${state.assignmentPersonColumnId === 'person' ? 'selected' : ''}>Person</option>
+            </select>
+          </div>
+          <div class="bp-map-row">
+            <div class="bp-map-label">תאריך התחלת הקצאה <span class="req">*</span><span class="bp-type">Date</span></div>
+            <select class="select" data-key-state="assignmentStartDateColumnId">
+              <option value="date_mkzcyg4a" ${state.assignmentStartDateColumnId === 'date_mkzcyg4a' ? 'selected' : ''}>Start Date</option>
+            </select>
+          </div>
+          <div class="bp-map-row">
+            <div class="bp-map-label">תאריך סיום הקצאה <span class="req">*</span><span class="bp-type">Date</span></div>
+            <select class="select" data-key-state="assignmentEndDateColumnId">
+              <option value="date_mkzc5yxj" ${state.assignmentEndDateColumnId === 'date_mkzc5yxj' ? 'selected' : ''}>End Date</option>
+            </select>
+          </div>
+          <div class="bp-map-row">
+            <div class="bp-map-label">קישור לפרויקט <span class="req">*</span><span class="bp-type">Connect Boards</span></div>
+            <select class="select" data-key-state="assignmentProjectLinkColumnId">
+              <option value="board_relation_mkzc6g38" ${state.assignmentProjectLinkColumnId === 'board_relation_mkzc6g38' ? 'selected' : ''}>Project Link</option>
+            </select>
+          </div>
+          <div class="bp-map-row">
+            <div class="bp-map-label">עמודת לקוח <span class="bp-type">Connect Boards</span></div>
+            <select class="select" data-key-state="customerColumnId">
+              <option value="">ללא</option>
+              <option value="board_relation_mm2bw67" ${state.customerColumnId === 'board_relation_mm2bw67' ? 'selected' : ''}>Customer Link</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      ${renderProjectTypePanel()}
+      </div>
+    </div>
+  `;
+}
+
+function renderProjectTypePanel() {
+  const mockLabels = [
+    { valueId: '10641475001', key: '0', label: 'פנימי',       color: '#9cd326' },
+    { valueId: '10641475002', key: '1', label: 'לקוח חיצוני', color: '#007eb5' },
+    { valueId: '10641475003', key: '2', label: 'R&D',          color: '#a25ddc' },
+  ];
+  return `
+    <div class="bp-advanced ${state.enableProjectTypeDistinction ? 'open' : ''}" style="margin-top:10px">
+      <button class="bp-advanced-toggle" data-toggle-adv="projectTypeDistinction" type="button">
+        <div class="bp-advanced-left">
+          ${ICON.settings}
+          <span>הבחנה פנימי / חיצוני</span>
+          ${state.enableProjectTypeDistinction
+            ? `<span class="bp-advanced-summary">${Object.values(state.projectTypeMapping).filter(v=>v!=='unmapped').length} ממופים</span>`
+            : `<span class="bp-advanced-summary bp-advanced-empty">כבוי</span>`}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" class="switch ${state.enableProjectTypeDistinction ? 'on' : ''}" aria-label="הפעל/כבה הבחנה פנימי/חיצוני" data-toggle="enableProjectTypeDistinction"></button>
+          <span class="bp-advanced-caret">${state.enableProjectTypeDistinction ? '⌃' : '⌄'}</span>
+        </div>
+      </button>
+      ${state.enableProjectTypeDistinction ? `
+        <div class="bp-advanced-body">
+          <div class="adv-section">
+            <div class="adv-field">
+              <label>עמודת סיווג סוג פרויקט</label>
+              <select class="select" data-key-state="projectTypeColumnId" style="max-width:280px">
+                <option value="color_mm19gaez" ${state.projectTypeColumnId === 'color_mm19gaez' ? 'selected' : ''}>Project Type</option>
+              </select>
+            </div>
+            <div class="adv-field" style="margin-top:12px">
+              <label>מיפוי ערכי סטטוס → תפקיד</label>
+              <p class="hint" style="margin:0 0 6px">בכל שורה: <strong>שתי תוויות</strong> מהלוח, לצד כל אחת בחירת תפקיד (פנימי / חיצוני / לא מסווג).</p>
+              <div class="pt-type-map" role="group" aria-label="מיפוי סוג פרויקט — שתי עמודות">
+                  ${mockLabels.map(l => `
+                    <div class="pt-type-item" role="group" aria-label="תווית ${l.label}">
+                      <div class="pt-type-label">
+                        <span class="pt-type-dot" style="background:${l.color}" aria-hidden="true"></span>
+                        <span class="pt-type-text">${l.label}</span>
+                      </div>
+                      <span class="sr-only">תפקיד לתווית ${l.label}</span>
+                      <select class="select" data-pt-idx="${l.key}">
+                        <option value="internal" ${state.projectTypeMapping[l.key] === 'internal' ? 'selected' : ''}>פנימי</option>
+                        <option value="external" ${state.projectTypeMapping[l.key] === 'external' ? 'selected' : ''}>חיצוני</option>
+                        <option value="unmapped" ${!state.projectTypeMapping[l.key] || state.projectTypeMapping[l.key] === 'unmapped' ? 'selected' : ''}>לא מסווג</option>
+                      </select>
+                    </div>
+                  `).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+/** לייבלים מעמודת סטטוס (באפליקציה: מגיעים מה-API; taskActiveStatusValues = מערך מחרוזות טקסט הלייבל) */
+const MOCK_TASK_FILTER_STATUS_LABELS = [
+  { label: 'בעבודה', color: '#fdab3d' },
+  { label: 'בוצע', color: '#00c875' },
+  { label: 'תקוע', color: '#e2445c' },
+  { label: 'לא התחיל', color: '#c4c4c4' },
+];
+
+function renderTaskActiveStatusLabelsHtml() {
+  return MOCK_TASK_FILTER_STATUS_LABELS.map((s, i) => {
+    const on = (state.taskActiveStatusValues || []).includes(s.label);
+    return `<button type="button" class="status-chip ${on ? 'on' : ''}" style="--sc:${s.color}" data-task-active-idx="${i}" title="הפעלה או ביטול לסטטוס פעיל">${s.label}</button>`;
+  }).join('');
+}
+
+function renderTasksCard(isOpen) {
+  return `
+    <div class="bp-card bp-acc ${isOpen ? 'bp-acc-open' : 'bp-acc-collapsed'}" style="--bp-accent: var(--violet)">
+      <button type="button" class="bp-acc-head" data-bp-acc="tasks" aria-expanded="${isOpen}">
+        <div class="bp-icon">${ICON.listChecks}</div>
+        <div class="bp-head-text" style="flex:1;min-width:0">
+          <h3 style="margin:0">לוח משימות</h3>
+          <p style="margin:2px 0 0">בחירת לוח המשימות, ואז מיפוי עמודה בלוח הפרויקטים — השדות בגריד 2 עמודות. אופציונלית: סינון לפי סטטוס.</p>
+        </div>
+        ${state.tasksBoardId ? `<span class="bp-chip-ok">${ICON.check} נבחר</span>` : `<span class="bp-chip-nf">○ טרם נבחר</span>`}
+        <span class="bp-acc-caret" aria-hidden="true">⌃</span>
+      </button>
+      <div class="bp-acc-panel">
+        <div class="bp-mapping" style="margin-top:0">
+          <div class="bp-mapping-head">לוח ומיפוי (גריד 2 עמודות)</div>
+          <p class="bp-map-intro" style="margin:0 0 8px;font-size:12px;color:var(--muted)">שדה הלוח ושדה העמודה תופסים כל אחת חצי רוחב — לא בשורה אחת מלאה.</p>
+          <div class="bp-mapping-grid">
+            <div class="bp-map-row">
+              <div class="bp-map-label">בחירת לוח משימות <span class="req">*</span><span class="bp-type">Board</span></div>
+              <div class="bp-map-board-wrap">
+                <select class="select" data-key-state="tasksBoardId">
+                  <option value="">— בחרו לוח —</option>
+                  ${AVAILABLE_BOARDS.map(b => `<option value="${b.id}" ${String(state.tasksBoardId) === String(b.id) ? 'selected' : ''}>${b.name} · ${b.rows} שורות</option>`).join('')}
+                </select>
+                <button type="button" class="btn ghost sm" data-mock="create-board" title="יוצר לוח ב־monday (מוקאפ)">צור לוח</button>
+              </div>
+            </div>
+            <div class="bp-map-row">
+              <div class="bp-map-label">עמודת קישור למשימות בלוח הפרויקטים <span class="req">*</span><span class="bp-type">Connect</span></div>
+              <select class="select" data-key-state="tasksProjectColumnId">
+                <option value="">— בחרו עמודה —</option>
+                <option value="board_relation_tasks" ${state.tasksProjectColumnId === 'board_relation_tasks' ? 'selected' : ''}>Tasks · Connect boards</option>
+                <option value="board_relation_t2" ${state.tasksProjectColumnId === 'board_relation_t2' ? 'selected' : ''}>Subtasks</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="bp-mapping" style="margin-top:10px">
+          <div class="bp-mapping-head">המשך: סינון משימות (אופציונלי — רק אם הופעל)</div>
+          <div class="toggle-row ${state.taskStatusFilterEnabled ? 'on' : ''}" data-toggle="taskStatusFilterEnabled" style="margin:0 0 10px">
+            <div class="toggle-row-body">
+              <div class="t">סינון משימות לפי סטטוס</div>
+              <div class="d">תואם לטאב מיפוי באפליקציה — שונה מסינון הפרויקטים/עובדים בדשבורד (שיוגדרו בשלב &quot;אישורים ופילטרים&quot;)</div>
+            </div>
+            <button type="button" class="switch ${state.taskStatusFilterEnabled ? 'on' : ''}" aria-label="הפעל סינון סטטוס משימות"></button>
+          </div>
+          <div class="bp-mapping-grid" style="${state.taskStatusFilterEnabled && state.tasksBoardId ? '' : 'opacity:.55;pointer-events:none'}">
+            <div class="bp-map-row">
+              <div class="bp-map-label">עמודת סטטוס במשימות <span class="req">*</span><span class="bp-type">Status</span></div>
+              <select class="select" data-key-state="taskStatusColumnId">
+                <option value="">—</option>
+                <option value="color_status_tasks" ${state.taskStatusColumnId === 'color_status_tasks' ? 'selected' : ''}>Status (משימות)</option>
+              </select>
+            </div>
+            <div class="bp-map-row" style="grid-column:1 / -1;align-self:stretch;min-width:0">
+              <div>
+                <div class="bp-map-label" style="margin-bottom:4px">ערכי סטטוס פעילים <span class="req">*</span><span class="bp-type">Multi</span></div>
+                <p class="bp-map-intro" style="margin:0 0 8px;font-size:12px;color:var(--muted)">לחיצה על לייבל מעמודת הסטטוס — מסמנת/מבטלת; רק לייבלים מסומנים נחשבים &quot;פעילים&quot; (כמו <strong>MultiSelect</strong> בטאב מיפוי). במוקאב: לייבלים לדוגמה; בייצור: נטענים מעמודה שנבחרה.</p>
+                ${state.taskStatusColumnId ? `
+                <div class="chip-picker" role="group" aria-label="סטטוסים פעילים">
+                  ${renderTaskActiveStatusLabelsHtml()}
+                </div>
+                ` : `<p class="bp-map-intro" style="margin:0;font-size:12px;color:var(--muted-2)">בחרו עמודת סטטוס כדי לראות רשימת לייבלים לבחירה</p>`}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* הפונקציות הישנות boardPickerCard, renderAdvancedPanel, renderProjectTypeSection,
+   renderStatusFilterSection, employeesPickerCard הוסרו — הוחלפו ב:
+   renderProjectsDirectCard, renderAssignmentsCard, renderProjectTypePanel, renderTasksCard (למעלה).
+   סינון פרויקטים לדשבורד אינו בשלב הזה — מוגדר אצל &quot;אישורים ופילטרים&quot;. */
+
+/* ======================================================================
+   Step 4: Timesheet board (mode + preview)
+====================================================================== */
+/* עמודות לדוגמה לפי סוג — value=persisted id, טקסט=שם מוצג בלבד */
+const TS_COL_OPTIONS = {
+  date: [
+    { id: 'date4', label: 'תאריך/שעת התחלה' },
+    { id: 'date_mkzy8rtn', label: 'תאריך/שעת סיום' },
+  ],
+  number: [
+    { id: 'numeric_mky7eqsf', label: 'משך בשעות' },
+  ],
+  people: [
+    { id: 'person', label: 'מדווח (People)' },
+  ],
+  connect: [
+    { id: 'board_relation_mkyg2zeq', label: 'Project' },
+    { id: 'board_relation_mm00yzj2', label: 'Assignment' },
+    { id: 'board_relation_mm2bjxk4', label: 'Customer' },
+  ],
+  status: [
+    { id: 'color_mm008jha', label: 'Event Type' },
+    { id: 'color_mkzk9xes', label: 'סיווג שוטף' },
+    { id: 'color_mkzsg4t1', label: 'סיווג (פרויקטים)' },
+  ],
+  text: [
+    { id: 'text_mkzsm5wd', label: 'הערות' },
+  ],
+};
+function colOptsForType(t) { return TS_COL_OPTIONS[t] || []; }
+
+function mapCol(stateKey, type) {
+  const val = state[stateKey] || '';
+  const opts = colOptsForType(type);
+  return `
+    <select class="select" data-key-state="${stateKey}">
+      <option value="">— לא ממופה —</option>
+      ${opts.map(o => `<option value="${o.id}" ${val === o.id ? 'selected' : ''}>${o.label}</option>`).join('')}
+    </select>`;
+}
+
+function renderTimesheet() {
+  const fc = state.fieldConfig;
+  const isBillable = fc.billableToggle === 'visible';
+
+  /* _timesheetMode is wizard-only — not persisted to customSettings */
+  return `
+    <h2 class="step-title">לוח הדיווחים</h2>
+    <p class="step-sub">הגדירו את לוח ה-monday שיקבל את דיווחי השעות, ומפו את עמודות הלוח לשדות האפליקציה.</p>
+
+    <div class="field" style="margin-bottom:0">
+        <label>לוח דיווחים <span class="req">*</span></label>
+        <div class="bp-board-pick__row">
+          <select class="select" data-key-state="timeReportingBoardId">
+            <option value="">— בחרו לוח —</option>
+            ${AVAILABLE_BOARDS.map(b => `<option value="${b.id}" ${state.timeReportingBoardId === b.id ? 'selected' : ''}>${b.name} · ${b.rows} שורות</option>`).join('')}
+            <option value="18390430440" ${'18390430440' === state.timeReportingBoardId ? 'selected' : ''}>Time Reports 2026 (18390430440)</option>
+          </select>
+          <button type="button" class="btn ghost sm" data-mock="create-board" title="יוצר לוח ב־monday (מוקאפ)">צור לוח</button>
+        </div>
+      </div>
+
+    <div style="margin-top: 24px">
+      ${renderTimesheetMapping()}
+    </div>
+  `;
+}
+
+/** אקורדיון קבוצת מיפוי (לוח דיווחים) — id ∈ tsMapGroupOpen */
+function wrapTsMapAccordion(id, title, desc, innerHtml) {
+  const open = !!state.tsMapGroupOpen[id];
+  return `
+    <div class="ts-map-acc ${open ? 'is-open' : ''}" data-ts-map-wrap="${id}">
+      <button type="button" class="ts-map-acc-toggle" data-ts-map-acc="${id}" aria-expanded="${open}">
+        <div>
+          <h4 class="ts-map-acc-h">${title}</h4>
+          <p class="ts-map-acc-d">${desc}</p>
+        </div>
+        <span class="ts-map-acc-caret" aria-hidden="true">${open ? '⌃' : '⌄'}</span>
+      </button>
+      <div class="ts-map-acc-body" ${open ? '' : 'hidden'}>
+        ${innerHtml}
+      </div>
+    </div>`;
+}
+
+function renderTimesheetMapping() {
+  const fc = state.fieldConfig;
+  const isBillable = fc.billableToggle === 'visible';
+
+  const essentialBody = `
+      <div class="ts-map-grid">
+        <div class="ts-map-cell"><label>תאריך/שעת התחלה <span class="req">*</span><span class="ts-col-type">Date</span></label>${mapCol('dateColumnId','date')}</div>
+        <div class="ts-map-cell"><label>תאריך/שעת סיום <span class="req">*</span><span class="ts-col-type">Date</span></label>${mapCol('endTimeColumnId','date')}</div>
+        <div class="ts-map-cell"><label>משך בשעות <span class="req">*</span><span class="ts-col-type">Numbers</span></label>${mapCol('durationColumnId','number')}</div>
+        <div class="ts-map-cell"><label>מדווח <span class="req">*</span><span class="ts-col-type">People</span></label>${mapCol('reporterColumnId','people')}</div>
+      </div>`;
+
+  const structureBody = `
+      <div class="ts-map-grid">
+        <div class="ts-map-cell"><label>פרויקט <span class="req">*</span><span class="ts-col-type">Connect Boards</span></label>${mapCol('projectColumnId','connect')}</div>
+        ${fc.task !== 'hidden' ? `<div class="ts-map-cell"><label>משימה <span class="ts-col-type">Connect Boards</span></label>${mapCol('taskColumnId','connect')}</div>` : ''}
+        ${state.useAssignmentsMode ? `<div class="ts-map-cell"><label>הקצאה <span class="req">*</span><span class="ts-col-type">Connect Boards</span></label>${mapCol('assignmentColumnId','connect')}</div>` : ''}
+        ${fc.stage !== 'hidden' ? `<div class="ts-map-cell"><label>סיווג ${fc.stage === 'required' ? '<span class="req">*</span>' : ''}<span class="ts-col-type">Status</span></label>${mapCol('stageColumnId','status')}</div>` : ''}
+        ${fc.notes !== 'hidden' ? `<div class="ts-map-cell"><label>הערות <span class="ts-col-type">Text</span></label>${mapCol('notesColumnId','text')}</div>` : ''}
+        <div class="ts-map-cell"><label>לקוח <span class="ts-col-type">Connect Boards</span></label>${mapCol('customerReportColumnId','connect')}</div>
+      </div>`;
+
+  const billableBody = `
+      <div class="ts-map-grid">
+        <div class="ts-map-cell"><label>עמודת סוג אירוע <span class="req">*</span><span class="ts-col-type">Status</span></label>${mapCol('eventTypeStatusColumnId','status')}</div>
+        <div class="ts-map-cell"><label>עמודת סיווג שוטף <span class="ts-col-type">Status</span></label>${mapCol('nonBillableStatusColumnId','status')}</div>
+      </div>`;
+
+  return `
+    <div class="ts-map-head">
+      <div>
+        <h3 class="ts-map-title">מיפוי עמודות לוח הדיווחים</h3>
+        <p class="ts-map-sub">בוחרים לכל שדה את <strong>עמודת הלוח</strong> המתאימה. <span class="ts-auto-badge">${ICON.zap} ערכים מהאובייקט הנוכחי</span></p>
+      </div>
+    </div>
+
+    ${wrapTsMapAccordion('essential', 'שדות חובה', 'תאריך/שעת <strong>התחלה</strong>, תאריך/שעת <strong>סיום</strong>, <strong>משך זמן</strong>, <strong>מדווח</strong> — בלי מיפוי מלא הדיווח לא נשמר. (סוג דיווח ומבנה — בקבוצות נוספות.)', essentialBody)}
+
+    ${wrapTsMapAccordion('structure', 'מבנה הדיווח', 'פרויקט, לקוח, משימה, הקצאה, סיווג, הערות — לפי שלב המבנה; * חובה כשהוגדרו כחובה/גלויים.', structureBody)}
+
+    ${isBillable ? `
+    ${wrapTsMapAccordion('billable', 'עמודות סוגי דיווח', '<span class="req">*</span> חובה כשהוגדרו סוגי חיוב. נדרשות לסיווג הדיווח (שוטף / פרויקט / יומי וכו׳) יחד עם מפת הקטגוריות בסעיף הבא.', billableBody)}
+    ${renderEventTypeMappingTable()}
+    ` : ''}
+  `;
+}
+
+function renderEventTypeMappingTable() {
+  const cats = ['allDay','temporary','externalProject','internalProject','routine'];
+  const catLabels = { allDay:'יומי (חופשה/מחלה/מילואים)', temporary:'עתידי', externalProject:'פרויקט חיצוני', internalProject:'פרויקט פנימי', routine:'שוטף' };
+
+  const rows = Object.keys(state.eventTypeMapping).map(idx => {
+    const meta = state.eventTypeLabelMeta[idx] || {};
+    const cat = state.eventTypeMapping[idx];
+    return `
+      <div class="et-map-item" role="group" aria-label="מיפוי ${meta.label || idx}">
+        <div class="et-map-label">
+          <span class="et-map-dot" style="background:${meta.color || '#ccc'}" aria-hidden="true"></span>
+          <span class="et-map-text">${meta.label || '—'}</span>
+        </div>
+        <div class="et-map-select-cell">
+          <span class="sr-only">קטגוריית אפליקציה לתווית ${meta.label || ''}</span>
+          <select class="select" data-et-idx="${idx}" style="width:100%;max-width:100%;box-sizing:border-box">${cats.map(c => `<option value="${c}" ${cat === c ? 'selected' : ''}>${catLabels[c]}</option>`).join('')}</select>
+        </div>
+      </div>`;
+  }).join('');
+
+  const eventMapBody = `<div class="et-map-list">${rows}</div>`;
+
+  return wrapTsMapAccordion(
+    'eventMap',
+    'מיפוי סוגי דיווח <span class="req">*</span>',
+    'חובה יחד עם עמודת סוג האירוע. כל <strong>תווית</strong> מהלוח ממופה לקטגוריית אפליקציה. <strong>שתי תוויות בשורה</strong> (בכל תא: תווית | קטגוריה). N-to-1: מספר סטטוסים → אותה קטגוריה.',
+    eventMapBody
+  );
+}
+
+function renderMappingGroup(id, title, desc, cols, m, auto) {
+  if (!cols.length) return '';
+  return `
+    <div class="ts-map-acc is-open" style="margin-bottom:10px">
+      <div class="ts-map-acc-body" style="padding:12px 14px">
+        <div class="ts-map-acc-h" style="margin-bottom:8px;font-size:13.5px;font-weight:700">${title}</div>
+        <p class="ts-map-acc-d" style="margin:0 0 10px">${desc}</p>
+      <div class="ts-map-grid">
+        ${cols.map(c => {
+          const val = m[c.key] || '';
+          const opts = colOptsForType(c.type);
+          const isAuto = auto[c.key];
+          return `
+            <div class="ts-map-cell">
+              <label>
+                ${c.label}
+                ${c.req ? '<span class="req">*</span>' : ''}
+                <span class="ts-col-type">${c.hint}</span>
+                ${isAuto ? `<span class="ts-auto-pill">${ICON.check} זוהה</span>` : ''}
+              </label>
+              ${c.desc ? `<div class="ts-map-desc">${c.desc}</div>` : ''}
+              <select class="select" data-ts-map="${c.key}">
+                <option value="">— לא ממופה —</option>
+                ${opts.map(o => `<option value="${o.id}" ${val === o.id ? 'selected' : ''}>${o.label}</option>`).join('')}
+              </select>
+            </div>
+          `;
+        }).join('')}
+      </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ======================================================================
+   Step 5: Approvals + Edit lock
+====================================================================== */
+function renderFlow() {
+  const mockApprovalLabels = [
+    { idx: '0', label: 'ממתין',  color: '#fdab3d' },
+    { idx: '1', label: 'אושר',   color: '#16a34a' },
+    { idx: '2', label: 'נדחה',   color: '#ef4444' },
+  ];
+  const approvalCats = { pending:'ממתין לאישור', approved:'מאושר', rejected:'נדחה', unmapped:'לא ממופה' };
+  const aOpen = state.openFlowCard === 'approval';
+  const lOpen = state.openFlowCard === 'lock';
+  const fOpen = state.openFlowCard === 'filters';
+  const lockSumm = { none: 'ללא נעילה', week: 'אחרי שבוע', month: 'אחרי חודש', approved: 'בעת אישור' }[state.editLockMode] || '—';
+
+  return `
+    <h2 class="step-title">אישורים, נעילה ופילטרים</h2>
+    <p class="step-sub">שלושה כרטיסים — כל אחד עומד בפני עצמו. בברירת מחדל הכול סגור; לחיצה פותחת כרטיס (האחרים נסגרים), לחיצה שוב על אותו כותרת סוגרת.</p>
+
+    <div class="bp-stack">
+    <!-- 1. אישור -->
+    <div class="bp-card bp-acc ${aOpen ? 'bp-acc-open' : 'bp-acc-collapsed'}" style="--bp-accent: var(--primary)">
+      <button type="button" class="bp-acc-head" data-flow-acc="approval" aria-expanded="${aOpen}">
+        <div class="bp-icon">${ICON.shield}</div>
+        <div class="bp-head-text" style="flex:1;min-width:0">
+          <h3 style="margin:0">אישור מנהל</h3>
+          <p style="margin:2px 0 0">מי מאשר דיווחים ואיך ממופים ערכי סטטוס האישור</p>
+        </div>
+        ${state.enableApproval ? `<span class="bp-chip-ok">${ICON.check} פעיל</span>` : `<span class="bp-chip-nf">○ כבוי</span>`}
+        <span class="bp-acc-caret" aria-hidden="true">⌃</span>
+      </button>
+      <div class="bp-acc-panel">
+      <div class="toggle-row ${state.enableApproval ? 'on' : ''}" data-toggle="enableApproval">
+        <div class="toggle-row-body">
+          <div class="t">הפעל אישור דיווחים</div>
+          <div class="d">מנהלים מסומנים יוכלו לאשר / לדחות דיווחים. הכי נפוץ לצוותים של 10+ אנשים.</div>
+        </div>
+        <button class="switch ${state.enableApproval ? 'on' : ''}" aria-label="הפעל/כבה אישור מנהל"></button>
+      </div>
+
+      ${state.enableApproval ? `
+        <div class="field" style="margin-top: 14px">
+          <label>מנהלים שיכולים לאשר <span class="req">*</span></label>
+          <div class="chip-picker" id="manager-picker">
+            ${state.approvedManagerIds.map(id => {
+              const u = USERS.find(x => x.id === id);
+              if (!u) return '';
+              return `
+                <span class="m-chip">
+                  <span style="width:18px;height:18px;border-radius:50%;background:${u.color};color:#fff;display:grid;place-items:center;font-size:10px;font-weight:700">${u.name.slice(0,1)}</span>
+                  ${u.name}
+                  <button data-rm-manager="${u.id}" aria-label="הסר מנהל ${u.name}">${ICON.x}</button>
+                </span>
+              `;
+            }).join('')}
+            ${state.approvedManagerIds.length === 0 ? '<span class="chip-placeholder">טרם נבחרו מנהלים…</span>' : ''}
+            <button class="link-row" style="background:none;border:none;color:var(--primary);font-weight:600;font-size:12px;cursor:pointer;padding:4px 6px;font-family:inherit" id="add-manager" aria-label="הוסף מנהל">+ הוסיפו מנהל</button>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:14px">
+          <label>עמודת סטטוס אישור <span class="req">*</span><span class="ts-col-type">Status</span></label>
+          <select class="select" data-key-state="approvalStatusColumnId" style="max-width:320px">
+            <option value="">— בחרו עמודה —</option>
+            <option value="color_approval" ${state.approvalStatusColumnId === 'color_approval' ? 'selected' : ''}>Approval Status</option>
+          </select>
+        </div>
+
+        ${state.approvalStatusColumnId ? `
+        <div style="margin-top:12px">
+          <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:8px">מיפוי ערכי סטטוס לאישור</label>
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead><tr style="font-size:11px;color:var(--muted);border-bottom:1px solid var(--line-2)">
+              <th style="padding:4px;text-align:start;width:20px"></th>
+              <th style="padding:4px 8px;text-align:start">תווית</th>
+              <th style="padding:4px 8px;text-align:start">קטגוריה</th>
+            </tr></thead>
+            <tbody>
+              ${mockApprovalLabels.map(l => `
+                <tr>
+                  <td style="padding:5px 4px"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${l.color}"></span></td>
+                  <td style="padding:5px 8px;font-weight:600">${l.label}</td>
+                  <td style="padding:5px 8px">
+                    <select class="select" style="max-width:180px" data-approval-idx="${l.idx}">
+                      ${Object.entries(approvalCats).map(([v,t]) => `<option value="${v}">${t}</option>`).join('')}
+                    </select>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        ` : ''}
+      ` : ''}
+      </div>
+    </div>
+
+    <!-- 2. נעילה -->
+    <div class="bp-card bp-acc ${lOpen ? 'bp-acc-open' : 'bp-acc-collapsed'}" style="--bp-accent: var(--warning)">
+      <button type="button" class="bp-acc-head" data-flow-acc="lock" aria-expanded="${lOpen}">
+        <div class="bp-icon">${ICON.lock}</div>
+        <div class="bp-head-text" style="flex:1;min-width:0">
+          <h3 style="margin:0">נעילת עריכה</h3>
+          <p style="margin:2px 0 0">מתי דיווחים כבר לא ניתנים לעריכה על ידי המדווח</p>
+        </div>
+        <span class="bp-chip-ok" style="background:var(--warning-soft);color:var(--warning)">${lockSumm}</span>
+        <span class="bp-acc-caret" aria-hidden="true">⌃</span>
+      </button>
+      <div class="bp-acc-panel">
+      <div class="choice-list">
+        ${[
+          { v: 'none',     t: 'ללא נעילה',                d: 'עובדים יכולים לערוך כל דיווח שלהם, בכל זמן.' },
+          { v: 'week',     t: 'נעילה אחרי שבוע',          d: 'דיווחים ננעלים לעריכה 7 ימים אחרי שנוצרו.' },
+          { v: 'month',    t: 'נעילה אחרי חודש',          d: 'דיווחים ננעלים לעריכה 30 ימים אחרי שנוצרו.' },
+          { v: 'approved', t: 'נעילה בעת אישור מנהל',    d: 'ברגע שמנהל מאשר — הדיווח נעול. מנהל יכול לבטל.' },
+        ].map(o => `
+          <div class="choice ${state.editLockMode === o.v ? 'on' : ''}" data-lock="${o.v}">
+            <div class="tick"></div>
+            <div>
+              <div class="title">${o.t}</div>
+              <div class="desc">${o.d}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+
+      <!-- lockAfterApproval — רק כשאישור מופעל -->
+      ${state.enableApproval ? `
+        <div class="toggle-row ${state.lockAfterApproval ? 'on' : ''}" data-toggle="lockAfterApproval" style="margin-top:12px">
+          <div class="toggle-row-body">
+            <div class="t">נעל דיווח לאחר אישור מנהל</div>
+            <div class="d">דיווח שאושר לא יהיה ניתן לעריכה על ידי המדווח — מנהל יכול לבטל</div>
+          </div>
+          <button class="switch ${state.lockAfterApproval ? 'on' : ''}" aria-label="נעל לאחר אישור"></button>
+        </div>
+      ` : ''}
+      </div>
+    </div>
+
+    <!-- 3. פילטרים -->
+    <div class="bp-card bp-acc ${fOpen ? 'bp-acc-open' : 'bp-acc-collapsed'}" style="--bp-accent: var(--violet)">
+      <button type="button" class="bp-acc-head" data-flow-acc="filters" aria-expanded="${fOpen}">
+        <div class="bp-icon">${ICON.users}</div>
+        <div class="bp-head-text" style="flex:1;min-width:0">
+          <h3 style="margin:0">מקורות לפילטרים</h3>
+          <p style="margin:2px 0 0">מאיזה לוחות נטענים פרויקטים ועובדים לסרגלי הסינון</p>
+        </div>
+        <span class="bp-chip-nf">2 לוחות</span>
+        <span class="bp-acc-caret" aria-hidden="true">⌃</span>
+      </button>
+      <div class="bp-acc-panel">
+      <div class="bp-stack" style="margin-bottom:0">
+        <!-- Project filter source -->
+        <div class="bp-card" style="--bp-accent: var(--primary)">
+          <div class="bp-card-head">
+            <div class="bp-icon">${ICON.briefcase}</div>
+            <div class="bp-head-text">
+              <h3>לוח פרויקטים לפילטר</h3>
+              <p>ממנו נטענת רשימת הפרויקטים בסרגל הסינון של הלוח</p>
+            </div>
+          </div>
+          ${!state.useAssignmentsMode
+            ? `<div class="bp-inline-note">${ICON.check} מסונכרן אוטומטית מלוח הפרויקטים שנבחר בשלב הלוחות</div>`
+            : `<div class="field"><label>לוח פרויקטים לפילטר</label>
+               <div class="bp-board-pick__row">
+                 <select class="select" data-key-state="filterProjectsBoardId">
+                   <option value="">ללא</option>
+                   <option value="78999" ${state.filterProjectsBoardId === '78999' ? 'selected' : ''}>Projects 2026 (78999)</option>
+                 </select>
+                 <button type="button" class="btn ghost sm" data-mock="create-board" title="יוצר לוח ב־monday (מוקאפ)">צור לוח</button>
+               </div></div>`
+          }
+        </div>
+
+        <!-- Employees filter source -->
+        <div class="bp-card" style="--bp-accent: var(--success)">
+          <div class="bp-card-head">
+            <div class="bp-icon">${ICON.users}</div>
+            <div class="bp-head-text">
+              <h3>לוח עובדים לפילטר</h3>
+              <p>רשות — אם לא נבחר, פילטר המדווחים יציג רק מי שדיווח בפועל</p>
+            </div>
+          </div>
+          <div class="field">
+            <label>לוח עובדים <span style="color:var(--muted);font-weight:400">(רשות)</span></label>
+            <div class="bp-board-pick__row">
+              <select class="select" data-key-state="filterEmployeesBoardId">
+                <option value="">ללא — השתמש במדווחים בפועל</option>
+                <option value="hr_board" ${state.filterEmployeesBoardId === 'hr_board' ? 'selected' : ''}>HR · עובדים</option>
+              </select>
+              <button type="button" class="btn ghost sm" data-mock="create-board" title="יוצר לוח ב־monday (מוקאפ)">צור לוח</button>
+            </div>
+          </div>
+          ${state.filterEmployeesBoardId ? `
+            <div class="field" style="margin-top:10px">
+              <label>עמודת People בלוח העובדים</label>
+              <select class="select" data-key-state="filterEmployeesColumnId">
+                <option value="person" ${state.filterEmployeesColumnId === 'person' ? 'selected' : ''}>Person</option>
+              </select>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+      </div>
+    </div>
+    </div>
+  `;
+}
+
+/* ======================================================================
+   Step 6: Calendar
+====================================================================== */
+function renderCalendar() {
+  const dayOrder = [];
+  for (let i = 0; i < 7; i++) dayOrder.push((state.weekStartDay + i) % 7);
+
+  return `
+    <h2 class="step-title">לוח שנה ויעדים</h2>
+    <p class="step-sub">הגדירו את מבנה השבוע ויעדי השעות, כדי שהלוח יציג עומס ותפוקה נכון.</p>
+
+    <section class="cal-section">
+      <div class="cal-section-head">
+        <div class="cal-ic" style="background: var(--primary-soft); color: var(--primary)">${ICON.calendar}</div>
+        <div>
+          <h3>מבנה השבוע</h3>
+          <p>יום פותח (ראשון בלוח) וימי עבודה — באותה שורה במסכים רחבים.</p>
+        </div>
+      </div>
+
+      <div class="cal-week-row">
+        <div class="field cal-fdow-field mb-0">
+          <label for="fdow-select">יום ראשון בלוח</label>
+          <select class="select" id="fdow-select" aria-label="יום ראשון בלוח">
+            ${[0, 1, 2, 3, 4, 5, 6].map(i => `
+              <option value="${i}" ${state.weekStartDay === i ? 'selected' : ''}>${DAYS_FULL[i]}</option>
+            `).join('')}
+          </select>
+        </div>
+        <div class="field cal-workdays-field mb-0">
+          <label>ימי עבודה בשבוע</label>
+          <div class="day-chips">
+            ${dayOrder.map(i => `
+              <button type="button" class="day-chip ${state.workDays.includes(i) ? 'on' : ''}" data-day="${i}" title="${DAYS_FULL[i]}">${DAYS_HE[i]}</button>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cal-section">
+      <div class="cal-section-head">
+        <div class="cal-ic" style="background: var(--violet-soft); color: var(--violet)">${ICON.target}</div>
+        <div>
+          <h3>יעדי שעות</h3>
+          <p>מוצגים כהתקדמות בטופסי הדיווח — יומי, שבועי וחודשי בשורה אחת.</p>
+        </div>
+      </div>
+
+      <div class="cal-targets-grid">
+        <div class="field mb-0">
+          <label>אורך יום עבודה</label>
+          <div class="input-unit">
+            <input type="number" class="input" min="0" step="0.5" value="${state.workdayLength}" id="wd-hours"/>
+            <span>שעות</span>
+          </div>
+        </div>
+        <div class="field mb-0">
+          <label>יעד שבועי</label>
+          <div class="input-unit">
+            <input type="number" class="input" min="0" step="0.5" value="${state.weeklyHoursTarget}" id="wd-week"/>
+            <span>שעות</span>
+          </div>
+        </div>
+        <div class="field mb-0">
+          <label>יעד חודשי</label>
+          <div class="input-unit">
+            <input type="number" class="input" min="0" step="0.5" value="${state.monthlyHoursTarget}" id="wd-month"/>
+            <span>שעות</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cal-section">
+      <div class="cal-section-head">
+        <div class="cal-ic" style="background: var(--warning-soft); color: var(--warning)">${ICON.zap}</div>
+        <div>
+          <h3>תצוגה בלוח השנה</h3>
+          <p>מה מציגים ברקע של הלוח.</p>
+        </div>
+      </div>
+
+      <div class="toggle-row ${state.showHolidays ? 'on' : ''}" data-toggle="showHolidays">
+        <div class="toggle-row-body">
+          <div class="t">הצגת חגים וימי חופש</div>
+          <div class="d">חגי ישראל וחופשות רשמיות יוצגו ברקע של לוח השנה.</div>
+        </div>
+        <button class="switch ${state.showHolidays ? 'on' : ''}" aria-label="הצג/הסתר חגים"></button>
+      </div>
+
+      <div class="toggle-row ${state.showTemporaryEvents ? 'on' : ''}" data-toggle="showTemporaryEvents" style="margin-bottom: 0">
+        <div class="toggle-row-body">
+          <div class="t">הצגת אירועים זמניים</div>
+          <div class="d">אירועים עם סטטוס "עתידי" יוצגו בעיצוב חלול. לחיצה עליהם תפתח טופס המרה.</div>
+        </div>
+        <button class="switch ${state.showTemporaryEvents ? 'on' : ''}" aria-label="הצג/הסתר אירועים זמניים"></button>
+      </div>
+    </section>
+  `;
+}
+
+/* ======================================================================
+   Step 7: Summary
+====================================================================== */
+function renderSummary() {
+  const fc = state.fieldConfig;
+  const fcLbl = v => ({ required:'חובה', optional:'רשות', hidden:'מוסתר', visible:'מוצג' }[v] || '—');
+  const isBillable = fc.billableToggle === 'visible';
+  const lockLbl = { none:'ללא', week:'שבוע', month:'חודש', approved:'בעת אישור' }[state.editLockMode] || '—';
+  const lastMod = new Intl.DateTimeFormat('he-IL', { dateStyle:'medium', timeStyle:'short' })
+    .format(new Date(state.lastModifiedAt));
+  const xorWarning = state.advancedValidation.enabled && !(state.advancedValidation.xorFields[0] && state.advancedValidation.xorFields[1]);
+
+  return `
+    <div class="summary-hero">
+      <div class="ic">${ICON.party}</div>
+      <div>
+        <h3>הכול מוכן — האפליקציה שלכם קיימת!</h3>
+        <p>התצורה נשמרה. אפשר להתחיל לדווח שעות ולעקוב אחרי הצוות.</p>
+      </div>
+    </div>
+
+    ${xorWarning ? `<div class="callout warn" role="alert" aria-live="polite" style="margin-bottom:20px">${ICON.warn}<span><strong>ולידציית XOR מופעלת</strong> — יש לחזור לשלב המבנה ולבחור שני שדות חובה.</span></div>` : ''}
+
+    <div class="summary-grid">
+      <div class="sum-card">
+        <h4>${ICON.fileText} מבנה דיווח</h4>
+        <dl>
+          <dt>פרויקט</dt><dd><span class="chip">חובה תמיד</span></dd>
+          <dt>משימה</dt><dd class="${fc.task === 'hidden' ? 'muted' : ''}" style="font-variant-numeric:tabular-nums">${fcLbl(fc.task)}</dd>
+          <dt>סיווג</dt><dd class="${fc.stage === 'hidden' ? 'muted' : ''}">${fcLbl(fc.stage)}</dd>
+          <dt>הערות</dt><dd class="${fc.notes === 'hidden' ? 'muted' : ''}">${fcLbl(fc.notes)}</dd>
+          <dt>שוטף/חיוב</dt><dd>${fcLbl(fc.billableToggle)}</dd>
+          ${isBillable ? `<dt>סיווג שוטף</dt><dd>${fcLbl(fc.nonBillableType)}</dd>` : ''}
+        </dl>
+      </div>
+
+      <div class="sum-card">
+        <h4>${ICON.briefcase} לוחות</h4>
+        <dl>
+          <dt>מצב</dt><dd>${state.useAssignmentsMode ? '<span class="chip">הקצאות</span>' : 'ישיר'}</dd>
+          <dt>${state.useAssignmentsMode ? 'לוח הקצאות' : 'לוח פרויקטים'}</dt>
+          <dd style="font-size:11px">${state.useAssignmentsMode ? state.assignmentsBoardId : (state.connectedBoardId || '—')}</dd>
+          <dt>לוח דיווחים</dt><dd style="font-size:11px">${state.timeReportingBoardId || '—'}</dd>
+          <dt>פנימי/חיצוני</dt><dd>${state.enableProjectTypeDistinction ? '<span class="chip">פעיל</span>' : '<span class="chip off">כבוי</span>'}</dd>
+        </dl>
+      </div>
+
+      <div class="sum-card">
+        <h4>${ICON.shield} אישורים ונעילה</h4>
+        <dl>
+          <dt>אישור מנהל</dt><dd>${state.enableApproval ? '<span class="chip">פעיל</span>' : '<span class="chip off">כבוי</span>'}</dd>
+          ${state.enableApproval ? `<dt>מנהלים</dt><dd style="font-variant-numeric:tabular-nums">${state.approvedManagerIds.length}</dd>` : ''}
+          <dt>נעל לאחר אישור</dt><dd>${state.lockAfterApproval ? 'כן' : 'לא'}</dd>
+          <dt>נעילת עריכה</dt><dd>${lockLbl}</dd>
+        </dl>
+      </div>
+
+      <div class="sum-card">
+        <h4>${ICON.calendar} יומן ויעדים</h4>
+        <dl>
+          <dt>ימי עבודה</dt><dd>${state.workDays.map(d => DAYS_HE[d]).join(' ')}</dd>
+          <dt>שעות ביום</dt><dd style="font-variant-numeric:tabular-nums">${state.workdayLength}</dd>
+          <dt>יעד שבועי</dt><dd style="font-variant-numeric:tabular-nums">${state.weeklyHoursTarget}h</dd>
+          <dt>יעד חודשי</dt><dd style="font-variant-numeric:tabular-nums">${state.monthlyHoursTarget}h</dd>
+          <dt>חגים</dt><dd>${state.showHolidays ? 'מוצגים' : 'מוסתרים'}</dd>
+          <dt>אירועים זמניים</dt><dd>${state.showTemporaryEvents ? 'מוצגים' : 'מוסתרים'}</dd>
+        </dl>
+      </div>
+
+      <div class="sum-card" style="grid-column: 1 / -1">
+        <h4>${ICON.settings} מטא-דאטה ומיפוי אירועים</h4>
+        <dl style="grid-template-columns: auto 1fr auto 1fr">
+          <dt>עודכן ע"י</dt><dd>${state.lastModifiedBy.name}</dd>
+          <dt>תאריך</dt><dd>${lastMod}</dd>
+          <dt>מיפוי אירועים</dt><dd style="font-variant-numeric:tabular-nums">${Object.keys(state.eventTypeMapping).length} ערכים ממופים</dd>
+          <dt>XOR</dt><dd style="color:${xorWarning ? 'var(--warning)' : 'var(--success)'}">${xorWarning ? 'מופעל — לא מוגדר' : state.advancedValidation.enabled ? 'מוגדר' : 'כבוי'}</dd>
+        </dl>
+      </div>
+    </div>
+  `;
+}
+
+/* ======================================================================
+   Event handlers (delegated via re-render)
+====================================================================== */
+function attachHandlers() {
+  // Template cards
+  document.querySelectorAll('[data-preset]').forEach(el => {
+    el.addEventListener('click', () => applyTemplate(el.dataset.preset));
+  });
+  // tri-state
+  document.querySelectorAll('[data-fc]').forEach(row => {
+    if (row.classList.contains('locked')) return;
+    row.querySelectorAll('.tri button').forEach(b => {
+      b.addEventListener('click', () => setFc(row.dataset.fc, b.dataset.mode));
+    });
+  });
+  /* === Generic boolean toggles via data-toggle attribute === */
+  document.querySelectorAll('[data-toggle]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = el.dataset.toggle;
+      if (key === 'billableToggle') {
+        setBillableToggle(state.fieldConfig.billableToggle !== 'visible');
+        return;
+      }
+      if (key === 'advancedValidationEnabled') {
+        const next = !state.advancedValidation.enabled;
+        state.advancedValidation = {
+          enabled: next,
+          xorFields: [null, null],
+        };
+        renderBody();
+        return;
+      }
+      /* Simple boolean flips */
+      const booleanKeys = [
+        'enableApproval','lockAfterApproval','useAssignmentsMode',
+        'showHolidays','showTemporaryEvents',
+        'enableProjectTypeDistinction','taskStatusFilterEnabled',
+      ];
+      if (booleanKeys.includes(key)) {
+        if (key === 'useAssignmentsMode') {
+          state.openBoardsCard = null;
+        }
+        state[key] = !state[key];
+        renderBody();
+      }
+    });
+  });
+
+  /* === לוחות: אקורדיון (כרטיס בודד פתוח) === */
+  document.querySelectorAll('[data-bp-acc]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = el.dataset.bpAcc;
+      if (id === 'main' || id === 'tasks') {
+        state.openBoardsCard = state.openBoardsCard === id ? null : id;
+        renderBody();
+      }
+    });
+  });
+
+  /* === אישורים / נעילה / פילטרים: אקורדיון (כרטיס בודד פתוח) === */
+  document.querySelectorAll('[data-flow-acc]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = el.dataset.flowAcc;
+      if (id === 'approval' || id === 'lock' || id === 'filters') {
+        state.openFlowCard = state.openFlowCard === id ? null : id;
+        renderBody();
+      }
+    });
+  });
+
+  /* === מיפוי לוח דיווחים: אקורדיון לפי נושא (כל קבוצה בנפרד, ברירת מחדל סגור) === */
+  document.querySelectorAll('[data-ts-map-acc]').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = el.dataset.tsMapAcc;
+      if (id && Object.prototype.hasOwnProperty.call(state.tsMapGroupOpen, id)) {
+        state.tsMapGroupOpen[id] = !state.tsMapGroupOpen[id];
+        renderBody();
+      }
+    });
+  });
+
+  document.querySelectorAll('[data-mock="create-board"]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toast('צור לוח — הדמיה במוקאפ; בייצור: יצירת לוח ב־monday');
+    });
+  });
+
+  /* === Edit lock choices === */
+  document.querySelectorAll('[data-lock]').forEach(el => {
+    el.addEventListener('click', () => { state.editLockMode = el.dataset.lock; renderBody(); });
+  });
+
+  /* === First day of week (dropdown) === */
+  const fdowSel = document.getElementById('fdow-select');
+  if (fdowSel) {
+    fdowSel.addEventListener('change', (e) => {
+      state.weekStartDay = Number(e.target.value);
+      renderBody();
+    });
+  }
+
+  /* === Work days === */
+  document.querySelectorAll('[data-day]').forEach(el => {
+    el.addEventListener('click', () => {
+      const d = Number(el.dataset.day);
+      state.workDays = state.workDays.includes(d) ? state.workDays.filter(x => x !== d) : [...state.workDays, d].sort();
+      renderBody();
+    });
+  });
+
+  /* === Hour targets === */
+  const wh = document.getElementById('wd-hours');
+  if (wh) wh.addEventListener('input', e => { state.workdayLength = Number(e.target.value) || 0; });
+  const ww = document.getElementById('wd-week');
+  if (ww) ww.addEventListener('input', e => { state.weeklyHoursTarget = Number(e.target.value) || 0; });
+  const wm = document.getElementById('wd-month');
+  if (wm) wm.addEventListener('input', e => { state.monthlyHoursTarget = Number(e.target.value) || 0; });
+
+  /* === Managers (approvedManagerIds) === */
+  document.querySelectorAll('[data-rm-manager]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.approvedManagerIds = state.approvedManagerIds.filter(id => id !== el.dataset.rmManager);
+      renderBody();
+    });
+  });
+  document.getElementById('add-manager')?.addEventListener('click', () => {
+    const avail = USERS.filter(u => !state.approvedManagerIds.includes(u.id));
+    if (avail.length) { state.approvedManagerIds.push(avail[0].id); renderBody(); }
+  });
+
+  /* === Generic state key selects (data-key-state) === */
+  document.querySelectorAll('[data-key-state]').forEach(sel => {
+    sel.addEventListener('change', e => {
+      const key = e.target.dataset.keyState;
+      if (key === 'taskStatusColumnId') {
+        state.taskActiveStatusValues = [];
+      }
+      state[key] = e.target.value;
+      renderBody();
+    });
+  });
+
+  /* === taskActiveStatusValues — לייבלים מרובים (מוקאב) === */
+  document.querySelectorAll('[data-task-active-idx]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const i = Number(e.currentTarget.dataset.taskActiveIdx);
+      const s = MOCK_TASK_FILTER_STATUS_LABELS[i];
+      if (!s) return;
+      const label = s.label;
+      const cur = state.taskActiveStatusValues || [];
+      state.taskActiveStatusValues = cur.includes(label)
+        ? cur.filter((x) => x !== label)
+        : [...cur, label];
+      renderBody();
+    });
+  });
+
+  /* === XOR field selects (advancedValidation) === */
+  document.querySelectorAll('.xor-select[data-xor-idx]').forEach(sel => {
+    sel.addEventListener('change', e => {
+      const i = Number(e.target.dataset.xorIdx);
+      const v = e.target.value || null;
+      const next = [...state.advancedValidation.xorFields];
+      next[i] = v;
+      state.advancedValidation = { ...state.advancedValidation, xorFields: next };
+      renderBody();
+    });
+  });
+
+  /* === eventTypeMapping N-to-1 === */
+  document.querySelectorAll('[data-et-idx]').forEach(sel => {
+    sel.addEventListener('change', e => {
+      state.eventTypeMapping[e.target.dataset.etIdx] = e.target.value;
+    });
+  });
+  /* === projectTypeMapping per index (data-pt-idx) === */
+  document.querySelectorAll('[data-pt-idx]').forEach(sel => {
+    sel.addEventListener('change', e => {
+      state.projectTypeMapping[e.target.dataset.ptIdx] = e.target.value;
+    });
+  });
+
+  /* === Preview tab switch (שלב תבנית) — בלי רינדור מלא, רק עדכון מחלקות + נראות שדות === */
+  document.querySelectorAll('[data-prev-tab]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.previewTab = el.dataset.prevTab;
+      syncPreviewTabsFromState();
+      updatePreviewVisibility();
+    });
+  });
+
+  /* === תצוגה מקדימה: שמור / ביטול / סגירה + בחירת צ'יפ (דמו) === */
+  document.querySelectorAll('[data-rp-save]').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); toast('נשמר (תצוגה מקדימה — לא נשלחת לאפליקציה)'); });
+  });
+  document.querySelectorAll('[data-rp-cancel]').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); toast('בוטל (תצוגה מקדימה)'); });
+  });
+  document.querySelectorAll('[data-rp-close]').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); toast('סגירה (דמו)'); });
+  });
+  document.querySelectorAll('.mini-form--interactive').forEach(mf => {
+    mf.addEventListener('click', (e) => {
+      const chip = e.target.closest && e.target.closest('.rp-chip');
+      if (!chip || !chip.closest('.rp-chips')) return;
+      e.stopPropagation();
+      chip.parentElement.querySelectorAll('.rp-chip').forEach(c => c.classList.remove('on'));
+      chip.classList.add('on');
+    });
+  });
+
+  updatePreviewVisibility();
+}
+
+/* ======================================================================
+   Toast + celebration
+====================================================================== */
+function toast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = `
+    position: fixed; bottom: 24px; inset-inline-start: 50%; transform: translateX(-50%);
+    background: var(--ink); color: #fff; padding: 12px 22px; border-radius: 999px;
+    font-size: 14px; font-weight: 600; z-index: 2000;
+    box-shadow: 0 10px 30px -10px rgba(0,0,0,.3);
+  `;
+  document.body.appendChild(t);
+  t.animate([{opacity: 0, transform: 'translate(-50%, 20px)'}, {opacity: 1, transform: 'translate(-50%, 0)'}], {duration: 250});
+  setTimeout(() => {
+    t.animate([{opacity: 1}, {opacity: 0}], {duration: 300}).onfinish = () => t.remove();
+  }, 2400);
+}
+
+function celebrate() {
+  const colors = ['#2563eb', '#16a34a', '#f59e0b', '#3b82f6', '#ef4444'];
+  for (let i = 0; i < 50; i++) {
+    const el = document.createElement('div');
+    el.style.cssText = `
+      position: fixed; top: 40%; left: 50%; width: 8px; height: 14px;
+      background: ${colors[i % colors.length]}; border-radius: 2px;
+      z-index: 9999; pointer-events: none;
+      transform: translate(-50%, -50%);
+    `;
+    document.body.appendChild(el);
+    const ang = Math.random() * Math.PI * 2;
+    const dist = 250 + Math.random() * 350;
+    const dx = Math.cos(ang) * dist;
+    const dy = Math.sin(ang) * dist;
+    el.animate([
+      { transform: 'translate(-50%, -50%) rotate(0)', opacity: 1 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${Math.random() * 720}deg)`, opacity: 0 },
+    ], { duration: 1600, easing: 'cubic-bezier(.2,.7,.3,1)' }).onfinish = () => el.remove();
+  }
+}
+
+/* ======================================================================
+   Init
+====================================================================== */
+render();
+</script>
+
+<!-- ============================================================
+     Traceability Block — dev-only, not user-facing
+     מקשר בין שדות האשף למפתחות customSettings
+============================================================ -->
+<details id="traceability" style="margin:24px;font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:12px">
+  <summary style="cursor:pointer;font-weight:700;color:var(--ink)">🔍 Traceability: wizard → customSettings</summary>
+  <table style="width:100%;margin-top:12px;border-collapse:collapse;font-size:11px">
+    <thead>
+      <tr style="background:var(--bg-2);font-weight:700">
+        <th style="padding:6px 8px;text-align:start;border:1px solid var(--line-2)">שדה במוקאפ</th>
+        <th style="padding:6px 8px;text-align:start;border:1px solid var(--line-2)">מפתח customSettings</th>
+        <th style="padding:6px 8px;text-align:start;border:1px solid var(--line-2)">הערה</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">state._template</td><td style="padding:5px 8px;border:1px solid var(--line-2)">—</td><td style="padding:5px 8px;border:1px solid var(--line-2);color:var(--warning)">wizard-only shortcut, not persisted</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">state._timesheetMode</td><td style="padding:5px 8px;border:1px solid var(--line-2)">—</td><td style="padding:5px 8px;border:1px solid var(--line-2);color:var(--warning)">wizard-only UI hint, not persisted</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">fieldConfig.billableToggle</td><td style="padding:5px 8px;border:1px solid var(--line-2)">fieldConfig.billableToggle</td><td style="padding:5px 8px;border:1px solid var(--line-2)">היה: billable:bool — תוקן ל-'visible'|'hidden'</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">useAssignmentsMode</td><td style="padding:5px 8px;border:1px solid var(--line-2)">useAssignmentsMode</td><td style="padding:5px 8px;border:1px solid var(--line-2)">היה: boardCfg.employees.mode==='allocations'</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">enableApproval</td><td style="padding:5px 8px;border:1px solid var(--line-2)">enableApproval</td><td style="padding:5px 8px;border:1px solid var(--line-2)">היה: approval:bool</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">approvedManagerIds</td><td style="padding:5px 8px;border:1px solid var(--line-2)">approvedManagerIds</td><td style="padding:5px 8px;border:1px solid var(--line-2)">היה: approvalManagers</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">editLockMode</td><td style="padding:5px 8px;border:1px solid var(--line-2)">editLockMode</td><td style="padding:5px 8px;border:1px solid var(--line-2)">היה: editLock</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">lockAfterApproval</td><td style="padding:5px 8px;border:1px solid var(--line-2)">lockAfterApproval</td><td style="padding:5px 8px;border:1px solid var(--line-2);color:var(--success)">חדש — לא היה במוקאפ</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">weekStartDay</td><td style="padding:5px 8px;border:1px solid var(--line-2)">weekStartDay</td><td style="padding:5px 8px;border:1px solid var(--line-2)">היה: firstDayOfWeek</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">workdayLength</td><td style="padding:5px 8px;border:1px solid var(--line-2)">workdayLength</td><td style="padding:5px 8px;border:1px solid var(--line-2)">היה: workdayHours</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">weeklyHoursTarget</td><td style="padding:5px 8px;border:1px solid var(--line-2)">weeklyHoursTarget</td><td style="padding:5px 8px;border:1px solid var(--line-2)">היה: weeklyTarget</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">monthlyHoursTarget</td><td style="padding:5px 8px;border:1px solid var(--line-2)">monthlyHoursTarget</td><td style="padding:5px 8px;border:1px solid var(--line-2)">היה: monthlyTarget</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">showTemporaryEvents</td><td style="padding:5px 8px;border:1px solid var(--line-2)">showTemporaryEvents</td><td style="padding:5px 8px;border:1px solid var(--line-2)">היה: showTemporary</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">projectTypeMapping</td><td style="padding:5px 8px;border:1px solid var(--line-2)">projectTypeMapping</td><td style="padding:5px 8px;border:1px solid var(--line-2)">מבנה שונה: היה {internal:[],external:[]} → כעת {idx:'internal'|'external'}</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">eventTypeMapping</td><td style="padding:5px 8px;border:1px solid var(--line-2)">eventTypeMapping</td><td style="padding:5px 8px;border:1px solid var(--line-2);color:var(--success)">חדש — N-to-1, אינדקסים לא-רציפים כולל 101</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">filterProjectsBoardId</td><td style="padding:5px 8px;border:1px solid var(--line-2)">filterProjectsBoardId</td><td style="padding:5px 8px;border:1px solid var(--line-2);color:var(--success)">חדש — לא היה במוקאפ</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">filterEmployeesBoardId</td><td style="padding:5px 8px;border:1px solid var(--line-2)">filterEmployeesBoardId</td><td style="padding:5px 8px;border:1px solid var(--line-2);color:var(--success)">חדש — לא היה במוקאפ</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">customerColumnId</td><td style="padding:5px 8px;border:1px solid var(--line-2)">customerColumnId</td><td style="padding:5px 8px;border:1px solid var(--line-2);color:var(--success)">חדש — בלוח פרויקטים/הקצאות</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">customerReportColumnId</td><td style="padding:5px 8px;border:1px solid var(--line-2)">customerReportColumnId</td><td style="padding:5px 8px;border:1px solid var(--line-2);color:var(--success)">חדש — בלוח הדיווחים</td></tr>
+      <tr style="background:var(--warning-soft)"><td colspan="3" style="padding:6px 8px;border:1px solid var(--line-2);font-weight:700">Legacy keys — נשמרים אוטומטית כ-mirror, לא נערכים ישירות:</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">structureMode</td><td style="padding:5px 8px;border:1px solid var(--line-2)">structureMode</td><td style="padding:5px 8px;border:1px solid var(--line-2)">mirror אוטומטי של fieldConfig.task/stage</td></tr>
+      <tr><td style="padding:5px 8px;border:1px solid var(--line-2)">enableNotes</td><td style="padding:5px 8px;border:1px solid var(--line-2)">enableNotes</td><td style="padding:5px 8px;border:1px solid var(--line-2)">mirror אוטומטי של fieldConfig.notes !== 'hidden'</td></tr>
+    </tbody>
+  </table>
+</details>
+</body>
+</html>

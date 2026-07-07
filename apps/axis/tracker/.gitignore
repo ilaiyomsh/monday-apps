@@ -1,0 +1,16 @@
+node_modules
+spec
+build
+PLAN.md
+
+# OS / artifacts
+.DS_Store
+code.tar.gz
+build.zip
+**/__pycache__/
+
+# Env
+.env
+.env.local
+.env.*.local
+.claude/
