@@ -1,0 +1,131 @@
+import { Router } from 'express';
+import subscriptionStorage from '../storage/subscription-storage.js';
+import syncConfigStorage from '../storage/sync-config-storage.js';
+import * as googleCalendar from '../services/google-calendar.js';
+import { ensureWatchChannel } from '../services/watch-channel.js';
+import { getBaseUrl } from '../helpers/environment.js';
+import logger from '../services/logger.js';
+
+const router = Router();
+const TAG = 'route_scheduler';
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+// Renew near-expiry Google watch channels registered under the Custom Object
+// path (all_active_configs). Runs alongside the v3 renewal below as part of
+// the same cron invocation.
+async function renewCustomObjectConfigs() {
+  const index = await syncConfigStorage.getActiveConfigIndex();
+  const expiring = index.filter(
+    (entry) => Number(entry.googleWatchExpiration) - Date.now() < ONE_DAY_MS
+  );
+  logger.info('renew-channel (custom object)', TAG, { total: index.length, expiring: expiring.length });
+
+  const counts = { renewed: 0, skipped: 0, failed: 0 };
+  for (const entry of expiring) {
+    const { configId } = entry;
+    try {
+      const config = await syncConfigStorage.getSyncConfig(configId);
+      if (!config) {
+        logger.warn('renew-channel (custom object): stale index entry', TAG, { configId });
+        await syncConfigStorage.removeActiveConfig(configId);
+        counts.skipped++;
+        continue;
+      }
+      const result = await ensureWatchChannel(config);
+      if (result?.renewed) counts.renewed++; else counts.skipped++;
+    } catch (err) {
+      logger.error('renew-channel (custom object): failed', TAG, { configId, error: err.message });
+      counts.failed++;
+    }
+  }
+  return counts;
+}
+
+// Called by monday scheduler cron daily. No auth middleware (scheduler uses
+// its own signing). Both URL paths — monday invokes /mndy-cronjob/<name>,
+// we also accept /scheduler/<name> for direct testing.
+router.post(['/mndy-cronjob/renew-channel', '/scheduler/renew-channel'], async (req, res) => {
+  try {
+    logger.info('scheduler cron fired', TAG);
+
+    const index = await subscriptionStorage.getSubscriptionIndex();
+    const expiring = index.filter(
+      (entry) => Number(entry.expiration) - Date.now() < ONE_DAY_MS
+    );
+
+    logger.info('renew-channel scheduler', TAG, {
+      total: index.length,
+      expiring: expiring.length,
+    });
+
+    let renewed = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    for (const entry of expiring) {
+      const { subscriptionId } = entry;
+      try {
+        const subscription = await subscriptionStorage.getSubscription(subscriptionId);
+        if (!subscription) {
+          logger.warn('renew-channel: stale index entry, removing', TAG, { subscriptionId });
+          await subscriptionStorage.removeFromSubscriptionIndex(subscriptionId);
+          skipped++;
+          continue;
+        }
+
+        const accessToken = subscription.accessToken;
+        try {
+          await googleCalendar.stopChannel(accessToken, subscriptionId, subscription.resourceId);
+        } catch (err) {
+          logger.warn('renew-channel: failed to stop previous watch (continuing)', TAG, {
+            subscriptionId,
+            error: err.message,
+          });
+        }
+
+        const { resourceId, expiration } = await googleCalendar.watchCalendar(accessToken, {
+          channelId: String(subscriptionId),
+          baseUrl: getBaseUrl(),
+        });
+
+        await subscriptionStorage.updateSubscription(subscriptionId, { resourceId, expiration });
+        await subscriptionStorage.removeFromSubscriptionIndex(subscriptionId);
+        await subscriptionStorage.addToSubscriptionIndex({
+          subscriptionId,
+          webhookUrl: subscription.webhookUrl,
+          userId: subscription.userId,
+          expiration,
+        });
+
+        logger.info('renew-channel: subscription renewed', TAG, { subscriptionId, expiration });
+        renewed++;
+      } catch (err) {
+        logger.error('renew-channel: failed to renew subscription', TAG, {
+          subscriptionId,
+          error: err.message,
+        });
+        failed++;
+      }
+    }
+
+    // Custom Object path — renew all_active_configs in the same cron run.
+    let customObjectCounts = { renewed: 0, skipped: 0, failed: 0 };
+    try {
+      customObjectCounts = await renewCustomObjectConfigs();
+    } catch (err) {
+      logger.error('renew-channel: custom object renewal failed', TAG, { error: err.message });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      v3: { renewed, skipped, failed },
+      customObject: customObjectCounts,
+    });
+  } catch (err) {
+    logger.error('renew-channel scheduler failed', TAG, { error: err.message });
+    return res.status(500).json({ error: 'renew-channel failed' });
+  }
+});
+
+export default router;

@@ -1,0 +1,317 @@
+{
+  "name": "Calendar Sync — Health & Activity",
+  "description": "Google Calendar → monday.com sync app. Top: at-a-glance stats. Middle: sync engine + webhook trends. Bottom: OAuth, cron renewal, per-config breakdown, backfill, error log. Filter by config / user / tag / level via the bar at top.",
+  "owner": "X-AXIOM-EVERYONE",
+  "datasets": ["calendar-sync"],
+  "refreshTime": 300,
+  "schemaVersion": 2,
+  "timeWindowStart": "qr-now-7d",
+  "timeWindowEnd": "qr-now",
+  "charts": [
+    {
+      "id": "header-note",
+      "name": "About",
+      "type": "Note",
+      "query": {"apl": ""},
+      "text": "## Calendar Sync — Health & Activity\n\nOne-way sync **Google Calendar → monday.com board**, hosted on monday code.  Audience: oncall + product health.\n\n- **Default range:** 7d · **Refresh:** 5m\n- **Filter** by config / user / tag / level using the bar below.\n- **Oncall:** start with the 4 stats → if red, check *Sync errors by tag* → drill into *Recent errors* (bottom).\n- **Cron / OAuth panels** can be sparse — they fire <10×/day; keep the 7d range when looking at them.\n\nDocs: see `CLAUDE.md` in the repo for architecture + endpoint contracts."
+    },
+    {
+      "id": "filters",
+      "name": "Filters",
+      "type": "SmartFilter",
+      "query": {"apl": ""},
+      "filters": [
+        {
+          "id": "acc_filter",
+          "name": "Account",
+          "type": "select",
+          "selectType": "apl",
+          "active": true,
+          "apl": {
+            "apl": "['calendar-sync'] | where isnotempty(acc) | distinct acc | project key=acc, value=acc | sort by key asc",
+            "queryOptions": {"quickRange": "7d"}
+          },
+          "options": [{"key": "All", "value": "", "default": true}]
+        },
+        {
+          "id": "obj_filter",
+          "name": "Instance",
+          "type": "select",
+          "selectType": "apl",
+          "active": true,
+          "apl": {
+            "apl": "['calendar-sync'] | where isnotempty(obj) | distinct obj | project key=obj, value=obj | sort by key asc",
+            "queryOptions": {"quickRange": "7d"}
+          },
+          "options": [{"key": "All", "value": "", "default": true}]
+        },
+        {
+          "id": "cfg_filter",
+          "name": "Config",
+          "type": "select",
+          "selectType": "apl",
+          "active": true,
+          "apl": {
+            "apl": "['calendar-sync'] | where isnotempty(cfg) | distinct cfg | project key=cfg, value=cfg | sort by key asc",
+            "queryOptions": {"quickRange": "7d"}
+          },
+          "options": [{"key": "All", "value": "", "default": true}]
+        },
+        {
+          "id": "usr_filter",
+          "name": "User",
+          "type": "select",
+          "selectType": "apl",
+          "active": true,
+          "apl": {
+            "apl": "['calendar-sync'] | where isnotempty(usr) | distinct usr | project key=usr, value=usr | sort by key asc",
+            "queryOptions": {"quickRange": "7d"}
+          },
+          "options": [{"key": "All", "value": "", "default": true}]
+        },
+        {
+          "id": "tag_filter",
+          "name": "Tag",
+          "type": "select",
+          "selectType": "list",
+          "active": true,
+          "options": [
+            {"key": "All", "value": "", "default": true},
+            {"key": "sync", "value": "sync"},
+            {"key": "webhook", "value": "webhook"},
+            {"key": "oauth", "value": "oauth"},
+            {"key": "monday_api", "value": "monday_api"},
+            {"key": "backfill", "value": "backfill"},
+            {"key": "scheduler", "value": "scheduler"},
+            {"key": "subscription", "value": "subscription"},
+            {"key": "policy", "value": "policy"},
+            {"key": "lifecycle", "value": "lifecycle"},
+            {"key": "configs", "value": "configs"}
+          ]
+        },
+        {
+          "id": "level_filter",
+          "name": "Level",
+          "type": "select",
+          "selectType": "list",
+          "active": true,
+          "options": [
+            {"key": "All", "value": "", "default": true},
+            {"key": "info", "value": "info"},
+            {"key": "warn", "value": "warn"},
+            {"key": "error", "value": "error"},
+            {"key": "debug", "value": "debug"}
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "stat-sync-runs",
+      "name": "Sync runs",
+      "type": "Statistic",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where tag == \"sync\" and message == \"sync_done\"\n| summarize ['Sync runs'] = count()"
+      }
+    },
+    {
+      "id": "stat-error-rate",
+      "name": "Error rate %",
+      "type": "Statistic",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| summarize total = countif(tag == \"sync\" and message == \"sync_done\"), errs = countif(level == \"error\" or message == \"error\" or tag == \"monday_api\")\n| extend ['Error rate %'] = iff(total > 0, round(100.0 * errs / total, 2), 0.0)\n| project ['Error rate %']"
+      },
+      "config": {
+        "warningThreshold": 1,
+        "errorThreshold": 5
+      }
+    },
+    {
+      "id": "stat-active-configs",
+      "name": "Active configs",
+      "type": "Statistic",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where tag == \"webhook\"\n| summarize ['Active configs'] = dcount(cfg)"
+      }
+    },
+    {
+      "id": "stat-p95-latency",
+      "name": "p95 sync ms",
+      "type": "Statistic",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where tag == \"sync\" and message == \"sync_done\" and isnotnull(ms)\n| summarize ['p95 ms'] = round(percentile(ms, 95), 0)"
+      }
+    },
+
+    {
+      "id": "ts-events-processed",
+      "name": "Events processed (created/updated/deleted/skipped)",
+      "type": "TimeSeries",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where tag == \"sync\" and message == \"sync_done\"\n| summarize created = sum(created), updated = sum(updated), deleted = sum(deleted), skipped = sum(skipped) by bin_auto(_time)"
+      },
+      "config": {"aggChartOpts": {"variant": "area"}}
+    },
+    {
+      "id": "ts-sync-errors-by-tag",
+      "name": "Sync errors by tag",
+      "type": "TimeSeries",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where level == \"error\" or message == \"error\" or message == \"api error\"\n| summarize errors = count() by bin_auto(_time), tag"
+      },
+      "config": {"aggChartOpts": {"variant": "bars"}}
+    },
+
+    {
+      "id": "ts-webhook-hits",
+      "name": "Webhook hits / min",
+      "type": "TimeSeries",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where tag == \"webhook\"\n| summarize hits = count() by bin_auto(_time)"
+      }
+    },
+    {
+      "id": "ts-sync-percentiles",
+      "name": "Sync duration p50 / p95 / p99 (ms)",
+      "type": "TimeSeries",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where tag == \"sync\" and message == \"sync_done\" and isnotnull(ms)\n| summarize percentiles_array(ms, 50, 95, 99) by bin_auto(_time)"
+      }
+    },
+
+    {
+      "id": "ts-oauth-events",
+      "name": "OAuth events",
+      "type": "TimeSeries",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where tag == \"oauth\" or status == \"google_disconnected\" or status == \"monday_disconnected\"\n| summarize n = count() by bin_auto(_time), message"
+      }
+    },
+    {
+      "id": "stat-disconnected",
+      "name": "Disconnected configs",
+      "type": "Statistic",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where status == \"google_disconnected\" or status == \"monday_disconnected\"\n| summarize ['Disconnected'] = dcount(cfg)"
+      },
+      "config": {"warningThreshold": 1, "errorThreshold": 5}
+    },
+    {
+      "id": "stat-last-cron",
+      "name": "Hours since last cron tick",
+      "type": "Statistic",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where tag == \"scheduler\"\n| summarize last_tick = max(_time)\n| extend ['Hours since cron'] = round(datetime_diff('minute', now(), last_tick) / 60.0, 1)\n| project ['Hours since cron']"
+      },
+      "config": {"warningThreshold": 25, "errorThreshold": 48}
+    },
+    {
+      "id": "stat-renewed",
+      "name": "Channels renewed",
+      "type": "Statistic",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where tag == \"subscription\" and message == \"subscription_renewed\"\n| summarize ['Renewed'] = count()"
+      }
+    },
+    {
+      "id": "stat-expiring",
+      "name": "Channels expiring (latest cron)",
+      "type": "Statistic",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where tag == \"scheduler\" and isnotnull(expiring)\n| top 1 by _time desc\n| project ['Expiring'] = expiring"
+      }
+    },
+
+    {
+      "id": "stat-accounts",
+      "name": "Connected accounts",
+      "type": "Statistic",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where isnotempty(acc)\n| summarize ['Accounts'] = dcount(acc)"
+      }
+    },
+    {
+      "id": "stat-instances",
+      "name": "Instances",
+      "type": "Statistic",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where isnotempty(obj)\n| summarize ['Instances'] = dcount(obj)"
+      }
+    },
+    {
+      "id": "tbl-instance-configs",
+      "name": "Configs per instance",
+      "type": "Table",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where isnotempty(obj) and isnotempty(cfg)\n| summarize Configs = dcount(cfg), Account = take_any(acc), ['Last seen'] = max(_time) by Instance = obj\n| order by Configs desc\n| take 50"
+      }
+    },
+    {
+      "id": "tbl-top-configs",
+      "name": "Per-config usage (created / updated / deleted / skipped / errors)",
+      "type": "Table",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where isnotempty(cfg)\n| summarize\n    runs = countif(tag == \"sync\" and message == \"sync_done\"),\n    created = sum(created),\n    updated = sum(updated),\n    deleted = sum(deleted),\n    skipped = sum(skipped),\n    errors = countif(level == \"error\" or message == \"error\"),\n    instance = take_any(obj),\n    user = take_any(usr),\n    last_seen = max(_time)\n  by cfg\n| order by runs desc\n| take 50\n| project Config = cfg, Instance = instance, User = user, Runs = runs, Created = created, Updated = updated, Deleted = deleted, Skipped = skipped, Errors = errors, ['Last seen'] = last_seen"
+      }
+    },
+
+    {
+      "id": "ts-backfill",
+      "name": "Backfill activity",
+      "type": "TimeSeries",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where tag == \"backfill\"\n| summarize n = count() by bin_auto(_time), message"
+      },
+      "config": {"aggChartOpts": {"variant": "bars"}}
+    },
+
+    {
+      "id": "monitors",
+      "name": "Monitors",
+      "type": "Note",
+      "query": {"apl": ""},
+      "text": "### Monitors\n\nNo monitors created yet for `calendar-sync`.\n\nCreate them in **Axiom → Monitors**, then swap this panel to a `MonitorList` chart with the chosen monitor IDs.\n\n**Suggested monitors:**\n- Sync error-rate >5% over 1h\n- Hours since last cron tick >25\n- Disconnected configs > 0 (sustained)\n- Webhook hits drop to 0 over 30m"
+    },
+
+    {
+      "id": "logstream-errors",
+      "name": "Recent errors",
+      "type": "LogStream",
+      "query": {
+        "apl": "declare query_parameters (acc_filter:string=\"\", obj_filter:string=\"\", cfg_filter:string=\"\", usr_filter:string=\"\", tag_filter:string=\"\", level_filter:string=\"\");\n['calendar-sync']\n| where (isempty(acc_filter) or acc == acc_filter)\n| where (isempty(obj_filter) or obj == obj_filter)\n| where (isempty(cfg_filter) or cfg == cfg_filter)\n| where (isempty(usr_filter) or usr == usr_filter)\n| where (isempty(tag_filter) or tag == tag_filter)\n| where (isempty(level_filter) or level == level_filter)\n| where level == \"error\" or level == \"warn\" or message == \"error\" or message == \"api error\"\n| project-keep _time, level, tag, message, cfg, usr, code, cause, reason, status\n| order by _time desc\n| take 200"
+      }
+    }
+  ],
+  "layout": [
+    {"i": "header-note", "x": 0, "y": 0, "w": 12, "h": 2},
+    {"i": "filters", "x": 0, "y": 2, "w": 12, "h": 1},
+
+    {"i": "stat-sync-runs",     "x": 0, "y": 3, "w": 3, "h": 2},
+    {"i": "stat-error-rate",    "x": 3, "y": 3, "w": 3, "h": 2},
+    {"i": "stat-active-configs","x": 6, "y": 3, "w": 3, "h": 2},
+    {"i": "stat-p95-latency",   "x": 9, "y": 3, "w": 3, "h": 2},
+
+    {"i": "ts-events-processed",   "x": 0, "y": 5, "w": 6, "h": 4},
+    {"i": "ts-sync-errors-by-tag", "x": 6, "y": 5, "w": 6, "h": 4},
+
+    {"i": "ts-webhook-hits",     "x": 0, "y": 9, "w": 6, "h": 4},
+    {"i": "ts-sync-percentiles", "x": 6, "y": 9, "w": 6, "h": 4},
+
+    {"i": "ts-oauth-events",  "x": 0, "y": 13, "w": 6, "h": 4},
+    {"i": "stat-disconnected","x": 6, "y": 13, "w": 3, "h": 2},
+    {"i": "stat-last-cron",   "x": 9, "y": 13, "w": 3, "h": 2},
+    {"i": "stat-renewed",     "x": 6, "y": 15, "w": 3, "h": 2},
+    {"i": "stat-expiring",    "x": 9, "y": 15, "w": 3, "h": 2},
+
+    {"i": "stat-accounts",        "x": 0, "y": 17, "w": 3, "h": 2},
+    {"i": "stat-instances",       "x": 3, "y": 17, "w": 3, "h": 2},
+    {"i": "tbl-instance-configs", "x": 6, "y": 17, "w": 6, "h": 4},
+
+    {"i": "tbl-top-configs", "x": 0, "y": 21, "w": 12, "h": 6},
+
+    {"i": "ts-backfill", "x": 0, "y": 27, "w": 6, "h": 4},
+    {"i": "monitors",    "x": 6, "y": 27, "w": 6, "h": 4},
+
+    {"i": "logstream-errors", "x": 0, "y": 31, "w": 12, "h": 8}
+  ]
+}
