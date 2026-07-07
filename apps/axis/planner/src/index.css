@@ -1,0 +1,137 @@
+@import "tailwindcss";
+@import "./styles/tokens.css";
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * SELF-HOSTED FONTS — monday Vibe stack. Figtree covers Latin/numerals; Noto
+ * Sans Hebrew covers Hebrew glyphs via the browser's per-glyph fallback. Each
+ * is a single variable font file spanning every weight (100–900), so there is
+ * no separate file per weight. Replaces the previous Google-Fonts Rubik
+ * @import — the app now renders deterministically offline inside the monday
+ * iframe, and these family names match @vibe/core's --font-family so Vibe
+ * components reuse the same self-hosted faces.
+ * ────────────────────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: "Figtree";
+  src: url("./assets/fonts/Figtree-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Noto Sans Hebrew";
+  src: url("./assets/fonts/NotoSansHebrew-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  /* Figtree first (Latin/numerals), Noto Sans Hebrew next (Hebrew glyphs fall
+     through automatically per-glyph). Mirrors Vibe's --font-family order. */
+  --font-sans: "Figtree", "Noto Sans Hebrew", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+:root {
+  font-family: "Figtree", "Noto Sans Hebrew", system-ui, -apple-system, sans-serif;
+  background-color: var(--color-bg-app);
+  /* NOTE: 20px root is intentional/pre-existing — Tailwind's rem-based text
+     sizes scale from it. Left unchanged so the redesign swaps font + colors
+     without reflowing the dense Gantt layout. */
+  font-size: 20px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+}
+
+/* Custom Scrollbar for a cleaner look */
+::-webkit-scrollbar {
+  width: 14px;
+  height: 16px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-scrollbar-track);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: 10px;
+  border: 3px solid var(--color-scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-scrollbar-thumb-hover);
+}
+
+.gantt-virtual-list {
+  scrollbar-gutter: stable;
+}
+
+/* Outer scroll container follows document direction so the vertical scrollbar
+   sits on the correct side (right in Hebrew, left in English). The inner div
+   stays LTR in both languages because the timeline math requires it — see
+   VirtualRowList.tsx for why. */
+:root[dir="rtl"] .gantt-virtual-list {
+  direction: rtl;
+}
+
+.gantt-virtual-list > div {
+  direction: ltr;
+}
+
+/* Global button hover and active states */
+button, 
+[role="button"],
+.clickable {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+button:hover:not(:disabled),
+[role="button"]:hover,
+.clickable:hover {
+  cursor: pointer;
+}
+
+button:active:not(:disabled),
+[role="button"]:active,
+.clickable:active {
+  transform: scale(0.96);
+}
+
+/* Vibe DatePicker RTL Fixes */
+.monday-rtl [class*="datePickerDayRangeStart"]:not([class*="datePickerDayRangeEnd"]),
+[dir="rtl"] [class*="datePickerDayRangeStart"]:not([class*="datePickerDayRangeEnd"]) {
+  margin-left: 0 !important;
+  margin-right: var(--day-picker-days-horizontal-gap, 4px) !important;
+  border-radius: 0 var(--border-radius-small, 4px) var(--border-radius-small, 4px) 0 !important;
+}
+
+.monday-rtl [class*="datePickerDayRangeEnd"]:not([class*="datePickerDayRangeStart"]),
+[dir="rtl"] [class*="datePickerDayRangeEnd"]:not([class*="datePickerDayRangeStart"]) {
+  margin-right: 0 !important;
+  margin-left: var(--day-picker-days-horizontal-gap, 4px) !important;
+  border-radius: var(--border-radius-small, 4px) 0 0 var(--border-radius-small, 4px) !important;
+}
+
+.monday-rtl [class*="datePickerDayRangeMiddle"],
+.monday-rtl [class*="datePickerAddToRangeMiddle"],
+[dir="rtl"] [class*="datePickerDayRangeMiddle"],
+[dir="rtl"] [class*="datePickerAddToRangeMiddle"] {
+  margin: var(--day-picker-days-vertical-gap, 2px) 0 !important;
+  border-radius: 0 !important;
+}
+
+/* Vibe Dialog portals (month/year dropdowns) render at body level — ensure they appear above modals and calendar portals */
+body > .monday-style-dialog-content-wrapper {
+  z-index: var(--z-portal) !important;
+}

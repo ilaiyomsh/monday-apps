@@ -29,3 +29,6 @@
   item EDITING restricted to own items, managers edit all. Set on the monday board itself (not in
   the apps) during W5.1 mapping, per `Day-off/CONTRACT.md` §8.
 - **W1.7 deferred** — see F2.
+
+## Onboarding debt (2026-07-07)
+- **planner**: `lint` stubbed in the monorepo copy — 268 pre-existing eslint errors (mostly `no-explicit-any`). Re-enable `eslint .` after a cleanup pass.

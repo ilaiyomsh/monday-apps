@@ -1,0 +1,528 @@
+{
+  "common": {
+    "search": "Search...",
+    "searchVerb": "Search...",
+    "noResults": "No results found",
+    "cancel": "Cancel",
+    "save": "Save",
+    "confirm": "Confirm",
+    "selectPlaceholder": "Select...",
+    "loading": "Loading...",
+    "clearSelection": "Clear selection",
+    "clearAll": "Clear all"
+  },
+  "app": {
+    "error": {
+      "title": "Failed to load the app",
+      "retry": "Try again",
+      "network": {
+        "title": "Something went wrong",
+        "description": "We're having trouble loading the app right now.\nThis is usually temporary — refreshing the page should fix it.",
+        "refresh": "Refresh page"
+      }
+    },
+    "welcome": {
+      "title": "Welcome to Planner!",
+      "description": "To get started, configure the boards and columns the system should read from.",
+      "cta": "Configure now",
+      "noPermission": "Please contact your administrator to complete the initial setup."
+    }
+  },
+  "gantt": {
+    "error": {
+      "network": {
+        "message": "We couldn't load the latest data. Some information may be missing or out of date.",
+        "refresh": "Refresh page",
+        "retry": "Try again",
+        "dismiss": "Dismiss"
+      }
+    },
+    "viewMode": {
+      "projects": "Projects",
+      "employees": "Employees",
+      "available": "Available"
+    },
+    "zoom": {
+      "quarter": "Quarter",
+      "month": "Month",
+      "week": "Week",
+      "day": "Day"
+    },
+    "toolbar": {
+      "today": "Today",
+      "settings": "Settings",
+      "displayUnitHours": "Show in hours",
+      "displayUnitHoursShort": "h",
+      "displayUnitPercent": "Show in percent"
+    },
+    "loading": "Loading data...",
+    "deleteToast": {
+      "message": "Allocation deleted",
+      "undo": "Undo"
+    }
+  },
+  "filter": {
+    "button": "Filter",
+    "timeframe": {
+      "label": "End period",
+      "endingThisWeek": "Ending this week",
+      "endingThisMonth": "Ending this month"
+    },
+    "utilization": {
+      "label": "Utilization status",
+      "red": "Red (over budget)",
+      "yellow": "Orange (burning fast)",
+      "blue": "Blue (under-utilized)",
+      "green": "Green (on plan)"
+    },
+    "hidePast": "Hide past allocations",
+    "clear": "Clear"
+  },
+  "addProject": {
+    "button": "Add project",
+    "allShown": "All projects are shown",
+    "loading": "Loading projects...",
+    "searchPlaceholder": "Search project...",
+    "noResults": "No projects found",
+    "allAlreadyShown": "All projects are already shown",
+    "helper": "Add a project to the view"
+  },
+  "projectFilter": {
+    "button": "Filter projects",
+    "pmColumn": "Project manager",
+    "typeColumn": "Project type",
+    "noPMsAvailable": "No managers available",
+    "noTypesAvailable": "No types available",
+    "clear": "Clear",
+    "activeWithoutAllocations": "Show only active projects without allocations"
+  },
+  "companyLoad": {
+    "groupTitle": "Company availability",
+    "tooltipTitle": "Company/role load",
+    "tooltipTitleCompany": "Company load",
+    "tooltipTitleRole": "{{role}} load",
+    "standard_one": "Capacity: {{hours}}h ({{count}} employee)",
+    "standard_other": "Capacity: {{hours}}h ({{count}} employees)",
+    "retry": "Failed to load past data — retry"
+  },
+  "loadCell": {
+    "period": "Period: {{period}}",
+    "availability": "Availability: {{percent}}% ({{hours}}h)",
+    "totalAvailable": "Total available: {{hours}}h",
+    "utilization": "Utilization: {{percent}}% ({{hours}}h)"
+  },
+  "datePicker": {
+    "placeholder": "Pick a date..."
+  },
+  "allocation": {
+    "mode": {
+      "single": "Single allocation",
+      "bulk": "Bulk allocation"
+    },
+    "stats": {
+      "plannedTotal": "Planned total",
+      "actualTotal": "Actual total",
+      "actualPercent": "% Actual",
+      "hoursShort": "h"
+    },
+    "fields": {
+      "project": "Project",
+      "capability": "Capability",
+      "employee": "Employee",
+      "hoursPerDay": "Hours/day",
+      "totalHours": "Total hours",
+      "fte": "FTE %",
+      "endDate": "End date",
+      "startDate": "Start date"
+    },
+    "placeholder": {
+      "project": "Search project...",
+      "capability": "Search capability...",
+      "employee": "Pick employee..."
+    },
+    "workingDays": "{{count}} working days",
+    "warning": {
+      "cannotSwapEmployeeWithReported": "Cannot swap employee for an allocation with reported hours",
+      "overlapTitle": "Overlaps an existing allocation!",
+      "overlapBody": "This employee already has an allocation for this project on the overlapping dates. Change the dates or edit the existing allocation."
+    },
+    "toast": {
+      "projectRequired": "Pick a project for this allocation",
+      "employeeRequired": "Pick an employee for this allocation",
+      "overlapBlock": "Cannot save — overlaps an existing allocation in this date range",
+      "saveError": "Failed to save the allocation. Try again."
+    },
+    "button": {
+      "delete": "Delete",
+      "duplicate": "Duplicate",
+      "save": "Save allocation",
+      "saving": "Saving..."
+    },
+    "duplicate": {
+      "title": "Duplicate allocation",
+      "same": "Duplicate to same employee",
+      "sameDetails": "Same details, immediately after the current allocation ends",
+      "other": "Duplicate to another employee",
+      "otherDetails": "Same dates, pick a new role and employee"
+    }
+  },
+  "bulkAllocation": {
+    "fields": {
+      "start": "Start",
+      "end": "End"
+    },
+    "row": {
+      "hoursPerDayShort": "h/day",
+      "totalHoursShort": "Hours",
+      "reset": "Reset",
+      "remove": "Remove",
+      "metaSummary": "{{hoursPerDay}} h/day  |  {{percent}}%  |  {{days}} days"
+    },
+    "sidebar": {
+      "title": "Pick a capability",
+      "empty": "No capabilities defined for employees"
+    },
+    "emptyState": "Pick capabilities from the list to add allocations",
+    "validation": {
+      "employeeRequired": "Pick an employee",
+      "hoursPositive": "Total hours must be greater than 0",
+      "overlap": "Overlaps an existing allocation"
+    },
+    "toast": {
+      "partialSave": "Saved {{succeeded}} allocations, {{failed}} failed."
+    },
+    "savingProgress": "Saving {{done}}/{{total}}...",
+    "confirmClose": {
+      "message": "Save your changes?"
+    }
+  },
+  "taskBar": {
+    "hoursUnit": "{{count}} hours",
+    "tooltip": {
+      "capability": "Capability:",
+      "name": "Name:",
+      "planning": "Planned:",
+      "actual": "Actual:",
+      "percentHours": "{{percent}}% | {{hours}} hours",
+      "planDaily": "Planned:",
+      "planWeekly": "Planned:",
+      "planMonthly": "Planned:",
+      "plannedTotal": "Planned total for period:",
+      "actualTotal": "Actual total for period:",
+      "actualPercent": "% Actual:",
+      "dates": "Dates:",
+      "totalDays": "Total days:",
+      "daysCount_one": "{{count}} day",
+      "daysCount_two": "{{count}} days",
+      "daysCount_other": "{{count}} days"
+    },
+    "contextMenu": {
+      "edit": "Edit"
+    }
+  },
+  "employeeLoad": {
+    "label": "Load",
+    "rowAvailabilityLabel": "Availability"
+  },
+  "ganttProvider": {
+    "toast": {
+      "deleteFailed": "Failed to delete the allocation. The allocation has been restored.",
+      "bulkPmUpdateFailed": "Manager update: {{failed}}/{{total}} failed"
+    }
+  },
+  "timeline": {
+    "search": {
+      "project": "Search project...",
+      "employee": "Search employee..."
+    },
+    "refreshTooltip": "Refresh project list",
+    "loadingAbsences": "Loading absences...",
+    "weekLabel": "Week {{week}}",
+    "weekLabelShort": "W{{week}}",
+    "quarterLabel": "Quarter {{quarter}}"
+  },
+  "pmSelector": {
+    "selectManager": "Pick a manager",
+    "noEmployees": "No employees available"
+  },
+  "projectSummary": {
+    "selectType": "Pick a project type",
+    "addType": "+ Type",
+    "plannedHours": "Planned hours",
+    "allocatedHours": "Allocated hours",
+    "actualHours": "Actual hours"
+  },
+  "classification": {
+    "external": "External projects",
+    "internal": "Internal projects",
+    "other": "Other"
+  },
+  "settings": {
+    "dialog": {
+      "title": "Settings",
+      "showJsonTitle": "Settings JSON (Draft)",
+      "copyJson": "Copy JSON",
+      "importLabel": "Import",
+      "exportLabel": "Export",
+      "importSuccess": "Settings imported into draft. Press \"Save changes\" to apply.",
+      "importError": "Could not import settings: the file is not valid JSON.",
+      "exportSuccess": "Settings exported to file.",
+      "exportError": "Could not export settings.",
+      "saveButton": "Save changes"
+    },
+    "footer": {
+      "dirty": "● Unsaved changes",
+      "allValid": "✓ All settings are valid",
+      "missingFields": "Required fields are missing — you can save and complete later"
+    },
+    "tabs": {
+      "allocations": "Allocations",
+      "employees": "Employees",
+      "projects": "Projects",
+      "availability": "Availability",
+      "general": "General"
+    },
+    "tabStatus": {
+      "missing": "Required fields are missing",
+      "complete": "Fully configured"
+    },
+    "loading": {
+      "boards": "Loading boards..."
+    },
+    "unsavedConfirm": {
+      "message": "There are unsaved changes. Save them before closing?",
+      "saveAndClose": "Save and close",
+      "closeWithoutSaving": "Close without saving"
+    },
+    "placeholder": {
+      "column": "Pick a column...",
+      "board": "Pick a board...",
+      "statusColumn": "Pick a status column...",
+      "capabilityColumn": "Pick a capability column...",
+      "capabilitiesColumn": "Pick a capabilities column...",
+      "classificationStatus": "Pick a classification status column...",
+      "activeStatuses": "Pick active statuses...",
+      "internalLabels": "Pick labels representing internal projects...",
+      "externalLabels": "Pick labels representing external projects...",
+      "pmColumn": "Pick a project manager column...",
+      "clientColumn": "Pick a client column...",
+      "typeColumn": "Pick a project type column...",
+      "plannedHoursColumn": "Pick a planned-hours column...",
+      "projectsBoard": "Pick a projects board...",
+      "label": "Pick a label...",
+      "checkboxColumn": "Pick a checkbox column...",
+      "approvedStatuses": "Pick approved statuses...",
+      "rejectedStatuses": "Pick rejected labels..."
+    },
+    "allocations": {
+      "title": "Allocations board",
+      "description": "Pick the board and columns that hold the allocation data",
+      "fields": {
+        "board": "Allocations board",
+        "startDate": "Start date",
+        "endDate": "End date",
+        "hoursPerDay": "Hours per day",
+        "totalHours": "Total hours",
+        "fte": "FTE %",
+        "fteHelp": "Column for storing FTE % (auto-computed from hours per day)",
+        "project": "Project",
+        "employee": "Employee",
+        "role": "Role",
+        "capability": "Allocation capability column",
+        "reportedHours": "Reported hours (Mirror)",
+        "reportedHoursHelp": "Pick a Mirror column holding the actual reported hours total",
+        "cost": "Allocation cost",
+        "pm": "Project manager",
+        "pmHelp": "People column to store the project manager on each allocation",
+        "client": "Client",
+        "clientHelp": "Board Relation column to store the client on each allocation"
+      }
+    },
+    "employees": {
+      "title": "Employees board",
+      "description": "Pick the board and columns that hold the employee data",
+      "fields": {
+        "board": "Employees board",
+        "name": "Employee name",
+        "role": "Role",
+        "allocPercent": "FTE %",
+        "cost": "Employer cost",
+        "user": "User (People column)",
+        "capabilities": "Capabilities column",
+        "capabilitiesHelp": "Dropdown column listing the employee's capabilities. If unset, capabilities default to the role."
+      },
+      "filterInactive": "Filter out inactive employees?",
+      "filterInactiveHelp": "Inactive employees will be hidden, their allocations won't be fetched, and they won't be counted in load and availability calculations.",
+      "statusColumn": "Employee status column",
+      "activeStatusValue": "\"Active\" status value",
+      "peopleWarning": "Heads up: the people column must allow only a single user. Tick \"Limit to one person\" in the column settings on monday."
+    },
+    "projects": {
+      "title": "Projects board",
+      "description": "Configure a projects board and active-project filtering",
+      "selectBoard": "Pick a projects board",
+      "selectBoardHelp": "Pick from the boards linked through the project column",
+      "noLinkedBoards": "No linked boards found. Make sure you picked a Board Relation project column in the Allocations section.",
+      "filterActive": "Filter by active projects?",
+      "statusColumn": "Project status column",
+      "activeStatusValue": "\"Active\" status value",
+      "classification": {
+        "label": "Internal/external classification?",
+        "statusColumn": "Status column for classification",
+        "internal": "Internal labels",
+        "external": "External labels",
+        "note": "Projects not mapped to any group will appear under \"Other\"."
+      },
+      "fields": {
+        "pm": "Project manager",
+        "pmHelp": "Pick the column that holds the project manager — shown on the summary card",
+        "client": "Client",
+        "clientHelp": "Board Relation column linking to the clients board",
+        "type": "Project type",
+        "typeHelp": "Status column displayed as the type badge on the project card",
+        "plannedHours": "Planned hours",
+        "plannedHoursHelp": "Numbers column on the projects board — the project's planned work hours, shown on the project card"
+      }
+    },
+    "availability": {
+      "dayoff": {
+        "title": "Day-off vacations board",
+        "description": "Map the vacations board managed by the Day-off app — the absence source of truth. Approved personal absences zero the employee's capacity; mandatory company days zero everyone",
+        "fields": {
+          "board": "Vacations board",
+          "boardHelp": "The board where Day-off stores absence requests and company days. Changing the board resets the column and label mappings below",
+          "employee": "Employee column (People)",
+          "employeeHelp": "The people column holding the requesting employee — must resolve to the same monday user as the Employees board",
+          "startDate": "Start-date column",
+          "endDate": "End-date column",
+          "kind": "Kind column (personal / general)",
+          "kindHelp": "The status column distinguishing personal requests from company-wide days",
+          "generalLabel": "Label meaning a company day (general)",
+          "personalLabel": "Label meaning a personal absence",
+          "kindLabelsHelp": "Stored as stable label IDs — renaming the labels on the board later is safe",
+          "type": "Absence-type column",
+          "typeHelp": "Optional — the status column with the absence type (vacation, sick…), shown in availability tooltips",
+          "mandatory": "Mandatory column (Checkbox)",
+          "mandatoryHelp": "Company days with this box checked close the office and zero capacity for everyone; unchecked days are display-only. Without this mapping every company day is display-only",
+          "approvalRequired": "Count approved absences only",
+          "approvalRequiredHelp": "On — only requests whose approval status is in the approved set reduce capacity. Off — every personal absence counts, including pending and rejected ones",
+          "approvalColumn": "Approval-status column",
+          "approvedValues": "Statuses that count as approved",
+          "approvedValuesHelp": "Pick the labels meaning the request was approved (required while the toggle is on)",
+          "approvalColumnHelp": "The approval-lifecycle column on the board. Required when the approval policy is ON — and recommended always: without it rejected requests cannot be excluded.",
+          "rejectedValues": "Rejected labels",
+          "rejectedValuesHelp": "Requests carrying these labels are always excluded from availability math — even when the approval policy is OFF. They remain visible only inside the Day-off app."
+        }
+      }
+    },
+    "languagePicker": {
+      "label": "Interface language",
+      "auto": "Auto (Monday)",
+      "he": "עברית",
+      "en": "English"
+    },
+    "general": {
+      "title": "General settings",
+      "description": "General system settings",
+      "workDayStart": "Workday start time",
+      "workDayEnd": "Workday end time",
+      "defaultZoom": "Default view",
+      "defaultZoomHelp": "Zoom level shown by default when the Gantt opens",
+      "displayUnit": "Display unit",
+      "displayUnitHelp": "Whether to show allocations in hours or as FTE percentage",
+      "workHours": {
+        "title": "Working hours settings",
+        "help": "These values feed FTE % and other effort displays.",
+        "hoursPerDay": "Hours per day",
+        "hoursPerWeek": "Hours per week",
+        "hoursPerMonth": "Hours per month",
+        "syncButton": "Sync hours",
+        "syncDayBy": "Sync from hours-per-day field",
+        "syncWeekBy": "Sync from hours-per-week field",
+        "syncMonthBy": "Sync from hours-per-month field",
+        "syncDisabledTooltip": "Change a field to enable sync"
+      },
+      "workDays": {
+        "title": "Active working days",
+        "help": "Mark the days the company actually works. They count toward load and effort calculations.",
+        "day0": "Sun",
+        "day1": "Mon",
+        "day2": "Tue",
+        "day3": "Wed",
+        "day4": "Thu",
+        "day5": "Fri",
+        "day6": "Sat"
+      }
+    },
+    "validation": {
+      "allocationsBoard": "Pick an allocations board",
+      "startDate": "Pick a start-date column",
+      "endDate": "Pick an end-date column",
+      "hoursPerDay": "Pick an hours-per-day column",
+      "project": "Pick a project column",
+      "employee": "Pick an employee column",
+      "role": "Pick a role column",
+      "employeesBoard": "Pick an employees board",
+      "employeeName": "Pick an employee-name column",
+      "employeeRole": "Pick an employee-role column",
+      "employeeFte": "Pick an FTE % column",
+      "employeeUser": "Pick a user column",
+      "employeeStatusColumn": "Pick an employee status column",
+      "activeEmployeeStatusValue": "Pick at least one active employee status value",
+      "projectsBoardForFilter": "Pick a projects board to filter on",
+      "projectStatus": "Pick a project-status column",
+      "activeStatusValue": "Pick at least one active status value",
+      "projectsBoardForClassification": "Pick a projects board for classification",
+      "classificationColumn": "Pick a project classification column",
+      "classificationLabels": "Pick at least one label for internal or external",
+      "workHours": "Start time must come before end time",
+      "dayoff": {
+        "identityJoin": "An absence source requires the user column on the employees board (Employees tab) — without it absences cannot be matched to employees",
+        "employeeColumn": "Pick the employee (people) column",
+        "startDateColumn": "Pick the absence start-date column",
+        "endDateColumn": "Pick the absence end-date column",
+        "kindColumn": "Pick the entry-kind (personal/general) status column",
+        "generalLabel": "Pick the label that means a company day",
+        "personalLabel": "Pick the label that means a personal absence",
+        "approvalColumn": "Approval policy is on — pick the approval-status column",
+        "approvedLabels": "Approval policy is on — pick at least one approved label",
+        "boardNotFound": "The vacations board was not found — it may have been deleted or is not accessible",
+        "columnMissing": "This column no longer exists on the vacations board — re-pick it",
+        "labelMissing": "This label no longer exists on the column — re-pick it",
+        "approvedLabelsMissing": "Some approved labels no longer exist on the approval column — re-pick them",
+        "rejectedNeedsColumn": "Mapping rejected labels requires picking an approval column"
+      }
+    }
+  },
+  "availability": {
+    "roleSummary": "{{hours}} h ({{count}} employees)",
+    "roleEmployeeCount_one": "{{count}} employee",
+    "roleEmployeeCount_other": "{{count}} employees",
+    "halfDay": "Half day",
+    "holiday": "Holiday",
+    "weekend": "Weekend",
+    "unassignedRole": "No role",
+    "employeeFte": "FTE: {{percent}}%",
+    "tooltip": {
+      "free": "{{hours}} h available",
+      "fte": "FTE: {{percent}}%",
+      "roleLabel": "Capability:",
+      "employeeLabel": "Name:",
+      "fteLabel": "FTE:",
+      "periodLabel": "Period:",
+      "availabilityLabel": "Availability:",
+      "allocationLabel": "Allocations:",
+      "freeLabel": "Total free:",
+      "statusLabel": "Status:",
+      "hoursValue": "{{hours}} hours",
+      "reasonHoliday": "Holiday: {{name}}",
+      "reasonHalfDay": "Holiday eve: {{name}}",
+      "reasonHolidayInfo": "{{name}} (working day)",
+      "reasonWeekend": "Weekend",
+      "reasonAbsence": "Absence: {{name}}",
+      "reasonAbsenceUnknown": "Absence"
+    },
+    "absence": "Absence",
+    "partial": "Partial"
+  }
+}

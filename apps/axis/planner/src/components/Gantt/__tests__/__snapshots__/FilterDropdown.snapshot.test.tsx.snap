@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`FilterDropdown — Hebrew baseline > Hebrew inventory is unchanged from baseline (source ∪ he bundle) 1`] = `
+[
+  "אדום (חריגה מתקציב)",
+  "הסתר הקצאות שעברו",
+  "ירוק (בתוכנית)",
+  "כחול (ניצול חסר)",
+  "כתום (שורף מהר)",
+  "מסתיים החודש",
+  "מסתיים השבוע",
+  "נקה",
+  "סטטוס ניצולת",
+  "סינון",
+  "תקופת סיום",
+]
+`;
