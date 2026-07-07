@@ -1,0 +1,6 @@
+/* Clear existing App.css */
+#root {
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+}

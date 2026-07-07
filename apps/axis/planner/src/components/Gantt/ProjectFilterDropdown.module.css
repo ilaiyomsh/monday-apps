@@ -1,0 +1,473 @@
+/* ProjectFilterDropdown.module.css - Two-column project filter dropdown
+ *
+ * NOTE (design-tokens refactor): all hex literals previously in this file
+ * have been replaced with var() references to tokens defined in
+ * src/styles/tokens.css. To inspect the original colors before the refactor,
+ * see PR #N or git show HEAD~6:src/components/Gantt/ProjectFilterDropdown.module.css
+ */
+
+.filterContainer {
+    position: relative;
+}
+
+/* Inherit document direction. RTL-only rules below are gated by :root[dir="rtl"]
+   so the same module works in both languages without duplicating selectors. */
+:root[dir="rtl"] .filterContainer {
+    direction: rtl;
+}
+
+/* Trigger Button */
+.trigger {
+    display: flex !important;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+
+    height: 36px;
+    padding: 0 16px;
+    min-width: fit-content;
+
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border-stronger);
+    border-radius: var(--radius-pill) !important;
+
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+.trigger:hover {
+    background-color: var(--color-bg-section);
+    border-color: var(--color-border-strong);
+}
+
+.triggerActive {
+    background-color: var(--color-accent-bg-softer);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.triggerActive:hover {
+    background-color: var(--color-accent-bg-hover);
+    border-color: var(--color-accent);
+}
+
+.triggerOpen {
+    border-color: var(--color-accent);
+}
+
+/* Inner Button Elements */
+.filterIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 16px;
+    color: var(--color-text-muted);
+    transition: color 0.2s ease;
+}
+
+.triggerActive .filterIcon {
+    color: var(--color-accent);
+}
+
+.triggerText {
+    font-weight: 600;
+}
+
+.badge {
+    background-color: var(--color-accent-strong);
+    color: var(--color-text-on-accent);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+    margin: 0 -4px;
+}
+
+.chevron {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+    transition: transform 0.2s ease;
+}
+
+.chevronOpen {
+    transform: rotate(180deg);
+}
+
+.triggerActive .chevron {
+    color: var(--color-accent);
+}
+
+/* Icon-only Trigger Button */
+.iconTrigger {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--color-bg-surface);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.iconTrigger:hover {
+    background-color: var(--color-bg-section);
+    border-color: var(--color-border-strong);
+    color: var(--color-text-primary);
+}
+
+.iconTriggerActive {
+    background-color: var(--color-accent-bg-softer);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.iconTriggerActive:hover {
+    background-color: var(--color-accent-bg-hover);
+    border-color: var(--color-accent);
+}
+
+.iconTriggerOpen {
+    border-color: var(--color-accent);
+}
+
+.iconBadge {
+    position: absolute;
+    top: -6px;
+    inset-inline-end: -6px;
+    background-color: var(--color-accent-strong);
+    color: var(--color-text-on-accent);
+    font-size: 10px;
+    font-weight: 600;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Dropdown Panel */
+.dropdown {
+    width: 480px;
+    background-color: var(--color-bg-surface);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-dropdown);
+    z-index: var(--z-modal);
+    animation: dropdownSlide 0.15s ease;
+    overflow: hidden;
+}
+
+@keyframes dropdownSlide {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Two-Column Layout — direction inherits from document */
+.columns {
+    display: flex;
+}
+
+:root[dir="rtl"] .columns {
+    direction: rtl;
+}
+
+.divider {
+    width: 1px;
+    background-color: var(--color-border-subtle);
+    flex-shrink: 0;
+}
+
+.column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+/* Column Header */
+.columnHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    border-bottom: 1px solid var(--color-border-faint);
+    background-color: var(--color-bg-subtle);
+    position: sticky;
+    top: 0;
+}
+
+.columnBadge {
+    background-color: var(--color-accent-bg-badge);
+    color: var(--color-accent-text-strong);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+}
+
+/* Search Input */
+.searchContainer {
+    padding: 8px;
+    border-bottom: 1px solid var(--color-border-faint);
+    position: relative;
+}
+
+.searchIcon {
+    position: absolute;
+    inset-inline-end: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-faint);
+    pointer-events: none;
+}
+
+.searchInput {
+    width: 100%;
+    padding: 8px 10px;
+    padding-inline-end: 32px;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+:root[dir="rtl"] .searchInput {
+    direction: rtl;
+}
+
+.searchInput:focus {
+    border-color: var(--color-accent-focus);
+}
+
+.searchInput::placeholder {
+    color: var(--color-text-faint);
+}
+
+/* Options List */
+.optionsList {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-neutral-500) var(--color-bg-hover);
+}
+
+.optionsList::-webkit-scrollbar {
+    width: 6px;
+}
+
+.optionsList::-webkit-scrollbar-track {
+    background: var(--color-bg-hover);
+    border-radius: 3px;
+}
+
+.optionsList::-webkit-scrollbar-thumb {
+    background: var(--color-neutral-500);
+    border-radius: 3px;
+}
+
+.optionsList::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-faint);
+}
+
+.option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.option:hover {
+    background-color: var(--color-bg-hover);
+}
+
+.optionSelected {
+    background-color: var(--color-accent-bg-soft);
+}
+
+.optionSelected:hover {
+    background-color: var(--color-accent-bg-badge);
+}
+
+.checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--color-accent-strong);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.optionName {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.optionPhoto {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+.optionPhotoPlaceholder {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background-color: var(--color-border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-subtle);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.colorDot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Empty & Loading States */
+.noResults {
+    padding: 16px;
+    text-align: center;
+    color: var(--color-text-subtle);
+    font-size: 13px;
+}
+
+.loading {
+    padding: 16px;
+    text-align: center;
+    color: var(--color-text-subtle);
+    font-size: 13px;
+}
+
+/* Top toggle row (above columns) */
+.topToggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-border-faint);
+    background-color: var(--color-bg-subtle);
+    cursor: pointer;
+    user-select: none;
+    font-size: 13px;
+}
+
+.topToggle:hover {
+    background-color: var(--color-bg-subtler, var(--color-bg-subtle));
+}
+
+.topToggleLabel {
+    flex: 1;
+    color: var(--color-text-strong);
+    font-weight: 500;
+}
+
+/* Footer */
+.footer {
+    padding: 12px;
+    border-top: 1px solid var(--color-border-faint);
+    background-color: var(--color-bg-subtle);
+}
+
+.clearButton {
+    width: 100%;
+    padding: 8px 12px;
+    background-color: var(--color-danger-soft);
+    border: 1px solid var(--color-danger-border);
+    border-radius: var(--radius-md);
+    color: var(--color-danger-strong);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.clearButton:hover {
+    background-color: var(--color-danger-softer);
+    border-color: var(--color-danger-border-hover);
+}
+
+/* Responsive Design */
+@media (max-width: 540px) {
+    .dropdown {
+        width: calc(100vw - 32px);
+        max-width: 480px;
+    }
+
+    .columns {
+        flex-direction: column;
+    }
+
+    .divider {
+        width: 100%;
+        height: 1px;
+    }
+
+    .optionsList {
+        max-height: 150px;
+    }
+}
+
+/* Inline spinner — shown next to "hide past allocations" while past
+   allocations are loaded on demand (only after a short delay, so fast
+   loads don't flash). margin-inline-start pushes it to the row's far edge. */
+.inlineSpinner {
+    width: 14px;
+    height: 14px;
+    margin-inline-start: auto;
+    flex-shrink: 0;
+    border: 2px solid var(--color-border-subtle);
+    border-top-color: var(--color-primary, var(--color-info));
+    border-radius: 50%;
+    animation: inlineSpin 0.6s linear infinite;
+}
+
+@keyframes inlineSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
