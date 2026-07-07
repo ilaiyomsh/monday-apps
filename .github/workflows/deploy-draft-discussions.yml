@@ -9,6 +9,7 @@ name: Deploy Draft - discussions
 # and replace all discussions / build / APP_DISCUSSIONS_ID placeholders.
 
 on:
+  workflow_dispatch: {}   # manual re-deploy of the draft (e.g. dev-live detach)
   push:
     branches:
       - develop
