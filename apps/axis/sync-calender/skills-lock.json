@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "skills": {
+    "axiom-sre": {
+      "source": "axiomhq/skills",
+      "sourceType": "github",
+      "skillPath": "skills/sre/SKILL.md",
+      "computedHash": "c68aea9b6c0ca3ccc53060dde50af088fe756148e4bd1c98ccb7039b01124afc"
+    },
+    "building-dashboards": {
+      "source": "axiomhq/skills",
+      "sourceType": "github",
+      "skillPath": "skills/building-dashboards/SKILL.md",
+      "computedHash": "b261d40b92fad95950857cd302e57e8477d64b0cc3e23d98877e5c30f857bc70"
+    },
+    "controlling-costs": {
+      "source": "axiomhq/skills",
+      "sourceType": "github",
+      "skillPath": "skills/controlling-costs/SKILL.md",
+      "computedHash": "7011f64a0959aa9d28a3585ce1d8b991d3a54ecdac3d3f7a1e1e3df46789f32a"
+    },
+    "query-metrics": {
+      "source": "axiomhq/skills",
+      "sourceType": "github",
+      "skillPath": "skills/query-metrics/SKILL.md",
+      "computedHash": "49868aa447c3196fd85ae3ba1462429a3fea8b2106a49d4f46d0f8925f1b8eb9"
+    },
+    "spl-to-apl": {
+      "source": "axiomhq/skills",
+      "sourceType": "github",
+      "skillPath": "skills/spl-to-apl/SKILL.md",
+      "computedHash": "4bc60dd19ea863e38b3f0d40a9c03e20e90451727f098c659bd48405d5744f4d"
+    },
+    "writing-evals": {
+      "source": "axiomhq/skills",
+      "sourceType": "github",
+      "skillPath": "skills/writing-evals/SKILL.md",
+      "computedHash": "37d710e47ce0a681714c54df770db6cf19481a3f7ceb566b3cc5161141396d48"
+    }
+  }
+}

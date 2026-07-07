@@ -1,0 +1,70 @@
+{
+  "policies": {
+    "demo-object-1": {
+      "accountId": "demo-account",
+      "objectId": "demo-object-1",
+      "boardId": "1953193772",
+      "linkColumnId": "link_mm2dfvy3",
+      "peopleColumnId": "multiple_person_mkqwq9gz",
+      "itemNameSource": "eventName",
+      "columnMapping": {
+        "date_mkqwkw4q": {
+          "source": "startDate"
+        },
+        "date_mm2etg89": {
+          "source": "endDate"
+        },
+        "text_mkqwc4p1": {
+          "source": "description"
+        },
+        "numeric_mkqw4pgm": {
+          "source": "duration"
+        }
+      },
+      "configuredByUserId": "71077014",
+      "updatedAt": 1776325046976,
+      "createdAt": 1776323078655
+    }
+  },
+  "configs": {
+    "13a841da-1af3-4633-ba10-b4a430b6c48e": {
+      "configId": "13a841da-1af3-4633-ba10-b4a430b6c48e",
+      "accountId": "demo-account",
+      "objectId": "demo-object-1",
+      "userId": "71077014",
+      "mondayUserId": "71077014",
+      "googleRefreshToken": "1//037hTcYxX0KKGCgYIARAAGAMSNwF-L9IrCkSDEYHHYZv2ZsfapF1K2h-uCR9PZww2p_sZHmVtsLo-UD4_lrOilSunkf8T3G5PbW4",
+      "googleAccessToken": "ya29.a0Aa7MYipbOqgbvAEC_PHwWPkTLkCjN1wkiAOZ8TSWDRlX--WKgFzqGvGri2i1fygis10YnWzad-9yPIEf_CqeBr2QfOuqhzktYbyeIqlCKBO2hJgzHnMKrVJUbWQr75Obvy3ppclsgmkvaeeKeqPMvFrJmAliCSIB6ytsy_n0RXaPwpQxQoiePLmIMoOVz9ZoUx7ERM4aCgYKAV8SARESFQHGX2MiRWxaAweIiNH5DXDhg7TNYw0206",
+      "googleAccessTokenExpiresAt": 1776330807834,
+      "googleUserEmail": "ilai@twyst.co.il",
+      "googleSyncToken": "CI_t69D38ZMDEI_t69D38ZMDGAUgu839rAMou839rAM=",
+      "mondayAccessToken": "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQ2MTIxNzQ0NiwiYWFpIjoxMSwidWlkIjo3MTA3NzAxNCwiaWFkIjoiMjAyNS0wMS0yMlQwMDowODo0OC4wMDBaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6Mjc1NDk2MTksInJnbiI6ImV1YzEifQ.xbMbvUFw_RRTJOim-JSoiAUwm3XIQqvoO9EsqL3UjTU",
+      "status": "active",
+      "lastSyncAt": 1776327585344,
+      "lastError": null,
+      "createdAt": 1776322840094,
+      "updatedAt": 1776327585345
+    }
+  },
+  "instanceConfigs": {
+    "demo-object-1": [
+      "13a841da-1af3-4633-ba10-b4a430b6c48e"
+    ]
+  },
+  "oauthStates": {
+    "5bd42739157d98383710ba46c7e89e3281530e5abdfe303ab748586b413f73a5": {
+      "type": "google",
+      "configId": "13a841da-1af3-4633-ba10-b4a430b6c48e",
+      "accountId": "demo-account",
+      "userId": "71077014",
+      "createdAt": 1776324625177
+    },
+    "399e4ef4672cf76cdc4ef0894022e4beb7d79055448bf0423c7cbf85e9f4209c": {
+      "type": "monday",
+      "configId": "13a841da-1af3-4633-ba10-b4a430b6c48e",
+      "accountId": "demo-account",
+      "userId": "71077014",
+      "createdAt": 1776325151121
+    }
+  }
+}

@@ -1,0 +1,223 @@
+import { Router } from 'express';
+import subscriptionStorage from '../storage/subscription-storage.js';
+import { fireTrigger } from '../services/monday-triggers.js';
+import * as googleCalendar from '../services/google-calendar.js';
+import { shouldSync } from '../services/google-calendar.js';
+import logger from '../services/logger.js';
+import { webhookConfigHandler } from './webhook-config.js';
+
+const router = Router();
+const TAG = 'route_webhook';
+const TRIGGER_FIRE_DELAY_MS = 100;
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+function toIsoDate(googleDateTime) {
+  if (!googleDateTime) return '';
+  return googleDateTime.dateTime ?? googleDateTime.date ?? '';
+}
+
+// Elapsed time in hours, 2-decimal precision, with trailing zeros stripped so
+// "1.5" / "1" / "0.75" drop cleanly into monday's Numbers column via Item Values.
+function computeDurationHours(startIso, endIso) {
+  if (!startIso || !endIso) return '';
+  const startMs = new Date(startIso).getTime();
+  const endMs = new Date(endIso).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return '';
+  const hours = (endMs - startMs) / (1000 * 60 * 60);
+  return String(Number(hours.toFixed(2)));
+}
+
+// Outbound trigger payload carries DOMAIN DATA ONLY — no routing fields.
+// The action receives routing via trigger_cache_<triggerUuid> lookup keyed by
+// runtimeMetadata.triggerUuid that monday passes through automatically.
+function buildTriggerPayload(event) {
+  const startDate = toIsoDate(event.start);
+  const endDate = toIsoDate(event.end);
+  return {
+    eventName: event.summary || '',
+    startDate,
+    endDate,
+    description: event.description || '',
+    duration: computeDurationHours(startDate, endDate),
+  };
+}
+
+// Google calendar push notification handler. No body — routing info is in the
+// x-goog-* headers. Fetches events incrementally from Google, filters via
+// shouldSync, fires one trigger per event, and writes routing state to the
+// trigger cache keyed by the triggerUuid monday assigns.
+router.post('/webhook/calendar', async (req, res) => {
+  // Custom Object path branch: configIds always start with "config_", so we
+  // delegate to the new handler before any v3 logic runs. v3 subscriptionIds
+  // never start with that prefix, so there is no collision.
+  const channelToken = req.headers['x-goog-channel-token'];
+  if (typeof channelToken === 'string' && channelToken.startsWith('config_')) {
+    return webhookConfigHandler(req, res);
+  }
+
+  try {
+    const resourceState = req.headers['x-goog-resource-state'];
+    const subscriptionId = req.headers['x-goog-channel-token'];
+
+    logger.info('google webhook received', TAG, {
+      subscriptionId,
+      resourceState,
+      messageNumber: req.headers['x-goog-message-number'],
+    });
+
+    if (resourceState === 'sync') {
+      logger.info('google sync verification received', TAG);
+      return res.status(200).end();
+    }
+
+    if (!subscriptionId) {
+      logger.warn('webhook received without x-goog-channel-token header', TAG);
+      return res.status(200).end();
+    }
+
+    let subscription;
+    try {
+      subscription = await subscriptionStorage.getSubscription(subscriptionId);
+    } catch (err) {
+      logger.error('secure storage read failed in webhook', TAG, {
+        subscriptionId,
+        error: err.message,
+      });
+      return res.status(200).end();
+    }
+
+    if (!subscription) {
+      logger.warn('unknown subscriptionId in webhook', TAG, { subscriptionId });
+      return res.status(200).end();
+    }
+
+    const { webhookUrl, accessToken, syncToken } = subscription;
+
+    let events;
+    let newSyncToken;
+    try {
+      const result = await googleCalendar.listChanges(accessToken, syncToken);
+      events = result.events;
+      newSyncToken = result.newSyncToken;
+    } catch (err) {
+      // No fallback fire — the stored syncToken is untouched, so the next
+      // successful sync will pick up any events we missed here.
+      logger.error('webhook google fetch failed — dropping, next sync will recover', TAG, {
+        subscriptionId,
+        error: err.message,
+      });
+      return res.status(200).end();
+    }
+
+    logger.info('webhook fetched events', TAG, {
+      subscriptionId,
+      eventCount: events.length,
+    });
+
+    let fired = 0;
+    let cacheFailures = 0;
+    for (const event of events) {
+      // Isolate each event — a single failure (fire 5xx or storage flaking on
+      // one cache key) shouldn't abort the whole batch. Without this, one bad
+      // event throws out of the loop, skips syncToken persist, and the next
+      // webhook re-fetches everything.
+      try {
+        const willSync = shouldSync(event);
+        const isCancelled = event.status === 'cancelled';
+        // If the user previously accepted then declined, the event stays
+        // confirmed in Google but shouldSync() returns false. We still need
+        // to delete the existing item on monday — surface this as a
+        // cancellation in the cache so the action performs the delete.
+        const selfDeclined = event.attendees?.find((a) => a.self === true)?.responseStatus === 'declined';
+
+        if (!willSync && !isCancelled && !selfDeclined) {
+          logger.info('webhook skipping non-sync event', TAG, {
+            subscriptionId,
+            eventId: event.id,
+            status: event.status,
+            selfResponse: event.attendees?.find((a) => a.self === true)?.responseStatus,
+          });
+          continue;
+        }
+
+        const cacheEventStatus = (isCancelled || selfDeclined) ? 'cancelled' : 'confirmed';
+
+        const triggerUuid = await fireTrigger(webhookUrl, buildTriggerPayload(event));
+        if (!triggerUuid) {
+          logger.warn('fire returned no triggerUuid, skipping cache write', TAG, {
+            subscriptionId,
+            eventId: event.id,
+          });
+        } else {
+          try {
+            await subscriptionStorage.setTriggerCache(triggerUuid, {
+              subscriptionId,
+              eventId: event.id,
+              eventStatus: cacheEventStatus,
+              eventLink: event.htmlLink || '',
+            });
+            logger.info('trigger cache written', TAG, {
+              subscriptionId,
+              eventId: event.id,
+              eventStatus: cacheEventStatus,
+              triggerUuid,
+            });
+          } catch (err) {
+            // monday's action for this triggerUuid will 500 on cache miss and
+            // retry later; if the cache stays missing, the next webhook push
+            // re-surfaces the event via syncToken. Don't let this poison the
+            // rest of the batch.
+            cacheFailures++;
+            logger.error('trigger cache write failed', TAG, {
+              subscriptionId,
+              eventId: event.id,
+              triggerUuid,
+              error: err.message,
+            });
+          }
+        }
+
+        fired++;
+        if (fired < events.length) {
+          await sleep(TRIGGER_FIRE_DELAY_MS);
+        }
+      } catch (err) {
+        logger.error('webhook event handling failed', TAG, {
+          subscriptionId,
+          eventId: event?.id,
+          error: err.message,
+        });
+      }
+    }
+
+    // Persist syncToken even if some events above failed — the per-event
+    // try/catch keeps us here. Skipping this would cause the next webhook
+    // push to refetch the same events and fire duplicate triggerUuids.
+    if (newSyncToken && newSyncToken !== syncToken) {
+      try {
+        await subscriptionStorage.updateSubscription(subscriptionId, { syncToken: newSyncToken });
+      } catch (err) {
+        logger.error('failed to persist syncToken (next webhook will re-fetch)', TAG, {
+          subscriptionId,
+          error: err.message,
+        });
+      }
+    }
+
+    logger.info('webhook fire complete', TAG, {
+      subscriptionId,
+      totalEvents: events.length,
+      triggersFired: fired,
+      cacheFailures,
+    });
+    return res.status(200).end();
+  } catch (err) {
+    logger.error('webhook handler crashed', TAG, { error: err.message, stack: err.stack });
+    return res.status(200).end();
+  }
+});
+
+export default router;
