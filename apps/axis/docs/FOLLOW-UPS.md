@@ -33,3 +33,4 @@
 ## Onboarding debt (2026-07-07)
 - **planner**: `lint` stubbed in the monorepo copy — 268 pre-existing eslint errors (mostly `no-explicit-any`). Re-enable `eslint .` after a cleanup pass.
 - **day-off**: `lint` stubbed in the monorepo copy — 8 pre-existing `setState synchronously within an effect` errors. The 4 error-guard silent-catch violations WERE fixed at onboarding (3 warn-logged parse fallbacks + 1 sanctioned FP-2 exception). Re-enable `eslint .` after refactoring the effects.
+- **sync-calender**: new app 11666315 created at onboarding (old 11119011 was stale). Server env vars (MONDAY_SIGNING_SECRET, Google/Microsoft OAuth, Axiom keys) are NOT in the repo — set them once via `mapps code:env -i 11666315` before first real run. Feature setup (views/webhooks) still needs Developer Center configuration.
