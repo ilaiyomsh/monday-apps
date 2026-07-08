@@ -80,17 +80,21 @@
   height: 24px;
   border: none;
   background: transparent;
-  border-radius: var(--border-radius-small, 4px);
   color: var(--secondary-text-color, #676879);
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
 }
-.triangle:hover {
-  background: rgba(0, 0, 0, 0.06);
-}
+/* Collapse caret — matches a collapsed group in Tasks/Decisions EXACTLY: a 24px
+   vibe DropdownChevronDown that rotates -90deg when collapsed (same class names,
+   size and transition as TasksTab `.chevron`/`.chevronCollapsed`). No caret
+   hover chip — in Tasks/Decisions the whole header is the click target. */
 .chevron {
-  transition: transform var(--motion-productive-medium, 100ms) ease;
+  width: 24px;
+  height: 24px;
+  color: var(--secondary-text-color, #676879);
+  transition: transform var(--motion-productive-medium, 0.2s) ease;
+  flex-shrink: 0;
 }
 .chevronCollapsed {
   transform: rotate(-90deg);

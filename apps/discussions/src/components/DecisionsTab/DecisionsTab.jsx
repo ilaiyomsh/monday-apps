@@ -15,11 +15,12 @@ import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
 import {
-  filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter,
+  filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
 } from '@generated/components/MyTasksView/controls/controls.js';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
@@ -60,6 +61,15 @@ const GROUP_OPTIONS = [
   { value: 'status', label: 'סטאטוס', icon: 'status', orders: GROUP_STATUS_ORDERS },
   { value: 'decider', label: 'מחליט', icon: 'person', orders: GROUP_AZ_ORDERS },
 ];
+// Sort columns for the decisions table — החלטה (name) / סטאטוס / תאריך. `value`
+// keys map to sortTasks() (deadline == the decision date); a decision is mapped
+// to that shape before sorting (see sortedDecisions), mirroring the filter path.
+const SORT_OPTIONS = [
+  { value: 'name', label: 'החלטה', icon: 'text', dirs: SORT_TEXT_DIRS },
+  { value: 'status', label: 'סטאטוס', icon: 'status', dirs: SORT_STATUS_DIRS },
+  { value: 'deadline', label: 'תאריך', icon: 'date', dirs: SORT_DATE_DIRS },
+];
+const firstDecSortDir = (col) => (SORT_OPTIONS.find((o) => o.value === col) || SORT_OPTIONS[0])?.dirs?.[0]?.key;
 const NO_STATUS = '__none__';
 const NO_DECIDER = '__nodecider__';
 
@@ -485,11 +495,20 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   const [groupBy, setGroupBy] = useState(savedGroup ? savedGroup.col : 'none');
   const [groupOrder, setGroupOrder] = useState(savedGroup?.order || 'labelAsc');
   const [collapsed, setCollapsed] = useState({});
+  // Sort (client-side, over the loaded decisions; same saved-view contract as
+  // the Tasks tab). Load-time = the shared saved sort; empty/inactive by default.
+  const [sort, setSort] = useState(() => {
+    const s = savedView?.sort;
+    if (!s || !s.active || !SORT_OPTIONS.some((o) => o.value === s.col)) return { col: null, dir: null, active: false };
+    return { col: s.col, dir: s.dir || firstDecSortDir(s.col), active: true };
+  });
   const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
+  // Filter opens with a default STATUS row (empty values ⇒ shows all) when no
+  // saved view exists; a saved view's own rows win (incl. an explicitly empty set).
   const [filterRows, setFilterRows] = useState(() => (
     Array.isArray(savedView?.filterRows)
       ? savedView.filterRows.filter((k) => DEC_FILTER_COLUMNS.some((c) => c.key === k))
-      : []
+      : ['status']
   ));
 
   // Map a decision to the shape controls.js' filter engine expects (statusID /
@@ -501,12 +520,28 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     responsibilityID: Array.isArray(d.deciderID) ? d.deciderID : [],
     deadlineID: d.decisionDateID instanceof Date ? d.decisionDateID : null,
   });
+  // Client pipeline: filter -> sort. Both reuse the shared controls.js engine by
+  // mapping each decision to the { statusID, deadlineID, name } shape it expects
+  // (decisionStatusID -> statusID, decisionDateID -> deadlineID), then matching
+  // ids back to the real decisions. An inactive sort leaves the order untouched.
   const filteredDecisions = useMemo(() => {
     const fc = filterCount(filter);
-    if (fc === 0) return items;
-    const passing = new Set(filterTasks(items.map(filterView), filter).map((v) => String(v.id)));
-    return items.filter((d) => passing.has(String(d.id)));
-  }, [items, filter]);
+    let list = items;
+    if (fc > 0) {
+      const passing = new Set(filterTasks(items.map(filterView), filter).map((v) => String(v.id)));
+      list = items.filter((d) => passing.has(String(d.id)));
+    }
+    if (!sort.active || !sort.col) return list;
+    const views = list.map((d) => ({
+      id: d.id, name: d.name,
+      statusID: d.decisionStatusID,
+      deadlineID: d.decisionDateID instanceof Date ? d.decisionDateID : null,
+    }));
+    const orderIds = sortTasks(views, sort, { orderById: statusOpts.orderById, labelById: statusOpts.labelById })
+      .map((v) => String(v.id));
+    const byId = new Map(list.map((d) => [String(d.id), d]));
+    return orderIds.map((id) => byId.get(id)).filter(Boolean);
+  }, [items, filter, sort, statusOpts.orderById, statusOpts.labelById]);
 
   // Decider person options = the distinct deciders across the loaded decisions.
   const personOptions = useMemo(() => {
@@ -642,8 +677,11 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     setFilterRows((rows) => rows.map((k) => (k === fromCol ? toCol : k)));
     setFilter((f) => ({ ...f, [fromCol]: resetCol(fromCol), [toCol]: resetCol(toCol) }));
   };
-  const clearFilter = () => { setFilter(emptyFilter()); setFilterRows([]); };
+  const clearFilter = () => { setFilter(emptyFilter()); setFilterRows(['status']); };
   const fc = filterCount(filter);
+  // Sort handlers (session-only until an owner hits Save, like the other builders).
+  const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstDecSortDir(col), active: true });
+  const clearSort = () => setSort({ col: null, dir: null, active: false });
 
   // The decisions board is mapped MANUALLY in Settings (not wizard-created) —
   // unmapped is an EXPECTED state: render the empty state, fire nothing.
@@ -873,6 +911,17 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
               onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
             } : null}
             renderBody={renderFilterBody}
+          />
+          <SortByBuilder
+            options={SORT_OPTIONS}
+            value={sort}
+            mobile={isMobile}
+            onChange={onSortChange}
+            onClear={clearSort}
+            onSave={canSaveView ? () => {
+              saveView({ sort });
+              onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
+            } : null}
           />
           <GroupByBuilder
             options={GROUP_OPTIONS}

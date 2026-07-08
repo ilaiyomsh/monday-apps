@@ -3,12 +3,13 @@ import { Skeleton, Button, Text, Dropdown } from '@vibe/core';
 import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
 import {
-  filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter,
+  filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
 } from '@generated/components/MyTasksView/controls/controls.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
@@ -34,6 +35,15 @@ const GROUP_OPTIONS = [
   { value: 'status', label: 'סטאטוס', icon: 'status', orders: GROUP_STATUS_ORDERS },
   { value: 'person', label: 'אחראי', icon: 'person', orders: GROUP_AZ_ORDERS },
 ];
+// Sort columns for this tab (mirrors the filter columns: status + deadline +
+// name). `value` is a sortTasks() column key; direction sets are the shared My
+// Tasks sort config so labels/icons/keys match everywhere.
+const SORT_OPTIONS = [
+  { value: 'status', label: 'סטטוס', icon: 'status', dirs: SORT_STATUS_DIRS },
+  { value: 'deadline', label: 'דד ליין', icon: 'date', dirs: SORT_DATE_DIRS, note: 'Tasks with no deadline always sort last' },
+  { value: 'name', label: 'שם', icon: 'text', dirs: SORT_TEXT_DIRS },
+];
+const firstSortDir = (col) => (SORT_OPTIONS.find((o) => o.value === col) || SORT_OPTIONS[0])?.dirs?.[0]?.key;
 // Group-by source discussion — only meaningful in the "by type" view (where
 // tasks span multiple discussions), so it's appended to the options there only.
 const GROUP_OPTION_DISCUSSION = { value: 'discussion', label: 'דיון מקור', icon: 'relation', orders: GROUP_AZ_ORDERS };
@@ -605,13 +615,20 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     onNotify?.(msg, 'info', DELETE_GRACE_MS, { label: 'בטל', onClick: undo });
   };
 
-  // ---- Filter (client-side, over the loaded tasks; same engine as My Tasks) ----
+  // ---- Sort + Filter (client-side, over the loaded tasks; same engine + saved-
+  // view contract as My Tasks). Sort is empty/inactive by default; Filter opens
+  // with a default STATUS row (empty values ⇒ shows all) unless a saved view exists. ----
+  const [sort, setSort] = useState(() => {
+    const s = savedView?.sort;
+    if (!s || !s.active || !SORT_OPTIONS.some((o) => o.value === s.col)) return { col: null, dir: null, active: false };
+    return { col: s.col, dir: s.dir || firstSortDir(s.col), active: true };
+  });
   const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
   const [filterRows, setFilterRows] = useState(() => {
-    // Empty default: no pre-seeded "Where" row — the panel offers "+ New filter".
+    // Default STATUS row when nothing saved; a saved view's own rows win.
     return Array.isArray(savedView?.filterRows)
       ? savedView.filterRows.filter((k) => PREV_FILTER_COLUMNS.some((c) => c.key === k))
-      : [];
+      : ['status'];
   });
   const resetCol = (col) => (col === 'deadline' ? { op: 'within', range: null, date: null } : { op: 'is', values: new Set() });
   const setFilterOp = (col, op) => setFilter((f) => ({ ...f, [col]: { ...f[col], op } }));
@@ -635,8 +652,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     setFilterRows((rows) => rows.map((k) => (k === fromCol ? toCol : k)));
     setFilter((f) => ({ ...f, [fromCol]: resetCol(fromCol), [toCol]: resetCol(toCol) }));
   };
-  const clearFilter = () => { setFilter(emptyFilter()); setFilterRows([]); };
+  const clearFilter = () => { setFilter(emptyFilter()); setFilterRows(['status']); };
   const fc = filterCount(filter);
+  // Sort handlers (session-only until an owner hits Save, like the other builders).
+  const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstSortDir(col), active: true });
+  const clearSort = () => setSort({ col: null, dir: null, active: false });
 
   // Assignee options = the distinct people present across the loaded tasks.
   const personOptions = useMemo(() => {
@@ -649,7 +669,12 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
   }, [tasks]);
 
-  const filteredTasks = useMemo(() => filterTasks(tasks, filter), [tasks, filter]);
+  // Client pipeline: filter -> sort (both instant, over the loaded tasks). An
+  // inactive sort returns the list unchanged, so default order is untouched.
+  const filteredTasks = useMemo(
+    () => sortTasks(filterTasks(tasks, filter), sort, { orderById, labelById }),
+    [tasks, filter, sort, orderById, labelById]
+  );
 
   // Groups carry { key, label, color, items } — status groups key by the stable
   // label id (string) and resolve label/color via useStatusOptions; person groups
@@ -869,6 +894,17 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
               onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
             } : null}
             renderBody={renderFilterBody}
+          />
+          <SortByBuilder
+            options={SORT_OPTIONS}
+            value={sort}
+            mobile={isMobile}
+            onChange={onSortChange}
+            onClear={clearSort}
+            onSave={canSaveView ? () => {
+              saveView({ sort });
+              onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
+            } : null}
           />
           <GroupByBuilder
             options={groupOptions}
