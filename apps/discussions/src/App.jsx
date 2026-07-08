@@ -661,7 +661,7 @@ export default function App() {
         canManageSettings={canManageSettings}
       />
 
-      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} onNotify={notify} />
     </div>
       {overlays}
     </div>

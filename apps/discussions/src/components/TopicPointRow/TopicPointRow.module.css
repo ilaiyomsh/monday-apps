@@ -7,6 +7,8 @@
   min-height: 36px;
   border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
   background: var(--primary-background-color, #fff);
+  /* Smooth hover, same as TaskTableRow's .bodyRow. */
+  transition: background-color var(--motion-productive-short, 0.1s) ease;
 }
 .row:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
@@ -114,20 +116,26 @@
 }
 .menuIcon:hover { background: var(--primary-background-hover-color, #f0f1f3); }
 
-/* נקודה לדיון */
+/* נקודה לדיון — leading data cell. Left-aligned like the Tasks name cell
+   (.taskFirst): 14px inline-start clears the 6px accent strip, 8px trailing;
+   14px text; the row-level 36px min-height + 0.625px column rule come from .row
+   / the cell borders below (matches TaskTable's .taskCell chrome). */
 .nameCell {
   min-width: 0;
   display: flex;
   align-items: center;
-  padding: 0 10px;
+  padding-inline-start: 14px;
+  padding-inline-end: 8px;
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
 }
 .name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-color, #323338);
+  color: var(--primary-text-color, #323338);
   font-size: 14px;
+  line-height: 36px; /* match the native monday row height (TaskTableRow .nameText) */
+  font-family: var(--font-family);
 }
 .nameEditInput {
   width: 100%;
@@ -141,11 +149,13 @@
 }
 .nameEditInput:focus-visible { outline: none; }
 
-/* האם נידונה — square checkbox (mockup: blue fill when checked). */
+/* האם נידונה — square checkbox (mockup: blue fill when checked). Cell chrome
+   (padding / centering / 0.625px rule) mirrors TaskTable's .taskCell. */
 .checkCell {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0 8px;
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
 }
 .check {
@@ -167,12 +177,14 @@
 }
 .checkMark { stroke-width: 3; }
 
-/* החלטות / משימות cells — dashed create button + round counter pill. */
+/* החלטות / משימות cells — dashed create button + round counter pill. Cell
+   chrome (padding / centering / 0.625px rule) mirrors TaskTable's .taskCell. */
 .linkCell {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  padding: 0 8px;
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
 }
 .createBtn {

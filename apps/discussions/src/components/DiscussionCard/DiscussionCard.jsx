@@ -556,7 +556,7 @@ export function DiscussionCard({
         )}
         {activeTab === 'decisions' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
-            <DecisionsTab data={decisionsData} onNewDecision={() => openQuickCreate('decision')} onNotify={onNotify} canDecision={canDecision} canCreateDecision={canCreateDecision} />
+            <DecisionsTab data={decisionsData} onNewDecision={() => openQuickCreate('decision')} onNotify={onNotify} canDecision={canDecision} canCreateDecision={canCreateDecision} canReorderColumns={canReorderColumns} />
           </div>
         )}
         {activeTab === 'summary' && (
