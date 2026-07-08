@@ -44,6 +44,10 @@ export function TaskTableRow({
   onDeadlineChange,
   onRenameTask,
   onDeleteTask,
+  // Optimistic-create error affordance (a temp row whose create failed): retry
+  // re-runs the create; dismiss removes the row locally. Provided by TaskTable.
+  onRetryCreate,
+  onDismissRow,
   selectable = false,
   selected = false,
   onToggleSelect,
@@ -76,11 +80,13 @@ export function TaskTableRow({
   const [editingName, setEditingName] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [nameDraft, setNameDraft] = useState(task.name || '');
-  // While a freshly-created task still carries its optimistic `temp-…` id, the
-  // real monday item doesn't exist yet — any column write would target a bogus
-  // id and fail. Lock the row (faded + non-interactive) until createTask swaps
-  // in the server id.
+  // A freshly-added task still carrying a `temp-…` id has no monday item yet, but
+  // it is FULLY EDITABLE right away — edits are queued in useTasks and flushed the
+  // moment the real id arrives. `pending` now only drives aria-busy (no locking).
   const pending = String(task.id).startsWith('temp-');
+  // The background create failed: keep the row (never silently drop it) and show
+  // a clear error + retry/dismiss affordance instead of a blocked/faded row.
+  const failed = task._createFailed === true;
   const deadline = task.deadlineID;
   const { options: statusOptions, colorById, labelById, doneId } = useStatusOptions();
   // Priority is a second status column (priorityID); read-only here. Its maps are
@@ -230,6 +236,31 @@ export function TaskTableRow({
                 <Trash2 size={18} />
               </button>
             )
+          )}
+          {failed && (
+            <span className={styles.createFailedActions} onClick={(e) => e.stopPropagation()}>
+              <span className={styles.createFailedText}>שמירה נכשלה</span>
+              {onRetryCreate && (
+                <button
+                  type="button"
+                  className={styles.retryBtn}
+                  onClick={(e) => { e.stopPropagation(); onRetryCreate(task.id); }}
+                >
+                  נסה שוב
+                </button>
+              )}
+              {onDismissRow && (
+                <button
+                  type="button"
+                  className={styles.dismissBtn}
+                  onClick={(e) => { e.stopPropagation(); onDismissRow(task.id); }}
+                  aria-label="הסר שורה"
+                  title="הסר"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </span>
           )}
           {/* monday "updates" icon — opens the task's item card on the Updates pane */}
           <button
@@ -428,9 +459,9 @@ export function TaskTableRow({
   return (
     <div
       ref={dragRef}
-      className={`${grid.taskRow} ${styles.bodyRow} ${pending ? styles.pending : ''} ${dragProps ? styles.draggableRow : ''}`}
+      className={`${grid.taskRow} ${styles.bodyRow} ${failed ? styles.createFailed : ''} ${dragProps ? styles.draggableRow : ''}`}
       style={dragStyle ? { ...rowStyle, ...dragStyle } : rowStyle}
-      aria-busy={pending || undefined}
+      aria-busy={(pending && !failed) || undefined}
       {...(dragProps || {})}
     >
       {orderedKeys.map((k) => cellByKey[k]).filter(Boolean)}

@@ -4,6 +4,7 @@ import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js
 import { loadOrder, saveTopicOrder, savePointOrder, applyOrder } from '../utils/topicOrder.js';
 import { loadDiscussedPointIds, saveDiscussedPointIds } from '../utils/discussedStore.js';
 import { useMondayContext } from '../contexts/MondayContext.jsx';
+import { useOptimisticRows } from './useOptimisticRows.js';
 import logger from '../utils/logger.js';
 
 /*
@@ -77,6 +78,9 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
   const pendingCreates = useRef(new Map());
   // Monotonic temp-id seq — Date.now() collides when the user types fast.
   const tempSeq = useRef(0);
+  // Retry bookkeeping for failed optimistic creates. Topics flushes pending EDITS
+  // via resolveRealId (await), so only the create-args stash is used here.
+  const { stashCreateArgs, getCreateArgs, forgetRow } = useOptimisticRows();
 
   const fetchTopics = useCallback(async (options = {}) => {
     const { showLoader = true } = options;
@@ -197,16 +201,33 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     return null;
   }, []);
 
-  // Create a new TOPIC (item) linked to the discussion. Fully optimistic: the
-  // row appears INSTANTLY as a normal topic (no fade/lock/spinner). The board
-  // write runs in the background; when the real id returns it's swapped in place
-  // (the temp id stays the React key + color seed, so nothing flashes or jumps).
-  const addTopic = useCallback((name) => {
-    if (!discussionId || !name?.trim()) return;
-    const tempId = `temp-${++tempSeq.current}`;
-    const trimmed = name.trim();
-    const creatorId = currentUser?.id != null ? String(currentUser.id) : null;
-    setItems((prev) => [{ id: tempId, _realId: null, name: trimmed, notForDiscussion: false, creatorId, _subitems: [], _pending: true }, ...prev]);
+  // Resolve a POINT to its real write target for an edit: await any in-flight
+  // create (so an edit made BEFORE the subitem id arrived still lands) and read
+  // the FRESH boardId from the live items (the captured `point` keeps a stale
+  // null boardId until the create resolves). Returns null when the point has no
+  // real id yet (create still pending/failed) — the caller keeps the optimistic
+  // local value. This is what flushes queued point edits on reconcile.
+  const resolvePointTarget = useCallback(async (point) => {
+    const realId = await resolveRealId(point?.id);
+    if (!realId) return null;
+    let boardId = point?.boardId || null;
+    if (!boardId) {
+      for (const t of itemsRef.current) {
+        const s = (t._subitems || []).find(
+          (x) => String(x.id) === String(point?.id) || String(x._realId) === String(realId),
+        );
+        if (s) { boardId = s.boardId || null; break; }
+      }
+    }
+    return boardId ? { itemId: realId, boardId } : null;
+  }, [resolveRealId]);
+
+  // Background create for ONE optimistic topic row. Extracted from addTopic so a
+  // FAILED create can be re-run (retry) against the same temp row (the temp id
+  // stays the React key + color seed, so nothing flashes or jumps).
+  const runTopicCreate = useCallback((tempId, trimmed, creatorId) => {
+    // Clear any prior error flag (retry path) + mark saving.
+    setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, _pending: true, _createFailed: false } : t)));
 
     const promise = (async () => {
       const boardId = getBoardId('topics');
@@ -245,30 +266,43 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     promise
       .then((createdId) => {
         // Swap in the real id in place — no full refetch (avoids the flash/jump).
-        setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, _realId: createdId, _pending: false } : t)));
+        setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, _realId: createdId, _pending: false, _createFailed: false } : t)));
+        forgetRow(tempId);
         onSuccess?.('נושא לדיון נוצר בהצלחה');
       })
       .catch((err) => {
         if (!err?.__loggedId) logger.error('useTopics', 'הוספת נושא נכשלה', err);
-        setItems((prev) => prev.filter((i) => i.id !== tempId));
+        // Keep the row in a clear ERROR state (never silently drop it); the toast
+        // is raised via the logger sink and the row exposes retry/delete.
+        setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, _pending: false, _createFailed: true } : t)));
       })
       .finally(() => { pendingCreates.current.delete(tempId); });
-  }, [discussionId, onSuccess]);
+  }, [discussionId, onSuccess, forgetRow]);
 
-  // Add a discussion POINT = a subitem under the topic. Fully optimistic: the
-  // point appears INSTANTLY (no fade/lock/spinner). The board write runs in the
-  // background and resolves the parent's real id first — so a point added under
-  // a topic that's still being created waits for that id instead of failing.
-  const addPoint = useCallback((topicId, pointName) => {
-    if (!pointName?.trim()) return;
-    const tempId = `temp-sub-${++tempSeq.current}`;
-    const trimmed = pointName.trim();
+  // Add a new TOPIC (item) linked to the discussion. Fully optimistic: the row
+  // appears INSTANTLY as a normal topic (no fade/lock/spinner) and is editable
+  // right away; the board write runs in the background (runTopicCreate).
+  const addTopic = useCallback((name) => {
+    if (!discussionId || !name?.trim()) return;
+    const tempId = `temp-${++tempSeq.current}`;
+    const trimmed = name.trim();
     const creatorId = currentUser?.id != null ? String(currentUser.id) : null;
-    setItems((prev) => prev.map((topic) => (
-      topic.id === topicId
-        ? { ...topic, _subitems: [...(topic._subitems || []), { id: tempId, _realId: null, name: trimmed, notForDiscussion: false, discussed: false, creatorId, responses: '', decisionIds: [], taskIds: [], boardId: null, _pending: true }] }
-        : topic
-    )));
+    setItems((prev) => [{ id: tempId, _realId: null, name: trimmed, notForDiscussion: false, creatorId, _subitems: [], _pending: true }, ...prev]);
+    stashCreateArgs(tempId, { kind: 'topic', name: trimmed });
+    runTopicCreate(tempId, trimmed, creatorId);
+  }, [discussionId, currentUser, stashCreateArgs, runTopicCreate]);
+
+  // Background create for ONE optimistic point (subitem). Extracted from addPoint
+  // so a FAILED create can be re-run (retry) against the same temp row. Resolves
+  // the parent topic's real id first — a point added under a still-creating topic
+  // waits for that id instead of failing.
+  const runPointCreate = useCallback((topicId, tempId, trimmed) => {
+    const creatorId = currentUser?.id != null ? String(currentUser.id) : null;
+    // Clear any prior error flag (retry path) + mark saving.
+    setItems((prev) => prev.map((topic) => ({
+      ...topic,
+      _subitems: (topic._subitems || []).map((s) => (s.id === tempId ? { ...s, _pending: true, _createFailed: false } : s)),
+    })));
 
     const promise = (async () => {
       const parentRealId = await resolveRealId(topicId);
@@ -299,21 +333,55 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
       .then(({ subId, boardId }) => {
         setItems((prev) => prev.map((topic) => (
           topic.id === topicId
-            ? { ...topic, _subitems: (topic._subitems || []).map((s) => (s.id === tempId ? { ...s, _realId: subId, boardId, _pending: false } : s)) }
+            ? { ...topic, _subitems: (topic._subitems || []).map((s) => (s.id === tempId ? { ...s, _realId: subId, boardId, _pending: false, _createFailed: false } : s)) }
             : topic
         )));
+        forgetRow(tempId);
         onSuccess?.('נקודה לדיון נוצרה בהצלחה');
       })
       .catch((err) => {
         if (!err?.__loggedId) logger.error('useTopics', 'הוספת נקודה נכשלה', err);
+        // Keep the point in a clear ERROR state (never silently drop it); the row
+        // exposes retry/delete and the toast is raised via the logger sink.
         setItems((prev) => prev.map((topic) => (
           topic.id === topicId
-            ? { ...topic, _subitems: (topic._subitems || []).filter((sub) => sub.id !== tempId) }
+            ? { ...topic, _subitems: (topic._subitems || []).map((s) => (s.id === tempId ? { ...s, _pending: false, _createFailed: true } : s)) }
             : topic
         )));
       })
       .finally(() => { pendingCreates.current.delete(tempId); });
-  }, [resolveRealId, onSuccess]);
+  }, [resolveRealId, onSuccess, currentUser, forgetRow]);
+
+  // Add a discussion POINT = a subitem under the topic. Fully optimistic: the
+  // point appears INSTANTLY (no fade/lock/spinner) and is editable right away;
+  // the board write runs in the background (runPointCreate).
+  const addPoint = useCallback((topicId, pointName) => {
+    if (!pointName?.trim()) return;
+    const tempId = `temp-sub-${++tempSeq.current}`;
+    const trimmed = pointName.trim();
+    const creatorId = currentUser?.id != null ? String(currentUser.id) : null;
+    setItems((prev) => prev.map((topic) => (
+      topic.id === topicId
+        ? { ...topic, _subitems: [...(topic._subitems || []), { id: tempId, _realId: null, name: trimmed, notForDiscussion: false, discussed: false, creatorId, responses: '', decisionIds: [], taskIds: [], boardId: null, _pending: true }] }
+        : topic
+    )));
+    stashCreateArgs(tempId, { kind: 'point', name: trimmed, topicId });
+    runPointCreate(topicId, tempId, trimmed);
+  }, [currentUser, stashCreateArgs, runPointCreate]);
+
+  // Retry a failed optimistic create (topic OR point) against the SAME temp row.
+  // Reads the stashed create args; no-op if they were already forgotten (success
+  // or dismissed). The row's error affordance calls this.
+  const retryCreate = useCallback((id) => {
+    const args = getCreateArgs(id);
+    if (!args) return;
+    if (args.kind === 'topic') {
+      const creatorId = currentUser?.id != null ? String(currentUser.id) : null;
+      runTopicCreate(id, args.name, creatorId);
+    } else if (args.kind === 'point') {
+      runPointCreate(args.topicId, id, args.name);
+    }
+  }, [getCreateArgs, runTopicCreate, runPointCreate, currentUser]);
 
   // Toggle the "discussed" (האם נידונה) flag on a POINT. Board-backed when the
   // pointCheckedID checkbox is mapped (persists to the subitems board); otherwise
@@ -326,18 +394,17 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     })));
 
     const checkedCol = getColumns('topics')?.pointCheckedID?.id;
-    const boardId = point?.boardId;
-    const itemId = String(point?._realId || point?.id || '');
-    // Board path: column mapped AND the subitem is real (has a board id). A
-    // still-saving point (boardId null / temp id) has no board row yet — skip the
-    // write; the next read reflects nothing, which is fine for an unticked default.
-    if (checkedCol && boardId && !itemId.startsWith('temp-')) {
+    if (checkedCol) {
+      // Board path — resolve the real write target (awaits an in-flight create so
+      // a tick made before the subitem id arrived still persists).
+      const target = await resolvePointTarget(point);
+      if (!target) return; // create still pending/failed — keep the optimistic tick
       try {
         await api(
           `mutation ($boardId: ID!, $itemId: ID!, $cv: JSON!) {
             change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $cv) { id }
           }`,
-          { boardId, itemId, cv: JSON.stringify({ [checkedCol]: formatValue('checkbox', discussed) }) }
+          { boardId: target.boardId, itemId: target.itemId, cv: JSON.stringify({ [checkedCol]: formatValue('checkbox', discussed) }) }
         );
       } catch (err) {
         if (!err?.__loggedId) logger.error('useTopics', 'סימון נקודה כ"נידונה" נכשל', err);
@@ -349,21 +416,21 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
       return;
     }
 
-    // Fallback: app-local storage set, matched against real ids on read.
-    const persistId = String(point._realId || point.id);
+    // Fallback: app-local storage set, keyed by the REAL id (await the create so a
+    // tick on a still-saving point isn't stored under a temp id that never reconciles).
+    const realId = await resolveRealId(point.id);
+    const persistId = String(realId || point._realId || point.id);
     const set = new Set(discussedRef.current);
     if (discussed) set.add(persistId); else set.delete(persistId);
     discussedRef.current = set;
     saveDiscussedPointIds(discussionId, set);
-  }, [discussionId]);
+  }, [discussionId, resolvePointTarget, resolveRealId]);
 
   // Edit a POINT's free-text "responses" (התייחסויות) — long_text on the subitems
   // board. Optimistic + revert; no-op (warn) when the column isn't mapped or the
   // point isn't on the board yet.
   const updatePointResponses = useCallback(async (point, text) => {
     const colId = getColumns('topics')?.pointResponsesID?.id;
-    const boardId = point?.boardId;
-    const itemId = String(point?._realId || point?.id || '');
     const next = text == null ? '' : String(text);
     let prevVal = '';
     setItems((prev) => prev.map((topic) => ({
@@ -374,16 +441,17 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
         return { ...sub, responses: next };
       }),
     })));
-    if (!colId || !boardId || itemId.startsWith('temp-')) {
-      if (!colId) logger.warn('useTopics', 'לא ניתן לשמור התייחסות — עמודת ההתייחסויות אינה ממופה בהגדרות', point);
-      return;
-    }
+    if (!colId) { logger.warn('useTopics', 'לא ניתן לשמור התייחסות — עמודת ההתייחסויות אינה ממופה בהגדרות', point); return; }
+    // Resolve the real write target (awaits an in-flight create so an edit made
+    // before the subitem id arrived is flushed once it does).
+    const target = await resolvePointTarget(point);
+    if (!target) return; // create still pending/failed — keep the optimistic value
     try {
       await api(
         `mutation ($boardId: ID!, $itemId: ID!, $cv: JSON!) {
           change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $cv) { id }
         }`,
-        { boardId, itemId, cv: JSON.stringify({ [colId]: formatValue('long_text', next) }) }
+        { boardId: target.boardId, itemId: target.itemId, cv: JSON.stringify({ [colId]: formatValue('long_text', next) }) }
       );
     } catch (err) {
       if (!err?.__loggedId) logger.error('useTopics', 'שמירת התייחסות נכשלה', err);
@@ -392,17 +460,13 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
         _subitems: (topic._subitems || []).map((sub) => (sub.id === point.id ? { ...sub, responses: prevVal } : sub)),
       })));
     }
-  }, []);
+  }, [resolvePointTarget]);
 
   // Toggle the "not for discussion" (לא לדיון) checkbox on a POINT (subitem).
   // Persisted on the subitems board — written with the subitem's own board id.
   const togglePointNotForDiscussion = useCallback(async (point, notForDiscussion) => {
     const colId = getColumns('topics')?.pointNotForDiscussionID?.id;
-    const boardId = point?.boardId;
-    const itemId = String(point?._realId || point?.id || '');
-    // boardId only exists once the subitem is real, so a still-saving point is
-    // already gated here (boardId null) — no bogus write against a temp id.
-    if (!colId || !boardId || itemId.startsWith('temp-')) {
+    if (!colId) {
       logger.warn('useTopics', 'לא ניתן לסמן נקודה כ"לא לדיון" — עמודת לא לדיון (נקודה) אינה ממופה בהגדרות', point);
       return;
     }
@@ -410,12 +474,16 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
       ...topic,
       _subitems: (topic._subitems || []).map((sub) => (sub.id === point.id ? { ...sub, notForDiscussion } : sub)),
     })));
+    // Resolve the real write target (awaits an in-flight create so a toggle made
+    // before the subitem id arrived is flushed once it does).
+    const target = await resolvePointTarget(point);
+    if (!target) return; // create still pending/failed — keep the optimistic value
     try {
       await api(
         `mutation ($boardId: ID!, $itemId: ID!, $cv: JSON!) {
           change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $cv) { id }
         }`,
-        { boardId, itemId, cv: JSON.stringify({ [colId]: formatValue('checkbox', !notForDiscussion) }) }
+        { boardId: target.boardId, itemId: target.itemId, cv: JSON.stringify({ [colId]: formatValue('checkbox', !notForDiscussion) }) }
       );
     } catch (err) {
       if (!err?.__loggedId) logger.error('useTopics', 'סימון נקודה כ"לא לדיון" נכשל', err);
@@ -424,7 +492,7 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
         _subitems: (topic._subitems || []).map((sub) => (sub.id === point.id ? { ...sub, notForDiscussion: !notForDiscussion } : sub)),
       })));
     }
-  }, []);
+  }, [resolvePointTarget]);
 
   // Toggle the "not for discussion" (לא לדיון) checkbox on a TOPIC (item).
   const toggleTopicNotForDiscussion = useCallback(async (topicId, notForDiscussion) => {
@@ -524,21 +592,22 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
       ...t,
       _subitems: (t._subitems || []).map((s) => (s.id === point.id ? { ...s, name: trimmed } : s)),
     })));
-    const itemId = String(point._realId || point.id);
-    // boardId only exists once the subitem is real — skip the write until then.
-    if (!point.boardId || itemId.startsWith('temp-')) return;
+    // Resolve the real write target (awaits an in-flight create so a rename typed
+    // before the subitem id arrived is flushed once it does).
+    const target = await resolvePointTarget(point);
+    if (!target) return; // create still pending/failed — keep the optimistic name
     try {
       await api(
         `mutation ($boardId: ID!, $itemId: ID!, $cv: JSON!) {
           change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $cv) { id }
         }`,
-        { boardId: point.boardId, itemId, cv: JSON.stringify({ name: trimmed }) }
+        { boardId: target.boardId, itemId: target.itemId, cv: JSON.stringify({ name: trimmed }) }
       );
     } catch (err) {
       if (!err?.__loggedId) logger.error('useTopics', 'שינוי שם נקודה נכשל', err);
       fetchTopics({ showLoader: false });
     }
-  }, [fetchTopics]);
+  }, [fetchTopics, resolvePointTarget]);
 
   // Delete a POINT (subitem).
   const deletePoint = useCallback(async (point) => {
@@ -601,6 +670,7 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     loading,
     addTopic,
     addPoint,
+    retryCreate,
     togglePoint,
     updatePointResponses,
     togglePointNotForDiscussion,

@@ -43,15 +43,65 @@
   color: var(--primary-color, #0073ea);
 }
 
-/* Optimistic row whose monday item isn't saved yet: faded + every cell
-   locked (assignee/date/status/name/delete) until the real id arrives. */
-.pending {
-  opacity: 0.5;
-  pointer-events: none;
-  cursor: progress;
+/* Failed optimistic create: the row stays EDITABLE (no lock/fade) but is marked
+   clearly with a red inset accent + tint so the user can retry or dismiss it. */
+.createFailed {
+  background: var(--negative-color-selected, #fce9ec);
+  box-shadow: inset 3px 0 0 var(--negative-color, #d83a52);
 }
-.pending:hover {
+.createFailed:hover {
+  background: var(--negative-color-selected, #fce9ec);
+}
+/* The frozen name/select cells are opaque, so tint them too (otherwise the red
+   row tint is hidden behind them). The red label/buttons live in the name cell. */
+.createFailed .name,
+.createFailed .selFrozen {
+  background: var(--negative-color-selected, #fce9ec);
+  background-image: none;
+}
+/* Inline "create failed" affordance in the name cell: label + retry + dismiss. */
+.createFailedActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.createFailedText {
+  font-size: 12px;
+  color: var(--negative-color, #d83a52);
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.retryBtn {
+  border: 1px solid var(--negative-color, #d83a52);
+  border-radius: 4px;
   background: transparent;
+  color: var(--negative-color, #d83a52);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.retryBtn:hover {
+  background: var(--negative-color, #d83a52);
+  color: #ffffff;
+}
+.dismissBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.dismissBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--negative-color, #d83a52);
 }
 
 .muted {

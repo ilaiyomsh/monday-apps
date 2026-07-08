@@ -36,6 +36,43 @@
   opacity: 0.45;
 }
 
+/* Failed optimistic create: the point stays EDITABLE (no lock) but is marked
+   with a red row tint + a red leading accent strip; the red "שמירה נכשלה" label
+   and the retry button live in the name cell (delete = the existing trash). */
+.rowFailed {
+  background: var(--negative-color-selected, #fce9ec);
+}
+.rowFailed .lead {
+  box-shadow: inset 6px 0 0 var(--negative-color, #d83a52);
+}
+.createFailedActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.createFailedText {
+  font-size: 12px;
+  color: var(--negative-color, #d83a52);
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.retryBtn {
+  border: 1px solid var(--negative-color, #d83a52);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--negative-color, #d83a52);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.retryBtn:hover {
+  background: var(--negative-color, #d83a52);
+  color: #ffffff;
+}
+
 /* Lead column — the FROZEN selection-checkbox cell that carries the topic accent
    strip (36px track, 6px inset strip), mirroring TaskTable's `.selectCell`.
    --topic-accent cascades from .section in TopicsTab. Not rounded: the column
