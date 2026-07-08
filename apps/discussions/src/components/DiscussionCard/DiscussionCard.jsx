@@ -573,12 +573,12 @@ export function DiscussionCard({
         </div>
         {activeTab === 'tasks' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
-            <TasksTab data={tasksData} onNewTask={openNewTaskModal} onInlineCreateTask={handleInlineCreateTask} onNotify={onNotify} canTask={canTask} canCreateTask={createTask} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
+            <TasksTab data={tasksData} discussionId={discussion.id} onNewTask={openNewTaskModal} onInlineCreateTask={handleInlineCreateTask} onNotify={onNotify} canTask={canTask} canCreateTask={createTask} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
           </div>
         )}
         {activeTab === 'decisions' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
-            <DecisionsTab data={decisionsData} onNewDecision={() => openQuickCreate('decision')} onInlineCreate={handleInlineCreateDecision} onNotify={onNotify} canDecision={canDecision} canCreateDecision={canCreateDecision} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
+            <DecisionsTab data={decisionsData} discussionId={discussion.id} onNewDecision={() => openQuickCreate('decision')} onInlineCreate={handleInlineCreateDecision} onNotify={onNotify} canDecision={canDecision} canCreateDecision={canCreateDecision} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
           </div>
         )}
         {activeTab === 'summary' && (

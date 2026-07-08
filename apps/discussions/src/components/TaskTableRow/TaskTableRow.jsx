@@ -58,6 +58,12 @@ export function TaskTableRow({
   // When provided (and the row is read-only, i.e. no inline rename), clicking the
   // task name opens its item card via this callback (Previous-tasks tab → Updates).
   onOpenCard,
+  // Whole-row drag-reorder (native monday feel) — supplied by TaskTable when
+  // reordering is enabled. `dragRef`/`dragProps` ride on the row root; `dragStyle`
+  // merges the sortable transform into rowStyle. Omitted → the row isn't draggable.
+  dragRef,
+  dragStyle,
+  dragProps,
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
   // Label pickers open UPWARD by default (video feedback #4); computeFloatingPosition
@@ -421,9 +427,11 @@ export function TaskTableRow({
 
   return (
     <div
-      className={`${grid.taskRow} ${styles.bodyRow} ${pending ? styles.pending : ''}`}
-      style={rowStyle}
+      ref={dragRef}
+      className={`${grid.taskRow} ${styles.bodyRow} ${pending ? styles.pending : ''} ${dragProps ? styles.draggableRow : ''}`}
+      style={dragStyle ? { ...rowStyle, ...dragStyle } : rowStyle}
       aria-busy={pending || undefined}
+      {...(dragProps || {})}
     >
       {orderedKeys.map((k) => cellByKey[k]).filter(Boolean)}
     </div>

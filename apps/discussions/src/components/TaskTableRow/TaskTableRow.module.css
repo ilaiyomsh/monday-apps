@@ -345,3 +345,16 @@
 .statusOption:hover {
   filter: brightness(0.95);
 }
+
+
+/* Whole-row drag-reorder (native monday feel) — the entire body row is the drag
+   handle when reordering is enabled (see SortableRow + useRowOrder). A plain
+   click still edits a cell (dnd-kit's ~8px activation distance); grabbing +
+   moving reorders. touch-action:none lets the pointer sensor own the gesture. */
+.draggableRow {
+  cursor: grab;
+  touch-action: none;
+}
+.draggableRow:active {
+  cursor: grabbing;
+}

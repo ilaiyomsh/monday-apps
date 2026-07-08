@@ -488,3 +488,74 @@
   opacity: 1;
   color: var(--primary-color, #0073ea);
 }
+
+
+/* ---- Round 7: point multi-select checkbox + floating bulk-action bar ---- */
+
+/* Select-all-in-topic checkbox in the section header (before the chevron). */
+.topicSelect {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-inline-end: 4px;
+}
+.topicSelect > label {
+  margin: 0;
+}
+.topicSelect > label > :last-child {
+  margin-inline-start: 0;
+}
+
+/* Floating bulk-action bar — appears when ≥1 point is selected. Same chrome as
+   the Tasks/Decisions action bars (kept aligned per the multi-select convention). */
+.actionBar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+.actionBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding-inline-end: 2px;
+}
+.actionBarCenter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 2px;
+}
+.actionBarRight {
+  display: flex;
+  align-items: center;
+  padding-inline-start: 2px;
+}
+.closeSelectionBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.closeSelectionBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}

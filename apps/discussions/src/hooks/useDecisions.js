@@ -276,6 +276,21 @@ export function useDecisions(discussionId) {
     } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
   };
 
+  // Change the decider (מחליט) AFTER creation — a people column, single person by
+  // convention but written as an id array like affected. Optimistic + revert.
+  // (Round 7: the decider cell used to be display-only, so this was missing.)
+  const updateDecisionDecider = async (decisionId, people) => {
+    let prev = [];
+    setItems((current) => {
+      prev = current;
+      return current.map((i) => (i.id === decisionId ? { ...i, deciderID: people } : i));
+    });
+    try {
+      const b = new החלטות1Board();
+      await b.item(decisionId).update({ deciderID: (people || []).map((p) => Number(p.id)) }).execute();
+    } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
+  };
+
   const deleteDecision = useCallback(async (decisionId) => {
     if (!decisionId) return false;
     forgetCreated(decisionId); // so a later create's refresh can't resurrect it
@@ -417,6 +432,7 @@ export function useDecisions(discussionId) {
     updateDecisionPriority,
     updateDecisionDate,
     updateDecisionAffected,
+    updateDecisionDecider,
     deleteDecision,
     softDeleteDecisions,
   };

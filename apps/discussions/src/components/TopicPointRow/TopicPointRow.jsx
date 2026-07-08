@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Avatar, Dialog, DialogContentContainer } from '@vibe/core';
+import { Avatar, Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
 import { Trash2, EyeOff, Eye, MoreHorizontal, Check } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -129,6 +129,8 @@ export function TopicPointRow({
   decisionCount = 0, taskCount = 0,
   // Create-from-point + open-counter-popup callbacks (threaded by TopicsTab).
   onCreateDecision, onCreateTask, onOpenDecisions, onOpenTasks,
+  // Multi-select (Round 7) — a leading checkbox in the name cell when selectable.
+  selectable = false, selected = false, onToggleSelect,
 }) {
   const discussed = point.discussed === true;
   const excluded = point.notForDiscussion === true;
@@ -168,6 +170,15 @@ export function TopicPointRow({
 
       {/* נקודה לדיון — hover controls (kebab + grip) + name (double-click to rename) */}
       <div className={styles.nameCell}>
+        {selectable && (
+          <span className={styles.pointSelect} onClick={stop}>
+            <Checkbox
+              checked={selected}
+              onChange={(e) => onToggleSelect?.(point, e.target.checked)}
+              ariaLabel={`בחר נקודה ${point.name}`}
+            />
+          </span>
+        )}
         {(canEditPoint || canDelete) && (
           <span className={styles.rowControls} onClick={stop}>
             <RowKebabMenu

@@ -1,9 +1,15 @@
 import React, { useState, useRef } from 'react';
 import { Checkbox } from '@vibe/core';
 import { Plus } from 'lucide-react';
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+} from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { TaskTableRow } from '@generated/components/TaskTableRow';
+import { SortableRow } from '@generated/components/SortableRow';
 import { useColumnOrder } from '@generated/hooks/useColumnOrder.js';
 import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
+import { useRowOrder } from '@generated/hooks/useRowOrder.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
@@ -66,6 +72,14 @@ export function TaskTable({
   // allow-all so callers that don't gate (none today besides the task tabs) are
   // unaffected.
   canTask = () => true,
+  // Whole-row drag-reorder (Round 7). When `reorderScope` is provided AND
+  // reorder is allowed (owner/editor, non-mobile), the rows in THIS table become
+  // draggable up/down; the order persists per-scope in monday.storage (monday has
+  // no item-position API — see useRowOrder/rowOrder). `reorderScope` must be
+  // stable + unique per orderable list (per group / per discussion). Reordering
+  // is a display concern only — it never changes a task's status/group.
+  reorderScope = null,
+  canReorderRows = false,
 }) {
   const { isMobile } = useViewport();
 
@@ -90,6 +104,16 @@ export function TaskTable({
   const { gridTemplate, startResize } = useColumnWidths('tasks', defs);
   const mobileTemplate = order.map((k) => MOBILE_TRACK[k]).filter(Boolean).join(' ');
   const rowStyle = { gridTemplateColumns: isMobile ? mobileTemplate : gridTemplate };
+
+  // Whole-row drag-reorder (Round 7): enabled only when a scope is passed, the
+  // caller allows it, and we're not on touch (drag + inline-edit coexist via the
+  // pointer sensor's activation distance, like the Topics table). useRowOrder
+  // applies the persisted order to `tasks` and returns the display order.
+  const rowsReorderable = !!reorderScope && !!canReorderRows && !isMobile;
+  const { order: rowOrderIds, orderList: orderedTasks, onDragEnd: onRowDragEnd } =
+    useRowOrder(reorderScope, tasks, { enabled: rowsReorderable });
+  const rowSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const displayTasks = rowsReorderable ? orderedTasks : tasks;
 
   // Owner-only, non-touch reorder + resize (matches the My Tasks table).
   // Prefer the explicit board-permissions gate when supplied; else legacy owner.
@@ -143,26 +167,45 @@ export function TaskTable({
         </div>
 
         {/* rows */}
-        {tasks.map((task) => (
-          <TaskTableRow
-            key={task.id}
-            task={task}
-            columns={order}
-            rowStyle={rowStyle}
-            onStatusChange={onStatusChange && canTask('editTaskStatus', task) ? onStatusChange : undefined}
-            onPriorityChange={onPriorityChange && canTask('editTaskPriority', task) ? onPriorityChange : undefined}
-            onAssigneeChange={onAssigneeChange && canTask('editTaskAssignee', task) ? onAssigneeChange : undefined}
-            onDeadlineChange={onDeadlineChange && canTask('editTaskDeadline', task) ? onDeadlineChange : undefined}
-            onRenameTask={onRenameTask && canTask('editTaskName', task) ? onRenameTask : undefined}
-            onDeleteTask={onDeleteTask}
-            selectable={selectable}
-            selected={selectable ? !!selectedIds?.has(task.id) : false}
-            onToggleSelect={onToggleSelect}
-            showSourceDiscussion={showSourceDiscussion}
-            showPriority={showPriority}
-            onOpenCard={onOpenCard}
-          />
-        ))}
+        {(() => {
+          const renderRow = (task, drag) => (
+            <TaskTableRow
+              key={task.id}
+              task={task}
+              columns={order}
+              rowStyle={rowStyle}
+              onStatusChange={onStatusChange && canTask('editTaskStatus', task) ? onStatusChange : undefined}
+              onPriorityChange={onPriorityChange && canTask('editTaskPriority', task) ? onPriorityChange : undefined}
+              onAssigneeChange={onAssigneeChange && canTask('editTaskAssignee', task) ? onAssigneeChange : undefined}
+              onDeadlineChange={onDeadlineChange && canTask('editTaskDeadline', task) ? onDeadlineChange : undefined}
+              onRenameTask={onRenameTask && canTask('editTaskName', task) ? onRenameTask : undefined}
+              onDeleteTask={onDeleteTask}
+              selectable={selectable}
+              selected={selectable ? !!selectedIds?.has(task.id) : false}
+              onToggleSelect={onToggleSelect}
+              showSourceDiscussion={showSourceDiscussion}
+              showPriority={showPriority}
+              onOpenCard={onOpenCard}
+              dragRef={drag?.setNodeRef}
+              dragStyle={drag?.style}
+              dragProps={drag ? { ...drag.attributes, ...drag.listeners } : undefined}
+            />
+          );
+          if (!rowsReorderable) return displayTasks.map((task) => renderRow(task, null));
+          return (
+            <DndContext sensors={rowSensors} collisionDetection={closestCenter} onDragEnd={onRowDragEnd}>
+              <SortableContext items={rowOrderIds} strategy={verticalListSortingStrategy}>
+                {displayTasks.map((task) => (
+                  // A still-saving optimistic row (temp- id) has no board id yet,
+                  // so it can't be persisted in an order — leave it non-draggable.
+                  <SortableRow key={task.id} id={task.id} disabled={String(task.id).startsWith('temp-')}>
+                    {(drag) => renderRow(task, drag)}
+                  </SortableRow>
+                ))}
+              </SortableContext>
+            </DndContext>
+          );
+        })()}
 
         {/* add-task footer row — lives inside the rounded table. Inline add is
             the default (native monday "add item"); the modal button is a fallback

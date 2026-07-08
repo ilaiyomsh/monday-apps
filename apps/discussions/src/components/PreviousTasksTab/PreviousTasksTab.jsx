@@ -950,6 +950,8 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
                   showPriority={showPriority}
                   canReorderColumns={canReorderColumns}
                   canManageSettings={canManageSettings}
+                  reorderScope={discussion?.id ? `previous_${discussion.id}_${byType ? `type:${typeFilter.taskTypeId}` : `prev:${previousDiscussionId}`}_${groupBy}_${grp.key}` : null}
+                  canReorderRows={canCreateTask || canSelect}
                   onOpenCard={openTaskCard}
                   canTask={canTask}
                   onStatusChange={applyStatusChange}

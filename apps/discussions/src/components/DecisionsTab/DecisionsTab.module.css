@@ -485,3 +485,104 @@
 .decAddInput::placeholder {
   color: var(--placeholder-color, #9699a6);
 }
+
+
+/* ---- Round 7: multi-select checkbox column + whole-row drag + action bar ---- */
+
+/* Selection checkbox cell (leading, pinned) — a 40px square against the 36px row,
+   frozen at left:0 so it pins during horizontal scroll (mirrors TaskTable's
+   .selectCell). Hosts the purple group strip so it travels with the frozen col. */
+.decSelectCell {
+  justify-content: center;
+  padding: 0;
+}
+.decSelectable .decSelectCell {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #ffffff;
+  box-shadow: inset 6px 0 0 #6b4ee6;
+}
+.decSelectable .decHead .decSelectCell {
+  z-index: 3; /* header frozen cell stacks above body frozen cells */
+}
+.decSelectable .decSelectCell > label {
+  margin: 0;
+  transform: translateX(2px);
+}
+.decSelectable .decSelectCell > label > :last-child {
+  margin-inline-start: 0;
+}
+/* With the checkbox present the name cell is no longer the leading column — pin
+   it right after the frozen 40px checkbox and drop its own strip (the checkbox
+   carries it). */
+.decSelectable .decNameCell,
+.decSelectable .decNameHead {
+  left: 40px;
+  box-shadow: none;
+}
+
+/* Whole-row drag-reorder — the entire body row is the grab handle when enabled
+   (see SortableRow + useRowOrder). A plain click still edits a cell (dnd-kit's
+   ~8px activation distance). */
+.decDraggable {
+  cursor: grab;
+  touch-action: none;
+}
+.decDraggable:active {
+  cursor: grabbing;
+}
+
+/* Floating bulk-action bar — appears when ≥1 decision is selected. Same chrome
+   as TasksTab's action bar (kept aligned per the app's multi-select convention). */
+.decActionBar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+.decActionBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding-inline-end: 2px;
+}
+.decActionBarCenter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 2px;
+}
+.decActionBarRight {
+  display: flex;
+  align-items: center;
+  padding-inline-start: 2px;
+}
+.decCloseSelectionBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.decCloseSelectionBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
