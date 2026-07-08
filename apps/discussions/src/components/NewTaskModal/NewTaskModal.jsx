@@ -73,11 +73,27 @@ export function NewTaskModal({ open, onClose, onCreate, defaults = {} }) {
     onClose();
   };
 
+  // Enter ANYWHERE in the form submits — same as clicking "צור משימה". Skipped
+  // for textareas (multiline), buttons (native activation), and any control
+  // inside an open picker list (role=listbox/menu) so choosing an option doesn't
+  // also submit. The PersonPicker / date popovers render their inputs in a
+  // portal to document.body, so their Enter never bubbles here at all. submit()
+  // itself no-ops on an empty name (the button's only required field).
+  const onFormKeyDown = (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'BUTTON')) return;
+    if (t && typeof t.closest === 'function' && t.closest('[role="listbox"], [role="menu"]')) return;
+    e.preventDefault();
+    submit();
+  };
+
   return (
     <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div
         className={styles.modal}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={onFormKeyDown}
         role="dialog"
         aria-modal="true"
         aria-label="יצירת משימה חדשה"
@@ -89,7 +105,6 @@ export function NewTaskModal({ open, onClose, onCreate, defaults = {} }) {
             className={styles.titleInput}
             value={name}
             onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: '' })); }}
-            onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
             placeholder="שם המשימה"
             aria-label="שם המשימה"
           />

@@ -520,6 +520,26 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     ? discussionOptions.filter((o) => o.label.toLowerCase().includes(q))
     : discussionOptions;
 
+  // Enter ANYWHERE in the form submits — same as clicking "צור דיון"/"שמור
+  // שינויים" — while RESPECTING the button's disabled state (name + date + time
+  // are all required). It is deliberately INERT when a picker layer is active:
+  //  • any control inside an open inline dropdown list (role=listbox: the type /
+  //    שעה / previous-discussion menus and their search + add-type inputs) — so
+  //    Enter selects/searches there instead of submitting;
+  //  • buttons (Enter triggers their own click) and textareas (multiline);
+  //  • whenever an inline dropdown open-flag is set (belt-and-suspenders).
+  // The date + people pickers render in portals, so their Enter never bubbles here.
+  const onFormKeyDown = (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'BUTTON')) return;
+    if (t && typeof t.closest === 'function' && t.closest('[role="listbox"], [role="menu"]')) return;
+    if (isTypeDropdownOpen || isTimeDropdownOpen || isPreviousDropdownOpen || isParticipantTemplateMenuOpen || isAddingType) return;
+    if (creating || !name.trim() || !date || !time) return;
+    e.preventDefault();
+    handleSubmit();
+  };
+
   return (
     <div className={styles.overlay} onClick={(e) => {
       if (e.target === e.currentTarget) onClose();
@@ -527,6 +547,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       <div
         className={styles.modal}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={onFormKeyDown}
         role="dialog"
         aria-modal="true"
         aria-label={isEdit ? 'עריכת דיון' : 'יצירת דיון חדש'}

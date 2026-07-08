@@ -4,7 +4,7 @@ import { api, parseValue, cvSelection, formatValue } from '../utils/mondayApi/mo
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
 import { MondayContext } from '@generated/contexts/MondayContext.jsx';
 import logger from '../utils/logger';
-import { useOptimisticRows, isTempId, nextTempId } from './useOptimisticRows.js';
+import { useOptimisticRows, isTempId, isRealId, nextTempId } from './useOptimisticRows.js';
 
 // Undo window for deferred decision deletion — must match the delete toast's
 // auto-hide duration so the real delete fires exactly when "בטל" disappears.
@@ -144,19 +144,21 @@ export function useDecisions(discussionId) {
   const ctxApi = useContext(MondayContext);
   const currentUserId = ctxApi?.currentUser?.id ?? ctxApi?.context?.user?.id ?? null;
 
-  // Ids created VERY recently (real monday ids), each with an expiry timestamp.
-  // The disappearing-row fix uses this to preserve a just-created decision in a
-  // silent refresh whose eventually-consistent relation read hasn't caught up
-  // yet — WITHOUT resurrecting rows that were deleted (delete forgets the id).
-  const recentlyCreatedRef = useRef(new Map());
-  const RECENT_CREATE_MS = 15000;
-  const rememberCreated = (id) => { recentlyCreatedRef.current.set(String(id), Date.now() + RECENT_CREATE_MS); };
-  const forgetCreated = (id) => { recentlyCreatedRef.current.delete(String(id)); };
-
-  // Optimistic-row bookkeeping shared with useTasks: queue edits made on a
-  // freshly-added row BEFORE its real id arrives + stash create args for retry
-  // (see useOptimisticRows).
-  const { enqueueEdit, drainEdits, stashCreateArgs, getCreateArgs, forgetRow } = useOptimisticRows();
+  // Optimistic-row engine (shared with useTasks): queues edits made on a
+  // freshly-added row BEFORE its real id arrives, stashes create args for retry,
+  // and — crucially for the eventually-consistent decisions board_relation —
+  // PROTECTS a just-created real id from a refresh-merge eviction until the
+  // relation index surfaces it. Protection is marked the instant the real id is
+  // known (before any flush), so a concurrent create's refresh can never drop a
+  // just-created decision; a deleted decision is unprotected immediately so it's
+  // never resurrected. (Replaces the old per-hook recentlyCreatedRef map.)
+  const {
+    enqueueEdit, drainEdits, stashCreateArgs, getCreateArgs, forgetRow,
+    protectRealId, unprotectRealId, mergeServerList,
+  } = useOptimisticRows();
+  // Local aliases so the call sites below read naturally.
+  const rememberCreated = protectRealId;
+  const forgetCreated = unprotectRealId;
   // Live handle to the per-field update fns so createDecision's reconcile step
   // can FLUSH queued edits through the SAME mutations a committed row uses
   // (assigned each render, just before the hook returns).
@@ -191,51 +193,20 @@ export function useDecisions(discussionId) {
   // mutation, and monday's board_relation index is eventually-consistent — so an
   // immediate refetch here often does NOT yet return a just-created decision.
   // Replacing the list with that stale result made the new row vanish moments
-  // after it appeared. Instead we MERGE: server items win, and any locally-known
-  // row the server hasn't returned yet is KEPT **only if it was created in the
-  // last RECENT_CREATE_MS** (tracked in recentlyCreatedRef). Time-bounding it to
-  // fresh creates means a soft-deleted decision (whose id is forgotten on delete)
-  // is NOT resurrected by a later create's refresh, and a genuinely-removed row
-  // isn't kept forever. The next refetch reconciles everything.
+  // after it appeared. Instead we MERGE via the shared, multi-row-safe
+  // mergeServerList: server items win, every in-flight temp row is kept, and
+  // every just-created (protected) real row the relation index hasn't surfaced
+  // yet is kept until it does. A soft-deleted / dismissed row is already gone
+  // from `current` AND unprotected, so it is never resurrected.
   const refresh = useCallback(async () => {
     if (!discussionId) return;
     try {
       const fetchedItems = await fetchDecisionsByDiscussion(discussionId);
-      setItems((current) => {
-        const serverIds = new Set(fetchedItems.map((i) => String(i.id)));
-        const now = Date.now();
-        // Prune expired create-markers so the map can't grow unbounded.
-        for (const [id, expiry] of recentlyCreatedRef.current) {
-          if (expiry < now) recentlyCreatedRef.current.delete(id);
-        }
-        // Keep a locally-known row the server's (eventually-consistent) relation
-        // read hasn't returned yet when it is EITHER:
-        //   • a still-optimistic temp row — an in-flight create that hasn't
-        //     reconciled to its real id yet. The server CANNOT return it (no real
-        //     id exists), so a CONCURRENT create's refresh must NEVER drop it.
-        //     Dropping temp rows here was the "second rapid create disappears"
-        //     bug: creating a decision and immediately creating a second one fired
-        //     the first create's fire-and-forget refresh() while the second row was
-        //     still temp; that refresh removed it, and the second create's reconcile
-        //     then found no temp row to swap (temp→real) — so the freshly-created
-        //     decision vanished from the UI even though it existed on the board.
-        //   • a still-fresh create (real id) made in the last RECENT_CREATE_MS
-        //     whose relation index hasn't surfaced it yet (the original
-        //     single-create disappearing-row fix).
-        // A soft-deleted / dismissed row is already gone from `current` (and its
-        // create-marker forgotten), so neither branch can resurrect it.
-        const missing = current.filter((i) => {
-          const sid = String(i.id);
-          if (serverIds.has(sid)) return false;   // server returned it — use its copy
-          if (sid.startsWith('temp-')) return true; // in-flight optimistic create — always keep
-          return recentlyCreatedRef.current.has(sid);
-        });
-        return [...fetchedItems, ...missing];
-      });
+      setItems((current) => mergeServerList(current, fetchedItems));
     } catch (err) {
       logger.error('useDecisions', 'Error refreshing decisions', { discussionId, err });
     }
-  }, [discussionId]);
+  }, [discussionId, mergeServerList]);
 
   const updateDecisionName = async (decisionId, name) => {
     const trimmed = (name || '').trim();
@@ -245,7 +216,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, name: trimmed } : i));
     });
-    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'name', trimmed); return; }
+    if (!isRealId(decisionId)) { enqueueEdit(decisionId, 'name', trimmed); return; }
     try {
       const b = new החלטות1Board();
       await b.item(decisionId).update({ name: trimmed }).execute();
@@ -258,7 +229,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, decisionStatusID: status } : i));
     });
-    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'decisionStatusID', status); return; }
+    if (!isRealId(decisionId)) { enqueueEdit(decisionId, 'decisionStatusID', status); return; }
     try {
       const b = new החלטות1Board();
       await b.item(decisionId).update({ decisionStatusID: status }).execute();
@@ -271,7 +242,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, decisionPriorityID: priority } : i));
     });
-    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'decisionPriorityID', priority); return; }
+    if (!isRealId(decisionId)) { enqueueEdit(decisionId, 'decisionPriorityID', priority); return; }
     try {
       const b = new החלטות1Board();
       await b.item(decisionId).update({ decisionPriorityID: priority }).execute();
@@ -284,7 +255,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, decisionDateID: date } : i));
     });
-    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'decisionDateID', date); return; }
+    if (!isRealId(decisionId)) { enqueueEdit(decisionId, 'decisionDateID', date); return; }
     try {
       const b = new החלטות1Board();
       const f = date ? formatDate(date) : null;
@@ -298,7 +269,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, affectedID: people } : i));
     });
-    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'affectedID', people); return; }
+    if (!isRealId(decisionId)) { enqueueEdit(decisionId, 'affectedID', people); return; }
     try {
       const b = new החלטות1Board();
       await b.item(decisionId).update({ affectedID: (people || []).map((p) => Number(p.id)) }).execute();
@@ -314,7 +285,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, deciderID: people } : i));
     });
-    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'deciderID', people); return; }
+    if (!isRealId(decisionId)) { enqueueEdit(decisionId, 'deciderID', people); return; }
     try {
       const b = new החלטות1Board();
       await b.item(decisionId).update({ deciderID: (people || []).map((p) => Number(p.id)) }).execute();
@@ -417,9 +388,28 @@ export function useDecisions(discussionId) {
       const realId = created.id;
       await b.item(realId).update({ discussionLinkID: { linkedItems: [{ id: discussionId }] } }).execute();
       if (pointId) await linkDecisionToPoint(pointId, realId, existingLinkedIds);
-      // RECONCILE: swap temp→real IN PLACE; the spread preserves any edits the
-      // user already applied to the row while it was still optimistic.
-      setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, id: realId, _createFailed: false } : i)));
+      // PROTECT the real id BEFORE the reconcile/flush below, so a CONCURRENT
+      // create's fire-and-forget refresh() can't evict this just-created decision
+      // during the eventually-consistent relation window. Marking it AFTER the
+      // flush (as it was) left a gap: while awaiting the flush of a row's queued
+      // edits, another create's refresh saw the just-reconciled real row as
+      // neither temp nor protected and dropped it — the decisions vanish bug.
+      rememberCreated(realId);
+      // RECONCILE: swap temp→real IN PLACE (the spread preserves any edits the
+      // user applied while the row was still optimistic). IDEMPOTENT: if the temp
+      // row is somehow gone and the real row isn't present either, RE-ADD it so a
+      // freshly-created decision can never vanish.
+      setItems((prev) => {
+        let swapped = false;
+        const next = prev.map((i) => {
+          if (i.id === tempId) { swapped = true; return { ...i, id: realId, _createFailed: false }; }
+          return i;
+        });
+        if (!swapped && !next.some((i) => String(i.id) === String(realId))) {
+          next.push({ id: realId, name: trimmed, decisionStatusID: status, decisionPriorityID: priority, affectedID: affected, decisionDateID: effectiveDate, _createFailed: false });
+        }
+        return next;
+      });
       // FLUSH edits queued while the row had no real id, through the SAME update
       // mutations a committed row uses (last-write-wins per field). Awaited so the
       // silent refresh below reads the persisted values (never clobbers a flush).
@@ -436,13 +426,11 @@ export function useDecisions(discussionId) {
         await Promise.allSettled(jobs);
       }
       forgetRow(tempId);
-      // Mark this id as freshly created so the silent refresh below (and any that
-      // fire during the eventual-consistency window) preserve the row even if the
-      // relation index hasn't surfaced it yet — the disappearing-row fix.
-      rememberCreated(realId);
       // Silent refresh so the list reflects the authoritative server state —
-      // fire-and-forget so it doesn't delay the caller or flash a loader.
-      refresh();
+      // fire-and-forget so it doesn't delay the caller or flash a loader. `.catch`
+      // guarantees a floating refresh promise can never surface as an unhandled
+      // rejection (→ global error handler → unexpected-error popup).
+      Promise.resolve(refresh()).catch(() => {});
       return { id: realId };
     } catch (err) {
       logger.error('useDecisions', 'Error creating decision', err);

@@ -198,11 +198,28 @@ export function QuickCreateModal({
     onClose();
   };
 
+  // Enter ANYWHERE in the form submits — same as clicking "צור החלטה"/"צור משימה"
+  // — while RESPECTING the button's disabled state (canSubmit). Skipped for
+  // textareas, buttons (native activation; incl. the StatusSelect trigger), and
+  // any control inside the open status listbox, so choosing a status with Enter
+  // doesn't also submit. PersonPicker / date popovers are portaled, so their
+  // Enter never bubbles here.
+  const onFormKeyDown = (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'BUTTON')) return;
+    if (t && typeof t.closest === 'function' && t.closest('[role="listbox"], [role="menu"]')) return;
+    if (!canSubmit) return;
+    e.preventDefault();
+    submit();
+  };
+
   return (
     <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div
         className={styles.modal}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={onFormKeyDown}
         role="dialog"
         aria-modal="true"
         aria-label={isDecision ? 'יצירת החלטה מהירה' : 'יצירת משימה מהירה'}
@@ -246,7 +263,6 @@ export function QuickCreateModal({
             className={styles.textInput}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
             placeholder={isDecision ? 'מה ההחלטה? *' : 'שם המשימה *'}
             aria-label={isDecision ? 'טקסט ההחלטה (חובה)' : 'שם המשימה (חובה)'}
           />
