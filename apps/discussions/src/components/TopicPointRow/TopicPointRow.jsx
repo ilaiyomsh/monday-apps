@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Avatar, Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
 import { Update } from '@vibe/icons';
-import { Trash2, EyeOff, Eye, MoreHorizontal, Check } from 'lucide-react';
+import { Trash2, EyeOff, Eye, MoreHorizontal, Check, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { monday } from '@api/monday-client.js';
@@ -109,15 +109,21 @@ export function RowKebabMenu({ excluded, onToggleHide, onDelete, kind = 'נקו�
 /**
  * A discussion POINT = a subitem, rendered as a TABLE ROW (monday-style) aligned
  * to the group's column header via the shared `rowStyle` grid template
- * (decisions redesign — FIXED columns):
- *   [accent bar 28px] | נקודה לדיון (flex) | נידונה 66px | החלטות 168px | משימות 168px
+ * (decisions redesign — FIXED columns), aligned to a Tasks item row:
+ *   [checkbox lead 36px] | נקודה לדיון (flex) | נידונה 66px | החלטות 168px | משימות 168px
  * "נידונה" (discussed) persists to the subitems board when pointCheckedID is
  * mapped (app-local storage fallback otherwise — handled in useTopics).
  * החלטות/משימות cells: a dashed "+" (create a decision/task FROM this point —
  * rendered only when the create callback is provided, so the parent gates it by
  * capability) and a round counter pill (filled when >0) that opens the
- * PointItemsPopup. The hide/delete kebab lives (hover-revealed) in the name cell;
- * the lead column is the bare accent bar per the mockup.
+ * PointItemsPopup.
+ *
+ * ROW STRUCTURE (mirrors TaskTableRow): the LEADING cell is a clean selection
+ * checkbox carrying the topic accent strip (inset 6px) — like Tasks' `.selectCell`.
+ * The NAME cell is the start-aligned name with the "updates" chat-bubble icon
+ * pinned to its trailing edge (like `.taskFirst` + `.updatesBtn`); the point's
+ * hide(eye) + delete actions are hover-revealed there too (like Tasks' hover
+ * trash), instead of a persistent kebab.
  *
  * DRAG-TO-REORDER: the WHOLE ROW is the drag handle (native monday board feel) —
  * the six-dot grip was removed. dnd-kit's PointerSensor activation distance (set
@@ -133,20 +139,22 @@ export function TopicPointRow({
   onToggle, onToggleNotForDiscussion, onRename, onDelete,
   // Granular discussion-tier caps. Each equals the legacy canEdit while the
   // permissions feature is off, so behavior is unchanged. point edit (rename +
-  // whole-row drag), delete (kebab delete + hide), check ("נידונה" toggle).
+  // whole-row drag + hide), delete (hover delete), check ("נידונה" toggle).
   canEditPoint = true, canDelete = true, canCheck = true,
   // Decisions/tasks link counters (linked ids length, from pointDecisionsLinkID /
   // pointTasksLinkID; 0 when the columns are unmapped).
   decisionCount = 0, taskCount = 0,
   // Create-from-point + open-counter-popup callbacks (threaded by TopicsTab).
   onCreateDecision, onCreateTask, onOpenDecisions, onOpenTasks,
-  // Multi-select (Round 7) — a leading checkbox in the name cell when selectable.
+  // Multi-select (Round 7) — the leading checkbox cell when selectable.
   selectable = false, selected = false, onToggleSelect,
 }) {
   const discussed = point.discussed === true;
   const excluded = point.notForDiscussion === true;
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(point.name || '');
+  // Inline delete confirmation for the hover trash (mirrors TaskTableRow).
+  const [confirmDel, setConfirmDel] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(point.id) });
   const style = {
@@ -176,13 +184,13 @@ export function TopicPointRow({
       className={`${styles.row} ${excluded ? styles.excluded : ''} ${canEditPoint ? styles.rowDraggable : ''}`}
       {...dragProps}
     >
-      {/* accent bar (28px lead column) */}
-      <span className={styles.lead} aria-hidden="true" />
-
-      {/* נקודה לדיון — hover controls (kebab + grip) + name (double-click to rename) */}
-      <div className={styles.nameCell}>
+      {/* LEADING CELL — a clean selection checkbox carrying the topic color strip
+          (inset 6px), the frozen/leading element (mirrors TaskTable's `.selectCell`).
+          Off selection mode it's just the bare accent strip. The hide/delete
+          controls moved out to the name cell (hover), so this stays uncluttered. */}
+      <div className={styles.lead} aria-hidden={selectable ? undefined : true}>
         {selectable && (
-          <span className={styles.pointSelect} onClick={stop}>
+          <span className={styles.leadSelect} onClick={stop} onPointerDown={stop}>
             <Checkbox
               checked={selected}
               onChange={(e) => onToggleSelect?.(point, e.target.checked)}
@@ -190,16 +198,12 @@ export function TopicPointRow({
             />
           </span>
         )}
-        {(canEditPoint || canDelete) && (
-          <span className={styles.rowControls} onClick={stop}>
-            <RowKebabMenu
-              excluded={excluded}
-              kind="נקודה"
-              onToggleHide={canEditPoint ? () => onToggleNotForDiscussion?.(point, !excluded) : undefined}
-              onDelete={canDelete && onDelete ? () => onDelete(point) : undefined}
-            />
-          </span>
-        )}
+      </div>
+
+      {/* נקודה לדיון — start-aligned name; hover-revealed hide(eye) + delete like
+          the Tasks name cell; the "updates" chat-bubble icon pinned to the trailing
+          edge (same size/placement as Tasks). */}
+      <div className={styles.nameCell}>
         {editingName ? (
           <input
             className={styles.nameEditInput}
@@ -222,6 +226,56 @@ export function TopicPointRow({
           >
             {point.name}
           </span>
+        )}
+        {/* Secondary controls revealed on ROW HOVER (mirrors the Tasks name cell's
+            hover trash) — no longer a persistent kebab. hide(eye) toggles the
+            not-for-discussion flag; delete uses an inline confirm. Both
+            stopPropagation so a click never starts a whole-row drag. */}
+        {canEditPoint && (
+          <button
+            type="button"
+            className={styles.hideBtn}
+            onClick={(e) => { e.stopPropagation(); onToggleNotForDiscussion?.(point, !excluded); }}
+            aria-label={excluded ? 'הצג נקודה' : 'הסתר נקודה'}
+            title={excluded ? 'הצג נקודה' : 'הסתר נקודה'}
+          >
+            {excluded ? <Eye size={16} /> : <EyeOff size={16} />}
+          </button>
+        )}
+        {canDelete && onDelete && (
+          confirmDel ? (
+            <span className={styles.confirmDel} onClick={stop}>
+              <span className={styles.confirmText}>למחוק?</span>
+              <button
+                type="button"
+                className={`${styles.confirmBtn} ${styles.confirmYes}`}
+                onClick={(e) => { e.stopPropagation(); onDelete(point); setConfirmDel(false); }}
+                aria-label="אישור מחיקה"
+                title="אישור"
+              >
+                <Check size={14} />
+              </button>
+              <button
+                type="button"
+                className={styles.confirmBtn}
+                onClick={(e) => { e.stopPropagation(); setConfirmDel(false); }}
+                aria-label="ביטול מחיקה"
+                title="ביטול"
+              >
+                <X size={14} />
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className={styles.deleteBtn}
+              onClick={(e) => { e.stopPropagation(); setConfirmDel(true); }}
+              aria-label="מחק נקודה"
+              title="מחק נקודה"
+            >
+              <Trash2 size={18} />
+            </button>
+          )
         )}
         {/* monday "updates" speech-bubble icon at the trailing edge of the name
             cell — identical affordance to the Tasks name cell (opens the point's

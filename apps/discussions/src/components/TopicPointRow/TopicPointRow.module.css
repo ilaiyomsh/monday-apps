@@ -1,6 +1,6 @@
 /* A POINT = one table row, a grid aligned to the group's column header via the
    shared inline grid-template (rowStyle):
-   [accent bar 28px] | name (flex) | נידונה 66px | החלטות 168px | משימות 168px */
+   [checkbox lead 36px] | name (flex) | נידונה 66px | החלטות 168px | משימות 168px */
 .row {
   display: grid;
   align-items: stretch;
@@ -36,12 +36,17 @@
   opacity: 0.45;
 }
 
-/* Lead column — the bare topic accent bar (28px track, 6px inset strip).
+/* Lead column — the FROZEN selection-checkbox cell that carries the topic accent
+   strip (36px track, 6px inset strip), mirroring TaskTable's `.selectCell`.
    --topic-accent cascades from .section in TopicsTab. Not rounded: the column
    header rounds the top-left, the add-row rounds the bottom-left.
    FROZEN (sticky at left:0, opaque) so it pins with the name during the rare
-   horizontal scroll — mirrors TaskTable's frozen leading cell. */
+   horizontal scroll — mirrors TaskTable's frozen leading cell. Off selection
+   mode it's just the bare accent strip. */
 .lead {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
   position: sticky;
   left: 0;
@@ -49,30 +54,18 @@
   background: var(--primary-background-color, #fff);
 }
 
-/* Hover controls (the hide/delete kebab) — in the name cell since the lead
-   column is the bare accent bar. Revealed on row hover. The drag grip was
-   removed (the whole row drags now). */
-.rowControls {
+/* Selection checkbox centered in the lead cell (mirrors TaskTable's
+   `.selectCell > label`): reset the vibe Checkbox wrapper margins and nudge the
+   16px box to sit visually centered just after the 6px color strip. */
+.leadSelect {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-  margin-inline-end: 4px;
 }
-
-/* Multi-select checkbox (Round 7) — leading the name cell content when the tab
-   is in selection mode. Always visible (unlike the hover kebab) so the current
-   selection reads at a glance. */
-.pointSelect {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  margin-inline-end: 4px;
-}
-.pointSelect > label {
+.leadSelect > label {
   margin: 0;
+  transform: translateX(2px);
 }
-.pointSelect > label > :last-child {
+.leadSelect > label > :last-child {
   margin-inline-start: 0;
 }
 
@@ -161,15 +154,18 @@
   min-width: 0;
   display: flex;
   align-items: center;
+  /* Space the trailing controls (hide / delete / updates) like the Tasks name
+     cell's .nameInner gap:6px. */
+  gap: 6px;
   padding-inline-start: 14px;
   padding-inline-end: 8px;
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
-  /* FROZEN name column — pinned right after the 28px accent bar, opaque so
+  /* FROZEN name column — pinned right after the 36px checkbox lead, opaque so
      scrolled cells don't bleed through (mirrors TaskTable's frozen `.taskFirst`).
      Its resize handle in the header cell drives the width; the row cell just
      tracks the shared grid template. */
   position: sticky;
-  left: 28px;
+  left: 36px;
   z-index: 2;
   background: var(--primary-background-color, #fff);
 }
@@ -220,6 +216,75 @@
   background: var(--primary-background-color, #fff);
 }
 .nameEditInput:focus-visible { outline: none; }
+
+/* Hover-revealed secondary controls at the trailing edge of the name cell —
+   same affordance as the Tasks name cell's hover trash (.deleteBtn): hidden at
+   rest, revealed on row hover / keyboard focus. hide(eye) toggles the point's
+   not-for-discussion flag; delete opens an inline confirm. */
+.hideBtn,
+.deleteBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease, background-color 0.1s ease, color 0.1s ease;
+}
+.row:hover .hideBtn,
+.row:hover .deleteBtn,
+.hideBtn:focus-visible,
+.deleteBtn:focus-visible {
+  opacity: 1;
+}
+.hideBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+.deleteBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--negative-color, #d83a52);
+}
+
+/* Inline delete confirmation (mirrors TaskTableRow's .confirmDel) — stays visible
+   regardless of hover so the user can complete/cancel it. */
+.confirmDel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.confirmText {
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.confirmBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.confirmBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+}
+.confirmYes:hover {
+  color: var(--negative-color, #d83a52);
+}
 
 /* האם נידונה — square checkbox (mockup: blue fill when checked). Cell chrome
    (padding / centering / 0.625px rule) mirrors TaskTable's .taskCell. */

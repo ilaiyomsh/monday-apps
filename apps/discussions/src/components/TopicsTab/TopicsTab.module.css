@@ -436,7 +436,7 @@
 /* FROZEN leading column (accent bar) + FROZEN name header — pinned during the
    rare horizontal scroll (dragged tracks wider than the board), mirroring
    TaskTable's frozen `.taskFirst`. Both are opaque so scrolled cells don't bleed
-   through; the lead pins at 0, name right after it (the 28px LEAD_TRACK). Header
+   through; the lead pins at 0, name right after it (the 36px LEAD_TRACK). Header
    frozen cells stack above the body frozen cells (z-index 3 vs 2). */
 .frozenLead {
   position: sticky;
@@ -447,7 +447,7 @@
 .colHeadName {
   justify-content: flex-start;
   position: sticky;
-  left: 28px;
+  left: 36px;
   z-index: 3;
   background: #ffffff;
 }
