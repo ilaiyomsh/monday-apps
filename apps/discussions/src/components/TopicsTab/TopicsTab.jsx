@@ -328,8 +328,12 @@ function SortableTopicSection({
               rowStyle). Owners get a ResizeHandle on each column's trailing edge
               (the cell becomes a positioning context for the absolute handle). */}
           <div className={styles.colHead} style={rowStyle}>
-            <span className={styles.colHeadLead} aria-hidden="true" />
-            <span className={styles.colHeadCell} style={canResize ? { position: 'relative' } : undefined}>
+            <span className={`${styles.colHeadLead} ${styles.frozenLead}`} aria-hidden="true" />
+            {/* Frozen name header — sticky (its own positioning context) so it
+                pins during horizontal scroll AND hosts the resize handle, exactly
+                like TaskTable's frozen `.taskFirst`. No inline `relative` here:
+                the sticky class provides the absolute handle's containing block. */}
+            <span className={`${styles.colHeadCell} ${styles.colHeadName}`}>
               {canResize && <ResizeHandle onMouseDown={(e) => startResize('name', e)} />}
             </span>
             <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`} style={canResize ? { position: 'relative' } : undefined}>

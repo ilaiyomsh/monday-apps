@@ -57,25 +57,29 @@ export const TASKS_COLUMN_WIDTHS = {
 // Topics tab points table (one setting shared by every topic group, under the
 // shared 'topics' tableId — a drag on ANY topic's column resizes it for all
 // topics AND all users of the instance). The lead (accent-bar) track is a fixed
-// 28px track at the call site. `name` is a FILL track (minmax(w,1fr)) so the
-// table always spans the full width; dragging its border adjusts its MINIMUM.
-// The remaining columns (נידונה / החלטות / משימות) are fixed-px resizable tracks
-// matching the decisions redesign's default layout.
+// 28px track at the call site. EVERY data column — INCLUDING `name` — is a
+// fixed-px resizable track (shrink/expand parity with the Tasks table); the
+// table spans the full width via `.sectionBody { min-width: 100% }` (mirroring
+// TaskTable's `.taskTable`) instead of a fill track, so dragging name's border
+// actually resizes it (a minmax(w,1fr) fill track snapped back to fill and made
+// name feel non-resizable).
 export const TOPICS_COLUMN_WIDTHS = {
-  name: { default: 360, min: 160, max: 1200, flex: true },
+  name: { default: 360, min: 160, max: 1200 },
   check: { default: 66, min: 52, max: 160 },
   decisions: { default: 168, min: 110, max: 360 },
   tasks: { default: 168, min: 110, max: 360 },
 };
 
 // Decisions tab table (its OWN 'decisions' tableId — separate widths from the
-// task/topics tables). `name` (החלטה) is a FILL track so the table always spans
-// the full width; the rest are fixed-px resizable tracks. Owner-draggable +
-// persisted per-instance for all users (same store/pattern as the other tables).
-// The עדיפות column was removed from the decisions table (product decision), so
-// it has no width entry.
+// task/topics tables). EVERY column — INCLUDING `name` (החלטה) — is a fixed-px
+// resizable track (full shrink/expand parity with the Tasks table); the table
+// spans the full width via `.decTable { min-width: 100% }` (mirroring
+// TaskTable's `.taskTable`) rather than a fill track, so name actually resizes
+// when dragged. Owner-draggable + persisted per-instance for all users (same
+// store/pattern as the other tables). The עדיפות column was removed from the
+// decisions table (product decision), so it has no width entry.
 export const DECISIONS_COLUMN_WIDTHS = {
-  name: { default: 300, min: 200, max: 900, flex: true },
+  name: { default: 300, min: 200, max: 900 },
   decider: { default: 130, min: 90, max: 260 },
   affected: { default: 150, min: 100, max: 320 },
   status: { default: 170, min: 110, max: 340 },

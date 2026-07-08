@@ -1,7 +1,8 @@
 .wrap {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  /* Tightened inter-topic gap (was 24px) — proportional to the 14–18px text. */
+  gap: 12px;
   /* Full width (broke out of the 90% frame) so the point tables run to the RIGHT
      edge; a left inset keeps content off the edge, the right stays flush. */
   width: 100%;
@@ -12,7 +13,7 @@
 .loading {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
 }
 .toolbar {
   display: flex;
@@ -42,7 +43,8 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  /* Tightened topic-header → table gap (was 14px). */
+  gap: 7px;
 }
 /* Hidden / "לא לדיון" topic — dim the table body; the eye control stays full. */
 .sectionExcluded .sectionBody {
@@ -286,6 +288,14 @@
 .sectionBody {
   display: flex;
   flex-direction: column;
+  /* Fill to the board width and hug the summed track widths — same as
+     TaskTable's `.taskTable`. With `name` now a fixed-px track (not a fill
+     track), this keeps the grid spanning the full width (row separators run to
+     the right edge) while letting name shrink/expand freely on drag. When the
+     dragged tracks sum wider than the board, the box grows past 100% and scrolls
+     under this element's own overflow-x. */
+  width: max-content;
+  min-width: 100%;
   background: var(--primary-background-color, #fff);
   /* Bounded + rounded on the LEFT (top + left lines), OPEN on the right so the row
      separators run to the right edge. direction:ltr anchors the table left. */
@@ -433,6 +443,25 @@
 .colHeadLead {
   box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
   border-start-start-radius: var(--border-radius-medium, 8px);
+}
+
+/* FROZEN leading column (accent bar) + FROZEN name header — pinned during the
+   rare horizontal scroll (dragged tracks wider than the board), mirroring
+   TaskTable's frozen `.taskFirst`. Both are opaque so scrolled cells don't bleed
+   through; the lead pins at 0, name right after it (the 28px LEAD_TRACK). Header
+   frozen cells stack above the body frozen cells (z-index 3 vs 2). */
+.frozenLead {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #ffffff;
+}
+.colHeadName {
+  justify-content: flex-start;
+  position: sticky;
+  left: 28px;
+  z-index: 3;
+  background: #ffffff;
 }
 
 .noPoints {

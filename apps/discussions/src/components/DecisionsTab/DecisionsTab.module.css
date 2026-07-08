@@ -9,7 +9,9 @@
 .decisionsRoot {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-medium, 16px);
+  /* Tightened inter-element gap (was 16px) — halved to match the Topics tab
+     and stay proportional to the 14px table text. */
+  gap: var(--spacing-small, 8px);
   /* Same full-bleed layout as TasksTab: left inset keeps the toolbar off the
      edge, the board bleeds right so row separators run to the right edge. */
   width: 100%;
@@ -21,7 +23,7 @@
 .decSkeletonStack {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-small, 8px);
+  gap: var(--spacing-xs, 4px);
 }
 
 .decToolbar {
@@ -86,6 +88,18 @@
 .decBodyRow:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
 }
+/* The frozen leading name cell is opaque, so its hover background must be set
+   explicitly — otherwise it stays white while the rest of the row highlights.
+   Composite the (possibly semi-transparent) hover token OVER solid white so the
+   frozen cell stays opaque (scrolled cells can't bleed through). Same technique
+   as TaskTableRow's `.bodyRow:hover .name`. */
+.decBodyRow:hover .decNameCell {
+  background-color: #ffffff;
+  background-image: linear-gradient(
+    var(--primary-background-hover-color, #f5f6f8),
+    var(--primary-background-hover-color, #f5f6f8)
+  );
+}
 
 /* Optimistic row (temp- id): faded + locked until the server id arrives. */
 .decPending {
@@ -121,9 +135,23 @@
 .decNameHead {
   justify-content: flex-start;
   padding: 0 14px;
+  /* FROZEN name header — sticky/opaque so it pins during horizontal scroll and
+     hosts the resize handle (its own positioning context), mirroring
+     TaskTable's frozen `.taskFirst`. Header frozen cell stacks above the body
+     frozen cells (z-index 3 vs 2). Purple accent strip rounds at the TOP-left to
+     follow the table's rounded-left outer border (matches TaskTable's S2). */
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #ffffff;
+  box-shadow: inset 6px 0 0 #6b4ee6;
+  border-start-start-radius: var(--border-radius-medium, 8px);
 }
 
-/* החלטה cell — inset purple accent bar (decisions chrome color). */
+/* החלטה cell — FROZEN leading name cell (sticky at left:0, opaque so scrolled
+   cells don't bleed through), inset purple accent bar (decisions chrome color).
+   Mirrors TaskTable's frozen `.taskFirst`: this is what makes a decision row
+   read like a real monday item (pinned name column with the group-color strip). */
 .decNameCell {
   justify-content: flex-start;
   gap: 6px;
@@ -131,6 +159,18 @@
   padding-inline-end: 8px;
   box-shadow: inset 6px 0 0 #6b4ee6;
   overflow: hidden;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #ffffff;
+}
+/* When a decision row is the LAST child (no add-row — read-only viewer), its
+   frozen name cell rounds the strip at the BOTTOM-left to follow the table's
+   rounded-left bottom border (mirrors TaskTable's `.taskRow:last-child
+   .taskFirst`). With an add-row present the last .decBodyRow isn't :last-child,
+   so this is inert and the add-row's own rounded strip closes the box. */
+.decRow:last-child .decNameCell {
+  border-end-start-radius: var(--border-radius-medium, 8px);
 }
 
 .decNameText,

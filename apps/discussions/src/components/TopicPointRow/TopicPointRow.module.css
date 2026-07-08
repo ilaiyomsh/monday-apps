@@ -13,6 +13,19 @@
 .row:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
 }
+/* The frozen leading cells (accent bar + name) are opaque, so their hover
+   background must be set explicitly — otherwise they stay white while the rest
+   of the row highlights. Composite the (possibly semi-transparent) hover token
+   OVER solid white so the frozen cell stays opaque (scrolled cells can't bleed
+   through). Same technique as TaskTableRow's `.bodyRow:hover .name`. */
+.row:hover .lead,
+.row:hover .nameCell {
+  background-color: #ffffff;
+  background-image: linear-gradient(
+    var(--primary-background-hover-color, #f5f6f8),
+    var(--primary-background-hover-color, #f5f6f8)
+  );
+}
 /* Hidden ("לא לדיון") point — dimmed. */
 .excluded .nameCell {
   opacity: 0.45;
@@ -20,9 +33,15 @@
 
 /* Lead column — the bare topic accent bar (28px track, 6px inset strip).
    --topic-accent cascades from .section in TopicsTab. Not rounded: the column
-   header rounds the top-left, the add-row rounds the bottom-left. */
+   header rounds the top-left, the add-row rounds the bottom-left.
+   FROZEN (sticky at left:0, opaque) so it pins with the name during the rare
+   horizontal scroll — mirrors TaskTable's frozen leading cell. */
 .lead {
   box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--primary-background-color, #fff);
 }
 
 /* Hover controls (kebab + drag grip) — moved INTO the name cell since the lead
@@ -127,6 +146,14 @@
   padding-inline-start: 14px;
   padding-inline-end: 8px;
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  /* FROZEN name column — pinned right after the 28px accent bar, opaque so
+     scrolled cells don't bleed through (mirrors TaskTable's frozen `.taskFirst`).
+     Its resize handle in the header cell drives the width; the row cell just
+     tracks the shared grid template. */
+  position: sticky;
+  left: 28px;
+  z-index: 2;
+  background: var(--primary-background-color, #fff);
 }
 .name {
   overflow: hidden;

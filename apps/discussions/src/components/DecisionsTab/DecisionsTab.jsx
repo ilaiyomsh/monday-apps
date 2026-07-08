@@ -332,7 +332,11 @@ export function DecisionsTab({ data, onNewDecision, onNotify, canDecision = () =
       <div className={styles.decBoard}>
         <div className={styles.decTable}>
           <div className={`${styles.decRow} ${styles.decHead}`} style={rowStyle}>
-            <div className={`${styles.decCell} ${styles.decHeadCell} ${styles.decNameHead}`} style={canResize ? { position: 'relative' } : undefined}>
+            {/* Frozen name header — sticky (its own positioning context) so it
+                pins during horizontal scroll AND hosts the resize handle, exactly
+                like TaskTable's frozen `.taskFirst`. No inline `relative` here:
+                the sticky class provides the absolute handle's containing block. */}
+            <div className={`${styles.decCell} ${styles.decHeadCell} ${styles.decNameHead}`}>
               החלטה
               {canResize && <ResizeHandle onMouseDown={(e) => startResize('name', e)} />}
             </div>
