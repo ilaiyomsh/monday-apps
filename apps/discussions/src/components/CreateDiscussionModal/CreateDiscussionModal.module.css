@@ -12,7 +12,7 @@
 .modal {
   /* Compact form width — fields are laid out in a tidy responsive grid so no
      single control (e.g. the manager field) is disproportionately wide. */
-  width: min(600px, calc(100vw - 32px));
+  width: min(500px, calc(100vw - 32px));
   display: flex;
   flex-direction: column;
   border-radius: var(--border-radius-big, 12px);
@@ -147,7 +147,8 @@
 /* Collapse multi-column rows to a single column on very narrow widths. */
 @media (max-width: 560px) {
   .row,
-  .row3 {
+  .row3,
+  .dateTimeRow {
     grid-template-columns: 1fr;
   }
 }
@@ -197,22 +198,23 @@
   box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
 }
 
-/* Date + hour side by side, each with its own (uniform) required label. */
+/* Date + hour side by side at EQUAL width (2-column 1fr 1fr grid), each with
+   its own (uniform) required label. Collapses to a single column on narrow
+   widths (see the media query below). */
 .dateTimeRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: var(--spacing-small, 8px);
-  align-items: flex-start;
+  align-items: start;
 }
 .dateCol {
-  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
 }
 .timeCol {
-  width: 140px;
-  flex-shrink: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
