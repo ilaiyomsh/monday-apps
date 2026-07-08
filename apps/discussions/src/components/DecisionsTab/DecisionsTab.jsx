@@ -593,6 +593,32 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     onNotify?.(msg, 'info', 6000, { label: 'בטל', onClick: undo });
   };
 
+  // Batch edit (Round 13): a column change on a SELECTED row applies to EVERY
+  // selected row (monday behavior), mirroring TasksTab's resolveTargetIds — the
+  // origin row alone unless it's part of a 2+ selection, then filtered to the
+  // rows the user may edit for that capability. Single-row editing (nothing, or
+  // only that row, selected) is unchanged. Applied per-row via the existing
+  // optimistic single-row updaters (decisions have no dedicated batch endpoint,
+  // same as TasksTab's priority path).
+  const resolveDecisionTargets = (originId, cap) => {
+    const base = selectedIds.size > 1 && selectedIds.has(originId) ? [...selectedIds] : [originId];
+    return cap ? base.filter((id) => canDecision(cap, decById.get(String(id)))) : base;
+  };
+  const applyDecisionStatus = async (id, status) => {
+    for (const t of resolveDecisionTargets(id, 'editDecisionStatus')) await updateDecisionStatus(t, status);
+  };
+  const applyDecisionDate = async (id, date) => {
+    for (const t of resolveDecisionTargets(id, 'editDecisionDate')) await updateDecisionDate(t, date);
+  };
+  // מחליט + מושפעים are both gated by 'editDecisionAffected' (see DecisionRows'
+  // deciderCanEdit), so batch decider/affected use that same capability.
+  const applyDecisionDecider = async (id, people) => {
+    for (const t of resolveDecisionTargets(id, 'editDecisionAffected')) await updateDecisionDecider(t, people);
+  };
+  const applyDecisionAffected = async (id, people) => {
+    for (const t of resolveDecisionTargets(id, 'editDecisionAffected')) await updateDecisionAffected(t, people);
+  };
+
   // Filter mutators (mirror the Tasks / Previous tabs).
   const resetCol = (col) => (col === 'deadline' ? { op: 'within', range: null, date: null } : { op: 'is', values: new Set() });
   const setFilterOp = (col, op) => setFilter((f) => ({ ...f, [col]: { ...f[col], op } }));
@@ -805,10 +831,10 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         statusOpts={statusOpts}
         canDecision={canDecision}
         updateDecisionName={updateDecisionName}
-        updateDecisionStatus={updateDecisionStatus}
-        updateDecisionDate={updateDecisionDate}
-        updateDecisionDecider={updateDecisionDecider}
-        updateDecisionAffected={updateDecisionAffected}
+        updateDecisionStatus={applyDecisionStatus}
+        updateDecisionDate={applyDecisionDate}
+        updateDecisionDecider={applyDecisionDecider}
+        updateDecisionAffected={applyDecisionAffected}
         onDelete={handleDelete}
         onRetryCreate={retryCreate}
         onDismissRow={dismissRow}

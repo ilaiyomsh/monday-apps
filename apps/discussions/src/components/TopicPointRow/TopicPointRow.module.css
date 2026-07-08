@@ -85,6 +85,9 @@
   align-items: center;
   justify-content: center;
   box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
+  /* Close the lead (checkbox/accent) column with a right rule, matching the
+     Tasks table's frozen `.selectCell` separator (TaskTable `.taskCell`). */
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
   position: sticky;
   left: 0;
   z-index: 2;
