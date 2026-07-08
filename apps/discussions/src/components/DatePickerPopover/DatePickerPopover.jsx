@@ -65,7 +65,19 @@ export function DatePickerPopover({ value, onChange, variant = 'cell', placehold
 
   return (
     <Dialog
-      open={open}
+      // Fully control visibility from `open` via useDerivedStateFromProps +
+      // isOpen. Vibe's Dialog computes "shown" as (internalState || openProp),
+      // so the plain `open` prop can only force-OPEN — setting it false never
+      // closed the dialog once a trigger click had set the internal state true.
+      // That's why the picker lingered after choosing a date (handleSelect set
+      // open=false but the internal state stayed true). Deriving from isOpen
+      // makes `open`/false actually close it. We deliberately do NOT add
+      // 'onContentClick' to hideTrigger: that would also close on the month
+      // nav-arrow clicks inside the calendar. Instead handleSelect/clear/today
+      // set open=false, closing right after the selection commits — for ALL
+      // date pickers, since this is the shared component.
+      isOpen={open}
+      useDerivedStateFromProps
       showTrigger={['click']}
       hideTrigger={['clickoutside', 'esc']}
       onDialogDidShow={() => { updatePosition(); setOpen(true); }}
