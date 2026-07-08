@@ -737,14 +737,14 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
               <div className={styles.field}>
                 <Text type="text2" className={styles.label}>{leadLabel}</Text>
                 <div className={styles.fieldWrap}>
-                  <PersonPicker selected={lead} onChange={setLead} bordered />
+                  <PersonPicker selected={lead} onChange={setLead} bordered single closeOnSelect />
                   {lead.length > 0 && <FieldClearButton onClear={() => setLead([])} label={`ניקוי ${leadLabel}`} />}
                 </div>
               </div>
               <div className={styles.field}>
                 <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
                 <div className={styles.fieldWrap}>
-                  <PersonPicker selected={coordinator} onChange={setCoordinator} bordered />
+                  <PersonPicker selected={coordinator} onChange={setCoordinator} bordered single closeOnSelect />
                   {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
                 </div>
               </div>
