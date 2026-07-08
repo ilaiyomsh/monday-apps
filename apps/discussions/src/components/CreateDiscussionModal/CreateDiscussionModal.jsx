@@ -17,7 +17,7 @@ import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
-import { createTopicsFromTemplate, countPoints, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
+import { createTopicsFromTemplate, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { toDateInput, toTimeInput, composeLocalDate } from '@generated/utils/dateTime.js';
@@ -118,8 +118,8 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     subscribePeopleColumns, getPeopleColumnsVersion, getPeopleColumnsVersion
   );
   // Every field that maps to a board column shows that column's LIVE title
-  // (fallback = its historical Hebrew label). "שעה" and "נושאים מתבנית" are not
-  // board columns, so they keep their fixed labels.
+  // (fallback = its historical Hebrew label). "שעה" is not a board column, so
+  // it keeps its fixed label.
   const fieldLabels = React.useMemo(() => ({
     type: getColumnTitle('discussions', 'discussionTypeID') || 'סוג דיון',
     date: getColumnTitle('discussions', 'discussionDateID') || 'תאריך',
@@ -138,7 +138,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const [isPreviousDropdownOpen, setIsPreviousDropdownOpen] = useState(false);
   const [previousSearch, setPreviousSearch] = useState('');
   const [templateId, setTemplateId] = useState('none');
-  const [isTemplateDropdownOpen, setIsTemplateDropdownOpen] = useState(false);
   const [isParticipantTemplateMenuOpen, setIsParticipantTemplateMenuOpen] = useState(false);
   // "סוג" (discussion type) — a SINGLE-select DROPDOWN column (alias
   // discussionTypeID). `discussionType` holds the type's label TEXT (or null).
@@ -479,10 +478,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
           setIsPreviousDropdownOpen(false);
           return;
         }
-        if (isTemplateDropdownOpen) {
-          setIsTemplateDropdownOpen(false);
-          return;
-        }
         if (isParticipantTemplateMenuOpen) {
           setIsParticipantTemplateMenuOpen(false);
           return;
@@ -500,20 +495,19 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [open, onClose, isPreviousDropdownOpen, isTemplateDropdownOpen, isParticipantTemplateMenuOpen, isTypeDropdownOpen, isTimeDropdownOpen]);
+  }, [open, onClose, isPreviousDropdownOpen, isParticipantTemplateMenuOpen, isTypeDropdownOpen, isTimeDropdownOpen]);
 
   useEffect(() => {
-    if (!open || (!isPreviousDropdownOpen && !isTemplateDropdownOpen && !isParticipantTemplateMenuOpen && !isTypeDropdownOpen && !isTimeDropdownOpen)) return undefined;
+    if (!open || (!isPreviousDropdownOpen && !isParticipantTemplateMenuOpen && !isTypeDropdownOpen && !isTimeDropdownOpen)) return undefined;
     const handlePointerDown = () => {
       setIsPreviousDropdownOpen(false);
-      setIsTemplateDropdownOpen(false);
       setIsTypeDropdownOpen(false);
       setIsParticipantTemplateMenuOpen(false);
       setIsTimeDropdownOpen(false);
     };
     window.addEventListener('pointerdown', handlePointerDown);
     return () => window.removeEventListener('pointerdown', handlePointerDown);
-  }, [open, isPreviousDropdownOpen, isTemplateDropdownOpen, isParticipantTemplateMenuOpen, isTypeDropdownOpen, isTimeDropdownOpen]);
+  }, [open, isPreviousDropdownOpen, isParticipantTemplateMenuOpen, isTypeDropdownOpen, isTimeDropdownOpen]);
 
   if (!open) return null;
 
@@ -525,24 +519,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const filteredDiscussionOptions = q
     ? discussionOptions.filter((o) => o.label.toLowerCase().includes(q))
     : discussionOptions;
-
-  const templateOptions = templates.map((t) => ({
-    value: t.id,
-    label: `${t.name} (${t.topics.length} נושאים · ${countPoints(t)} נקודות)`,
-  }));
-  const selectedTemplateLabel =
-    templateOptions.find((o) => o.value === templateId)?.label || 'בחר תבנית';
-
-  // The selected "סוג דיון" IS the label text (dropdown value).
-  const selectedTypeLabel = discussionType || '';
-
-  // The "נושאים מתבנית" field doubles as the type-topics indicator: when a type
-  // carries topics (typeTopics stashed for submit, templateId still 'none'), the
-  // trigger shows the type's template name instead of the placeholder — so we no
-  // longer need a separate "נושאים עבור {type}" field.
-  const typeTopicsSelected = !!typeTopics?.length;
-  const templateFieldValue = typeTopicsSelected ? `תבנית "${selectedTypeLabel}"` : selectedTemplateLabel;
-  const templateFieldEmpty = templateId === 'none' && !typeTopicsSelected;
 
   return (
     <div className={styles.overlay} onClick={(e) => {
@@ -572,8 +548,8 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         </div>
         <div className={styles.content}>
           <Flex direction="column" gap={16} align="stretch" className={styles.form}>
-            {/* Row 1: סוג דיון + נושאים מתבנית (template topics) side by side. */}
-            <div className={styles.row}>
+            {/* Row 1: סוג דיון — full-width, on its own row. */}
+            <div className={`${styles.row} ${styles.rowSingle}`}>
               <div className={styles.field}>
                 <Text type="text2" className={styles.label}>{fieldLabels.type}</Text>
                 <div className={styles.customDropdown}>
@@ -584,7 +560,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                       e.stopPropagation();
                       setIsTypeDropdownOpen((prev) => !prev);
                       setIsPreviousDropdownOpen(false);
-                      setIsTemplateDropdownOpen(false);
                       setIsAddingType(false);
                       setTypeSearch('');
                     }}
@@ -686,57 +661,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                   )}
                 </div>
               </div>
-              {templates.length > 0 && (
-                <div className={styles.field}>
-                  <Text type="text2" className={styles.label}>נושאים מתבנית</Text>
-                  <div className={styles.customDropdown}>
-                    <button
-                      type="button"
-                      className={styles.dropdownTrigger}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsTemplateDropdownOpen((prev) => !prev);
-                        setIsPreviousDropdownOpen(false);
-                        setIsTypeDropdownOpen(false);
-                      }}
-                      aria-expanded={isTemplateDropdownOpen}
-                      aria-haspopup="listbox"
-                    >
-                      <span className={`${styles.dropdownValue} ${templateFieldEmpty ? styles.dropdownPlaceholder : ''}`}>{templateFieldValue}</span>
-                      <span className={styles.dropdownChevron} aria-hidden="true">▾</span>
-                    </button>
-                    {(templateId !== 'none' || typeTopicsSelected) && (
-                      <FieldClearButton onClear={() => { setTemplateId('none'); setTypeTopics(null); }} label="ניקוי תבנית" />
-                    )}
-                    {isTemplateDropdownOpen && (
-                      <ul
-                        className={styles.dropdownMenu}
-                        role="listbox"
-                        onClick={(e) => e.stopPropagation()}
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        {templateOptions.map((option) => (
-                          <li
-                            key={option.value}
-                            role="option"
-                            aria-selected={templateId === option.value}
-                            className={`${styles.dropdownItem} ${
-                              templateId === option.value ? styles.dropdownItemSelected : ''
-                            }`}
-                            onClick={() => {
-                              setTemplateId(option.value);
-                              setTypeTopics(null);
-                              setIsTemplateDropdownOpen(false);
-                            }}
-                          >
-                            {option.label}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Row 2: תאריך הדיון + שעה, side by side. */}
@@ -766,7 +690,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                           e.stopPropagation();
                           setIsTimeDropdownOpen((prev) => !prev);
                           setIsPreviousDropdownOpen(false);
-                          setIsTemplateDropdownOpen(false);
                           setIsTypeDropdownOpen(false);
                         }}
                         aria-expanded={isTimeDropdownOpen}
@@ -837,7 +760,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                           e.stopPropagation();
                           setIsParticipantTemplateMenuOpen((prev) => !prev);
                           setIsPreviousDropdownOpen(false);
-                          setIsTemplateDropdownOpen(false);
                         }}
                         aria-haspopup="listbox"
                         aria-expanded={isParticipantTemplateMenuOpen}
