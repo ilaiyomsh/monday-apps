@@ -43,6 +43,10 @@ export function TaskTable({
   inlineCreateDefaults,
   onRenameTask,
   onDeleteTask,
+  // Optimistic-create error affordance, threaded to each row (see TaskTableRow):
+  // retry re-runs a failed create; dismiss removes the failed temp row locally.
+  onRetryCreate,
+  onDismissRow,
   selectable = false,
   selectedIds,
   onToggleSelect,
@@ -180,6 +184,8 @@ export function TaskTable({
               onDeadlineChange={onDeadlineChange && canTask('editTaskDeadline', task) ? onDeadlineChange : undefined}
               onRenameTask={onRenameTask && canTask('editTaskName', task) ? onRenameTask : undefined}
               onDeleteTask={onDeleteTask}
+              onRetryCreate={onRetryCreate}
+              onDismissRow={onDismissRow}
               selectable={selectable}
               selected={selectable ? !!selectedIds?.has(task.id) : false}
               onToggleSelect={onToggleSelect}

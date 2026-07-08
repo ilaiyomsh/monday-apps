@@ -77,6 +77,8 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     updateTasksAssigneeBatch,
     updateTasksDeadlineBatch,
     softDeleteTasks,
+    retryCreate,
+    dismissRow,
   } = data;
   // Load-time grouping/filter = the shared saved view (empty default otherwise);
   // in-session changes are local until someone with permission hits Save.
@@ -378,6 +380,9 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     onAssigneeChange: applyAssigneeChange,
     onDeadlineChange: applyDeadlineChange,
     onRenameTask: applyRename,
+    // Optimistic-create error recovery (temp row whose create failed).
+    onRetryCreate: retryCreate,
+    onDismissRow: dismissRow,
   };
   const TASK_EDIT_CAPS = ['editTaskStatus', 'editTaskPriority', 'editTaskDeadline', 'editTaskAssignee', 'editTaskName', 'deleteTask'];
   const canSelect = items.some((t) => TASK_EDIT_CAPS.some((cap) => canTask(cap, t)));

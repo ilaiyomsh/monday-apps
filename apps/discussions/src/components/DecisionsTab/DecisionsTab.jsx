@@ -173,6 +173,9 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
 
 function DecisionRow({
   decision, statusOpts, can, onRename, onStatus, onDate, onDecider, onAffected, onDelete, rowStyle,
+  // Optimistic-create error affordance (a temp row whose create failed): retry
+  // re-runs the create; dismiss removes the row locally.
+  onRetryCreate, onDismissRow,
   deciderCanEdit = false, deciderPickerProps,
   // Ordered column keys (incl. 'sel'/'name'), supplied by DecisionsTab so header
   // and body honor the same drag-reorder order.
@@ -186,10 +189,13 @@ function DecisionRow({
   const [nameDraft, setNameDraft] = useState(decision.name || '');
   const [confirmDel, setConfirmDel] = useState(false);
 
-  // Optimistic row whose monday item isn't saved yet (useDecisions temp id):
-  // faded + locked until createDecision swaps in the server id (mirrors
-  // TaskTableRow's pending state).
+  // A freshly-added decision still carrying a temp id has no monday item yet, but
+  // it is FULLY EDITABLE right away — edits are queued in useDecisions and flushed
+  // when the real id arrives. `pending` now only drives aria-busy (no locking).
   const pending = String(decision.id).startsWith('temp-');
+  // Background create failed: keep the row (never silently drop it) and show a
+  // clear error + retry/dismiss affordance instead of a blocked/faded row.
+  const failed = decision._createFailed === true;
 
   const deciderPeople = Array.isArray(decision.deciderID) ? decision.deciderID : [];
   const affected = Array.isArray(decision.affectedID) ? decision.affectedID : [];
@@ -283,6 +289,31 @@ function DecisionRow({
             </button>
           )
         )}
+        {failed && (
+          <span className={styles.decCreateFailedActions} onClick={(e) => e.stopPropagation()}>
+            <span className={styles.decCreateFailedText}>שמירה נכשלה</span>
+            {onRetryCreate && (
+              <button
+                type="button"
+                className={styles.decRetryBtn}
+                onClick={(e) => { e.stopPropagation(); onRetryCreate(decision.id); }}
+              >
+                נסה שוב
+              </button>
+            )}
+            {onDismissRow && (
+              <button
+                type="button"
+                className={styles.decDismissBtn}
+                onClick={(e) => { e.stopPropagation(); onDismissRow(decision.id); }}
+                aria-label="הסר שורה"
+                title="הסר"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </span>
+        )}
         {/* monday "updates" speech-bubble icon at the trailing edge of the name
             cell — identical affordance to the Tasks name cell (opens the
             decision's item card on the Updates pane). */}
@@ -367,9 +398,9 @@ function DecisionRow({
   return (
     <div
       ref={dragRef}
-      className={`${styles.decRow} ${styles.decBodyRow} ${pending ? styles.decPending : ''} ${dragProps ? styles.decDraggable : ''}`}
+      className={`${styles.decRow} ${styles.decBodyRow} ${failed ? styles.decCreateFailed : ''} ${dragProps ? styles.decDraggable : ''}`}
       style={dragStyle ? { ...rowStyle, ...dragStyle } : rowStyle}
-      aria-busy={pending || undefined}
+      aria-busy={(pending && !failed) || undefined}
       {...(dragProps || {})}
     >
       {orderedKeys.map((k) => cellByKey[k]).filter(Boolean)}
@@ -406,6 +437,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     updateDecisionAffected,
     updateDecisionDecider,
     softDeleteDecisions,
+    retryCreate,
+    dismissRow,
   } = data;
 
   // Status label set comes from the MAPPED decisions status column —
@@ -777,6 +810,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         updateDecisionDecider={updateDecisionDecider}
         updateDecisionAffected={updateDecisionAffected}
         onDelete={handleDelete}
+        onRetryCreate={retryCreate}
+        onDismissRow={dismissRow}
         rowStyle={rowStyle}
       />
 
@@ -887,6 +922,7 @@ function DecisionRows({
   list, scope, canReorderRows, columns, selectable, selectedIds, onToggleSelect,
   statusOpts, canDecision, updateDecisionName, updateDecisionStatus, updateDecisionDate,
   updateDecisionDecider, updateDecisionAffected, onDelete, rowStyle,
+  onRetryCreate, onDismissRow,
 }) {
   const enabled = !!scope && !!canReorderRows;
   const { order: rowOrderIds, orderList, onDragEnd } = useRowOrder(scope, list, { enabled });
@@ -906,6 +942,8 @@ function DecisionRows({
       onDecider={updateDecisionDecider}
       onAffected={updateDecisionAffected}
       onDelete={onDelete}
+      onRetryCreate={onRetryCreate}
+      onDismissRow={onDismissRow}
       rowStyle={rowStyle}
       deciderCanEdit={canDecision('editDecisionAffected', d)}
       selectable={selectable}

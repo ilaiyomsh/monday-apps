@@ -489,6 +489,25 @@
   color: var(--primary-color, #0073ea);
 }
 
+/* Topic-header retry affordance when the topic's optimistic create failed. */
+.topicRetryBtn {
+  margin-inline-start: 6px;
+  border: 1px solid var(--negative-color, #d83a52);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--negative-color, #d83a52);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: var(--font-family);
+}
+.topicRetryBtn:hover {
+  background: var(--negative-color, #d83a52);
+  color: #ffffff;
+}
+
 
 /* ---- Round 7: point multi-select checkbox + floating bulk-action bar ---- */
 

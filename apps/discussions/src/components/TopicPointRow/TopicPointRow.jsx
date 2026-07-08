@@ -137,6 +137,9 @@ export function TopicPointRow({
   // removed from the table; the read/write path in useTopics stays intact).
   usersById, // eslint-disable-line no-unused-vars
   onToggle, onToggleNotForDiscussion, onRename, onDelete,
+  // Optimistic-create error affordance: retry re-runs a failed point create
+  // (dismissal reuses the existing hover-trash / onDelete).
+  onRetryCreate,
   // Granular discussion-tier caps. Each equals the legacy canEdit while the
   // permissions feature is off, so behavior is unchanged. point edit (rename +
   // whole-row drag + hide), delete (hover delete), check ("נידונה" toggle).
@@ -151,6 +154,8 @@ export function TopicPointRow({
 }) {
   const discussed = point.discussed === true;
   const excluded = point.notForDiscussion === true;
+  // Background create failed: keep the point + show a clear error + retry.
+  const failed = point._createFailed === true;
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(point.name || '');
   // Inline delete confirmation for the hover trash (mirrors TaskTableRow).
@@ -181,7 +186,7 @@ export function TopicPointRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`${styles.row} ${excluded ? styles.excluded : ''} ${canEditPoint ? styles.rowDraggable : ''}`}
+      className={`${styles.row} ${excluded ? styles.excluded : ''} ${failed ? styles.rowFailed : ''} ${canEditPoint ? styles.rowDraggable : ''}`}
       {...dragProps}
     >
       {/* LEADING CELL — a clean selection checkbox carrying the topic color strip
@@ -225,6 +230,20 @@ export function TopicPointRow({
             onDoubleClick={canEditPoint ? () => { setNameDraft(point.name || ''); setEditingName(true); } : undefined}
           >
             {point.name}
+          </span>
+        )}
+        {failed && (
+          <span className={styles.createFailedActions} onClick={stop} onPointerDown={stop}>
+            <span className={styles.createFailedText}>שמירה נכשלה</span>
+            {onRetryCreate && (
+              <button
+                type="button"
+                className={styles.retryBtn}
+                onClick={(e) => { e.stopPropagation(); onRetryCreate(point.id); }}
+              >
+                נסה שוב
+              </button>
+            )}
           </span>
         )}
         {/* Secondary controls revealed on ROW HOVER (mirrors the Tasks name cell's

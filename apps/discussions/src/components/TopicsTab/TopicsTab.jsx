@@ -155,6 +155,9 @@ function topicColorStartIndex(id, seed = 0) {
 function SortableTopicSection({
   topic, accent, open, onToggleOpen, usersById,
   renameTopic,
+  // Optimistic-create error affordance (topic OR its points): retry re-runs the
+  // failed create; dismissal reuses the existing kebab delete / point trash.
+  onRetryCreate,
   deleteTopic, addPoint, togglePoint,
   togglePointNotForDiscussion, toggleTopicNotForDiscussion,
   renamePoint, deletePoint, reorderPoints,
@@ -201,6 +204,9 @@ function SortableTopicSection({
 
   const points = topic._subitems || [];
   const excluded = topic.notForDiscussion === true;
+  // Background create failed: keep the topic + show a clear error + retry in the
+  // header (dismissal = the existing kebab "מחק", which removes a temp row locally).
+  const topicFailed = topic._createFailed === true;
   const effectiveOpen = open && !excluded;
 
   const forDiscussion = points.filter((p) => p.notForDiscussion !== true);
@@ -358,6 +364,17 @@ function SortableTopicSection({
           />
         )}
 
+        {topicFailed && onRetryCreate && (
+          <button
+            type="button"
+            className={styles.topicRetryBtn}
+            onClick={(e) => { e.stopPropagation(); onRetryCreate(topic.id); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            title="שמירת הנושא נכשלה — נסה שוב"
+          >
+            שמירה נכשלה · נסה שוב
+          </button>
+        )}
         {canDelete && (
           <RowKebabMenu
             excluded={excluded}
@@ -407,6 +424,7 @@ function SortableTopicSection({
                   onToggleNotForDiscussion={togglePointNotForDiscussion}
                   onRename={renamePoint}
                   onDelete={deletePoint}
+                  onRetryCreate={onRetryCreate}
                   canEditPoint={canEditTopic}
                   canDelete={canDelete}
                   canCheck={canCheck}
@@ -499,7 +517,7 @@ export function TopicsTab({
   decisionsItems = [], tasksItems = [],
 }) {
   const {
-    items, loading, addTopic, addPoint, togglePoint, refetch,
+    items, loading, addTopic, addPoint, retryCreate, togglePoint, refetch,
     togglePointNotForDiscussion, toggleTopicNotForDiscussion, updateTopicPriority,
     renameTopic, deleteTopic, renamePoint, deletePoint, reorderTopics, reorderPoints,
   } = useTopics(discussion.id, { onSuccess: onNotify, onLoading: onNotifyLoading, onDismiss: onDismissToast });
@@ -812,6 +830,7 @@ export function TopicsTab({
               onToggleOpen={() => setCollapsed((p) => ({ ...p, [topic.id]: !p[topic.id] }))}
               usersById={usersById}
               renameTopic={renameTopic}
+              onRetryCreate={retryCreate}
               deleteTopic={deleteTopic}
               addPoint={addPoint}
               togglePoint={togglePoint}

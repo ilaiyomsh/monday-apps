@@ -4,6 +4,7 @@ import { api, parseValue, cvSelection, formatValue } from '../utils/mondayApi/mo
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
 import { MondayContext } from '@generated/contexts/MondayContext.jsx';
 import logger from '../utils/logger';
+import { useOptimisticRows, isTempId, nextTempId } from './useOptimisticRows.js';
 
 // Undo window for deferred decision deletion — must match the delete toast's
 // auto-hide duration so the real delete fires exactly when "בטל" disappears.
@@ -152,6 +153,15 @@ export function useDecisions(discussionId) {
   const rememberCreated = (id) => { recentlyCreatedRef.current.set(String(id), Date.now() + RECENT_CREATE_MS); };
   const forgetCreated = (id) => { recentlyCreatedRef.current.delete(String(id)); };
 
+  // Optimistic-row bookkeeping shared with useTasks: queue edits made on a
+  // freshly-added row BEFORE its real id arrives + stash create args for retry
+  // (see useOptimisticRows).
+  const { enqueueEdit, drainEdits, stashCreateArgs, getCreateArgs, forgetRow } = useOptimisticRows();
+  // Live handle to the per-field update fns so createDecision's reconcile step
+  // can FLUSH queued edits through the SAME mutations a committed row uses
+  // (assigned each render, just before the hook returns).
+  const flushersRef = useRef({});
+
   useEffect(() => {
     if (!discussionId) { setItems([]); setLoading(false); return; }
     let cancelled = false;
@@ -221,6 +231,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, name: trimmed } : i));
     });
+    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'name', trimmed); return; }
     try {
       const b = new החלטות1Board();
       await b.item(decisionId).update({ name: trimmed }).execute();
@@ -233,6 +244,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, decisionStatusID: status } : i));
     });
+    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'decisionStatusID', status); return; }
     try {
       const b = new החלטות1Board();
       await b.item(decisionId).update({ decisionStatusID: status }).execute();
@@ -245,6 +257,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, decisionPriorityID: priority } : i));
     });
+    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'decisionPriorityID', priority); return; }
     try {
       const b = new החלטות1Board();
       await b.item(decisionId).update({ decisionPriorityID: priority }).execute();
@@ -257,6 +270,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, decisionDateID: date } : i));
     });
+    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'decisionDateID', date); return; }
     try {
       const b = new החלטות1Board();
       const f = date ? formatDate(date) : null;
@@ -270,6 +284,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, affectedID: people } : i));
     });
+    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'affectedID', people); return; }
     try {
       const b = new החלטות1Board();
       await b.item(decisionId).update({ affectedID: (people || []).map((p) => Number(p.id)) }).execute();
@@ -285,6 +300,7 @@ export function useDecisions(discussionId) {
       prev = current;
       return current.map((i) => (i.id === decisionId ? { ...i, deciderID: people } : i));
     });
+    if (isTempId(decisionId)) { enqueueEdit(decisionId, 'deciderID', people); return; }
     try {
       const b = new החלטות1Board();
       await b.item(decisionId).update({ deciderID: (people || []).map((p) => Number(p.id)) }).execute();
@@ -296,6 +312,8 @@ export function useDecisions(discussionId) {
     forgetCreated(decisionId); // so a later create's refresh can't resurrect it
     const prev = [...items];
     setItems((current) => current.filter((i) => i.id !== decisionId));
+    // A temp row never reached the board — local removal is enough.
+    if (isTempId(decisionId)) { forgetRow(decisionId); return true; }
     try {
       await api(`mutation ($itemId: ID!) { delete_item(item_id: $itemId) { id } }`, { itemId: decisionId }, 'useDecisions.deleteDecision');
       return true;
@@ -304,7 +322,7 @@ export function useDecisions(discussionId) {
       setItems(prev);
       return false;
     }
-  }, [items]);
+  }, [items, forgetRow]);
 
   // Deferred ("soft") delete with an undo window: the rows vanish from the UI
   // immediately, but the real delete_item fires only after DELETE_GRACE_MS — so
@@ -324,6 +342,8 @@ export function useDecisions(discussionId) {
     const timer = setTimeout(() => {
       if (cancelled) return;
       idList.forEach((id) => {
+        // Temp rows never reached the board — just drop their bookkeeping.
+        if (isTempId(id)) { forgetRow(id); return; }
         api(`mutation ($itemId: ID!) { delete_item(item_id: $itemId) { id } }`, { itemId: id }, 'useDecisions.softDeleteDecisions')
           .catch((err) => logger.error('useDecisions', 'Error deleting decision', err));
       });
@@ -350,36 +370,13 @@ export function useDecisions(discussionId) {
   //   - pointId + existingLinkedIds: also APPEND the new decision to the topic
   //     point's (subitem's) pointDecisionsLinkID relation. The caller passes the
   //     point's current linked ids to avoid an extra read (relation writes replace).
-  const createDecision = useCallback(async (text, opts = {}) => {
-    const trimmed = (text || '').trim();
-    if (!trimmed || !discussionId) return null;
-    if (!getBoardId('decisions')) {
-      // Graceful degradation — never fire a query when the board is unmapped.
-      warnUnmappedOnce({ discussionId, action: 'createDecision' });
-      return null;
-    }
-    const {
-      status = null,
-      priority = null,
-      affected = [],
-      date = undefined,
-      decider = null,
-      pointId = null,
-      existingLinkedIds = [],
-    } = opts || {};
-    // Default the decision date to today; explicit null means "no date".
-    const effectiveDate = date === undefined ? new Date() : date;
-    const deciderId = decider != null ? (decider?.id ?? decider) : currentUserId;
-
-    const tempId = `temp-${Date.now()}`;
-    setItems((prev) => [...prev, {
-      id: tempId,
-      name: trimmed,
-      decisionStatusID: status,
-      decisionPriorityID: priority,
-      affectedID: affected,
-      decisionDateID: effectiveDate,
-    }]);
+  // Run (or RE-run, on retry) the background create for ONE optimistic decision
+  // row. Extracted from createDecision so a failed create can be retried against
+  // the SAME temp row. `norm` = the normalized create fields (see createDecision).
+  const runCreateDecision = useCallback(async (tempId, trimmed, norm) => {
+    const { status, priority, affected, effectiveDate, deciderId, pointId, existingLinkedIds } = norm;
+    // Clear any prior error flag (retry path).
+    setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, _createFailed: false } : i)));
     try {
       const b = new החלטות1Board();
       const decisionCols = getColumns('decisions') || {};
@@ -406,7 +403,25 @@ export function useDecisions(discussionId) {
       const realId = created.id;
       await b.item(realId).update({ discussionLinkID: { linkedItems: [{ id: discussionId }] } }).execute();
       if (pointId) await linkDecisionToPoint(pointId, realId, existingLinkedIds);
-      setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, id: realId } : i)));
+      // RECONCILE: swap temp→real IN PLACE; the spread preserves any edits the
+      // user already applied to the row while it was still optimistic.
+      setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, id: realId, _createFailed: false } : i)));
+      // FLUSH edits queued while the row had no real id, through the SAME update
+      // mutations a committed row uses (last-write-wins per field). Awaited so the
+      // silent refresh below reads the persisted values (never clobbers a flush).
+      const edits = drainEdits(tempId);
+      if (edits) {
+        const f = flushersRef.current;
+        const jobs = [];
+        if ('name' in edits) jobs.push(f.updateDecisionName(realId, edits.name));
+        if ('decisionStatusID' in edits) jobs.push(f.updateDecisionStatus(realId, edits.decisionStatusID));
+        if ('decisionPriorityID' in edits) jobs.push(f.updateDecisionPriority(realId, edits.decisionPriorityID));
+        if ('decisionDateID' in edits) jobs.push(f.updateDecisionDate(realId, edits.decisionDateID));
+        if ('affectedID' in edits) jobs.push(f.updateDecisionAffected(realId, edits.affectedID));
+        if ('deciderID' in edits) jobs.push(f.updateDecisionDecider(realId, edits.deciderID));
+        await Promise.allSettled(jobs);
+      }
+      forgetRow(tempId);
       // Mark this id as freshly created so the silent refresh below (and any that
       // fire during the eventual-consistency window) preserve the row even if the
       // relation index hasn't surfaced it yet — the disappearing-row fix.
@@ -417,16 +432,81 @@ export function useDecisions(discussionId) {
       return { id: realId };
     } catch (err) {
       logger.error('useDecisions', 'Error creating decision', err);
-      setItems((prev) => prev.filter((i) => i.id !== tempId));
+      // Keep the row in a clear ERROR state (never silently drop it) so the user
+      // can retry or dismiss it; the Hebrew error toast is raised via the logger
+      // sink. Queued edits + create args are kept so a retry can still flush them.
+      setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, _createFailed: true } : i)));
       return null;
     }
-  }, [discussionId, refresh, currentUserId]);
+  }, [discussionId, refresh, currentUserId, drainEdits, forgetRow]);
+
+  // Create a decision linked to this discussion, inserting an OPTIMISTIC row that
+  // shows immediately AND is fully editable right away. `text` is the wording
+  // (= the item NAME). See the header comment for the `opts` shape.
+  const createDecision = useCallback((text, opts = {}) => {
+    const trimmed = (text || '').trim();
+    if (!trimmed || !discussionId) return null;
+    if (!getBoardId('decisions')) {
+      // Graceful degradation — never fire a query when the board is unmapped.
+      warnUnmappedOnce({ discussionId, action: 'createDecision' });
+      return null;
+    }
+    const {
+      status = null,
+      priority = null,
+      affected = [],
+      date = undefined,
+      decider = null,
+      pointId = null,
+      existingLinkedIds = [],
+    } = opts || {};
+    // Default the decision date to today; explicit null means "no date".
+    const effectiveDate = date === undefined ? new Date() : date;
+    const deciderId = decider != null ? (decider?.id ?? decider) : currentUserId;
+    const norm = { status, priority, affected, effectiveDate, deciderId, pointId, existingLinkedIds };
+
+    const tempId = nextTempId();
+    stashCreateArgs(tempId, { trimmed, norm });
+    setItems((prev) => [...prev, {
+      id: tempId,
+      name: trimmed,
+      decisionStatusID: status,
+      decisionPriorityID: priority,
+      affectedID: affected,
+      decisionDateID: effectiveDate,
+    }]);
+    return runCreateDecision(tempId, trimmed, norm);
+  }, [discussionId, currentUserId, runCreateDecision, stashCreateArgs]);
+
+  // Retry a failed create against the same optimistic row (row error affordance).
+  const retryCreate = useCallback((tempId) => {
+    const args = getCreateArgs(tempId);
+    if (!args) return null;
+    return runCreateDecision(tempId, args.trimmed, args.norm);
+  }, [getCreateArgs, runCreateDecision]);
+
+  // Dismiss a failed optimistic row: it never reached the board, so just remove
+  // it locally and drop its bookkeeping (no API call).
+  const dismissRow = useCallback((tempId) => {
+    forgetRow(tempId);
+    forgetCreated(tempId);
+    setItems((prev) => prev.filter((i) => i.id !== tempId));
+  }, [forgetRow]);
+
+  // Expose the latest per-field update fns to the create-reconcile flush step
+  // (read lazily at flush time — no stale closures, no createDecision churn).
+  flushersRef.current = {
+    updateDecisionName, updateDecisionStatus, updateDecisionPriority,
+    updateDecisionDate, updateDecisionAffected, updateDecisionDecider,
+  };
 
   return {
     items,
     loading,
     refresh,
     createDecision,
+    retryCreate,
+    dismissRow,
     updateDecisionName,
     updateDecisionStatus,
     updateDecisionPriority,
