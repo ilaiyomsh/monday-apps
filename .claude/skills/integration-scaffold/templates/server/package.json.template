@@ -1,0 +1,26 @@
+{
+  "name": "__PACKAGE_SCOPE__/server",
+  "version": "1.0.0",
+  "description": "Server for __APP_NAME_PASCAL__ integration",
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "server": "nodemon src/app.js",
+    "dev": "concurrently -k \"nodemon src/app.js\" \"mapps tunnel:create -p 8080 -a APP_ID\"",
+    "tunnel": "mapps tunnel:create -p 8080 -a APP_ID",
+    "deploy": "mapps code:push -a APP_ID",
+    "logs": "mapps code:logs -i APP_ID -s live -t console",
+    "logs:http": "mapps code:logs -i APP_ID -s live -t http"
+  },
+  "dependencies": {
+    "__PACKAGE_SCOPE__/shared": "workspace:*",
+    "body-parser": "^1.20.2",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "nodemon": "^3.0.0",
+    "@mondaycom/apps-cli": "^4.10.5"
+  }
+}

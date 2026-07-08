@@ -1,0 +1,186 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-medium, 16px);
+  /* Full width (the tab pane broke out of the 90% frame) so the board's row
+     separators run to the RIGHT edge of the view. A left inset keeps the toolbar
+     off the edge; the right stays flush (the board bleeds right). */
+  width: 100%;
+  padding-inline-start: 28px;
+  padding-inline-end: 0;
+  box-sizing: border-box;
+}
+
+/* batch action bar — appears under the toolbar when ≥1 task is selected */
+.actionBar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+
+.actionBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding-inline-end: 2px;
+}
+
+.actionBarCenter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 2px;
+}
+
+.actionBarRight {
+  display: flex;
+  align-items: center;
+  padding-inline-start: 2px;
+}
+
+.closeSelectionBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.closeSelectionBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.skeletonStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-small, 8px);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacing-small, 8px);
+}
+
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+}
+
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+}
+
+.groupSelect {
+  width: 144px;
+}
+
+.groupNativeSelect {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  cursor: pointer;
+}
+
+.groupNativeSelect:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+/* Single shared horizontal scroll for ALL groups (one scrollbar, they move
+   together — a real monday board — instead of each group scrolling on its own).
+   overflow: auto hidden = horizontal auto, vertical hidden; the stack's height
+   fits its content so nothing is clipped vertically and the card body (.body in
+   DiscussionCard) keeps owning the vertical scroll. */
+.board {
+  overflow: auto hidden;
+  width: 100%;
+  /* direction:ltr so the LTR tables anchor LEFT (color strip + frozen name on the
+     left) and the row separators extend to the RIGHT edge — not the reverse. */
+  direction: ltr;
+}
+/* Shared horizontal extent: as wide as the widest group table (max-content) but
+   never narrower than the board (min-width:100%), so every group fills the same
+   width and the row separators run edge-to-edge. */
+.groupScrollInner {
+  width: max-content;
+  min-width: 100%;
+  direction: ltr;
+}
+
+.groupStack {
+  display: flex;
+  flex-direction: column;
+  /* monday gap between groups (open→open) = 28px. */
+  gap: 28px;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* Pin the group title left while columns scroll horizontally under the shared
+     board scroll (the header is on its own row above the table — no overlap). */
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: max-content;
+  margin: 0 0 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.chevron {
+  width: 24px;
+  height: 24px;
+  color: var(--secondary-text-color, #676879);
+  transition: transform var(--motion-productive-medium, 0.2s) ease;
+  flex-shrink: 0;
+}
+
+.chevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+.groupTitle {
+  font-size: 18px;
+  font-weight: 500;
+  /* Pin the variable-font weight axis to match font-weight — Noto Sans Hebrew /
+     Figtree default to thin/light masters, so font-weight alone can render off.
+     500 = native monday group-title medium weight. */
+  font-variation-settings: 'wght' 500;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+}

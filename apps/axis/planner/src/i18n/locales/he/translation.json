@@ -1,0 +1,528 @@
+{
+  "common": {
+    "search": "חיפוש...",
+    "searchVerb": "חפש...",
+    "noResults": "לא נמצאו תוצאות",
+    "cancel": "ביטול",
+    "save": "שמור",
+    "confirm": "אישור",
+    "selectPlaceholder": "בחר...",
+    "loading": "טוען...",
+    "clearSelection": "נקה בחירה",
+    "clearAll": "נקה הכל"
+  },
+  "app": {
+    "error": {
+      "title": "שגיאה בטעינת האפליקציה",
+      "retry": "Try again",
+      "network": {
+        "title": "Something went wrong",
+        "description": "We're having trouble loading the app right now.\nThis is usually temporary — refreshing the page should fix it.",
+        "refresh": "Refresh page"
+      }
+    },
+    "welcome": {
+      "title": "ברוכים הבאים ל-Planner!",
+      "description": "כדי להתחיל, עליך להגדיר את הלוחות והעמודות שמהם המערכת תשאב את המידע.",
+      "cta": "הגדרת המערכת עכשיו",
+      "noPermission": "יש לפנות למנהל המערכת לצורך הגדרה ראשונית."
+    }
+  },
+  "gantt": {
+    "error": {
+      "network": {
+        "message": "We couldn't load the latest data. Some information may be missing or out of date.",
+        "refresh": "Refresh page",
+        "retry": "Try again",
+        "dismiss": "Dismiss"
+      }
+    },
+    "viewMode": {
+      "projects": "פרויקטים",
+      "employees": "עובדים",
+      "available": "זמינות"
+    },
+    "zoom": {
+      "quarter": "רבעון",
+      "month": "חודש",
+      "week": "שבוע",
+      "day": "יום"
+    },
+    "toolbar": {
+      "today": "היום",
+      "settings": "הגדרות",
+      "displayUnitHours": "הצג בשעות",
+      "displayUnitHoursShort": "ש׳",
+      "displayUnitPercent": "הצג באחוזים"
+    },
+    "loading": "טוען נתונים...",
+    "deleteToast": {
+      "message": "ההקצאה נמחקה",
+      "undo": "בטל"
+    }
+  },
+  "filter": {
+    "button": "סינון",
+    "timeframe": {
+      "label": "תקופת סיום",
+      "endingThisWeek": "מסתיים השבוע",
+      "endingThisMonth": "מסתיים החודש"
+    },
+    "utilization": {
+      "label": "סטטוס ניצולת",
+      "red": "אדום (חריגה מתקציב)",
+      "yellow": "כתום (שורף מהר)",
+      "blue": "כחול (ניצול חסר)",
+      "green": "ירוק (בתוכנית)"
+    },
+    "hidePast": "הסתר הקצאות שעברו",
+    "clear": "נקה"
+  },
+  "addProject": {
+    "button": "הוסף פרויקט",
+    "allShown": "כל הפרויקטים מוצגים",
+    "loading": "טוען פרויקטים...",
+    "searchPlaceholder": "חיפוש פרויקט...",
+    "noResults": "לא נמצאו פרויקטים",
+    "allAlreadyShown": "כל הפרויקטים כבר מוצגים",
+    "helper": "הוסף פרויקט לתצוגה"
+  },
+  "projectFilter": {
+    "button": "סינון פרויקטים",
+    "pmColumn": "מנהל פרויקט",
+    "typeColumn": "סוג פרויקט",
+    "noPMsAvailable": "אין מנהלים זמינים",
+    "noTypesAvailable": "אין סוגים זמינים",
+    "clear": "נקה",
+    "activeWithoutAllocations": "הצג רק פרויקטים פעילים ללא הקצאה"
+  },
+  "companyLoad": {
+    "groupTitle": "עומס חברה",
+    "tooltipTitle": "עומס חברה/תפקיד",
+    "tooltipTitleCompany": "עומס חברה",
+    "tooltipTitleRole": "עומס {{role}}",
+    "standard_one": "תקן: {{hours}} ש׳ ({{count}} עובד)",
+    "standard_other": "תקן: {{hours}} ש׳ ({{count}} עובדים)",
+    "retry": "טעינת נתוני העבר נכשלה — נסה שוב"
+  },
+  "loadCell": {
+    "period": "תקופה: {{period}}",
+    "availability": "זמינות: {{percent}}% ({{hours}} ש׳)",
+    "totalAvailable": "סה\"כ פנוי לתקופה: {{hours}} ש׳",
+    "utilization": "ניצול: {{percent}}% ({{hours}} ש׳)"
+  },
+  "datePicker": {
+    "placeholder": "בחר תאריך..."
+  },
+  "allocation": {
+    "mode": {
+      "single": "הקצאה בודדת",
+      "bulk": "הקצאה מרובה"
+    },
+    "stats": {
+      "plannedTotal": "סה״כ תכנון",
+      "actualTotal": "סה״כ ביצוע",
+      "actualPercent": "אחוז ביצוע",
+      "hoursShort": "ש׳"
+    },
+    "fields": {
+      "project": "פרויקט",
+      "capability": "יכולת",
+      "employee": "עובד",
+      "hoursPerDay": "שעות ליום",
+      "totalHours": "סה\"כ שעות",
+      "fte": "אחוז משרה",
+      "endDate": "תאריך סיום",
+      "startDate": "תאריך התחלה"
+    },
+    "placeholder": {
+      "project": "חפש פרויקט...",
+      "capability": "חפש יכולת...",
+      "employee": "בחר עובד..."
+    },
+    "workingDays": "{{count}} ימי עבודה",
+    "warning": {
+      "cannotSwapEmployeeWithReported": "לא ניתן להחליף עובד להקצאה עם שעות מדווחות",
+      "overlapTitle": "חפיפה עם הקצאה קיימת!",
+      "overlapBody": "לעובד זה כבר קיימת הקצאה לפרויקט זה בתאריכים החופפים. יש לשנות את התאריכים או לערוך את ההקצאה הקיימת."
+    },
+    "toast": {
+      "projectRequired": "יש לבחור פרויקט להקצאה זו",
+      "employeeRequired": "יש לבחור עובד להקצאה זו",
+      "overlapBlock": "לא ניתן לשמור - קיימת חפיפה עם הקצאה קיימת בתאריכים אלו",
+      "saveError": "שגיאה בשמירת ההקצאה. נסה שוב."
+    },
+    "button": {
+      "delete": "מחק",
+      "duplicate": "שכפל",
+      "save": "שמור",
+      "saving": "שומר..."
+    },
+    "duplicate": {
+      "title": "שכפול הקצאה",
+      "same": "שכפל לאותו עובד",
+      "sameDetails": "אותם פרטים, מיד לאחר סיום ההקצאה הנוכחית",
+      "other": "שכפל לעובד אחר",
+      "otherDetails": "אותם תאריכים, בחירת תפקיד ועובד חדש"
+    }
+  },
+  "bulkAllocation": {
+    "fields": {
+      "start": "התחלה",
+      "end": "סיום"
+    },
+    "row": {
+      "hoursPerDayShort": "ש׳/יום",
+      "totalHoursShort": "שעות",
+      "reset": "איפוס",
+      "remove": "הסר",
+      "metaSummary": "{{hoursPerDay}} ש׳/יום  |  {{percent}}%  |  {{days}} ימים"
+    },
+    "sidebar": {
+      "title": "בחר יכולת",
+      "empty": "אין יכולות מוגדרות לעובדים"
+    },
+    "emptyState": "בחר יכולות מהרשימה להוספת הקצאות",
+    "validation": {
+      "employeeRequired": "יש לבחור עובד",
+      "hoursPositive": "סה\"כ שעות חייב להיות גדול מ-0",
+      "overlap": "חפיפה עם הקצאה קיימת"
+    },
+    "toast": {
+      "partialSave": "נשמרו {{succeeded}} הקצאות, {{failed}} נכשלו."
+    },
+    "savingProgress": "שומר {{done}}/{{total}}...",
+    "confirmClose": {
+      "message": "האם לשמור את השינויים?"
+    }
+  },
+  "taskBar": {
+    "hoursUnit": "{{count}} שעות",
+    "tooltip": {
+      "capability": "יכולת:",
+      "name": "שם:",
+      "planning": "תכנון:",
+      "actual": "ביצוע:",
+      "percentHours": "{{percent}}% | {{hours}} שעות",
+      "planDaily": "תכנון:",
+      "planWeekly": "תכנון:",
+      "planMonthly": "תכנון:",
+      "plannedTotal": "סה\"כ תכנון לתקופה:",
+      "actualTotal": "סה\"כ ביצוע לתקופה:",
+      "actualPercent": "אחוז ביצוע:",
+      "dates": "תאריכים:",
+      "totalDays": "סך ימים:",
+      "daysCount_one": "יום {{count}}",
+      "daysCount_two": "יומיים",
+      "daysCount_other": "{{count}} ימים"
+    },
+    "contextMenu": {
+      "edit": "ערוך"
+    }
+  },
+  "employeeLoad": {
+    "label": "עומס",
+    "rowAvailabilityLabel": "זמינות"
+  },
+  "ganttProvider": {
+    "toast": {
+      "deleteFailed": "שגיאה במחיקת ההקצאה. ההקצאה שוחזרה.",
+      "bulkPmUpdateFailed": "עדכון מנהל: {{failed}} מתוך {{total}} נכשלו"
+    }
+  },
+  "timeline": {
+    "search": {
+      "project": "חיפוש פרויקט...",
+      "employee": "חיפוש עובד..."
+    },
+    "refreshTooltip": "רענן רשימת פרויקטים",
+    "loadingAbsences": "טוען היעדרויות...",
+    "weekLabel": "שבוע {{week}}",
+    "weekLabelShort": "ש{{week}}",
+    "quarterLabel": "רבעון {{quarter}}"
+  },
+  "pmSelector": {
+    "selectManager": "בחר מנהל",
+    "noEmployees": "אין עובדים זמינים"
+  },
+  "projectSummary": {
+    "selectType": "בחר סוג פרויקט",
+    "addType": "+ סוג",
+    "plannedHours": "שעות מתוכננות",
+    "allocatedHours": "שעות מוקצות",
+    "actualHours": "שעות בפועל"
+  },
+  "classification": {
+    "external": "פרויקטים חיצוניים",
+    "internal": "פרויקטים פנימיים",
+    "other": "אחר"
+  },
+  "settings": {
+    "dialog": {
+      "title": "הגדרות",
+      "showJsonTitle": "הגדרות JSON (טיוטה)",
+      "copyJson": "העתק JSON",
+      "importLabel": "ייבוא",
+      "exportLabel": "ייצוא",
+      "importSuccess": "ההגדרות יובאו לטיוטה. לחץ על \"שמור שינויים\" כדי להחיל.",
+      "importError": "לא ניתן לייבא הגדרות: הקובץ אינו JSON תקין.",
+      "exportSuccess": "ההגדרות יוצאו לקובץ.",
+      "exportError": "לא ניתן לייצא הגדרות.",
+      "saveButton": "שמור שינויים"
+    },
+    "footer": {
+      "dirty": "● קיימים שינויים שלא נשמרו",
+      "allValid": "✓ כל ההגדרות תקינות",
+      "missingFields": "חסרים שדות חובה - ניתן לשמור ולהשלים מאוחר יותר"
+    },
+    "tabs": {
+      "allocations": "הקצאות",
+      "employees": "עובדים",
+      "projects": "פרויקטים",
+      "availability": "זמינות",
+      "general": "כללי"
+    },
+    "tabStatus": {
+      "missing": "חסרים שדות חובה",
+      "complete": "הוגדר במלואו"
+    },
+    "loading": {
+      "boards": "טוען לוחות..."
+    },
+    "unsavedConfirm": {
+      "message": "קיימים שינויים שלא נשמרו. האם ברצונך לשמור אותם לפני היציאה?",
+      "saveAndClose": "שמור וצא",
+      "closeWithoutSaving": "צא ללא שמירה"
+    },
+    "placeholder": {
+      "column": "בחר עמודה...",
+      "board": "בחר לוח...",
+      "statusColumn": "בחר עמודת סטטוס...",
+      "capabilityColumn": "בחר עמודת יכולת...",
+      "capabilitiesColumn": "בחר עמודת יכולות...",
+      "classificationStatus": "בחר עמודת סטטוס לסיווג...",
+      "activeStatuses": "בחר סטטוסים פעילים...",
+      "internalLabels": "בחר לייבלים שמייצגים פרויקטים פנימיים...",
+      "externalLabels": "בחר לייבלים שמייצגים פרויקטים חיצוניים...",
+      "pmColumn": "בחר עמודת מנהל פרויקט...",
+      "clientColumn": "בחר עמודת לקוח...",
+      "typeColumn": "בחר עמודת סוג פרויקט...",
+      "plannedHoursColumn": "בחר עמודת שעות מתוכננות...",
+      "projectsBoard": "בחר לוח פרויקטים...",
+      "label": "בחר תווית...",
+      "checkboxColumn": "בחר עמודת Checkbox...",
+      "approvedStatuses": "בחר סטטוסים שנחשבים מאושרים...",
+      "rejectedStatuses": "בחר תוויות נדחה..."
+    },
+    "allocations": {
+      "title": "לוח הקצאות",
+      "description": "בחר את הלוח והעמודות שמכילות את נתוני ההקצאות",
+      "fields": {
+        "board": "לוח הקצאות",
+        "startDate": "תאריך התחלה",
+        "endDate": "תאריך סיום",
+        "hoursPerDay": "שעות ליום",
+        "totalHours": "סה\"כ שעות",
+        "fte": "אחוז משרה",
+        "fteHelp": "עמודה לשמירת אחוז המשרה (מחושב אוטומטית משעות ליום)",
+        "project": "פרויקט",
+        "employee": "עובד",
+        "role": "תפקיד",
+        "capability": "עמודת יכולת בהקצאה",
+        "reportedHours": "שעות מדווחות (Mirror)",
+        "reportedHoursHelp": "בחר עמודת Mirror המכילה את סה\"כ השעות המדווחות בפועל",
+        "cost": "עלות הקצאה",
+        "pm": "מנהל פרויקט",
+        "pmHelp": "עמודת People לשמירת מנהל הפרויקט בכל הקצאה",
+        "client": "לקוח",
+        "clientHelp": "עמודת Board Relation לשמירת הלקוח בכל הקצאה"
+      }
+    },
+    "employees": {
+      "title": "לוח עובדים",
+      "description": "בחר את הלוח והעמודות שמכילות את נתוני העובדים",
+      "fields": {
+        "board": "לוח עובדים",
+        "name": "שם עובד",
+        "role": "תפקיד",
+        "allocPercent": "אחוז משרה",
+        "cost": "עלות מעביד",
+        "user": "משתמש (People Column)",
+        "capabilities": "עמודת יכולות",
+        "capabilitiesHelp": "עמודת Dropdown עם רשימת היכולות של העובד. אם לא נבחר, היכולות יהיו זהות לתפקיד."
+      },
+      "filterInactive": "סינון עובדים לא פעילים?",
+      "filterInactiveHelp": "עובדים לא פעילים לא יוצגו, ההקצאות שלהם לא ימשכו, והם לא ייכללו בחישובי עומס וזמינות.",
+      "statusColumn": "עמודת סטטוס עובד",
+      "activeStatusValue": "ערך סטטוס \"פעיל\"",
+      "peopleWarning": "שימת לב: עמודת אנשים צריכה לאפשר בחירה של משתמש אחד בלבד. יש לסמן \"הגבל בחירה לאיש אחד\" בהגדרות העמודה ב-monday."
+    },
+    "projects": {
+      "title": "לוח פרויקטים",
+      "description": "הגדר לוח פרויקטים וסינון פרויקטים פעילים",
+      "selectBoard": "בחר לוח פרויקטים",
+      "selectBoardHelp": "בחר מתוך הלוחות המקושרים בעמודת הפרויקט",
+      "noLinkedBoards": "לא נמצאו לוחות מקושרים. וודא שבחרת עמודת פרויקט מסוג Board Relation בסעיף ההקצאות.",
+      "filterActive": "סינון לפי פרויקטים פעילים?",
+      "statusColumn": "עמודת סטטוס פרויקט",
+      "activeStatusValue": "ערך סטטוס \"פעיל\"",
+      "classification": {
+        "label": "סיווג פנימי/חיצוני?",
+        "statusColumn": "עמודת סטטוס לסיווג",
+        "internal": "לייבלים פנימיים",
+        "external": "לייבלים חיצוניים",
+        "note": "פרויקטים שלא ממופים לאף קבוצה יוצגו תחת קבוצת \"אחר\"."
+      },
+      "fields": {
+        "pm": "מנהל פרויקט",
+        "pmHelp": "בחר עמודה המכילה את מנהל הפרויקט לתצוגה בכרטיס הסיכום",
+        "client": "לקוח",
+        "clientHelp": "עמודת Board Relation המקשרת ללוח לקוחות",
+        "type": "סוג פרויקט",
+        "typeHelp": "עמודת סטטוס שתוצג ככרטיסיית סוג בכרטיס הפרויקט",
+        "plannedHours": "שעות מתוכננות",
+        "plannedHoursHelp": "עמודת מספרים בלוח הפרויקטים — שעות העבודה המתוכננות לפרויקט, מוצגת בכרטיס הפרויקט"
+      }
+    },
+    "availability": {
+      "dayoff": {
+        "title": "לוח חופשות (Day-off)",
+        "description": "מיפוי לוח החופשות שמנוהל באפליקציית Day-off — מקור האמת להיעדרויות. היעדרות אישית מאושרת מאפסת את הקיבולת של העובד; יום חברה מחייב מאפס את כולם",
+        "fields": {
+          "board": "לוח החופשות",
+          "boardHelp": "הלוח שבו Day-off שומרת בקשות היעדרות וימי חברה. החלפת הלוח מאפסת את מיפויי העמודות והתוויות שמתחת",
+          "employee": "עמודת עובד (People)",
+          "employeeHelp": "עמודת האנשים עם העובד המבקש — חייבת להצביע על אותו משתמש monday כמו לוח העובדים",
+          "startDate": "עמודת תאריך התחלה",
+          "endDate": "עמודת תאריך סיום",
+          "kind": "עמודת סוג רשומה (אישי / כללי)",
+          "kindHelp": "עמודת הסטטוס שמבדילה בין בקשה אישית ליום חברה כללי",
+          "generalLabel": "תווית שמשמעותה יום חברה (כללי)",
+          "personalLabel": "תווית שמשמעותה היעדרות אישית",
+          "kindLabelsHelp": "נשמר לפי מזהה תווית יציב — שינוי שם התווית בלוח בהמשך בטוח",
+          "type": "עמודת סוג היעדרות",
+          "typeHelp": "אופציונלי — עמודת הסטטוס עם סוג ההיעדרות (חופשה, מחלה…), מוצגת ב-tooltip של הזמינות",
+          "mandatory": "עמודת חובה (Checkbox)",
+          "mandatoryHelp": "ימי חברה עם סימון בעמודה הזו סוגרים את המשרד ומאפסים קיבולת לכולם; בלי סימון הם תצוגה בלבד. בלי מיפוי העמודה — כל ימי החברה יהיו תצוגה בלבד",
+          "approvalRequired": "ספירת היעדרויות מאושרות בלבד",
+          "approvalRequiredHelp": "פעיל — רק בקשות שסטטוס האישור שלהן נמצא בקבוצת המאושרים מפחיתות קיבולת. כבוי — כל היעדרות אישית נספרת, כולל ממתינות ונדחות",
+          "approvalColumn": "עמודת סטטוס אישור",
+          "approvedValues": "סטטוסים שנחשבים מאושרים",
+          "approvedValuesHelp": "בחר את התוויות שמשמעותן שהבקשה אושרה (נדרש כשהמתג פעיל)",
+          "approvalColumnHelp": "עמודת מחזור האישור בלוח. נדרשת כשמדיניות האישור פעילה — ומומלצת תמיד: בלעדיה לא ניתן להחריג בקשות שנדחו.",
+          "rejectedValues": "תוויות \"נדחה\"",
+          "rejectedValuesHelp": "בקשות עם תוויות אלה מוחרגות מחישוב הזמינות תמיד — גם כשמדיניות האישור כבויה. הן נשארות גלויות רק באפליקציית החופשות."
+        }
+      }
+    },
+    "languagePicker": {
+      "label": "שפת ממשק",
+      "auto": "אוטומטי (Monday)",
+      "he": "עברית",
+      "en": "English"
+    },
+    "general": {
+      "title": "הגדרות כלליות",
+      "description": "הגדרות כלליות למערכת",
+      "workDayStart": "שעת התחלת יום עבודה",
+      "workDayEnd": "שעת סיום יום עבודה",
+      "defaultZoom": "תצוגת ברירת מחדל",
+      "defaultZoomHelp": "רמת הזום שתופיע כברירת מחדל בפתיחת הגאנט",
+      "displayUnit": "יחידת תצוגה",
+      "displayUnitHelp": "האם להציג את ההקצאות בשעות או באחוז משרה",
+      "workHours": {
+        "title": "הגדרות שעות עבודה",
+        "help": "ערכים אלו משמשים לחישוב אחוז משרה ותצוגות מאמץ אחרות.",
+        "hoursPerDay": "שעות ליום",
+        "hoursPerWeek": "שעות לשבוע",
+        "hoursPerMonth": "שעות לחודש",
+        "syncButton": "סנכרן שעות",
+        "syncDayBy": "סנכרן לפי שדה שעות ליום",
+        "syncWeekBy": "סנכרן לפי שדה שעות לשבוע",
+        "syncMonthBy": "סנכרן לפי שדה שעות לחודש",
+        "syncDisabledTooltip": "שנה שדה כדי לאפשר סנכרון"
+      },
+      "workDays": {
+        "title": "ימי עבודה פעילים",
+        "help": "סמן את הימים שבהם מתבצעת עבודה בחברה. ימים אלו ייספרו בחישובי עומסים ומאמץ.",
+        "day0": "א'",
+        "day1": "ב'",
+        "day2": "ג'",
+        "day3": "ד'",
+        "day4": "ה'",
+        "day5": "ו'",
+        "day6": "ש׳"
+      }
+    },
+    "validation": {
+      "allocationsBoard": "יש לבחור לוח הקצאות",
+      "startDate": "יש לבחור עמודת תאריך התחלה",
+      "endDate": "יש לבחור עמודת תאריך סיום",
+      "hoursPerDay": "יש לבחור עמודת שעות ליום",
+      "project": "יש לבחור עמודת פרויקט",
+      "employee": "יש לבחור עמודת עובד",
+      "role": "יש לבחור עמודת תפקיד",
+      "employeesBoard": "יש לבחור לוח עובדים",
+      "employeeName": "יש לבחור עמודת שם עובד",
+      "employeeRole": "יש לבחור עמודת תפקיד עובד",
+      "employeeFte": "יש לבחור עמודת אחוז משרה",
+      "employeeUser": "יש לבחור עמודת משתמש",
+      "employeeStatusColumn": "יש לבחור עמודת סטטוס עובד",
+      "activeEmployeeStatusValue": "יש לבחור לפחות ערך סטטוס פעיל אחד",
+      "projectsBoardForFilter": "יש לבחור לוח פרויקטים לסינון",
+      "projectStatus": "יש לבחור עמודת סטטוס פרויקט",
+      "activeStatusValue": "יש לבחור לפחות ערך סטטוס פעיל אחד",
+      "projectsBoardForClassification": "יש לבחור לוח פרויקטים לסיווג",
+      "classificationColumn": "יש לבחור עמודת סיווג פרויקט",
+      "classificationLabels": "יש לבחור לפחות לייבל אחד לפנימי או לחיצוני",
+      "workHours": "שעת התחלה חייבת להיות לפני שעת הסיום",
+      "dayoff": {
+        "identityJoin": "מקור היעדרויות מחייב את עמודת המשתמש בלוח העובדים (בטאב העובדים) — בלעדיה לא ניתן לשייך היעדרויות לעובדים",
+        "employeeColumn": "יש לבחור עמודת עובד (אנשים)",
+        "startDateColumn": "יש לבחור עמודת תאריך תחילת היעדרות",
+        "endDateColumn": "יש לבחור עמודת תאריך סיום היעדרות",
+        "kindColumn": "יש לבחור עמודת סוג רשומה (אישי/כללי)",
+        "generalLabel": "יש לבחור את הלייבל שמשמעו יום כללי",
+        "personalLabel": "יש לבחור את הלייבל שמשמעו היעדרות אישית",
+        "approvalColumn": "מדיניות אישורים פעילה — יש לבחור עמודת סטטוס אישור",
+        "approvedLabels": "מדיניות אישורים פעילה — יש לבחור לפחות לייבל מאושר אחד",
+        "boardNotFound": "לוח החופשות לא נמצא — ייתכן שנמחק או שאין אליו גישה",
+        "columnMissing": "העמודה כבר לא קיימת בלוח החופשות — יש לבחור מחדש",
+        "labelMissing": "הלייבל כבר לא קיים בעמודה — יש לבחור מחדש",
+        "approvedLabelsMissing": "חלק מהלייבלים המאושרים כבר לא קיימים בעמודת האישור — יש לבחור מחדש",
+        "rejectedNeedsColumn": "מיפוי תוויות \"נדחה\" דורש בחירת עמודת אישור"
+      }
+    }
+  },
+  "availability": {
+    "roleSummary": "{{hours}} ש׳ ({{count}} עובדים)",
+    "roleEmployeeCount_one": "עובד {{count}}",
+    "roleEmployeeCount_other": "{{count}} עובדים",
+    "halfDay": "חצי יום",
+    "holiday": "חג",
+    "weekend": "סוף שבוע",
+    "unassignedRole": "ללא תפקיד",
+    "employeeFte": "אחוז משרה: {{percent}}%",
+    "tooltip": {
+      "free": "{{hours}} ש׳ פנויות",
+      "fte": "אחוז משרה: {{percent}}%",
+      "roleLabel": "יכולת:",
+      "employeeLabel": "שם:",
+      "fteLabel": "אחוז משרה:",
+      "periodLabel": "תקופה:",
+      "availabilityLabel": "זמינות:",
+      "allocationLabel": "עומס:",
+      "freeLabel": "סה\"כ פנוי:",
+      "statusLabel": "מצב:",
+      "hoursValue": "{{hours}} שעות",
+      "reasonHoliday": "חג: {{name}}",
+      "reasonHalfDay": "ערב חג: {{name}}",
+      "reasonHolidayInfo": "{{name}} (יום עבודה)",
+      "reasonWeekend": "סוף שבוע",
+      "reasonAbsence": "היעדרות: {{name}}",
+      "reasonAbsenceUnknown": "היעדרות"
+    },
+    "absence": "היעדרות",
+    "partial": "זמינות חלקית"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "__PACKAGE_SCOPE__/example-integration",
+  "version": "1.0.0",
+  "description": "Example integration tool with trigger and action blocks",
+  "type": "module",
+  "dependencies": {
+    "__PACKAGE_SCOPE__/shared": "workspace:*"
+  }
+}

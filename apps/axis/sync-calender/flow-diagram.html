@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>זרימת האפליקציה — Google Calendar ↔ monday.com</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Heebo", "Assistant", sans-serif;
+    margin: 0;
+    padding: 32px;
+    background: #f5f7fb;
+    color: #1b2038;
+    direction: rtl;
+  }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  .sub { color: #6b7280; margin-bottom: 28px; }
+
+  .legend {
+    display: flex; gap: 18px; flex-wrap: wrap;
+    background: #fff; padding: 14px 18px; border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    margin-bottom: 28px; font-size: 14px;
+  }
+  .legend-item { display: flex; gap: 8px; align-items: center; }
+  .chip {
+    width: 18px; height: 18px; border-radius: 4px; display: inline-block;
+  }
+
+  .phase {
+    background: #fff; border-radius: 16px; padding: 24px 28px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06);
+    margin-bottom: 28px;
+    border-right: 6px solid transparent;
+  }
+  .phase h2 {
+    font-size: 22px; margin: 0 0 4px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .phase .phase-sub { color: #6b7280; margin: 0 0 20px; font-size: 14px; }
+
+  .phase.subscribe { border-right-color: #10b981; }
+  .phase.subscribe h2 { color: #065f46; }
+  .phase.runtime   { border-right-color: #3b82f6; }
+  .phase.runtime h2 { color: #1e40af; }
+  .phase.action    { border-right-color: #8b5cf6; }
+  .phase.action h2 { color: #5b21b6; }
+  .phase.fallback  { border-right-color: #ef4444; }
+  .phase.fallback h2 { color: #991b1b; }
+  .phase.cron      { border-right-color: #6b7280; }
+  .phase.cron h2 { color: #374151; }
+
+  /* flow row */
+  .flow {
+    display: flex; flex-direction: row;
+    flex-wrap: nowrap; overflow-x: auto;
+    gap: 0; padding-bottom: 8px;
+  }
+  .step {
+    flex: 0 0 auto; width: 200px;
+    background: #f9fafb; border: 1px solid #e5e7eb;
+    border-radius: 10px; padding: 12px 14px;
+    font-size: 13px; line-height: 1.5;
+    position: relative;
+  }
+  .step .num {
+    position: absolute; top: -10px; right: -10px;
+    background: #1f2937; color: #fff;
+    width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+  }
+  .step .actor {
+    font-size: 11px; font-weight: 700; color: #6b7280;
+    text-transform: uppercase; letter-spacing: .5px;
+    margin-bottom: 4px;
+  }
+  .step .title { font-weight: 600; margin-bottom: 4px; }
+  .step code {
+    background: #1f2937; color: #e5e7eb;
+    padding: 1px 6px; border-radius: 4px;
+    font-family: "SF Mono", Menlo, monospace; font-size: 11px;
+    direction: ltr; display: inline-block;
+  }
+
+  .arrow {
+    flex: 0 0 auto; width: 36px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px; color: #9ca3af; font-weight: 700;
+  }
+
+  /* actor colors */
+  .step.user    { background: #fef3c7; border-color: #fcd34d; }
+  .step.google  { background: #e0f2fe; border-color: #7dd3fc; }
+  .step.monday  { background: #ede9fe; border-color: #c4b5fd; }
+  .step.server  { background: #ecfdf5; border-color: #86efac; }
+  .step.storage { background: #fce7f3; border-color: #f9a8d4; }
+
+  .note {
+    margin-top: 16px; padding: 12px 14px;
+    background: #fffbea; border-right: 4px solid #f59e0b;
+    border-radius: 6px; font-size: 13px; line-height: 1.6;
+  }
+  .note strong { color: #92400e; }
+
+  .split {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    margin-top: 14px;
+  }
+  .branch {
+    background: #f9fafb; border: 1px dashed #d1d5db;
+    border-radius: 10px; padding: 12px 14px; font-size: 13px;
+  }
+  .branch h4 { margin: 0 0 6px; font-size: 14px; }
+  .branch.ok  { border-color: #10b981; background: #ecfdf5; }
+  .branch.err { border-color: #ef4444; background: #fef2f2; }
+
+  .matrix {
+    width: 100%; border-collapse: collapse; margin-top: 12px;
+    font-size: 13px;
+  }
+  .matrix th, .matrix td {
+    border: 1px solid #e5e7eb; padding: 8px 12px; text-align: right;
+  }
+  .matrix th { background: #f3f4f6; font-weight: 600; }
+  .matrix td code {
+    background: #1f2937; color: #e5e7eb;
+    padding: 1px 6px; border-radius: 4px; font-size: 11px;
+    direction: ltr; display: inline-block;
+  }
+
+  .actors-bar {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    background: #fff; padding: 14px 18px; border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    margin-bottom: 28px;
+  }
+  .actor-card {
+    flex: 1 1 180px; display: flex; gap: 10px; align-items: center;
+    font-size: 13px;
+  }
+  .actor-emoji { font-size: 28px; }
+  .actor-card strong { display: block; font-size: 14px; }
+  .actor-card span { color: #6b7280; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>זרימת האפליקציה — Sync Calendar</h1>
+<p class="sub">סנכרון חד-כיווני מיומן Google לבורד monday.com • ארכיטקטורה v3 (Rich Trigger + Stateless Action)</p>
+
+<div class="actors-bar">
+  <div class="actor-card">
+    <div class="actor-emoji">👤</div>
+    <div><strong>המשתמש</strong><span>מגדיר אוטומציה, יוצר אירועים ביומן</span></div>
+  </div>
+  <div class="actor-card">
+    <div class="actor-emoji">📅</div>
+    <div><strong>Google Calendar</strong><span>Watch Channel + events.list + OAuth2</span></div>
+  </div>
+  <div class="actor-card">
+    <div class="actor-emoji">🟢</div>
+    <div><strong>monday.com</strong><span>Trigger + Action + GraphQL API</span></div>
+  </div>
+  <div class="actor-card">
+    <div class="actor-emoji">🖥️</div>
+    <div><strong>השרת שלנו</strong><span>Express על monday code (port 8080)</span></div>
+  </div>
+  <div class="actor-card">
+    <div class="actor-emoji">💾</div>
+    <div><strong>SecureStorage</strong><span>channel_, user_channels_, all_active_channels</span></div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><span class="chip" style="background:#10b981"></span>שלב 1 — הרשמה (Subscribe)</div>
+  <div class="legend-item"><span class="chip" style="background:#3b82f6"></span>שלב 2 — Webhook מ-Google</div>
+  <div class="legend-item"><span class="chip" style="background:#8b5cf6"></span>שלב 3 — Action במונדיי</div>
+  <div class="legend-item"><span class="chip" style="background:#ef4444"></span>Fallback (v2 — כשה-Google fetch נכשל)</div>
+  <div class="legend-item"><span class="chip" style="background:#6b7280"></span>Scheduler (חידוש יומי)</div>
+</div>
+
+<!-- ============ PHASE 1 — SUBSCRIBE ============ -->
+<div class="phase subscribe">
+  <h2>🟢 שלב 1 — הרשמה (כשהמשתמש מגדיר אוטומציה)</h2>
+  <p class="phase-sub">קורה פעם אחת, כשהמשתמש בוחר את הבלוק ולוחץ "החל" בבונה האוטומציות.</p>
+
+  <div class="flow">
+    <div class="step user">
+      <span class="num">1</span>
+      <div class="actor">משתמש</div>
+      <div class="title">בונה אוטומציה</div>
+      בוחר בלוק Trigger + Action, מחבר חשבון Google, בוחר בורד ועמודות
+    </div>
+    <div class="arrow">←</div>
+    <div class="step monday">
+      <span class="num">2</span>
+      <div class="actor">monday</div>
+      <div class="title">POST <code>/triggers/subscribe</code></div>
+      שולח <code>webhookUrl</code>, <code>userId</code>, וToken Google טרי
+    </div>
+    <div class="arrow">←</div>
+    <div class="step server">
+      <span class="num">3</span>
+      <div class="actor">שרת</div>
+      <div class="title">יוצר <code>channelId</code></div>
+      UUID רנדומלי דרך <code>crypto.randomUUID()</code>
+    </div>
+    <div class="arrow">←</div>
+    <div class="step google">
+      <span class="num">4</span>
+      <div class="actor">Google</div>
+      <div class="title"><code>events.watch</code></div>
+      רושם Watch Channel — Google יודע לאן לשלוח push
+    </div>
+    <div class="arrow">←</div>
+    <div class="step google">
+      <span class="num">5</span>
+      <div class="actor">Google</div>
+      <div class="title"><code>events.list</code> (initial)</div>
+      מביא <code>syncToken</code> התחלתי + <code>oauth2.userinfo</code> לקבלת אימייל
+    </div>
+    <div class="arrow">←</div>
+    <div class="step storage">
+      <span class="num">6</span>
+      <div class="actor">Storage</div>
+      <div class="title">שומר ב-SecureStorage</div>
+      <code>channel_&lt;channelId&gt;</code> עם <code>webhookUrl, syncToken, userId, userEmail, resourceId, expiration, accessToken</code>
+    </div>
+    <div class="arrow">←</div>
+    <div class="step monday">
+      <span class="num">7</span>
+      <div class="actor">monday</div>
+      <div class="title">מחזיר <code>{ webhookId }</code></div>
+      monday שומר את ה-channelId אצלו ויחזיר אותו בכל Trigger עתידי
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>למה <code>userId</code> נשמר?</strong> כדי שבשלב ה-Action נוכל להקצות את בעל האוטומציה לעמודת People. זה המקור ל-<code>hasAssignedUser=true</code> בלוגים.
+  </div>
+</div>
+
+<!-- ============ PHASE 2 — WEBHOOK ============ -->
+<div class="phase runtime">
+  <h2>🔔 שלב 2 — Webhook (כשמשהו משתנה ביומן)</h2>
+  <p class="phase-sub">Google שולח push על כל יצירה/עדכון/מחיקה. השרת שואב את האירועים ושולח Trigger למונדיי עם נתוני האירוע.</p>
+
+  <div class="flow">
+    <div class="step user">
+      <span class="num">1</span>
+      <div class="actor">משתמש</div>
+      <div class="title">יוצר/משנה אירוע ב-Google</div>
+      דרך הדפדפן, מובייל, Outlook וכו׳
+    </div>
+    <div class="arrow">←</div>
+    <div class="step google">
+      <span class="num">2</span>
+      <div class="actor">Google</div>
+      <div class="title">POST <code>/webhook/calendar</code></div>
+      שולח push ריק עם headers: <code>X-Goog-Channel-Token=&lt;channelId&gt;</code>
+    </div>
+    <div class="arrow">←</div>
+    <div class="step storage">
+      <span class="num">3</span>
+      <div class="actor">Storage</div>
+      <div class="title">טוען <code>channel_&lt;id&gt;</code></div>
+      מקבל <code>accessToken</code> + <code>syncToken</code> + <code>webhookUrl</code>
+    </div>
+    <div class="arrow">←</div>
+    <div class="step google">
+      <span class="num">4</span>
+      <div class="actor">Google</div>
+      <div class="title"><code>events.list(syncToken)</code></div>
+      מביא <em>רק</em> את האירועים שהשתנו מאז ה-sync האחרון
+    </div>
+    <div class="arrow">←</div>
+    <div class="step server">
+      <span class="num">5</span>
+      <div class="actor">שרת</div>
+      <div class="title">מסנן <code>shouldSync()</code></div>
+      מדלג על: all-day, לא-התקבלו, חיצוניים. R8: declined → משודר כ-cancelled
+    </div>
+    <div class="arrow">←</div>
+    <div class="step server">
+      <span class="num">6</span>
+      <div class="actor">שרת</div>
+      <div class="title">מחשב <code>duration</code></div>
+      (end − start) בשעות, נקודה עשרונית: <code>"1.5"</code>, <code>"1"</code>, <code>"0.75"</code>
+    </div>
+    <div class="arrow">←</div>
+    <div class="step monday">
+      <span class="num">7</span>
+      <div class="actor">monday</div>
+      <div class="title">POST <code>webhookUrl</code></div>
+      JWT חתום (MONDAY_SIGNING_SECRET) + <code>outputFields</code>: channelId, eventId, eventStatus, eventLink, eventName, startDate, endDate, description, duration
+    </div>
+    <div class="arrow">←</div>
+    <div class="step storage">
+      <span class="num">8</span>
+      <div class="actor">Storage</div>
+      <div class="title">שומר <code>syncToken</code> חדש</div>
+      כדי שה-webhook הבא יביא רק דלתא
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>קצב:</strong> 100ms השהייה בין כל Trigger כשיש batch. <strong>Push ריק:</strong> Google לא שולח את תוכן האירוע — רק "משהו השתנה". חייבים להביא בעצמנו.
+  </div>
+</div>
+
+<!-- ============ PHASE 3 — ACTION ============ -->
+<div class="phase action">
+  <h2>⚡ שלב 3 — Action (monday חוזר אלינו לבצע את הפעולה)</h2>
+  <p class="phase-sub">אחרי שה-Trigger התפרץ, monday פותר את מיפוי המשתמש דרך ה-Item Values ומפעיל את ה-Action עם ערכים כבר מוכנים.</p>
+
+  <div class="flow">
+    <div class="step monday">
+      <span class="num">1</span>
+      <div class="actor">monday</div>
+      <div class="title">POST <code>/actions/sync-events</code></div>
+      JWT עם <code>shortLivedToken</code> + <code>accessToken</code> Google טרי + <code>inboundFieldValues</code>
+    </div>
+    <div class="arrow">←</div>
+    <div class="step storage">
+      <span class="num">2</span>
+      <div class="actor">Storage</div>
+      <div class="title">מעדכן <code>accessToken</code></div>
+      הטוקן הטרי שמונדיי העביר מוחלף לעדכן את ה-webhook לפעם הבאה
+    </div>
+    <div class="arrow">←</div>
+    <div class="step server">
+      <span class="num">3</span>
+      <div class="actor">שרת</div>
+      <div class="title">בונה <code>eventUrl</code></div>
+      מ-<code>(eventId + userEmail)</code> — לא צריך ש-monday ישלח את זה בחזרה
+    </div>
+    <div class="arrow">←</div>
+    <div class="step monday">
+      <span class="num">4</span>
+      <div class="actor">monday API</div>
+      <div class="title"><code>items_page_by_column_values</code></div>
+      מחפש item שמכיל את eventUrl בעמודת Link — זו ה"זהות" של האירוע בבורד
+    </div>
+    <div class="arrow">←</div>
+    <div class="step server">
+      <span class="num">5</span>
+      <div class="actor">שרת</div>
+      <div class="title">מפעיל מטריצת החלטה</div>
+      confirmed/cancelled × קיים/לא-קיים → create / update / delete / skip
+    </div>
+    <div class="arrow">←</div>
+    <div class="step monday">
+      <span class="num">6</span>
+      <div class="actor">monday API</div>
+      <div class="title">GraphQL mutation</div>
+      create_item / change_multiple_column_values / change_simple_column_value (rename) / delete_item
+    </div>
+  </div>
+
+  <table class="matrix">
+    <thead>
+      <tr><th>eventStatus</th><th>item קיים בבורד?</th><th>פעולה</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>confirmed</td><td>❌ לא</td><td><code>createItem</code> + כל העמודות (כולל peopleColumn אם הוגדרה)</td></tr>
+      <tr><td>confirmed</td><td>✅ כן</td><td><code>updateItem</code> + <code>changeItemName</code> אם השם השתנה</td></tr>
+      <tr><td>cancelled</td><td>✅ כן</td><td><code>deleteItem</code></td></tr>
+      <tr><td>cancelled</td><td>❌ לא</td><td>skip (אין מה למחוק)</td></tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <strong>peopleColumnId (אופציונלי):</strong> אם המשתמש הגדיר עמודת People, ב-create וב-update נוסף <code>{personsAndTeams: [{id: channel.userId, kind: "person"}]}</code> — בעל האוטומציה מוקצה אוטומטית.
+  </div>
+</div>
+
+<!-- ============ FALLBACK ============ -->
+<div class="phase fallback">
+  <h2>🔁 Fallback — כשה-Google fetch נכשל</h2>
+  <p class="phase-sub">אם ה-webhook לא הצליח להביא אירועים מ-Google (Token פג, שגיאת רשת וכו׳), יורים Trigger עם <code>channelId</code> בלבד. ה-Action מזהה שאין <code>eventId</code> וחוזר למנגנון v2 — הוא עצמו יביא את האירועים עם Token טרי שמגיע בקריאה.</p>
+
+  <div class="split">
+    <div class="branch err">
+      <h4>🚨 Webhook נכשל</h4>
+      <code>events.list</code> זרק שגיאה → catch → POST <code>webhookUrl</code> רק עם <code>{ channelId }</code>.
+    </div>
+    <div class="branch ok">
+      <h4>✅ Action מציל את הסיטואציה</h4>
+      מזהה ש-<code>eventId</code> ריק → טוען <code>syncToken</code> → <code>events.list</code> עם Token טרי → <code>sync-engine.processEvents</code> על כל הבאץ׳.
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>מה אבד?</strong> שום אירוע. ה-Fallback מבטיח שכל שינוי ב-Google יגיע לבורד, גם אם ה-Token המאוחסן פג.
+  </div>
+</div>
+
+<!-- ============ SCHEDULER ============ -->
+<div class="phase cron">
+  <h2>⏰ Scheduler — חידוש יומי של ערוצי Watch</h2>
+  <p class="phase-sub">Watch Channel של Google פג אחרי 7 ימים לכל היותר. אם אין פעילות ביומן, ה-Action לא יופעל וה-channel ייעלם בשקט. ה-cron הוא backstop ליום שבו לא היו אירועים.</p>
+
+  <div class="flow">
+    <div class="step monday">
+      <span class="num">1</span>
+      <div class="actor">monday cron</div>
+      <div class="title">יומי 08:00 UTC</div>
+      POST <code>/scheduler/renew-channel</code> דרך monday's <code>/mndy-cronjob/</code>
+    </div>
+    <div class="arrow">←</div>
+    <div class="step storage">
+      <span class="num">2</span>
+      <div class="actor">Storage</div>
+      <div class="title">סורק <code>all_active_channels</code></div>
+      מוצא channels עם <code>expiration &lt; 24h</code>
+    </div>
+    <div class="arrow">←</div>
+    <div class="step monday">
+      <span class="num">3</span>
+      <div class="actor">monday</div>
+      <div class="title">ירי Trigger עם channelId</div>
+      פר channel שעומד לפוג
+    </div>
+    <div class="arrow">←</div>
+    <div class="step server">
+      <span class="num">4</span>
+      <div class="actor">שרת</div>
+      <div class="title">Action מחדש Watch</div>
+      <code>channels.stop</code> + <code>calendar.watch</code> חדש עם אותו <code>channelId</code>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SUMMARY TABLE ============ -->
+<div class="phase" style="border-right-color:#1f2937;">
+  <h2>📋 סיכום: מה נשמר? מי יוזם? מה זורם?</h2>
+
+  <table class="matrix">
+    <thead>
+      <tr>
+        <th>Endpoint</th>
+        <th>יוזם</th>
+        <th>Token של Google</th>
+        <th>Token של monday</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>/triggers/subscribe</code></td>
+        <td>monday</td>
+        <td><code>credentialsValues</code> (טרי)</td>
+        <td>JWT עם <code>shortLivedToken</code></td>
+      </tr>
+      <tr>
+        <td><code>/webhook/calendar</code></td>
+        <td>Google</td>
+        <td><strong>accessToken מאוחסן</strong> (מתעדכן בכל Action)</td>
+        <td>אין</td>
+      </tr>
+      <tr>
+        <td><code>/actions/sync-events</code></td>
+        <td>monday (דרך webhookUrl)</td>
+        <td><code>credentialsValues</code> (טרי — מרענן את המאוחסן)</td>
+        <td>JWT עם <code>shortLivedToken</code> (טרי)</td>
+      </tr>
+      <tr>
+        <td><code>/scheduler/renew-channel</code></td>
+        <td>monday cron</td>
+        <td>אין (relay בלבד)</td>
+        <td>אין</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+</body>
+</html>

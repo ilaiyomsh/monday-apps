@@ -1,0 +1,52 @@
+mutation UpdatePaymentModel {
+  update_status_column(
+    board_id: <BOARD_ID>
+    id: "status_mkn7tn68"
+    revision: "7c4813aa99deab05a709e09a965d93f1"
+    title: "מודל תשלומים"
+    settings: {
+      labels: [
+        { index: 0, label: "בנק",                  color: working_orange }
+        { index: 1, label: "פיקס",                 color: done_green, is_done: true }
+        { index: 2, label: "ליווי חודשי - נמוך",   color: bubble }
+        { index: 3, label: "לא לחיוב",             color: dark_blue }
+        { index: 4, label: "עמלות",                color: purple }
+        { index: 6, label: "ליווי חודשי - גבוה",   color: blackish }
+        { index: 7, label: "שעות גמיש",            color: egg_yolk }
+        { index: 8, label: "ליווי חודשי - בינוני", color: sofia_pink }
+      ]
+    }
+  ) {
+    id
+    title
+    settings_str
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Column: color_mktxp11v  (title: "שלב פרויקט")
+# ---------------------------------------------------------------------------
+mutation UpdateProjectStage {
+  update_status_column(
+    board_id: <BOARD_ID>
+    id: "color_mktxp11v"
+    revision: "50112184b0590ad784cc6dd3573732de"
+    title: "שלב פרויקט"
+    settings: {
+      labels: [
+        { index: 0,  label: "תהליך מכירה",   color: working_orange }
+        { index: 1,  label: "הסתיים",        color: done_green, is_done: true }
+        { index: 3,  label: "בניית מערכת",   color: dark_red }
+        { index: 7,  label: "אפיון",         color: bright_blue }
+        { index: 9,  label: "הגדלת מערכת",   color: dark_indigo }
+        { index: 10, label: "אחזקת מערכת",   color: bright_green }
+        { index: 11, label: "לא רלוונטי",    color: explosive }
+        { index: 15, label: "הדרכת משתמשים", color: blackish }
+      ]
+    }
+  ) {
+    id
+    title
+    settings_str
+  }
+}

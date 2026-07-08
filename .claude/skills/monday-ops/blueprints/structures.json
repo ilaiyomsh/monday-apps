@@ -1,0 +1,66 @@
+{
+  "_doc": "The possible SYSTEM STRUCTURES. Each preset declares which boards the structure needs, which Axis apps it drives, and the app-settings 'flavor' (the keys whose values differ by structure). The interview picks ONE preset, then options (customers/wbs/routine) add boards on top. provision.py builds only the boards a structure needs (creating missing ones, mapping existing ones) and renders the app settings from the matching flavor. Tracker has two reporting modes: assignments-mode (project source = Allocations) vs tasks/portfolio-mode. Planner always writes Allocations and reads Employees + Portfolio.",
+
+  "structures": {
+    "portfolio_full": {
+      "label": "Full portfolio system — Planner + Tracker (assignments mode)",
+      "summary": "The דמו 8/6 shape. Planner plans allocations; Tracker reports time against those allocations. Portfolio is the project master, Allocations is the hinge, Time Logs receives reports.",
+      "apps": ["planner", "tracker"],
+      "boards_required": ["portfolio", "employees", "allocations", "timeLogs"],
+      "boards_optional": ["customers", "projectStructure"],
+      "tracker_flavor": {
+        "structureMode": "PROJECT_ONLY",
+        "projectsSourceMode": "portfolio",
+        "useAssignmentsMode": true,
+        "useCurrentBoardForReporting": false
+      },
+      "planner_flavor": { "enabled": true }
+    },
+
+    "tracker_only_assignments": {
+      "label": "Time tracking only — Tracker, assignments mode (no Planner)",
+      "summary": "Allocations already define who may report on what (perhaps maintained manually or by another tool). Tracker reports time against them. No capacity planning UI.",
+      "apps": ["tracker"],
+      "boards_required": ["allocations", "timeLogs"],
+      "boards_optional": ["portfolio", "employees", "customers"],
+      "tracker_flavor": {
+        "structureMode": "PROJECT_ONLY",
+        "projectsSourceMode": "portfolio",
+        "useAssignmentsMode": true,
+        "useCurrentBoardForReporting": false
+      },
+      "planner_flavor": { "enabled": false }
+    },
+
+    "tracker_only_tasks": {
+      "label": "Time tracking only — Tracker reports against a projects/tasks board (no assignments, no Planner)",
+      "summary": "Everyone may report on any active project/task. Tracker reads a projects board (and optional tasks board) directly. Simplest tracking setup.",
+      "apps": ["tracker"],
+      "boards_required": ["portfolio", "timeLogs"],
+      "boards_optional": ["employees", "customers"],
+      "tracker_flavor": {
+        "structureMode": "PROJECT_AND_TASK",
+        "projectsSourceMode": "portfolio",
+        "useAssignmentsMode": false,
+        "useCurrentBoardForReporting": false
+      },
+      "planner_flavor": { "enabled": false }
+    },
+
+    "planner_only": {
+      "label": "Capacity planning only — Planner (no time tracking)",
+      "summary": "Plan allocations of employees to projects and see capacity/availability. No Time Logs, no Tracker, no reported-vs-planned.",
+      "apps": ["planner"],
+      "boards_required": ["portfolio", "employees", "allocations"],
+      "boards_optional": ["customers", "projectStructure"],
+      "tracker_flavor": null,
+      "planner_flavor": { "enabled": true }
+    }
+  },
+
+  "options": {
+    "customers": { "adds_board": "customers", "doc": "Adds a Customers board + `client`/`customer` board_relation columns on Portfolio, Allocations, Time Logs." },
+    "projectStructure": { "adds_board": "projectStructure", "needs": "wbsExcel", "doc": "Adds a WBS template board for one flagship project, built from an Excel file, linked from Portfolio.link." },
+    "routine": { "doc": "Adds the שוטף primary label + a `routineType` secondary status to Time Logs (Tracker nonBillableStatusColumnId). Use only when the client has ongoing non-project work." }
+  }
+}

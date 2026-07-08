@@ -1,0 +1,259 @@
+/**
+ * Auto-Loader
+ * Automatically discovers and loads tools and blocks from the tools/ directory.
+ *
+ * Directory Structure Expected:
+ * tools/
+ *   └── tool-name/
+ *       ├── tool.config.js      # Tool metadata
+ *       └── blocks/
+ *           └── block-name/
+ *               ├── block.config.js  # Block metadata
+ *               ├── index.js         # Exports (executeAction/subscribeTrigger/unsubscribeTrigger, fieldHandlers, metadata)
+ *               ├── action.js        # Action handler (for action blocks)
+ *               ├── trigger.js       # Trigger handlers (for trigger blocks)
+ *               └── fields.js        # Field handlers
+ */
+
+import { readdir, stat } from 'fs/promises';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { logger } from '__PACKAGE_SCOPE__/shared';
+
+const TAG = 'auto_loader';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = join(__dirname, '../../..');
+const TOOLS_DIR = join(PROJECT_ROOT, 'tools');
+
+/**
+ * Registry of all loaded tools and blocks
+ */
+export const registry = {
+  tools: new Map(),
+  blocks: new Map(),
+};
+
+/**
+ * Loads all tools and their blocks from the tools/ directory.
+ */
+export async function loadTools() {
+  logger.info('Loading tools from directory', TAG, { toolsDir: TOOLS_DIR });
+
+  try {
+    const toolDirs = await readdir(TOOLS_DIR);
+
+    for (const toolDir of toolDirs) {
+      const toolPath = join(TOOLS_DIR, toolDir);
+      const toolStat = await stat(toolPath);
+
+      if (!toolStat.isDirectory()) continue;
+
+      try {
+        await loadTool(toolDir, toolPath);
+      } catch (err) {
+        logger.error('Failed to load tool', TAG, { tool: toolDir, error: err.message });
+      }
+    }
+
+    logger.info('Tools loaded successfully', TAG, {
+      toolCount: registry.tools.size,
+      blockCount: registry.blocks.size,
+    });
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      logger.warn('Tools directory not found', TAG, { toolsDir: TOOLS_DIR });
+    } else {
+      logger.error('Failed to load tools', TAG, { error: err.message });
+    }
+  }
+}
+
+async function loadTool(toolName, toolPath) {
+  logger.debug('Loading tool', TAG, { tool: toolName });
+
+  let toolConfig = { name: toolName };
+  try {
+    const configPath = join(toolPath, 'tool.config.js');
+    const configModule = await import(configPath);
+    toolConfig = configModule.default || configModule;
+  } catch (err) {
+    logger.debug('No tool.config.js found, using defaults', TAG, { tool: toolName });
+  }
+
+  const tool = {
+    config: toolConfig,
+    blocks: new Map(),
+  };
+
+  const blocksPath = join(toolPath, 'blocks');
+
+  try {
+    const blockDirs = await readdir(blocksPath);
+
+    for (const blockDir of blockDirs) {
+      const blockPath = join(blocksPath, blockDir);
+      const blockStat = await stat(blockPath);
+
+      if (!blockStat.isDirectory()) continue;
+
+      try {
+        await loadBlock(toolName, blockDir, blockPath, tool);
+      } catch (err) {
+        logger.error('Failed to load block', TAG, {
+          tool: toolName,
+          block: blockDir,
+          error: err.message,
+          stack: err.stack,
+        });
+      }
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      throw err;
+    }
+    logger.debug('No blocks directory found', TAG, { tool: toolName });
+  }
+
+  registry.tools.set(toolName, tool);
+}
+
+async function loadBlock(toolName, blockName, blockPath, tool) {
+  logger.debug('Loading block', TAG, { tool: toolName, block: blockName });
+
+  let blockConfig = { name: blockName };
+  try {
+    const configPath = join(blockPath, 'block.config.js');
+    const configModule = await import(configPath);
+    blockConfig = configModule.default || configModule;
+  } catch (err) {
+    logger.debug('No block.config.js found, using defaults', TAG, { block: blockName });
+  }
+
+  const indexPath = join(blockPath, 'index.js');
+  const blockModule = await import(indexPath);
+
+  const block = {
+    toolName,
+    config: blockConfig,
+    module: blockModule,
+    executeAction: blockModule.executeAction,
+    subscribeTrigger: blockModule.subscribeTrigger,
+    unsubscribeTrigger: blockModule.unsubscribeTrigger,
+    fieldHandlers: blockModule.fieldHandlers || {},
+    metadata: blockModule.metadata || {},
+  };
+
+  const blockType = block.subscribeTrigger ? 'trigger' : 'action';
+
+  tool.blocks.set(blockName, block);
+  registry.blocks.set(blockName, block);
+
+  logger.info('Block loaded', TAG, {
+    tool: toolName,
+    block: blockName,
+    type: blockType,
+    hasAction: !!block.executeAction,
+    hasTrigger: !!block.subscribeTrigger,
+    fieldCount: Object.keys(block.fieldHandlers).length,
+  });
+}
+
+export function getBlock(blockName) {
+  const block = registry.blocks.get(blockName);
+  if (!block) {
+    logger.warn('Block not found', TAG, { blockName });
+    return null;
+  }
+  return block;
+}
+
+export function getAllBlockNames() {
+  return Array.from(registry.blocks.keys());
+}
+
+export function getTriggerBlocks() {
+  const triggers = [];
+  for (const [name, block] of registry.blocks) {
+    if (block.subscribeTrigger) {
+      triggers.push({ name, block });
+    }
+  }
+  return triggers;
+}
+
+export function getActionBlocks() {
+  const actions = [];
+  for (const [name, block] of registry.blocks) {
+    if (block.executeAction) {
+      actions.push({ name, block });
+    }
+  }
+  return actions;
+}
+
+export function getFieldHandler(blockName, fieldName) {
+  const block = registry.blocks.get(blockName);
+  if (!block?.fieldHandlers) {
+    return null;
+  }
+  return block.fieldHandlers[fieldName] || null;
+}
+
+export function findFieldHandler(fieldName) {
+  for (const [blockName, block] of registry.blocks) {
+    if (block.fieldHandlers?.[fieldName]) {
+      return {
+        blockName,
+        handler: block.fieldHandlers[fieldName],
+      };
+    }
+  }
+  return null;
+}
+
+export function getAllFieldHandlers() {
+  const handlers = [];
+
+  for (const [blockName, block] of registry.blocks) {
+    if (block.fieldHandlers) {
+      for (const [fieldName, handler] of Object.entries(block.fieldHandlers)) {
+        handlers.push({ blockName, fieldName, handler });
+      }
+    }
+  }
+
+  return handlers;
+}
+
+export function logRegistryStatus() {
+  const toolCount = registry.tools.size;
+  const blockCount = registry.blocks.size;
+  const triggerCount = getTriggerBlocks().length;
+  const actionCount = getActionBlocks().length;
+  const totalFieldHandlers = getAllFieldHandlers().length;
+
+  logger.info('Registry Status', TAG, {
+    toolCount,
+    tools: Array.from(registry.tools.keys()),
+    blockCount,
+    blocks: getAllBlockNames(),
+    triggerCount,
+    actionCount,
+    totalFieldHandlers,
+  });
+}
+
+export default {
+  registry,
+  loadTools,
+  getBlock,
+  getAllBlockNames,
+  getTriggerBlocks,
+  getActionBlocks,
+  getFieldHandler,
+  findFieldHandler,
+  getAllFieldHandlers,
+  logRegistryStatus,
+};

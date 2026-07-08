@@ -1,0 +1,75 @@
+{
+  "common": {
+    "loading": "טוען",
+    "close": "סגור",
+    "cancel": "ביטול",
+    "save": "שמור",
+    "retry": "נסה שוב",
+    "copy": "העתק",
+    "copied": "הועתק"
+  },
+  "toasts": {
+    "genericError": "אירעה שגיאה"
+  },
+  "errorBoundary": {
+    "title": "משהו השתבש",
+    "refresh": "רענן את הדף",
+    "tryAgain": "נסה שוב",
+    "details": "פרטים"
+  },
+  "errorDetailsModal": {
+    "title": "פרטי שגיאה",
+    "tabError": "שגיאה",
+    "tabApi": "API",
+    "tabJson": "JSON",
+    "copyAll": "העתק הכל",
+    "copyQuery": "העתק שאילתה"
+  },
+  "network": {
+    "title": "בעיית רשת",
+    "message": "לא הצלחנו לטעון את ההגדרות. בדוק את החיבור ונסה שוב.",
+    "retry": "נסה שוב"
+  },
+  "myTasks": {
+    "title": "המשימות שלי",
+    "viewDiscussions": "דיונים",
+    "viewMyTasks": "המשימות שלי",
+    "searchPlaceholder": "חיפוש משימה",
+    "filterByCreator": "סינון לפי יוצר",
+    "allCreators": "כל היוצרים",
+    "groupBy": "קיבוץ",
+    "filter": "סינון",
+    "clearFilters": "נקה סינון",
+    "groupByDiscussion": "לפי דיון",
+    "groupByStatus": "לפי סטאטוס",
+    "groupByPriority": "לפי עדיפות",
+    "groupByGroup": "לפי קבוצת לוח",
+    "sortBy": "מיון",
+    "sortNone": "ללא מיון",
+    "sortPriorityAsc": "עדיפות (גבוהה→נמוכה)",
+    "sortPriorityDesc": "עדיפות (נמוכה→גבוהה)",
+    "sortDeadlineAsc": "דד ליין (עולה)",
+    "sortDeadlineDesc": "דד ליין (יורד)",
+    "sortStatus": "סטאטוס",
+    "expandAll": "פתח הכל",
+    "collapseAll": "קפל הכל",
+    "loadMore": "טען עוד",
+    "empty": "אין לך משימות",
+    "emptyHint": "משימות שהוקצו לך יופיעו כאן",
+    "notConfigured": "החיבור ללוח המשימות עדיין לא הוגדר",
+    "error": "טעינת המשימות נכשלה",
+    "colName": "משימה",
+    "colDiscussion": "דיון",
+    "colDeadline": "דד ליין",
+    "colPriority": "עדיפות",
+    "colStatus": "סטאטוס",
+    "colNotes": "הערות",
+    "notesPlaceholder": "הוסף הערה",
+    "noDiscussion": "ללא דיון",
+    "noStatus": "ללא סטאטוס",
+    "noPriority": "ללא עדיפות",
+    "noGroup": "ללא קבוצה",
+    "openItem": "פתח פריט",
+    "allTasks": "כל המשימות"
+  }
+}

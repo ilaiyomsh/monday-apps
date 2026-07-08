@@ -1,0 +1,120 @@
+.container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* === בטרייה === */
+
+.batteryWrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+}
+
+.batteryTrack {
+    width: 120px;
+    height: 18px;
+    background-color: var(--color-border);
+    border-radius: 9px;
+    overflow: hidden;
+    position: relative;
+}
+
+.batteryFill {
+    display: flex;
+    height: 100%;
+    transition: width 0.5s ease;
+}
+
+.batterySegment {
+    height: 100%;
+    min-width: 2px;
+    transition: width 0.5s ease;
+}
+
+.batteryLoading {
+    width: 60%;
+    height: 100%;
+    border-radius: 9px;
+    background: linear-gradient(90deg, var(--color-border) 25%, var(--color-border-medium) 50%, var(--color-border) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.percentText {
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text);
+    min-width: 36px;
+    text-align: center;
+}
+
+/* === Tooltip === */
+
+.tooltip {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border-medium);
+    border-radius: 10px;
+    box-shadow: var(--shadow-md);
+    padding: var(--spacing-md) 14px;
+    z-index: var(--z-popover);
+    min-width: 200px;
+}
+
+.tooltipRow {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
+    padding: 3px 0;
+    font-size: 13px;
+    color: var(--color-text);
+}
+
+.tooltipDot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.tooltipLabel {
+    flex: 1;
+}
+
+.tooltipHours {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.tooltipDivider {
+    height: 1px;
+    background-color: var(--color-border);
+    margin: 6px 0;
+}
+
+.tooltipTotal {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text);
+}
+
+/* === מובייל - הסתרה === */
+
+@media (max-width: 768px) {
+    .container {
+        display: none;
+    }
+}

@@ -1,0 +1,30 @@
+import React from 'react';
+
+function ItemDetails({ item, onRefresh }) {
+  const columnValues = item.column_values || [];
+
+  return (
+    <div className="item-details py-4">
+      <div className="grid grid-cols-2 gap-4">
+        {columnValues.map((cv) => (
+          <div key={cv.id} className="p-3 bg-gray-50 rounded">
+            <label className="block text-xs font-medium text-gray-500 mb-1">
+              {cv.title || cv.id}
+            </label>
+            <div className="text-sm">
+              {cv.text || <span className="text-gray-400">Empty</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {columnValues.length === 0 && (
+        <p className="text-gray-500 text-center py-8">
+          No column values to display.
+        </p>
+      )}
+    </div>
+  );
+}
+
+export default ItemDetails;

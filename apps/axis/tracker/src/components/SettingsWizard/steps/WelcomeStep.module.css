@@ -1,0 +1,85 @@
+.welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: var(--spacing-xl) var(--spacing-xl) 0;
+}
+.mark {
+    width: 96px;
+    height: 96px;
+    border-radius: 28px;
+    background: linear-gradient(135deg, var(--primary, var(--color-secondary)), var(--accent, var(--color-accent)));
+    display: grid;
+    place-items: center;
+    color: var(--color-text-inverse);
+    box-shadow: 0 20px 40px -10px rgba(37, 99, 235, 0.3); /* var(--color-secondary) at 30% */
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+}
+.mark::before {
+    content: '';
+    position: absolute;
+    inset: -20% -10% auto auto;
+    width: 60%;
+    height: 60%;
+    background: radial-gradient(circle, rgba(255,255,255,.4), transparent 60%);
+}
+.headline {
+    font-size: 34px;
+    font-weight: 800;
+    color: var(--ink, var(--color-text-on-dark));
+    margin: 0 0 10px;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+}
+.lede {
+    font-size: 16px;
+    color: var(--muted, var(--color-text-secondary));
+    max-width: min(640px, 100%);
+    margin: 0 0 28px;
+    line-height: 1.55;
+}
+
+.feats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-md);
+    width: 100%;
+    max-width: 100%;
+    margin-bottom: var(--spacing-3xl);
+}
+.card {
+    background: var(--bg-2, var(--color-bg-input));
+    border: 1px solid var(--line-2, var(--color-border-light));
+    border-radius: 14px;
+    padding: var(--spacing-xl) 18px;
+    text-align: start;
+}
+.ic {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--primary-soft, var(--color-accent-soft));
+    color: var(--primary, var(--color-secondary));
+    display: grid;
+    place-items: center;
+    margin-bottom: var(--spacing-md);
+}
+.cardTitle {
+    font-size: 14px;
+    font-weight: var(--font-weight-bold);
+    color: var(--ink, var(--color-text-on-dark));
+    margin: 0 0 var(--spacing-xs);
+}
+.cardDesc {
+    font-size: 13px;
+    color: var(--muted, var(--color-text-secondary));
+    margin: 0;
+    line-height: 1.5;
+}
+
+@media (max-width: 960px) {
+    .feats { grid-template-columns: 1fr; }
+}

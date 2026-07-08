@@ -1,0 +1,938 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "delete": "Delete",
+    "edit": "Edit",
+    "loading": "Loading...",
+    "error": "Error",
+    "search": "Search",
+    "notAvailable": "Not available",
+    "undo": "Undo",
+    "yes": "Yes",
+    "no": "No",
+    "confirm": {
+      "title": "Confirm",
+      "message": "Are you sure?",
+      "confirmText": "Confirm",
+      "cancelText": "Cancel"
+    },
+    "dropdown": {
+      "searchPlaceholder": "Search the list...",
+      "noOptions": "No options available",
+      "noResultsFor": "No results for \"{{term}}\""
+    },
+    "multiselect": {
+      "selectedCount_one": "{{count}} selected",
+      "selectedCount_other": "{{count}} selected"
+    },
+    "datePicker": {
+      "placeholder": "Select date",
+      "today": "Today"
+    },
+    "timeSelect": {
+      "placeholder": "Select time ...",
+      "noTimes": "No times available"
+    },
+    "taskSelect": {
+      "placeholder": "Select task...",
+      "creating": "Adding new task...",
+      "searchPlaceholder": "Search task...",
+      "createSuggestion": "Create new task: \"{{term}}\"",
+      "noTasks": "No tasks available",
+      "addNew": "+ Add new task",
+      "newTaskName": "Task name"
+    }
+  },
+  "selection": {
+    "contextMenu": {
+      "deleteEvent": "Delete event"
+    },
+    "actionBar": {
+      "oneSelected": "1 event selected",
+      "manySelected": "{{count}} events selected",
+      "duplicate": "Duplicate",
+      "delete": "Delete",
+      "duplicateTooltip": "Duplicate selected events",
+      "deleteTooltip": "Delete selected events",
+      "clearTooltip": "Clear selection"
+    }
+  },
+  "filterBar": {
+    "trigger": "Filter",
+    "showPlanned": "Show planned",
+    "peopleColumn": "People",
+    "projectsColumn": "Projects",
+    "searchPlaceholder": "Search...",
+    "loading": "Loading...",
+    "noResults": "No results",
+    "noPeopleAvailable": "No people available",
+    "noProjectsAvailable": "No projects available",
+    "clearSelection": "Clear selection"
+  },
+  "calendarToolbar": {
+    "today": "Today",
+    "previous": "Previous",
+    "next": "Next",
+    "dashboard": "Dashboard",
+    "dashboardTitle": "Time reporting dashboard",
+    "settings": "Settings",
+    "settingsIncomplete": "Settings incomplete",
+    "projectColors": "Color palette",
+    "selectReports": "Select reports",
+    "selectReportsForApproval": "Select reports for approval",
+    "cancelSelection": "Cancel selection",
+    "approveAll": "Approve all",
+    "views": {
+      "month": "Month",
+      "week": "Week",
+      "work_week": "Work week",
+      "three_day": "3 days",
+      "day": "Day",
+      "agenda": "Agenda"
+    }
+  },
+  "eventModal": {
+    "title": "Time report",
+    "convertTitle": "Convert planned event",
+    "closeAria": "Close",
+    "originalEvent": "Original event:",
+    "futureEventWarning": "⚠️ Cannot edit a future event",
+    "convertHint": "Select a project to convert the planned event into a time report",
+    "modes": {
+      "external": "External projects",
+      "internal": "Internal projects",
+      "projects": "Projects",
+      "routine": "Routine"
+    },
+    "fields": {
+      "nonBillableType": "Routine type",
+      "project": "Project",
+      "task": "Task",
+      "stage": "Classification",
+      "notes": "Notes"
+    },
+    "placeholders": {
+      "projectSearch": "Search project...",
+      "task": "Select task...",
+      "notes": "Add notes here..."
+    },
+    "states": {
+      "loading": "Loading...",
+      "noProjectSelected": "No project selected",
+      "noStageSelected": "No classification selected",
+      "noProjectsFound": "No projects found",
+      "noTask": "No task",
+      "noProject": "No project",
+      "nonBillableDefault": "Non-billable"
+    },
+    "validation": {
+      "nonBillableType": "Routine type is required",
+      "project": "Project is required",
+      "task": "Task is required",
+      "stage": "Classification is required"
+    },
+    "actions": {
+      "delete": "Delete",
+      "approve": "Approve",
+      "reject": "Reject",
+      "close": "Close",
+      "cancel": "Cancel",
+      "convert": "Convert to report",
+      "update": "Update",
+      "save": "Save"
+    },
+    "unsavedChanges": {
+      "title": "Unsaved changes",
+      "message": "You have unsaved changes. Do you want to leave?",
+      "confirm": "Leave without saving",
+      "cancel": "Keep editing"
+    }
+  },
+  "settings": {
+    "title": "Reporting settings",
+    "tabs": {
+      "structure": "Report structure",
+      "mapping": "Data mapping",
+      "additional": "Additional settings",
+      "projectColors": "Color palette",
+      "calendar": "Calendar settings"
+    },
+    "projectColors": {
+      "title": "Color palette",
+      "noProjects": "No projects available",
+      "noResults": "No matching projects",
+      "searchPlaceholder": "Search project…",
+      "loading": "Loading projects…",
+      "routineRow": "Routine"
+    },
+    "tabHasErrors": "Complete the fields in this tab",
+    "exportLabel": "Export",
+    "exportTitle": "Export settings to JSON file",
+    "importLabel": "Import",
+    "importTitle": "Import settings from JSON file",
+    "lastModifiedBy": "Last modified by {{name}}",
+    "lastModifiedAnonymous": "Last modified",
+    "modifiedOnDate": "on {{date}}",
+    "modifiedAtTime": "at {{time}}",
+    "actions": {
+      "cancel": "Cancel",
+      "back": "Back: {{tab}}",
+      "next": "Next: {{tab}}",
+      "save": "Save settings"
+    },
+    "messages": {
+      "saved": "Settings saved successfully",
+      "saveError": "Error saving settings",
+      "exported": "Settings exported to file",
+      "imported": "Settings imported — click \"Save settings\" to apply",
+      "invalidStructure": "File structure is invalid",
+      "invalidJson": "File is not valid settings JSON",
+      "readError": "Error reading file"
+    },
+    "partialSave": {
+      "title": "Partial save",
+      "messageSuffix": "Save anyway?",
+      "confirm": "Save anyway",
+      "cancel": "Back to editing"
+    },
+    "import": {
+      "title": "Import settings",
+      "message": "Replace current settings with the contents of \"{{fileName}}\"?\n\nSettings will be applied only after saving.",
+      "confirm": "Import",
+      "cancel": "Cancel"
+    },
+    "structure": {
+      "fields": {
+        "task": {
+          "label": "Task",
+          "description": "Link to a task from a separate task board"
+        },
+        "stage": {
+          "label": "Classification (projects)",
+          "description": "Status column for report classification"
+        },
+        "nonBillableType": {
+          "label": "Classification (routine)",
+          "description": "Sub-classification for routine reports"
+        },
+        "notes": {
+          "label": "Notes",
+          "description": "Free text for the report"
+        }
+      },
+      "configTitle": "Field configuration",
+      "headers": {
+        "field": "Field",
+        "required": "Required",
+        "optional": "Optional",
+        "hidden": "Hidden"
+      },
+      "projectField": "Project",
+      "projectDescription": "Link to projects board",
+      "billableToggleTitle": "Allow projects/routine selection",
+      "billableToggleDescription": "When hidden, all reports are treated as projects",
+      "advancedTitle": "Advanced",
+      "xorToggleTitle": "Define choice between required fields",
+      "xorToggleDescription": "When enabled, only one of the selected fields needs to be filled",
+      "xorSelectPlaceholder": "Select field...",
+      "xorOr": "or"
+    },
+    "mapping": {
+      "validation": {
+        "customerSourceMissing": "Customer source column is set but this column is missing — customer won't be saved on reports",
+        "customerTargetMissing": "This column is set but customer source column is missing — customer won't be pulled from project",
+        "eventTypeMappingRequired": "Event type mapping must be defined",
+        "sectionHasErrors": "Complete the fields in this section"
+      },
+      "eventTypeCategories": {
+        "unmapped": "Unmapped",
+        "billable": "Projects",
+        "nonBillable": "Routine",
+        "allDay": "All-day",
+        "internalProject": "Internal",
+        "externalProject": "External",
+        "routine": "Routine"
+      },
+      "projectType": {
+        "columnLabel": "Project type column (in projects board)",
+        "toggleTitle": "Internal/external distinction",
+        "toggleDescription": "When enabled, report type is determined automatically by the project type column (internal/external) in the projects board.",
+        "mappingLabel": "Project type label mapping",
+        "loadingLabels": "Loading labels...",
+        "needBoardFirst": "Define a projects board first to choose the project type column",
+        "rolesUnmapped": "Unmapped",
+        "rolesInternal": "Internal",
+        "rolesExternal": "External",
+        "takenSuffix": " (taken)",
+        "selectMirrorPlaceholder": "Select Mirror column...",
+        "selectStatusPlaceholder": "Select status column..."
+      },
+      "assignmentsToggle": {
+        "title": "Use assignments board to fetch projects",
+        "description": "When enabled, projects are pulled from the assignments board based on the user and current date. Otherwise, pulled from the projects board."
+      },
+      "portfolioToggle": {
+        "title": "Projects source: Portfolio",
+        "description": "When enabled, the projects board is a monday Portfolio — the tasks board per project is resolved automatically, and project type is read directly from the portfolio (no mirror needed).",
+        "infoBoardMode": "Projects source: classic projects board.",
+        "infoPortfolioMode": "Projects source: Portfolio board — tasks board is resolved per project automatically.",
+        "validationInvalid": "The selected board is not a Portfolio (missing portfolio_project_link column of type hierarchy).",
+        "validationEmpty": "This portfolio has no projects connected yet."
+      },
+      "projects": {
+        "sectionTitle": "Projects board",
+        "boardLabel": "Select the projects board",
+        "boardPlaceholder": "Select board...",
+        "peopleColumnsLabel": "Person columns (assignments)",
+        "peopleColumnsPlaceholder": "Select person columns...",
+        "statusFilterTitle": "Filter projects by status",
+        "statusColumnLabel": "Status column",
+        "statusColumnPlaceholder": "Select status column...",
+        "statusValuesLabel": "Active status values",
+        "statusValuesPlaceholder": "Select status values...",
+        "customerColumnLabel": "Customer column (Connect Boards in projects board)",
+        "customerColumnPlaceholder": "Select customer column..."
+      },
+      "assignments": {
+        "sectionTitle": "Assignments board",
+        "description": "Assignments allow filtering projects by date range. If not set, person columns from the projects board will be used.",
+        "boardLabel": "Assignments board",
+        "boardPlaceholder": "Select assignments board...",
+        "peopleColumnLabel": "Person column",
+        "peopleColumnPlaceholder": "Select person column...",
+        "startDateColumnLabel": "Start date column",
+        "startDateColumnPlaceholder": "Select start date column...",
+        "endDateColumnLabel": "End date column",
+        "endDateColumnPlaceholder": "Select end date column...",
+        "projectLinkColumnLabel": "Project link column",
+        "projectLinkColumnPlaceholder": "Select project link column...",
+        "projectsSubSectionTitle": "Projects"
+      },
+      "tasks": {
+        "sectionTitle": "Tasks board",
+        "projectTasksColumnLabel": "Tasks column in projects board",
+        "projectTasksColumnPlaceholder": "Select tasks column...",
+        "boardLabel": "Tasks board",
+        "boardPlaceholder": "Select tasks board...",
+        "statusFilterTitle": "Filter tasks by status",
+        "statusColumnLabel": "Status column in tasks",
+        "statusColumnPlaceholder": "Select status column...",
+        "statusValuesLabel": "Active status values",
+        "statusValuesPlaceholder": "Select status values..."
+      },
+      "timesheet": {
+        "sectionTitle": "Time reports board",
+        "useCurrentBoardTitle": "Use current board",
+        "useCurrentBoardDescription": "When enabled, reports are saved in the board where the app is installed",
+        "boardLabel": "Select time reports board",
+        "boardCustomObjectDescription": "App is running as Custom Object - select a reports board",
+        "boardPlaceholder": "Select time reports board...",
+        "noBoardWarning": "No reports board selected - choose one or run the app from a board",
+        "projectLinkColumnLabel": "Project link column",
+        "projectLinkColumnPlaceholder": "Select link column...",
+        "taskLinkColumnLabel": "Task link column",
+        "taskLinkColumnPlaceholder": "Select task link column...",
+        "assignmentLinkColumnLabel": "Assignment link column",
+        "assignmentLinkColumnPlaceholder": "Select assignment link column...",
+        "startDateColumnLabel": "Date column (start)",
+        "startDateColumnPlaceholder": "Select start date column...",
+        "endDateColumnLabel": "End date column",
+        "endDateColumnPlaceholder": "Select end date column...",
+        "endDateColumnDescription": "Event end time (required for reading future-type events)",
+        "durationColumnLabel": "Duration column",
+        "durationColumnPlaceholder": "Select duration column...",
+        "reporterColumnLabel": "Reporter column",
+        "reporterColumnPlaceholder": "Select reporter column...",
+        "eventTypeColumnLabel": "Event type column",
+        "eventTypeColumnPlaceholder": "Select event type column...",
+        "temporaryCheckboxColumnLabel": "Future-event marker column",
+        "temporaryCheckboxColumnPlaceholder": "Select checkbox column...",
+        "temporaryCheckboxColumnDescription": "Checkbox column that marks an event as planned (future). The mark is cleared automatically on conversion to a real report.",
+        "allDayTypeColumnLabel": "All-day sub-type column",
+        "allDayTypeColumnPlaceholder": "Select status column...",
+        "allDayTypeColumnDescription": "Status column holding the all-day sub-types (Vacation, Sick, etc.). Its labels are the options shown when creating an all-day event.",
+        "mappingSectionTitle": "Event type mapping",
+        "mappingSectionDesc": "Assign each label to a category (two mappings per row)",
+        "mappingValid": "✓ Mapping valid",
+        "creatingColumn": "Creating column...",
+        "createColumnButton": "or create a new \"event type\" column",
+        "nonBillableColumnLabel": "Classification column - routine",
+        "nonBillableColumnPlaceholder": "Select status column...",
+        "stageColumnLabel": "Classification column - projects",
+        "stageColumnPlaceholder": "Select classification column...",
+        "notesColumnLabel": "Notes column",
+        "notesColumnPlaceholder": "Select notes column...",
+        "customerColumnLabel": "Customer column in reports board",
+        "customerColumnPlaceholder": "Select customer column...",
+        "customerColumnDescription": "Connect Boards column that links each report to a customer (optional)"
+      },
+      "absences": {
+        "sectionTitle": "Vacations board (Day-off)",
+        "sectionDescription": "Maps the Day-off component's vacations board — the absence source of truth. Matching uses stable column IDs and label IDs, never text.",
+        "sourceToggleTitle": "Report absences through Day-off",
+        "sourceToggleDescription": "When enabled, vacation/sick entry moves to the Day-off component and the calendar shows absences from the vacations board as read-only",
+        "showAbsencesTitle": "Show absences from the vacations board",
+        "showAbsencesDescription": "A separate calendar overlay for absences from the vacations board",
+        "appUrlLabel": "Day-off component link (optional)",
+        "appUrlDescription": "The URL of the Day-off component in the account (http/https only). Shown as a link in the redirect notice of the all-day modal when the absence source is Day-off",
+        "appUrlPlaceholder": "https://...",
+        "boardLabel": "Vacations board",
+        "boardPlaceholder": "Select vacations board...",
+        "personColumnLabel": "Employee column (People)",
+        "personColumnPlaceholder": "Select people column...",
+        "startDateColumnLabel": "Start date column",
+        "startDateColumnPlaceholder": "Select date column...",
+        "endDateColumnLabel": "End date column (inclusive)",
+        "endDateColumnPlaceholder": "Select date column...",
+        "kindColumnLabel": "Entry kind column (personal/general)",
+        "kindColumnPlaceholder": "Select status column...",
+        "kindGeneralLabelLabel": "\"General\" label (company day)",
+        "kindPersonalLabelLabel": "\"Personal\" label (absence request)",
+        "kindLabelPlaceholder": "Select label...",
+        "typeColumnLabel": "Absence type column",
+        "typeColumnPlaceholder": "Select status column...",
+        "typeColumnDescription": "Absence types (vacation/sick/...) load from this column's labels — the set is dynamic per board",
+        "approvalToggleTitle": "Approval required for absences",
+        "approvalToggleDescription": "When enabled, pending absences render hollow in the calendar and the approval column mapping becomes required",
+        "approvalColumnLabel": "Approval status column",
+        "approvalColumnPlaceholder": "Select status column...",
+        "approvedLabelsLabel": "\"Approved\" labels",
+        "pendingLabelsLabel": "\"Pending approval\" labels",
+        "rejectedLabelsLabel": "\"Rejected\" labels (optional)",
+        "rejectedLabelsDescription": "Requests with these labels are not shown in the calendar. An approval label assigned to no group is reported as a configuration error",
+        "approvalLabelsPlaceholder": "Select labels..."
+      }
+    },
+    "additional": {
+      "appearance": {
+        "sectionTitle": "Appearance",
+        "sectionDescription": "Customize the application's color scheme",
+        "light": "Light",
+        "dark": "Dark",
+        "auto": "Auto"
+      },
+      "approval": {
+        "sectionTitle": "Manager approval",
+        "toggleTitle": "Manager approval for reports",
+        "toggleDescription": "When enabled, reports require approval from an authorized manager",
+        "managersLabel": "Authorized managers",
+        "userFallbackName": "User {{id}}",
+        "loadingUsersPlaceholder": "Loading users...",
+        "searchUsersPlaceholder": "Search user to add...",
+        "statusColumnLabel": "Approval status column",
+        "statusColumnPlaceholder": "Select approval status column...",
+        "needTimesheetBoard": "Define a time reports board first in the \"Data mapping\" tab",
+        "mappingSectionTitle": "Approval status mapping",
+        "mappingSectionDesc": "Assign each label to a category",
+        "mappingValid": "✓ Mapping valid",
+        "mappingRequired": "Approval status mapping must be defined",
+        "sectionHasErrors": "Complete the fields in this section"
+      },
+      "editLock": {
+        "sectionTitle": "Report edit lock",
+        "lockAfterApprovalTitle": "Lock after manager approval",
+        "lockAfterApprovalDescription": "Events approved by a manager will be locked for editing",
+        "managersExempt": "Authorized managers are exempt from edit lock",
+        "modes": {
+          "none": "No restriction",
+          "days_after": "Up to {{days}} days from the report date"
+        },
+        "daysAfterPrefix": "Up to",
+        "daysAfterSuffix": "days from the report date",
+        "daysLabel": "Number of days",
+        "reasons": {
+          "days_after": "Report locked — more than {{days}} days have passed since the report date",
+          "default": "Report is locked for editing"
+        }
+      },
+      "filters": {
+        "projectsSourceTitle": "Projects source for filter",
+        "directModeIntro": "Direct mode:",
+        "directModeDesc": "The filter project list is taken automatically from the configured projects board.",
+        "currentBoardLabel": "Current board:",
+        "assignmentsModeIntro": "Assignments mode:",
+        "assignmentsModeDesc": "Select the board from which projects will be pulled into the filter. The displayed boards are those connected via the project link column in the assignments board.",
+        "needAssignmentsLink": "Define the project link column in the assignments board first (in the \"Data mapping\" tab)",
+        "filterBoardLabel": "Filter projects board",
+        "filterBoardDescription": "Select the board from which to pull all projects for display in the filter",
+        "filterBoardPlaceholder": "Select projects board...",
+        "statusColumnLabel": "Status column for filter narrowing",
+        "statusColumnDescription": "Optional. When set, you can choose which project labels appear in the filter project list (above the calendar/dashboard)",
+        "statusColumnNoneOption": "— None — show all projects from board",
+        "statusColumnPlaceholder": "Select column or no filter",
+        "statusValuesLabel": "Status values to display in filter",
+        "statusValuesDescription": "Multi-select. If empty, all projects from the board are shown. With selection — only projects whose status matches one of the chosen options",
+        "statusValuesPlaceholder": "Select labels...",
+        "employeesSourceTitle": "Employees source for filter",
+        "employeesIntro": "Select a board and person column containing the full list of employees. Typically this is an HR/employees board or the assignments board.",
+        "employeesBoardLabel": "Employees/HR board",
+        "employeesBoardDescription": "The board containing the employee list",
+        "employeesBoardPlaceholder": "Select employees board...",
+        "employeesColumnLabel": "Employees column (People)",
+        "employeesColumnDescription": "The People column containing the employee list",
+        "employeesColumnPlaceholder": "Select person column...",
+        "employeesEmptyNote": "If no employees board is defined, the filter will show only reporters who have already submitted hours in the reports board"
+      }
+    },
+    "calendar": {
+      "showTemporary": "Show planned events in calendar",
+      "temporaryDescription": "Events with \"planned\" status appear hollow. Click them to open the conversion form.",
+      "workDays": "Working days",
+      "weekStart": "First day of week",
+      "dayLabels": [
+        "Su",
+        "Mo",
+        "Tu",
+        "We",
+        "Th",
+        "Fr",
+        "Sa"
+      ],
+      "hoursTargetTitle": "Hours target",
+      "dailyTargetLabel": "Daily — work day length (hours)",
+      "weeklyTargetLabel": "Weekly — hours target",
+      "monthlyTargetLabel": "Monthly — hours target",
+      "languagePickerTitle": "Interface language",
+      "languagePickerDescription": "Overrides Monday's default language. Default = use the account's language.",
+      "languageOptionDefault": "Default (Monday)",
+      "languageOptionHe": "עברית",
+      "languageOptionEn": "English"
+    }
+  },
+  "allDayModal": {
+    "menuTitle": "Report type for this day",
+    "daysSelectionTitle": "{{type}} settings",
+    "splitTitle": "Bulk hours report",
+    "selectedMark": "✓ Selected",
+    "multipleReports": "Multiple reports / work hours",
+    "emptyState": "Select a project from the list on the left to start",
+    "dayoffButton": "Absence report",
+    "dayoffButtonNoUrl": "No link to the absence app is configured",
+    "labels": {
+      "fromDate": "From:",
+      "toDate": "To:",
+      "pickDate": "Pick date",
+      "oneDay": "One day",
+      "manyDays": "{{count}} days",
+      "startTime": "Start time",
+      "endTime": "End time",
+      "timePlaceholder": "Time",
+      "notes": "Notes",
+      "notesPlaceholder": "Notes...",
+      "totalHours": "Total hours"
+    },
+    "search": {
+      "projectPlaceholder": "Search project...",
+      "loadingProjects": "Loading projects...",
+      "noResults": "No projects found",
+      "noProjectsAvailable": "No projects available",
+      "externalGroup": "External projects",
+      "internalGroup": "Internal projects"
+    },
+    "tooltips": {
+      "deleteRow": "Delete row",
+      "decrement15": "Subtract 15 minutes",
+      "increment15": "Add 15 minutes",
+      "addNonBillable": "Add non-billable report",
+      "clickToAdd": "Click to add"
+    },
+    "placeholders": {
+      "task": "Select task..."
+    },
+    "states": {
+      "loading": "Loading...",
+      "noTask": "No task",
+      "nonBillableDefault": "Routine"
+    },
+    "validation": {
+      "noReports": "Add at least one project with hours",
+      "task": "Task is required",
+      "nonBillableType": "Non-billable type is required",
+      "stage": "Classification is required"
+    },
+    "actions": {
+      "delete": "Delete",
+      "approve": "Approve",
+      "reject": "Reject",
+      "close": "Close",
+      "cancel": "Cancel",
+      "back": "Back",
+      "save": "Save reports",
+      "create": "Create event"
+    },
+    "unsaved": {
+      "title": "Save reports",
+      "message": "You have unsaved reports. Save them before closing?",
+      "confirm": "Save reports",
+      "cancel": "Discard"
+    }
+  },
+  "celebration": {
+    "dayStart": "Let's go — first report of the day!",
+    "fullDay": "Nice — full day logged!",
+    "halfDay": "Past the halfway point — keep going!"
+  },
+  "toasts": {
+    "futureTimeBlocked": "You can't log hours for future time",
+    "missingDataCreate": "Missing required data to create the event",
+    "missingDataUpdate": "Missing required data to update the event",
+    "missingDataConvert": "Missing required data to convert the event",
+    "eventCreated": "Event created successfully",
+    "eventUpdated": "Event updated successfully",
+    "eventConverted": "Event converted to time report successfully",
+    "reportsCreated": "Reports created successfully",
+    "deleteEventNotFound": "Error: event ID for deletion not found",
+    "noPendingApprovals": "No reports pending approval",
+    "approvalApproved": "Report approved successfully",
+    "approvalRejected": "Report rejected",
+    "bulkApprovalSucceeded": "{{count}} reports approved successfully",
+    "bulkApprovalFailed": "{{count}} reports failed approval",
+    "eventsDuplicated": "{{count}} events duplicated successfully",
+    "duplicateEventsError": "Error duplicating events",
+    "moveAllDayToTimedBlocked": "Can't move an all-day event to the timed area",
+    "moveTimedToAllDayBlocked": "Can't move a timed event to the all-day area",
+    "deleteEventsError": "Error deleting events",
+    "updateEventNotFound": "Error: event ID for update not found",
+    "invalidEventType": "Invalid event type",
+    "settingsSaved": "Settings saved"
+  },
+  "dashboard": {
+    "title": "Hours dashboard",
+    "backToCalendar": "Back to calendar",
+    "exportCsv": "Export CSV",
+    "exportExcel": "Export to Excel",
+    "settings": "Settings",
+    "search": "Search...",
+    "exportFilename": "hours-report",
+    "exportError": "Excel export failed",
+    "recordsCount": "{{count}} records",
+    "stats": {
+      "totalHours": "Total hours",
+      "projectsPercent": "Projects share",
+      "projectsHours": "Project hours",
+      "internalHours": "Internal hours",
+      "externalHours": "External hours",
+      "routineHours": "Routine hours"
+    },
+    "filters": {
+      "allCustomers": "All customers",
+      "allProjects": "All projects",
+      "allEmployees": "All employees",
+      "fromDate": "From",
+      "toDate": "To",
+      "previousPeriod": "Previous period",
+      "nextPeriod": "Next period"
+    },
+    "billFilter": {
+      "all": "All",
+      "billable": "Projects",
+      "nonBillable": "Routine",
+      "internalProject": "Internal",
+      "externalProject": "External",
+      "routine": "Routine"
+    },
+    "granularity": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month",
+      "year": "Year",
+      "between": "Range"
+    },
+    "charts": {
+      "byPeriod": "Hours by {{granularity}}",
+      "byPeriodAvg": "Hours by {{granularity}} (average)",
+      "byEmployee": "Hours by employee",
+      "distribution": "Hours distribution",
+      "projectsDistribution": "Project hours distribution",
+      "routineDistribution": "Routine hours distribution",
+      "categoryDrillTitle": "Categories — pick a slice",
+      "noData": "No data in selected range",
+      "noDataShort": "No data",
+      "noProjectsData": "No project hours data",
+      "noRoutineData": "No routine hours data",
+      "noCategoryData": "No category data",
+      "clickPie": "Click a slice in the main pie",
+      "hoursLabel": "{{value}} hours",
+      "hoursUnit": "hours",
+      "categoryNames": {
+        "internalProject": "Internal hours category",
+        "externalProject": "External hours category",
+        "routine": "Routine hours category"
+      },
+      "legend": {
+        "internal": "Internal",
+        "external": "External",
+        "routine": "Routine",
+        "billable": "Projects",
+        "nonBillable": "Routine"
+      }
+    }
+  },
+  "errorDetailsModal": {
+    "title": "Error details",
+    "tabs": {
+      "error": "Error",
+      "api": "API call",
+      "json": "Full JSON"
+    },
+    "labels": {
+      "userMessage": "User message:",
+      "errorCode": "Error code:",
+      "techMessage": "Technical message:",
+      "statusCode": "Status code:",
+      "errorData": "Error data:",
+      "actionRequired": "Action required:",
+      "operationName": "Operation name:",
+      "queryMutation": "Query/Mutation:",
+      "requestId": "Request ID:",
+      "stackTrace": "Stack Trace:",
+      "variables": "Variables:"
+    },
+    "emptyApi": "No API call details available",
+    "copyAll": "📋 Copy all",
+    "copyQuery": "📋 Copy query",
+    "copied": "✓ Copied!"
+  },
+  "settingsValidation": {
+    "title": "Settings update required",
+    "messageOwner": "Please complete the app settings to start using the time-reporting calendar.",
+    "messageViewer": "App settings have not been completed yet. Please contact the board owner to finish the configuration.",
+    "dismissOwner": "Later",
+    "openSettings": "Open settings"
+  },
+  "mobileResize": {
+    "dragStartAria": "Drag to change start time",
+    "dragEndAria": "Drag to change end time"
+  },
+  "wizard": {
+    "title": "Time Tracker",
+    "eyebrow": "Setup wizard",
+    "dialogAria": "Setup wizard",
+    "stepperAria": "Wizard steps",
+    "close": "Close",
+    "closeAria": "Close wizard",
+    "back": "Back",
+    "next": "Next",
+    "getStarted": "Get started",
+    "steps": {
+      "welcome": {
+        "label": "Welcome",
+        "headline": "Welcome to Time Tracker",
+        "lede": "Three quick questions and we'll set up everything you need — boards, columns, and sample data. You can change anything later from Settings.",
+        "cards": {
+          "zeroSetup": {
+            "title": "Zero setup",
+            "desc": "We create the boards (Customers, Projects, Tasks, Time Logs) and map every column for you."
+          },
+          "sampleData": {
+            "title": "Sample data",
+            "desc": "Two example projects and a handful of time entries are seeded around today's date so the calendar is alive on first open."
+          },
+          "fullControl": {
+            "title": "Full control",
+            "desc": "Every setting stays editable from the regular settings screen after you're done."
+          }
+        }
+      },
+      "questions": {
+        "label": "Setup",
+        "sub": "Tailor the app to your team",
+        "source": {
+          "title": "Where are your projects managed?",
+          "hint": "Create everything from scratch, or connect to an existing monday Portfolio.",
+          "createLabel": "Create from scratch",
+          "portfolioLabel": "I have an existing Portfolio"
+        },
+        "tasks": {
+          "title": "Do you track tasks inside projects?",
+          "hint": "A project can be broken into tasks (e.g. Discovery, Build, QA)."
+        },
+        "stages": {
+          "title": "Do you classify time entries by type of work?",
+          "hint": "For example: Internal Meetings / External Meetings / Solo Work."
+        },
+        "distinction": {
+          "title": "Distinguish internal vs. external projects?",
+          "hint": "Internal projects vs. client (external) projects."
+        }
+      },
+      "portfolio": {
+        "label": "Portfolio",
+        "sub": "Connect your Portfolio board",
+        "title": "Pick your Portfolio board",
+        "hint": "Only boards built from the Portfolio template are shown.",
+        "boardLabel": "Portfolio board",
+        "boardPlaceholder": "Choose a board...",
+        "loading": "Loading boards...",
+        "noneFound": "No Portfolio boards found in this workspace.",
+        "noneFoundHelp": "To create one: in monday, click 'Add new board' → pick the Portfolio template. Then come back here.",
+        "projectTypeColumnLabel": "Project Type column (Internal / External)",
+        "projectTypeColumnPlaceholder": "Choose a Status column...",
+        "projectTypeColumnHint": "A Status column on the Portfolio that distinguishes internal from external.",
+        "mappingLabel": "Label mapping",
+        "mappingHint": "Mark each label as Internal or External.",
+        "mappingInternal": "Internal",
+        "mappingExternal": "External",
+        "mappingNone": "None"
+      },
+      "install": {
+        "label": "Install",
+        "sub": "Creating boards and seeding data",
+        "yourChoices": "Your choices",
+        "summary": {
+          "tasks": "Tasks: {{value}}",
+          "stages": "Stages: {{value}}",
+          "distinction": "Internal/External: {{value}}"
+        },
+        "createButton": "Create boards & install",
+        "starting": "Starting...",
+        "errorPrefix": "Error",
+        "donePrefix": "Done",
+        "showDetails": "Show details",
+        "hideDetails": "Hide details",
+        "errorLogPrefix": "Error: {{message}}",
+        "successTitle": "✓ Install complete",
+        "successText": "{{count}} boards created and settings saved.",
+        "openApp": "Open the calendar",
+        "tryAgain": "Try again"
+      }
+    }
+  },
+  "calendar": {
+    "gutter": {
+      "dayPrefix": "Day {{day}}"
+    }
+  },
+  "monthlyBattery": {
+    "hoursUnit": "hours",
+    "total": "Total"
+  },
+  "approval": {
+    "lockReason": "Report locked — approved by manager",
+    "actionBar": {
+      "selectedCount_one": "1 report selected for approval",
+      "selectedCount_other": "{{count}} reports selected for approval",
+      "approveSelectedTitle": "Approve selected",
+      "approving": "Approving...",
+      "approve": "Approve",
+      "clearSelection": "Clear selection"
+    }
+  },
+  "errors": {
+    "toast": {
+      "copyDetails": "Copy details",
+      "retry": "Retry",
+      "details": "Details",
+      "close": "Close",
+      "copied": "Copied!"
+    },
+    "codes": {
+      "unauthorized": {
+        "message": "You don't have permission to perform this action on the board. Contact the board owner to change permissions.",
+        "actionRequired": "Contact the board owner to change permissions"
+      },
+      "columnNotFound": {
+        "message": "One of the configured columns does not exist on the board. Please open the settings and re-select the columns.",
+        "actionRequired": "Open the settings and re-select the columns"
+      },
+      "complexityBudget": {
+        "message": "The system is under heavy load right now. Please wait a few seconds and try again.",
+        "actionRequired": "Wait a few seconds and try again"
+      },
+      "columnValue": {
+        "message": "The entered data does not match the column type on the board. Please check the input.",
+        "actionRequired": "Check the entered data"
+      },
+      "correctedValue": {
+        "message": "The entered data was corrected automatically. Please check the values on the board.",
+        "actionRequired": "Check the values on the board"
+      },
+      "internalServerError": {
+        "message": "A communication error occurred with the Monday server. Please try again.",
+        "actionRequired": "Try again in a few moments"
+      },
+      "networkError": {
+        "message": "No network connection. Please check your connection and try again.",
+        "actionRequired": "Check your network connection and try again"
+      },
+      "apiTemporarilyBlocked": {
+        "message": "The service is temporarily unavailable. Please try again in a few moments.",
+        "actionRequired": "Try again in a few moments"
+      },
+      "boardNotFound": {
+        "message": "The board was not found or you do not have access to it.",
+        "actionRequired": "Check the board settings"
+      },
+      "invalidArgument": {
+        "message": "The entered data is invalid. Please check the input.",
+        "actionRequired": "Check the entered data"
+      },
+      "rateLimit": {
+        "message": "You have exceeded the request limit. Please wait a few seconds and try again.",
+        "actionRequired": "Wait a few seconds and try again"
+      },
+      "concurrencyLimit": {
+        "message": "You have exceeded the concurrent request limit. Please wait a few seconds and try again.",
+        "actionRequired": "Wait a few seconds and try again"
+      },
+      "tokenUnauthorized": {
+        "message": "No permission to access the data. Make sure the API token is valid.",
+        "actionRequired": "Check the API token"
+      },
+      "ipRestricted": {
+        "message": "Access is blocked from your IP address. Contact the account admin.",
+        "actionRequired": "Contact the account admin"
+      },
+      "missingPermissions": {
+        "message": "The app is missing required OAuth permissions. Contact the app developer.",
+        "actionRequired": "The app permissions need to be updated"
+      },
+      "jsonParse": {
+        "message": "There was an error in the format of the submitted data. Please try again.",
+        "actionRequired": "Check the entered data"
+      },
+      "invalidUser": {
+        "message": "The user was not found or is not assigned to the board.",
+        "actionRequired": "Check the user settings"
+      },
+      "itemNameTooLong": {
+        "message": "The item name is too long (255 characters max).",
+        "actionRequired": "Shorten the item name"
+      },
+      "itemsLimit": {
+        "message": "The board has reached the 10,000 item limit. Delete or archive old items.",
+        "actionRequired": "Delete or archive old items from the board"
+      },
+      "fieldLimit": {
+        "message": "Field limit exceeded. Please wait a few seconds and try again.",
+        "actionRequired": "Wait a few seconds and try again"
+      },
+      "queryComplexity": {
+        "message": "The query is too complex. Please try again in a few moments.",
+        "actionRequired": "Try again in a few moments"
+      },
+      "dailyLimit": {
+        "message": "You have exceeded the daily request limit. Try again tomorrow.",
+        "actionRequired": "Wait until tomorrow or upgrade the plan"
+      },
+      "resourceLocked": {
+        "message": "The board is currently locked due to a concurrent update. Try again in a moment.",
+        "actionRequired": "Try again in a few seconds"
+      },
+      "unknown": {
+        "message": "An unexpected error occurred. Please try again."
+      }
+    }
+  },
+  "errorBoundary": {
+    "title": "An error occurred",
+    "message": "Please refresh the page or contact support.",
+    "detailsSummary": "Error details",
+    "details": "Details",
+    "refresh": "Refresh the page",
+    "chunkTitle": "Failed to load component",
+    "chunkMessage": "A new version may have been released, or there is no network connection. Refresh the page to continue."
+  }
+}

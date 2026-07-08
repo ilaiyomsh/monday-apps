@@ -1,0 +1,269 @@
+.bodyRow {
+  background: #ffffff;
+  transition: background 0.1s ease;
+}
+.bodyRow:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+/* The frozen name cell is opaque (sticky), so its hover background must be set
+   explicitly to match the rest of the row — `background: inherit` doesn't always
+   re-resolve through the sticky layer, leaving the name column lighter. */
+/* Target this module's OWN local `.name` class — `.taskFirst` belongs to
+   MyTasksTable.module.css and would hash to a non-matching local name in the
+   production (scoped) build, so the frozen cell never picked up the hover. */
+.bodyRow:hover .name,
+.bodyRow:hover .selFrozen {
+  /* The hover token is often semi-transparent in the monday theme; composite it
+     OVER solid white so the frozen cell stays fully opaque and the horizontally
+     scrolled cells underneath can't bleed through it. */
+  background-color: #ffffff;
+  background-image: linear-gradient(
+    var(--primary-background-hover-color, #f5f6f8),
+    var(--primary-background-hover-color, #f5f6f8)
+  );
+}
+
+/* Selected-row highlight — subtle full-row tint. The frozen .name cell is opaque
+   (sticky), so composite the tint OVER solid white the same way the hover rule
+   does (see below); target this module's OWN .name class, not the grid module's
+   .taskFirst/.selectCell (those hash to non-matching names in the prod build). */
+.bodyRow.selected {
+  background: var(--primary-selected-color, #e6f1ff);
+}
+.bodyRow.selected .name,
+.bodyRow.selected .selFrozen {
+  background-color: #ffffff;
+  background-image: linear-gradient(
+    var(--primary-selected-color, #e6f1ff),
+    var(--primary-selected-color, #e6f1ff)
+  );
+}
+
+.muted {
+  color: var(--secondary-text-color, #676879);
+}
+
+/* Frozen (sticky) leading cells: an EXPLICIT own-module opaque background at
+   REST (not only on hover/selected). The rest background used to rely on the
+   cross-module .taskFirst/.selectCell classes, which hash to non-matching names
+   in the production build — so the frozen cells could render without a solid
+   fill and the horizontally-scrolled columns bled through behind the name. */
+.name,
+.selFrozen {
+  background: #ffffff;
+}
+.name {
+  justify-content: flex-start;
+}
+.nameText {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  line-height: 36px; /* match native row height */
+  font-family: var(--font-family);
+  text-align: start;
+  /* reset button chrome — it's a clickable text label */
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+/* inline rename input — swaps in for the name text while editing */
+.nameInput {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 4px;
+  padding: 0 6px;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  background: var(--primary-background-color, #fff);
+}
+.nameInput:focus-visible {
+  outline: none;
+}
+/* rename pencil — revealed on row hover (permission-gated by the row) */
+.renameBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  opacity: 0;
+  transition: background-color 0.1s ease, color 0.1s ease, opacity 0.1s ease;
+}
+.bodyRow:hover .renameBtn,
+.renameBtn:focus-visible {
+  opacity: 1;
+}
+.renameBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+
+/* monday "updates" speech-bubble icon at the trailing edge of the name cell. */
+.updatesBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.updatesBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+
+.discussionChip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--primary-selected-color, #cce5ff);
+  color: var(--primary-text-color, #323338);
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Discussion column chip — mirrors the "דיון מקור" connected-board chip in the
+   Previous-tasks tab (TaskTableRow.module.css): white rounded chip with a colored
+   leading bar, clickable to open the discussion item card. */
+.sourceCell {
+  justify-content: stretch;
+  gap: 6px;
+  overflow: hidden;
+}
+.sourceChips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.sourceChip {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: start;
+  padding: 4px 8px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-inline-start: 3px solid var(--primary-color, #0073ea);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--primary-text-color, #323338);
+  font-family: var(--font-family);
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.sourceChip:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.deadlineCell {
+  justify-content: center;
+  /* relative so the hover clear-X can sit in the corner (editable variant) */
+  position: relative;
+}
+/* native monday deadline text is gray, not near-black */
+.deadlineCell .muted {
+  color: rgb(102, 102, 102);
+}
+/* Date cell (editable variant): let the picker trigger fill the full cell
+   height so the whole cell area is clickable, not only the icon/text.
+   (Own-module copy of TaskTableRow's .cellCenter — cross-module class
+   selectors break in the scoped production build.) */
+.cellCenter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+/* hover X that clears the deadline (editable variant only) */
+.clearX {
+  position: absolute;
+  inset-inline-start: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary-background-color, #fff);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.deadlineCell:hover .clearX {
+  opacity: 1;
+}
+.clearX:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-text-color, #323338);
+}
+
+/* status / priority cells: kill the grid cell's 0 8px padding so the colored
+   fill bleeds edge-to-edge like native monday. Scoped under .bodyRow for a
+   specificity (0,2,0) that beats the grid `.taskCell` regardless of bundle
+   order (the imported `.statusCell{padding:0}` ties and can lose the tiebreak). */
+.bodyRow .statusCellBleed {
+  padding: 0;
+}
+
+/* notes — inline editable textarea that visually blends into the cell */
+.notesCell {
+  padding: 0;
+}
+.notesInput {
+  width: 100%;
+  min-height: 36px;
+  resize: none;
+  border: none;
+  background: transparent;
+  padding: 8px;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  line-height: 20px;
+  /* notes is the only LTR-or-RTL free-text cell — follow the document direction */
+  direction: inherit;
+  text-align: start;
+}
+.notesInput::placeholder {
+  color: var(--placeholder-color, #9699a6);
+}
+.notesInput:focus-visible {
+  outline: none;
+  background: var(--primary-background-color, #fff);
+  box-shadow: inset 0 0 0 1px var(--primary-color, #0073ea);
+}

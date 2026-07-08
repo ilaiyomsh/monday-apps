@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>עורך לייבלים – monday Status Column</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Rubik", Arial, sans-serif;
+      background: #f6f7fb;
+      margin: 0;
+      padding: 24px;
+      color: #1f2937;
+    }
+    .app { max-width: 900px; margin: 0 auto; }
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    .sub { color: #6b7280; font-size: 14px; margin-bottom: 20px; }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      margin-bottom: 16px;
+    }
+    .row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+    .field { flex: 1; min-width: 180px; }
+    label { display: block; font-size: 13px; color: #374151; margin-bottom: 4px; }
+    input[type="text"], input[type="password"], select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      background: #fff;
+    }
+    input[type="text"]:focus, input[type="password"]:focus, select:focus {
+      outline: none;
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+    button {
+      padding: 9px 16px;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn-primary { background: #6366f1; color: #fff; }
+    .btn-primary:hover { background: #4f46e5; }
+    .btn-primary:disabled { background: #c7d2fe; cursor: not-allowed; }
+    .btn-secondary { background: #e5e7eb; color: #1f2937; }
+    .btn-secondary:hover { background: #d1d5db; }
+    .btn-danger { background: #fee2e2; color: #b91c1c; padding: 6px 10px; font-size: 12px; }
+    .btn-danger:hover { background: #fecaca; }
+    .btn-add { background: #ecfdf5; color: #065f46; border: 1px dashed #6ee7b7; }
+    .btn-add:hover { background: #d1fae5; }
+
+    .warn {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+    .error {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 10px;
+      white-space: pre-wrap;
+    }
+    .success {
+      background: #ecfdf5;
+      border: 1px solid #6ee7b7;
+      color: #065f46;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; text-align: right; vertical-align: middle; }
+    th {
+      font-size: 12px;
+      color: #6b7280;
+      font-weight: 600;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    tr.deactivated { opacity: 0.45; }
+    .swatch {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      vertical-align: middle;
+      margin-left: 6px;
+      border: 1px solid rgba(0,0,0,0.1);
+    }
+    .id-badge {
+      display: inline-block;
+      background: #f3f4f6;
+      color: #6b7280;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-family: ui-monospace, "SF Mono", monospace;
+    }
+    .color-select-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 16px;
+    }
+    .checkbox-cell { text-align: center; }
+    .footer-note { font-size: 12px; color: #6b7280; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useMemo } = React;
+
+    // StatusColumnColors enum — 40 colors from monday API docs
+    const COLORS = [
+      { name: "working_orange", id: 0,   hex: "#fdab3d" },
+      { name: "done_green",     id: 1,   hex: "#00c875" },
+      { name: "stuck_red",      id: 2,   hex: "#e2445c" },
+      { name: "dark_blue",      id: 3,   hex: "#0086c0" },
+      { name: "purple",         id: 4,   hex: "#9d50dd" },
+      { name: "explosive",      id: 5,   hex: "#ff642e" },
+      { name: "grass_green",    id: 6,   hex: "#037f4c" },
+      { name: "bright_blue",    id: 7,   hex: "#579bfc" },
+      { name: "saladish",       id: 8,   hex: "#cab641" },
+      { name: "egg_yolk",       id: 9,   hex: "#ffcb00" },
+      { name: "blackish",       id: 10,  hex: "#333333" },
+      { name: "dark_red",       id: 11,  hex: "#bb3354" },
+      { name: "sofia_pink",     id: 12,  hex: "#ff158a" },
+      { name: "lipstick",       id: 13,  hex: "#ff5ac4" },
+      { name: "dark_purple",    id: 14,  hex: "#784bd1" },
+      { name: "bright_green",   id: 15,  hex: "#9cd326" },
+      { name: "chili_blue",     id: 16,  hex: "#66ccff" },
+      { name: "american_gray",  id: 17,  hex: "#808080" },
+      { name: "brown",          id: 18,  hex: "#7f5347" },
+      { name: "dark_orange",    id: 19,  hex: "#d974b0" },
+      { name: "sunset",         id: 101, hex: "#ff7575" },
+      { name: "bubble",         id: 102, hex: "#faa1f1" },
+      { name: "peach",          id: 103, hex: "#ffadad" },
+      { name: "berry",          id: 104, hex: "#e8697d" },
+      { name: "winter",         id: 105, hex: "#9aadbd" },
+      { name: "river",          id: 106, hex: "#68a1bd" },
+      { name: "navy",           id: 107, hex: "#225091" },
+      { name: "aquamarine",     id: 108, hex: "#4eccc6" },
+      { name: "indigo",         id: 109, hex: "#5559df" },
+      { name: "dark_indigo",    id: 110, hex: "#401694" },
+      { name: "pecan",          id: 151, hex: "#563e3e" },
+      { name: "lavender",       id: 152, hex: "#a25ddc" },
+      { name: "royal",          id: 153, hex: "#2b76e5" },
+      { name: "steel",          id: 154, hex: "#a9bee8" },
+      { name: "orchid",         id: 155, hex: "#dce3ea" },
+      { name: "lilac",          id: 156, hex: "#bda8f0" },
+      { name: "tan",            id: 157, hex: "#a0a0a0" },
+      { name: "sky",            id: 158, hex: "#a1e3f6" },
+      { name: "coffee",         id: 159, hex: "#bd816e" },
+      { name: "teal",           id: 160, hex: "#2da283" },
+    ];
+    const COLOR_BY_ID = Object.fromEntries(COLORS.map(c => [c.id, c]));
+
+    const MONDAY_API = "https://api.monday.com/v2";
+    const API_VERSION = "2026-04";
+
+    async function mondayQuery(token, query, variables) {
+      const res = await fetch(MONDAY_API, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": token,
+          "API-Version": API_VERSION,
+        },
+        body: JSON.stringify({ query, variables }),
+      });
+      const json = await res.json();
+      if (json.errors) {
+        const msg = json.errors.map(e => e.message).join("\n");
+        throw new Error(msg);
+      }
+      return json.data;
+    }
+
+    function nextFreeLabelId(labels) {
+      const used = new Set(labels.map(l => l.id));
+      for (let i = 0; i < 40; i++) if (!used.has(i)) return i;
+      throw new Error("אין מקום ל-label חדש (max 40)");
+    }
+
+    function App() {
+      const [token, setToken] = useState("");
+      const [boardId, setBoardId] = useState("");
+      const [columnId, setColumnId] = useState("");
+      const [loading, setLoading] = useState(false);
+      const [saving, setSaving] = useState(false);
+      const [error, setError] = useState("");
+      const [success, setSuccess] = useState("");
+      const [columnMeta, setColumnMeta] = useState(null);
+      const [labels, setLabels] = useState([]);
+      const [title, setTitle] = useState("");
+
+      async function loadColumn() {
+        setError(""); setSuccess(""); setLoading(true);
+        try {
+          const q = `query($b:[ID!],$c:[String!]){
+            boards(ids:$b){
+              columns(ids:$c){
+                id title description
+                ... on StatusColumn { revision settings_str }
+              }
+            }
+          }`;
+          const data = await mondayQuery(token, q, { b: [boardId], c: [columnId] });
+          const col = data?.boards?.[0]?.columns?.[0];
+          if (!col) throw new Error("עמודה לא נמצאה");
+          if (!col.settings_str) throw new Error("העמודה אינה status (חסר settings_str)");
+          const settings = JSON.parse(col.settings_str);
+          const rawLabels = settings.labels || {};
+          const positions = settings.labels_positions_v2 || {};
+          const colors = settings.labels_colors || {};
+          const doneColors = new Set(settings.done_colors || []);
+          const deactivated = new Set(settings.deactivated_labels || []);
+
+          // Collect all known label IDs (incl. phantom ones from positions/color_mapping)
+          const colorMapping = settings.color_mapping || {};
+          const allIds = new Set();
+          Object.keys(rawLabels).forEach(k => allIds.add(Number(k)));
+          Object.keys(positions).forEach(k => allIds.add(Number(k)));
+          Object.keys(colorMapping).forEach(k => allIds.add(Number(k)));
+          Object.values(colorMapping).forEach(v => allIds.add(Number(v)));
+
+          const built = [...allIds].map(id => {
+            const hex = colors[id]?.color;
+            const colorEntry = COLORS.find(c => c.hex.toLowerCase() === (hex || "").toLowerCase());
+            return {
+              id,
+              label: rawLabels[id] || "",
+              colorName: colorEntry?.name || "american_gray",
+              isDone: doneColors.has(id),
+              isDeactivated: deactivated.has(id) || !rawLabels[id],
+              position: positions[id] ?? 999,
+              _phantom: !rawLabels[id],
+            };
+          }).sort((a, b) => a.position - b.position);
+
+          setLabels(built);
+          setColumnMeta({
+            id: col.id,
+            title: col.title,
+            description: col.description,
+            revision: col.revision,
+          });
+          setTitle(col.title || "");
+        } catch (e) {
+          setError(e.message);
+          setColumnMeta(null);
+          setLabels([]);
+        } finally {
+          setLoading(false);
+        }
+      }
+
+      function updateLabel(idx, patch) {
+        setLabels(prev => prev.map((l, i) => i === idx ? { ...l, ...patch } : l));
+      }
+
+      function removeLabel(idx) {
+        setLabels(prev => prev.filter((_, i) => i !== idx));
+      }
+
+      function addLabel() {
+        setLabels(prev => {
+          const id = nextFreeLabelId(prev);
+          // pick a color not yet used
+          const used = new Set(prev.map(l => l.colorName));
+          const free = COLORS.find(c => !used.has(c.name)) || COLORS[0];
+          return [...prev, {
+            id,
+            label: "ליבל חדש",
+            colorName: free.name,
+            isDone: false,
+            isDeactivated: false,
+            _phantom: false,
+          }];
+        });
+      }
+
+      async function save() {
+        setError(""); setSuccess(""); setSaving(true);
+        try {
+          // Validation
+          if (!columnMeta) throw new Error("טען עמודה קודם");
+          const colorsUsed = labels.filter(l => !l.isDeactivated).map(l => l.colorName);
+          const dupColors = colorsUsed.filter((c, i) => colorsUsed.indexOf(c) !== i);
+          if (dupColors.length > 0) throw new Error("צבעים חייבים להיות ייחודיים: " + [...new Set(dupColors)].join(", "));
+
+          const labelsInput = labels.map(l => {
+            const base = {
+              index: l.id,
+              label: l.isDeactivated && !l.label ? `_p${l.id}` : (l.label || `_p${l.id}`),
+              color: l.colorName,
+            };
+            if (l.isDone) base.is_done = true;
+            if (l.isDeactivated) base.is_deactivated = true;
+            return base;
+          });
+
+          // Build mutation manually to use enum (unquoted) color values
+          const labelsStr = labelsInput.map(l => {
+            const parts = [
+              `index: ${l.index}`,
+              `label: ${JSON.stringify(l.label)}`,
+              `color: ${l.color}`,
+            ];
+            if (l.is_done) parts.push("is_done: true");
+            if (l.is_deactivated) parts.push("is_deactivated: true");
+            return `{ ${parts.join(", ")} }`;
+          }).join("\n        ");
+
+          const mutation = `mutation {
+            update_status_column(
+              board_id: ${boardId}
+              id: ${JSON.stringify(columnMeta.id)}
+              revision: ${JSON.stringify(columnMeta.revision)}
+              title: ${JSON.stringify(title)}
+              settings: { labels: [
+                ${labelsStr}
+              ] }
+            ) { id title settings_str }
+          }`;
+
+          await mondayQuery(token, mutation);
+          setSuccess("העמודה עודכנה בהצלחה. טוען מצב מעודכן…");
+          await loadColumn();
+        } catch (e) {
+          setError(e.message);
+        } finally {
+          setSaving(false);
+        }
+      }
+
+      const canLoad = token && boardId && columnId && !loading;
+
+      return (
+        <div className="app">
+          <h1>עורך לייבלים – monday Status Column</h1>
+          <div className="sub">עריכת labels של עמודת סטטוס דרך monday API. ה-token לא נשמר בשום מקום.</div>
+
+          <div className="warn">
+            ⚠️ <b>אזהרה:</b> ה-API token שלך מועבר ישירות אל monday מהדפדפן. הוא לא נשמר באף שרת, אבל בכל מקרה — אל תזין token של חשבון בעל הרשאות שאתה לא רוצה לחלוק. רענון הדף מוחק את ה-token.
+          </div>
+
+          <div className="card">
+            <div className="row">
+              <div className="field">
+                <label>API Token</label>
+                <input type="password" value={token} onChange={e => setToken(e.target.value)} placeholder="eyJhbGc..." />
+              </div>
+              <div className="field" style={{ maxWidth: 180 }}>
+                <label>Board ID</label>
+                <input type="text" value={boardId} onChange={e => setBoardId(e.target.value.trim())} placeholder="18412493233" />
+              </div>
+              <div className="field" style={{ maxWidth: 220 }}>
+                <label>Column ID</label>
+                <input type="text" value={columnId} onChange={e => setColumnId(e.target.value.trim())} placeholder="status_xxx" />
+              </div>
+              <button className="btn-primary" disabled={!canLoad} onClick={loadColumn}>
+                {loading ? "טוען…" : "טען עמודה"}
+              </button>
+            </div>
+            {error && <div className="error">{error}</div>}
+            {success && <div className="success">{success}</div>}
+          </div>
+
+          {columnMeta && (
+            <div className="card">
+              <div className="row" style={{ marginBottom: 16 }}>
+                <div className="field">
+                  <label>כותרת העמודה</label>
+                  <input type="text" value={title} onChange={e => setTitle(e.target.value)} />
+                </div>
+                <div className="field" style={{ maxWidth: 140 }}>
+                  <label>revision</label>
+                  <input type="text" value={columnMeta.revision} readOnly style={{ fontFamily: "ui-monospace", fontSize: 12, background: "#f9fafb" }} />
+                </div>
+              </div>
+
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: 70 }}>ID</th>
+                    <th>טקסט</th>
+                    <th style={{ width: 240 }}>צבע</th>
+                    <th style={{ width: 70 }}>סיום</th>
+                    <th style={{ width: 90 }}>כבוי</th>
+                    <th style={{ width: 60 }}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {labels.map((l, idx) => {
+                    const color = COLORS.find(c => c.name === l.colorName) || COLORS[0];
+                    return (
+                      <tr key={l.id} className={l.isDeactivated ? "deactivated" : ""}>
+                        <td><span className="id-badge">#{l.id}</span></td>
+                        <td>
+                          <input
+                            type="text"
+                            value={l.label}
+                            onChange={e => updateLabel(idx, { label: e.target.value })}
+                          />
+                        </td>
+                        <td>
+                          <div className="color-select-wrap">
+                            <span className="swatch" style={{ background: color.hex }} />
+                            <select
+                              value={l.colorName}
+                              onChange={e => updateLabel(idx, { colorName: e.target.value })}
+                            >
+                              {COLORS.map(c => (
+                                <option key={c.name} value={c.name}>
+                                  {c.name} ({c.hex})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </td>
+                        <td className="checkbox-cell">
+                          <input
+                            type="checkbox"
+                            checked={l.isDone}
+                            onChange={e => updateLabel(idx, { isDone: e.target.checked })}
+                          />
+                        </td>
+                        <td className="checkbox-cell">
+                          <input
+                            type="checkbox"
+                            checked={l.isDeactivated}
+                            onChange={e => updateLabel(idx, { isDeactivated: e.target.checked })}
+                          />
+                        </td>
+                        <td>
+                          <button className="btn-danger" onClick={() => removeLabel(idx)}>מחק</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              <div className="toolbar">
+                <button className="btn-add" onClick={addLabel}>+ הוסף ליבל</button>
+                <button className="btn-primary" onClick={save} disabled={saving}>
+                  {saving ? "שומר…" : "💾 שמור שינויים"}
+                </button>
+              </div>
+              <div className="footer-note">
+                💡 מחיקת ליבל בשימוש תיכשל ("Unable to delete a label already in use") — סמן "כבוי" במקום.
+                כל צבע חייב להיות ייחודי.
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

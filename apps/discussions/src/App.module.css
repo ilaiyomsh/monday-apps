@@ -1,0 +1,248 @@
+/* Outer shell: a top view-toggle bar (Discussions ⇄ My Tasks) over the body. */
+.appShell {
+  height: 100vh; /* fallback for browsers without small-viewport units */
+  height: 100svh; /* avoids clipping under mobile browser chrome */
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.appViewBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
+  background: var(--primary-background-color, #fff);
+}
+.appViewToggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.appViewTab {
+  border: none;
+  background: transparent;
+  padding: 4px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: var(--font-family);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.appViewTabActive {
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-color, #0073ea);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.appShellBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.root {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  overflow: hidden;
+}
+
+/* While dragging the divider, suppress text selection and keep the resize
+   cursor everywhere (the pointer often outruns the thin handle strip). */
+.resizing {
+  cursor: col-resize;
+  user-select: none;
+}
+.resizing * {
+  cursor: col-resize !important;
+}
+
+.settingsBtn {
+  position: fixed;
+  top: 12px;
+  inset-inline-end: 12px;
+  z-index: 1000;
+  background: var(--primary-background-color, #fff);
+  box-shadow: var(--box-shadow-small, 0 4px 8px rgba(0, 0, 0, 0.2));
+}
+
+/* Desktop-only collapse handle. Hidden on mobile (the panes toggle instead). */
+.dividerHandle {
+  display: none;
+}
+.collapseBtn {
+  /* monday-style circular navigation toggle (a chevron in a bordered circle,
+     no text label) — small circle, solid white fill. */
+  border-radius: 50% !important;
+  border: 1px solid var(--ui-border-color, #d0d4e4) !important;
+  background: #fff !important;
+  box-shadow: var(--box-shadow-small, 0 4px 8px rgba(0, 0, 0, 0.16));
+  /* Force a compact circle regardless of the Vibe size preset. */
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--icon-color, #676879);
+}
+.collapseBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8) !important;
+}
+/* Shrink the chevron itself to match the smaller circle. */
+.collapseBtn :global(svg),
+.collapseBtn :global(.icon_component) {
+  width: 14px !important;
+  height: 14px !important;
+}
+
+/* Desktop split-view chrome. Gated on the GLOBAL `.is-desktop` root class
+   (set from the monday SDK mobile flag) instead of a viewport @media, so that
+   transient iframe narrowing — e.g. when monday opens an item card / updates
+   panel beside the board view — never collapses the layout. Only the actual
+   monday mobile app (context.mode==='mobile') drops these. */
+/* A thin transparent strip centered on the list/card divider; hovering it
+   reveals the collapse button. */
+:global(.is-desktop) .dividerHandle {
+  position: fixed;
+  top: 0;
+  /* Centered ON the divider line. The toggle is a plain always-clickable
+     button (a fixed element on top of the sidebar), so the whole circle works
+     even where it straddles the column edge. */
+  inset-inline-start: var(--sidebar-w, 320px);
+  transform: translateX(-50%);
+  height: 100%;
+  width: 28px;
+  z-index: 1000;
+  display: block;
+}
+/* While expanded the divider strip is a drag-to-resize grip. A subtle line
+   marks the boundary; it strengthens on hover/drag. */
+:global(.is-desktop) .dividerHandleResizable {
+  cursor: col-resize;
+}
+:global(.is-desktop) .dividerHandleResizable::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  height: 100%;
+  width: 2px;
+  background: var(--ui-border-color, #d0d4e4);
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+:global(.is-desktop) .dividerHandleResizable:hover::before,
+:global(.is-desktop) .dividerHandleHover.dividerHandleResizable::before {
+  opacity: 1;
+}
+:global(.is-desktop) .resizing .dividerHandleResizable::before {
+  opacity: 1;
+  background: var(--primary-color, #0073ea);
+}
+
+/* When collapsed there is no divider — pin the handle to the very edge as a
+   thin visible vertical strip so the user can always reopen the list. */
+:global(.is-desktop) .dividerHandleCollapsed {
+  inset-inline-start: 0;
+  transform: translateX(0);
+  width: 14px;
+  background: #fff;
+  border-inline-end: 1px solid var(--ui-border-color, #e6e9ef);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+}
+
+:global(.is-desktop) .collapseBtn {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  /* While expanded the collapse arrow is hidden by default and only reveals
+     when the cursor is over the discussions column (or the divider strip) —
+     it must vanish when hovering the discussion/tasks area. */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+:global(.is-desktop) .dividerHandleCollapsed .collapseBtn {
+  left: auto;
+  inset-inline-start: 3px;
+  transform: none;
+  opacity: 1; /* expand arrow is always visible while collapsed */
+  pointer-events: auto;
+}
+/* Reveal the collapse arrow whenever the cursor is anywhere over the
+   discussions column (.dividerHandleHover), over the divider strip itself,
+   or the button is keyboard-focused. */
+:global(.is-desktop) .dividerHandleHover .collapseBtn,
+:global(.is-desktop) .dividerHandle:hover .collapseBtn,
+:global(.is-desktop) .collapseBtn:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* mobile: panes toggle via .hiddenMobile; both show side-by-side on md+ */
+.hiddenMobile {
+  display: none;
+}
+
+/* Desktop split: the list + card sit side by side. Gated on `.is-desktop`
+   (not a width @media) so an item-card panel narrowing the iframe never
+   collapses the split into the single-pane mobile layout. */
+:global(.is-desktop) .root {
+  --sidebar-w: 340px;
+}
+:global(.is-desktop) .sidebar {
+  width: var(--sidebar-w, 340px);
+}
+:global(.is-desktop) .hiddenMobile {
+  display: block;
+}
+
+/* Real monday mobile app only: keep the view-toggle a COMPACT, content-width
+   segmented pill (monday-style) centered on a slim bar — NOT a full-width band,
+   with a comfortable tap size. Gated on `.mobile-app` so a narrowed desktop
+   iframe does NOT center the toggle. */
+:global(.mobile-app) .appViewBar {
+  justify-content: center;
+}
+:global(.mobile-app) .appViewTab {
+  padding: 8px 18px;
+}
+
+/* Collapsed state — hide the discussions column so the card takes the full width.
+   Declared last so it wins over the responsive `.sidebar`/`.hiddenMobile` rules. */
+.collapsed {
+  display: none;
+}
+
+/* When a discussion is open, `showList=false` also adds `.hiddenMobile`, whose
+   desktop rule (`display: block`, specificity 0,2,0) would otherwise override the
+   single-class `.collapsed` and keep the column visible. Match its specificity —
+   declared later in source so it wins the tie — so collapse works with a card open. */
+:global(.is-desktop) .collapsed {
+  display: none;
+}
+
+.mainFull {
+  flex: 1;
+}

@@ -1,0 +1,11 @@
+{
+  "channel_8ea842ad-e15f-4d7c-bcbe-14bf36265ea3": {
+    "value": "{\"webhookUrl\":\"http://localhost:9999/mock-monday/relay/placeholder\",\"syncToken\":\"mock-sync-2\",\"userId\":71077014,\"userEmail\":\"e2e-tester@example.com\",\"resourceId\":\"mock-resource-8ea842ad-e15f-4d7c-bcbe-14bf36265ea3\",\"expiration\":\"1776781187368\",\"accessToken\":\"mock-access-token\",\"accessTokenUpdatedAt\":1776176387421}"
+  },
+  "user_channels_71077014": {
+    "value": "[\"8ea842ad-e15f-4d7c-bcbe-14bf36265ea3\"]"
+  },
+  "all_active_channels": {
+    "value": "[{\"channelId\":\"8ea842ad-e15f-4d7c-bcbe-14bf36265ea3\",\"webhookUrl\":\"http://localhost:9999/mock-monday/relay/placeholder\",\"userId\":71077014,\"expiration\":\"1776781187368\"}]"
+  }
+}

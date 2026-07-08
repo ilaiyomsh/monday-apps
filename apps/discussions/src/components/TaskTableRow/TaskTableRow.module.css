@@ -1,0 +1,347 @@
+/* Row cells inherit the grid (.taskRow/.taskCell) from TaskTable.module.css;
+   this file styles the cell *contents*. Font = monday vibe font (--font-family). */
+
+.bodyRow {
+  transition: background-color var(--motion-productive-short, 0.1s) ease;
+}
+.bodyRow:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+/* The frozen leading cells (name + checkbox) are opaque/sticky, so their hover
+   background must be set explicitly to match the rest of the row — otherwise the
+   name column stays white on hover. Composite the (possibly semi-transparent)
+   hover token OVER solid white so the frozen cell stays opaque (scrolled cells
+   can't bleed through). NOTE: target this module's OWN local classes (.name /
+   .selFrozen) — `.taskFirst`/`.selectCell` belong to TaskTable.module.css and
+   would hash to a non-matching local name in the production (scoped) build. */
+.bodyRow:hover .name,
+.bodyRow:hover .selFrozen {
+  background-color: #ffffff;
+  background-image: linear-gradient(
+    var(--primary-background-hover-color, #f5f6f8),
+    var(--primary-background-hover-color, #f5f6f8)
+  );
+}
+
+/* monday "updates" speech-bubble icon at the trailing edge of the name cell. */
+.updatesBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.updatesBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+
+/* Optimistic row whose monday item isn't saved yet: faded + every cell
+   locked (assignee/date/status/name/delete) until the real id arrives. */
+.pending {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: progress;
+}
+.pending:hover {
+  background: transparent;
+}
+
+.muted {
+  font-size: 14px;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+}
+.overdue {
+  font-size: 14px;
+  color: var(--negative-color, #d83a52);
+  font-weight: var(--font-weight-medium, 500);
+  font-family: var(--font-family);
+}
+
+/* Inline-editable task name (leading-aligned). */
+/* Frozen (sticky) leading cells need an EXPLICIT own-module opaque background at
+   REST — the cross-module .taskFirst/.selectCell classes hash to non-matching
+   names in the production build, so relying on them left the frozen cells
+   without a solid fill and scrolled columns bled through behind the name. */
+.name,
+.selFrozen {
+  background: #ffffff;
+}
+.name {
+  overflow: hidden;
+}
+.nameInner {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 6px;
+}
+.nameText,
+.nameBtn {
+  flex: 1;
+  font-size: 14px;
+  line-height: 36px; /* match native row height */
+  color: var(--primary-text-color, #323338);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family);
+}
+.nameBtn {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: start;
+}
+.nameInput {
+  width: 100%;
+  min-width: 0;
+  font-size: 14px;
+  padding: 2px 6px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  box-sizing: border-box;
+  font-family: var(--font-family);
+}
+.nameInput:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+.deleteBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease, background-color 0.1s ease, color 0.1s ease;
+}
+.bodyRow:hover .deleteBtn,
+.deleteBtn:focus-visible {
+  opacity: 1;
+}
+.deleteBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--negative-color, #d83a52);
+}
+
+/* Inline delete confirmation (replaces the blocking window.confirm). */
+.confirmDel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.confirmText {
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.confirmBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.confirmBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+}
+.confirmYes:hover {
+  color: var(--negative-color, #d83a52);
+}
+
+.assigneeCell,
+.cellCenter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+/* Date cell: let the picker trigger fill the full cell height so the whole
+   cell area is clickable, not only the icon/text. */
+.cellCenter {
+  height: 100%;
+}
+
+/* deadline cell — relative so the hover clear-X can sit in the corner */
+.deadlineCell {
+  position: relative;
+}
+/* native monday deadline text is gray, not near-black */
+.deadlineCell .muted {
+  color: rgb(102, 102, 102);
+}
+.clearX {
+  position: absolute;
+  inset-inline-start: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary-background-color, #fff);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.deadlineCell:hover .clearX {
+  opacity: 1;
+}
+.clearX:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-text-color, #323338);
+}
+
+/* status — full-width colored fill (monday native) */
+.statusCell {
+  padding: 0;
+}
+/* Dialog (Refable) clones the trigger as the direct child — stretch it full. */
+.statusCell > * {
+  width: 100%;
+  height: 100%;
+}
+.statusTrigger {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.statusFill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 36px;
+  /* native monday: square fill, edge-to-edge, no rounding */
+  border-radius: 0;
+  padding: 0 8px;
+  color: var(--text-color-on-primary, #fff);
+  font-weight: var(--font-weight-medium, 500);
+  font-size: 14px;
+  font-family: var(--font-family);
+}
+.statusEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 36px;
+  border-radius: 0;
+  padding: 0 8px;
+  background: hsl(var(--status-default, 0 0% 77%));
+  color: var(--text-color-on-primary, #fff);
+  font-size: 14px;
+  font-family: var(--font-family);
+}
+
+/* source discussion — monday connected-board-style chip ("by type" view).
+   The chip fills the cell width (uniform across rows), not sized to the text. */
+.sourceCell {
+  justify-content: stretch;
+  gap: 6px;
+  overflow: hidden;
+}
+.sourceChips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.sourceChip {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: start;
+  padding: 4px 8px;
+  /* the connected-board look: a colored leading bar + white rounded chip */
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-inline-start: 3px solid var(--primary-color, #0073ea);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--primary-text-color, #323338);
+  font-family: var(--font-family);
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.sourceChip:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+.sourceMore {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+}
+
+/* status picker — full-width colored option bars (monday native) */
+.statusMenu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 168px;
+  padding: 2px;
+}
+.statusOption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  border: none;
+  border-radius: var(--border-radius-small, 4px);
+  color: var(--text-color-on-primary, #fff);
+  font-weight: var(--font-weight-medium, 500);
+  font-size: 16px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: filter 0.1s ease;
+}
+.statusOption:hover {
+  filter: brightness(0.95);
+}

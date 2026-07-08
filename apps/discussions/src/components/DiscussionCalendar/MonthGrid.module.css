@@ -1,0 +1,94 @@
+/* Month view — 7-column grid; the container is dir="rtl" so DOM order
+   Sunday→Saturday lays out right→left (Hebrew calendar convention). All edges
+   use logical properties so nothing fights the flipped direction. */
+.calMRoot {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.calMWeekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
+  flex-shrink: 0;
+}
+.calMWeekday {
+  padding: 4px 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+}
+
+.calMGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 1fr;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.calMCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px;
+  border-inline-end: 1px solid var(--ui-border-color, #e6e9ef);
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+  cursor: pointer;
+  overflow: hidden;
+}
+.calMCell:nth-child(7n) {
+  border-inline-end: none;
+}
+.calMCell:hover {
+  background: var(--primary-background-hover-color, #f6f7fb);
+}
+.calMCell:focus-visible {
+  outline: 2px solid var(--primary-color, #0073ea);
+  outline-offset: -2px;
+}
+.calMCellOut {
+  background: var(--allgrey-background-color, #f6f7fb);
+}
+.calMCellOut .calMDayNum {
+  color: var(--secondary-text-color, #9699a6);
+}
+
+.calMDayNum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  align-self: flex-start;
+  font-size: 12px;
+  color: var(--text-color, #323338);
+  flex-shrink: 0;
+}
+.calMDayNumToday {
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.calMChips {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.calMMore {
+  padding: 0 4px;
+  font-size: 11px;
+  color: var(--secondary-text-color, #676879);
+}
+.calMCell:hover .calMMore {
+  text-decoration: underline;
+}

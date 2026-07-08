@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<title>Task table — polish preview</title>
+<style>
+  :root{
+    --primary-background-color:#fff;--primary-background-hover-color:#f5f6f8;
+    --layout-border-color:#e6e9ef;--ui-border-color:#d0d4e4;
+    --primary-text-color:#323338;--secondary-text-color:#676879;--placeholder-color:#9699a6;
+    --font-family:"Figtree","Roboto","Noto Sans Hebrew",sans-serif;
+    /* sample column-settings colors (come from monday in the real app) */
+    --c-working:#fdab3d;--c-done:#00c875;--c-stuck:#e2445c;--c-irrelevant:#3a7fc2;
+  }
+  body{font-family:var(--font-family);background:#fff;margin:0;padding:24px;color:var(--primary-text-color);}
+  .groupHeader{display:flex;align-items:center;gap:6px;margin:18px 0 8px;}
+  .chev{width:14px;}
+  .groupTitle{font-size:17px;font-weight:700;font-family:var(--font-family);}
+
+  .taskTable{width:100%;background:#fff;border:1px solid var(--layout-border-color);border-radius:8px;overflow:hidden;font-family:var(--font-family);}
+  .taskRow{display:grid;grid-template-columns:minmax(180px,1.6fr) 140px 150px 170px;align-items:stretch;min-height:40px;border-bottom:1px solid var(--layout-border-color);position:relative;}
+  .taskRow::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:6px;background:var(--group-color,transparent);}
+  .taskHead{color:var(--secondary-text-color);font-weight:500;font-size:16px;}
+  .nameHead{justify-content:flex-start;}
+  .taskCell{display:flex;align-items:center;justify-content:center;padding:0 8px;min-height:44px;border-inline-end:1px solid var(--layout-border-color);overflow:hidden;font-size:16px;}
+  .taskCell:last-child{border-inline-end:none;}
+  .taskFirst{justify-content:flex-start;padding-inline-start:14px;}
+  .muted{font-size:15px;color:var(--secondary-text-color);}
+  .avatarEmpty{width:30px;height:30px;border-radius:50%;background:transparent;box-shadow:0 1px 4px rgba(0,0,0,.12);color:#676879;display:inline-flex;align-items:center;justify-content:center;}
+  .deadlineCell{position:relative;}
+  .clearX{position:absolute;inset-inline-start:4px;top:50%;transform:translateY(-50%);width:18px;height:18px;border:none;border-radius:50%;background:#fff;color:var(--secondary-text-color);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;}
+  .statusCell{padding:0;}
+  .statusFill{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;color:#fff;font-weight:500;font-size:16px;}
+  .addRow{display:flex;align-items:center;min-height:38px;padding:0 12px 0 18px;color:var(--placeholder-color);font-size:14px;position:relative;}
+  .addRow::before{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:6px;background:var(--group-color);opacity:.45;}
+  .avatar{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;}
+  .avatar.is{background:#1f2a52;}
+
+  /* status picker menu */
+  .menuWrap{position:relative;display:inline-block;margin:32px 8px;}
+  .statusMenu{display:flex;flex-direction:column;gap:6px;width:168px;padding:8px;background:#fff;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.18);}
+  .statusOption{display:flex;align-items:center;justify-content:center;height:38px;border:none;border-radius:4px;color:#fff;font-weight:500;font-size:14px;font-family:var(--font-family);cursor:pointer;}
+  .label{font-size:13px;color:var(--secondary-text-color);margin:24px 8px 4px;}
+</style>
+</head>
+<body>
+
+<!-- group: בעבודה (colored title + left strip) -->
+<div class="groupHeader"><span class="chev" style="color:var(--c-working)">▾</span><span class="groupTitle" style="color:var(--c-working)">בעבודה (1)</span></div>
+<div class="taskTable" dir="ltr" style="--group-color:var(--c-working)">
+  <div class="taskRow taskHead"><div class="taskCell taskFirst nameHead">משימה</div><div class="taskCell">אחראי</div><div class="taskCell">דד ליין</div><div class="taskCell">סטאטוס</div></div>
+  <div class="taskRow"><div class="taskCell taskFirst">משימה לדוגמא</div>
+    <div class="taskCell"><span class="avatar is">IS</span></div>
+    <div class="taskCell deadlineCell"><span class="muted">09/06/2026</span><button class="clearX">✕</button></div>
+    <div class="taskCell statusCell"><span class="statusFill" style="background:var(--c-working)">בעבודה</span></div></div>
+  <div class="addRow">+ הוסף משימה</div>
+</div>
+
+<!-- group: בוצע -->
+<div class="groupHeader"><span class="chev" style="color:var(--c-done)">▾</span><span class="groupTitle" style="color:var(--c-done)">בוצע (1)</span></div>
+<div class="taskTable" dir="ltr" style="--group-color:var(--c-done)">
+  <div class="taskRow taskHead"><div class="taskCell taskFirst nameHead">משימה</div><div class="taskCell">אחראי</div><div class="taskCell">דד ליין</div><div class="taskCell">סטאטוס</div></div>
+  <div class="taskRow"><div class="taskCell taskFirst">משימה 2</div>
+    <div class="taskCell"><span class="avatarEmpty"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></span></div>
+    <div class="taskCell deadlineCell"><span class="muted">—</span></div>
+    <div class="taskCell statusCell"><span class="statusFill" style="background:var(--c-done)">בוצע</span></div></div>
+  <div class="addRow">+ הוסף משימה</div>
+</div>
+
+<div class="label">תפריט בחירת סטטוס (צבעים/תוויות מגיעים מהגדרות עמודת הסטטוס):</div>
+<div class="menuWrap">
+  <div class="statusMenu">
+    <button class="statusOption" style="background:var(--c-working)">בעבודה</button>
+    <button class="statusOption" style="background:var(--c-done)">בוצע</button>
+    <button class="statusOption" style="background:var(--c-stuck)">תקוע</button>
+    <button class="statusOption" style="background:var(--c-irrelevant)">לא רלוונטי</button>
+  </div>
+</div>
+
+</body>
+</html>

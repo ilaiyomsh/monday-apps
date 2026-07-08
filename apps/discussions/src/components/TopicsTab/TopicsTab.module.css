@@ -1,0 +1,442 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Full width (broke out of the 90% frame) so the point tables run to the RIGHT
+     edge; a left inset keeps content off the edge, the right stays flush. */
+  width: 100%;
+  padding-inline-start: 28px;
+  padding-inline-end: 0;
+  box-sizing: border-box;
+}
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+/* Leading controls (new-topic + apply-template); the trailing collapse-all sits
+   right after them in one left-aligned cluster (like the My Tasks toolbar). */
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.addTopicRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+/* One topic = a monday board GROUP: a plain colored-title header (no band) with
+   the points rendered below as a bordered table box (mirrors the My Tasks tab). */
+.section {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* Hidden / "לא לדיון" topic — dim the table body; the eye control stays full. */
+.sectionExcluded .sectionBody {
+  opacity: 0.55;
+}
+
+/* Header = monday board-group row: chevron + colored title text, no background. */
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0 2px;
+}
+
+/* Leading collapse caret — neutral grey. Open: points down; collapsed: points
+   toward the leading (right) side in LTR. */
+.triangle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: var(--border-radius-small, 4px);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+.triangle:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+.chevron {
+  transition: transform var(--motion-productive-medium, 100ms) ease;
+}
+.chevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+/* Drag handle — subtle until header hover. */
+.grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  padding: 2px;
+  color: var(--secondary-text-color, #676879);
+  cursor: grab;
+  opacity: 0;
+  flex-shrink: 0;
+  touch-action: none;
+  transition: opacity var(--motion-productive-short, 0.15s) ease;
+}
+.sectionHeader:hover .grip {
+  opacity: 0.7;
+}
+.grip:active {
+  cursor: grabbing;
+}
+
+/* Title toggle zone — the solid color label badge. */
+.titleZone {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: start;
+}
+.titleInput {
+  min-width: 160px;
+  max-width: 360px;
+  font-size: 18px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+}
+.titleInput:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+/* Title zone: the colored topic name + the creator avatar that is revealed only
+   while hovering the text (mirrors the requested behavior). */
+.titleWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.title {
+  font-size: 17px;
+  font-weight: 500;
+  /* Pin the variable-font weight axis (Noto/Figtree default to light masters). */
+  font-variation-settings: 'wght' 500;
+  color: var(--topic-accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 420px;
+  cursor: default;
+}
+
+/* Count = "remaining / total to discuss", numbers only, neutral pill. */
+.count {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 9px;
+  margin-inline-start: 10px;
+  border-radius: 10px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--layout-border-color, #d0d4e4);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--secondary-text-color, #676879);
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.headerSpacer {
+  flex: 1;
+}
+
+/* Per-topic priority box — identical to the status column: FIXED width, centered
+   label, white text on the status color, NO chevron. Empty = grey "עדיפות". */
+.prioWrap {
+  flex: 0 0 auto;
+  margin-inline-end: 6px;
+}
+.prio {
+  width: 104px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.prioNone {
+  background: #eceef3;
+  color: var(--secondary-text-color, #676879);
+}
+.prio:disabled {
+  cursor: default;
+}
+/* Picker menu (mirrors the task status menu). */
+.prioMenu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px;
+  min-width: 160px;
+}
+.prioOption {
+  height: 36px;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+.prioOption:hover {
+  filter: brightness(0.95);
+}
+/* "ללא עדיפות" clear option — grey, matching the empty pill. */
+.prioOptionNone {
+  background: #eceef3;
+  color: var(--secondary-text-color, #676879);
+}
+
+/* Topic actions (hide / delete / confirm) — appear on header hover. */
+.sectionActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+}
+.sectionHeader:hover .sectionActions,
+.sectionActions:focus-within {
+  opacity: 1;
+}
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  padding: 4px;
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  color: var(--secondary-text-color, #676879);
+}
+.actionBtn:hover {
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--text-color, #323338);
+}
+.actionDanger:hover {
+  background: var(--negative-color-selected, #fce4e4);
+  color: var(--negative-color, #d83a52);
+}
+.excludeActive {
+  color: var(--negative-color, #d83a52);
+}
+.excludeActive:hover {
+  background: var(--negative-color-selected, #fce4e4);
+  color: var(--negative-color, #d83a52);
+}
+.confirmText {
+  font-size: 12px;
+  color: var(--negative-color, #d83a52);
+  font-weight: 500;
+}
+
+/* Points table — continuous monday-grid look (no rounded card border): the row
+   separators run edge-to-edge and the only vertical line closing the grid is the
+   last column's own border. The name column is a FILL track (minmax) so the table
+   always spans the full width, so it effectively never scrolls horizontally; the
+   overflow-x:auto stays only for the rare case where dragged minimums outgrow the
+   width, and it hosts the frozen lead/name columns' sticky origin. */
+.sectionBody {
+  display: flex;
+  flex-direction: column;
+  background: var(--primary-background-color, #fff);
+  /* Bounded + rounded on the LEFT (top + left lines), OPEN on the right so the row
+     separators run to the right edge. direction:ltr anchors the table left. */
+  border-top: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-inline-start: 0.625px solid var(--ui-border-color, #d0d4e4);
+  /* Bottom border CLOSES the table box (curving with the rounded corner), same
+     as the My-Tasks table — without it the grid just fades out under the last
+     row / add-point row. */
+  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
+  direction: ltr;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+/* The table's own bottom border is the single closing line: the last child must
+   not draw its own border-bottom on top of it (a straight row-border would also
+   overlap the rounded corner and stick out past the radius). Generic child
+   selector on purpose — the point rows' class lives in TopicPointRow.module.css
+   and cross-module class names hash apart in the production build. */
+.sectionBody > :last-child {
+  border-bottom: none;
+}
+
+/* Add-point row — SAME design as the task add-row (.addRow in TaskTable): a
+   full-width, 36px row with the accent color strip; the WHOLE row is the click
+   target (a <button> at rest), and clicking anywhere opens an inline borderless
+   text input. Shows only a "+" (no label). */
+.addPoint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 12px 0 18px;
+  border: none;
+  background: transparent;
+  color: var(--placeholder-color, #9699a6);
+  font-family: var(--font-family);
+  font-size: 14px;
+  text-align: start;
+  cursor: pointer;
+  position: relative;
+}
+.addPoint::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: var(--topic-accent, hsl(var(--status-default)));
+  border-end-start-radius: var(--border-radius-medium, 8px);
+}
+.addPoint:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--secondary-text-color, #676879);
+}
+.addPointIcon {
+  flex-shrink: 0;
+}
+.addPointInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: var(--font-family);
+  color: var(--text-color, #323338);
+  padding: 0;
+}
+.addPointInput::placeholder {
+  color: var(--placeholder-color, #9699a6);
+}
+.addPointInput:focus-visible {
+  outline: none;
+}
+
+.empty {
+  text-align: center;
+  padding: 48px 0;
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+}
+
+/* Hover kebab (3-dot) at the visual-left of the group header — revealed on
+   header hover (the inner button defaults to opacity:0 from its own module). */
+.headerKebab {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.headerKebab button {
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.sectionHeader:hover .headerKebab button {
+  opacity: 1;
+}
+
+/* Creator avatar in the group header — hidden until the topic text is hovered. */
+.headerAvatar {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.sectionHeader:hover .headerAvatar {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Column header row for a topic's points. Uses the SAME grid as the point rows
+   (ROW_STYLE inline sets grid-template-columns) so each label sits directly above
+   its column — mirrors the MyTasks table pattern where the header reuses the row
+   grid. Plain text labels, no cell fill / no color strip; a thin bottom rule is
+   the only separator. Without `display: grid` the labels collapse into an inline
+   run jammed at the RTL edge. */
+.colHead {
+  display: grid;
+  align-items: stretch;
+  min-height: 36px;
+  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+}
+.colHeadCell {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  min-height: 36px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--primary-text-color, #323338);
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.colHeadCenter {
+  justify-content: center;
+}
+/* Leading cell of the column header — hosts the accent color strip rounded at the
+   TOP-left to match the table's rounded-left outer border (S2). */
+.colHeadLead {
+  box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
+  border-start-start-radius: var(--border-radius-medium, 8px);
+}
+
+.noPoints {
+  padding: 10px 8px;
+  padding-inline-start: 16px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 13px;
+  box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
+}

@@ -1,0 +1,24 @@
+node_modules/
+.env
+.DS_Store
+.mapps/
+
+# Test-run artifacts
+.dev/
+tests/results.log
+tests/results.jsonl
+
+# Docs directory — kept local only, not version-controlled
+docs/
+
+# Build/deploy artifacts
+code.tar.gz
+local-secure-storage.db.json
+temp.zip
+public/admin/
+
+# Environment files with real secrets
+.env.ex
+
+# Security scan outputs
+security-scan-*.json

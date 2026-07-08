@@ -1,0 +1,273 @@
+/* monday board-style table for the task tabs (previous decisions / tasks).
+   Rounded on both edges, grid rows, monday @vibe/core tokens.
+   NOTE: class names are GLOBAL (classNameStrategy: 'non-scoped'), so the grid
+   classes are task-prefixed to avoid collisions and are shared with
+   TaskTableRow (which imports this module for the structural classes). */
+
+.taskTableScroll {
+  /* No longer a scroller or a card. The shared board scroll (the tab's .board /
+     group-stack) owns the single horizontal scrollbar and the frozen column pins
+     to IT — so all groups scroll together. No overflow / border / radius here:
+     the row separators run edge-to-edge (continuous "infinite" monday grid) and
+     the only closing vertical line is the last column's own border. */
+  width: 100%;
+}
+
+.taskTable {
+  /* Fixed-px resizable tracks: max-content hugs the summed width; min-width:100%
+     keeps the grid filling the board so row separators run to the right edge. Wider
+     than the board → scrolls under the shared board scrollbar. NO overflow here (it
+     would capture the sticky frozen column). Bounded + rounded on the LEFT (top +
+     left borders, rounded left corners) so row separators STOP at the strip instead
+     of bleeding past it; OPEN on the right (no right border) so they run to the edge. */
+  width: max-content;
+  min-width: 100%;
+  background: #ffffff;
+  border: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-inline-end: none;
+  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
+  font-family: var(--font-family);
+}
+
+/* Shared grid template — header + body rows stay aligned. monday row height = 36px. */
+.taskRow {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.6fr) 140px 150px 170px;
+  align-items: stretch;
+  min-height: 36px;
+  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  position: relative;
+}
+/* When there is NO add-row (previous-tasks tab) the last row sits directly on
+   the table's own bottom border: drop its row border so the single table border
+   closes the box — a straight row-border here overlapped the rounded corner and
+   stuck out past the radius. (With an add-row the last .taskRow isn't :last-child,
+   so the separator above the add-row is unaffected.) */
+.taskRow:last-child {
+  border-bottom: none;
+}
+/* The group-color strip now lives as an inset shadow on the FROZEN leading cell
+   (.taskFirst, or .selectCell in selection mode) so it travels with the frozen
+   column during horizontal scroll instead of being a row-level bar that scrolls
+   away (and gets covered by the opaque frozen cell). */
+
+/* Selection mode (previous-tasks tab): prepend a 36px checkbox column (square
+   against the 36px row). The Tasks tab never sets `selectable`, so its 4-column
+   grid is untouched. */
+.selectable .taskRow {
+  grid-template-columns: 36px minmax(180px, 1.6fr) 140px 150px 170px;
+}
+/* "by discussion type" view: append a rightmost source-discussion column. */
+.withSource .taskRow {
+  grid-template-columns: minmax(180px, 1.6fr) 140px 150px 170px minmax(160px, 1fr);
+}
+.withSource.selectable .taskRow {
+  grid-template-columns: 36px minmax(180px, 1.6fr) 140px 150px 170px minmax(160px, 1fr);
+}
+/* "priority mapped" view: insert a read-only 140px priority column after status.
+   Combines with selectable and/or withSource (most-specific combo rule wins). */
+.withPriority .taskRow {
+  grid-template-columns: minmax(180px, 1.6fr) 140px 150px 170px 140px;
+}
+.withPriority.selectable .taskRow {
+  grid-template-columns: 36px minmax(180px, 1.6fr) 140px 150px 170px 140px;
+}
+.withPriority.withSource .taskRow {
+  grid-template-columns: minmax(180px, 1.6fr) 140px 150px 170px 140px minmax(160px, 1fr);
+}
+.withPriority.withSource.selectable .taskRow {
+  grid-template-columns: 36px minmax(180px, 1.6fr) 140px 150px 170px 140px minmax(160px, 1fr);
+}
+.selectCell {
+  justify-content: center;
+  padding: 0;
+}
+/* Square checkbox cell: 36px column × 36px row, checkbox centred via flex
+   (min-height gives no definite height for an absolute child's top:50%). */
+.selectable .selectCell {
+  width: 36px;
+  min-width: 36px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* FROZEN leading cell in selection mode (mirrors .taskFirst). */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #ffffff;
+  box-shadow: inset 6px 0 0 var(--group-color, hsl(var(--status-default)));
+}
+/* The @vibe/core Checkbox root is a <label> wrapper. flex centres it. */
+.selectable .selectCell > label {
+  margin: 0;
+  /* Visual center in the 36px cell sits slightly right (after the color strip). */
+  transform: translateX(2px);
+}
+/* @vibe/core adds a trailing label/text slot inside the checkbox wrapper even
+   when only ariaLabel is passed. Reset its inline-start margin so the visual
+   16px box stays geometrically centered in the 36px select cell. */
+.selectable .selectCell > label > :last-child {
+  margin-inline-start: 0;
+}
+.selectable .taskFirst {
+  padding-inline-start: 8px; /* name is no longer the leading cell */
+  left: 36px; /* pinned right after the frozen 36px checkbox */
+  box-shadow: none; /* the group strip lives on the frozen checkbox instead */
+}
+
+.taskHead {
+  background: #ffffff;
+  color: var(--primary-text-color, #323338);
+  font-weight: 400;
+  font-size: 14px;
+}
+.taskHead .taskCell {
+  cursor: default;
+}
+.nameHead {
+  justify-content: flex-start;
+}
+/* Higher-specificity guard so the name header aligns left (matching the
+   left-aligned name values) instead of inheriting the centered header cell. */
+.taskHead .nameHead {
+  justify-content: flex-start;
+  text-align: left;
+}
+/* Header frozen cells stack above the body frozen cells during scroll. */
+.taskHead .taskFirst,
+.taskHead .selectCell {
+  z-index: 3;
+}
+
+.taskCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  min-height: 36px;
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  overflow: hidden;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+}
+/* The rightmost column KEEPS its right border so it stays bounded in the body
+   too — these tables use fixed-px widths, so when the table is narrower than its
+   container the last column's right edge sits mid-table (no outer box border to
+   lean on). Previously border-inline-end:none here left it unbordered in rows. */
+.taskFirst {
+  justify-content: flex-start;
+  padding-inline-start: 14px; /* clear the 6px colored strip */
+  /* FROZEN name column — pinned during horizontal scroll, opaque so scrolled cells
+     don't bleed through; group-color strip as an inset shadow that travels with it.
+     (Selection mode moves this after the frozen checkbox, see above.) */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #ffffff;
+  box-shadow: inset 6px 0 0 var(--group-color, hsl(var(--status-default)));
+}
+
+/* add-task footer row — last child gets the rounded bottom via table overflow */
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 12px 0 0;
+  border: none;
+  background: transparent;
+  color: var(--placeholder-color, #9699a6);
+  font-family: var(--font-family);
+  font-size: 14px;
+  text-align: start;
+  cursor: pointer;
+  position: relative;
+}
+/* The label (and the color strip it carries) is FROZEN like the leading cells:
+   the button spans the full table width, and the sticky label pins to the board
+   scrollport's left edge during horizontal scroll instead of scrolling away. */
+.addLabel {
+  position: sticky;
+  left: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding-inline-start: 18px;
+  white-space: nowrap;
+}
+.addLabel::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: var(--group-color, hsl(var(--status-default)));
+  opacity: 0.45;
+  /* Round the strip's bottom corner to match the table's rounded-left bottom
+     border (same as the My-Tasks table's add-row strip). */
+  border-end-start-radius: var(--border-radius-medium, 8px);
+}
+.addRow:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--secondary-text-color, #676879);
+}
+.addIcon {
+  flex-shrink: 0;
+}
+.addRow :global(.input-component) {
+  flex: 1;
+}
+
+/* Phone: the frozen name column is half-screen (50vw) at rest and shrinks to a
+   quarter (25vw) once the table is horizontally scrolled (.scrolled toggled by
+   the component on scroll) — so the scrolled columns become visible while you
+   keep the task name for context. Other columns get compact fixed widths. */
+/* Mobile-app only (gated on `.mobile-app`, not viewport width). The component
+   also drives the grid via inline `tracks` keyed on the same SDK mobile flag, so
+   an item-card panel narrowing the iframe never reflows the table to this layout. */
+:global(.mobile-app) .taskTable {
+  width: max-content;
+  min-width: 100%;
+}
+:global(.mobile-app) .taskTableScroll {
+  /* initial / fallback; the component shrinks this gradually toward 25vw on
+     horizontal scroll (1:1 with scrollLeft) via inline style. */
+  --name-col: 50vw;
+}
+:global(.mobile-app) .taskRow {
+  grid-template-columns: var(--name-col) 110px 120px 140px;
+}
+:global(.mobile-app) .selectable .taskRow {
+  grid-template-columns: 36px var(--name-col) 110px 120px 140px;
+}
+:global(.mobile-app) .withSource .taskRow {
+  grid-template-columns: var(--name-col) 110px 120px 140px 150px;
+}
+:global(.mobile-app) .withSource.selectable .taskRow {
+  grid-template-columns: 36px var(--name-col) 110px 120px 140px 150px;
+}
+:global(.mobile-app) .withPriority .taskRow {
+  grid-template-columns: var(--name-col) 110px 120px 140px 110px;
+}
+:global(.mobile-app) .withPriority.selectable .taskRow {
+  grid-template-columns: 36px var(--name-col) 110px 120px 140px 110px;
+}
+:global(.mobile-app) .withPriority.withSource .taskRow {
+  grid-template-columns: var(--name-col) 110px 120px 140px 110px 150px;
+}
+:global(.mobile-app) .withPriority.withSource.selectable .taskRow {
+  grid-template-columns: 36px var(--name-col) 110px 120px 140px 110px 150px;
+}
+
+/* S2 — round the group-color strip to match the table's rounded-left border:
+   top-left on the HEADER leading cell, bottom-left on the LAST row / add-row.
+   Inset box-shadows follow border-radius, so radius on the frozen leading cell
+   rounds the strip. */
+.taskHead .taskFirst,
+.taskHead .selectCell { border-start-start-radius: var(--border-radius-medium, 8px); }
+.taskRow:last-child .taskFirst,
+.taskRow:last-child .selectCell { border-end-start-radius: var(--border-radius-medium, 8px); }
+.addRow::before { border-end-start-radius: var(--border-radius-medium, 8px); }

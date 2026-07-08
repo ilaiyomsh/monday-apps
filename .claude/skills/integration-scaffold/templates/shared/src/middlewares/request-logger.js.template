@@ -1,0 +1,27 @@
+import logger from '../services/logger/index.js';
+
+/**
+ * Middleware to log all incoming requests and their responses.
+ */
+export function requestLoggerMiddleware(req, res, next) {
+  const startTime = Date.now();
+
+  logger.request(req);
+
+  if (req.method === 'POST' && req.body) {
+    const safeBody = { ...req.body };
+    if (safeBody.payload?.inputFields?.shortLivedToken) {
+      safeBody.payload.inputFields.shortLivedToken = '[REDACTED]';
+    }
+    logger.debug('Request body', 'request_logger', safeBody);
+  }
+
+  const originalSend = res.send;
+  res.send = function(body) {
+    const duration = Date.now() - startTime;
+    logger.response(req, res.statusCode, duration);
+    return originalSend.call(this, body);
+  };
+
+  next();
+}

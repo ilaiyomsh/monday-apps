@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מפת מערכת Axis</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --card-hover: #222633;
+    --border: #2c3140;
+    --text: #e6e8ee;
+    --muted: #9aa0b0;
+    --accent: #6c8cff;
+    --accent2: #a78bfa;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --pink: #f472b6;
+    --cyan: #22d3ee;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Heebo", "Arial Hebrew", Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 80% -10%, #1c2030 0%, var(--bg) 60%);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 40px 20px 80px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+
+  header.hero {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  header.hero .badge {
+    display: inline-block;
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 16px;
+    margin-bottom: 18px;
+  }
+  header.hero h1 {
+    font-size: 42px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin-bottom: 14px;
+  }
+  header.hero h1 .ax {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  header.hero p {
+    color: var(--muted);
+    font-size: 18px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  header.hero p .en { color: var(--cyan); direction: ltr; unicode-bidi: isolate; }
+
+  h2.section {
+    font-size: 22px;
+    margin: 48px 0 20px;
+    padding-right: 14px;
+    border-right: 4px solid var(--accent);
+  }
+
+  /* Layers diagram */
+  .layers { display: flex; flex-direction: column; gap: 16px; margin-bottom: 8px; }
+  .layer {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .layer .num {
+    flex: 0 0 44px;
+    height: 44px;
+    width: 44px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    font-size: 20px;
+    color: #0f1117;
+  }
+  .layer.l1 .num { background: var(--accent); }
+  .layer.l2 .num { background: var(--green); }
+  .layer.l3 .num { background: var(--amber); }
+  .layer .ltxt strong { font-size: 17px; }
+  .layer .ltxt span { color: var(--muted); display:block; font-size: 14px; }
+  .layer .ltxt span .en { color: var(--cyan); direction: ltr; unicode-bidi: isolate; }
+  .arrow-down { text-align:center; color: var(--muted); font-size: 20px; }
+
+  /* Components grid */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 22px;
+    transition: transform .15s ease, background .15s ease, border-color .15s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .card:hover { transform: translateY(-4px); background: var(--card-hover); border-color: var(--accent); }
+  .card .top-stripe {
+    position: absolute; top: 0; right: 0; left: 0; height: 4px;
+  }
+  .card.app .top-stripe { background: var(--accent); }
+  .card.service .top-stripe { background: var(--green); }
+  .card.monitor .top-stripe { background: var(--amber); }
+  .card.template .top-stripe { background: var(--accent2); }
+  .card.draft .top-stripe { background: var(--pink); }
+
+  .card .chead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .card .chead .name { font-size: 20px; font-weight: 800; direction: ltr; unicode-bidi: isolate; }
+  .card .chead .icon { font-size: 26px; }
+  .card .role { color: var(--muted); font-size: 14px; margin-bottom: 14px; min-height: 60px; }
+
+  .tag-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .tag {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(108,140,255,.12);
+    border: 1px solid rgba(108,140,255,.3);
+    color: #b9c6ff;
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+  .meta-row { display:flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 12px; }
+  .meta-row b { color: var(--text); font-weight: 600; }
+  .meta-row .en { direction: ltr; unicode-bidi: isolate; }
+  .kind-pill {
+    font-size: 11px; padding: 3px 9px; border-radius: 6px; font-weight: 700;
+  }
+  .kind-app { background: rgba(108,140,255,.18); color:#b9c6ff; }
+  .kind-service { background: rgba(52,211,153,.16); color:#7ff0c8; }
+  .kind-monitor { background: rgba(251,191,36,.16); color:#ffd980; }
+  .kind-template { background: rgba(167,139,250,.18); color:#cdb9ff; }
+  .kind-draft { background: rgba(244,114,182,.16); color:#ffb3da; }
+
+  /* Flow */
+  .flow {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 28px;
+    margin-top: 8px;
+  }
+  .flow-row { display:flex; gap: 14px; justify-content:center; flex-wrap: wrap; }
+  .node {
+    flex: 1 1 200px;
+    max-width: 260px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    text-align:center;
+  }
+  .node .nname { font-weight: 800; direction: ltr; unicode-bidi: isolate; }
+  .node .ndesc { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .node.app { border-color: var(--accent); }
+  .node.hub { border-color: var(--green); }
+  .node.mon { border-color: var(--amber); }
+  .flow .conn { text-align:center; color: var(--muted); font-size: 22px; padding: 10px 0; }
+  .flow .conn small { display:block; font-size: 13px; }
+
+  footer { text-align:center; color: var(--muted); font-size: 13px; margin-top: 50px; }
+
+  .dev-note {
+    background: rgba(251,191,36,.07);
+    border: 1px dashed rgba(251,191,36,.45);
+    border-radius: 14px;
+    padding: 16px 20px;
+    margin-top: 16px;
+    font-size: 14px;
+    color: var(--muted);
+  }
+  .dev-note b { color: var(--amber); font-weight: 700; }
+  .dev-note .en { color: var(--cyan); direction: ltr; unicode-bidi: isolate; }
+
+  .card.devtool { opacity: .85; }
+  .card.devtool .top-stripe { background: repeating-linear-gradient(45deg, var(--amber), var(--amber) 8px, #1a1d27 8px, #1a1d27 16px); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="badge">SYSTEM MAP</div>
+    <h1>מערכת <span class="ax">Axis</span></h1>
+    <p>
+      מערכת אפליקציות
+      <span class="en">monday.com</span>
+      לניהול משאבים וזמן — שני רכיבי-ליבה: <b>תכנון</b> ו<b>דיווח שעות</b>, ורכיב-עזר לסנכרון יומן שמזין את דיווח השעות.
+    </p>
+  </header>
+
+  <h2 class="section">מבנה המערכת</h2>
+  <div class="layers">
+    <div class="layer l1">
+      <div class="num">1</div>
+      <div class="ltxt">
+        <strong>Planner — תכנון</strong>
+        <span>תכנון פרויקטים והקצאת משאבים בתרשים <span class="en">Gantt</span>. רכיב-ליבה עצמאי.</span>
+      </div>
+    </div>
+    <div class="layer l2">
+      <div class="num">2</div>
+      <div class="ltxt">
+        <strong>Tracker — דיווח שעות</strong>
+        <span>דיווח שעות-עבודה, חופשות ומחלות בממשק יומן. רכיב-ליבה.</span>
+      </div>
+    </div>
+    <div class="arrow-down">↑ &nbsp; מזין אירועי יומן</div>
+    <div class="layer l3" style="margin-right:32px">
+      <div class="num">＋</div>
+      <div class="ltxt">
+        <strong>sync-calender — סנכרון יומן</strong>
+        <span>רכיב-עזר ל-<span class="en">Tracker</span>: מסנכרן אירועים מ-<span class="en">Google Calendar</span> כדי להזין את דיווח השעות.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="dev-note">
+    🛠️ <b>כלי מפתח בלבד —</b> בנפרד מהמערכת קיים דשבורד בקרה
+    (<span class="en">sync-calender-status</span>)
+    לניטור בריאות האפליקציות. הוא <b>אינו חלק מהמערכת</b> — המוצר עובד לחלוטין בלעדיו.
+  </div>
+
+  <h2 class="section">רכיבי המוצר</h2>
+  <div class="grid">
+
+    <!-- Planner -->
+    <div class="card app">
+      <div class="top-stripe"></div>
+      <div class="chead"><span class="name">Planner</span><span class="icon">📊</span></div>
+      <div class="role">תכנון פרויקטים והקצאת משאבים בתרשים <span style="direction:ltr;unicode-bidi:isolate">Gantt</span> — גרירה-ושחרור, ציר-זמן אינסופי, ומפת-חום של עומס לפי תפקיד.</div>
+      <div class="tag-row">
+        <span class="tag">React 19</span><span class="tag">Vite 7</span><span class="tag">TypeScript</span><span class="tag">@dnd-kit</span><span class="tag">@vibe/core</span>
+      </div>
+      <div class="meta-row"><span><b>סוג:</b> <span class="kind-pill kind-app">Board View</span></span><span><b>App ID:</b> <span class="en">10787117</span></span></div>
+    </div>
+
+    <!-- Tracker -->
+    <div class="card app">
+      <div class="top-stripe"></div>
+      <div class="chead"><span class="name">Tracker</span><span class="icon">🕐</span></div>
+      <div class="role">דיווח שעות-עבודה בממשק יומן דו-לשוני (עברית/אנגלית). אירועים שעתיים לעבודה, ואירועי יום-שלם לחופשה / מחלה / מילואים.</div>
+      <div class="tag-row">
+        <span class="tag">React 18</span><span class="tag">Vite 6</span><span class="tag">react-big-calendar</span><span class="tag">@hebcal/core</span>
+      </div>
+      <div class="meta-row"><span><b>סוג:</b> <span class="kind-pill kind-app">Board View</span></span><span><b>App ID:</b> <span class="en">10684862</span></span></div>
+    </div>
+
+    <!-- sync-calender -->
+    <div class="card service">
+      <div class="top-stripe"></div>
+      <div class="chead"><span class="name">sync-calender</span><span class="icon">🔄</span></div>
+      <div class="role">רכיב-עזר ל-<span style="direction:ltr;unicode-bidi:isolate">Tracker</span>: סנכרון חד-כיווני מ-<span style="direction:ltr;unicode-bidi:isolate">Google Calendar</span> ללוח, כדי להזין אירועי יומן לדיווח השעות. מסנן לפי אישור הגעה וכותב עמודות לפי כללים פר-משתמש.</div>
+      <div class="tag-row">
+        <span class="tag">Express.js</span><span class="tag">React 19</span><span class="tag">Google Calendar API</span><span class="tag">Axiom</span>
+      </div>
+      <div class="meta-row"><span><b>סוג:</b> <span class="kind-pill kind-service">רכיב-עזר ל-Tracker</span></span><span><b>App ID:</b> <span class="en">11119011</span></span></div>
+    </div>
+
+  </div>
+
+  <h2 class="section">כלי פיתוח <span style="font-size:14px;color:var(--muted);font-weight:400">— לא חלק מהמוצר</span></h2>
+  <div class="grid">
+
+    <!-- sync-calender-status -->
+    <div class="card devtool">
+      <div class="top-stripe"></div>
+      <div class="chead"><span class="name">sync-calender-status</span><span class="icon">🛠️</span></div>
+      <div class="role">דשבורד בקרה <b style="color:var(--amber)">למפתח בלבד</b> לניטור בריאות האפליקציות, מלוגים של <span style="direction:ltr;unicode-bidi:isolate">Axiom</span>. <b style="color:var(--amber)">אינו חלק מהמערכת</b> — המוצר עובד בלעדיו.</div>
+      <div class="tag-row">
+        <span class="tag">Node.js</span><span class="tag">GitHub Actions</span><span class="tag">GitHub Pages</span>
+      </div>
+      <div class="meta-row"><span><b>סוג:</b> <span class="kind-pill kind-monitor">כלי מפתח חיצוני</span></span></div>
+    </div>
+
+    <!-- template -->
+    <div class="card template">
+      <div class="top-stripe"></div>
+      <div class="chead"><span class="name">_axiom-dashboard-template</span><span class="icon">🧩</span></div>
+      <div class="role">שלד לשימוש חוזר שמחבר אפליקציה למסלול <span style="direction:ltr;unicode-bidi:isolate">logging → Axiom → Dashboard</span>. תשתית לכלי הבקרה של המפתח.</div>
+      <div class="tag-row">
+        <span class="tag">@axiomhq/js</span><span class="tag">Scaffold</span>
+      </div>
+      <div class="meta-row"><span><b>סוג:</b> <span class="kind-pill kind-template">Template / Library</span></span></div>
+    </div>
+
+  </div>
+
+  <h2 class="section">זרימת הנתונים</h2>
+  <div class="flow">
+    <div class="flow-row">
+      <div class="node app"><div class="nname">Planner</div><div class="ndesc">תכנון משאבים · עצמאי</div></div>
+      <div class="node app"><div class="nname">Tracker</div><div class="ndesc">דיווח שעות</div></div>
+    </div>
+    <div class="conn">↑<small>sync-calender מזין אירועי יומן ל-Tracker</small></div>
+    <div class="flow-row">
+      <div class="node" style="border-color:var(--green)">
+        <div class="nname">sync-calender</div>
+        <div class="ndesc">Google Calendar → לוח Tracker</div>
+      </div>
+    </div>
+
+    <div style="border-top:1px dashed var(--border);margin:26px 0 18px"></div>
+
+    <div class="conn" style="padding-top:0">🛠️ כלי מפתח (אופציונלי, לא חלק מהמוצר)<small>האפליקציות שולחות לוגים → Axiom → דשבורד</small></div>
+    <div class="flow-row">
+      <div class="node" style="opacity:.8;border-style:dashed;border-color:var(--amber)">
+        <div class="nname">Axiom → sync-calender-status</div>
+        <div class="ndesc">דשבורד בקרה למפתח בלבד</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    מפת מערכת Axis ·
+    <span style="direction:ltr;unicode-bidi:isolate">Planner · Tracker · sync-calender</span>
+  </footer>
+
+</div>
+</body>
+</html>

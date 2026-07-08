@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="he" dir="ltr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>דיונים — תצוגת לוח (Mockup)</title>
+<style>
+  /* ---- monday-like tokens (mirrors @vibe/core + theme-tokens.css) ---- */
+  :root {
+    --primary-bg: #ffffff;
+    --secondary-bg: #f5f6f8;
+    --row-hover: #f5f6f8;
+    --border: #e6e9ef;
+    --border-strong: #d0d4e4;
+    --text: #323338;
+    --text-secondary: #676879;
+    --text-placeholder: #9699a6;
+
+    /* status colors (match StatusBadge --status-* tokens) */
+    --status-working: #fdab3d;   /* בעבודה  */
+    --status-done:    #00c875;   /* בוצע    */
+    --status-stuck:   #e2445c;   /* תקוע    */
+    --status-default: #c4c4c4;
+
+    --radius: 8px;
+    --row-h: 40px;
+    --indicator-w: 6px;
+    --font: "Figtree", "Poppins", "Roboto", "Noto Sans Hebrew", -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--secondary-bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+  }
+
+  .board {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 24px 28px 120px;
+  }
+
+  /* ---- top toolbar (filters carried over from current DiscussionList) ---- */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 22px;
+    flex-wrap: wrap;
+  }
+  .toolbar h1 {
+    font-size: 22px;
+    font-weight: 600;
+    margin: 0;
+    margin-right: auto;
+  }
+  .btn {
+    border: none;
+    border-radius: 6px;
+    height: 32px;
+    padding: 0 14px;
+    font-family: var(--font);
+    font-size: 14px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn-primary { background: #0073ea; color: #fff; }
+  .btn-primary:hover { background: #0060b9; }
+  .btn-ghost { background: transparent; color: var(--text-secondary); }
+  .btn-ghost:hover { background: #e9ebf0; }
+  .search {
+    height: 32px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 0 30px 0 12px;
+    width: 220px;
+    font-family: var(--font);
+    font-size: 14px;
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23676879' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") no-repeat right 9px center;
+  }
+  select.filter {
+    height: 32px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 0 10px;
+    font-family: var(--font);
+    font-size: 14px;
+    background: #fff;
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  /* ---- group block ---- */
+  .group {
+    margin-bottom: 30px;
+  }
+  .group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 34px;
+    cursor: pointer;
+    user-select: none;
+    padding-left: 2px;
+  }
+  .chevron {
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .15s ease;
+  }
+  .group.collapsed .chevron { transform: rotate(-90deg); }
+  .group-title {
+    font-size: 16px;
+    font-weight: 600;
+  }
+  .group-count {
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 400;
+  }
+  .group-menu {
+    margin-left: auto;
+    opacity: 0;
+    color: var(--text-secondary);
+    transition: opacity .1s;
+  }
+  .group-header:hover .group-menu { opacity: 1; }
+
+  /* ---- table ---- */
+  .table {
+    background: var(--primary-bg);
+    border: 1px solid var(--border);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    overflow: hidden;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+  }
+  .group.collapsed .table { display: none; }
+
+  /* colored group indicator strip on the left (LTR leading edge) */
+  .row {
+    display: grid;
+    grid-template-columns: minmax(280px, 1.6fr) 160px 170px 200px;
+    align-items: stretch;
+    position: relative;
+    min-height: var(--row-h);
+    border-bottom: 1px solid var(--border);
+  }
+  .row::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: var(--indicator-w);
+    background: var(--group-color, transparent);
+  }
+  .row:last-child { border-bottom: none; }
+
+  .head {
+    color: var(--text-secondary);
+    font-weight: 500;
+    background: var(--primary-bg);
+  }
+  .head .cell { justify-content: center; cursor: default; }
+
+  .body-row:hover { background: var(--row-hover); }
+
+  .cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 8px;
+    border-right: 1px solid var(--border);
+    min-height: var(--row-h);
+    overflow: hidden;
+  }
+  .cell:last-child { border-right: none; }
+  /* first column carries the indicator strip offset */
+  .cell.first { padding-left: calc(8px + var(--indicator-w)); }
+
+  /* name cell — leading aligned (LTR) */
+  .cell.name {
+    justify-content: flex-start;
+    font-weight: 400;
+  }
+
+  /* person cell */
+  .avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    border: 2px solid var(--primary-bg);
+  }
+  /* monday-style empty person placeholder: light gray circle + silhouette */
+  .avatar.empty {
+    background: #f0f1f3 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%23b0b4c4' stroke-width='1.8'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8'/%3E%3C/svg%3E") no-repeat center center;
+    border: 1px solid #e2e4ec;
+  }
+  .avatar.is { background: #1f2a52; }
+  .avatar.photo { background-size: cover; background-position: center; }
+
+  /* date cell */
+  .cell.date { color: var(--text); }
+
+  /* status cell — full width colored fill (monday native) */
+  .cell.status { padding: 0; }
+  .status-fill {
+    width: 100%;
+    height: 100%;
+    min-height: var(--row-h);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 500;
+    font-size: 14px;
+  }
+
+  /* add-item footer row */
+  .add-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: center;
+    position: relative;
+    min-height: 38px;
+    color: var(--text-placeholder);
+    cursor: pointer;
+  }
+  .add-row::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: var(--indicator-w);
+    background: var(--group-color);
+    opacity: .45;
+  }
+  .add-row:hover { color: var(--text-secondary); background: var(--row-hover); }
+  .add-row .add-label { padding-left: calc(12px + var(--indicator-w)); text-align: left; }
+
+  .note {
+    max-width: 1180px;
+    margin: 0 auto 18px;
+    padding: 10px 14px;
+    background: #eaf3ff;
+    border: 1px solid #cfe3ff;
+    border-radius: 8px;
+    color: #1d4b8f;
+    font-size: 13px;
+    direction: rtl;
+  }
+</style>
+</head>
+<body>
+
+<div class="note">
+  Mockup סטטי — תצוגת "לוח" לדיונים בסגנון monday (כיוון משמאל לימין). קיבוץ לפי <b>סטטוס</b>, עמודות: שם הדיון · מוביל דיון · תאריך יצירה · Status.
+</div>
+
+<div class="board">
+
+  <!-- toolbar -->
+  <div class="toolbar">
+    <button class="btn btn-primary">+ חדש</button>
+    <button class="btn btn-ghost">▦ תבניות</button>
+    <input class="search" placeholder="חיפוש..." />
+    <select class="filter"><option>כל החודשים</option></select>
+    <select class="filter"><option>כל הסוגים</option></select>
+    <h1>דיונים</h1>
+  </div>
+
+  <!-- ============ GROUP: בעבודה (working / orange) ============ -->
+  <div class="group" style="--group-color: var(--status-working);">
+    <div class="group-header">
+      <span class="chevron" style="color: var(--status-working);">▾</span>
+      <span class="group-title" style="color: var(--status-working);">בעבודה</span>
+      <span class="group-count">2 דיונים</span>
+      <span class="group-menu">•••</span>
+    </div>
+    <div class="table">
+      <!-- header -->
+      <div class="row head">
+        <div class="cell first">שם הדיון</div>
+        <div class="cell">מוביל דיון</div>
+        <div class="cell">תאריך יצירה</div>
+        <div class="cell">Status</div>
+      </div>
+      <!-- rows -->
+      <div class="row body-row">
+        <div class="cell name first">דיון 2</div>
+        <div class="cell"><span class="avatar empty"></span></div>
+        <div class="cell date">Jun 8</div>
+        <div class="cell status"><div class="status-fill" style="background: var(--status-working);">בעבודה</div></div>
+      </div>
+      <div class="row body-row">
+        <div class="cell name first">ישיבת הנהלה שבועית</div>
+        <div class="cell"><span class="avatar empty"></span></div>
+        <div class="cell date">Jun 3</div>
+        <div class="cell status"><div class="status-fill" style="background: var(--status-working);">בעבודה</div></div>
+      </div>
+      <!-- add row -->
+      <div class="add-row">
+        <div class="add-label">+ הוסף דיון</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ GROUP: בוצע (done / green) ============ -->
+  <div class="group" style="--group-color: var(--status-done);">
+    <div class="group-header">
+      <span class="chevron" style="color: var(--status-done);">▾</span>
+      <span class="group-title" style="color: var(--status-done);">בוצע</span>
+      <span class="group-count">1 דיון</span>
+      <span class="group-menu">•••</span>
+    </div>
+    <div class="table">
+      <div class="row head">
+        <div class="cell first">שם הדיון</div>
+        <div class="cell">מוביל דיון</div>
+        <div class="cell">תאריך יצירה</div>
+        <div class="cell">Status</div>
+      </div>
+      <div class="row body-row">
+        <div class="cell name first">דיון 3</div>
+        <div class="cell"><span class="avatar photo" style="background-image:url('https://style.monday.com/static/art/person1.png');"></span></div>
+        <div class="cell date">Jun 3</div>
+        <div class="cell status"><div class="status-fill" style="background: var(--status-done);">בוצע</div></div>
+      </div>
+      <div class="add-row">
+        <div class="add-label">+ הוסף דיון</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ GROUP: תקוע (stuck / red) ============ -->
+  <div class="group" style="--group-color: var(--status-stuck);">
+    <div class="group-header">
+      <span class="chevron" style="color: var(--status-stuck);">▾</span>
+      <span class="group-title" style="color: var(--status-stuck);">תקוע</span>
+      <span class="group-count">1 דיון</span>
+      <span class="group-menu">•••</span>
+    </div>
+    <div class="table">
+      <div class="row head">
+        <div class="cell first">שם הדיון</div>
+        <div class="cell">מוביל דיון</div>
+        <div class="cell">תאריך יצירה</div>
+        <div class="cell">Status</div>
+      </div>
+      <div class="row body-row">
+        <div class="cell name first">דיון 4</div>
+        <div class="cell"><span class="avatar is">IS</span></div>
+        <div class="cell date">Jun 5</div>
+        <div class="cell status"><div class="status-fill" style="background: var(--status-stuck);">תקוע</div></div>
+      </div>
+      <div class="add-row">
+        <div class="add-label">+ הוסף דיון</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // collapse/expand groups — proves the interaction model for the React port
+  document.querySelectorAll('.group-header').forEach(function (h) {
+    h.addEventListener('click', function () {
+      h.parentElement.classList.toggle('collapsed');
+    });
+  });
+</script>
+</body>
+</html>

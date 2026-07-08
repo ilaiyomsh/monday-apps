@@ -1,0 +1,177 @@
+/* monday board-style table for the "My Tasks" view. Mirrors TaskTable but with
+   a 6-column grid (name | discussion | deadline | priority | status | notes).
+   Class names are GLOBAL (classNameStrategy: 'non-scoped'), so these are
+   myt-prefixed conceptually but kept structurally identical to TaskTable. */
+
+.taskTableScroll {
+  /* No longer a scroller or a card: the shared board (.board in MyTasksView)
+     owns the single horizontal scroll, and the frozen name column pins to IT.
+     So NO overflow / border / radius here — just a full-width pass-through, giving
+     the continuous "infinite" monday grid (row lines run edge-to-edge, the only
+     vertical line closing the grid is the last column's border). */
+  width: 100%;
+}
+
+.taskTable {
+  /* Fixed-px (draggable) columns: hug their summed width; min-width:100% keeps the
+     grid filling the board so the row separators always run edge-to-edge. Wider
+     than the viewport → it scrolls under the shared board scrollbar. NO overflow
+     here (it would capture the sticky frozen cell). border-top is the top line
+     separating the table from the group title; the right side stays OPEN so the
+     row separators run to the right edge (the "infinite" monday look). */
+  width: max-content;
+  min-width: 100%;
+  background: #ffffff;
+  /* Bounded + rounded on the LEFT (top + left borders, rounded left corners) so
+     the row separators STOP at the strip instead of bleeding past it to the left;
+     OPEN on the right (no right border) so they run to the right edge. */
+  border: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-inline-end: none;
+  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
+  font-family: var(--font-family);
+}
+
+/* Shared grid template — header + body rows stay aligned. */
+.taskRow {
+  display: grid;
+  grid-template-columns: 220px minmax(140px, 1fr) 120px 130px 160px minmax(160px, 1.2fr);
+  align-items: stretch;
+  min-height: 36px;
+  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  position: relative;
+}
+/* No add-row → the last row sits on the table's own bottom border: drop the row
+   border so the single table border closes the box (a straight row-border would
+   overlap the rounded corner and stick out past the radius). */
+.taskRow:last-child {
+  border-bottom: none;
+}
+
+.taskHead {
+  background: #ffffff;
+  color: var(--primary-text-color, #323338);
+  font-weight: 400;
+  font-size: 14px;
+}
+.taskHead .taskCell {
+  cursor: default;
+}
+.nameHead {
+  justify-content: center;
+}
+/* Higher-specificity guard so the name header is CENTERED within its (frozen)
+   column. The body name cells stay LEFT-aligned via the separate .name/.nameText
+   classes in MyTasksRow.module.css — header and body use different classes, so
+   centering the header here does not affect the task-name values. */
+.taskHead .nameHead {
+  justify-content: center;
+  text-align: center;
+}
+
+.taskCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  min-height: 36px;
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  overflow: hidden;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+}
+/* The rightmost column KEEPS its right border so it stays bounded in the body
+   too. With fixed-px columns the table can be narrower than its container, so the
+   last column's right edge sits mid-table — border-inline-end:none used to leave
+   it unbordered in the rows (visible only in the header). */
+/* Name column is FROZEN (like a real monday board): it stays pinned to the left
+   while the rest of the row scrolls horizontally, occluding the scrolled cells.
+   The group color strip is an inset box-shadow on the left so it travels with the
+   frozen column; the table's rounded left border rounds the strip's outer corner. */
+.taskFirst {
+  justify-content: flex-start;
+  padding-inline-start: 14px; /* clear the 6px colored strip */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  /* MUST be opaque so horizontally-scrolled cells can't show through the frozen
+     column. Solid white (the table bg); the hover state composites the hover
+     tint over white in MyTasksRow.module.css (the hover token is semi-transparent). */
+  background: #ffffff;
+  box-shadow: inset 6px 0 0 var(--group-color, hsl(var(--status-default)));
+}
+.taskHead .taskFirst {
+  z-index: 3;
+}
+
+/* S2 — round the color strip at the table's rounded-left corners. The strip is
+   an inset box-shadow on the frozen leading cell (or .selectCell in selection
+   mode), and inset shadows follow border-radius, so rounding the top-left of the
+   HEADER leading cell and the bottom-left of the LAST row's leading cell rounds
+   the strip to match the table's rounded-left outer border. */
+.taskHead .taskFirst,
+.taskHead .selectCell { border-start-start-radius: var(--border-radius-medium, 8px); }
+.taskRow:last-child .taskFirst,
+.taskRow:last-child .selectCell { border-end-start-radius: var(--border-radius-medium, 8px); }
+
+/* Selection column (mirrors TaskTable.module.css). Prepended 36px frozen
+   checkbox track; the group-color strip moves onto it so it travels with the
+   frozen column during horizontal scroll. */
+.selectCell { justify-content: center; padding: 0; }
+.selectable .selectCell {
+  width: 36px; min-width: 36px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  position: sticky; left: 0; z-index: 2; background: #ffffff;
+  box-shadow: inset 6px 0 0 var(--group-color, hsl(var(--status-default)));
+}
+.selectable .selectCell > label { margin: 0; transform: translateX(2px); }
+.selectable .selectCell > label > :last-child { margin-inline-start: 0; }
+.selectable .taskFirst { padding-inline-start: 8px; left: 36px; box-shadow: none; }
+.taskHead .selectCell, .taskHead .taskFirst { z-index: 3; }
+
+/* Inline "+ הוסף משימה" footer row (same design as TasksTab's TaskTable). The
+   group-color strip continues onto it (bottom-left rounded to match the border).
+   As the last child it also carries the strip's rounded bottom corner, so the
+   .taskRow:last-child rule above intentionally no longer matches here. */
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 12px 0 0;
+  border: none;
+  background: transparent;
+  color: var(--placeholder-color, #9699a6);
+  font-family: var(--font-family);
+  font-size: 14px;
+  text-align: start;
+  cursor: pointer;
+  position: relative;
+}
+/* The label (and the color strip it carries) is FROZEN like the leading cells:
+   the button spans the full table width, and the sticky label pins to the board
+   scrollport's left edge during horizontal scroll instead of scrolling away. */
+.addLabel {
+  position: sticky;
+  left: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  padding-inline-start: 18px;
+  white-space: nowrap;
+}
+.addLabel::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: var(--group-color, hsl(var(--status-default)));
+  opacity: 0.45;
+  border-end-start-radius: var(--border-radius-medium, 8px);
+}
+.addRow:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--secondary-text-color, #676879);
+}

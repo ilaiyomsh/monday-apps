@@ -1,0 +1,262 @@
+/* layout */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-large, 24px);
+  /* Full width (broke out of the 90% frame) so the task table runs to the RIGHT
+     edge; a left inset keeps the KPI cards / charts off the edge. */
+  width: 100%;
+  padding-inline-start: var(--spacing-medium, 16px);
+  padding-inline-end: 0;
+  box-sizing: border-box;
+}
+
+.loadingStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-medium, 16px);
+}
+
+/* KPI cards */
+.kpiGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-medium, 16px);
+}
+
+/* Auto-fitting grid on desktop (three cards: total · בוצעו · בעיכוב); gated on
+   `.is-desktop` (not viewport width) so an item-card panel narrowing the iframe
+   doesn't drop it to a single column. */
+:global(.is-desktop) .kpiGrid {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+/* dir="ltr" on the card puts the accent stripe physically on the left; the body
+   to its right holds the label at the top and the number centered. The shadow is
+   cast on top, bottom and right only (not the left, where the accent stripe is). */
+.kpiCard {
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  min-height: 80px;
+  box-shadow:
+    2px 0 6px -2px rgba(0, 0, 0, 0.14),
+    0 2px 6px -2px rgba(0, 0, 0, 0.14),
+    0 -2px 6px -2px rgba(0, 0, 0, 0.14);
+}
+
+.kpiAccent {
+  width: 4px;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+.kpiBody {
+  flex: 1;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Label: top-left (physical, since card is dir=ltr) */
+.kpiLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 4px;
+  font-size: var(--font-size-subtext, 12px);
+  color: var(--secondary-text-color, #676879);
+  text-align: left;
+}
+
+/* Number: centered in the remaining body space (color set inline on done/delayed). */
+.kpiValue {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-size: 40px;
+  font-weight: var(--font-weight-bold, 600);
+  color: var(--text-color, #323338);
+}
+
+/* chart card */
+.chartCard {
+  overflow: hidden;
+}
+
+.chartBody {
+  padding: var(--spacing-medium, 20px);
+}
+
+.chartToolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--spacing-medium, 16px);
+}
+
+/* Segmented control: status / assignee grouping. */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--allgrey-background-color, #f6f7fb);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+}
+
+.segment {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 4px 12px;
+  border-radius: var(--border-radius-small, 4px);
+  font-size: var(--font-size-subtext, 13px);
+  color: var(--secondary-text-color, #676879);
+}
+
+.segmentActive {
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-color, #0073ea);
+  font-weight: var(--font-weight-medium, 500);
+  box-shadow: var(--box-shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.1));
+}
+
+.chartContainer {
+  width: 100%;
+  height: 256px;
+}
+
+/* recharts tooltip panel */
+.tooltip {
+  border-radius: var(--border-radius-small, 4px);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  background: var(--ui-background-color, #ffffff);
+  padding: var(--spacing-xs, 6px) var(--spacing-small, 10px);
+  font-size: var(--font-size-subtext, 12px);
+  color: var(--text-color, #323338);
+  box-shadow: var(--box-shadow-medium, 0 6px 20px rgba(0, 0, 0, 0.2));
+}
+
+.tooltipLabel {
+  margin-bottom: var(--spacing-xs, 4px);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 6px);
+}
+
+.tooltipSwatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.tooltipName {
+  color: var(--secondary-text-color, #676879);
+}
+
+.tooltipValue {
+  font-weight: var(--font-weight-medium, 500);
+}
+
+/* filtered tasks */
+.filteredStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-small, 12px);
+}
+
+.filteredHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.filteredTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  /* Match the Tasks/Previous-Tasks group titles — force the variable-font weight
+     axis so the Hebrew label renders bold and uniform across all task tables. */
+  font-variation-settings: 'wght' 700;
+  color: var(--text-color, #323338);
+}
+
+.taskStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-small, 8px);
+  /* TaskTable no longer scrolls itself — own the single horizontal scroll here so
+     the wide table can slide under one bottom scrollbar (monday-board look).
+     direction:ltr so the table anchors LEFT and row separators extend RIGHT. */
+  overflow: auto hidden;
+  direction: ltr;
+}
+
+/* empty state */
+.empty {
+  text-align: center;
+  padding: var(--spacing-xxl, 48px) 0;
+  color: var(--secondary-text-color, #676879);
+  font-size: var(--font-size-general-label, 14px);
+}
+
+/* Floating selection bar for the drill-down TaskTable — shown when ≥1 task is
+   selected (mirrors TasksTab/PreviousTasksTab). Bulk delete + bulk column edits
+   (editing one selected row applies to the whole selection). */
+.actionBar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+.actionBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding-inline-end: 2px;
+}
+.actionBarCenter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 2px;
+}
+.actionBarRight {
+  display: flex;
+  align-items: center;
+  padding-inline-start: 2px;
+}
+.closeSelectionBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.closeSelectionBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}

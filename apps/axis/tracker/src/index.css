@@ -1,0 +1,18 @@
+@import './styles/tokens.css';
+
+body {
+  margin: 0;
+  font-family: 'Rubik', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* החלת הגופן על כל האלמנטים כולל רכיבי Vibe ו-Big Calendar */
+*, *::before, *::after {
+  font-family: 'Rubik', sans-serif !important;
+}
+
+/* החרגת אלמנטים של קוד */
+code, pre, kbd, samp {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace !important;
+}

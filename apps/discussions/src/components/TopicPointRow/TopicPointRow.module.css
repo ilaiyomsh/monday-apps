@@ -1,0 +1,179 @@
+/* A POINT = one table row, a grid aligned to the group's column header via the
+   shared inline grid-template (rowStyle). */
+.row {
+  display: grid;
+  align-items: stretch;
+  min-height: 40px;
+  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  background: var(--primary-background-color, #fff);
+}
+.row:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+/* Hidden ("לא לדיון") point — dimmed. */
+.excluded .nameCell {
+  opacity: 0.45;
+}
+
+/* leading zone: hover kebab + drag grip, pinned to the visual start (left). */
+.lead {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  justify-content: center;
+  /* Accent color strip (S2) — --topic-accent cascades from .section. Not rounded:
+     the column header rounds the top-left, the add-row rounds the bottom-left. */
+  box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
+  padding-inline-start: 6px;
+}
+
+.kebabWrap {
+  display: inline-flex;
+}
+.kebabBtn,
+.grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  border-radius: var(--border-radius-small, 4px);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.grip { cursor: grab; }
+.grip:active { cursor: grabbing; }
+.row:hover .kebabBtn,
+.row:hover .grip {
+  opacity: 1;
+}
+.kebabBtn:hover {
+  background: var(--primary-background-hover-color, #eceef2);
+  color: var(--text-color, #323338);
+}
+
+/* kebab menu */
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 140px;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  text-align: start;
+  cursor: pointer;
+}
+.menuItem:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.menuDanger {
+  color: var(--negative-color, #d83a52);
+}
+.menuConfirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-color, #323338);
+}
+.menuIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+}
+.menuIcon:hover { background: var(--primary-background-hover-color, #f0f1f3); }
+
+/* נקודה לדיון */
+.nameCell {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+}
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-color, #323338);
+  font-size: 14px;
+}
+.nameEditInput {
+  width: 100%;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 14px;
+  font-family: var(--font-family);
+  color: var(--text-color, #323338);
+  background: var(--primary-background-color, #fff);
+}
+.nameEditInput:focus-visible { outline: none; }
+
+/* האם נידונה — square checkbox */
+.checkCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 2px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 4px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+.checkOn {
+  border-color: var(--positive-color, #258750);
+  background: var(--positive-color, #258750);
+}
+.checkMark { stroke-width: 3; }
+
+/* creator avatar — keep the closing vertical line (border-inline-end) so the
+   grid line to the RIGHT of the avatar column continues on every row, matching
+   the column header (which draws it via .colHeadCell). */
+.avatarCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+}
+.avatarEmpty {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--disabled-background-color, #eceef2);
+}

@@ -1,0 +1,33 @@
+import React from 'react';
+import { useMondayContext } from './hooks/useMondayContext';
+import Widget from './components/Widget/Widget';
+import WidgetSettings from './components/Widget/WidgetSettings';
+import LoadingState from './components/shared/LoadingState';
+import ErrorState from './components/shared/ErrorState';
+
+function App() {
+  const { context, loading, error } = useMondayContext();
+
+  if (loading) {
+    return <LoadingState />;
+  }
+
+  if (error) {
+    return <ErrorState message={error} />;
+  }
+
+  const themeClass = context?.theme === 'dark' ? 'dark-app-theme' : 'light-app-theme';
+  const instanceType = context?.instanceType;
+
+  return (
+    <div className={`min-h-screen ${themeClass}`}>
+      {instanceType === 'dashboard_widget_settings' ? (
+        <WidgetSettings context={context} />
+      ) : (
+        <Widget context={context} />
+      )}
+    </div>
+  );
+}
+
+export default App;

@@ -1,0 +1,163 @@
+/* Mirrors CreateDiscussionModal's floating-modal shell so the new-task box
+   matches the app's look (custom overlay/modal, header title input, footer). */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.modal {
+  width: min(480px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--border-radius-big, 12px);
+  background: var(--primary-background-color, #fff);
+  box-shadow: var(--box-shadow-medium, 0 10px 30px rgba(0, 0, 0, 0.2));
+  overflow: visible;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+}
+
+/* Editable task-name title in the header (same as the discussion modal). */
+.titleInput {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 18px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-color, #323338);
+  padding: 4px 8px;
+  margin-inline-end: 8px;
+  border-radius: var(--border-radius-small, 4px);
+  text-align: start;
+}
+.titleInput:hover {
+  border-color: var(--ui-border-color, #c3c6d4);
+}
+.titleInput:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+  background: var(--primary-background-color, #fff);
+}
+
+.closeButton {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--secondary-text-color, #676879);
+}
+
+.content {
+  padding: 16px;
+  overflow: visible;
+}
+
+/* Two fields side by side (assignee + deadline); stacks on narrow widths. */
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 480px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 4px);
+  min-width: 0;
+  text-align: start;
+}
+
+.label {
+  color: var(--text-color, #323338);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+/* Red asterisk marking a required field label. */
+.required {
+  color: var(--negative-color, #d83a52);
+  font-weight: var(--font-weight-bold, 700);
+}
+
+/* Inline validation message (missing name / assignee / deadline). */
+.fieldError {
+  color: var(--negative-color, #d83a52);
+  margin-top: var(--spacing-xs, 4px);
+}
+
+/* Native date input styled to match the bordered fields. */
+.dateInput {
+  position: relative;
+  width: 100%;
+  /* Match the bordered PersonPicker trigger height (assignee field) so the two
+     side-by-side fields line up. */
+  height: 40px;
+  padding: 0 var(--spacing-small, 8px);
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background-color: var(--primary-background-color, #fff);
+  /* visible calendar glyph at the trailing edge (the indicator below is made
+     full-cover + transparent so it no longer draws its own icon). */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 20 20' fill='none' stroke='%23676879' stroke-width='1.4'%3E%3Crect x='3' y='4.5' width='14' height='12' rx='2.2'/%3E%3Cpath d='M3 8h14M7 3v3M13 3v3' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-inline-end: 30px;
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  box-sizing: border-box;
+}
+/* Whole cell opens the picker: stretch the native indicator to cover the field
+   (transparent). A direct click on it opens the browser date picker, which works
+   in monday's cross-origin iframe (unlike the blocked showPicker()). */
+.dateInput::-webkit-calendar-picker-indicator {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+.dateInput:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+.footer {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+}
+
+@media (max-width: 768px) {
+  .overlay {
+    padding: 8px;
+    align-items: flex-end;
+  }
+  .modal {
+    width: 100%;
+    border-radius: 12px 12px 0 0;
+  }
+}

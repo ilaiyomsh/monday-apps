@@ -1,0 +1,431 @@
+/* "אנשים בלוח" — board owners/members section + people-picker popover.
+   CSS Modules non-scoped: plain class names, picked distinctively to avoid
+   cross-module clashes. Popover styled after the native monday people-picker. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* Separator/spacing provided by the pinned .peopleFooter wrapper in
+     PermissionsTab — keep this compact (no own border/margin). */
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 6px 4px;
+}
+
+.sectionTitle {
+  font-size: 15px;
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--text-color, #323338);
+  padding: 0 8px 2px;
+}
+
+/* Overlay + centered box (opens in the middle of the settings modal). */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  z-index: 10000;
+  padding: 16px;
+}
+
+.centerBox {
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--primary-background-color, #fff);
+  border-radius: var(--border-radius-medium, 8px);
+  box-shadow: var(--box-shadow-large, 0 10px 40px rgba(0, 0, 0, 0.25));
+  padding: 16px;
+  text-align: left;
+  overflow: hidden; /* inner scrollBody scrolls */
+}
+
+/* Skeleton placeholders shown while people load. */
+.skelGroup {
+  display: inline-flex;
+  align-items: center;
+}
+
+.skelGroup .skelAvatar {
+  margin-inline-start: -6px;
+}
+
+.skelGroup .skelAvatar:first-child {
+  margin-inline-start: 0;
+}
+
+.skelAvatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--ui-border-color, #e6e9ef);
+  box-shadow: 0 0 0 2px var(--primary-background-color, #fff);
+  animation: skelPulse 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+.skelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+}
+
+.skelBar {
+  height: 10px;
+  border-radius: 5px;
+  flex: 1;
+  max-width: 160px;
+  background: var(--ui-border-color, #e6e9ef);
+  animation: skelPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes skelPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+.previewEmpty {
+  color: var(--secondary-text-color, #676879);
+  font-size: 13px;
+}
+
+.addBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--primary-color, #0073ea);
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.addBtn:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+
+.addBtn:disabled {
+  cursor: default;
+  opacity: 0.5;
+  color: var(--secondary-text-color, #676879);
+}
+
+/* Unified board-members list (owners first), each row: avatar · name · crown · ✕ */
+.memberList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.memberRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: var(--border-radius-small, 4px);
+}
+
+.memberRow:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+
+/* Crown toggle — filled blue for owners, hollow gray for members. */
+.crownBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  flex-shrink: 0;
+  color: var(--icon-color, #c5c7d0);
+}
+
+.crownBtn:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #e6ebff);
+}
+
+.crownBtn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.crownBtnOwner {
+  color: var(--primary-color, #0073ea);
+}
+
+.crown {
+  display: block;
+}
+
+.crownOwner {
+  color: var(--primary-color, #0073ea);
+}
+
+/* Invite-by-email feedback line inside the picker popover. */
+.inviteMsg {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: var(--border-radius-small, 4px);
+}
+
+.inviteOk {
+  color: var(--positive-color, #258750);
+  background: var(--positive-color-selected, #e5f5ec);
+}
+
+.inviteErr {
+  color: var(--negative-color, #d83a52);
+  background: var(--negative-color-selected, #fce6e9);
+}
+
+.peopleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 3px 8px;
+  border: none;
+  background: transparent;
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  text-align: start;
+}
+
+.peopleRow:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+
+.peopleRow:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.peopleRowLabel {
+  font-size: 13px;
+  color: var(--text-color, #323338);
+}
+
+.peopleRowAvatars {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Popover portaled to document.body (escapes the modal's overflow).
+   Styled as a one-to-one replica of monday's native "Invite to this board" box. */
+.popover {
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  box-shadow: var(--box-shadow-medium, 0 6px 20px rgba(0, 0, 0, 0.2));
+  padding: 12px;
+  text-align: left;
+  overflow: hidden; /* maxHeight set inline; inner scrollBody scrolls */
+}
+
+/* Box header — title + close, like the native dialog. */
+.boxHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.boxTitle {
+  font-size: 16px;
+  font-weight: var(--font-weight-bold, 700);
+  color: var(--text-color, #323338);
+}
+
+.boxClose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.boxClose:hover {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+
+/* Scrollable body under the pinned search — prevents the popover from clipping. */
+.scrollBody {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+/* Circular team glyph, sized like an Avatar (for the "everyone" team entry). */
+.teamAvatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--disabled-background-color, #eaebf0);
+  display: grid;
+  place-items: center;
+  color: var(--secondary-text-color, #676879);
+  flex-shrink: 0;
+}
+
+.searchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  inset-inline-start: 8px;
+  width: 16px;
+  height: 16px;
+  color: var(--secondary-text-color, #676879);
+  pointer-events: none;
+}
+
+.search {
+  width: 100%;
+  height: 32px;
+  padding: 0 8px;
+  padding-inline-start: 30px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: var(--font-size-general-label, 14px);
+  box-sizing: border-box;
+}
+
+.search:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+.groupLabel {
+  font-size: 13px;
+  font-weight: var(--font-weight-medium, 600);
+  color: var(--text-color, #323338);
+  padding: 6px 2px 2px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  text-align: start;
+}
+
+.row:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+
+.rowAlready {
+  cursor: default;
+}
+
+.rowAlready:hover {
+  background: transparent;
+}
+
+.name {
+  font-size: 14px;
+  color: var(--text-color, #323338);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.alreadyTag {
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  flex-shrink: 0;
+}
+
+.teamIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--secondary-text-color, #676879);
+  flex-shrink: 0;
+}
+
+.empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--secondary-text-color, #676879);
+  font-size: 13px;
+}
+
+.removeBtn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.removeBtn:hover:not(:disabled) {
+  background: var(--negative-color-selected, #fce6e9);
+  color: var(--negative-color, #d83a52);
+}
+
+.removeBtn:disabled {
+  cursor: default;
+  opacity: 0.5;
+}

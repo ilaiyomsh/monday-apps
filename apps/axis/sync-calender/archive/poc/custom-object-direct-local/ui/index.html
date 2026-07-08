@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Custom Object Direct Sync POC</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; }
+      h2 { margin-top: 28px; }
+      .row { margin-bottom: 10px; }
+      input, textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
+      button { padding: 8px 14px; margin-right: 8px; cursor: pointer; }
+      .card { border: 1px solid #ddd; padding: 12px; border-radius: 8px; margin-bottom: 12px; }
+      pre { background: #f7f7f7; padding: 10px; border-radius: 8px; overflow: auto; }
+      .small { color: #555; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <h1>Custom Object Direct Sync POC</h1>
+    <p class="small">POC identity is passed via headers (x-account-id / x-user-id / x-user-role).</p>
+
+    <div class="card">
+      <h2>Identity</h2>
+      <div class="row"><label>Account ID <input id="accountId" value="demo-account" /></label></div>
+      <div class="row"><label>User ID <input id="userId" value="71077014" /></label></div>
+      <div class="row">
+        <label>User Role
+          <select id="role">
+            <option value="user">user</option>
+            <option value="admin">admin</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Shared Policy (Admin)</h2>
+      <div class="row"><label>Object ID <input id="objectId" value="demo-object-1" /></label></div>
+      <div class="row"><label>Board ID <input id="boardId" placeholder="e.g. 1953193772" /></label></div>
+      <div class="row"><label>Link Column ID <input id="linkColumnId" placeholder="e.g. link_m123" /></label></div>
+      <div class="row"><label>People Column ID <input id="peopleColumnId" placeholder="e.g. people_m123" /></label></div>
+      <div class="row">
+        <label>Column Mapping (JSON)
+          <textarea id="columnMapping" rows="8">{}</textarea>
+        </label>
+      </div>
+      <button id="savePolicyBtn">Save Policy</button>
+      <button id="loadRowsBtn">Load Rows</button>
+    </div>
+
+    <div class="card">
+      <h2>User Row</h2>
+      <div id="rows"></div>
+    </div>
+
+    <div class="card">
+      <h2>Logs</h2>
+      <pre id="log"></pre>
+    </div>
+
+    <script type="module" src="/admin/app.js"></script>
+  </body>
+</html>

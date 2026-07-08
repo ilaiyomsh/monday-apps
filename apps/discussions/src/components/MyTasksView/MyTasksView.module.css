@@ -1,0 +1,407 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  /* The .board child owns the scrolling (both axes) so the horizontal scrollbar
+     pins to the bottom of the view — a real monday board. The root itself does
+     NOT scroll. */
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* monday-style toolbar: a left-aligned (LTR) row of pill buttons. Sits above the
+   scrolling board as the first flex row (no longer sticky — the board scrolls,
+   not the root). */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex: none;
+  background: var(--primary-background-color, #ffffff);
+  padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
+}
+
+/* "דיונים" back button — its own row above the toolbar. */
+.topBar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+}
+
+/* THE single scroll container — both axes. All group tables live inside one
+   horizontal scroll so they move together under ONE bottom scrollbar (monday
+   board behavior), instead of each group scrolling on its own. flex:1 + min-height:0
+   makes it fill the remaining height so the horizontal bar sits at the view bottom.
+   direction:ltr so the LTR tables ANCHOR LEFT (color strip + frozen name on the
+   left) and the row separators extend to the RIGHT edge — not the reverse. */
+.board {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  direction: ltr;
+  /* S3 — the 28px left inset (keeps the color bar off the screen's left edge)
+     MUST be margin, not padding. Chrome resolves sticky insets against the
+     scrollport minus the scroller's own padding, so with padding the frozen
+     cells rested 28px in and the scrolled columns peeked out in that gutter.
+     With margin the scrollport itself starts 28px in: scrolled content clips
+     there and the frozen cells (left:0) pin exactly at the inset, gutter clean.
+     NO right inset so the row separators run to the right edge of the view. */
+  margin-inline-start: 28px;
+  margin-inline-end: 0;
+}
+/* Establishes the shared horizontal extent: as wide as the widest group table
+   (max-content), but never narrower than the viewport (min-width:100%) so the
+   row separators always run edge-to-edge. All groups fill this width, so they
+   scroll in unison. */
+.groupScrollInner {
+  width: max-content;
+  min-width: 100%;
+  direction: ltr;
+  padding-block: var(--spacing-small, 8px) 0;
+}
+
+/* Base pill — plain by default, light hover (matches monday's Search/Person). */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pill:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.pill:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+/* Applied pill — light-blue fill + blue text (matches monday's "Sort / 1"). */
+.pillActive {
+  background: var(--primary-selected-color, #e6f1ff);
+  color: var(--primary-color, #0073ea);
+}
+.pillActive:hover {
+  background: var(--primary-selected-hover-color, #d6e8ff);
+}
+.pillIcon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: currentColor;
+}
+.pillCount {
+  margin-inline-start: 2px;
+  opacity: 0.85;
+}
+
+/* Search, expanded into an inline input but keeping the pill shape. */
+.searchPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--secondary-text-color, #676879);
+}
+.searchInput {
+  width: 180px;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+}
+.searchInput:focus-visible {
+  outline: none;
+}
+
+/* Phone: keep the whole toolbar on ONE row by switching wrap -> nowrap and
+   letting it scroll horizontally; the pill LABELS stay visible (an earlier
+   icon-only attempt hid the @vibe/icons wrappers and blanked the toolbar). */
+/* Mobile-app only (gated on `.mobile-app`, not viewport width — so an item-card
+   panel narrowing the iframe doesn't collapse the toolbar to icon-only). */
+/* Icon-only pills fit one row, so NO horizontal scroll is needed. Dropping
+   overflow-x is important: `overflow-x:auto` forces overflow-y to `auto` too
+   (CSS spec), which vertically clipped the active pill's blue background. */
+:global(.mobile-app) .pill {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+/* Icon-only: hide the label + count text spans; the svg icon is a direct
+   <svg> child (not a span), so it stays — centered with equal margins, and the
+   active (blue) background becomes a fully-visible rounded square. */
+:global(.mobile-app) .pill > span {
+  display: none;
+}
+
+/* Pill menus (Sort / Group by). */
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  text-align: start;
+  cursor: pointer;
+}
+.menuItem:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.menuItemActive {
+  background: var(--primary-selected-color, #e6f1ff);
+  color: var(--primary-color, #0073ea);
+}
+
+/* Filter pill menu (multi-select status + priority). */
+.filterMenu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* One column per filterable column, side by side (priority | status). */
+.filterGrid {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.filterCol {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 160px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.filterCol + .filterCol {
+  border-inline-start: 1px solid var(--ui-border-color, #e6e9ef);
+  padding-inline-start: 8px;
+}
+.filterHeading {
+  padding: 4px 10px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+  font-weight: 600;
+}
+.filterItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  text-align: start;
+  cursor: pointer;
+}
+.filterItem:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.filterDot {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+.filterLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.filterCheck {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--primary-color, #0073ea);
+}
+.filterClear {
+  margin-top: 4px;
+  padding: 7px 10px;
+  border: none;
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+  background: transparent;
+  color: var(--primary-color, #0073ea);
+  font-size: 14px;
+  font-family: var(--font-family);
+  text-align: start;
+  cursor: pointer;
+}
+.filterClear:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+
+/* Floating selection bar — shown when ≥1 task is selected (copied from
+   TasksTab.module.css so both surfaces match). Selection-only for now (no bulk
+   mutation): a count on the left + a close (X) on the right. */
+.actionBar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+.actionBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding-inline-end: 2px;
+}
+.actionBarCenter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 2px;
+}
+.actionBarRight {
+  display: flex;
+  align-items: center;
+  padding-inline-start: 2px;
+}
+.closeSelectionBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.closeSelectionBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.skeletonStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-small, 8px);
+}
+
+.groupStack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  /* Headers + tables both read left-to-right and pin to the LEFT edge, matching
+     a real monday board (the table itself is dir=ltr). */
+  direction: ltr;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* Pin the group title to the left edge while the columns scroll horizontally
+     under the shared board scroll (monday keeps the group name in view). The
+     header sits on its own row above the table, so it never overlaps cells. */
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: max-content;
+  margin: 0 0 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: start;
+}
+
+.chevron {
+  width: 24px;
+  height: 24px;
+  color: var(--secondary-text-color, #676879);
+  transition: transform var(--motion-productive-medium, 0.2s) ease;
+  flex-shrink: 0;
+}
+.chevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+.groupTitle {
+  font-size: 18px;
+  font-weight: 500;
+  font-variation-settings: 'wght' 500; /* native monday group-title medium weight */
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+}
+.groupCount {
+  margin-inline-start: 8px;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 16px;
+  color: var(--secondary-text-color, #676879);
+  text-align: center;
+}
+.emptyTitle {
+  font-size: 16px;
+  color: var(--primary-text-color, #323338);
+}
+.emptyHint {
+  font-size: 14px;
+}
+
+.loadMore {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 16px;
+}

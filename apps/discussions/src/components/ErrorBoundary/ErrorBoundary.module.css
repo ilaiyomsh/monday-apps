@@ -1,0 +1,11 @@
+.boundary {
+  min-height: 100vh;
+  min-height: 100svh;
+  padding: var(--spacing-large, 24px);
+  text-align: center;
+}
+
+.message {
+  color: var(--secondary-text-color, #676879);
+  max-width: 480px;
+}

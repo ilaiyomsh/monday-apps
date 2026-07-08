@@ -1,0 +1,42 @@
+/**
+ * __PACKAGE_SCOPE__/shared
+ * Common utilities, middlewares, and services.
+ */
+
+// Middlewares
+export { authenticationMiddleware, MONDAY_SIGNING_SECRET } from './middlewares/index.js';
+export { requestLoggerMiddleware } from './middlewares/index.js';
+export { errorMiddleware } from './middlewares/index.js';
+
+// Error-guard infra (see .claude/skills/error-guard/references/server-patterns.md)
+export { asyncHandler } from './helpers/async-handler.js';
+export { installProcessGuards, setGracefulServer } from './services/process-guards.js';
+export {
+  attachAxiomServerSink,
+  flushAxiom,
+  isAxiomSinkActive,
+} from './services/axiom-sink.js';
+
+// Services
+export { default as logger } from './services/logger/index.js';
+export {
+  createApiClient,
+  getColumnType,
+  formatValueForColumnType,
+  updateColumnValue,
+} from './services/monday-api.js';
+export {
+  signTriggerToken,
+  fireTrigger,
+  sendActionCallback,
+} from './services/trigger-service.js';
+
+// Helpers
+export { getSecret } from './helpers/secret-store.js';
+export { extractFieldValue, extractFieldValues } from './helpers/field-extractors.js';
+export {
+  saveSubscription,
+  getSubscription,
+  deleteSubscription,
+  getAllSubscriptions,
+} from './helpers/subscription-store.js';

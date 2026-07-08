@@ -1,0 +1,102 @@
+/* Design Tokens - Google Calendar Style */
+
+:root {
+  /* Colors - Primary */
+  --gc-primary: #1a73e8;
+  --gc-primary-light: #e8f0fe;
+  
+  /* Colors - Borders & Dividers */
+  --gc-border: #dadce0;
+  --gc-border-light: #e0e0e0;
+  
+  /* Colors - Text */
+  --gc-text-primary: #3c4043;
+  --gc-text-secondary: #70757a;
+  --gc-gutter-text: #5f6368;
+  --gc-gutter-text-dark: #202124;
+  
+  /* Colors - Today Indicator */
+  --gc-today-circle: #1a73e8;
+  --gc-time-indicator: #ea4335;
+  --gc-bg-today: #e8f0fe;
+  
+  /* Colors - Event Types (dynamic colors from colorUtils.js) */
+  /* Note: Colors are now generated dynamically by getEventColor() based on projectId or eventType */
+  --gc-event-sick: #e2445c;
+  --gc-event-vacation: #00c875;
+  --gc-event-reserves: #579bfc;
+  --gc-event-default: #3174ad;
+  
+  /* Layout - Spacing */
+  --gc-event-gap: 2px;
+  --gc-event-padding: 4px 8px;
+  --gc-event-radius: 8px;
+  
+  /* Layout - Dimensions */
+  --gc-gutter-width: 60px;
+  --gc-header-height: 48px;
+  --gc-slot-height: 60px;
+  
+  /* All-day events overlap (dynamic - set by JS) */
+  --allday-overlap: 0;
+  
+  /* Z-Index Hierarchy */
+  --gc-z-grid: 1;
+  --gc-z-event: 10;
+  --gc-z-event-dragging: 15;
+  --gc-z-now-indicator: 20;
+  --gc-z-header: 30;
+  --gc-z-modal: 1000;
+  
+  /* Typography */
+  --gc-font-family: 'Rubik', sans-serif;
+  --gc-font-size-header: 11px;
+  --gc-font-size-event: 15px;
+  --gc-font-size-small: 11px;
+  --gc-font-weight-header: 500;
+  --gc-font-weight-event: normal;
+  
+  /* Shadows */
+  --gc-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.15);
+  --gc-shadow-drag: 0 6px 10px rgba(0, 0, 0, 0.14);
+  
+  /* Transitions - list specific properties instead of 'all' */
+  --gc-transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out, opacity 0.2s ease-in-out;
+
+  /* Mobile touch targets */
+  --gc-mobile-touch-target: 44px;
+  --gc-mobile-header-height: 40px;
+}
+
+/* Dark theme overrides for calendar */
+[data-theme="dark"] {
+  --gc-primary: #4a9eff;
+  --gc-primary-light: #1e3a5f;
+
+  --gc-border: #3a3f4a;
+  --gc-border-light: #2f333d;
+
+  --gc-text-primary: #e8eaed;
+  --gc-text-secondary: #9aa0a6;
+  --gc-gutter-text: #9aa0a6;
+  --gc-gutter-text-dark: #e8eaed;
+
+  --gc-today-circle: #4a9eff;
+  --gc-time-indicator: #f87171;
+  --gc-bg-today: #1e3a5f;
+
+  --gc-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.5);
+  --gc-shadow-drag: 0 6px 10px rgba(0, 0, 0, 0.55);
+}
+
+/* Mobile overrides */
+@media (max-width: 768px) {
+  :root {
+    --gc-gutter-width: 45px;
+    --gc-font-size-event: 12px;
+    --gc-font-size-header: 10px;
+    --gc-event-padding: 2px 6px;
+    --gc-event-radius: 6px;
+  }
+}
+

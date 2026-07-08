@@ -1,0 +1,220 @@
+import fetch from 'node-fetch';
+import logger from './logger/index.js';
+
+const MONDAY_API_URL = 'https://api.monday.com/v2';
+const TAG = 'monday_api';
+
+/**
+ * Creates an API client for Monday.com GraphQL API.
+ * @param {string} token - The short-lived API token.
+ * @returns {Object} Client with a query function.
+ */
+export function createApiClient(token) {
+  return {
+    query: async (query, variables = {}) => {
+      const response = await fetch(MONDAY_API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token,
+          'API-Version': '2025-10'
+        },
+        body: JSON.stringify({ query, variables })
+      });
+
+      const result = await response.json();
+
+      if (result.errors) {
+        logger.error('Monday API returned errors', TAG, { errors: result.errors });
+        throw new Error(result.errors[0].message);
+      }
+
+      return result.data;
+    }
+  };
+}
+
+/**
+ * Gets the column type for a specific column on a board.
+ */
+export async function getColumnType(apiClient, boardId, columnId) {
+  const query = `
+    query GetColumnType($boardId: [ID!]!, $columnId: [String!]!) {
+      boards(ids: $boardId) {
+        columns(ids: $columnId) {
+          id
+          type
+        }
+      }
+    }
+  `;
+
+  const data = await apiClient.query(query, {
+    boardId: [String(boardId)],
+    columnId: [String(columnId)]
+  });
+
+  const column = data?.boards?.[0]?.columns?.[0];
+  if (!column) {
+    throw new Error(`Column ${columnId} not found on board ${boardId}`);
+  }
+
+  return column.type;
+}
+
+/**
+ * Formats a value for the appropriate column type.
+ * https://developer.monday.com/api-reference/reference/column-types-reference
+ */
+export function formatValueForColumnType(columnType, value) {
+  switch (columnType) {
+    case 'status':
+      if (!isNaN(parseInt(value, 10)) && String(parseInt(value, 10)) === value) {
+        return JSON.stringify({ index: parseInt(value, 10) });
+      }
+      return JSON.stringify({ label: value });
+
+    case 'text':
+      return JSON.stringify(value);
+
+    case 'long_text':
+      return JSON.stringify({ text: value });
+
+    case 'numbers':
+      return JSON.stringify(value);
+
+    case 'date': {
+      const parsedDate = new Date(value);
+      if (!isNaN(parsedDate.getTime())) {
+        const year = parsedDate.getFullYear();
+        const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+        const day = String(parsedDate.getDate()).padStart(2, '0');
+        return JSON.stringify({ date: `${year}-${month}-${day}` });
+      }
+      return JSON.stringify({ date: value });
+    }
+
+    case 'checkbox': {
+      const isChecked = value.toLowerCase() === 'true' || value === '1' || value.toLowerCase() === 'yes';
+      return JSON.stringify({ checked: isChecked ? 'true' : 'false' });
+    }
+
+    case 'rating':
+      return JSON.stringify({ rating: parseInt(value, 10) });
+
+    case 'dropdown': {
+      const items = value.split(',').map(l => l.trim());
+      const allNumeric = items.every(item => !isNaN(parseInt(item, 10)));
+      return allNumeric ? JSON.stringify({ ids: items }) : JSON.stringify({ labels: items });
+    }
+
+    case 'email':
+      return JSON.stringify({ email: value, text: value });
+
+    case 'phone': {
+      if (value.includes(':')) {
+        const [countryCode, phone] = value.split(':').map(s => s.trim());
+        return JSON.stringify({ phone, countryShortName: countryCode.toUpperCase() });
+      }
+      return JSON.stringify({ phone: value });
+    }
+
+    case 'link': {
+      if (value.includes('|')) {
+        const [url, text] = value.split('|').map(s => s.trim());
+        return JSON.stringify({ url, text });
+      }
+      return JSON.stringify({ url: value, text: value });
+    }
+
+    case 'timeline': {
+      const [from, to] = value.split(',').map(d => d.trim());
+      return JSON.stringify({ from, to });
+    }
+
+    case 'hour': {
+      const timeParts = value.split(':');
+      return JSON.stringify({ hour: parseInt(timeParts[0], 10), minute: parseInt(timeParts[1] || '0', 10) });
+    }
+
+    case 'week': {
+      const [startDate, endDate] = value.split(',').map(d => d.trim());
+      return JSON.stringify({ week: { startDate, endDate } });
+    }
+
+    case 'location': {
+      const parts = value.split(',').map(s => s.trim());
+      const result = { lat: parts[0], lng: parts[1] };
+      if (parts[2]) result.address = parts.slice(2).join(',').trim();
+      return JSON.stringify(result);
+    }
+
+    case 'country': {
+      if (value.includes(':')) {
+        const [countryCode, countryName] = value.split(':').map(s => s.trim());
+        return JSON.stringify({ countryCode: countryCode.toUpperCase(), countryName });
+      }
+      return JSON.stringify({ countryCode: value.toUpperCase(), countryName: value });
+    }
+
+    case 'people': {
+      const ids = value.split(',').map(id => ({ id: parseInt(id.trim(), 10), kind: 'person' }));
+      return JSON.stringify({ personsAndTeams: ids });
+    }
+
+    case 'tags':
+      return JSON.stringify({ tag_ids: value.split(',').map(id => id.trim()) });
+
+    case 'color_picker':
+      throw new Error('Color picker column cannot be updated via API');
+
+    case 'world_clock':
+      return JSON.stringify({ timezone: value });
+
+    case 'formula':
+    case 'mirror':
+    case 'auto_number':
+    case 'creation_log':
+    case 'last_updated':
+    case 'button':
+    case 'item_id':
+      throw new Error(`Column type '${columnType}' is read-only and cannot be updated`);
+
+    default:
+      return JSON.stringify(value);
+  }
+}
+
+/**
+ * Updates a column value on an item.
+ */
+export async function updateColumnValue(apiClient, boardId, itemId, columnId, value) {
+  const mutation = `
+    mutation UpdateColumnValue($boardId: ID!, $itemId: ID!, $columnId: String!, $value: JSON!) {
+      change_column_value(
+        board_id: $boardId
+        item_id: $itemId
+        column_id: $columnId
+        value: $value
+      ) {
+        id
+      }
+    }
+  `;
+
+  const data = await apiClient.query(mutation, {
+    boardId: String(boardId),
+    itemId: String(itemId),
+    columnId: String(columnId),
+    value: value
+  });
+
+  return data?.change_column_value?.id;
+}
+
+export default {
+  createApiClient,
+  getColumnType,
+  formatValueForColumnType,
+  updateColumnValue,
+};

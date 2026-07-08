@@ -1,0 +1,13 @@
+{
+ "fetched_at": 1783003575.202969,
+ "versions": {
+  "2025-04": "maintenance",
+  "2025-07": "maintenance",
+  "2025-10": "maintenance",
+  "2026-01": "maintenance",
+  "2026-04": "maintenance",
+  "2026-07": "current",
+  "2026-10": "release_candidate",
+  "2027-01": "release_candidate"
+ }
+}

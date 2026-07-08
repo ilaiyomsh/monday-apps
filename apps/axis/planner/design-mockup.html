@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Company Load Cell - Design Mockup</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .label-en { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; direction: ltr; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 p-6">
+  <div class="max-w-6xl mx-auto">
+    <h1 class="text-2xl font-bold mb-2">Company Load — Single-Row Cell Variants</h1>
+    <p class="text-sm text-slate-600 mb-4">
+      תקשורת של 3 ערכים: <b>קיבולת מקס׳</b>, <b>זמינות בפועל</b>, <b>הקצאה</b>. דגש: כשזמינות=0 אבל יש הקצאה — סיגנל אדום מובהק.
+    </p>
+
+    <div class="bg-white border border-slate-200 rounded-lg p-4 mb-6 grid grid-cols-1 md:grid-cols-5 gap-4">
+      <label class="flex flex-col gap-1 text-sm">
+        <span>קיבולת מקס׳ — <span id="maxLabel" class="font-bold label-en">42.5</span></span>
+        <input id="max" type="range" min="0" max="100" step="0.5" value="42.5" class="accent-slate-400" />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span>זמינות בפועל — <span id="capLabel" class="font-bold label-en">42.5</span></span>
+        <input id="cap" type="range" min="0" max="100" step="0.5" value="42.5" class="accent-emerald-500" />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span>הקצאה — <span id="allocLabel" class="font-bold label-en">20</span></span>
+        <input id="alloc" type="range" min="0" max="120" step="0.5" value="20" class="accent-rose-500" />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span>רוחב תא (px) — <span id="widthLabel" class="font-bold label-en">80</span></span>
+        <input id="width" type="range" min="36" max="160" step="2" value="80" class="accent-slate-500" />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span>תרחישים</span>
+        <select id="preset" class="border border-slate-300 rounded px-2 py-1">
+          <option value="custom">— ידני —</option>
+          <option value="full">יום עבודה רגיל</option>
+          <option value="halfday">חצי-יום חג</option>
+          <option value="2absent">2 מתוך 5 בחופש</option>
+          <option value="holiday">חג מלא (alloc=0)</option>
+          <option value="holiday-alloc">⚠️ הוקצה על חג (cap=0, alloc=20)</option>
+          <option value="halfday-over">חצי-יום עמוס מדי</option>
+          <option value="over">על-העומס רגיל</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-lg p-4 mb-6 grid grid-cols-3 md:grid-cols-6 gap-4 text-sm">
+      <div><div class="text-slate-500">קיבולת מקס׳</div><div id="statMax" class="font-bold text-lg label-en">42.5h</div></div>
+      <div><div class="text-slate-500">זמינות בפועל</div><div id="statCap" class="font-bold text-lg label-en">42.5h</div></div>
+      <div><div class="text-slate-500">% זמינות</div><div id="statAvail" class="font-bold text-lg label-en">100%</div></div>
+      <div><div class="text-slate-500">מוקצה</div><div id="statAlloc" class="font-bold text-lg label-en">20h</div></div>
+      <div><div class="text-slate-500">סטטוס</div><div id="statStatus" class="font-bold text-lg">תקין</div></div>
+      <div><div class="text-slate-500">% ניצול</div><div id="statUtil" class="font-bold text-lg label-en">47%</div></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="variantsGrid"></div>
+
+    <p class="text-xs text-slate-400 mt-8 text-center">
+      Tokens: <span class="label-en">green-{200,300,500,700}</span> · <span class="label-en">rose-{400,500,600,800}</span> · <span class="label-en">slate-{200,300}</span>
+    </p>
+  </div>
+
+<script>
+const state = { maxCap: 42.5, capacity: 42.5, allocated: 20, cellWidth: 80 };
+const $ = (id) => document.getElementById(id);
+
+function fmtH(h) { return h.toFixed(h % 1 === 0 ? 0 : 1) + 'h'; }
+function fmtPct(p) { return Math.round(p) + '%'; }
+
+function utilTone(util) {
+  if (util <= 0) return { bg: 'bg-slate-200', text: 'text-slate-600', hex: '#cbd5e1' };
+  if (util < 20) return { bg: 'bg-green-200', text: 'text-green-900', hex: '#bbf7d0' };
+  if (util < 50) return { bg: 'bg-green-300', text: 'text-green-900', hex: '#86efac' };
+  if (util < 80) return { bg: 'bg-green-500', text: 'text-white', hex: '#22c55e' };
+  if (util <= 100) return { bg: 'bg-green-700', text: 'text-white', hex: '#15803d' };
+  const over = util - 100;
+  if (over < 20) return { bg: 'bg-rose-400', text: 'text-white', hex: '#fb7185' };
+  if (over < 50) return { bg: 'bg-rose-500', text: 'text-white', hex: '#f43f5e' };
+  if (over < 80) return { bg: 'bg-rose-600', text: 'text-white', hex: '#e11d48' };
+  return { bg: 'bg-rose-800', text: 'text-white', hex: '#9f1239' };
+}
+
+function metrics(maxCap, cap, alloc) {
+  const safeCap = Math.min(cap, maxCap);
+  const free = Math.max(0, safeCap - alloc);
+  // Three regimes:
+  //   workNormal   : cap > 0, alloc <= cap          → green util
+  //   workOver     : cap > 0, alloc > cap           → red util
+  //   ghostAlloc   : cap === 0, alloc > 0           → CRITICAL: scheduled on no-capacity period
+  //   noWork       : cap === 0, alloc === 0         → empty (holiday, no problem)
+  let regime;
+  let util; // % within actual capacity
+  if (safeCap > 0) {
+    util = (alloc / safeCap) * 100;
+    regime = alloc > safeCap ? 'workOver' : 'workNormal';
+  } else if (alloc > 0) {
+    util = Infinity;
+    regime = 'ghostAlloc';
+  } else {
+    util = 0;
+    regime = 'noWork';
+  }
+  const availPct = maxCap > 0 ? (safeCap / maxCap) * 100 : 0;
+  // ghostPct: how much of MAX is "scheduled" on a no-capacity period — used to visualize a red overlay
+  const ghostPct = maxCap > 0 ? Math.min(100, (alloc / maxCap) * 100) : 100;
+  return { maxCap, cap: safeCap, alloc, free, util, availPct, regime, ghostPct };
+}
+
+const variants = [
+  {
+    key: 'A',
+    title: 'A — טבעת זמינות + עיגול עומס',
+    desc: 'טבעת חיצונית: ירוק=זמין, אפור=לא-זמין. כשאין זמינות אבל יש הקצאה — הטבעת נצבעת אדומה והעיגול הפנימי אדום עם המספר. זה מבדיל בין "חג שקט" ל"חג עם הקצאה שגויה".',
+    render(m) {
+      const r = 18, c = 2 * Math.PI * r;
+      const availDash = (m.availPct / 100) * c;
+      const fillTone = utilTone(m.regime === 'ghostAlloc' ? 999 : m.util);
+      const innerSize = m.regime === 'ghostAlloc'
+        ? 28
+        : (m.cap > 0 ? Math.min(28, 8 + (Math.min(m.util, 100) / 100) * 20) : 0);
+      const ringFullRed = m.regime === 'ghostAlloc';
+      return `
+        <div class="relative flex items-center justify-center" style="width:48px;height:48px;">
+          <svg viewBox="0 0 48 48" class="absolute inset-0">
+            <circle cx="24" cy="24" r="${r}" fill="none" stroke="${ringFullRed ? '#9f1239' : '#e2e8f0'}" stroke-width="5"/>
+            ${!ringFullRed && availDash > 0 ? `<circle cx="24" cy="24" r="${r}" fill="none" stroke="#22c55e" stroke-width="5"
+                    stroke-dasharray="${availDash} ${c}" transform="rotate(-90 24 24)" stroke-linecap="butt" stroke-opacity="0.75"/>` : ''}
+          </svg>
+          ${innerSize > 0 ? `<div class="absolute rounded-full ${fillTone.bg} flex items-center justify-center"
+               style="width:${innerSize}px;height:${innerSize}px;">
+            <span class="text-[9px] font-bold ${fillTone.text} label-en">${m.regime === 'ghostAlloc' ? fmtH(m.alloc) : fmtPct(m.util)}</span>
+          </div>` : '<span class="relative text-[14px] text-slate-300">–</span>'}
+        </div>
+        <div class="text-[10px] mt-0.5 label-en ${m.regime === 'ghostAlloc' ? 'text-rose-700 font-bold' : 'text-slate-500'}">${m.regime === 'ghostAlloc' ? '⚠ ' + fmtH(m.alloc) + ' on closed' : fmtH(m.alloc) + '/' + fmtH(m.cap)}</div>
+      `;
+    },
+  },
+  {
+    key: 'B',
+    title: 'B — שתי טבעות (זמינות + ניצול)',
+    desc: 'חיצונית = availPct. פנימית = utilPct, אדומה מעל 100%. כשאין זמינות וקיימת הקצאה — חיצונית אדומה מלאה, פנימית אדומה כהה עם שעות.',
+    render(m) {
+      const r1 = 19, r2 = 13;
+      const c1 = 2 * Math.PI * r1;
+      const c2 = 2 * Math.PI * r2;
+      const ghost = m.regime === 'ghostAlloc';
+      const outerStroke = ghost ? '#9f1239' : '#22c55e';
+      const outerDash = ghost ? c1 : (m.availPct/100)*c1;
+      const innerStroke = ghost ? '#9f1239' : (m.util > 100 ? '#dc2626' : (m.util >= 80 ? '#15803d' : '#22c55e'));
+      const util = Math.min(100, m.util);
+      const overPct = m.util > 100 && m.util !== Infinity ? Math.min(100, m.util - 100) : 0;
+      const numColor = (ghost || m.util > 100) ? 'text-rose-700' : 'text-slate-700';
+      const centerLabel = ghost ? fmtH(m.alloc) : (m.cap > 0 ? fmtPct(m.util) : '–');
+      return `
+        <div class="relative flex items-center justify-center" style="width:50px;height:50px;">
+          <svg viewBox="0 0 50 50" class="absolute inset-0">
+            <circle cx="25" cy="25" r="${r1}" fill="none" stroke="#e2e8f0" stroke-width="3"/>
+            <circle cx="25" cy="25" r="${r1}" fill="none" stroke="${outerStroke}" stroke-width="3"
+                    stroke-dasharray="${outerDash} ${c1}" transform="rotate(-90 25 25)" stroke-linecap="butt"/>
+            <circle cx="25" cy="25" r="${r2}" fill="none" stroke="#f1f5f9" stroke-width="3"/>
+            ${ghost
+              ? `<circle cx="25" cy="25" r="${r2}" fill="none" stroke="${innerStroke}" stroke-width="3" stroke-dasharray="${c2} ${c2}" transform="rotate(-90 25 25)"/>`
+              : `<circle cx="25" cy="25" r="${r2}" fill="none" stroke="${innerStroke}" stroke-width="3" stroke-dasharray="${(util/100)*c2} ${c2}" transform="rotate(-90 25 25)" stroke-linecap="round"/>`
+            }
+            ${overPct > 0 ? '<circle cx="25" cy="25" r="' + r2 + '" fill="none" stroke="#9f1239" stroke-width="3" stroke-dasharray="' + ((overPct/100)*c2) + ' ' + c2 + '" transform="rotate(-90 25 25)" stroke-linecap="round"/>' : ''}
+          </svg>
+          <span class="relative text-[10px] font-bold label-en ${numColor}">${centerLabel}</span>
+        </div>
+        <div class="text-[10px] mt-0.5 label-en ${ghost ? 'text-rose-700 font-bold' : 'text-slate-500'}">${ghost ? '⚠ ' + fmtH(m.alloc) + ' / 0 cap' : 'avail ' + fmtPct(m.availPct) + ' · used ' + fmtPct(m.util)}</div>
+      `;
+    },
+  },
+  {
+    key: 'C',
+    title: 'C — דונאט 4 קשתות',
+    desc: 'ירוק כהה=מנוצל, ירוק בהיר=פנוי-זמין, אפור=לא-זמין. אדום=על-העומס. כשאין זמינות והקצאה גדולה — כל הטבעת אדומה.',
+    render(m) {
+      const cx = 22, cy = 22, r = 17;
+      const c = 2 * Math.PI * r;
+      const ghost = m.regime === 'ghostAlloc';
+      if (ghost) {
+        return `
+          <div class="relative flex items-center justify-center" style="width:44px;height:44px;">
+            <svg viewBox="0 0 44 44" class="absolute inset-0">
+              <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#dc2626" stroke-width="6"/>
+            </svg>
+            <span class="relative text-[10px] font-bold text-white label-en bg-rose-700 rounded-full px-1.5 py-0.5">⚠ ${fmtH(m.alloc)}</span>
+          </div>
+          <div class="text-[10px] mt-0.5 label-en text-rose-700 font-bold">scheduled · 0 cap</div>
+        `;
+      }
+      const usedPct = m.maxCap > 0 ? Math.min(m.availPct, (m.alloc / m.maxCap) * 100) : 0;
+      const overPct = m.util > 100 ? Math.min(100 - m.availPct, ((m.alloc - m.cap) / m.maxCap) * 100) : 0;
+      const dashAvail = (m.availPct / 100) * c;
+      const dashUsed = (usedPct / 100) * c;
+      const dashOver = (overPct / 100) * c;
+      const dashUnavail = ((100 - m.availPct) / 100) * c;
+      const numColor = m.util > 100 ? '#b91c1c' : m.util >= 80 ? '#166534' : m.util > 0 ? '#15803d' : '#64748b';
+      return `
+        <div class="relative flex items-center justify-center" style="width:44px;height:44px;">
+          <svg viewBox="0 0 44 44" class="absolute inset-0">
+            <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="6"
+                    stroke-dasharray="${dashUnavail} ${c}" stroke-dashoffset="${-((m.availPct/100)*c)}" transform="rotate(-90 ${cx} ${cy})"/>
+            <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#bbf7d0" stroke-width="6"
+                    stroke-dasharray="${dashAvail} ${c}" transform="rotate(-90 ${cx} ${cy})"/>
+            <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#15803d" stroke-width="6"
+                    stroke-dasharray="${dashUsed} ${c}" transform="rotate(-90 ${cx} ${cy})"/>
+            ${overPct > 0 ? '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="#dc2626" stroke-width="6" stroke-dasharray="' + dashOver + ' ' + c + '" stroke-dashoffset="' + (-((m.availPct/100)*c)) + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>' : ''}
+          </svg>
+          <span class="relative text-[11px] font-bold label-en" style="color:${numColor}">${m.cap > 0 ? fmtPct(m.util) : '–'}</span>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-0.5 label-en">${fmtH(m.alloc)}/${fmtH(m.cap)}</div>
+      `;
+    },
+  },
+  {
+    key: 'D',
+    title: 'D — בועה גודל=זמינות, צבע=ניצול',
+    desc: 'בועה בגודל יחסי לזמינות. צבע = ניצול. כשאין זמינות וקיימת הקצאה — מופיע משולש אדום מזהיר במקום הבועה הקטנה.',
+    render(m) {
+      const ghost = m.regime === 'ghostAlloc';
+      if (ghost) {
+        return `
+          <div class="relative flex items-center justify-center" style="width:40px;height:40px;">
+            <div class="absolute inset-0 rounded-full bg-rose-700 flex items-center justify-center">
+              <span class="text-[12px] font-bold text-white label-en">⚠</span>
+            </div>
+          </div>
+          <div class="text-[10px] mt-0.5 label-en text-rose-700 font-bold">${fmtH(m.alloc)} · 0 cap</div>
+        `;
+      }
+      const fillTone = utilTone(m.util);
+      const maxSize = 40;
+      const size = m.maxCap > 0 ? Math.max(8, (m.cap / m.maxCap) * maxSize) : 8;
+      return `
+        <div class="relative flex items-center justify-center" style="width:${maxSize}px;height:${maxSize}px;">
+          <div class="absolute inset-0 rounded-full bg-slate-200 opacity-50"></div>
+          <div class="absolute rounded-full ${fillTone.bg} flex items-center justify-center"
+               style="width:${size}px;height:${size}px;">
+            ${m.cap > 0 ? `<span class="text-[10px] font-bold ${fillTone.text} label-en">${fmtPct(m.util)}</span>` : ''}
+          </div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-0.5 label-en">${fmtH(m.alloc)}/${fmtH(m.cap)}</div>
+      `;
+    },
+  },
+  {
+    key: 'E',
+    title: 'E — פס מפוצל 4 מקטעים',
+    desc: 'פס: ירוק כהה=מנוצל, ירוק בהיר=פנוי-זמין, אפור=לא-זמין, אדום=על-העומס. במקרה ghost-alloc — כל הפס אדום עם שעות מודגשות.',
+    render(m) {
+      const ghost = m.regime === 'ghostAlloc';
+      if (ghost) {
+        return `
+          <div class="w-[72px]">
+            <div class="relative h-5 rounded-full overflow-hidden flex bg-rose-700 items-center justify-center">
+              <span class="text-[10px] font-bold text-white label-en">⚠ ${fmtH(m.alloc)} on closed</span>
+            </div>
+          </div>
+        `;
+      }
+      const availPct = m.availPct;
+      const usedPct = m.maxCap > 0 ? Math.min(100, (m.alloc / m.maxCap) * 100) : 0;
+      const overPct = m.util > 100 ? Math.min(100, ((m.alloc - m.cap) / m.maxCap) * 100) : 0;
+      const freePct = Math.max(0, availPct - usedPct);
+      const unavailPct = Math.max(0, 100 - availPct);
+      return `
+        <div class="w-[72px]">
+          <div class="relative h-5 rounded-full overflow-hidden flex" dir="ltr">
+            <div class="h-full bg-green-700" style="width:${usedPct - overPct}%;"></div>
+            ${overPct > 0 ? `<div class="h-full bg-rose-500" style="width:${overPct}%;"></div>` : ''}
+            <div class="h-full bg-green-200" style="width:${freePct}%;"></div>
+            <div class="h-full bg-slate-200" style="width:${unavailPct}%;"></div>
+          </div>
+          <div class="text-[10px] text-slate-500 mt-0.5 text-center label-en">${m.cap > 0 ? fmtPct(m.util) : '–'} · ${fmtH(m.cap)}</div>
+        </div>
+      `;
+    },
+  },
+  {
+    key: 'F',
+    title: 'F — עיגול בתוך עיגול',
+    desc: 'חיצוני אפור = MAX קבוע. פנימי = זמינות בפועל (גודל יחסי), צבעו = ניצול. ghost-alloc → עיגול פנימי הופך לאות "X" אדומה עם שעות.',
+    render(m) {
+      const outer = 40;
+      const ghost = m.regime === 'ghostAlloc';
+      if (ghost) {
+        return `
+          <div class="relative flex items-center justify-center rounded-full bg-rose-700" style="width:${outer}px;height:${outer}px;">
+            <span class="text-[10px] font-bold text-white label-en">⚠ ${fmtH(m.alloc)}</span>
+          </div>
+          <div class="text-[10px] mt-0.5 label-en text-rose-700 font-bold">0 cap</div>
+        `;
+      }
+      const fillTone = utilTone(m.util);
+      const innerSize = m.maxCap > 0 ? Math.max(8, (m.cap / m.maxCap) * outer) : 8;
+      return `
+        <div class="relative flex items-center justify-center rounded-full bg-slate-200" style="width:${outer}px;height:${outer}px;">
+          <div class="absolute rounded-full ${fillTone.bg} flex items-center justify-center"
+               style="width:${innerSize}px;height:${innerSize}px;">
+            ${m.cap > 0 ? `<span class="text-[10px] font-bold ${fillTone.text} label-en">${fmtPct(m.util)}</span>` : ''}
+          </div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-0.5 label-en">avail ${fmtPct(m.availPct)}</div>
+      `;
+    },
+  },
+  {
+    key: 'G',
+    title: 'G — שעון פאי',
+    desc: 'סקטורים: ירוק כהה=מנוצל, ירוק בהיר=פנוי, אפור=לא-זמין. ghost-alloc → כל המעגל אדום עם שעות מסוכנות במרכז.',
+    render(m) {
+      const cx = 22, cy = 22, r = 16;
+      const ghost = m.regime === 'ghostAlloc';
+      if (ghost) {
+        return `
+          <div class="relative flex items-center justify-center" style="width:44px;height:44px;">
+            <svg viewBox="0 0 44 44" class="absolute inset-0">
+              <circle cx="${cx}" cy="${cy}" r="${r}" fill="#dc2626"/>
+              <circle cx="${cx}" cy="${cy}" r="9" fill="white"/>
+            </svg>
+            <span class="relative text-[10px] font-bold text-rose-700 label-en">⚠${fmtH(m.alloc)}</span>
+          </div>
+          <div class="text-[10px] mt-0.5 label-en text-rose-700 font-bold">0 cap</div>
+        `;
+      }
+      const usedPct = m.maxCap > 0 ? Math.min(m.availPct, (m.alloc / m.maxCap) * 100) : 0;
+      const overPct = m.util > 100 ? Math.min(100 - m.availPct, ((m.alloc - m.cap) / m.maxCap) * 100) : 0;
+      const freeEnd = m.availPct;
+      function sector(fromPct, toPct, fill) {
+        if (toPct - fromPct <= 0.01) return '';
+        const toRad = (p) => (p / 100) * Math.PI * 2 - Math.PI / 2;
+        const x1 = cx + r * Math.cos(toRad(fromPct));
+        const y1 = cy + r * Math.sin(toRad(fromPct));
+        const x2 = cx + r * Math.cos(toRad(toPct));
+        const y2 = cy + r * Math.sin(toRad(toPct));
+        const large = (toPct - fromPct) > 50 ? 1 : 0;
+        return `<path d="M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z" fill="${fill}"/>`;
+      }
+      return `
+        <div class="relative flex items-center justify-center" style="width:44px;height:44px;">
+          <svg viewBox="0 0 44 44" class="absolute inset-0">
+            <circle cx="${cx}" cy="${cy}" r="${r}" fill="#e2e8f0"/>
+            ${sector(0, freeEnd, '#bbf7d0')}
+            ${sector(0, usedPct, '#15803d')}
+            ${overPct > 0 ? sector(freeEnd, freeEnd + overPct, '#dc2626') : ''}
+            <circle cx="${cx}" cy="${cy}" r="9" fill="white"/>
+          </svg>
+          <span class="relative text-[10px] font-bold text-slate-700 label-en">${m.cap > 0 ? fmtPct(m.util) : '–'}</span>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-0.5 label-en">${fmtH(m.alloc)}/${fmtH(m.cap)}</div>
+      `;
+    },
+  },
+  {
+    key: 'H',
+    title: 'H — טבעת MAX + עיגול עומס',
+    desc: 'מסגרת חיצונית = MAX. עיגול פנימי בגודל יחסי לזמינות, צבעו = ניצול. ghost-alloc → המסגרת אדומה ובפנים סמל אזהרה עם שעות.',
+    render(m) {
+      const outer = 44;
+      const ghost = m.regime === 'ghostAlloc';
+      if (ghost) {
+        return `
+          <div class="relative flex items-center justify-center rounded-full border-2 border-rose-600 bg-rose-50" style="width:${outer}px;height:${outer}px;">
+            <span class="text-[11px] font-bold text-rose-700 label-en">⚠${fmtH(m.alloc)}</span>
+          </div>
+          <div class="text-[10px] mt-0.5 label-en text-rose-700 font-bold">0 cap</div>
+        `;
+      }
+      const fillTone = utilTone(m.util);
+      const innerSize = m.maxCap > 0 ? Math.max(0, (m.cap / m.maxCap) * (outer - 4)) : 0;
+      return `
+        <div class="relative flex items-center justify-center rounded-full border-2 border-slate-300" style="width:${outer}px;height:${outer}px;">
+          <div class="rounded-full ${fillTone.bg} flex items-center justify-center"
+               style="width:${innerSize}px;height:${innerSize}px;">
+            ${innerSize >= 18 && m.cap > 0 ? `<span class="text-[10px] font-bold ${fillTone.text} label-en">${fmtPct(m.util)}</span>` : ''}
+          </div>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-0.5 label-en">${fmtH(m.alloc)}/${fmtH(m.cap)} · max ${fmtH(m.maxCap)}</div>
+      `;
+    },
+  },
+];
+
+function renderAll() {
+  const m = metrics(state.maxCap, state.capacity, state.allocated);
+  $('maxLabel').textContent = state.maxCap.toFixed(1);
+  $('capLabel').textContent = state.capacity.toFixed(1);
+  $('allocLabel').textContent = state.allocated.toFixed(1);
+  $('widthLabel').textContent = state.cellWidth;
+  $('statMax').textContent = fmtH(m.maxCap);
+  $('statCap').textContent = fmtH(m.cap);
+  $('statAvail').textContent = fmtPct(m.availPct);
+  $('statAlloc').textContent = fmtH(m.alloc);
+  $('statUtil').textContent = m.regime === 'ghostAlloc' ? '∞' : fmtPct(m.util);
+  const statusEl = $('statStatus');
+  const statusMap = {
+    workNormal: ['תקין', 'text-green-700'],
+    workOver:   ['על-העומס', 'text-rose-600'],
+    ghostAlloc: ['⚠ הוקצה על חג', 'text-rose-700'],
+    noWork:     ['חג / לא-עבודה', 'text-slate-500'],
+  };
+  const [txt, color] = statusMap[m.regime];
+  statusEl.textContent = txt;
+  statusEl.className = `font-bold text-lg ${color}`;
+
+  const scenarios = [
+    { max: 42.5, cap: 42.5, alloc: 20 },
+    { max: 42.5, cap: 42.5, alloc: 21 },
+    { max: 42.5, cap: 21,   alloc: 10 },   // half-day
+    { max: 42.5, cap: 34,   alloc: 34 },   // 1 absent, full
+    { max: 42.5, cap: 42.5, alloc: 47 },   // over
+    { max: 42.5, cap: 42.5, alloc: 29 },
+    { max: 42.5, cap: 0,    alloc: 20 },   // GHOST: scheduled on holiday
+    { max: 42.5, cap: 25.5, alloc: 16 },
+    { max: 42.5, cap: 42.5, alloc: 5 },
+    { max: 42.5, cap: 0,    alloc: 0 },    // holiday clean
+    { max: 42.5, cap: 21,   alloc: 25 },   // half-day overloaded
+    { max: 42.5, cap: 42.5, alloc: 0 },
+  ];
+
+  const grid = $('variantsGrid');
+  grid.innerHTML = variants.map((v) => {
+    const rowCells = scenarios.map((s) => {
+      const sm = metrics(s.max, s.cap, s.alloc);
+      return '<div class="flex items-center justify-center border-l border-slate-100 last:border-l-0" style="width:' + (state.cellWidth/2) + 'px;height:64px;">' +
+        '<div class="flex flex-col items-center scale-90 origin-center">' + v.render(sm) + '</div>' +
+        '</div>';
+    }).join('');
+    return `
+      <div class="bg-white border border-slate-200 rounded-lg p-4">
+        <div class="flex items-baseline justify-between mb-1">
+          <h3 class="font-bold text-sm">${v.title}</h3>
+          <span class="text-xs text-slate-400 label-en">variant ${v.key}</span>
+        </div>
+        <p class="text-xs text-slate-600 mb-3">${v.desc}</p>
+        <div class="flex items-center justify-center bg-slate-50 border border-slate-100 rounded h-20 mb-3 mx-auto"
+             style="width:${state.cellWidth}px;">
+          <div class="flex flex-col items-center">${v.render(m)}</div>
+        </div>
+        <div class="text-[10px] text-slate-400 mb-1 text-center">סימולציה: שבוע 7 = ⚠ הוקצה על חג</div>
+        <div class="flex border border-slate-200 rounded overflow-hidden">${rowCells}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+$('max').addEventListener('input', (e) => {
+  state.maxCap = parseFloat(e.target.value);
+  if (state.capacity > state.maxCap) {
+    state.capacity = state.maxCap;
+    $('cap').value = state.capacity;
+  }
+  $('cap').max = state.maxCap;
+  $('preset').value='custom';
+  renderAll();
+});
+$('cap').addEventListener('input', (e) => { state.capacity = Math.min(parseFloat(e.target.value), state.maxCap); $('preset').value='custom'; renderAll(); });
+$('alloc').addEventListener('input', (e) => { state.allocated = parseFloat(e.target.value); $('preset').value='custom'; renderAll(); });
+$('width').addEventListener('input', (e) => { state.cellWidth = parseInt(e.target.value); renderAll(); });
+$('preset').addEventListener('change', (e) => {
+  const v = e.target.value;
+  if (v === 'full')          { state.maxCap = 42.5; state.capacity = 42.5; state.allocated = 20; }
+  if (v === 'halfday')       { state.maxCap = 42.5; state.capacity = 21;   state.allocated = 10; }
+  if (v === '2absent')       { state.maxCap = 42.5; state.capacity = 25.5; state.allocated = 16; }
+  if (v === 'holiday')       { state.maxCap = 42.5; state.capacity = 0;    state.allocated = 0; }
+  if (v === 'holiday-alloc') { state.maxCap = 42.5; state.capacity = 0;    state.allocated = 20; }
+  if (v === 'halfday-over')  { state.maxCap = 42.5; state.capacity = 21;   state.allocated = 30; }
+  if (v === 'over')          { state.maxCap = 42.5; state.capacity = 42.5; state.allocated = 55; }
+  $('max').value = state.maxCap;
+  $('cap').max = state.maxCap;
+  $('cap').value = state.capacity;
+  $('alloc').value = state.allocated;
+  renderAll();
+});
+
+renderAll();
+</script>
+</body>
+</html>

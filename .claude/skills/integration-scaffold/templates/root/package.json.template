@@ -1,0 +1,89 @@
+{
+  "name": "__APP_NAME__",
+  "version": "1.0.0",
+  "description": "Monday.com Integration App - __APP_NAME_PASCAL__",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev": "pnpm -F __PACKAGE_SCOPE__/server dev",
+    "start": "pnpm -F __PACKAGE_SCOPE__/server start",
+    "server": "pnpm -F __PACKAGE_SCOPE__/server server",
+    "tunnel": "pnpm -F __PACKAGE_SCOPE__/server tunnel",
+    "deploy": "pnpm -F __PACKAGE_SCOPE__/server deploy",
+    "logs": "pnpm -F __PACKAGE_SCOPE__/server logs",
+    "logs:http": "pnpm -F __PACKAGE_SCOPE__/server logs:http",
+    "lint": "eslint server/src packages/shared/src tools --ext .js"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0",
+    "eslint-plugin-promise": "^6.1.1"
+  },
+  "eslintConfig": {
+    "root": true,
+    "env": {
+      "node": true,
+      "es2022": true
+    },
+    "parserOptions": {
+      "ecmaVersion": 2022,
+      "sourceType": "module"
+    },
+    "plugins": [
+      "promise"
+    ],
+    "rules": {
+      "no-console": "error",
+      "no-empty": [
+        "error",
+        {
+          "allowEmptyCatch": false
+        }
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          "selector": "CatchClause > BlockStatement:not(:has(CallExpression[callee.object.name='logger'])):not(:has(ThrowStatement)):not(:has(CallExpression[callee.name='next']))",
+          "message": "This catch block swallows the error silently. Do exactly one of: (1) call logger.error/logger.warn(...) to record it, (2) re-throw it with `throw` so an upstream catch or the process net handles it, or (3) forward it with `next(error)` so the terminal error middleware logs it and returns a safe JSON response. The only allowed silent path is an intentional AbortController cancel: `if (e.name === 'AbortError') return;`."
+        }
+      ],
+      "promise/catch-or-return": "error"
+    },
+    "overrides": [
+      {
+        "files": [
+          "**/services/logger/**",
+          "**/axiom-sink.js",
+          "**/process-guards.js"
+        ],
+        "rules": {
+          "no-console": "off",
+          "no-restricted-syntax": "off"
+        }
+      },
+      {
+        "files": [
+          "**/__tests__/**",
+          "**/*.test.js"
+        ],
+        "rules": {
+          "no-console": "off",
+          "no-restricted-syntax": "off"
+        }
+      }
+    ],
+    "ignorePatterns": [
+      "dist",
+      "build",
+      "node_modules"
+    ]
+  },
+  "keywords": [
+    "monday.com",
+    "workflow",
+    "integration"
+  ],
+  "license": "MIT"
+}

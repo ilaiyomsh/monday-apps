@@ -1,0 +1,28 @@
+/**
+ * Field Extractors
+ * Utility functions for extracting values from Monday.com input fields.
+ */
+
+/**
+ * Extracts a value from an input field.
+ * Handles both direct values and objects with .value property.
+ */
+export function extractFieldValue(field) {
+  return field?.value ?? field;
+}
+
+/**
+ * Extracts multiple field values from an inputFields object.
+ */
+export function extractFieldValues(inputFields, fieldNames) {
+  const result = {};
+  for (const name of fieldNames) {
+    result[name] = extractFieldValue(inputFields[name]);
+  }
+  return result;
+}
+
+export default {
+  extractFieldValue,
+  extractFieldValues,
+};

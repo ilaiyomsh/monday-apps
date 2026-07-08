@@ -1,0 +1,383 @@
+/**
+ * Design Tokens — single source of truth for all visual design values.
+ *
+ * Rules:
+ * - All hex/rgb literals live HERE (with two exemptions: `colorUtils.ts` reads
+ *   the palette via getComputedStyle + does YIQ contrast math; `Logger.ts` uses
+ *   hex strings for console styling, not UI).
+ * - Components reference tokens via Tailwind v4 generated utilities (every
+ *   `--color-<name>` yields `bg-<name>` / `text-<name>` / `border-<name>`), or
+ *   the arbitrary form `bg-[var(--color-<name>)]`. Never use raw Tailwind
+ *   palette classes (the slate, gray, blue, red, green, amber families) —
+ *   they bypass this file and cannot be re-themed.
+ * - VIBE ALIGNMENT (2026-06-14): semantic color values are taken from monday's
+ *   real Vibe tokens (@vibe/core/dist/tokens/tokens.css, light theme), so the
+ *   app matches monday.com's design system. Key Vibe anchors:
+ *     text   #323338 (primary) / #676879 (secondary) / #9699a6 (subtle)
+ *     border #c3c6d4 (ui) / #d0d4e4 (layout)
+ *     bg     #ffffff (surface) / #f6f7fb (app)
+ *     accent #0073ea (primary) / #0060b9 (hover) / #cce5ff (selected)
+ *     status #00854d (positive) / #d83a52 (negative) / #ffcb00 (warning)
+ *   The project picker palette below IS the Vibe data-visualization palette.
+ * - Typography scale maps to standard Tailwind classes per this table:
+ *     text-[10px] → text-xs   (was 10px, now 12px; +2px)
+ *     text-[11px] → text-xs   (was 11px, now 12px; +1px)
+ *     text-[12px] → text-xs   (exact)
+ *     text-[13px] → text-xs   (was 13px, now 12px; -1px)
+ *     text-[14px] → text-sm   (exact)
+ *     text-[15px] → text-sm   (was 15px, now 14px; -1px)
+ *     text-[16px] → text-base (exact)
+ *     text-[17px] → text-base (was 17px, now 16px; -1px)
+ *     text-[18px] → text-lg   (exact)
+ *     text-[19px] → text-lg   (was 19px, now 18px; -1px; SettingsDialog headers)
+ *     text-[20px] → text-xl   (exact)
+ *     text-[22px] → text-2xl  (was 22px, now 24px; +2px)
+ *     text-[24px] → text-2xl  (exact)
+ *   To roll back a specific size, grep the migration commit (PR #N) and
+ *   substitute back the original bracket form.
+ * - Z-index is a 5-step ladder; no more `z-[9999]` arbitrary values.
+ * - Status colors (success/warning/danger/info) are unified and Vibe-aligned.
+ * - DARK MODE: the app is light-only today, but this file is dark-READY. To
+ *   add dark/black support, fill the `.dark-app-theme` / `.black-app-theme`
+ *   override blocks at the bottom (values from @vibe/core dark/black themes)
+ *   and apply the matching Vibe class on the app root in App.tsx. Because the
+ *   generated utilities reference these vars at runtime, overriding them in a
+ *   theme class is all that's needed — no component edits.
+ *
+ * Imported by src/index.css; the @theme block extends Tailwind 4's design system.
+ */
+
+@theme {
+  /* ──────────────────────────────────────────────────────────────────────────
+   * TYPOGRAPHY WEIGHTS — Vibe weight ladder. Prefer Tailwind font-* utilities
+   * in components; these vars exist for the rare inline/computed weight.
+   * ────────────────────────────────────────────────────────────────────────── */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * BRAND
+   * ────────────────────────────────────────────────────────────────────────── */
+  --color-monday-blue: #0073ea;
+  --color-monday-purple: #9d50dd;
+  --color-monday-gray: #f6f7fb;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * NEUTRAL SPECTRUM — Vibe-aligned grays (snow_white → mud_black), with a
+   * coherent ladder so direct `bg-neutral-*` / `text-neutral-*` usages land on
+   * monday's palette. Anchors: 0 #ffffff, 50 #f6f7fb (allgrey), 200 #e7e9ef
+   * (ui-background), 300 #dcdfec (ui_grey), 400 #d0d4e4 (layout-border),
+   * 450 #c3c6d4 (wolf_gray/ui-border), 600 #9699a6, 700 #676879 (asphalt),
+   * 900 #323338 (mud_black).
+   * ────────────────────────────────────────────────────────────────────────── */
+  --color-neutral-0: #ffffff;
+  --color-neutral-25: #fbfbfc;
+  --color-neutral-50: #f6f7fb;
+  --color-neutral-75: #f4f5fa;
+  --color-neutral-100: #f0f1f5;
+  --color-neutral-150: #eceff8;
+  --color-neutral-200: #e7e9ef;
+  --color-neutral-250: #e1e3ed;
+  --color-neutral-300: #dcdfec;
+  --color-neutral-350: #d8d9e0;
+  --color-neutral-400: #d0d4e4;
+  --color-neutral-450: #c3c6d4;
+  --color-neutral-500: #b3b6c4;
+  --color-neutral-550: #a1a4b3;
+  --color-neutral-600: #9699a6;
+  --color-neutral-650: #868998;
+  --color-neutral-700: #676879;
+  --color-neutral-750: #5a5b6b;
+  --color-neutral-800: #4b4d5e;
+  --color-neutral-850: #3d3f4f;
+  --color-neutral-900: #323338;
+  --color-neutral-950: #292a30;
+  --color-neutral-1000: #000000;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * SEMANTIC SURFACES, BORDERS, TEXT
+   * ────────────────────────────────────────────────────────────────────────── */
+  --color-bg-app: #f6f7fb;
+  --color-bg-surface: #ffffff;
+  --color-bg-subtle: #fbfbfc;
+  --color-bg-section: #f6f7fb;
+  --color-bg-hover: #f0f1f5;
+  --color-bg-emphasis: #e7e9ef;
+  /* Inverted surface — stays dark in light mode (Vibe --inverted-color-background).
+     Tooltips, dark badges, undo/info toasts. */
+  --color-bg-inverted: #323338;
+
+  --color-border-faint: #f0f1f5;
+  --color-border-subtle: #e7e9ef;
+  --color-border-default: #d0d4e4;
+  --color-border-strong: #c3c6d4;
+  --color-border-stronger: #b3b6c4;
+
+  --color-text-primary: #323338;
+  --color-text-secondary: #676879;
+  --color-text-muted: #676879;
+  --color-text-subtle: #9699a6;
+  --color-text-header: #323338;
+  --color-text-faint: #b3b6c4;
+  --color-text-on-accent: #ffffff;
+  --color-text-on-inverted: #ffffff;
+  --color-text-link: #1f76c2;
+
+  /* Code/JSON preview surface — a self-contained dark editor palette (developer
+     facing draft preview in SettingsDialog). Intentionally dark regardless of
+     app theme; values preserved from the original slate-based palette. */
+  --color-surface-code: #0d1117;
+  --color-code-bg: #0f172a;
+  --color-code-surface: #1e293b;
+  --color-code-row: #334155;
+  --color-code-row-alt: #475569;
+  --color-code-border: #334155;
+  --color-code-text: #e2e8f0;
+  --color-code-text-muted: #94a3b8;
+  --color-code-accent: #93c5fd;
+  --color-code-overlay: rgba(15, 23, 42, 0.6);
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * ACCENT (Vibe primary-blue family)
+   * ────────────────────────────────────────────────────────────────────────── */
+  --color-accent: #0073ea;
+  --color-accent-hover: #0060b9;
+  --color-accent-strong: #0073ea;
+  --color-accent-strong-hover: #0060b9;
+  --color-accent-bg-soft: #eceff8;
+  --color-accent-bg-softer: #f0f7ff;
+  --color-accent-bg-hover: #cce5ff;
+  --color-accent-bg-tint: #f0f7ff;
+  --color-accent-bg-badge: #cce5ff;
+  --color-accent-text-strong: #0060b9;
+  --color-accent-focus: #0073ea;
+  --color-accent-selected: #cce5ff;
+  --color-accent-selected-hover: #aed4fc;
+
+  /* Secondary accent (Vibe purple #9d50dd) — used to visually distinguish the
+     project-classification surfaces from the blue primary-filter surfaces. */
+  --color-accent-secondary: #9d50dd;
+  --color-accent-secondary-bg-soft: #f3ecfb;
+  --color-accent-secondary-border: #e3d3f5;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * STATUS — Vibe-aligned (positive/negative/warning). Soft = light surface,
+   * text = readable-on-light. Legacy Tailwind shades replaced by Vibe values.
+   * ────────────────────────────────────────────────────────────────────────── */
+  /* success → Vibe positive #00854d (was Tailwind #22c55e) */
+  --color-success: #00854d;
+  --color-success-soft: #d6ebe0;
+  --color-success-border: #b5cec0;
+  --color-success-hover: #007038;
+  --color-success-text: #037f4c;
+
+  /* warning → Vibe warning #ffcb00 (was Tailwind #f59e0b). Soft/text fixed:
+     soft is a light surface, text is a dark readable amber. */
+  --color-warning: #ffcb00;
+  --color-warning-hover: #eaaa15;
+  --color-warning-soft: #fff4d1;
+  --color-warning-border: #f5d76e;
+  --color-warning-text: #7a5c00;
+
+  /* danger → Vibe negative #d83a52 (was Tailwind #ef4444) */
+  --color-danger: #d83a52;
+  --color-danger-strong: #b63546;
+  --color-danger-hover: #b63546;
+  --color-danger-soft: #fae3e6;
+  --color-danger-softer: #f4c3cb;
+  --color-danger-border: #ecb7bf;
+  --color-danger-border-hover: #d83a52;
+  --color-danger-text: #b63546;
+
+  /* info = Vibe primary blue */
+  --color-info: #0073ea;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * LOAD / UTILIZATION SCALE — workload circles (LoadCell). Green = healthy
+   * load, red = over-allocated. White (#fff) 10px-bold text overlays ALL of
+   * these, so every value is darkened to clear that text: each meets ≥3.2:1
+   * contrast vs white and the scale stays monotonically darker by severity.
+   * (The original Vibe tints — e.g. low #80e3ba @ 1.54:1 — were too light for
+   * white text to read.) Contrast ratios noted inline; keep them ≥3:1 if retuned.
+   *   low      (≤40%)     green        3.21:1
+   *   medium   (40–80%)   done-green   4.00:1
+   *   high     (80–100%)  grass-green  5.07:1
+   *   over     (100–200%) sunset red   3.60:1
+   *   critical (>200%)    negative red 4.52:1
+   * ────────────────────────────────────────────────────────────────────────── */
+  --color-load-low: #24a36f;
+  --color-load-medium: #009256;
+  --color-load-high: #037f4c;
+  --color-load-over: #ff3636;
+  --color-load-critical: #d83a52;
+
+  /* Avatar initials fallback background (was bg-blue-500) */
+  --color-avatar-bg: #0073ea;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * SCROLLBAR — Vibe grays
+   * ────────────────────────────────────────────────────────────────────────── */
+  --color-scrollbar-track: #f0f1f5;
+  --color-scrollbar-thumb: #c3c6d4;
+  --color-scrollbar-thumb-hover: #9699a6;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * PROJECT PALETTE — monday Vibe color picker (24 vibrant + 9 neutral).
+   * This IS the Vibe data-visualization palette. Read by colorUtils.ts via
+   * getComputedStyle.
+   * ────────────────────────────────────────────────────────────────────────── */
+  --project-color-vibrant-1: #00c875;
+  --project-color-vibrant-2: #fdab3d;
+  --project-color-vibrant-3: #df2f4a;
+  --project-color-vibrant-4: #9d50dd;
+  --project-color-vibrant-5: #579bfc;
+  --project-color-vibrant-6: #ffcb00;
+  --project-color-vibrant-7: #ff5ac4;
+  --project-color-vibrant-8: #9cd326;
+  --project-color-vibrant-9: #ff6d3b;
+  --project-color-vibrant-10: #4eccc6;
+  --project-color-vibrant-11: #bb3354;
+  --project-color-vibrant-12: #784bd1;
+  --project-color-vibrant-13: #66ccff;
+  --project-color-vibrant-14: #e50073;
+  --project-color-vibrant-15: #037f4c;
+  --project-color-vibrant-16: #cab641;
+  --project-color-vibrant-17: #5559df;
+  --project-color-vibrant-18: #ff7575;
+  --project-color-vibrant-19: #faa1f1;
+  --project-color-vibrant-20: #ffadad;
+  --project-color-vibrant-21: #216edf;
+  --project-color-vibrant-22: #bda8f9;
+  --project-color-vibrant-23: #e484bd;
+  --project-color-vibrant-24: #007eb5;
+
+  --project-color-neutral-1: #74afcc;
+  --project-color-neutral-2: #a1e3f6;
+  --project-color-neutral-3: #9aadbd;
+  --project-color-neutral-4: #a9bee8;
+  --project-color-neutral-5: #9d99b9;
+  --project-color-neutral-6: #7f5347;
+  --project-color-neutral-7: #bca58a;
+  --project-color-neutral-8: #cd9282;
+  --project-color-neutral-9: #563e3e;
+
+  /* Fallback for projects without an assigned color (Vibe neutral) */
+  --project-color-fallback: #c4c4c4;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * Z-INDEX LADDER
+   * ────────────────────────────────────────────────────────────────────────── */
+  --z-base: 0;
+  --z-dropdown: 30;
+  --z-overlay: 1000;
+  --z-modal: 9999;
+  --z-portal: 10001;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * SHADOWS — Vibe-flavored elevation. dnd-* back the TaskBar drag states;
+   * header-col / sticky-col back the pinned sidebar + timeline edges.
+   * ────────────────────────────────────────────────────────────────────────── */
+  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --shadow-sticky-col: 2px 0 5px rgba(0, 0, 0, 0.03);
+  --shadow-focus-ring: 0 0 0 3px rgba(0, 115, 234, 0.2);
+  --shadow-card: 0 4px 8px rgba(0, 0, 0, 0.08);
+  --shadow-header-col: 4px 0 8px rgba(0, 0, 0, 0.02);
+  --shadow-dnd: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+  --shadow-dnd-drag: 0 10px 25px -5px rgba(0, 0, 0, 0.2);
+  --shadow-dnd-active: 0 8px 16px -2px rgba(0, 0, 0, 0.25), 0 0 0 2px rgba(255, 255, 255, 0.6);
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * RADII
+   * ────────────────────────────────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-pill: 50px;
+
+  /* ──────────────────────────────────────────────────────────────────────────
+   * CONTAINER WIDTHS — one-off modal/dialog dimensions tokenized for
+   * consistency (per refactor directive: no hardcoded values, even one-offs).
+   * Usage: w-[var(--w-modal-sm)] etc.
+   * ────────────────────────────────────────────────────────────────────────── */
+  --w-modal-confirm: 380px;
+  --w-modal-sm: 560px;
+  --w-modal-md: 800px;
+  --w-modal-lg: 1200px;
+  --w-dropdown-sm: 220px;
+  --w-dropdown-xs: 160px;
+  --w-card-sm: 380px;
+  --w-button: 130px;
+  --w-button-lg: 140px;
+  --w-input-narrow: 90px;
+  --w-toolbar-search: 100px;
+  --w-toolbar-control: 140px;
+  --w-toolbar-input: 200px;
+  --max-w-tooltip: 340px;
+  --max-w-badge: 150px;
+  --max-h-dropdown: 240px;
+  --max-h-dropdown-sm: 200px;
+  --min-w-button: 100px;
+  --min-w-dropdown: 160px;
+  --min-w-input: 180px;
+  --h-input: 34px;
+  --h-input-sm: 32px;
+
+  /* Component-internal z-index layers (within an overlay) */
+  --z-layer-1: 100;
+  --z-layer-2: 200;
+  --z-layer-3: 300;
+
+  /* Muted inactive-project bars when "show past" is ON (Rule 4) */
+  --opacity-bar-inactive: 0.45;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * DARK-READY OVERRIDE TEMPLATES (currently inert — app is light-only).
+ *
+ * The app reads monday's theme (light | dark | black) but renders light today.
+ * To turn on dark/black support later:
+ *   1. Apply the Vibe theme class on the app root in App.tsx, e.g.
+ *      className={theme === 'dark' ? 'dark-app-theme' : theme === 'black' ? 'black-app-theme' : ''}
+ *      (this also flips @vibe/core's own component tokens).
+ *   2. Uncomment + fill the blocks below with the dark/black equivalents from
+ *      @vibe/core/dist/tokens/tokens.css (.dark-app-theme / .black-app-theme).
+ * Generated utilities reference these vars at runtime, so no component edits
+ * are required — only these overrides. Suggested dark anchors (Vibe dark):
+ *   bg-app #181b34 · bg-surface #30324e · text-primary #d5d8df
+ *   text-secondary #9699a6 · border #797e93 / layout #4b4e69 · accent #0073ea
+ * ────────────────────────────────────────────────────────────────────────── */
+/*
+.dark-app-theme {
+  --color-bg-app: #181b34;
+  --color-bg-surface: #30324e;
+  --color-bg-section: #181b34;
+  --color-bg-hover: rgba(103, 104, 121, 0.3);
+  --color-bg-emphasis: #434660;
+  --color-border-subtle: #4b4e69;
+  --color-border-default: #4b4e69;
+  --color-border-strong: #797e93;
+  --color-text-primary: #d5d8df;
+  --color-text-secondary: #9699a6;
+  --color-text-muted: #9699a6;
+  --color-text-subtle: #797e93;
+  --color-text-header: #d5d8df;
+}
+.black-app-theme {
+  --color-bg-app: #111111;
+  --color-bg-surface: #2c2c2c;
+  --color-bg-section: #111111;
+  --color-bg-hover: rgba(103, 104, 121, 0.3);
+  --color-bg-emphasis: #4d4d4d;
+  --color-border-subtle: #636363;
+  --color-border-default: #636363;
+  --color-border-strong: #8d8d8d;
+  --color-text-primary: #eeeeee;
+  --color-text-secondary: #aaaaaa;
+  --color-text-muted: #aaaaaa;
+  --color-text-subtle: #8d8d8d;
+  --color-text-header: #eeeeee;
+}
+*/

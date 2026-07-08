@@ -1,0 +1,66 @@
+/**
+ * Subscription Store
+ * Manages trigger subscriptions (webhookUrl + inputFields).
+ *
+ * Uses in-memory Map by default. Replace with Monday Code storage
+ * or a database for production persistence.
+ */
+
+import logger from '../services/logger/index.js';
+
+const TAG = 'subscription_store';
+
+/** @type {Map<string, Object>} In-memory subscription storage */
+const subscriptions = new Map();
+
+/**
+ * Saves a trigger subscription.
+ * @param {string|number} id - Subscription/webhook ID
+ * @param {Object} data - Subscription data (webhookUrl, inputFields, recipeId, integrationId)
+ */
+export function saveSubscription(id, data) {
+  const key = String(id);
+  subscriptions.set(key, data);
+  logger.info('Subscription saved', TAG, { id: key, webhookUrl: data.webhookUrl });
+}
+
+/**
+ * Gets a trigger subscription.
+ * @param {string|number} id - Subscription/webhook ID
+ * @returns {Object|null} Subscription data or null
+ */
+export function getSubscription(id) {
+  const key = String(id);
+  const sub = subscriptions.get(key) || null;
+  if (!sub) {
+    logger.warn('Subscription not found', TAG, { id: key });
+  }
+  return sub;
+}
+
+/**
+ * Deletes a trigger subscription.
+ * @param {string|number} id - Subscription/webhook ID
+ * @returns {boolean} Whether the subscription was found and deleted
+ */
+export function deleteSubscription(id) {
+  const key = String(id);
+  const existed = subscriptions.delete(key);
+  logger.info('Subscription deleted', TAG, { id: key, existed });
+  return existed;
+}
+
+/**
+ * Gets all active subscriptions.
+ * @returns {Array<{id: string, data: Object}>}
+ */
+export function getAllSubscriptions() {
+  return Array.from(subscriptions.entries()).map(([id, data]) => ({ id, data }));
+}
+
+export default {
+  saveSubscription,
+  getSubscription,
+  deleteSubscription,
+  getAllSubscriptions,
+};

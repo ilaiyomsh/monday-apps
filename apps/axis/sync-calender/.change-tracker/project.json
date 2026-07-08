@@ -1,0 +1,5 @@
+{
+  "app": "sync-calender",
+  "description": "One-way sync from Google Calendar to monday.com board, hosted on monday code. connect to Tracker app, provide events fron user calender to timelogging system",
+  "path": "/Users/ilaish/monday_app/apps/Axis/sync-calender"
+}

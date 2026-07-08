@@ -1,0 +1,200 @@
+/* Prevent 300ms double-tap zoom delay */
+* { touch-action: manipulation; }
+
+/* Intentional tap highlight */
+button, a, [role="button"] {
+  -webkit-tap-highlight-color: rgba(0, 115, 234, 0.1); /* var(--color-primary) at 10% */
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.App {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* Header עם כפתור הגדרות */
+.app-header {
+  background-color: var(--color-bg-tertiary);
+  border-bottom: 1px solid var(--color-divider);
+  padding: var(--spacing-md) var(--spacing-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.header-container h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+/* עיגול אדום אינדיקטור */
+.settings-icon-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.red-circle-indicator {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 12px;
+  height: 12px;
+  background-color: var(--color-alert);
+  border: 2px solid var(--color-text-inverse);
+  border-radius: 50%;
+}
+
+/* דיאלוג הגדרות */
+.settings-dialog {
+  min-width: 300px;
+  padding: var(--spacing-xl);
+}
+
+.settings-dialog label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: var(--spacing-xl);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.settings-dialog input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.settings-dialog-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+/* Main content */
+.app-main {
+  flex: 1;
+  overflow: auto;
+  padding: 0 16px;
+}
+
+@media (max-width: 768px) {
+  .app-main {
+    padding: 0;
+    overflow-x: hidden;
+  }
+  /* מנע גלילה אופקית גם ברמת ה-root */
+  html, body, #root {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+  /* גם ה-root של היומן עצמו — מנע אירועים/אלמנטים מ-rbc לחרוג מעבר לרוחב */
+  .gcCalendarRoot {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+  /* כל אלמנט פנימי ב-rbc time-view שעלול לחשב width שלילי/חורג */
+  .gcCalendarRoot .rbc-time-view,
+  .gcCalendarRoot .rbc-time-content,
+  .gcCalendarRoot .rbc-day-slot {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+}
+
+/* אנימציית הסוויפ עכשיו real-time finger-following דרך JS — אין צורך ב-keyframes */
+
+/* "Peek" label של היום הסמוך — מופיע בצד במהלך סוויפ עם fade-in */
+.gc-swipe-peek {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-lg) var(--spacing-xl);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: var(--radius-modal);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+  color: var(--color-text-on-dark);
+  will-change: opacity;
+}
+
+.gc-peek-day {
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  color: var(--gc-text-secondary);
+  line-height: 1;
+}
+
+.gc-peek-num {
+  font-size: 36px;
+  font-weight: var(--font-weight-regular);
+  line-height: 1;
+  color: var(--gc-primary);
+}
+
+/* drag-create preview של rbc — עיצוב Google-like (כחול שקוף עם טווח שעות).
+   חל בכל גדלי המסך; מחליף את ברירת המחדל האפורה של react-big-calendar. */
+.rbc-slot-selection {
+  background-color: rgba(26, 115, 232, 0.18) !important; /* var(--gc-primary) at 18% */
+  border: none !important;
+  box-shadow: inset 0 0 0 2px var(--gc-primary) !important;
+  border-radius: var(--radius-input);
+  color: var(--gc-primary) !important;
+  font-size: 13px;
+  font-weight: var(--font-weight-semibold);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  box-sizing: border-box;
+  width: auto !important;
+  left: 6px !important;
+  right: 6px !important;
+}
+.rbc-slot-selection > span {
+  display: block;
+  line-height: 1.2;
+}
+
+/* מניעת pull-to-refresh ו-double-tap zoom במובייל */
+@media (max-width: 768px) {
+  html, body {
+    overscroll-behavior-y: contain;
+  }
+  .rbc-toolbar-mobile button,
+  .rbc-toolbar-mobile .rbc-month-label {
+    touch-action: manipulation;
+  }
+}

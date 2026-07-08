@@ -1,0 +1,45 @@
+.root {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.card {
+  max-width: 520px;
+  width: 100%;
+  padding: 32px;
+  border-radius: 12px;
+  background: var(--primary-background-color);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  text-align: center;
+}
+
+.section {
+  width: 100%;
+}
+
+.actions {
+  margin-top: 8px;
+}
+
+.error {
+  color: var(--negative-color, #d83a52);
+}
+
+.barTrack {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--ui-background-color, #e6e9ef);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--primary-color, #0073ea);
+  transition: width 0.25s ease;
+}
