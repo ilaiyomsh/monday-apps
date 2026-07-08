@@ -24,7 +24,8 @@
  */
 
 // Stable list of the board roles the app maps.
-export const BOARD_KEYS = ['discussions', 'tasks', 'topics'];
+// `decisions` (לוח החלטות) is mapped MANUALLY in Settings (not wizard-created).
+export const BOARD_KEYS = ['discussions', 'tasks', 'topics', 'decisions'];
 
 // App-level preferences (not board/column mapping) — persisted under
 // `settings.preferences` in monday.storage. The "Previous tasks" tab can resolve
@@ -198,6 +199,14 @@ export const CAPABILITY_DEFAULTS = {
   editTaskAssignee: 'creatorLeadOwner',
   editTaskName: 'creatorLeadOwner',
   deleteTask: 'creatorLeadOwner',
+  // ---- decision tier ----
+  createDecision: 'creatorLeadOwner',
+  editDecisionStatus: 'creatorLeadOwner',
+  editDecisionPriority: 'creatorLeadOwner',
+  editDecisionDate: 'creatorLeadOwner',
+  editDecisionAffected: 'creatorLeadOwner',
+  editDecisionName: 'creatorLeadOwner',
+  deleteDecision: 'creatorLeadOwner',
   // ---- system tier (global) ----
   createDiscussion: 'all',
   reorderColumns: 'owner',
@@ -227,6 +236,8 @@ export const CAPABILITIES = [
   { id: 'editResponses', tier: 'disc', group: 'topics', label: 'עריכת התייחסויות' },
   // discussion-scoped "משימות" card (creating a task lives in the discussion)
   { id: 'createTask', tier: 'disc', group: 'tasks', label: 'יצירת משימה בדיון' },
+  // discussion-scoped "החלטות" card (creating a decision lives in the discussion)
+  { id: 'createDecision', tier: 'disc', group: 'decisions', label: 'יצירת החלטה בדיון' },
   // ---- task tier (one "שדות משימה" card; delete is a row) ----
   { id: 'editTaskStatus', tier: 'task', group: 'taskFields', label: 'עריכת סטאטוס' },
   { id: 'editTaskPriority', tier: 'task', group: 'taskFields', label: 'עריכת עדיפות' },
@@ -234,6 +245,13 @@ export const CAPABILITIES = [
   { id: 'editTaskAssignee', tier: 'task', group: 'taskFields', label: 'עריכת אחריות' },
   { id: 'editTaskName', tier: 'task', group: 'taskFields', label: 'עריכת שם משימה' },
   { id: 'deleteTask', tier: 'task', group: 'taskFields', label: 'מחיקת משימה' },
+  // ---- decision tier (one "שדות החלטה" card; delete is a row) ----
+  { id: 'editDecisionStatus', tier: 'decision', group: 'decisionFields', label: 'עריכת סטאטוס' },
+  { id: 'editDecisionPriority', tier: 'decision', group: 'decisionFields', label: 'עריכת עדיפות' },
+  { id: 'editDecisionDate', tier: 'decision', group: 'decisionFields', label: 'עריכת תאריך' },
+  { id: 'editDecisionAffected', tier: 'decision', group: 'decisionFields', label: 'עריכת מושפעים' },
+  { id: 'editDecisionName', tier: 'decision', group: 'decisionFields', label: 'עריכת נוסח החלטה' },
+  { id: 'deleteDecision', tier: 'decision', group: 'decisionFields', label: 'מחיקת החלטה' },
   // ---- system tier (global) ----
   { id: 'createDiscussion', tier: 'system', group: 'system', label: 'יצירת דיון' },
   { id: 'reorderColumns', tier: 'system', group: 'system', label: 'סידור עמודות' },
@@ -252,6 +270,7 @@ export const CAPABILITIES = [
 export const PERMISSION_ROLE_SOURCES = {
   discussions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID', 'participantsID'],
   tasks: ['taskCreatorID', 'responsibilityID'],
+  decisions: ['decisionCreatorID', 'deciderID'],
 };
 
 /*
@@ -280,6 +299,7 @@ export const DEFAULT_PERMISSION_SEED = {
       editSummary: true,
       exportDocs: true,
       createTask: true,
+      createDecision: true,
       addTopicOrPoint: true,
       editTopicOrPoint: true,
       deleteTopicOrPoint: true,
@@ -295,6 +315,7 @@ export const DEFAULT_PERMISSION_SEED = {
       editSummary: true,
       exportDocs: true,
       createTask: true,
+      createDecision: true,
       addTopicOrPoint: true,
       editTopicOrPoint: true,
       deleteTopicOrPoint: true,
@@ -310,6 +331,7 @@ export const DEFAULT_PERMISSION_SEED = {
       editSummary: true,
       exportDocs: true,
       createTask: true,
+      createDecision: true,
       addTopicOrPoint: true,
       editTopicOrPoint: true,
       deleteTopicOrPoint: true,
@@ -317,8 +339,9 @@ export const DEFAULT_PERMISSION_SEED = {
       editResponses: true,
     },
   },
-  // participants → view + export + createTask + addTopicOrPoint + checkPoint +
-  // editResponses ; NOT editDiscussionFields/editSummary/editTopicOrPoint/deleteTopicOrPoint
+  // participants → view + export + createTask + createDecision + addTopicOrPoint +
+  // checkPoint + editResponses ; NOT editDiscussionFields/editSummary/
+  // editTopicOrPoint/deleteTopicOrPoint (createDecision mirrors createTask per role)
   'discussions:participantsID': {
     capabilities: {
       viewDiscussion: true,
@@ -326,6 +349,7 @@ export const DEFAULT_PERMISSION_SEED = {
       editSummary: false,
       exportDocs: true,
       createTask: true,
+      createDecision: true,
       addTopicOrPoint: true,
       editTopicOrPoint: false,
       deleteTopicOrPoint: false,
@@ -355,6 +379,28 @@ export const DEFAULT_PERMISSION_SEED = {
       deleteTask: false,
     },
   },
+  // decision creator → ALL decision caps true (incl. deleteDecision)
+  'decisions:decisionCreatorID': {
+    capabilities: {
+      editDecisionStatus: true,
+      editDecisionPriority: true,
+      editDecisionDate: true,
+      editDecisionAffected: true,
+      editDecisionName: true,
+      deleteDecision: true,
+    },
+  },
+  // decider (מחליט) → edit everything ; NOT delete
+  'decisions:deciderID': {
+    capabilities: {
+      editDecisionStatus: true,
+      editDecisionPriority: true,
+      editDecisionDate: true,
+      editDecisionAffected: true,
+      editDecisionName: true,
+      deleteDecision: false,
+    },
+  },
 };
 
 // Maps the SDK class name used in the exported code -> a board key above.
@@ -362,6 +408,7 @@ export const BOARD_CLASS_TO_KEY = {
   'דיונים1Board': 'discussions',
   'משימות1Board': 'tasks',
   'נושאיםלדיון1Board': 'topics',
+  'החלטות1Board': 'decisions',
 };
 
 // alias -> { type: <monday column TYPE>, title } — NO monday ids.
@@ -392,6 +439,10 @@ export const COLUMN_SCHEMA = {
     // typeColors), NOT on the column, since dropdown labels have no color.
     discussionTypeID: { type: 'dropdown', title: 'סוג' },
     previousDiscussionID: { type: 'board_relation', title: 'דיון קודם' },
+    // Two-way pair with the decisions board's discussionLinkID — decisions are
+    // READ from the discussion side via this relation's linked_items (a
+    // board_relation can't be server-filtered by item id).
+    decisionsBoardLinkID: { type: 'board_relation', title: 'לוח החלטות' },
     // ---- read-only display / chart fields ----
     totalTasksID: { type: 'formula', title: 'סך משימות' },
     completionPctID: { type: 'formula', title: 'ביצוע %' },
@@ -456,6 +507,26 @@ export const COLUMN_SCHEMA = {
     // read/write time in useTopics/templates/docxExport.)
     topicNotForDiscussionID: { type: 'checkbox', title: 'האם להציג (נושא)' },
     pointNotForDiscussionID: { type: 'checkbox', title: 'האם להציג (נקודה)', subitems: true },
+    // Per-POINT board_relation links to the decisions/tasks created from that
+    // point — columns on the SUBITEMS board. create_item IGNORES board_relation
+    // values, so these are written AFTER creation via change_multiple_column_values
+    // on the subitems board (same path as pointCheckedID), APPENDING to the
+    // existing linked ids. Per-point counters/popup read them back.
+    pointDecisionsLinkID: { type: 'board_relation', title: 'החלטות (נקודה)', subitems: true },
+    pointTasksLinkID: { type: 'board_relation', title: 'משימות (נקודה)', subitems: true },
+  },
+
+  // לוח החלטות — mapped MANUALLY in Settings (NOT wizard-created). The item
+  // NAME is the decision text itself; discussionLinkID is the two-way pair of
+  // the discussions board's decisionsBoardLinkID.
+  decisions: {
+    decisionCreatorID: { type: 'people', title: 'יוצר החלטה' },
+    deciderID: { type: 'people', title: 'מחליט' },
+    affectedID: { type: 'people', title: 'מושפעים' },
+    decisionStatusID: { type: 'status', title: 'סטאטוס החלטה' },
+    decisionPriorityID: { type: 'status', title: 'עדיפות' },
+    decisionDateID: { type: 'date', title: 'תאריך' },
+    discussionLinkID: { type: 'board_relation', title: 'דיון' },
   },
 };
 
@@ -508,6 +579,8 @@ export const ALIAS_MIGRATIONS = {
     topicNotForDiscussion: 'topicNotForDiscussionID',
     pointNotForDiscussion: 'pointNotForDiscussionID',
   },
+  // New board (2026-07) — no legacy aliases to migrate.
+  decisions: {},
 };
 
 /*

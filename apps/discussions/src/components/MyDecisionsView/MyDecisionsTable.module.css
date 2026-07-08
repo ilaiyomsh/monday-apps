@@ -1,0 +1,86 @@
+/* monday board-style table for the "ההחלטות שלי" view. Structurally mirrors
+   MyTasksTable.module.css (frozen first column, shared board scroll, open right
+   edge) with the decisions PURPLE accent (--group-color falls back to
+   --decisions-accent #6b4ee6, set inline by MyDecisionsTable).
+   Own-module copies throughout — cross-module bare-class selectors break in the
+   scoped production build. */
+
+.taskTableScroll {
+  /* The shared board (.board in MyDecisionsView) owns the single horizontal
+     scroll; this is a full-width pass-through (no overflow/border/radius). */
+  width: 100%;
+}
+
+.taskTable {
+  /* Fixed-px (draggable) columns hug their summed width; min-width:100% keeps
+     the grid filling the board so row separators run edge-to-edge. Bounded +
+     rounded on the LEFT, OPEN on the right (the "infinite" monday look). */
+  width: max-content;
+  min-width: 100%;
+  background: #ffffff;
+  border: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-inline-end: none;
+  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
+  font-family: var(--font-family);
+}
+
+/* Shared grid template — header + body rows stay aligned (template set inline). */
+.taskRow {
+  display: grid;
+  align-items: stretch;
+  min-height: 36px;
+  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  position: relative;
+}
+/* Last row sits on the table's own bottom border. */
+.taskRow:last-child {
+  border-bottom: none;
+}
+
+.taskHead {
+  background: #ffffff;
+  color: var(--primary-text-color, #323338);
+  font-weight: 400;
+  font-size: 14px;
+}
+.taskHead .taskCell {
+  cursor: default;
+}
+.taskHead .nameHead {
+  justify-content: center;
+  text-align: center;
+}
+
+.taskCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  min-height: 36px;
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  overflow: hidden;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+}
+
+/* The decision-text column is FROZEN: pinned left while the row scrolls under
+   the shared board scroll. The group color strip (purple by default) is an
+   inset box-shadow so it travels with the frozen column. */
+.taskFirst {
+  justify-content: flex-start;
+  padding-inline-start: 14px; /* clear the 6px colored strip */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  /* MUST be opaque so horizontally-scrolled cells can't show through. */
+  background: #ffffff;
+  box-shadow: inset 6px 0 0 var(--group-color, var(--decisions-accent, #6b4ee6));
+}
+.taskHead .taskFirst {
+  z-index: 3;
+}
+
+/* Round the color strip at the table's rounded-left corners (inset shadows
+   follow border-radius). */
+.taskHead .taskFirst { border-start-start-radius: var(--border-radius-medium, 8px); }
+.taskRow:last-child .taskFirst { border-end-start-radius: var(--border-radius-medium, 8px); }

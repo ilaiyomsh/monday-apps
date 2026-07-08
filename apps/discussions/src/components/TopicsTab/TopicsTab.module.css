@@ -398,23 +398,24 @@
   pointer-events: auto;
 }
 
-/* Column header row for a topic's points. Uses the SAME grid as the point rows
-   (ROW_STYLE inline sets grid-template-columns) so each label sits directly above
-   its column — mirrors the MyTasks table pattern where the header reuses the row
-   grid. Plain text labels, no cell fill / no color strip; a thin bottom rule is
-   the only separator. Without `display: grid` the labels collapse into an inline
+/* Column header row for a topic's points. Uses the SAME FIXED grid as the point
+   rows (rowStyle inline sets grid-template-columns) so each label sits directly
+   above its column:
+     [accent 28px] | (empty name header) | נידונה | החלטות | משימות
+   Plain text labels, no cell fill / no color strip; a thin bottom rule is the
+   only separator. Without `display: grid` the labels collapse into an inline
    run jammed at the RTL edge. */
 .colHead {
   display: grid;
   align-items: stretch;
-  min-height: 36px;
+  min-height: 38px;
   border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
 }
 .colHeadCell {
   display: flex;
   align-items: center;
   padding: 0 10px;
-  min-height: 36px;
+  min-height: 38px;
   font-size: 13px;
   font-weight: 400;
   color: var(--primary-text-color, #323338);

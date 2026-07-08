@@ -21,30 +21,19 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTopics } from '@generated/hooks/useTopics';
-import { useColumnOrder } from '@generated/hooks/useColumnOrder.js';
-import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
-import { useViewport } from '@generated/hooks/useViewport.js';
-import { ResizeHandle } from '@generated/components/ResizeHandle';
-import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
-import { TOPICS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
+import { PointItemsPopup } from '@generated/components/PointItemsPopup';
 import styles from './TopicsTab.module.css';
 
 const NEUTRAL = 'hsl(var(--status-default))';
 
-// One grid template shared by every topic's column header + point rows so they
-// always line up (mirrors the My Tasks table pattern of one rowStyle for both):
-//   [kebab/grip] | נקודה לדיון | נידונה | avatar
-// Desktop widths are draggable + persisted per instance (useColumnWidths, ONE
-// 'topics' setting for all topic groups); the order of the נידונה/avatar columns
-// is drag-reorderable (useColumnOrder — lead + name stay pinned first). Mobile
-// falls back to the original compact flexible template.
-const TOPIC_COLUMN_KEYS = ['lead', 'name', 'check', 'avatar'];
-const TOPIC_PINNED = ['lead', 'name'];
-const MOBILE_TRACK = { lead: '40px', name: 'minmax(140px, 1fr)', check: '56px', avatar: '44px' };
-// Ghost labels for the header drag overlay.
-const COL_LABEL = { check: 'נידונה', avatar: 'יוצר' };
+// FIXED grid template shared by every topic's column header + point rows so they
+// always line up (decisions redesign — per the approved mockup):
+//   [accent bar 28px] | נקודה לדיון (flex) | נידונה 66px | החלטות 168px | משימות 168px
+// (Replaces the previous drag-reorderable/resizable topics column system; the
+// kebab + drag grip moved into the name cell, hover-revealed.)
+const ROW_TEMPLATE = '28px minmax(180px, 1fr) 66px 168px 168px';
 
 // Per-topic priority box — identical look to the status column: FIXED width,
 // centered label, white text on the status color (label text + colors come from
@@ -135,24 +124,25 @@ function topicColorStartIndex(id, seed = 0) {
   return (h + seed) % TOPIC_COLOR_COUNT;
 }
 
-/* One topic = a GROUP: a sortable header band (accent color, collapse caret, drag
-   grip, name, creator avatar, discussed count, optional priority, hover kebab) +
-   a column header row + the topic's point rows as a table. */
+/* One topic = a GROUP (mockup structure): a header row (hover kebab, collapse
+   chevron, drag grip, accent-colored name, "discussed/total" chip, spacer,
+   priority pill) + a fixed column-header row + the topic's point rows as a
+   table + the add-point row. */
 function SortableTopicSection({
-  topic, accent, open, onToggleOpen, usersById, responsesMapped,
+  topic, accent, open, onToggleOpen, usersById,
   renameTopic,
-  deleteTopic, addPoint, togglePoint, updatePointResponses,
+  deleteTopic, addPoint, togglePoint,
   togglePointNotForDiscussion, toggleTopicNotForDiscussion,
   renamePoint, deletePoint, reorderPoints,
-  // Column layout — computed ONCE in TopicsTab (shared by all sections):
-  // ordered keys, the grid template, and the owner-only resize/reorder actions.
-  colOrder, rowStyle, canReorderCols = false, canResizeCols = false,
-  startColResize, reorderCols,
+  // Shared fixed grid template (same object for header + rows).
+  rowStyle,
   // Granular discussion-tier caps (each equals the legacy canEdit while the
   // feature is off). add → add topic/point; edit → rename/priority/drag-reorder;
-  // del → delete/hide; check → "נידונה" toggle; responses → התייחסויות text.
-  canAdd = true, canEditTopic = true, canDelete = true, canCheck = true, canEditResponses = true,
+  // del → delete/hide; check → "נידונה" toggle.
+  canAdd = true, canEditTopic = true, canDelete = true, canCheck = true,
   priorityMapped = false, priorityOptions, priorityLabelById, priorityColorById, updateTopicPriority,
+  // Decisions/tasks-from-point wiring (threaded from TopicsTab).
+  onCreatePointDecision, onCreatePointTask, onOpenPointItems,
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(topic.id) });
   const accentTri = `var(${accent})`;
@@ -176,6 +166,10 @@ function SortableTopicSection({
   const forDiscussion = points.filter((p) => p.notForDiscussion !== true);
   const discussedCount = forDiscussion.filter((p) => p.discussed === true).length;
   const total = forDiscussion.length;
+
+  // Pill visibility (mockup): shown when the topic HAS a priority label; kept
+  // visible (grey "עדיפות" placeholder) for editors so they can still set one.
+  const hasPriorityLabel = topic.priority != null && priorityLabelById?.[topic.priority] != null;
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const handlePointDragEnd = ({ active, over }) => {
@@ -265,8 +259,7 @@ function SortableTopicSection({
           </span>
         )}
 
-        {/* count badge sits right after the title; the creator avatar follows it
-            (swapped from the previous title→avatar→count order). */}
+        {/* "discussed/total" chip sits right after the title (mockup). */}
         <span className={styles.count} title="נדונו מתוך סך הנקודות לדיון (ללא מוסתרות)">
           {discussedCount}/{total}
         </span>
@@ -278,7 +271,7 @@ function SortableTopicSection({
 
         <span className={styles.headerSpacer} />
 
-        {priorityMapped && (
+        {priorityMapped && (hasPriorityLabel || canEditTopic) && (
           <PriorityPill
             value={topic.priority}
             options={priorityOptions}
@@ -292,46 +285,13 @@ function SortableTopicSection({
 
       {effectiveOpen && (
         <div className={styles.sectionBody}>
-          {/* column header — cells follow the shared column ORDER; owners get a
-              resize handle per column + drag-reorder on the movable ones. */}
+          {/* FIXED column header — same grid template as the point rows. */}
           <div className={styles.colHead} style={rowStyle}>
-            <ColumnHeaderDnd
-              enabled={canReorderCols}
-              ids={colOrder.filter((k) => !TOPIC_PINNED.includes(k))}
-              labels={COL_LABEL}
-              onReorder={reorderCols}
-            >
-              {colOrder.map((key) => {
-                if (key === 'lead') return <span key="lead" className={styles.colHeadLead} />;
-                const handle = canResizeCols
-                  ? <ResizeHandle onMouseDown={(e) => startColResize(key, e)} />
-                  : null;
-                if (key === 'name') {
-                  return (
-                    <span key="name" className={styles.colHeadCell} style={canResizeCols ? { position: 'relative' } : undefined}>
-                      {handle}
-                    </span>
-                  );
-                }
-                const center = key === 'check' ? ` ${styles.colHeadCenter}` : '';
-                const label = key === 'check' ? '#' : '';
-                const inner = (<>{label}{handle}</>);
-                return canReorderCols ? (
-                  <SortableHeaderCell key={key} id={key} className={`${styles.colHeadCell}${center}`}>
-                    {inner}
-                  </SortableHeaderCell>
-                ) : (
-                  <span
-                    key={key}
-                    className={`${styles.colHeadCell}${center}`}
-                    style={canResizeCols ? { position: 'relative' } : undefined}
-                    title={key === 'check' ? 'נידונה' : undefined}
-                  >
-                    {inner}
-                  </span>
-                );
-              })}
-            </ColumnHeaderDnd>
+            <span className={styles.colHeadLead} aria-hidden="true" />
+            <span className={styles.colHeadCell} />
+            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`}>נידונה</span>
+            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`}>החלטות</span>
+            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`}>משימות</span>
           </div>
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handlePointDragEnd}>
@@ -340,19 +300,22 @@ function SortableTopicSection({
                 <TopicPointRow
                   key={point.id}
                   point={point}
-                  usersById={usersById}
                   rowStyle={rowStyle}
-                  columns={colOrder}
-                  responsesMapped={responsesMapped}
                   onToggle={togglePoint}
-                  onUpdateResponses={updatePointResponses}
                   onToggleNotForDiscussion={togglePointNotForDiscussion}
                   onRename={renamePoint}
                   onDelete={deletePoint}
                   canEditPoint={canEditTopic}
                   canDelete={canDelete}
                   canCheck={canCheck}
-                  canEditResponses={canEditResponses}
+                  decisionCount={(point.decisionIds || []).length}
+                  taskCount={(point.taskIds || []).length}
+                  // Stamp the parent topic id onto the scoped point — the
+                  // quick-create task flow links the new task to the topic too.
+                  onCreateDecision={onCreatePointDecision ? () => onCreatePointDecision({ ...point, topicId: topic.id }) : undefined}
+                  onCreateTask={onCreatePointTask ? () => onCreatePointTask({ ...point, topicId: topic.id }) : undefined}
+                  onOpenDecisions={(p) => onOpenPointItems('decision', p)}
+                  onOpenTasks={(p) => onOpenPointItems('task', p)}
                 />
               ))}
             </SortableContext>
@@ -412,30 +375,77 @@ export function TopicsTab({
   // permissions feature is off, so behavior is unchanged; Phase 3 lets a role
   // grant some and not others.
   addTopicOrPoint = true, editTopicOrPoint = true, deleteTopicOrPoint = true,
-  checkPoint = true, editResponses = true,
-  // System-tier: column drag-reorder + width resize (owners/admins, from
-  // `can('reorderColumns')` in DiscussionCard — same gate as the task tables).
-  canReorderColumns = false,
+  checkPoint = true, editResponses = true, // editResponses kept for prop compat (התייחסויות column removed from display)
+  // Kept for prop compat — the topics table now uses a FIXED column layout, so
+  // column drag-reorder/resize no longer applies here.
+  canReorderColumns = false, // eslint-disable-line no-unused-vars
+  // Decisions redesign wiring (per the approved mockup):
+  //   onCreateFromPoint(kind, point) — kind: 'decision' | 'task'; opens the
+  //     parent's quick-create flow scoped to the point. The dashed "+" buttons
+  //     render only when this is provided (parent gates by capability).
+  //   decisionsItems / tasksItems — the discussion's ALREADY-LOADED decision /
+  //     task lists (from useDecisions / useTasks in DiscussionCard); the counter
+  //     popup resolves linked ids against them — NO new queries here.
+  onCreateFromPoint,
+  decisionsItems = [], tasksItems = [],
 }) {
   const {
-    items, loading, addTopic, addPoint, togglePoint, updatePointResponses, refetch,
+    items, loading, addTopic, addPoint, togglePoint, refetch,
     togglePointNotForDiscussion, toggleTopicNotForDiscussion, updateTopicPriority,
     renameTopic, deleteTopic, renamePoint, deletePoint, reorderTopics, reorderPoints,
   } = useTopics(discussion.id, { onSuccess: onNotify, onLoading: onNotifyLoading, onDismiss: onDismissToast });
 
   const priorityMapped = !!getColumns('topics')?.topicPriorityID?.id;
-  const responsesMapped = !!getColumns('topics')?.pointResponsesID?.id;
   const priorityOpts = useStatusOptions('topics', 'topicPriorityID');
 
-  // Column layout — ONE persisted order + width set ('topics') shared by every
-  // topic group. lead (kebab/grip) + name stay pinned; נידונה/avatar are movable.
-  const { isMobile } = useViewport();
-  const { order: colOrder, reorder: reorderCols } = useColumnOrder('topics', TOPIC_COLUMN_KEYS, TOPIC_PINNED);
-  const colDefs = colOrder.map((k) => (k === 'lead' ? { key: 'lead', fixed: 40 } : { key: k, ...W[k] }));
-  const { gridTemplate, startResize } = useColumnWidths('topics', colDefs);
-  const mobileTemplate = colOrder.map((k) => MOBILE_TRACK[k]).filter(Boolean).join(' ');
-  const rowStyle = { gridTemplateColumns: isMobile ? mobileTemplate : gridTemplate };
-  const canReorderCols = canReorderColumns && !isMobile;
+  // Shared fixed grid template for the column header + all point rows.
+  const rowStyle = useMemo(() => ({ gridTemplateColumns: ROW_TEMPLATE }), []);
+
+  // Counter popup state — { kind: 'decision'|'task', point } | null.
+  const [popup, setPopup] = useState(null);
+
+  // Resolve the popup's point against the LIVE items (a silent refetch replaces
+  // the point objects, and the linked ids must stay fresh while the popup is open).
+  const livePopupPoint = useMemo(() => {
+    if (!popup?.point) return null;
+    const sid = String(popup.point.id);
+    for (const t of items) {
+      for (const s of (t._subitems || [])) {
+        if (String(s.id) === sid) return s;
+      }
+    }
+    return popup.point;
+  }, [popup, items]);
+
+  // Popup rows = the point's linked ids matched against the discussion's
+  // already-loaded decisions/tasks lists (props) — no new queries.
+  const popupItems = useMemo(() => {
+    if (!popup || !livePopupPoint) return [];
+    const ids = popup.kind === 'decision'
+      ? (livePopupPoint.decisionIds || [])
+      : (livePopupPoint.taskIds || []);
+    const source = popup.kind === 'decision' ? (decisionsItems || []) : (tasksItems || []);
+    const byId = new Map(source.map((x) => [String(x.id), x]));
+    return ids.map((id) => byId.get(String(id))).filter(Boolean);
+  }, [popup, livePopupPoint, decisionsItems, tasksItems]);
+
+  // Refresh mechanism for the per-point link counters: when the parent's
+  // decisions/tasks lists change (a create-from-point completed and the parent
+  // refreshed its list), silently re-read the topics so the subitems' linked ids
+  // (pointDecisionsLinkID / pointTasksLinkID) pick up the new link. Optimistic
+  // temp ids are excluded so we only react to REAL board changes.
+  const linkFingerprintRef = useRef(null);
+  useEffect(() => {
+    const fingerprint = [
+      ...(decisionsItems || []).map((d) => String(d.id)),
+      '|',
+      ...(tasksItems || []).map((t) => String(t.id)),
+    ].filter((id) => !id.startsWith('temp-')).join(',');
+    if (linkFingerprintRef.current === null) { linkFingerprintRef.current = fingerprint; return; }
+    if (linkFingerprintRef.current === fingerprint) return;
+    linkFingerprintRef.current = fingerprint;
+    refetch({ showLoader: false });
+  }, [decisionsItems, tasksItems, refetch]);
 
   // Resolve every creator (topics + points) to a user object for the avatars.
   const creatorIds = useMemo(() => {
@@ -514,6 +524,16 @@ export function TopicsTab({
     reorderTopics(arrayMove(ids, oldIndex, newIndex));
   };
 
+  // Create-from-point callbacks — rendered only when the parent provided the
+  // handler (the parent gates by the createDecision/createTask capabilities).
+  const onCreatePointDecision = typeof onCreateFromPoint === 'function'
+    ? (point) => onCreateFromPoint('decision', point)
+    : undefined;
+  const onCreatePointTask = typeof onCreateFromPoint === 'function'
+    ? (point) => onCreateFromPoint('task', point)
+    : undefined;
+  const onOpenPointItems = (kind, point) => setPopup({ kind, point });
+
   if (loading) {
     return (
       <div className={styles.loading}>
@@ -574,33 +594,28 @@ export function TopicsTab({
               open={isOpen(topic.id)}
               onToggleOpen={() => setCollapsed((p) => ({ ...p, [topic.id]: !p[topic.id] }))}
               usersById={usersById}
-              responsesMapped={responsesMapped}
               renameTopic={renameTopic}
               deleteTopic={deleteTopic}
               addPoint={addPoint}
               togglePoint={togglePoint}
-              updatePointResponses={updatePointResponses}
               togglePointNotForDiscussion={togglePointNotForDiscussion}
               toggleTopicNotForDiscussion={toggleTopicNotForDiscussion}
               renamePoint={renamePoint}
               deletePoint={deletePoint}
               reorderPoints={reorderPoints}
-              colOrder={colOrder}
               rowStyle={rowStyle}
-              canReorderCols={canReorderCols}
-              canResizeCols={canReorderCols}
-              startColResize={startResize}
-              reorderCols={reorderCols}
               canAdd={addTopicOrPoint}
               canEditTopic={editTopicOrPoint}
               canDelete={deleteTopicOrPoint}
               canCheck={checkPoint}
-              canEditResponses={editResponses}
               priorityMapped={priorityMapped}
               priorityOptions={priorityOpts.options}
               priorityLabelById={priorityOpts.labelById}
               priorityColorById={priorityOpts.colorById}
               updateTopicPriority={updateTopicPriority}
+              onCreatePointDecision={onCreatePointDecision}
+              onCreatePointTask={onCreatePointTask}
+              onOpenPointItems={onOpenPointItems}
             />
           ))}
         </SortableContext>
@@ -609,6 +624,14 @@ export function TopicsTab({
       {items.length === 0 && !addingTopic && (
         <div className={styles.empty}>אין נושאים לדיון זה</div>
       )}
+
+      <PointItemsPopup
+        open={!!popup}
+        kind={popup?.kind || 'decision'}
+        point={livePopupPoint}
+        items={popupItems}
+        onClose={() => setPopup(null)}
+      />
     </div>
   );
 }

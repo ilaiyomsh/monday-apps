@@ -5,7 +5,7 @@ import { Skeleton, Button, Text, IconButton } from '@vibe/core';
 import { Calendar, Search, Settings } from '@vibe/icons';
 import { Copy, FileDown, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
-import { MONTHS_HE } from '@generated/utils/dateTime.js';
+import { MONTHS_HE, fmtTimeLabel } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
 import { discussionAccentColor } from '@generated/constants/discussionColors.js';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
@@ -14,18 +14,21 @@ import { usePermission } from '@generated/hooks/usePermission.js';
 import styles from './DiscussionList.module.css';
 
 /* Loading-skeleton bar height. MUST equal the rendered height of a real `.item`
-   row (single 14px line + 8px top/bottom padding ≈ 36px; see .item min-height
-   in DiscussionList.module.css, kept in sync via --list-row-height) so the grey
-   bars don't visibly shrink/jump when the real rows arrive. */
-const ROW_SKELETON_H = 36;
+   row (two lines: 20px name + 2px gap + 16px subtitle + 8px top/bottom padding
+   = 54px; see .item min-height in DiscussionList.module.css) so the grey bars
+   don't visibly shrink/jump when the real rows arrive. */
+const ROW_SKELETON_H = 54;
 
-/* List-row date label: short weekday + "DD/MM" ("יום ב׳ 06/07"). No time,
-   no icon — compact metadata pinned to the row's right. */
+/* List-row subtitle: short weekday + "DD/MM", plus " · HH:MM" when the date
+   column carries a real time part ("יום ב׳ 07/07 · 09:00" — mockup dateLabel).
+   fmtTimeLabel reads the hasTime flag off the ORIGINAL Date, so this must get
+   the item's own discussionDateID object (never a clone). */
 function fmtListDate(d) {
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const weekday = d.toLocaleDateString('he-IL', { weekday: 'short' }); // "יום ב׳"
-  return `${weekday} ${dd}/${mm}`;
+  const time = fmtTimeLabel(d);
+  return time ? `${weekday} ${dd}/${mm} · ${time}` : `${weekday} ${dd}/${mm}`;
 }
 
 /* Custom single-select filter — matches the app's other working dropdowns
@@ -261,7 +264,7 @@ function RowMenu({ item, onEdit, onDuplicate, onExport, onDelete, exporting }) {
 
 export function DiscussionList({
   onSelect, selectedId, onCreateNew, onEdit, onDuplicate, onExport, onDelete,
-  exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, currentUser = null,
+  exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, onOpenMyDecisions, currentUser = null,
   // Calendar view — nav state lives in App so it survives the refreshKey remount.
   viewMode = 'list', onViewModeChange, calendarAnchor, calendarMode, onCalendarNavigate, onCreateAt,
 }) {
@@ -369,14 +372,25 @@ export function DiscussionList({
 
   return (
     <div className={styles.root}>
-      {/* Vibrant header with gradient accent */}
+      {/* Vibrant header with gradient accent (mockup: 4px multi-color bar) */}
       <div className={styles.header}>
-        <div
-          className={styles.gradientBar}
-          style={{ background: 'linear-gradient(to left, hsl(var(--dept-legal)), hsl(var(--dept-hr)), hsl(var(--dept-ceo)), hsl(var(--status-done)))' }}
-        />
+        <div className={styles.gradientBar} />
         <div className={styles.headerInner}>
+          {/* Mockup buttons row: personal-view nav (outline) at inline-start,
+              chrome (gear + view toggle) and the primary "חדש" at inline-end. */}
           <div className={styles.titleRow}>
+            <div className={styles.titleActions}>
+              {onOpenMyDecisions && (
+                <Button kind={"secondary"} size={"small"} onClick={onOpenMyDecisions}>
+                  ההחלטות שלי
+                </Button>
+              )}
+              {onOpenMyTasks && (
+                <Button kind={"secondary"} size={"small"} onClick={onOpenMyTasks}>
+                  המשימות שלי
+                </Button>
+              )}
+            </div>
             <div className={styles.titleActions}>
               {canManageSettings && (
                 <IconButton
@@ -387,13 +401,6 @@ export function DiscussionList({
                   onClick={onOpenSettings}
                 />
               )}
-              {onOpenMyTasks && (
-                <Button kind={"secondary"} size={"small"} onClick={onOpenMyTasks}>
-                  המשימות שלי
-                </Button>
-              )}
-            </div>
-            <div className={styles.titleActions}>
               {onViewModeChange && (
                 <IconButton
                   icon={isCalendar ? List : Calendar}
@@ -419,6 +426,7 @@ export function DiscussionList({
                   type="text"
                   className={styles.search}
                   aria-label="חיפוש דיון"
+                  placeholder="חיפוש דיון"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -441,6 +449,7 @@ export function DiscussionList({
                   type="text"
                   className={styles.search}
                   aria-label="חיפוש דיון"
+                  placeholder="חיפוש דיון"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />

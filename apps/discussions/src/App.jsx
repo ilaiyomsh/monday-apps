@@ -5,6 +5,7 @@ import { DiscussionList } from '@generated/components/DiscussionList';
 import { DiscussionCard } from '@generated/components/DiscussionCard';
 import { CreateDiscussionModal } from '@generated/components/CreateDiscussionModal';
 import { MyTasksView } from '@generated/components/MyTasksView';
+import { MyDecisionsView } from '@generated/components/MyDecisionsView';
 import { useToast } from './hooks/useToast';
 import { useUiErrorSink } from './hooks/useUiErrorSink';
 import { useMondayContext } from './contexts/MondayContext.jsx';
@@ -41,7 +42,8 @@ const APP_VIEW_KEY = 'discussions_app_view';
 
 function readSavedAppView() {
   try {
-    return window.localStorage.getItem(APP_VIEW_KEY) === 'myTasks' ? 'myTasks' : 'discussions';
+    const saved = window.localStorage.getItem(APP_VIEW_KEY);
+    return saved === 'myTasks' || saved === 'myDecisions' ? saved : 'discussions';
   } catch {
     return 'discussions';
   }
@@ -218,6 +220,7 @@ export default function App() {
   const { settings } = useSettings();
   const effectiveView = appView;
   const openMyTasks = useCallback(() => handleAppViewChange('myTasks'), [handleAppViewChange]);
+  const openMyDecisions = useCallback(() => handleAppViewChange('myDecisions'), [handleAppViewChange]);
   const backToDiscussions = useCallback(() => handleAppViewChange('discussions'), [handleAppViewChange]);
 
   const [selectedDiscussion, setSelectedDiscussion] = useState(null);
@@ -561,6 +564,17 @@ export default function App() {
     );
   }
 
+  if (effectiveView === 'myDecisions') {
+    return (
+      <div className={`${styles.appShell} ${layoutClass}`}>
+        <div className={styles.appShellBody} dir="rtl">
+          <MyDecisionsView canManageSettings={canManageSettings} onBackToDiscussions={backToDiscussions} onNotify={notify} />
+        </div>
+        {overlays}
+      </div>
+    );
+  }
+
   return (
     <div className={`${styles.appShell} ${layoutClass}`}>
     <div
@@ -612,6 +626,7 @@ export default function App() {
           currentUser={currentUser}
           onOpenSettings={() => setShowSettings(true)}
           onOpenMyTasks={openMyTasks}
+          onOpenMyDecisions={openMyDecisions}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           calendarAnchor={calNav.anchor}
