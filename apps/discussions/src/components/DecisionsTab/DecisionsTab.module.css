@@ -26,21 +26,24 @@
   gap: var(--spacing-xs, 4px);
 }
 
+/* Toolbar layout mirrors the Tasks tab's .toolbar EXACTLY: a single flex-start
+   cluster so the primary button and the Filter + Group-by controls pack together
+   at the start (was space-between + width:100%, which pushed the controls to the
+   far end). */
 .decToolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--spacing-small, 8px);
-  width: 100%;
 }
 .decToolbarLeft {
   display: flex;
   align-items: center;
   gap: var(--spacing-small, 8px);
-  min-width: 0;
 }
-/* Filter + Group by + collapse-all cluster (LTR, monday-style pills) — mirrors
-   the Tasks / Previous tabs' toolbar. */
+/* Filter + Group by + collapse-all cluster (monday-style pills) — mirrors the
+   Tasks tab's .toolbarRight exactly (same classes/order/spacing; inherits the
+   page direction with no dir override, so both toolbars render identically). */
 .decToolbarRight {
   display: flex;
   align-items: center;

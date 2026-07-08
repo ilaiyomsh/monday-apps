@@ -863,7 +863,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
             <Button kind={"primary"} size={"small"} onClick={() => onNewDecision?.()}>החלטה חדשה</Button>
           )}
         </div>
-        <div className={styles.decToolbarRight} dir="ltr">
+        <div className={styles.decToolbarRight}>
           <BuilderControl
             icon={Filter} label="Filter" title="Filter by" mobile={isMobile} width={isMobile ? undefined : 620}
             applied={fc > 0} badge={fc}
