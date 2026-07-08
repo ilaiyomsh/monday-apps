@@ -68,22 +68,23 @@ const DISCUSSION = { id: 'D1', name: 'דיון נוכחי', discussionTypeID: '�
 describe('PreviousTasksTab — Filter pill (smoke)', () => {
   beforeEach(() => { cfg.byType = true; vp.mobile = true; });
 
-  it('renders a Filter pill that opens the builder sheet EMPTY; "+ New filter" adds the status row', async () => {
+  it('opens the Filter builder with a default STATUS row (empty values ⇒ shows all)', async () => {
     render(<PreviousTasksTab discussion={DISCUSSION} />);
     const pill = await screen.findByLabelText('Filter');
     fireEvent.click(pill);
-    expect(screen.queryByText('Where')).toBeNull();      // empty default — no pre-seeded row
-    expect(screen.getByText('No filters — showing all tasks')).toBeTruthy();
-    fireEvent.click(screen.getByText('+ New filter'));   // adds the first (status) row
+    // Round 17: the panel opens PRE-SEEDED with one "Where status is …" row
+    // (empty values, so nothing is actually filtered) instead of the old
+    // "No filters — showing all tasks" empty state.
     expect(screen.getByText('Where')).toBeTruthy();
-    expect(screen.getByText('סטטוס')).toBeTruthy();
+    expect(screen.getByText('סטטוס')).toBeTruthy();          // column = status
+    expect(screen.getByText('Choose values')).toBeTruthy();  // empty values ⇒ show all
+    expect(screen.queryByText('No filters — showing all tasks')).toBeNull();
   });
 
   it('offers status + deadline + person columns (no priority)', async () => {
     render(<PreviousTasksTab discussion={DISCUSSION} />);
     fireEvent.click(await screen.findByLabelText('Filter'));
-    fireEvent.click(screen.getByText('+ New filter')); // empty default — add the first row
-    // open the column picker (the row's column segment shows "סטטוס")
+    // The default status row is already present — open its column picker.
     fireEvent.click(screen.getByText('סטטוס'));
     expect(screen.getByText('אחראי')).toBeTruthy();   // person column available
     expect(screen.getByText('דד ליין')).toBeTruthy(); // deadline column available
@@ -96,8 +97,7 @@ describe('PreviousTasksTab — Filter pill (smoke)', () => {
     expect(screen.getByText('הנחיה של יוסי')).toBeTruthy();
 
     fireEvent.click(await screen.findByLabelText('Filter'));
-    fireEvent.click(screen.getByText('+ New filter')); // empty default — add the first row
-    // retarget the row to the person column
+    // Retarget the default status row to the person column, then pick דנה.
     fireEvent.click(screen.getByText('סטטוס'));
     fireEvent.click(screen.getByText('אחראי'));
     // open the person value list (empty multi-segment shows "Choose values") and pick דנה

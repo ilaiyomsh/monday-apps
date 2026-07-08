@@ -4,11 +4,12 @@ import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { TaskTable } from '@generated/components/TaskTable';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
 import {
-  filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter,
+  filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
 } from '@generated/components/MyTasksView/controls/controls.js';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -42,6 +43,15 @@ const GROUP_OPTIONS = [
   { value: 'status', label: 'סטאטוס', icon: 'status', orders: GROUP_STATUS_ORDERS },
   { value: 'person', label: 'אחראי', icon: 'person', orders: GROUP_AZ_ORDERS },
 ];
+// Sort columns for the Tasks tab (mirrors the filter columns: status + deadline
+// + name). `value` is a sortTasks() column key; the direction sets come from the
+// shared My Tasks sort config so labels/icons/keys match everywhere.
+const SORT_OPTIONS = [
+  { value: 'status', label: 'סטטוס', icon: 'status', dirs: SORT_STATUS_DIRS },
+  { value: 'deadline', label: 'דד ליין', icon: 'date', dirs: SORT_DATE_DIRS, note: 'Tasks with no deadline always sort last' },
+  { value: 'name', label: 'שם', icon: 'text', dirs: SORT_TEXT_DIRS },
+];
+const firstSortDir = (col) => (SORT_OPTIONS.find((o) => o.value === col) || SORT_OPTIONS[0])?.dirs?.[0]?.key;
 const NO_STATUS = '__none__';
 const NO_ASSIGNEE = '__unassigned__';
 
@@ -87,14 +97,23 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   const [groupBy, setGroupBy] = useState(savedGroup ? savedGroup.col : 'none');
   const [groupOrder, setGroupOrder] = useState(savedGroup?.order || 'labelAsc');
   const [collapsed, setCollapsed] = useState({});
+  // Sort (client-side, over the loaded tasks; same engine + saved-view contract
+  // as My Tasks). Load-time = the shared saved sort; empty/inactive by default.
+  const [sort, setSort] = useState(() => {
+    const s = savedView?.sort;
+    if (!s || !s.active || !SORT_OPTIONS.some((o) => o.value === s.col)) return { col: null, dir: null, active: false };
+    return { col: s.col, dir: s.dir || firstSortDir(s.col), active: true };
+  });
 
   // ---- Filter (client-side, over the loaded tasks; same engine as My Tasks /
   // Previous tasks). status + deadline + person columns. ----
   const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
+  // Filter opens with a default STATUS row (empty values ⇒ shows all) when no
+  // saved view exists; a saved view's own rows win (incl. an explicitly empty set).
   const [filterRows, setFilterRows] = useState(() => (
     Array.isArray(savedView?.filterRows)
       ? savedView.filterRows.filter((k) => TASKS_FILTER_COLUMNS.some((c) => c.key === k))
-      : []
+      : ['status']
   ));
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [deleting, setDeleting] = useState(false);
@@ -124,8 +143,11 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     setFilterRows((rows) => rows.map((k) => (k === fromCol ? toCol : k)));
     setFilter((f) => ({ ...f, [fromCol]: resetCol(fromCol), [toCol]: resetCol(toCol) }));
   };
-  const clearFilter = () => { setFilter(emptyFilter()); setFilterRows([]); };
+  const clearFilter = () => { setFilter(emptyFilter()); setFilterRows(['status']); };
   const fc = filterCount(filter);
+  // Sort handlers (session-only until an owner hits Save, like the other builders).
+  const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstSortDir(col), active: true });
+  const clearSort = () => setSort({ col: null, dir: null, active: false });
   // Show the read-only priority column only when the owner mapped priorityID.
   const showPriority = !!getColumns('tasks').priorityID?.id;
 
@@ -146,7 +168,12 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
   }, [items]);
 
-  const filteredTasks = useMemo(() => filterTasks(items, filter), [items, filter]);
+  // Client pipeline: filter -> sort (both instant, over the loaded page). An
+  // inactive sort returns the list unchanged, so default order is untouched.
+  const filteredTasks = useMemo(
+    () => sortTasks(filterTasks(items, filter), sort, { orderById, labelById }),
+    [items, filter, sort, orderById, labelById]
+  );
 
   const grouped = useMemo(() => {
     if (groupBy === 'status') {
@@ -406,6 +433,17 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
               onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
             } : null}
             renderBody={renderFilterBody}
+          />
+          <SortByBuilder
+            options={SORT_OPTIONS}
+            value={sort}
+            mobile={isMobile}
+            onChange={onSortChange}
+            onClear={clearSort}
+            onSave={canSaveView ? () => {
+              saveView({ sort });
+              onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
+            } : null}
           />
           <GroupByBuilder
             options={GROUP_OPTIONS}

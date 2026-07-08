@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton, Button, TextField, Dialog, DialogContentContainer, Text, Checkbox } from '@vibe/core';
-import { CloseSmall } from '@vibe/icons';
+import { CloseSmall, DropdownChevronDown } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { Plus, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { Plus, Eye, EyeOff } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -277,7 +277,14 @@ function SortableTopicSection({
           aria-label={effectiveOpen ? 'קפל נושא' : 'פתח נושא'}
           title={excluded ? 'נושא מוסתר' : (effectiveOpen ? 'קפל' : 'פתח')}
         >
-          <ChevronDown size={16} className={`${styles.chevron} ${effectiveOpen ? '' : styles.chevronCollapsed}`} />
+          {/* Collapse caret — SAME glyph/size/rotation as a collapsed group in
+              Tasks/Decisions (vibe DropdownChevronDown, 24px, rotate(-90deg) when
+              collapsed) and tinted with the topic accent, mirroring how those
+              tabs tint the caret with the group color. */}
+          <DropdownChevronDown
+            className={`${styles.chevron} ${effectiveOpen ? '' : styles.chevronCollapsed}`}
+            style={{ color: `hsl(${accentTri})` }}
+          />
         </button>
 
         {editingTitle ? (
