@@ -265,12 +265,24 @@
   align-self: stretch;
   gap: 6px;
   padding-inline: 12px;
+  /* Anchor for the short, centered vertical separator (::before) below. */
+  position: relative;
 }
 .peopleGroup:first-child { padding-inline-start: 0; }
 .peopleGroup:last-child { padding-inline-end: 0; }
-/* Vertical separator between fields. */
-.peopleGroup + .peopleGroup {
-  border-inline-start: 1px solid var(--ui-border-color, #d0d4e4);
+/* Vertical separator between fields: a SHORT, vertically-centered bar (not a
+   full-height line). A centered ::before instead of a stretched border, so it
+   reads as a short divider between fields. Same 1px thickness + color; only the
+   height is reduced and it's centered in the header row. */
+.peopleGroup + .peopleGroup::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 18px;
+  background: var(--ui-border-color, #d0d4e4);
 }
 
 /* People-column groups get a wider label→avatars gap than the date/time groups. */
