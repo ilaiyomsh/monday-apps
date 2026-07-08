@@ -592,6 +592,16 @@
   left: 40px;
   box-shadow: none;
 }
+/* Round the table's top-leading corner (S2) — matches the Topics (.sectionBody)
+   and Tasks (.taskTable) tables. The non-selectable layout already rounds it via
+   .decNameHead's border-start-start-radius; in SELECT mode the frozen leading
+   cell is the checkbox, so round ITS top-inline-start corner too — otherwise its
+   square white/purple-strip corner fills the rounded table top and the Decisions
+   table top reads square (unlike Topics/Tasks). Mirrors TaskTable's
+   `.taskHead .taskFirst, .taskHead .selectCell { border-start-start-radius }`. */
+.decSelectable .decHead .decSelectCell {
+  border-start-start-radius: var(--border-radius-medium, 8px);
+}
 
 /* Whole-row drag-reorder — the entire body row is the grab handle when enabled
    (see SortableRow + useRowOrder). A plain click still edits a cell (dnd-kit's

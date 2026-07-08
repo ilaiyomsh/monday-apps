@@ -54,18 +54,18 @@ describe('TopicsTab — toolbar collapse-all alignment', () => {
     // is a sibling that comes AFTER it, so it sits at the far (LTR) end.
     const leadingGroup = toolbar.querySelector(`.${styles.toolbarLeft}`);
     expect(leadingGroup).toBeTruthy();
-    // Topics default-collapse after first load, so the button starts as "expand".
-    const collapseBtn = screen.getByLabelText('פתח הכל');
+    // Topics now default-OPEN on entering the tab, so the button starts as "collapse".
+    const collapseBtn = screen.getByLabelText('קפל הכל');
     expect(toolbar.lastElementChild.contains(collapseBtn)).toBe(true);
     expect(toolbar.lastElementChild).not.toBe(leadingGroup);
   });
 
   it('toggles the collapse-all aria-label between קפל הכל and פתח הכל on click', () => {
     render(<TopicsTab discussion={discussion} canEdit />);
-    // Topics default-collapse after first load, so the button starts as "expand".
-    const btn = screen.getByLabelText('פתח הכל');
+    // Topics now default-OPEN on entering the tab, so the button starts as "collapse".
+    const btn = screen.getByLabelText('קפל הכל');
     fireEvent.click(btn);
-    expect(screen.getByLabelText('קפל הכל')).toBeTruthy();
+    expect(screen.getByLabelText('פתח הכל')).toBeTruthy();
   });
 
   it('does not render the collapse-all button when there are no topics', () => {

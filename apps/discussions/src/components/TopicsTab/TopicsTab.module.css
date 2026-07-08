@@ -143,24 +143,6 @@
   cursor: default;
 }
 
-/* Count = "remaining / total to discuss", numbers only, neutral pill. */
-.count {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 9px;
-  margin-inline-start: 10px;
-  border-radius: 10px;
-  background: var(--primary-background-color, #fff);
-  border: 1px solid var(--layout-border-color, #d0d4e4);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--secondary-text-color, #676879);
-  flex-shrink: 0;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
 .headerSpacer {
   flex: 1;
 }

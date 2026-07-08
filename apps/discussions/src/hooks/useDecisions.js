@@ -208,12 +208,26 @@ export function useDecisions(discussionId) {
         for (const [id, expiry] of recentlyCreatedRef.current) {
           if (expiry < now) recentlyCreatedRef.current.delete(id);
         }
-        // Keep a missing row only when it's a still-fresh create the relation
-        // index hasn't surfaced yet (never a temp row — the swap already replaced
-        // it with the real id; never an arbitrary/older row).
+        // Keep a locally-known row the server's (eventually-consistent) relation
+        // read hasn't returned yet when it is EITHER:
+        //   • a still-optimistic temp row — an in-flight create that hasn't
+        //     reconciled to its real id yet. The server CANNOT return it (no real
+        //     id exists), so a CONCURRENT create's refresh must NEVER drop it.
+        //     Dropping temp rows here was the "second rapid create disappears"
+        //     bug: creating a decision and immediately creating a second one fired
+        //     the first create's fire-and-forget refresh() while the second row was
+        //     still temp; that refresh removed it, and the second create's reconcile
+        //     then found no temp row to swap (temp→real) — so the freshly-created
+        //     decision vanished from the UI even though it existed on the board.
+        //   • a still-fresh create (real id) made in the last RECENT_CREATE_MS
+        //     whose relation index hasn't surfaced it yet (the original
+        //     single-create disappearing-row fix).
+        // A soft-deleted / dismissed row is already gone from `current` (and its
+        // create-marker forgotten), so neither branch can resurrect it.
         const missing = current.filter((i) => {
           const sid = String(i.id);
-          if (serverIds.has(sid) || sid.startsWith('temp-')) return false;
+          if (serverIds.has(sid)) return false;   // server returned it — use its copy
+          if (sid.startsWith('temp-')) return true; // in-flight optimistic create — always keep
           return recentlyCreatedRef.current.has(sid);
         });
         return [...fetchedItems, ...missing];

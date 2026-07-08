@@ -149,9 +149,8 @@ function topicColorStartIndex(id, seed = 0) {
 }
 
 /* One topic = a GROUP (mockup structure): a header row (hover kebab, collapse
-   chevron, drag grip, accent-colored name, "discussed/total" chip, spacer,
-   priority pill) + a fixed column-header row + the topic's point rows as a
-   table + the add-point row. */
+   chevron, drag grip, accent-colored name, spacer, priority pill) + a fixed
+   column-header row + the topic's point rows as a table + the add-point row. */
 function SortableTopicSection({
   topic, accent, open, onToggleOpen, usersById,
   renameTopic,
@@ -208,10 +207,6 @@ function SortableTopicSection({
   // header (dismissal = the existing kebab "מחק", which removes a temp row locally).
   const topicFailed = topic._createFailed === true;
   const effectiveOpen = open && !excluded;
-
-  const forDiscussion = points.filter((p) => p.notForDiscussion !== true);
-  const discussedCount = forDiscussion.filter((p) => p.discussed === true).length;
-  const total = forDiscussion.length;
 
   // Pill visibility (mockup): shown when the topic HAS a priority label; kept
   // visible (grey "עדיפות" placeholder) for editors so they can still set one.
@@ -340,11 +335,6 @@ function SortableTopicSection({
             {excluded ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
         )}
-
-        {/* "discussed/total" chip sits right after the title (mockup). */}
-        <span className={styles.count} title="נדונו מתוך סך הנקודות לדיון (ללא מוסתרות)">
-          {discussedCount}/{total}
-        </span>
 
         {/* Creator avatar — revealed only while hovering the topic's header. */}
         <span className={styles.headerAvatar}>
@@ -724,9 +714,12 @@ export function TopicsTab({
     if (loading) return;
     if (collapseInitRef.current === discussion?.id) return;
     collapseInitRef.current = discussion?.id;
-    const c = {};
-    items.forEach((t) => { c[t.id] = true; });
-    setCollapsed(c);
+    // Default: every topic OPEN on entering the tab / switching discussions.
+    // isOpen(id) is `collapsed[id] !== true`, so an empty map = all expanded.
+    // Manual collapse/expand (chevron, title click, collapse-all) keeps writing
+    // per-topic flags into `collapsed` from here on — only the initial default
+    // changed (was: seed every topic collapsed).
+    setCollapsed({});
   }, [loading, discussion?.id, items]);
 
   const isOpen = (id) => collapsed[id] !== true;
