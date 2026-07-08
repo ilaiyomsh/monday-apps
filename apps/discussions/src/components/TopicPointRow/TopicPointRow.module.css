@@ -4,7 +4,7 @@
 .row {
   display: grid;
   align-items: stretch;
-  min-height: 40px;
+  min-height: 36px;
   border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
   background: var(--primary-background-color, #fff);
 }

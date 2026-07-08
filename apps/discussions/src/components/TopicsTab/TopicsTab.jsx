@@ -5,7 +5,7 @@ import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { Plus, ChevronDown, GripVertical } from 'lucide-react';
+import { Plus, ChevronDown, GripVertical, Eye, EyeOff } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -202,16 +202,6 @@ function SortableTopicSection({
       className={`${styles.section} ${excluded ? styles.sectionExcluded : ''}`}
     >
       <div className={styles.sectionHeader}>
-        {(canEditTopic || canDelete) && (
-          <RowKebabMenu
-            excluded={excluded}
-            kind="נושא"
-            className={styles.headerKebab}
-            onToggleHide={canEditTopic ? () => toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(topic.id, !excluded) : undefined}
-            onDelete={canDelete ? () => deleteTopic(topic.id) : undefined}
-          />
-        )}
-
         <button
           type="button"
           className={styles.triangle}
@@ -259,6 +249,21 @@ function SortableTopicSection({
           </span>
         )}
 
+        {/* Eye toggle — hide/show the topic, placed at the right edge of the
+            name. Single click toggles the not-for-discussion flag (replaces the
+            old kebab \"הסתר/הצג\"). */}
+        {canEditTopic && (
+          <button
+            type="button"
+            className={styles.eyeBtn}
+            onClick={(e) => { e.stopPropagation(); toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(topic.id, !excluded); }}
+            aria-label={excluded ? 'הצג נושא' : 'הסתר נושא'}
+            title={excluded ? 'הצג נושא' : 'הסתר נושא'}
+          >
+            {excluded ? <Eye size={16} /> : <EyeOff size={16} />}
+          </button>
+        )}
+
         {/* "discussed/total" chip sits right after the title (mockup). */}
         <span className={styles.count} title="נדונו מתוך סך הנקודות לדיון (ללא מוסתרות)">
           {discussedCount}/{total}
@@ -279,6 +284,15 @@ function SortableTopicSection({
             colorById={priorityColorById}
             canEdit={canEditTopic}
             onChange={(labelId) => updateTopicPriority && updateTopicPriority(topic.id, labelId)}
+          />
+        )}
+
+        {canDelete && (
+          <RowKebabMenu
+            excluded={excluded}
+            kind="נושא"
+            className={styles.headerKebab}
+            onDelete={() => deleteTopic(topic.id)}
           />
         )}
       </div>
