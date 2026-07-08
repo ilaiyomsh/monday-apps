@@ -52,6 +52,15 @@ function readStatus(columnValues, columnId) {
   return cv && cv.index != null ? cv.index : null;
 }
 
+// Read a board_relation column's linked item ids off column_values. [] when the
+// column is unmapped / the value is empty. Used for the per-point decisions /
+// tasks link counters (pointDecisionsLinkID / pointTasksLinkID).
+function readLinkedIds(columnValues, columnId) {
+  if (!columnId) return [];
+  const cv = (columnValues || []).find((c) => c.id === columnId);
+  return (cv?.linked_item_ids || []).map(String);
+}
+
 export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}) {
   const { currentUser } = useMondayContext();
   const [items, setItems] = useState([]);
@@ -85,10 +94,14 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
       const pointCheckedId = topicCols.pointCheckedID?.id || null; // "האם נידונה"
       const pointCreatorId = topicCols.pointCreatorID?.id || null;
       const pointResponsesId = topicCols.pointResponsesID?.id || null;
+      // Per-point board_relation links to the decisions/tasks created FROM that
+      // point (SUBITEM columns) — drive the החלטות/משימות counters in TopicsTab.
+      const pointDecisionsLinkId = topicCols.pointDecisionsLinkID?.id || null;
+      const pointTasksLinkId = topicCols.pointTasksLinkID?.id || null;
       // Mapped topic-item column ids to fetch; empty is fine (monday returns []),
       // so an unmapped column reads back empty.
       const topicReadCols = [topicNfdId, topicPriorityId, topicCreatorId].filter(Boolean);
-      const pointReadCols = [pointNfdId, pointCheckedId, pointCreatorId, pointResponsesId].filter(Boolean);
+      const pointReadCols = [pointNfdId, pointCheckedId, pointCreatorId, pointResponsesId, pointDecisionsLinkId, pointTasksLinkId].filter(Boolean);
 
       // Load the app-local "discussed" set alongside the board read (fallback when
       // the pointCheckedID board column isn't mapped).
@@ -106,7 +119,7 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
                       id
                       name
                       board { id }
-                      column_values(ids: $pointCols) { id text ... on CheckboxValue { checked } ... on PeopleValue { persons_and_teams { id } } }
+                      column_values(ids: $pointCols) { id text ... on CheckboxValue { checked } ... on PeopleValue { persons_and_teams { id } } ... on BoardRelationValue { linked_item_ids } }
                     }
                   }
                 }
@@ -141,6 +154,10 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
             : discussedSet.has(String(sub.id)),
           creatorId: readFirstPersonId(sub.column_values, pointCreatorId),
           responses: readText(sub.column_values, pointResponsesId),
+          // Linked decision/task ids created FROM this point ([] when the link
+          // column is unmapped) — counter = ids.length in TopicsTab.
+          decisionIds: readLinkedIds(sub.column_values, pointDecisionsLinkId),
+          taskIds: readLinkedIds(sub.column_values, pointTasksLinkId),
         })),
       }));
 
@@ -249,7 +266,7 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     const creatorId = currentUser?.id != null ? String(currentUser.id) : null;
     setItems((prev) => prev.map((topic) => (
       topic.id === topicId
-        ? { ...topic, _subitems: [...(topic._subitems || []), { id: tempId, _realId: null, name: trimmed, notForDiscussion: false, discussed: false, creatorId, responses: '', boardId: null, _pending: true }] }
+        ? { ...topic, _subitems: [...(topic._subitems || []), { id: tempId, _realId: null, name: trimmed, notForDiscussion: false, discussed: false, creatorId, responses: '', decisionIds: [], taskIds: [], boardId: null, _pending: true }] }
         : topic
     )));
 

@@ -74,6 +74,12 @@ const SYSTEM_CAPS = new Set(
 const TASK_CAPS = new Set(
   CAPABILITIES.filter((c) => c.tier === 'task').map((c) => c.id)
 );
+// Capability ids that act on a specific DECISION (decision tier) — resolve
+// exactly like the task tier, from the DECISION item's own people columns
+// (PERMISSION_ROLE_SOURCES.decisions: decisionCreatorID/deciderID).
+const DECISION_CAPS = new Set(
+  CAPABILITIES.filter((c) => c.tier === 'decision').map((c) => c.id)
+);
 // `viewDiscussion` is a discussion cap but is NOT an edit cap — it must never be
 // suppressed by the `ready` gate (you can always view).
 const VIEW_CAP = 'viewDiscussion';
@@ -93,13 +99,23 @@ function discussionReady(discussion) {
   return aliases.some((alias) => Array.isArray(discussion?.[alias]));
 }
 
-// Same readiness check for a TASK item (My Tasks — no parent discussion in
-// ctx): the task's role columns (taskCreatorID/responsibilityID) must have
-// loaded before its task caps can resolve; until then edits stay read-only.
-function taskReady(item) {
+// Same readiness check for an ITEM-tier object (task / decision) in a ctx
+// WITHOUT a parent discussion: the item's own role columns
+// (taskCreatorID/responsibilityID or decisionCreatorID/deciderID) must have
+// loaded before its caps can resolve; until then edits stay read-only.
+function itemReady(item, itemBoardKey) {
   if (!item) return false;
-  const aliases = PERMISSION_ROLE_SOURCES.tasks || [];
+  const aliases = PERMISSION_ROLE_SOURCES[itemBoardKey] || [];
   return aliases.some((alias) => Array.isArray(item?.[alias]));
+}
+
+// Does the user hold one of the ITEM's own role columns (task
+// creator/responsible, decision creator/decider)? The item-tier analogue of
+// isCreatorOrLead — drives the fail-open self-edit path and the
+// 'creatorLeadOwner' default bucket for item-tier caps.
+function isItemSelfRole(item, itemBoardKey, myId) {
+  const aliases = PERMISSION_ROLE_SOURCES[itemBoardKey] || [];
+  return aliases.some((alias) => inPeople(item?.[alias], myId));
 }
 
 // Is the user a discussion "editor" — its creator, lead (מנהל דיון), or
@@ -117,17 +133,15 @@ function isCreatorOrLead(discussion, myId) {
 //   'all'              → every member (allow)
 //   'owner'            → owners/admins only (already handled by bypass → deny)
 //   'creatorLeadOwner' → creator/lead (owner already bypassed → so creator/lead)
-function resolveDefaultBucket(cap, { discussion, myId, isTaskCap, item }) {
+function resolveDefaultBucket(cap, { discussion, myId, itemBoardKey, item }) {
   const bucket = CAPABILITY_DEFAULTS[cap];
   if (bucket === 'all') return true;
   if (bucket === 'owner') return false; // owner already bypassed above
   if (bucket === 'creatorLeadOwner') {
-    if (isTaskCap) {
-      // task tier: the task's own creator / responsible person
-      return (
-        inPeople(item?.taskCreatorID, myId) ||
-        inPeople(item?.responsibilityID, myId)
-      );
+    if (itemBoardKey) {
+      // item tier (task/decision): the item's own role columns — task
+      // creator/responsible, decision creator/decider.
+      return isItemSelfRole(item, itemBoardKey, myId);
     }
     return isCreatorOrLead(discussion, myId);
   }
@@ -154,6 +168,10 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
   const isViewCap = capability === VIEW_CAP;
   const isSystemCap = SYSTEM_CAPS.has(capability);
   const isTaskCap = TASK_CAPS.has(capability);
+  const isDecisionCap = DECISION_CAPS.has(capability);
+  // ITEM-tier caps (task / decision) resolve from the ITEM's own people columns;
+  // itemBoardKey names the board whose role sources apply (null = discussion tier).
+  const itemBoardKey = isTaskCap ? 'tasks' : isDecisionCap ? 'decisions' : null;
   // Discussion-scoped EDIT caps are gated by `ready`; view & system caps aren't.
   const isReadyGated = !isSystemCap && !isViewCap;
 
@@ -163,14 +181,15 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
 
   // `ready` gate: until the discussion's people columns load we can't know the
   // user's role, so edit caps stay read-only. (Applies in BOTH the fail-open
-  // and feature-on paths — preserves the no-flicker invariant.) Task caps in a
-  // ctx WITHOUT a discussion (My Tasks) derive readiness from the TASK item
-  // instead — its own role columns are the people source being scanned.
-  const noDiscussionTaskCtx = isTaskCap && !discussion;
+  // and feature-on paths — preserves the no-flicker invariant.) Item-tier caps
+  // (task / decision) in a ctx WITHOUT a discussion (My Tasks / My Decisions)
+  // derive readiness from the ITEM instead — its own role columns are the
+  // people source being scanned.
+  const noDiscussionItemCtx = !!itemBoardKey && !discussion;
   const ready = isSystemCap
     ? true
-    : noDiscussionTaskCtx
-      ? taskReady(item)
+    : noDiscussionItemCtx
+      ? itemReady(item, itemBoardKey)
       : discussionReady(discussion);
   if (isReadyGated && !ready) return false;
 
@@ -190,16 +209,14 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
       // createDiscussion / manageTemplates were allow-all today.
       return true;
     }
-    // discussion-content edits AND task edits: today's legacy gate was
+    // discussion-content edits AND task/decision edits: today's legacy gate was
     // creator/lead (owner already bypassed). Task tabs threaded the same
-    // creator/lead-derived canEdit, so task caps resolve identically.
-    // Task caps with NO discussion in ctx (My Tasks) fall back to the task's
-    // own creator/responsible — mirrors that surface's self-edit behavior.
-    if (noDiscussionTaskCtx) {
-      return (
-        inPeople(item?.taskCreatorID, myId) ||
-        inPeople(item?.responsibilityID, myId)
-      );
+    // creator/lead-derived canEdit, so item caps resolve identically.
+    // Item caps with NO discussion in ctx (My Tasks / My Decisions) fall back
+    // to the item's own role columns (task creator/responsible, decision
+    // creator/decider) — mirrors those surfaces' self-edit behavior.
+    if (noDiscussionItemCtx) {
+      return isItemSelfRole(item, itemBoardKey, myId);
     }
     return isCreatorOrLead(discussion, myId);
   }
@@ -233,7 +250,7 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
         );
       }
       // undefined → owners-only default (owners already bypassed → deny).
-      return resolveDefaultBucket('reorderColumns', { discussion, myId, isTaskCap, item });
+      return resolveDefaultBucket('reorderColumns', { discussion, myId, itemBoardKey, item });
     }
 
     // createDiscussion / manageTemplates: default allow-all. Explicit false now
@@ -250,11 +267,11 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
   if (CAPABILITY_DEFAULTS[capability] === 'all') return true;
 
   // Which board's people columns apply to this capability's tier.
-  const boardKey = isTaskCap ? 'tasks' : 'discussions';
+  const boardKey = itemBoardKey || 'discussions';
 
-  // The people-source the role's value comes from: for task caps it's the TASK
-  // item; for discussion caps it's the discussion.
-  const source = isTaskCap ? item : discussion;
+  // The people-source the role's value comes from: for item-tier caps (task /
+  // decision) it's the ITEM; for discussion caps it's the discussion.
+  const source = itemBoardKey ? item : discussion;
 
   // 4. Role scan with VETO (deny-wins per-role veto, §2.2). Accumulate over the
   //    HELD, NON-HIDDEN roles the user actually has:
@@ -276,17 +293,17 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
       granted = true; // explicit grant
     } else if (
       // absent → inherit the capability default, evaluated for this user/item
-      resolveDefaultBucket(capability, { discussion, myId, isTaskCap, item })
+      resolveDefaultBucket(capability, { discussion, myId, itemBoardKey, item })
     ) {
       granted = true;
     }
   }
 
   // 5. Creator/Lead override — discussion-scoped content caps only (excludes
-  //    system AND task caps). Default: override sits ABOVE the veto (creator/lead
-  //    immune → ALLOW). Strict mode: override sits BELOW the veto, so a held
-  //    role's explicit `false` can revoke them.
-  const contentOverride = !isTaskCap && isCreatorOrLead(discussion, myId);
+  //    system AND item-tier caps). Default: override sits ABOVE the veto
+  //    (creator/lead immune → ALLOW). Strict mode: override sits BELOW the veto,
+  //    so a held role's explicit `false` can revoke them.
+  const contentOverride = !itemBoardKey && isCreatorOrLead(discussion, myId);
   if (contentOverride) {
     if (!strictCreatorLead) return true; // override wins (today's behavior)
     if (!denied) return true; // strict: only survives if no held role vetoes

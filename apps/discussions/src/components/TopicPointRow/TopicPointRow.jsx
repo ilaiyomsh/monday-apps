@@ -11,7 +11,9 @@ function initialsOf(name) {
 
 /* Creator avatar (who created the topic / point). Resolves the user from the
    shared usersById map (populated by useUsers in TopicsTab); falls back to a
-   neutral placeholder while the photo/name is still loading or unset. */
+   neutral placeholder while the photo/name is still loading or unset. Still
+   used by the topic GROUP HEADER (TopicsTab) — the per-point avatar column was
+   removed from the table in the decisions redesign. */
 export function CreatorAvatar({ userId, usersById, size = 'small' }) {
   if (!userId) return <span className={styles.avatarEmpty} aria-hidden="true" />;
   const user = usersById?.[String(userId)];
@@ -95,22 +97,32 @@ export function RowKebabMenu({ excluded, onToggleHide, onDelete, kind = 'נקו�
 
 /**
  * A discussion POINT = a subitem, rendered as a TABLE ROW (monday-style) aligned
- * to the group's column header via the shared `rowStyle` grid template:
- *   [kebab/grip] | נקודה לדיון | נידונה (checkbox) | התייחסויות (inline text) | avatar
- * "נידונה" (discussed) and "התייחסויות" persist to the subitems board (when their
- * columns are mapped). "הסתרה" toggles the not-for-discussion board flag (dims the
- * row + excludes it from the export). Drag grip reorders points within the topic.
+ * to the group's column header via the shared `rowStyle` grid template
+ * (decisions redesign — FIXED columns):
+ *   [accent bar 28px] | נקודה לדיון (flex) | נידונה 66px | החלטות 168px | משימות 168px
+ * "נידונה" (discussed) persists to the subitems board when pointCheckedID is
+ * mapped (app-local storage fallback otherwise — handled in useTopics).
+ * החלטות/משימות cells: a dashed "+" (create a decision/task FROM this point —
+ * rendered only when the create callback is provided, so the parent gates it by
+ * capability) and a round counter pill (filled when >0) that opens the
+ * PointItemsPopup. The kebab (hide/delete) + drag grip moved INTO the name cell
+ * (hover-revealed) — the lead column is now the bare accent bar per the mockup.
  */
 export function TopicPointRow({
-  point, usersById, rowStyle,
-  // Ordered column keys from TopicsTab's shared column order — cells render in
-  // this order so drag-reordered headers and rows can never drift apart.
-  columns = ['lead', 'name', 'check', 'avatar'],
+  point, rowStyle,
+  // Kept for signature compatibility (the per-point creator avatar column was
+  // removed from the table; the read/write path in useTopics stays intact).
+  usersById, // eslint-disable-line no-unused-vars
   onToggle, onToggleNotForDiscussion, onRename, onDelete,
   // Granular discussion-tier caps. Each equals the legacy canEdit while the
   // permissions feature is off, so behavior is unchanged. point edit (rename +
   // drag), delete (kebab delete + hide), check ("נידונה" toggle).
   canEditPoint = true, canDelete = true, canCheck = true,
+  // Decisions/tasks link counters (linked ids length, from pointDecisionsLinkID /
+  // pointTasksLinkID; 0 when the columns are unmapped).
+  decisionCount = 0, taskCount = 0,
+  // Create-from-point + open-counter-popup callbacks (threaded by TopicsTab).
+  onCreateDecision, onCreateTask, onOpenDecisions, onOpenTasks,
 }) {
   const discussed = point.discussed === true;
   const excluded = point.notForDiscussion === true;
@@ -132,29 +144,28 @@ export function TopicPointRow({
   };
   const stop = (e) => e.stopPropagation();
 
-  // Cells keyed by column id, rendered in the shared `columns` order below.
-  const CELLS = {
-    // leading zone: hover kebab + drag grip
-    lead: (
-      <div key="lead" className={styles.lead} onClick={stop}>
+  return (
+    <div ref={setNodeRef} style={style} className={`${styles.row} ${excluded ? styles.excluded : ''}`}>
+      {/* accent bar (28px lead column) */}
+      <span className={styles.lead} aria-hidden="true" />
+
+      {/* נקודה לדיון — hover controls (kebab + grip) + name (double-click to rename) */}
+      <div className={styles.nameCell}>
         {(canEditPoint || canDelete) && (
-          <RowKebabMenu
-            excluded={excluded}
-            kind="נקודה"
-            onToggleHide={canEditPoint ? () => onToggleNotForDiscussion?.(point, !excluded) : undefined}
-            onDelete={canDelete && onDelete ? () => onDelete(point) : undefined}
-          />
+          <span className={styles.rowControls} onClick={stop}>
+            <RowKebabMenu
+              excluded={excluded}
+              kind="נקודה"
+              onToggleHide={canEditPoint ? () => onToggleNotForDiscussion?.(point, !excluded) : undefined}
+              onDelete={canDelete && onDelete ? () => onDelete(point) : undefined}
+            />
+            {canEditPoint && (
+              <button type="button" className={styles.grip} {...attributes} {...listeners} aria-label="גרור לסידור">
+                <GripVertical size={14} />
+              </button>
+            )}
+          </span>
         )}
-        {canEditPoint && (
-          <button type="button" className={styles.grip} {...attributes} {...listeners} aria-label="גרור לסידור">
-            <GripVertical size={14} />
-          </button>
-        )}
-      </div>
-    ),
-    // נקודה לדיון — name (double-click to rename)
-    name: (
-      <div key="name" className={styles.nameCell}>
         {editingName ? (
           <input
             className={styles.nameEditInput}
@@ -179,10 +190,9 @@ export function TopicPointRow({
           </span>
         )}
       </div>
-    ),
-    // האם נידונה — checkbox
-    check: (
-      <div key="check" className={styles.checkCell} onClick={stop}>
+
+      {/* האם נידונה — checkbox */}
+      <div className={styles.checkCell} onClick={stop}>
         <button
           type="button"
           className={`${styles.check} ${discussed ? styles.checkOn : ''}`}
@@ -194,18 +204,54 @@ export function TopicPointRow({
           {discussed && <Check size={13} className={styles.checkMark} />}
         </button>
       </div>
-    ),
-    // creator avatar
-    avatar: (
-      <div key="avatar" className={styles.avatarCell}>
-        <CreatorAvatar userId={point.creatorId} usersById={usersById} />
-      </div>
-    ),
-  };
 
-  return (
-    <div ref={setNodeRef} style={style} className={`${styles.row} ${excluded ? styles.excluded : ''}`}>
-      {columns.map((key) => CELLS[key] ?? null)}
+      {/* החלטות — dashed create + counter pill (opens the popup) */}
+      <div className={`${styles.linkCell} ${styles.decisionsCell}`} onClick={stop}>
+        {onCreateDecision && (
+          <button
+            type="button"
+            className={`${styles.createBtn} ${styles.createDecision}`}
+            title="החלטה חדשה"
+            aria-label="החלטה חדשה מהנקודה"
+            onClick={() => onCreateDecision(point)}
+          >
+            +
+          </button>
+        )}
+        <button
+          type="button"
+          className={`${styles.counter} ${decisionCount > 0 ? styles.counterDecisionOn : ''}`}
+          title="הצג החלטות"
+          aria-label="הצג החלטות מהנקודה"
+          onClick={() => onOpenDecisions?.(point)}
+        >
+          {decisionCount}
+        </button>
+      </div>
+
+      {/* משימות — dashed create + counter pill (opens the popup) */}
+      <div className={`${styles.linkCell} ${styles.tasksCell}`} onClick={stop}>
+        {onCreateTask && (
+          <button
+            type="button"
+            className={`${styles.createBtn} ${styles.createTask}`}
+            title="משימה חדשה"
+            aria-label="משימה חדשה מהנקודה"
+            onClick={() => onCreateTask(point)}
+          >
+            +
+          </button>
+        )}
+        <button
+          type="button"
+          className={`${styles.counter} ${taskCount > 0 ? styles.counterTaskOn : ''}`}
+          title="הצג משימות"
+          aria-label="הצג משימות מהנקודה"
+          onClick={() => onOpenTasks?.(point)}
+        >
+          {taskCount}
+        </button>
+      </div>
     </div>
   );
 }

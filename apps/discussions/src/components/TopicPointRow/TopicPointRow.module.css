@@ -1,5 +1,6 @@
 /* A POINT = one table row, a grid aligned to the group's column header via the
-   shared inline grid-template (rowStyle). */
+   shared inline grid-template (rowStyle):
+   [accent bar 28px] | name (flex) | נידונה 66px | החלטות 168px | משימות 168px */
 .row {
   display: grid;
   align-items: stretch;
@@ -15,16 +16,21 @@
   opacity: 0.45;
 }
 
-/* leading zone: hover kebab + drag grip, pinned to the visual start (left). */
+/* Lead column — the bare topic accent bar (28px track, 6px inset strip).
+   --topic-accent cascades from .section in TopicsTab. Not rounded: the column
+   header rounds the top-left, the add-row rounds the bottom-left. */
 .lead {
-  display: flex;
+  box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
+}
+
+/* Hover controls (kebab + drag grip) — moved INTO the name cell since the lead
+   column is now the bare accent bar. Revealed on row hover. */
+.rowControls {
+  display: inline-flex;
   align-items: center;
   gap: 2px;
-  justify-content: center;
-  /* Accent color strip (S2) — --topic-accent cascades from .section. Not rounded:
-     the column header rounds the top-left, the add-row rounds the bottom-left. */
-  box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
-  padding-inline-start: 6px;
+  flex-shrink: 0;
+  margin-inline-end: 4px;
 }
 
 .kebabWrap {
@@ -135,7 +141,7 @@
 }
 .nameEditInput:focus-visible { outline: none; }
 
-/* האם נידונה — square checkbox */
+/* האם נידונה — square checkbox (mockup: blue fill when checked). */
 .checkCell {
   display: flex;
   align-items: center;
@@ -146,30 +152,91 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  border: 2px solid var(--ui-border-color, #c3c6d4);
-  border-radius: 4px;
-  background: transparent;
+  border: 1.5px solid #c3c6d4;
+  border-radius: 5px;
+  background: var(--primary-background-color, #fff);
   color: #fff;
   cursor: pointer;
 }
 .checkOn {
-  border-color: var(--positive-color, #258750);
-  background: var(--positive-color, #258750);
+  border-color: var(--primary-color, #0073ea);
+  background: var(--primary-color, #0073ea);
 }
 .checkMark { stroke-width: 3; }
 
-/* creator avatar — keep the closing vertical line (border-inline-end) so the
-   grid line to the RIGHT of the avatar column continues on every row, matching
-   the column header (which draws it via .colHeadCell). */
-.avatarCell {
+/* החלטות / משימות cells — dashed create button + round counter pill. */
+.linkCell {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
 }
+.createBtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-family: var(--font-family);
+}
+/* Purple = decisions accent (chrome color per the approved mockup). */
+.createDecision {
+  border: 1px dashed #b7a8f0;
+  background: #f4f1fe;
+  color: #6b4ee6;
+}
+.createDecision:hover {
+  background: #ece6fc;
+}
+/* Blue = tasks accent. */
+.createTask {
+  border: 1px dashed #9cc4fb;
+  background: #eef5ff;
+  color: #0073ea;
+}
+.createTask:hover {
+  background: #e0edff;
+}
+
+/* Round counter pill — outline gray at 0, filled (purple/blue) when >0. */
+.counter {
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 13px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  background: var(--primary-background-color, #fff);
+  color: var(--placeholder-color, #9699a6);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-family);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+.counterDecisionOn {
+  border-color: #6b4ee6;
+  background: #6b4ee6;
+  color: #fff;
+}
+.counterTaskOn {
+  border-color: #0073ea;
+  background: #0073ea;
+  color: #fff;
+}
+
+/* Neutral placeholder for CreatorAvatar (still used in the topic group header). */
 .avatarEmpty {
   display: inline-block;
   width: 24px;

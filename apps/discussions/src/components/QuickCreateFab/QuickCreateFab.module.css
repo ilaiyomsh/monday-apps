@@ -1,0 +1,32 @@
+/* Mirrors CreateTaskFab's FAB exactly — one visual language for both buttons. */
+.fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px; /* explicit RIGHT — ancestors are dir="ltr"; do NOT use inset-inline-end */
+  z-index: 900; /* below the 1000 cluster (settings/divider/dialogs) and below the Vibe Modal */
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: none;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--box-shadow-medium, 0 6px 20px rgba(0, 0, 0, 0.2));
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.fab:hover {
+  background: var(--primary-hover-color, #0060b9);
+}
+
+.fab:active {
+  transform: scale(0.96);
+}
+
+.fab :global(svg) {
+  width: 28px;
+  height: 28px;
+}

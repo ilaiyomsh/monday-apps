@@ -1,0 +1,251 @@
+/* "ההחלטות שלי" view shell — own-module copies of the MyTasksView layout
+   classes (root/toolbar/board/group chrome; cross-module bare-class selectors
+   break in the scoped prod build) + the decisions-specific SUB-TABS segmented
+   control (purple accent, falls back to #6b4ee6 when --decisions-accent is
+   unset). */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  /* The .board child owns the scrolling (both axes) so the horizontal scrollbar
+     pins to the bottom of the view — a real monday board. The root itself does
+     NOT scroll. */
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* "דיונים" back button — its own row above the sub-tabs. */
+.topBar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+}
+
+/* Sub-tabs segmented control (RTL — Hebrew labels): 'החלטות שאני מחליט' /
+   'החלטות שמשפיעות עליי'. Active tab = white card + purple text on a light
+   gray track (monday tab-switcher idiom). */
+.subTabs {
+  flex: none;
+  direction: rtl;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  max-width: calc(100% - 32px);
+  margin: var(--spacing-small, 8px) var(--spacing-medium, 16px) 0;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.subTab {
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  padding: 6px 14px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.subTab:hover {
+  color: var(--primary-text-color, #323338);
+}
+.subTabActive {
+  background: var(--primary-background-color, #ffffff);
+  color: var(--decisions-accent, #6b4ee6);
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.subTabActive:hover {
+  color: var(--decisions-accent, #6b4ee6);
+}
+
+/* monday-style toolbar: a left-aligned (LTR) row of pill buttons. Sits above
+   the scrolling board as a fixed flex row. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex: none;
+  background: var(--primary-background-color, #ffffff);
+  padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
+}
+
+/* THE single scroll container — both axes (see MyTasksView.module.css for the
+   sticky-inset margin-vs-padding rationale: the 28px inset MUST be margin). */
+.board {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  direction: ltr;
+  margin-inline-start: 28px;
+  margin-inline-end: 0;
+}
+/* Shared horizontal extent: as wide as the widest group table, never narrower
+   than the viewport, so all groups scroll in unison. */
+.groupScrollInner {
+  width: max-content;
+  min-width: 100%;
+  direction: ltr;
+  padding-block: var(--spacing-small, 8px) 0;
+}
+
+/* Base pill — plain by default, light hover (matches monday's Search pill). */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pill:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.pill:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.pillIcon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: currentColor;
+}
+
+/* Search, expanded into an inline input but keeping the pill shape. */
+.searchPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--secondary-text-color, #676879);
+}
+.searchInput {
+  width: 180px;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+}
+.searchInput:focus-visible {
+  outline: none;
+}
+
+/* Mobile app: icon-only pills on one row (gated on the .mobile-app root class,
+   not viewport width — same as MyTasksView). */
+:global(.mobile-app) .pill {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+:global(.mobile-app) .pill > span {
+  display: none;
+}
+
+.skeletonStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-small, 8px);
+}
+
+.groupStack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  direction: ltr;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* Pin the group title to the left edge while the columns scroll horizontally
+     under the shared board scroll (monday keeps the group name in view). */
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: max-content;
+  margin: 0 0 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: start;
+}
+
+.chevron {
+  width: 24px;
+  height: 24px;
+  color: var(--secondary-text-color, #676879);
+  transition: transform var(--motion-productive-medium, 0.2s) ease;
+  flex-shrink: 0;
+}
+.chevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+.groupTitle {
+  font-size: 18px;
+  font-weight: 500;
+  font-variation-settings: 'wght' 500;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+}
+.groupCount {
+  margin-inline-start: 8px;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 16px;
+  color: var(--secondary-text-color, #676879);
+  text-align: center;
+  direction: rtl;
+}
+.emptyTitle {
+  font-size: 16px;
+  color: var(--primary-text-color, #323338);
+}
+.emptyHint {
+  font-size: 14px;
+}
+
+.loadMore {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 16px;
+}
