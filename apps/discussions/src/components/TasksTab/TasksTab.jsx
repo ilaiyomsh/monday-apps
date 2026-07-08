@@ -64,7 +64,7 @@ function buildPersonGroup(task) {
 // `canCreateTask` gates the "משימה חדשה"/add-row affordances. While the feature
 // is off both resolve via the legacy creator/lead/owner gate, so behavior is
 // byte-for-byte identical to the old single `canEdit` boolean.
-export function TasksTab({ data, onNewTask, onInlineCreateTask, onNotify, canTask = () => true, canCreateTask = true, canReorderColumns, canManageSettings = false }) {
+export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateTask, onNotify, canTask = () => true, canCreateTask = true, canReorderColumns, canManageSettings = false }) {
   const {
     items,
     loading,
@@ -474,6 +474,8 @@ export function TasksTab({ data, onNewTask, onInlineCreateTask, onNotify, canTas
             {!collapsed[grp.key] && (
               <TaskTable tasks={grp.items} color={groupColor}
                 {...editHandlers} canTask={canTask} showPriority={showPriority} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+                reorderScope={discussionId ? `tasks_${discussionId}_${groupBy}_${grp.key}` : null}
+                canReorderRows={canCreateTask}
                 selectable={canSelect} selectedIds={selectedIds} onToggleSelect={toggleSelect}
                 selectAllChecked={groupAllSelected}
                 selectAllIndeterminate={groupSomeSelected}

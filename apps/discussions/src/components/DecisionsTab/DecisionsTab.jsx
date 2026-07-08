@@ -1,6 +1,14 @@
-import React, { useMemo, useRef, useState } from 'react';
-import { Skeleton, Button, Dialog, DialogContentContainer } from '@vibe/core';
-import { DropdownChevronDown, Filter } from '@vibe/icons';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Skeleton, Button, Dialog, DialogContentContainer, Checkbox, Text } from '@vibe/core';
+import { DropdownChevronDown, Filter, CloseSmall } from '@vibe/icons';
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+} from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { SortableRow } from '@generated/components/SortableRow';
+import { useColumnOrder } from '@generated/hooks/useColumnOrder.js';
+import { useRowOrder } from '@generated/hooks/useRowOrder.js';
+import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
 import { Trash2, Check, X, Plus } from 'lucide-react';
 import { PersonAvatar, PersonList } from '@generated/components/PersonAvatar';
 import { PersonPicker } from '@generated/components/PersonPicker';
@@ -26,8 +34,10 @@ import { getBoardId } from '@api/board-config-store.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import styles from './DecisionsTab.module.css';
 
-// Column order for the decisions table (עדיפות removed — product decision).
-// `name` (החלטה) is a FILL track; the rest resize under the 'decisions' tableId.
+// DEFAULT column order for the decisions table (עדיפות removed — product
+// decision). `name` (החלטה) is the pinned/frozen leading column; the rest
+// resize AND reorder (owner drag) under the 'decisions' tableId (Round 7). A
+// leading 'sel' checkbox column is prepended at the call site when selectable.
 const DECISION_COLUMN_KEYS = ['name', 'decider', 'affected', 'status', 'date'];
 
 const NEUTRAL = 'hsl(var(--status-default))';
@@ -151,7 +161,17 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
   );
 }
 
-function DecisionRow({ decision, statusOpts, can, onRename, onStatus, onDate, onAffected, onDelete, rowStyle }) {
+function DecisionRow({
+  decision, statusOpts, can, onRename, onStatus, onDate, onDecider, onAffected, onDelete, rowStyle,
+  deciderCanEdit = false, deciderPickerProps,
+  // Ordered column keys (incl. 'sel'/'name'), supplied by DecisionsTab so header
+  // and body honor the same drag-reorder order.
+  columns,
+  // Selection (Round 7 multi-select) — a leading checkbox cell when selectable.
+  selectable = false, selected = false, onToggleSelect,
+  // Whole-row drag-reorder (Round 7) — ride the sortable bits onto the row root.
+  dragRef, dragStyle, dragProps,
+}) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(decision.name || '');
   const [confirmDel, setConfirmDel] = useState(false);
@@ -179,10 +199,20 @@ function DecisionRow({ decision, statusOpts, can, onRename, onStatus, onDate, on
     setEditingName(false);
   };
 
-  return (
-    <div className={`${styles.decRow} ${styles.decBodyRow} ${pending ? styles.decPending : ''}`} style={rowStyle} aria-busy={pending || undefined}>
-      {/* החלטה — inset purple accent bar, inline rename (gated), hover delete */}
-      <div className={`${styles.decCell} ${styles.decNameCell}`}>
+  const cellByKey = {
+    // selection checkbox (multi-select tabs only) — pinned leading cell
+    sel: (
+      <div key="sel" className={`${styles.decCell} ${styles.decSelectCell}`} onClick={(e) => e.stopPropagation()}>
+        <Checkbox
+          checked={selected}
+          onChange={(e) => onToggleSelect?.(decision.id, e.target.checked)}
+          ariaLabel={`בחר החלטה ${decision.name}`}
+        />
+      </div>
+    ),
+    // החלטה — inset purple accent bar, inline rename (gated), hover delete
+    name: (
+      <div key="name" className={`${styles.decCell} ${styles.decNameCell}`}>
         {editingName ? (
           <input
             className={styles.decNameInput}
@@ -244,18 +274,29 @@ function DecisionRow({ decision, statusOpts, can, onRename, onStatus, onDate, on
           )
         )}
       </div>
-
-      {/* מחליט — single avatar (display-only; no edit capability for decider) */}
-      <div className={styles.decCell}>
-        {deciderPeople.length > 0 ? (
+    ),
+    // מחליט — single-person picker when editable (Round 7: was display-only, so
+    // the decider couldn't be changed after creation); read-only avatar otherwise.
+    decider: (
+      <div key="decider" className={styles.decCell} onClick={(e) => e.stopPropagation()}>
+        {deciderCanEdit ? (
+          <PersonPicker
+            selected={deciderPeople}
+            onChange={(people) => onDecider(decision.id, people)}
+            single
+            closeOnSelect
+            {...(deciderPickerProps || {})}
+          />
+        ) : deciderPeople.length > 0 ? (
           <PersonAvatar person={deciderPeople[0]} showName={false} />
         ) : (
           <span className={styles.decMuted}>—</span>
         )}
       </div>
-
-      {/* מושפעים — up to 3 overlapping avatars + "+N"; PersonPicker when editable */}
-      <div className={styles.decCell}>
+    ),
+    // מושפעים — up to 3 overlapping avatars + "+N"; PersonPicker when editable
+    affected: (
+      <div key="affected" className={styles.decCell} onClick={(e) => e.stopPropagation()}>
         {can('editDecisionAffected', decision) ? (
           <PersonPicker
             selected={affected}
@@ -265,9 +306,10 @@ function DecisionRow({ decision, statusOpts, can, onRename, onStatus, onDate, on
           <PersonList people={affected} size="sm" showNames={false} max={3} />
         )}
       </div>
-
-      {/* סטאטוס — full-fill cell + inline picker (auto-closes on select) */}
-      <div className={`${styles.decCell} ${styles.decStatusCell}`}>
+    ),
+    // סטאטוס — full-fill cell + inline picker (auto-closes on select)
+    status: (
+      <div key="status" className={`${styles.decCell} ${styles.decStatusCell}`}>
         <LabelPickerCell
           value={decision.decisionStatusID}
           opts={statusOpts}
@@ -276,9 +318,10 @@ function DecisionRow({ decision, statusOpts, can, onRename, onStatus, onDate, on
           placeholder="בחר סטאטוס"
         />
       </div>
-
-      {/* תאריך — dd/mm; DatePickerPopover when editable */}
-      <div className={styles.decCell}>
+    ),
+    // תאריך — dd/mm; DatePickerPopover when editable
+    date: (
+      <div key="date" className={styles.decCell} onClick={(e) => e.stopPropagation()}>
         {can('editDecisionDate', decision) ? (
           <DatePickerPopover
             value={date}
@@ -291,6 +334,23 @@ function DecisionRow({ decision, statusOpts, can, onRename, onStatus, onDate, on
           <span className={styles.decMuted}>—</span>
         )}
       </div>
+    ),
+  };
+
+  const orderedKeys = columns || [
+    ...(selectable ? ['sel'] : []),
+    'name', 'decider', 'affected', 'status', 'date',
+  ];
+
+  return (
+    <div
+      ref={dragRef}
+      className={`${styles.decRow} ${styles.decBodyRow} ${pending ? styles.decPending : ''} ${dragProps ? styles.decDraggable : ''}`}
+      style={dragStyle ? { ...rowStyle, ...dragStyle } : rowStyle}
+      aria-busy={pending || undefined}
+      {...(dragProps || {})}
+    >
+      {orderedKeys.map((k) => cellByKey[k]).filter(Boolean)}
     </div>
   );
 }
@@ -307,9 +367,14 @@ function DecisionRow({ decision, statusOpts, can, onRename, onStatus, onDate, on
  * (wired to useDecisions.createDecision in DiscussionCard); the other columns
  * (מחליט/מושפעים/סטאטוס/תאריך) are filled inline on the new row afterward. The
  * "החלטה חדשה" toolbar button still opens the quick-create modal (secondary path)
- * via onNewDecision. Selection / bulk actions are deliberately NOT part of v1.
+ * via onNewDecision.
+ *
+ * ROUND 7 additions: whole-row drag-reorder (persisted per discussion+group via
+ * useRowOrder — monday has no item-position API), owner column drag-reorder
+ * (useColumnOrder, like TaskTable) + an editable "מחליט" cell, and multi-select
+ * with a floating bulk-delete bar (mirrors TasksTab).
  */
-export function DecisionsTab({ data, onNewDecision, onInlineCreate, onNotify, canDecision = () => true, canCreateDecision = true, canReorderColumns = false, canManageSettings = false }) {
+export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlineCreate, onNotify, canDecision = () => true, canCreateDecision = true, canReorderColumns = false, canManageSettings = false }) {
   const {
     items,
     loading,
@@ -317,6 +382,7 @@ export function DecisionsTab({ data, onNewDecision, onInlineCreate, onNotify, ca
     updateDecisionStatus,
     updateDecisionDate,
     updateDecisionAffected,
+    updateDecisionDecider,
     softDeleteDecisions,
   } = data;
 
@@ -325,18 +391,36 @@ export function DecisionsTab({ data, onNewDecision, onInlineCreate, onNotify, ca
   // removed from the table, so decisionPriorityID is no longer read here.)
   const statusOpts = useStatusOptions('decisions', 'decisionStatusID');
 
-  // Owner-resizable columns under the OWN 'decisions' tableId (persisted per
-  // instance for all users). `name` is a fill track; the rest are fixed-px
-  // resizable. Owners on a non-touch viewport get the drag handles; everyone
-  // gets the stored widths applied. Header + rows share this one grid template.
+  // ---- Multi-select (Round 7) — a leading 'sel' checkbox column + a floating
+  // bulk-action bar. Selection is offered when the user can act on at least one
+  // loaded decision (edit any field OR delete); while permissions are off this
+  // equals the legacy creator/decider/owner gate. ----
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const DEC_EDIT_CAPS = ['editDecisionStatus', 'editDecisionDate', 'editDecisionAffected', 'editDecisionName', 'deleteDecision'];
+  const canSelect = items.some((d) => DEC_EDIT_CAPS.some((cap) => canDecision(cap, d)));
+
+  // Owner-resizable + reorderable columns under the OWN 'decisions' tableId
+  // (persisted per instance for all users). `name` is pinned/frozen (and 'sel'
+  // when selectable); the rest resize + reorder. Owners on a non-touch viewport
+  // get the drag handles; everyone gets the stored order/widths applied.
   const { isMobile } = useViewport();
+  const baseKeys = useMemo(
+    () => [...(canSelect ? ['sel'] : []), ...DECISION_COLUMN_KEYS],
+    [canSelect]
+  );
+  const pinned = useMemo(() => (canSelect ? ['sel', 'name'] : ['name']), [canSelect]);
+  const { order, reorder } = useColumnOrder('decisions', baseKeys, pinned);
   const columnDefs = useMemo(
-    () => DECISION_COLUMN_KEYS.map((k) => ({ key: k, ...W[k] })),
-    []
+    () => order.map((k) => (k === 'sel' ? { key: 'sel', fixed: 40 } : { key: k, ...W[k] })),
+    [order]
   );
   const { gridTemplate, startResize } = useColumnWidths('decisions', columnDefs);
-  const canResize = !!canReorderColumns && !isMobile;
+  const canReorderCols = !!canReorderColumns && !isMobile;
+  const canResize = canReorderCols;
   const rowStyle = useMemo(() => ({ gridTemplateColumns: gridTemplate }), [gridTemplate]);
+  // Row-drag gate (same as selection: editors/creators; off on mobile). Reorder
+  // is scoped per group, so it's fine in every group mode (within-group only).
+  const canReorderRows = canSelect && !isMobile;
 
   // ---- Filter + Group by (client-side, over the loaded decisions; same
   // builder UI as the Tasks / Previous tabs). Load-time state = the shared saved
@@ -419,6 +503,39 @@ export function DecisionsTab({ data, onNewDecision, onInlineCreate, onNotify, ca
   const toggleAll = () => {
     if (allCollapsed) setCollapsed({});
     else { const c = {}; grouped.forEach((g) => { c[g.key] = true; }); setCollapsed(c); }
+  };
+
+  // ---- Selection helpers (Round 7) ----
+  const toggleSelect = (id, checked) =>
+    setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
+  const clearSelection = () => setSelectedIds(new Set());
+  // Drop selection ids that no longer exist (after a delete / refetch).
+  const allIds = useMemo(() => items.map((d) => String(d.id)), [items]);
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (current.size === 0) return current;
+      const valid = new Set(allIds);
+      const next = new Set();
+      current.forEach((id) => { if (valid.has(String(id))) next.add(id); });
+      return next.size === current.size ? current : next;
+    });
+  }, [allIds]);
+  // Only the selected decisions the user may delete (mixed selection → the
+  // allowed subset; a decision with no delete cap is silently skipped).
+  const decById = useMemo(() => {
+    const m = new Map(); items.forEach((d) => m.set(String(d.id), d)); return m;
+  }, [items]);
+  const deletableSelectedIds = useMemo(
+    () => [...selectedIds].filter((id) => canDecision('deleteDecision', decById.get(String(id)))),
+    [selectedIds, decById, canDecision]
+  );
+  const deleteSelected = () => {
+    if (deletableSelectedIds.length === 0) return;
+    const ids = deletableSelectedIds;
+    setSelectedIds(new Set());
+    const { undo } = softDeleteDecisions(ids);
+    const msg = ids.length === 1 ? 'ההחלטה נמחקה' : `${ids.length} החלטות נמחקו`;
+    onNotify?.(msg, 'info', 6000, { label: 'בטל', onClick: undo });
   };
 
   // Filter mutators (mirror the Tasks / Previous tabs).
@@ -560,51 +677,86 @@ export function DecisionsTab({ data, onNewDecision, onInlineCreate, onNotify, ca
     </>
   );
 
+  // Header title per column key (name/decider/affected/status/date; 'sel' has none).
+  const DEC_TITLE = { name: 'החלטה', decider: 'מחליט', affected: 'מושפעים', status: 'סטאטוס', date: 'תאריך' };
+  const decRelStyle = canResize ? { position: 'relative' } : undefined;
+  const decHandle = (key) => (canResize && key !== 'sel' ? <ResizeHandle onMouseDown={(e) => startResize(key, e)} /> : null);
+  // Movable header cells = everything except the pinned name (+ sel).
+  const movableColIds = order.filter((k) => k !== 'name' && k !== 'sel');
+
+  // Select-all checkbox state for ONE group's decisions.
+  const groupSelectState = (list) => {
+    const total = list.length;
+    const sel = list.reduce((n, d) => n + (selectedIds.has(d.id) ? 1 : 0), 0);
+    return { allChecked: total > 0 && sel === total, indeterminate: sel > 0 && sel < total };
+  };
+  const toggleSelectGroup = (list, checked) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    list.forEach((d) => { if (checked) next.add(d.id); else next.delete(d.id); });
+    return next;
+  });
+
+  const renderHeadCell = (key, list) => {
+    if (key === 'sel') {
+      const { allChecked, indeterminate } = groupSelectState(list);
+      return (
+        <div key="sel" className={`${styles.decCell} ${styles.decHeadCell} ${styles.decSelectCell}`} onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={allChecked}
+            indeterminate={indeterminate}
+            onChange={(e) => toggleSelectGroup(list, e.target.checked)}
+            ariaLabel={allChecked ? 'בטל בחירת קבוצה' : 'בחר את כל הקבוצה'}
+          />
+        </div>
+      );
+    }
+    if (key === 'name') {
+      // Frozen name header — sticky (own positioning context) so it pins during
+      // horizontal scroll AND hosts the resize handle (like TaskTable .taskFirst).
+      return (
+        <div key="name" className={`${styles.decCell} ${styles.decHeadCell} ${styles.decNameHead}`}>
+          {DEC_TITLE.name}
+          {decHandle('name')}
+        </div>
+      );
+    }
+    const inner = (<>{DEC_TITLE[key]}{decHandle(key)}</>);
+    return canReorderCols ? (
+      <SortableHeaderCell key={key} id={key} className={`${styles.decCell} ${styles.decHeadCell}`} style={decRelStyle}>{inner}</SortableHeaderCell>
+    ) : (
+      <div key={key} className={`${styles.decCell} ${styles.decHeadCell}`} style={decRelStyle}>{inner}</div>
+    );
+  };
+
   // Reusable table box for one group's decisions (header + rows). The add-row is
   // rendered only on the LAST group (or when ungrouped) so there's a single add
-  // affordance at the bottom.
-  const renderDecisionTable = (list, showAddRow) => (
-    <div className={styles.decTable}>
+  // affordance at the bottom. `scopeKey` identifies this group's row order.
+  const renderDecisionTable = (list, showAddRow, scopeKey) => (
+    <div className={`${styles.decTable} ${canSelect ? styles.decSelectable : ''}`}>
       <div className={`${styles.decRow} ${styles.decHead}`} style={rowStyle}>
-        {/* Frozen name header — sticky (its own positioning context) so it pins
-            during horizontal scroll AND hosts the resize handle, exactly like
-            TaskTable's frozen `.taskFirst`. */}
-        <div className={`${styles.decCell} ${styles.decHeadCell} ${styles.decNameHead}`}>
-          החלטה
-          {canResize && <ResizeHandle onMouseDown={(e) => startResize('name', e)} />}
-        </div>
-        <div className={`${styles.decCell} ${styles.decHeadCell}`} style={canResize ? { position: 'relative' } : undefined}>
-          מחליט
-          {canResize && <ResizeHandle onMouseDown={(e) => startResize('decider', e)} />}
-        </div>
-        <div className={`${styles.decCell} ${styles.decHeadCell}`} style={canResize ? { position: 'relative' } : undefined}>
-          מושפעים
-          {canResize && <ResizeHandle onMouseDown={(e) => startResize('affected', e)} />}
-        </div>
-        <div className={`${styles.decCell} ${styles.decHeadCell}`} style={canResize ? { position: 'relative' } : undefined}>
-          סטאטוס
-          {canResize && <ResizeHandle onMouseDown={(e) => startResize('status', e)} />}
-        </div>
-        <div className={`${styles.decCell} ${styles.decHeadCell}`} style={canResize ? { position: 'relative' } : undefined}>
-          תאריך
-          {canResize && <ResizeHandle onMouseDown={(e) => startResize('date', e)} />}
-        </div>
+        <ColumnHeaderDnd enabled={canReorderCols} ids={movableColIds} labels={DEC_TITLE} onReorder={reorder}>
+          {order.map((k) => renderHeadCell(k, list))}
+        </ColumnHeaderDnd>
       </div>
 
-      {list.map((d) => (
-        <DecisionRow
-          key={d.id}
-          decision={d}
-          statusOpts={statusOpts}
-          can={canDecision}
-          onRename={updateDecisionName}
-          onStatus={updateDecisionStatus}
-          onDate={updateDecisionDate}
-          onAffected={updateDecisionAffected}
-          onDelete={handleDelete}
-          rowStyle={rowStyle}
-        />
-      ))}
+      <DecisionRows
+        list={list}
+        scope={discussionId && scopeKey ? `decisions_${discussionId}_${scopeKey}` : null}
+        canReorderRows={canReorderRows}
+        columns={order}
+        selectable={canSelect}
+        selectedIds={selectedIds}
+        onToggleSelect={toggleSelect}
+        statusOpts={statusOpts}
+        canDecision={canDecision}
+        updateDecisionName={updateDecisionName}
+        updateDecisionStatus={updateDecisionStatus}
+        updateDecisionDate={updateDecisionDate}
+        updateDecisionDecider={updateDecisionDecider}
+        updateDecisionAffected={updateDecisionAffected}
+        onDelete={handleDelete}
+        rowStyle={rowStyle}
+      />
 
       {showAddRow && canCreateDecision && (
         onInlineCreate ? (
@@ -656,11 +808,31 @@ export function DecisionsTab({ data, onNewDecision, onInlineCreate, onNotify, ca
         </div>
       </div>
 
+      {/* Floating bulk-action bar (Round 7) — mirrors TasksTab's action bar:
+          left = selected count, center = actions (delete), right = close/X. */}
+      {selectedIds.size > 0 && (
+        <div className={styles.decActionBar} role="region" aria-label="פעולות על החלטות נבחרות">
+          <div className={styles.decActionBarLeft}>
+            <Text type={"text2"} element="span">{selectedIds.size} נבחרו</Text>
+          </div>
+          <div className={styles.decActionBarCenter}>
+            <Button kind={"secondary"} size={"small"} disabled={deletableSelectedIds.length === 0} onClick={deleteSelected}>
+              מחיקה
+            </Button>
+          </div>
+          <div className={styles.decActionBarRight}>
+            <button type="button" className={styles.decCloseSelectionBtn} onClick={clearSelection} aria-label="בטל בחירה">
+              <CloseSmall size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className={styles.decBoard}>
         {items.length === 0 && !canCreateDecision ? (
           <div className={styles.decEmptyRow}>אין החלטות עדיין</div>
         ) : !isGrouped ? (
-          renderDecisionTable(filteredDecisions, true)
+          renderDecisionTable(filteredDecisions, true, `${groupBy}_all`)
         ) : (
           grouped.map((grp, gi) => (
             <div key={grp.key} className={styles.decGroup}>
@@ -674,12 +846,66 @@ export function DecisionsTab({ data, onNewDecision, onInlineCreate, onNotify, ca
                   <span className={styles.decGroupTitle} style={grp.color ? { color: grp.color } : undefined}>{grp.label}</span>
                 </button>
               )}
-              {!collapsed[grp.key] && renderDecisionTable(grp.items, gi === grouped.length - 1)}
+              {!collapsed[grp.key] && renderDecisionTable(grp.items, gi === grouped.length - 1, `${groupBy}_${grp.key}`)}
             </div>
           ))
         )}
       </div>
     </div>
+  );
+}
+
+/*
+ * One group's decision rows, wrapped in a dnd-kit sortable context for whole-row
+ * drag-reorder (Round 7). Split into its own component so it can call the
+ * useRowOrder hook legally (groups are dynamic). When reorder is disabled it
+ * renders the rows plainly (no DnD wrapper).
+ */
+function DecisionRows({
+  list, scope, canReorderRows, columns, selectable, selectedIds, onToggleSelect,
+  statusOpts, canDecision, updateDecisionName, updateDecisionStatus, updateDecisionDate,
+  updateDecisionDecider, updateDecisionAffected, onDelete, rowStyle,
+}) {
+  const enabled = !!scope && !!canReorderRows;
+  const { order: rowOrderIds, orderList, onDragEnd } = useRowOrder(scope, list, { enabled });
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const displayList = enabled ? orderList : list;
+
+  const renderRow = (d, drag) => (
+    <DecisionRow
+      key={d.id}
+      decision={d}
+      columns={columns}
+      statusOpts={statusOpts}
+      can={canDecision}
+      onRename={updateDecisionName}
+      onStatus={updateDecisionStatus}
+      onDate={updateDecisionDate}
+      onDecider={updateDecisionDecider}
+      onAffected={updateDecisionAffected}
+      onDelete={onDelete}
+      rowStyle={rowStyle}
+      deciderCanEdit={canDecision('editDecisionAffected', d)}
+      selectable={selectable}
+      selected={selectable ? !!selectedIds?.has(d.id) : false}
+      onToggleSelect={onToggleSelect}
+      dragRef={drag?.setNodeRef}
+      dragStyle={drag?.style}
+      dragProps={drag ? { ...drag.attributes, ...drag.listeners } : undefined}
+    />
+  );
+
+  if (!enabled) return <>{displayList.map((d) => renderRow(d, null))}</>;
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={rowOrderIds} strategy={verticalListSortingStrategy}>
+        {displayList.map((d) => (
+          <SortableRow key={d.id} id={d.id} disabled={String(d.id).startsWith('temp-')}>
+            {(drag) => renderRow(d, drag)}
+          </SortableRow>
+        ))}
+      </SortableContext>
+    </DndContext>
   );
 }
 

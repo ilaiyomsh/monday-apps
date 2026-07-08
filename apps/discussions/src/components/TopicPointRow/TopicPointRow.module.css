@@ -60,6 +60,22 @@
   margin-inline-end: 4px;
 }
 
+/* Multi-select checkbox (Round 7) — leading the name cell content when the tab
+   is in selection mode. Always visible (unlike the hover kebab) so the current
+   selection reads at a glance. */
+.pointSelect {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-inline-end: 4px;
+}
+.pointSelect > label {
+  margin: 0;
+}
+.pointSelect > label > :last-child {
+  margin-inline-start: 0;
+}
+
 .kebabWrap {
   display: inline-flex;
 }

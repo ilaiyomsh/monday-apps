@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Skeleton, Button, TextField, Dialog, DialogContentContainer } from '@vibe/core';
+import { Skeleton, Button, TextField, Dialog, DialogContentContainer, Text, Checkbox } from '@vibe/core';
+import { CloseSmall } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
@@ -118,6 +119,23 @@ function PriorityPill({ value, options, labelById, colorById, canEdit, onChange 
   );
 }
 
+// Select-all-in-topic checkbox — checked when every point of the topic is
+// selected, indeterminate when some are. Toggles the whole topic's points.
+function TopicSelectAll({ points, selectedPointIds, onToggleTopicPoints }) {
+  const ids = points.map((p) => String(p.id));
+  const selCount = ids.reduce((n, id) => n + (selectedPointIds?.has(id) ? 1 : 0), 0);
+  const allChecked = ids.length > 0 && selCount === ids.length;
+  const indeterminate = selCount > 0 && selCount < ids.length;
+  return (
+    <Checkbox
+      checked={allChecked}
+      indeterminate={indeterminate}
+      onChange={(e) => onToggleTopicPoints?.(points, e.target.checked)}
+      ariaLabel={allChecked ? 'בטל בחירת נושא' : 'בחר את כל נקודות הנושא'}
+    />
+  );
+}
+
 const TOPIC_SKELETON_H = 44;
 
 /* 20-color monday LABEL palette (see theme-tokens.css --topic-color-1..20). */
@@ -152,6 +170,13 @@ function SortableTopicSection({
   // header cell gets a ResizeHandle whose drag calls startResize(key, e). The
   // widths are shared across every topic section (one grid template).
   canResize = false, startResize,
+  // Multi-select (Round 7): when `selectable`, each point row shows a checkbox;
+  // selection is tracked by point id in the parent. The section header hosts a
+  // select-all-in-topic checkbox.
+  selectable = false, selectedPointIds, onTogglePointSelect, onToggleTopicPoints,
+  // Sets of the discussion's REAL decision/task ids — the per-point counters
+  // intersect the point's linked ids with these so the count is accurate.
+  decisionIdSet, taskIdSet,
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(topic.id) });
   const accentTri = `var(${accent})`;
@@ -227,6 +252,21 @@ function SortableTopicSection({
         className={`${styles.sectionHeader} ${canEditTopic ? styles.sectionHeaderDraggable : ''}`}
         {...headerDragProps}
       >
+        {/* Select-all-in-topic checkbox (Round 7 multi-select) — toggles every
+            point of this topic. Stops propagation so it never starts a header drag. */}
+        {selectable && points.length > 0 && (
+          <span
+            className={styles.topicSelect}
+            onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <TopicSelectAll
+              points={points}
+              selectedPointIds={selectedPointIds}
+              onToggleTopicPoints={onToggleTopicPoints}
+            />
+          </span>
+        )}
         <button
           type="button"
           className={styles.triangle}
@@ -369,14 +409,21 @@ function SortableTopicSection({
                   canEditPoint={canEditTopic}
                   canDelete={canDelete}
                   canCheck={canCheck}
-                  decisionCount={(point.decisionIds || []).length}
-                  taskCount={(point.taskIds || []).length}
+                  decisionCount={decisionIdSet
+                    ? (point.decisionIds || []).filter((id) => decisionIdSet.has(String(id))).length
+                    : (point.decisionIds || []).length}
+                  taskCount={taskIdSet
+                    ? (point.taskIds || []).filter((id) => taskIdSet.has(String(id))).length
+                    : (point.taskIds || []).length}
                   // Stamp the parent topic id onto the scoped point — the
                   // quick-create task flow links the new task to the topic too.
                   onCreateDecision={onCreatePointDecision ? () => onCreatePointDecision({ ...point, topicId: topic.id }) : undefined}
                   onCreateTask={onCreatePointTask ? () => onCreatePointTask({ ...point, topicId: topic.id }) : undefined}
                   onOpenDecisions={(p) => onOpenPointItems('decision', p)}
                   onOpenTasks={(p) => onOpenPointItems('task', p)}
+                  selectable={selectable}
+                  selected={selectable ? !!selectedPointIds?.has(String(point.id)) : false}
+                  onToggleSelect={(p, checked) => onTogglePointSelect?.(p, checked)}
                 />
               ))}
             </SortableContext>
@@ -458,6 +505,74 @@ export function TopicsTab({
 
   const priorityMapped = !!getColumns('topics')?.topicPriorityID?.id;
   const priorityOpts = useStatusOptions('topics', 'topicPriorityID');
+
+  // Sets of the discussion's REAL, still-existing decision / task ids (from the
+  // prefetched lists in DiscussionCard). The per-point החלטות/משימות counters
+  // intersect the point's linked ids (pointDecisionsLinkID / pointTasksLinkID)
+  // with these, so the count reflects decisions/tasks that ACTUALLY exist and
+  // are linked to the point — deleted/stale linked ids no longer inflate it, and
+  // when the subitem link column is unmapped the point simply has no linked ids
+  // (count 0). This is what makes the Topics "החלטות" count show a real number
+  // instead of a stale/blank value.
+  const decisionIdSet = useMemo(
+    () => new Set((decisionsItems || []).map((d) => String(d.id))),
+    [decisionsItems]
+  );
+  const taskIdSet = useMemo(
+    () => new Set((tasksItems || []).map((t) => String(t.id))),
+    [tasksItems]
+  );
+
+  // ---- Multi-select of POINTS (Round 7) — a checkbox per point + a floating
+  // bulk bar (delete / hide the selected points). Offered when the user can edit
+  // or delete points; while permissions are off this equals the legacy gate. ----
+  const canSelectPoints = !!(deleteTopicOrPoint || editTopicOrPoint);
+  const [selectedPointIds, setSelectedPointIds] = useState(() => new Set());
+  // Map of point id -> its point object (for resolving the selection to actions).
+  const pointById = useMemo(() => {
+    const m = new Map();
+    items.forEach((t) => (t._subitems || []).forEach((p) => m.set(String(p.id), p)));
+    return m;
+  }, [items]);
+  // Prune ids that no longer exist (after a delete / refetch).
+  useEffect(() => {
+    setSelectedPointIds((cur) => {
+      if (cur.size === 0) return cur;
+      const next = new Set();
+      cur.forEach((id) => { if (pointById.has(String(id))) next.add(String(id)); });
+      return next.size === cur.size ? cur : next;
+    });
+  }, [pointById]);
+  const togglePointSelect = (point, checked) => setSelectedPointIds((prev) => {
+    const n = new Set(prev); const id = String(point.id);
+    if (checked) n.add(id); else n.delete(id); return n;
+  });
+  const toggleTopicPoints = (points, checked) => setSelectedPointIds((prev) => {
+    const n = new Set(prev);
+    (points || []).forEach((p) => { const id = String(p.id); if (checked) n.add(id); else n.delete(id); });
+    return n;
+  });
+  const clearPointSelection = () => setSelectedPointIds(new Set());
+  const selectedPoints = useMemo(
+    () => [...selectedPointIds].map((id) => pointById.get(String(id))).filter(Boolean),
+    [selectedPointIds, pointById]
+  );
+  // Bulk delete — iterate the per-point optimistic delete (no batch endpoint).
+  const deleteSelectedPoints = () => {
+    if (!deleteTopicOrPoint || selectedPoints.length === 0) return;
+    const pts = selectedPoints;
+    clearPointSelection();
+    pts.forEach((p) => deletePoint(p));
+    onNotify?.(pts.length === 1 ? 'הנקודה נמחקה' : `${pts.length} נקודות נמחקו`, 'success');
+  };
+  // Bulk hide — set every selected point's "not for discussion" flag.
+  const hideSelectedPoints = () => {
+    if (!editTopicOrPoint || selectedPoints.length === 0) return;
+    const pts = selectedPoints;
+    clearPointSelection();
+    pts.forEach((p) => { if (p.notForDiscussion !== true) togglePointNotForDiscussion(p, true); });
+    onNotify?.(pts.length === 1 ? 'הנקודה הוסתרה' : `${pts.length} נקודות הוסתרו`, 'success');
+  };
 
   // Resizable columns (shared 'topics' tableId → persisted per-instance for all
   // users). The leading 28px accent bar is fixed; name/check/decisions/tasks
@@ -662,6 +777,29 @@ export function TopicsTab({
         )}
       </div>
 
+      {/* Floating bulk-action bar (Round 7) — appears when ≥1 point is selected.
+          Same chrome as the Tasks/Decisions action bars: count · actions · close. */}
+      {selectedPointIds.size > 0 && (
+        <div className={styles.actionBar} role="region" aria-label="פעולות על נקודות נבחרות">
+          <div className={styles.actionBarLeft}>
+            <Text type={"text2"} element="span">{selectedPointIds.size} נבחרו</Text>
+          </div>
+          <div className={styles.actionBarCenter}>
+            {editTopicOrPoint && (
+              <Button kind={"secondary"} size={"small"} onClick={hideSelectedPoints}>הסתרה</Button>
+            )}
+            {deleteTopicOrPoint && (
+              <Button kind={"secondary"} size={"small"} onClick={deleteSelectedPoints}>מחיקה</Button>
+            )}
+          </div>
+          <div className={styles.actionBarRight}>
+            <button type="button" className={styles.closeSelectionBtn} onClick={clearPointSelection} aria-label="בטל בחירה">
+              <CloseSmall size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTopicDragEnd}>
         <SortableContext items={items.map((t) => String(t.id))} strategy={verticalListSortingStrategy}>
           {items.map((topic) => (
@@ -696,6 +834,12 @@ export function TopicsTab({
               onOpenPointItems={onOpenPointItems}
               canResize={canResize}
               startResize={startResize}
+              selectable={canSelectPoints}
+              selectedPointIds={selectedPointIds}
+              onTogglePointSelect={togglePointSelect}
+              onToggleTopicPoints={toggleTopicPoints}
+              decisionIdSet={decisionIdSet}
+              taskIdSet={taskIdSet}
             />
           ))}
         </SortableContext>
