@@ -1,14 +1,22 @@
-import React, { useRef, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Skeleton, Button, Dialog, DialogContentContainer } from '@vibe/core';
 import { Trash2, Check, X } from 'lucide-react';
 import { PersonAvatar, PersonList } from '@generated/components/PersonAvatar';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
+import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
+import { useViewport } from '@generated/hooks/useViewport.js';
+import { ResizeHandle } from '@generated/components/ResizeHandle';
+import { DECISIONS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { getBoardId } from '@api/board-config-store.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import styles from './DecisionsTab.module.css';
+
+// Column order for the decisions table (עדיפות removed — product decision).
+// `name` (החלטה) is a FILL track; the rest resize under the 'decisions' tableId.
+const DECISION_COLUMN_KEYS = ['name', 'decider', 'affected', 'status', 'date'];
 
 const NEUTRAL = 'hsl(var(--status-default))';
 
@@ -105,7 +113,7 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
   );
 }
 
-function DecisionRow({ decision, statusOpts, priorityOpts, can, onRename, onStatus, onPriority, onDate, onAffected, onDelete }) {
+function DecisionRow({ decision, statusOpts, can, onRename, onStatus, onDate, onAffected, onDelete, rowStyle }) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(decision.name || '');
   const [confirmDel, setConfirmDel] = useState(false);
@@ -134,7 +142,7 @@ function DecisionRow({ decision, statusOpts, priorityOpts, can, onRename, onStat
   };
 
   return (
-    <div className={`${styles.decRow} ${styles.decBodyRow} ${pending ? styles.decPending : ''}`} aria-busy={pending || undefined}>
+    <div className={`${styles.decRow} ${styles.decBodyRow} ${pending ? styles.decPending : ''}`} style={rowStyle} aria-busy={pending || undefined}>
       {/* החלטה — inset purple accent bar, inline rename (gated), hover delete */}
       <div className={`${styles.decCell} ${styles.decNameCell}`}>
         {editingName ? (
@@ -220,18 +228,6 @@ function DecisionRow({ decision, statusOpts, priorityOpts, can, onRename, onStat
         )}
       </div>
 
-      {/* עדיפות — pill + inline picker (auto-closes on select) */}
-      <div className={styles.decCell}>
-        <LabelPickerCell
-          value={decision.decisionPriorityID}
-          opts={priorityOpts}
-          canEdit={can('editDecisionPriority', decision)}
-          onPick={(id) => onPriority(decision.id, id)}
-          pill
-          placeholder="—"
-        />
-      </div>
-
       {/* סטאטוס — full-fill cell + inline picker (auto-closes on select) */}
       <div className={`${styles.decCell} ${styles.decStatusCell}`}>
         <LabelPickerCell
@@ -270,22 +266,34 @@ function DecisionRow({ decision, statusOpts, priorityOpts, can, onRename, onStat
  * `onNewDecision()` — the create flow itself lives outside this tab.
  * Selection / bulk actions are deliberately NOT part of v1.
  */
-export function DecisionsTab({ data, onNewDecision, onNotify, canDecision = () => true, canCreateDecision = true }) {
+export function DecisionsTab({ data, onNewDecision, onNotify, canDecision = () => true, canCreateDecision = true, canReorderColumns = false }) {
   const {
     items,
     loading,
     updateDecisionName,
     updateDecisionStatus,
-    updateDecisionPriority,
     updateDecisionDate,
     updateDecisionAffected,
     softDeleteDecisions,
   } = data;
 
-  // Status/priority label sets come from the MAPPED decisions status columns —
-  // useStatusOptions never fires when the board/column is unmapped.
+  // Status label set comes from the MAPPED decisions status column —
+  // useStatusOptions never fires when the board/column is unmapped. (עדיפות was
+  // removed from the table, so decisionPriorityID is no longer read here.)
   const statusOpts = useStatusOptions('decisions', 'decisionStatusID');
-  const priorityOpts = useStatusOptions('decisions', 'decisionPriorityID');
+
+  // Owner-resizable columns under the OWN 'decisions' tableId (persisted per
+  // instance for all users). `name` is a fill track; the rest are fixed-px
+  // resizable. Owners on a non-touch viewport get the drag handles; everyone
+  // gets the stored widths applied. Header + rows share this one grid template.
+  const { isMobile } = useViewport();
+  const columnDefs = useMemo(
+    () => DECISION_COLUMN_KEYS.map((k) => ({ key: k, ...W[k] })),
+    []
+  );
+  const { gridTemplate, startResize } = useColumnWidths('decisions', columnDefs);
+  const canResize = !!canReorderColumns && !isMobile;
+  const rowStyle = useMemo(() => ({ gridTemplateColumns: gridTemplate }), [gridTemplate]);
 
   // The decisions board is mapped MANUALLY in Settings (not wizard-created) —
   // unmapped is an EXPECTED state: render the empty state, fire nothing.
@@ -323,13 +331,27 @@ export function DecisionsTab({ data, onNewDecision, onNotify, canDecision = () =
 
       <div className={styles.decBoard}>
         <div className={styles.decTable}>
-          <div className={`${styles.decRow} ${styles.decHead}`}>
-            <div className={`${styles.decCell} ${styles.decHeadCell} ${styles.decNameHead}`}>החלטה</div>
-            <div className={`${styles.decCell} ${styles.decHeadCell}`}>מחליט</div>
-            <div className={`${styles.decCell} ${styles.decHeadCell}`}>מושפעים</div>
-            <div className={`${styles.decCell} ${styles.decHeadCell}`}>עדיפות</div>
-            <div className={`${styles.decCell} ${styles.decHeadCell}`}>סטאטוס</div>
-            <div className={`${styles.decCell} ${styles.decHeadCell}`}>תאריך</div>
+          <div className={`${styles.decRow} ${styles.decHead}`} style={rowStyle}>
+            <div className={`${styles.decCell} ${styles.decHeadCell} ${styles.decNameHead}`} style={canResize ? { position: 'relative' } : undefined}>
+              החלטה
+              {canResize && <ResizeHandle onMouseDown={(e) => startResize('name', e)} />}
+            </div>
+            <div className={`${styles.decCell} ${styles.decHeadCell}`} style={canResize ? { position: 'relative' } : undefined}>
+              מחליט
+              {canResize && <ResizeHandle onMouseDown={(e) => startResize('decider', e)} />}
+            </div>
+            <div className={`${styles.decCell} ${styles.decHeadCell}`} style={canResize ? { position: 'relative' } : undefined}>
+              מושפעים
+              {canResize && <ResizeHandle onMouseDown={(e) => startResize('affected', e)} />}
+            </div>
+            <div className={`${styles.decCell} ${styles.decHeadCell}`} style={canResize ? { position: 'relative' } : undefined}>
+              סטאטוס
+              {canResize && <ResizeHandle onMouseDown={(e) => startResize('status', e)} />}
+            </div>
+            <div className={`${styles.decCell} ${styles.decHeadCell}`} style={canResize ? { position: 'relative' } : undefined}>
+              תאריך
+              {canResize && <ResizeHandle onMouseDown={(e) => startResize('date', e)} />}
+            </div>
           </div>
 
           {items.length === 0 && !canCreateDecision && (
@@ -341,14 +363,13 @@ export function DecisionsTab({ data, onNewDecision, onNotify, canDecision = () =
               key={d.id}
               decision={d}
               statusOpts={statusOpts}
-              priorityOpts={priorityOpts}
               can={canDecision}
               onRename={updateDecisionName}
               onStatus={updateDecisionStatus}
-              onPriority={updateDecisionPriority}
               onDate={updateDecisionDate}
               onAffected={updateDecisionAffected}
               onDelete={handleDelete}
+              rowStyle={rowStyle}
             />
           ))}
 

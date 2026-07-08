@@ -104,7 +104,7 @@ const PREVIOUS_TASKS_MODE_OPTIONS = [
  * alias→real-column-id mapping that the SDK reads, then persist via
  * SettingsContext.updateSettings (monday.storage, per instance).
  */
-export function SettingsModal({ isOpen, onClose }) {
+export function SettingsModal({ isOpen, onClose, onNotify }) {
   const { settings, updateSettings } = useSettings();
   const { context } = useMondayContext();
   // settings is null until a mapping is stored; seed the editable draft from an
@@ -421,6 +421,8 @@ export function SettingsModal({ isOpen, onClose }) {
         } catch { /* detection best-effort */ }
       }
       await updateSettings({ boards, columns: columnsToSave, preferences, permissions, exportTemplate });
+      // Success toast (top of the app, same funnel as every other notification).
+      onNotify?.('הגדרות נשמרו בהצלחה', 'success');
       onClose();
     } catch (err) {
       setActiveTab(3);

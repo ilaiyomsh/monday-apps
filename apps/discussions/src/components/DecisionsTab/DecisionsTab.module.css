@@ -68,13 +68,14 @@
   direction: ltr;
 }
 
-/* Shared grid template (header + body). mockup: 40px rows,
-   החלטה | מחליט | מושפעים | עדיפות | סטאטוס | תאריך. */
+/* Header + body share ONE grid template, supplied INLINE by useColumnWidths
+   (owner-resizable, 'decisions' tableId): החלטה | מחליט | מושפעים | סטאטוס | תאריך
+   (עדיפות removed). 36px rows to match the Tasks/Topics tables. No static
+   grid-template-columns here — the inline rowStyle is authoritative. */
 .decRow {
   display: grid;
-  grid-template-columns: minmax(260px, 1.8fr) 130px 150px 140px 160px 110px;
   align-items: stretch;
-  min-height: 40px;
+  min-height: 36px;
   border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
   position: relative;
 }
@@ -96,12 +97,19 @@
   background: transparent;
 }
 
+/* Cell chrome mirrors TaskTable's .taskCell: centered, 0 8px padding, 14px text,
+   0.625px trailing column rule, 36px min-height. */
 .decCell {
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
+  min-height: 36px;
+  padding: 0 8px;
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  font-size: 14px;
+  color: var(--primary-text-color, #323338);
+  overflow: hidden;
   font-family: var(--font-family);
 }
 
@@ -130,7 +138,7 @@
   flex: 1;
   min-width: 0;
   font-size: 14px;
-  line-height: 40px; /* match row height */
+  line-height: 36px; /* match row height */
   color: var(--primary-text-color, #323338);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -244,7 +252,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 38px;
+  min-height: 36px;
   color: #ffffff;
   font-size: 14px;
   font-weight: 500;
@@ -323,7 +331,7 @@
 .decEmptyRow {
   display: flex;
   align-items: center;
-  min-height: 40px;
+  min-height: 36px;
   padding: 0 14px;
   color: var(--secondary-text-color, #676879);
   font-size: 14px;
@@ -339,7 +347,7 @@
   display: flex;
   align-items: stretch;
   width: 100%;
-  min-height: 40px;
+  min-height: 36px;
   padding: 0;
   border: none;
   background: transparent;

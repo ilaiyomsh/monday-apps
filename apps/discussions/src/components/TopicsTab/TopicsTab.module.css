@@ -408,15 +408,16 @@
 .colHead {
   display: grid;
   align-items: stretch;
-  min-height: 38px;
+  min-height: 36px;
+  background: #ffffff;
   border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
 }
 .colHeadCell {
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  min-height: 38px;
-  font-size: 13px;
+  padding: 0 8px;
+  min-height: 36px;
+  font-size: 14px;
   font-weight: 400;
   color: var(--primary-text-color, #323338);
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);

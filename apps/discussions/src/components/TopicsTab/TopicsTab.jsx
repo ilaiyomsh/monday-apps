@@ -21,6 +21,10 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTopics } from '@generated/hooks/useTopics';
+import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
+import { useViewport } from '@generated/hooks/useViewport.js';
+import { ResizeHandle } from '@generated/components/ResizeHandle';
+import { TOPICS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
@@ -28,12 +32,13 @@ import styles from './TopicsTab.module.css';
 
 const NEUTRAL = 'hsl(var(--status-default))';
 
-// FIXED grid template shared by every topic's column header + point rows so they
-// always line up (decisions redesign — per the approved mockup):
-//   [accent bar 28px] | נקודה לדיון (flex) | נידונה 66px | החלטות 168px | משימות 168px
-// (Replaces the previous drag-reorderable/resizable topics column system; the
-// kebab + drag grip moved into the name cell, hover-revealed.)
-const ROW_TEMPLATE = '28px minmax(180px, 1fr) 66px 168px 168px';
+// Column order for the points table (decisions redesign — per the approved
+// mockup): [accent bar 28px] | נקודה לדיון (fill) | נידונה | החלטות | משימות.
+// The leading accent bar is a FIXED 28px track; the other four keys resize via
+// useColumnWidths under the shared 'topics' tableId (owner-draggable, persisted
+// for all users). Widths/clamps come from constants/columnWidths TOPICS_COLUMN_WIDTHS.
+const LEAD_TRACK = '28px';
+const TOPIC_COLUMN_KEYS = ['name', 'check', 'decisions', 'tasks'];
 
 // Per-topic priority box — identical look to the status column: FIXED width,
 // centered label, white text on the status color (label text + colors come from
@@ -143,6 +148,10 @@ function SortableTopicSection({
   priorityMapped = false, priorityOptions, priorityLabelById, priorityColorById, updateTopicPriority,
   // Decisions/tasks-from-point wiring (threaded from TopicsTab).
   onCreatePointDecision, onCreatePointTask, onOpenPointItems,
+  // Owner column-resize (shared 'topics' tableId): when canResize, each column
+  // header cell gets a ResizeHandle whose drag calls startResize(key, e). The
+  // widths are shared across every topic section (one grid template).
+  canResize = false, startResize,
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(topic.id) });
   const accentTri = `var(${accent})`;
@@ -158,6 +167,11 @@ function SortableTopicSection({
   const [newPointText, setNewPointText] = useState('');
   const [showAddPointInput, setShowAddPointInput] = useState(false);
   const addPointInputRef = useRef(null);
+  // Single click on the title toggles collapse/expand (same as the chevron);
+  // double click renames. A short timer defers the toggle so a double-click
+  // opens rename WITHOUT the collapse flicker (React fires onClick before
+  // onDoubleClick). The pending toggle is cancelled when the dblclick lands.
+  const titleClickTimerRef = useRef(null);
 
   const points = topic._subitems || [];
   const excluded = topic.notForDiscussion === true;
@@ -237,10 +251,21 @@ function SortableTopicSection({
           <span className={styles.titleWrap}>
             <span
               className={styles.title}
-              style={{ color: `hsl(${accentTri})`, opacity: excluded ? 0.5 : 1 }}
-              onDoubleClick={canEditTopic && !excluded ? (e) => {
+              style={{ color: `hsl(${accentTri})`, opacity: excluded ? 0.5 : 1, cursor: excluded ? 'default' : 'pointer' }}
+              role={excluded ? undefined : 'button'}
+              aria-label={excluded ? undefined : (effectiveOpen ? 'קפל נושא' : 'פתח נושא')}
+              onClick={excluded ? undefined : () => {
+                // Defer the toggle so a following double-click (rename) can cancel it.
+                if (titleClickTimerRef.current) clearTimeout(titleClickTimerRef.current);
+                titleClickTimerRef.current = setTimeout(() => {
+                  titleClickTimerRef.current = null;
+                  onToggleOpen();
+                }, 220);
+              }}
+              onDoubleClick={!excluded ? (e) => {
                 e.preventDefault(); e.stopPropagation();
-                setTitleDraft(topic.name || ''); setEditingTitle(true);
+                if (titleClickTimerRef.current) { clearTimeout(titleClickTimerRef.current); titleClickTimerRef.current = null; }
+                if (canEditTopic) { setTitleDraft(topic.name || ''); setEditingTitle(true); }
               } : undefined}
               title={topic.name}
             >
@@ -299,13 +324,26 @@ function SortableTopicSection({
 
       {effectiveOpen && (
         <div className={styles.sectionBody}>
-          {/* FIXED column header — same grid template as the point rows. */}
+          {/* Column header — SAME grid template as the point rows (shared via
+              rowStyle). Owners get a ResizeHandle on each column's trailing edge
+              (the cell becomes a positioning context for the absolute handle). */}
           <div className={styles.colHead} style={rowStyle}>
             <span className={styles.colHeadLead} aria-hidden="true" />
-            <span className={styles.colHeadCell} />
-            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`}>נידונה</span>
-            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`}>החלטות</span>
-            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`}>משימות</span>
+            <span className={styles.colHeadCell} style={canResize ? { position: 'relative' } : undefined}>
+              {canResize && <ResizeHandle onMouseDown={(e) => startResize('name', e)} />}
+            </span>
+            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`} style={canResize ? { position: 'relative' } : undefined}>
+              נידונה
+              {canResize && <ResizeHandle onMouseDown={(e) => startResize('check', e)} />}
+            </span>
+            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`} style={canResize ? { position: 'relative' } : undefined}>
+              החלטות
+              {canResize && <ResizeHandle onMouseDown={(e) => startResize('decisions', e)} />}
+            </span>
+            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`} style={canResize ? { position: 'relative' } : undefined}>
+              משימות
+              {canResize && <ResizeHandle onMouseDown={(e) => startResize('tasks', e)} />}
+            </span>
           </div>
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handlePointDragEnd}>
@@ -390,9 +428,9 @@ export function TopicsTab({
   // grant some and not others.
   addTopicOrPoint = true, editTopicOrPoint = true, deleteTopicOrPoint = true,
   checkPoint = true, editResponses = true, // editResponses kept for prop compat (התייחסויות column removed from display)
-  // Kept for prop compat — the topics table now uses a FIXED column layout, so
-  // column drag-reorder/resize no longer applies here.
-  canReorderColumns = false, // eslint-disable-line no-unused-vars
+  // Owners (can('reorderColumns')) may drag-resize the topics columns; the
+  // widths persist per-instance under the shared 'topics' tableId (all users).
+  canReorderColumns = false,
   // Decisions redesign wiring (per the approved mockup):
   //   onCreateFromPoint(kind, point) — kind: 'decision' | 'task'; opens the
   //     parent's quick-create flow scoped to the point. The dashed "+" buttons
@@ -412,8 +450,23 @@ export function TopicsTab({
   const priorityMapped = !!getColumns('topics')?.topicPriorityID?.id;
   const priorityOpts = useStatusOptions('topics', 'topicPriorityID');
 
-  // Shared fixed grid template for the column header + all point rows.
-  const rowStyle = useMemo(() => ({ gridTemplateColumns: ROW_TEMPLATE }), []);
+  // Resizable columns (shared 'topics' tableId → persisted per-instance for all
+  // users). The leading 28px accent bar is fixed; name/check/decisions/tasks
+  // resize within their clamps. useColumnWidths returns the grid-template string
+  // for those four; we prepend the fixed lead track. Owners on a non-touch
+  // viewport get the drag handles (canResize); everyone gets the stored widths.
+  const { isMobile } = useViewport();
+  const columnDefs = useMemo(
+    () => TOPIC_COLUMN_KEYS.map((k) => ({ key: k, ...W[k] })),
+    []
+  );
+  const { gridTemplate, startResize } = useColumnWidths('topics', columnDefs);
+  const canResize = !!canReorderColumns && !isMobile;
+  // Shared grid template for the column header + all point rows.
+  const rowStyle = useMemo(
+    () => ({ gridTemplateColumns: `${LEAD_TRACK} ${gridTemplate}` }),
+    [gridTemplate]
+  );
 
   // Counter popup state — { kind: 'decision'|'task', point } | null.
   const [popup, setPopup] = useState(null);
@@ -630,6 +683,8 @@ export function TopicsTab({
               onCreatePointDecision={onCreatePointDecision}
               onCreatePointTask={onCreatePointTask}
               onOpenPointItems={onOpenPointItems}
+              canResize={canResize}
+              startResize={startResize}
             />
           ))}
         </SortableContext>

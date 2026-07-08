@@ -54,14 +54,30 @@ export const TASKS_COLUMN_WIDTHS = {
   source: { default: 260, min: 160, max: 520 },
 };
 
-// Topics tab points table (one setting shared by every topic group). The lead
-// (kebab/grip) track is fixed at the call site. `name` is a FIXED, resizable
-// track (like every other table's name column) so dragging its right border
-// actually resizes it — a FILL (1fr) track silently absorbs the drag and never
-// changes size. The row still spans the full width (rows stretch to the section
-// body) with an empty grid continuing to the right edge (native monday look).
+// Topics tab points table (one setting shared by every topic group, under the
+// shared 'topics' tableId — a drag on ANY topic's column resizes it for all
+// topics AND all users of the instance). The lead (accent-bar) track is a fixed
+// 28px track at the call site. `name` is a FILL track (minmax(w,1fr)) so the
+// table always spans the full width; dragging its border adjusts its MINIMUM.
+// The remaining columns (נידונה / החלטות / משימות) are fixed-px resizable tracks
+// matching the decisions redesign's default layout.
 export const TOPICS_COLUMN_WIDTHS = {
-  name: { default: 400, min: 140, max: 1200 },
-  check: { default: 56, min: 44, max: 140 },
-  avatar: { default: 44, min: 40, max: 120 },
+  name: { default: 360, min: 160, max: 1200, flex: true },
+  check: { default: 66, min: 52, max: 160 },
+  decisions: { default: 168, min: 110, max: 360 },
+  tasks: { default: 168, min: 110, max: 360 },
+};
+
+// Decisions tab table (its OWN 'decisions' tableId — separate widths from the
+// task/topics tables). `name` (החלטה) is a FILL track so the table always spans
+// the full width; the rest are fixed-px resizable tracks. Owner-draggable +
+// persisted per-instance for all users (same store/pattern as the other tables).
+// The עדיפות column was removed from the decisions table (product decision), so
+// it has no width entry.
+export const DECISIONS_COLUMN_WIDTHS = {
+  name: { default: 300, min: 200, max: 900, flex: true },
+  decider: { default: 130, min: 90, max: 260 },
+  affected: { default: 150, min: 100, max: 320 },
+  status: { default: 170, min: 110, max: 340 },
+  date: { default: 120, min: 90, max: 240 },
 };
