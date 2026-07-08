@@ -1,7 +1,7 @@
 .wrap {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 24px;
   /* Full width (broke out of the 90% frame) so the point tables run to the RIGHT
      edge; a left inset keeps content off the edge, the right stays flush. */
   width: 100%;
@@ -42,7 +42,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 14px;
 }
 /* Hidden / "לא לדיון" topic — dim the table body; the eye control stays full. */
 .sectionExcluded .sectionBody {
@@ -141,7 +141,7 @@
   min-width: 0;
 }
 .title {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 500;
   /* Pin the variable-font weight axis (Noto/Figtree default to light masters). */
   font-variation-settings: 'wght' 500;
@@ -439,4 +439,33 @@
   color: var(--secondary-text-color, #676879);
   font-size: 13px;
   box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
+}
+
+
+/* Eye toggle in the group header — hide/show a topic. Sits just to the right of
+   the name (right edge of the name); always visible but subtle, full on hover.
+   When the topic is hidden the eye brightens so the restore action is obvious. */
+.eyeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-inline-start: 4px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.eyeBtn:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.06);
+}
+.sectionExcluded .eyeBtn {
+  opacity: 1;
+  color: var(--primary-color, #0073ea);
 }

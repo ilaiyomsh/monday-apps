@@ -46,6 +46,7 @@ export function RowKebabMenu({ excluded, onToggleHide, onDelete, kind = 'נקו�
         content={() => (
           <DialogContentContainer>
             <div className={styles.menu}>
+              {onToggleHide && (
               <button
                 type="button"
                 className={styles.menuItem}
@@ -54,6 +55,7 @@ export function RowKebabMenu({ excluded, onToggleHide, onDelete, kind = 'נקו�
                 {excluded ? <Eye size={15} /> : <EyeOff size={15} />}
                 {excluded ? 'הצג' : 'הסתר'}
               </button>
+              )}
               {onDelete && (confirmDel ? (
                 <div className={styles.menuConfirm}>
                   <span>{`למחוק ${kind}?`}</span>
