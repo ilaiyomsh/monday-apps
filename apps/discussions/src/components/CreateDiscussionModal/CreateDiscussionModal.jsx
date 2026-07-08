@@ -554,7 +554,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         role="dialog"
         aria-modal="true"
         aria-label={isEdit ? 'עריכת דיון' : 'יצירת דיון חדש'}
-        dir="ltr"
+        dir="rtl"
       >
         <div className={styles.header}>
           <input
@@ -572,6 +572,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         </div>
         <div className={styles.content}>
           <Flex direction="column" gap={16} align="stretch" className={styles.form}>
+            {/* Row 1: סוג דיון + נושאים מתבנית (template topics) side by side. */}
             <div className={styles.row}>
               <div className={styles.field}>
                 <Text type="text2" className={styles.label}>{fieldLabels.type}</Text>
@@ -685,6 +686,61 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                   )}
                 </div>
               </div>
+              {templates.length > 0 && (
+                <div className={styles.field}>
+                  <Text type="text2" className={styles.label}>נושאים מתבנית</Text>
+                  <div className={styles.customDropdown}>
+                    <button
+                      type="button"
+                      className={styles.dropdownTrigger}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsTemplateDropdownOpen((prev) => !prev);
+                        setIsPreviousDropdownOpen(false);
+                        setIsTypeDropdownOpen(false);
+                      }}
+                      aria-expanded={isTemplateDropdownOpen}
+                      aria-haspopup="listbox"
+                    >
+                      <span className={`${styles.dropdownValue} ${templateFieldEmpty ? styles.dropdownPlaceholder : ''}`}>{templateFieldValue}</span>
+                      <span className={styles.dropdownChevron} aria-hidden="true">▾</span>
+                    </button>
+                    {(templateId !== 'none' || typeTopicsSelected) && (
+                      <FieldClearButton onClear={() => { setTemplateId('none'); setTypeTopics(null); }} label="ניקוי תבנית" />
+                    )}
+                    {isTemplateDropdownOpen && (
+                      <ul
+                        className={styles.dropdownMenu}
+                        role="listbox"
+                        onClick={(e) => e.stopPropagation()}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        {templateOptions.map((option) => (
+                          <li
+                            key={option.value}
+                            role="option"
+                            aria-selected={templateId === option.value}
+                            className={`${styles.dropdownItem} ${
+                              templateId === option.value ? styles.dropdownItemSelected : ''
+                            }`}
+                            onClick={() => {
+                              setTemplateId(option.value);
+                              setTypeTopics(null);
+                              setIsTemplateDropdownOpen(false);
+                            }}
+                          >
+                            {option.label}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Row 2: תאריך הדיון + שעה, side by side. */}
+            <div className={`${styles.row} ${styles.rowSingle}`}>
               <div className={styles.field}>
                 <div className={styles.dateTimeRow}>
                   <div className={styles.dateCol}>
@@ -751,7 +807,24 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
               </div>
             </div>
 
-            <div className={styles.row}>
+            {/* Row 3: מנהל (lead) + רשם דיון (coordinator) + משתתפים (participants),
+                three balanced fields side by side. The "מתבנית" participant-
+                template action stays attached to the משתתפים label. */}
+            <div className={styles.row3}>
+              <div className={styles.field}>
+                <Text type="text2" className={styles.label}>{leadLabel}</Text>
+                <div className={styles.fieldWrap}>
+                  <PersonPicker selected={lead} onChange={setLead} bordered />
+                  {lead.length > 0 && <FieldClearButton onClear={() => setLead([])} label={`ניקוי ${leadLabel}`} />}
+                </div>
+              </div>
+              <div className={styles.field}>
+                <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
+                <div className={styles.fieldWrap}>
+                  <PersonPicker selected={coordinator} onChange={setCoordinator} bordered />
+                  {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
+                </div>
+              </div>
               <div className={styles.field}>
                 <div className={styles.labelRow}>
                   <Text type="text2" className={styles.label}>{fieldLabels.participants}</Text>
@@ -799,76 +872,9 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                   {participants.length > 0 && <FieldClearButton onClear={() => setParticipants([])} label="ניקוי משתתפים" />}
                 </div>
               </div>
-              {templates.length > 0 && (
-                <div className={styles.field}>
-                  <Text type="text2" className={styles.label}>נושאים מתבנית</Text>
-                  <div className={styles.customDropdown}>
-                    <button
-                      type="button"
-                      className={styles.dropdownTrigger}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsTemplateDropdownOpen((prev) => !prev);
-                        setIsPreviousDropdownOpen(false);
-                        setIsTypeDropdownOpen(false);
-                      }}
-                      aria-expanded={isTemplateDropdownOpen}
-                      aria-haspopup="listbox"
-                    >
-                      <span className={`${styles.dropdownValue} ${templateFieldEmpty ? styles.dropdownPlaceholder : ''}`}>{templateFieldValue}</span>
-                      <span className={styles.dropdownChevron} aria-hidden="true">▾</span>
-                    </button>
-                    {(templateId !== 'none' || typeTopicsSelected) && (
-                      <FieldClearButton onClear={() => { setTemplateId('none'); setTypeTopics(null); }} label="ניקוי תבנית" />
-                    )}
-                    {isTemplateDropdownOpen && (
-                      <ul
-                        className={styles.dropdownMenu}
-                        role="listbox"
-                        onClick={(e) => e.stopPropagation()}
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        {templateOptions.map((option) => (
-                          <li
-                            key={option.value}
-                            role="option"
-                            aria-selected={templateId === option.value}
-                            className={`${styles.dropdownItem} ${
-                              templateId === option.value ? styles.dropdownItemSelected : ''
-                            }`}
-                            onClick={() => {
-                              setTemplateId(option.value);
-                              setTypeTopics(null);
-                              setIsTemplateDropdownOpen(false);
-                            }}
-                          >
-                            {option.label}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
-            <div className={styles.row}>
-              <div className={styles.field}>
-                <Text type="text2" className={styles.label}>{leadLabel}</Text>
-                <div className={styles.fieldWrap}>
-                  <PersonPicker selected={lead} onChange={setLead} bordered />
-                  {lead.length > 0 && <FieldClearButton onClear={() => setLead([])} label={`ניקוי ${leadLabel}`} />}
-                </div>
-              </div>
-              <div className={styles.field}>
-                <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
-                <div className={styles.fieldWrap}>
-                  <PersonPicker selected={coordinator} onChange={setCoordinator} bordered />
-                  {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
-                </div>
-              </div>
-            </div>
-
+            {/* Row 4: דיון קודם (previous discussion). */}
             {!hidePreviousDiscussion && (
             <div className={`${styles.row} ${styles.rowSingle}`}>
               <div className={`${styles.field} ${styles.previousDiscussionField}`}>
