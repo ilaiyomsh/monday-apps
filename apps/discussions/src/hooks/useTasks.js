@@ -4,7 +4,7 @@ import { api, parseValue, cvSelection } from '../utils/mondayApi/monday-client.j
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
 import { MondayContext } from '@generated/contexts/MondayContext.jsx';
 import logger from '../utils/logger';
-import { useOptimisticRows, isTempId, nextTempId } from './useOptimisticRows.js';
+import { useOptimisticRows, isTempId, isRealId, nextTempId } from './useOptimisticRows.js';
 
 // Undo window for deferred task deletion — must match the delete toast's
 // auto-hide duration so the real delete fires exactly when "בטל" disappears.
@@ -97,7 +97,10 @@ export function useTasks(discussionId, discussionTypeId = null) {
 
   // Optimistic-row bookkeeping: queue edits made on a freshly-added row BEFORE
   // its real id arrives, and stash create args for retry (see useOptimisticRows).
-  const { enqueueEdit, drainEdits, stashCreateArgs, getCreateArgs, forgetRow } = useOptimisticRows();
+  const {
+    enqueueEdit, drainEdits, stashCreateArgs, getCreateArgs, forgetRow,
+    protectRealId, unprotectRealId, mergeServerList,
+  } = useOptimisticRows();
   // Live handle to the per-field update fns so createTask's reconcile step can
   // FLUSH queued edits through the SAME mutations a committed row uses (assigned
   // each render, just before the hook returns).
@@ -131,11 +134,19 @@ export function useTasks(discussionId, discussionTypeId = null) {
     if (!discussionId) return;
     try {
       const fetchedItems = await fetchTasksByDiscussion(discussionId);
-      setItems(fetchedItems);
+      // Multi-row-safe MERGE (not a REPLACE). Keeps every in-flight temp row and
+      // every just-created (protected) row the eventually-consistent relation
+      // read hasn't surfaced yet. Replacing the list was the "create 3 tasks
+      // fast, then set their status → the first two vanish and one reappears"
+      // bug: an early create's fire-and-forget refresh() overwrote the list with
+      // a server snapshot that still lacked the other in-flight rows, so their
+      // later reconciles found no temp row to swap (temp→real) and the rows were
+      // lost until a subsequent refresh happened to catch them.
+      setItems((current) => mergeServerList(current, fetchedItems));
     } catch (err) {
       logger.error('useTasks', 'Error refreshing tasks', { discussionId, err });
     }
-  }, [discussionId]);
+  }, [discussionId, mergeServerList]);
 
   const updateTaskName = async (taskId, name) => {
     const trimmed = (name || '').trim();
@@ -145,7 +156,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
       prev = current;
       return current.map((i) => (i.id === taskId ? { ...i, name: trimmed } : i));
     });
-    if (isTempId(taskId)) { enqueueEdit(taskId, 'name', trimmed); return; }
+    if (!isRealId(taskId)) { enqueueEdit(taskId, 'name', trimmed); return; }
     try {
       const b = new משימות1Board();
       await b.item(taskId).update({ name: trimmed }).execute();
@@ -158,7 +169,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
       prev = current;
       return current.map((i) => (i.id === taskId ? { ...i, statusID: status } : i));
     });
-    if (isTempId(taskId)) { enqueueEdit(taskId, 'statusID', status); return; }
+    if (!isRealId(taskId)) { enqueueEdit(taskId, 'statusID', status); return; }
     try {
       const b = new משימות1Board();
       await b.item(taskId).update({ statusID: status }).execute();
@@ -171,7 +182,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
       prev = current;
       return current.map((i) => (i.id === taskId ? { ...i, priorityID: priority } : i));
     });
-    if (isTempId(taskId)) { enqueueEdit(taskId, 'priorityID', priority); return; }
+    if (!isRealId(taskId)) { enqueueEdit(taskId, 'priorityID', priority); return; }
     try {
       const b = new משימות1Board();
       await b.item(taskId).update({ priorityID: priority }).execute();
@@ -184,7 +195,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
       prev = current;
       return current.map((i) => (i.id === taskId ? { ...i, responsibilityID: people } : i));
     });
-    if (isTempId(taskId)) { enqueueEdit(taskId, 'responsibilityID', people); return; }
+    if (!isRealId(taskId)) { enqueueEdit(taskId, 'responsibilityID', people); return; }
     try {
       const b = new משימות1Board();
       await b.item(taskId).update({ responsibilityID: people.map(p => Number(p.id)) }).execute();
@@ -197,7 +208,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
       prev = current;
       return current.map((i) => (i.id === taskId ? { ...i, deadlineID: date } : i));
     });
-    if (isTempId(taskId)) { enqueueEdit(taskId, 'deadlineID', date); return; }
+    if (!isRealId(taskId)) { enqueueEdit(taskId, 'deadlineID', date); return; }
     try {
       const b = new משימות1Board();
       const f = date ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}` : null;
@@ -215,8 +226,8 @@ export function useTasks(discussionId, discussionTypeId = null) {
       return current.map((i) => (idsSet.has(String(i.id)) ? { ...i, statusID: status } : i));
     });
     // Temp rows aren't on the board yet — queue their edit; only write real ones.
-    ids.filter(isTempId).forEach((id) => enqueueEdit(id, 'statusID', status));
-    const realIds = ids.filter((id) => !isTempId(id));
+    ids.filter((id) => !isRealId(id)).forEach((id) => enqueueEdit(id, 'statusID', status));
+    const realIds = ids.filter(isRealId);
     if (realIds.length === 0) return;
     try {
       const b = new משימות1Board();
@@ -243,8 +254,8 @@ export function useTasks(discussionId, discussionTypeId = null) {
       return current.map((i) => (idsSet.has(String(i.id)) ? { ...i, responsibilityID: people } : i));
     });
     // Temp rows aren't on the board yet — queue their edit; only write real ones.
-    ids.filter(isTempId).forEach((id) => enqueueEdit(id, 'responsibilityID', people));
-    const realIds = ids.filter((id) => !isTempId(id));
+    ids.filter((id) => !isRealId(id)).forEach((id) => enqueueEdit(id, 'responsibilityID', people));
+    const realIds = ids.filter(isRealId);
     if (realIds.length === 0) return;
     try {
       const b = new משימות1Board();
@@ -272,8 +283,8 @@ export function useTasks(discussionId, discussionTypeId = null) {
       return current.map((i) => (idsSet.has(String(i.id)) ? { ...i, deadlineID: date } : i));
     });
     // Temp rows aren't on the board yet — queue their edit; only write real ones.
-    ids.filter(isTempId).forEach((id) => enqueueEdit(id, 'deadlineID', date));
-    const realIds = ids.filter((id) => !isTempId(id));
+    ids.filter((id) => !isRealId(id)).forEach((id) => enqueueEdit(id, 'deadlineID', date));
+    const realIds = ids.filter(isRealId);
     if (realIds.length === 0) return;
     try {
       const b = new משימות1Board();
@@ -295,6 +306,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
 
   const deleteTask = useCallback(async (taskId) => {
     if (!taskId) return false;
+    unprotectRealId(taskId); // a deleted row must not be resurrected by a later refresh-merge
     const prev = [...items];
     setItems((current) => current.filter((i) => i.id !== taskId));
     // A temp row never reached the board — local removal is enough.
@@ -307,7 +319,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
       setItems(prev);
       return false;
     }
-  }, [items, forgetRow]);
+  }, [items, forgetRow, unprotectRealId]);
 
   // Deferred ("soft") delete with an undo window: the rows vanish from the UI
   // immediately, but the real delete_item fires only after DELETE_GRACE_MS — so
@@ -318,6 +330,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
     const idList = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
     if (!idList.length) return { undo: () => {}, count: 0 };
     const idSet = new Set(idList.map(String));
+    idList.forEach((id) => unprotectRealId(id)); // don't let a concurrent refresh-merge resurrect a soft-deleted row
     const removed = items.filter((i) => idSet.has(String(i.id))); // snapshot for restore
     setItems((current) => current.filter((i) => !idSet.has(String(i.id))));
 
@@ -342,7 +355,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
       });
     };
     return { undo, count: idList.length };
-  }, [items, forgetRow]);
+  }, [items, forgetRow, unprotectRealId]);
 
   // Drop tasks from the shared list without touching the board — used to reverse
   // a carry-forward merge when the user undoes "move to current discussion".
@@ -387,9 +400,26 @@ export function useTasks(discussionId, discussionTypeId = null) {
       const relations = { discussionLinkID: { linkedItems: [{ id: discussionId }] } };
       if (topicId) relations.topicsLinkID = { linkedItems: [{ id: topicId }] };
       await b.item(realId).update(relations).execute();
-      // RECONCILE: swap temp→real IN PLACE; the spread preserves any edits the
-      // user already applied to the row while it was still optimistic.
-      setItems(prev => prev.map(i => i.id === tempId ? { ...i, id: realId, _createFailed: false } : i));
+      // PROTECT the real id BEFORE any async flush below, so a CONCURRENT
+      // create's fire-and-forget refresh() can never evict this just-created row
+      // during the eventual-consistency window (this ordering is what makes
+      // rapid multi-row creation stable — no vanish/reappear).
+      protectRealId(realId);
+      // RECONCILE: swap temp→real IN PLACE (the spread preserves any edits the
+      // user applied while the row was still optimistic). IDEMPOTENT: if the temp
+      // row is somehow gone (a race dropped it) and the real row isn't present
+      // either, RE-ADD it — a freshly-created task must never vanish.
+      setItems((prev) => {
+        let swapped = false;
+        const next = prev.map((i) => {
+          if (i.id === tempId) { swapped = true; return { ...i, id: realId, _createFailed: false }; }
+          return i;
+        });
+        if (!swapped && !next.some((i) => String(i.id) === String(realId))) {
+          next.push({ id: realId, name, statusID: status, responsibilityID: assignee, deadlineID: deadline, _createFailed: false });
+        }
+        return next;
+      });
       // FLUSH edits queued while the row had no real id, through the SAME update
       // mutations a committed row uses (last-write-wins per field). Awaited so the
       // silent refresh below reads the persisted values (never clobbers a flush).
@@ -407,8 +437,10 @@ export function useTasks(discussionId, discussionTypeId = null) {
       forgetRow(tempId);
       // Silent refresh so the Tasks tab and the Effectiveness tab (both read the
       // shared list) reflect the authoritative server state — fire-and-forget so
-      // it doesn't delay the modal close or flash a loader.
-      refresh();
+      // it doesn't delay the modal close or flash a loader. `.catch` belt-and-
+      // suspenders: refresh() already swallows its own errors, but never let a
+      // floating promise surface as an unhandled rejection (→ global handler).
+      Promise.resolve(refresh()).catch(() => {});
       return { id: realId };
     } catch (err) {
       logger.error('useTasks', 'Error creating task', err);
@@ -418,7 +450,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
       setItems(prev => prev.map(i => i.id === tempId ? { ...i, _createFailed: true } : i));
       return null;
     }
-  }, [discussionId, taskTypeText, refresh, currentUserId, drainEdits, forgetRow]);
+  }, [discussionId, taskTypeText, refresh, currentUserId, drainEdits, forgetRow, protectRealId]);
 
   // Create a task linked to this discussion, inserting an OPTIMISTIC row that
   // shows immediately AND is fully editable right away. `opts` may be a status

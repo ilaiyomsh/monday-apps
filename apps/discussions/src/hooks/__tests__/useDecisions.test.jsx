@@ -147,3 +147,88 @@ describe('useDecisions — two rapid creates both persist (no dropped second row
     });
   });
 });
+
+
+// ---------------------------------------------------------------------------
+// Round 18: THREE rapid decision creates must ALL persist even though every
+// refresh's (eventually-consistent) relation read comes back empty. Exercises
+// the shared multi-row merge + protect-before-flush: each create protects its
+// real id the instant it's known, so a concurrent create's refresh can never
+// evict a just-reconciled row.
+// ---------------------------------------------------------------------------
+describe('useDecisions — three rapid creates all persist (multi-row safe)', () => {
+  it('reconciles all three to their own real ids, none dropped by an overlapping refresh', async () => {
+    setActiveConfig({
+      boards: { discussions: { id: 'disc-board' }, decisions: { id: 'dec-board' } },
+      columns: {
+        discussions: { decisionsBoardLinkID: { id: 'disc_link', type: 'board_relation' } },
+        decisions: {},
+      },
+    });
+    let createSeq = 0;
+    api.mockImplementation(async (query) => {
+      if (query.includes('create_item')) { createSeq += 1; return { create_item: { id: `real-${createSeq}` } }; }
+      if (query.includes('change_multiple_column_values')) return { change_multiple_column_values: { id: 'ok' } };
+      if (query.includes('linked_items')) return { items: [{ column_values: [{ linked_items: [] }] }] }; // server lagging
+      return {};
+    });
+
+    const { result } = renderHook(() => useDecisions('disc-1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      const p1 = result.current.createDecision('החלטה 1');
+      const p2 = result.current.createDecision('החלטה 2');
+      const p3 = result.current.createDecision('החלטה 3');
+      await Promise.all([p1, p2, p3]);
+    });
+
+    await waitFor(() => {
+      const ids = result.current.items.map((i) => String(i.id)).sort();
+      expect(ids).toEqual(['real-1', 'real-2', 'real-3']);
+    });
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Round 18: a decision create whose network call REJECTS must keep the row in a
+// retryable error state and never surface as an unhandled rejection (the "אירעה
+// שגיאה לא צפויה" UNKNOWN_ERROR popup the reporter saw only in Decisions).
+// ---------------------------------------------------------------------------
+describe('useDecisions — a failed create shows retry, never an unhandled rejection', () => {
+  it('resolves to null, flags the temp row _createFailed, raises no unhandledrejection', async () => {
+    setActiveConfig({
+      boards: { discussions: { id: 'disc-board' }, decisions: { id: 'dec-board' } },
+      columns: {
+        discussions: { decisionsBoardLinkID: { id: 'disc_link', type: 'board_relation' } },
+        decisions: {},
+      },
+    });
+    api.mockImplementation(async (query) => {
+      if (query.includes('create_item')) throw new Error('network boom'); // no monday/graphql text
+      if (query.includes('linked_items')) return { items: [{ column_values: [{ linked_items: [] }] }] };
+      return {};
+    });
+    const unhandled = vi.fn();
+    window.addEventListener('unhandledrejection', unhandled);
+    try {
+      const { result } = renderHook(() => useDecisions('disc-1'));
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      let created;
+      await act(async () => { created = await result.current.createDecision('החלטה שנכשלת'); });
+      expect(created).toBeNull();
+
+      const row = result.current.items.find((i) => i.name === 'החלטה שנכשלת');
+      expect(row).toBeTruthy();
+      expect(String(row.id).startsWith('temp-')).toBe(true); // stays temp so retry can re-run it
+      expect(row._createFailed).toBe(true);
+
+      await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('unhandledrejection', unhandled);
+    }
+  });
+});
