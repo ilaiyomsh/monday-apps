@@ -34,11 +34,12 @@ import styles from './TopicsTab.module.css';
 const NEUTRAL = 'hsl(var(--status-default))';
 
 // Column order for the points table (decisions redesign — per the approved
-// mockup): [accent bar 28px] | נקודה לדיון (fill) | נידונה | החלטות | משימות.
-// The leading accent bar is a FIXED 28px track; the other four keys resize via
+// mockup): [checkbox lead 36px] | נקודה לדיון (fill) | נידונה | החלטות | משימות.
+// The leading cell is a FIXED 36px track — the selection checkbox + accent strip,
+// matching TaskTable's `.selectCell`; the other four keys resize via
 // useColumnWidths under the shared 'topics' tableId (owner-draggable, persisted
 // for all users). Widths/clamps come from constants/columnWidths TOPICS_COLUMN_WIDTHS.
-const LEAD_TRACK = '28px';
+const LEAD_TRACK = '36px';
 const TOPIC_COLUMN_KEYS = ['name', 'check', 'decisions', 'tasks'];
 
 // Per-topic priority box — identical look to the status column: FIXED width,
@@ -575,7 +576,7 @@ export function TopicsTab({
   };
 
   // Resizable columns (shared 'topics' tableId → persisted per-instance for all
-  // users). The leading 28px accent bar is fixed; name/check/decisions/tasks
+  // users). The leading 36px checkbox cell is fixed; name/check/decisions/tasks
   // resize within their clamps. useColumnWidths returns the grid-template string
   // for those four; we prepend the fixed lead track. Owners on a non-touch
   // viewport get the drag handles (canResize); everyone gets the stored widths.
