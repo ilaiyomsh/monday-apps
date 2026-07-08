@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { Checkbox } from '@vibe/core';
+import { Plus } from 'lucide-react';
 import { TaskTableRow } from '@generated/components/TaskTableRow';
 import { useColumnOrder } from '@generated/hooks/useColumnOrder.js';
 import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
@@ -25,6 +26,15 @@ export function TaskTable({
   onAssigneeChange,
   onDeadlineChange,
   onOpenNewTask,
+  // Inline add (native monday "add item"): when provided, the footer add-row
+  // becomes an inline text input — click reveals it, name + Enter creates the
+  // task IMMEDIATELY (no modal), and focus stays for rapid entry. Takes the
+  // group's seed defaults (status/assignee) so a task added inside a grouped
+  // section inherits that group. This is the DEFAULT add path for the Tasks tab;
+  // onOpenNewTask (the modal) is kept only as an optional fallback.
+  onInlineCreate,
+  // Seed values applied to an inline-created task (group status/assignee).
+  inlineCreateDefaults,
   onRenameTask,
   onDeleteTask,
   selectable = false,
@@ -154,13 +164,74 @@ export function TaskTable({
           />
         ))}
 
-        {/* add-task footer row — lives inside the rounded table */}
-        {onOpenNewTask && (
+        {/* add-task footer row — lives inside the rounded table. Inline add is
+            the default (native monday "add item"); the modal button is a fallback
+            only used when no inline handler is wired. */}
+        {onInlineCreate ? (
+          <InlineAddTaskRow onCreate={onInlineCreate} defaults={inlineCreateDefaults} />
+        ) : onOpenNewTask ? (
           <button type="button" className={styles.addRow} onClick={onOpenNewTask} aria-label="הוסף משימה">
             <span className={styles.addLabel}>+ הוסף משימה</span>
           </button>
-        )}
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+// Inline add-row for the Tasks tab: at rest it's the same "+ הוסף משימה" affordance;
+// clicking swaps in a borderless text input (mirrors the Topics add-point row).
+// Name + Enter creates the task with only a name (+ the group's seed defaults) —
+// deadline/assignee are filled inline afterward, so NOTHING is required. The
+// input stays focused after each create for rapid entry; Escape / empty-blur
+// collapses back to the label.
+function InlineAddTaskRow({ onCreate, defaults }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState('');
+  const inputRef = useRef(null);
+
+  const commit = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    // Only a name (plus any group seed defaults) — no required deadline/assignee.
+    onCreate(trimmed, { ...(defaults || {}) });
+    setText('');
+    // Keep focus so the user can add another straight away (monday behavior).
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className={styles.addRow}
+        onClick={() => { setEditing(true); requestAnimationFrame(() => inputRef.current?.focus()); }}
+        aria-label="הוסף משימה"
+      >
+        <span className={styles.addLabel}>+ הוסף משימה</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className={styles.addRow}>
+      <span className={styles.addLabel}>
+        <Plus size={16} className={styles.addIcon} />
+        <input
+          ref={inputRef}
+          className={styles.addInput}
+          autoFocus
+          value={text}
+          placeholder="שם משימה…"
+          aria-label="שם משימה חדשה"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { setText(''); setEditing(false); e.currentTarget.blur(); }
+          }}
+          onBlur={() => { if (!text.trim()) setEditing(false); }}
+        />
+      </span>
     </div>
   );
 }

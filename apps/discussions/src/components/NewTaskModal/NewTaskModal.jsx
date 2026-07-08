@@ -56,15 +56,17 @@ export function NewTaskModal({ open, onClose, onCreate, defaults = {} }) {
 
   const submit = () => {
     const trimmed = name.trim();
-    // Name, assignee and deadline are all mandatory — surface a message per field.
+    // ONLY the name is required now — deadline + assignee are optional and can be
+    // filled inline on the row afterward (matches the inline add-row: no required
+    // fields blocking task creation).
     const nextErrors = {
       name: trimmed ? '' : 'יש להזין שם משימה',
-      assignee: assignee.length ? '' : 'יש לבחור אחראי',
-      deadline: deadlineStr ? '' : 'יש לבחור תאריך דדליין',
+      assignee: '',
+      deadline: '',
     };
     setErrors(nextErrors);
-    if (nextErrors.name || nextErrors.assignee || nextErrors.deadline) return;
-    const deadline = new Date(`${deadlineStr}T00:00:00`);
+    if (nextErrors.name) return;
+    const deadline = deadlineStr ? new Date(`${deadlineStr}T00:00:00`) : null;
     // Fire-and-forget: the parent (DiscussionCard) decides close timing/feedback.
     onCreate(trimmed, { ...defaults, assignee, deadline });
     reset();
@@ -88,8 +90,8 @@ export function NewTaskModal({ open, onClose, onCreate, defaults = {} }) {
             value={name}
             onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: '' })); }}
             onKeyDown={(e) => { if (e.key === 'Enter') submit(); }}
-            placeholder="שם המשימה *"
-            aria-label="שם המשימה (חובה)"
+            placeholder="שם המשימה"
+            aria-label="שם המשימה"
           />
           <button type="button" className={styles.closeButton} onClick={onClose} aria-label="סגירה">
             ×
@@ -101,7 +103,7 @@ export function NewTaskModal({ open, onClose, onCreate, defaults = {} }) {
           <Flex direction="column" gap={16} align="stretch" className={styles.form}>
             <div className={styles.row}>
               <div className={styles.field}>
-                <Text type="text2" className={styles.label}>אחראי <span className={styles.required}>*</span></Text>
+                <Text type="text2" className={styles.label}>אחראי</Text>
                 <PersonPicker
                   selected={assignee}
                   onChange={(p) => { setAssignee(p); if (errors.assignee) setErrors((prev) => ({ ...prev, assignee: '' })); }}
@@ -112,7 +114,7 @@ export function NewTaskModal({ open, onClose, onCreate, defaults = {} }) {
                 {errors.assignee && <Text type="text2" className={styles.fieldError}>{errors.assignee}</Text>}
               </div>
               <div className={styles.field}>
-                <Text type="text2" className={styles.label}>דדליין <span className={styles.required}>*</span></Text>
+                <Text type="text2" className={styles.label}>דדליין</Text>
                 <DatePickerPopover
                   variant="field"
                   zIndex={4200}

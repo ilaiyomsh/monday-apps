@@ -13,6 +13,11 @@
 .row:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
 }
+/* Whole-row drag affordance (the six-dot grip was removed — the row itself is
+   the drag handle). grab cursor on the draggable areas; interactive cells keep
+   their own pointer cursor. */
+.rowDraggable { cursor: grab; }
+.rowDraggable:active { cursor: grabbing; }
 /* The frozen leading cells (accent bar + name) are opaque, so their hover
    background must be set explicitly — otherwise they stay white while the rest
    of the row highlights. Composite the (possibly semi-transparent) hover token
@@ -44,8 +49,9 @@
   background: var(--primary-background-color, #fff);
 }
 
-/* Hover controls (kebab + drag grip) — moved INTO the name cell since the lead
-   column is now the bare accent bar. Revealed on row hover. */
+/* Hover controls (the hide/delete kebab) — in the name cell since the lead
+   column is the bare accent bar. Revealed on row hover. The drag grip was
+   removed (the whole row drags now). */
 .rowControls {
   display: inline-flex;
   align-items: center;
@@ -57,8 +63,7 @@
 .kebabWrap {
   display: inline-flex;
 }
-.kebabBtn,
-.grip {
+.kebabBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -73,10 +78,7 @@
   opacity: 0;
   transition: opacity 0.12s ease;
 }
-.grip { cursor: grab; }
-.grip:active { cursor: grabbing; }
-.row:hover .kebabBtn,
-.row:hover .grip {
+.row:hover .kebabBtn {
   opacity: 1;
 }
 .kebabBtn:hover {

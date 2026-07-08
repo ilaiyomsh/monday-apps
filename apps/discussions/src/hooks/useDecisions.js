@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useContext } from 'react';
+import { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { החלטות1Board } from '@api/BoardSDK.js';
 import { api, parseValue, cvSelection, formatValue } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
@@ -143,6 +143,15 @@ export function useDecisions(discussionId) {
   const ctxApi = useContext(MondayContext);
   const currentUserId = ctxApi?.currentUser?.id ?? ctxApi?.context?.user?.id ?? null;
 
+  // Ids created VERY recently (real monday ids), each with an expiry timestamp.
+  // The disappearing-row fix uses this to preserve a just-created decision in a
+  // silent refresh whose eventually-consistent relation read hasn't caught up
+  // yet — WITHOUT resurrecting rows that were deleted (delete forgets the id).
+  const recentlyCreatedRef = useRef(new Map());
+  const RECENT_CREATE_MS = 15000;
+  const rememberCreated = (id) => { recentlyCreatedRef.current.set(String(id), Date.now() + RECENT_CREATE_MS); };
+  const forgetCreated = (id) => { recentlyCreatedRef.current.delete(String(id)); };
+
   useEffect(() => {
     if (!discussionId) { setItems([]); setLoading(false); return; }
     let cancelled = false;
@@ -166,11 +175,39 @@ export function useDecisions(discussionId) {
   // Silent refetch — re-pulls the discussion's decisions WITHOUT toggling
   // `loading` (no skeleton flash). Used after a create so the list reflects the
   // authoritative server state.
+  //
+  // IMPORTANT (disappearing-row fix): a decision's discussion link
+  // (discussionLinkID board_relation) is written AFTER create_item in a separate
+  // mutation, and monday's board_relation index is eventually-consistent — so an
+  // immediate refetch here often does NOT yet return a just-created decision.
+  // Replacing the list with that stale result made the new row vanish moments
+  // after it appeared. Instead we MERGE: server items win, and any locally-known
+  // row the server hasn't returned yet is KEPT **only if it was created in the
+  // last RECENT_CREATE_MS** (tracked in recentlyCreatedRef). Time-bounding it to
+  // fresh creates means a soft-deleted decision (whose id is forgotten on delete)
+  // is NOT resurrected by a later create's refresh, and a genuinely-removed row
+  // isn't kept forever. The next refetch reconciles everything.
   const refresh = useCallback(async () => {
     if (!discussionId) return;
     try {
       const fetchedItems = await fetchDecisionsByDiscussion(discussionId);
-      setItems(fetchedItems);
+      setItems((current) => {
+        const serverIds = new Set(fetchedItems.map((i) => String(i.id)));
+        const now = Date.now();
+        // Prune expired create-markers so the map can't grow unbounded.
+        for (const [id, expiry] of recentlyCreatedRef.current) {
+          if (expiry < now) recentlyCreatedRef.current.delete(id);
+        }
+        // Keep a missing row only when it's a still-fresh create the relation
+        // index hasn't surfaced yet (never a temp row — the swap already replaced
+        // it with the real id; never an arbitrary/older row).
+        const missing = current.filter((i) => {
+          const sid = String(i.id);
+          if (serverIds.has(sid) || sid.startsWith('temp-')) return false;
+          return recentlyCreatedRef.current.has(sid);
+        });
+        return [...fetchedItems, ...missing];
+      });
     } catch (err) {
       logger.error('useDecisions', 'Error refreshing decisions', { discussionId, err });
     }
@@ -241,6 +278,7 @@ export function useDecisions(discussionId) {
 
   const deleteDecision = useCallback(async (decisionId) => {
     if (!decisionId) return false;
+    forgetCreated(decisionId); // so a later create's refresh can't resurrect it
     const prev = [...items];
     setItems((current) => current.filter((i) => i.id !== decisionId));
     try {
@@ -261,6 +299,9 @@ export function useDecisions(discussionId) {
     const idList = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
     if (!idList.length) return { undo: () => {}, count: 0 };
     const idSet = new Set(idList.map(String));
+    // Forget any fresh-create markers so a create's refresh during this undo
+    // window can't resurrect a row the user just (soft-)deleted.
+    idList.forEach((id) => forgetCreated(id));
     const removed = items.filter((i) => idSet.has(String(i.id))); // snapshot for restore
     setItems((current) => current.filter((i) => !idSet.has(String(i.id))));
 
@@ -351,6 +392,10 @@ export function useDecisions(discussionId) {
       await b.item(realId).update({ discussionLinkID: { linkedItems: [{ id: discussionId }] } }).execute();
       if (pointId) await linkDecisionToPoint(pointId, realId, existingLinkedIds);
       setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, id: realId } : i)));
+      // Mark this id as freshly created so the silent refresh below (and any that
+      // fire during the eventual-consistency window) preserve the row even if the
+      // relation index hasn't surfaced it yet — the disappearing-row fix.
+      rememberCreated(realId);
       // Silent refresh so the list reflects the authoritative server state —
       // fire-and-forget so it doesn't delay the caller or flash a loader.
       refresh();

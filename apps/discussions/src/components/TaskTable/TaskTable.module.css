@@ -216,9 +216,27 @@
 }
 .addIcon {
   flex-shrink: 0;
+  margin-inline-end: 6px;
 }
 .addRow :global(.input-component) {
   flex: 1;
+}
+/* Inline add-row text input — borderless, transparent, inherits the row font so
+   it reads like a native monday "add item" field (matches the Topics add-point
+   input). Sits inside the sticky .addLabel. */
+.addInput {
+  flex: 1;
+  min-width: 220px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  padding: 0;
+}
+.addInput::placeholder {
+  color: var(--placeholder-color, #9699a6);
 }
 
 /* Phone: the frozen name column is half-screen (50vw) at rest and shrinks to a

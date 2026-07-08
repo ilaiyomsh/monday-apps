@@ -298,6 +298,28 @@ export function DiscussionCard({
     // created === null → createTask already logged the error (toast via sink).
   };
 
+  // Inline add (Tasks tab add-row): create with just a name (+ the group's seed
+  // status/assignee). Optimistic row shows instantly, so NO loader toast here —
+  // just a quiet success on completion (mirrors the Topics inline add feel).
+  // deadline/assignee stay optional and are filled inline on the row afterward.
+  const handleInlineCreateTask = async (name, opts) => {
+    if (!createTask) return;
+    const created = await tasksData.createTask(name, opts || {});
+    if (created) onNotify?.('משימה נוצרה בהצלחה');
+  };
+
+  // Inline add (Decisions tab add-row): create with just a name. Defaults match
+  // the quick-create modal path — מושפעים = the discussion's participants, מחליט
+  // defaults to the current user inside the hook, date → today. Optimistic row
+  // shows instantly; the rest of the columns are filled inline afterward.
+  const handleInlineCreateDecision = async (name) => {
+    if (!canCreateDecision) return;
+    const created = await decisionsData.createDecision(name, {
+      affected: Array.isArray(data.participantsID) ? data.participantsID : [],
+    });
+    if (created) onNotify?.('ההחלטה נוצרה');
+  };
+
   // ---- Quick create (FAB on every tab + per-point "+" in the Topics tab) ----
   const openQuickCreate = (mode, point = null) => setQuickCreate({ mode, point });
   const closeQuickCreate = () => setQuickCreate(null);
@@ -551,12 +573,12 @@ export function DiscussionCard({
         </div>
         {activeTab === 'tasks' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
-            <TasksTab data={tasksData} onNewTask={openNewTaskModal} onNotify={onNotify} canTask={canTask} canCreateTask={createTask} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
+            <TasksTab data={tasksData} onNewTask={openNewTaskModal} onInlineCreateTask={handleInlineCreateTask} onNotify={onNotify} canTask={canTask} canCreateTask={createTask} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
           </div>
         )}
         {activeTab === 'decisions' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
-            <DecisionsTab data={decisionsData} onNewDecision={() => openQuickCreate('decision')} onNotify={onNotify} canDecision={canDecision} canCreateDecision={canCreateDecision} canReorderColumns={canReorderColumns} />
+            <DecisionsTab data={decisionsData} onNewDecision={() => openQuickCreate('decision')} onInlineCreate={handleInlineCreateDecision} onNotify={onNotify} canDecision={canDecision} canCreateDecision={canCreateDecision} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
           </div>
         )}
         {activeTab === 'summary' && (
