@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton, Button, Dialog, DialogContentContainer, Checkbox, Text } from '@vibe/core';
-import { DropdownChevronDown, Filter, CloseSmall } from '@vibe/icons';
+import { DropdownChevronDown, Filter, CloseSmall, Update } from '@vibe/icons';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -31,8 +31,18 @@ import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { DECISIONS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { getBoardId } from '@api/board-config-store.js';
+import { monday } from '@api/monday-client.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import styles from './DecisionsTab.module.css';
+
+// Open a decision's item card on the Updates pane — identical affordance to the
+// Tasks name cell (kind:'updates' renders monday's side panel). A decision is a
+// board item, so decision.id is a real monday item id; guard the temp id of an
+// optimistic (not-yet-saved) decision so it never targets a bogus id.
+function openItemCard(itemId) {
+  if (!itemId || String(itemId).startsWith('temp-')) return;
+  monday.execute('openItemCard', { itemId: Number(itemId), kind: 'updates' });
+}
 
 // DEFAULT column order for the decisions table (עדיפות removed — product
 // decision). `name` (החלטה) is the pinned/frozen leading column; the rest
@@ -273,6 +283,18 @@ function DecisionRow({
             </button>
           )
         )}
+        {/* monday "updates" speech-bubble icon at the trailing edge of the name
+            cell — identical affordance to the Tasks name cell (opens the
+            decision's item card on the Updates pane). */}
+        <button
+          type="button"
+          className={styles.decUpdatesBtn}
+          title="עדכונים"
+          aria-label="פתח עדכונים"
+          onClick={(e) => { e.stopPropagation(); openItemCard(decision.id); }}
+        >
+          <Update size={18} />
+        </button>
       </div>
     ),
     // מחליט — single-person picker when editable (Round 7: was display-only, so

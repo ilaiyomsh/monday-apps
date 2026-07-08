@@ -1,12 +1,23 @@
 import React, { useState } from 'react';
 import { Avatar, Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
+import { Update } from '@vibe/icons';
 import { Trash2, EyeOff, Eye, MoreHorizontal, Check } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { monday } from '@api/monday-client.js';
 import styles from './TopicPointRow.module.css';
 
 function initialsOf(name) {
   return (name || '?').split(' ').map((n) => n[0]).join('').slice(0, 2);
+}
+
+// Open a point's item card on the Updates pane — identical to the Tasks name
+// cell's updates affordance (kind:'updates' renders monday's side panel). A
+// POINT is a subitem, so point.id is a real monday item id; guard the temp id
+// of an optimistic (not-yet-saved) point so it never targets a bogus id.
+function openItemCard(itemId) {
+  if (!itemId || String(itemId).startsWith('temp-')) return;
+  monday.execute('openItemCard', { itemId: Number(itemId), kind: 'updates' });
 }
 
 /* Creator avatar (who created the topic / point). Resolves the user from the
@@ -212,6 +223,18 @@ export function TopicPointRow({
             {point.name}
           </span>
         )}
+        {/* monday "updates" speech-bubble icon at the trailing edge of the name
+            cell — identical affordance to the Tasks name cell (opens the point's
+            item card on the Updates pane). */}
+        <button
+          type="button"
+          className={styles.updatesBtn}
+          title="עדכונים"
+          aria-label="פתח עדכונים"
+          onClick={(e) => { e.stopPropagation(); openItemCard(point.id); }}
+        >
+          <Update size={18} />
+        </button>
       </div>
 
       {/* האם נידונה — checkbox */}
