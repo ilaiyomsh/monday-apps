@@ -448,10 +448,6 @@ function SortableTopicSection({
             </SortableContext>
           </DndContext>
 
-          {points.length === 0 && (
-            <div className={styles.noPoints}>אין נקודות לנושא זה</div>
-          )}
-
           {canAdd && (
             showAddPointInput ? (
               // Editing: a full-width row (same look as the add-task row) with an
@@ -576,6 +572,15 @@ export function TopicsTab({
     () => [...selectedPointIds].map((id) => pointById.get(String(id))).filter(Boolean),
     [selectedPointIds, pointById]
   );
+  // Batch edit (Round 13): toggling "נידונה" on a point that is part of a 2+
+  // selection applies the SAME value to EVERY selected point (monday behavior) —
+  // mirrors the Tasks/Decisions batch column edits. A toggle on a point that
+  // isn't part of a multi-selection stays single-row (unchanged).
+  const applyTogglePoint = (point, discussed) => {
+    const originId = String(point.id);
+    const targets = selectedPointIds.size > 1 && selectedPointIds.has(originId) ? selectedPoints : [point];
+    targets.forEach((p) => togglePoint(p, discussed));
+  };
   // Bulk delete — iterate the per-point optimistic delete (no batch endpoint).
   const deleteSelectedPoints = () => {
     if (!deleteTopicOrPoint || selectedPoints.length === 0) return;
@@ -833,7 +838,7 @@ export function TopicsTab({
               onRetryCreate={retryCreate}
               deleteTopic={deleteTopic}
               addPoint={addPoint}
-              togglePoint={togglePoint}
+              togglePoint={applyTogglePoint}
               togglePointNotForDiscussion={togglePointNotForDiscussion}
               toggleTopicNotForDiscussion={toggleTopicNotForDiscussion}
               renamePoint={renamePoint}

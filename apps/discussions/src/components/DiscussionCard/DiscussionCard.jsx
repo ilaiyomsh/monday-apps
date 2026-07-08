@@ -292,10 +292,9 @@ export function DiscussionCard({
   const handleCreateTask = async (name, opts) => {
     if (!createTask) return; // guard: only roles granted createTask may create tasks
     const loadingId = onShowLoading?.('יוצר משימה');
-    const created = await tasksData.createTask(name, opts);
+    await tasksData.createTask(name, opts);
     if (loadingId != null) onDismissToast?.(loadingId);
-    if (created) onNotify?.('משימה נוצרה בהצלחה');
-    // created === null → createTask already logged the error (toast via sink).
+    // No success toast on create (per product): errors still surface via the logger sink.
   };
 
   // Inline add (Tasks tab add-row): create with just a name (+ the group's seed
@@ -304,8 +303,7 @@ export function DiscussionCard({
   // deadline/assignee stay optional and are filled inline on the row afterward.
   const handleInlineCreateTask = async (name, opts) => {
     if (!createTask) return;
-    const created = await tasksData.createTask(name, opts || {});
-    if (created) onNotify?.('משימה נוצרה בהצלחה');
+    await tasksData.createTask(name, opts || {});
   };
 
   // Inline add (Decisions tab add-row): create with just a name. Defaults match
@@ -314,10 +312,9 @@ export function DiscussionCard({
   // shows instantly; the rest of the columns are filled inline afterward.
   const handleInlineCreateDecision = async (name) => {
     if (!canCreateDecision) return;
-    const created = await decisionsData.createDecision(name, {
+    await decisionsData.createDecision(name, {
       affected: Array.isArray(data.participantsID) ? data.participantsID : [],
     });
-    if (created) onNotify?.('ההחלטה נוצרה');
   };
 
   // ---- Quick create (FAB on every tab + per-point "+" in the Topics tab) ----
@@ -356,11 +353,10 @@ export function DiscussionCard({
         }
       }
       if (loadingId != null) onDismissToast?.(loadingId);
-      if (created) onNotify?.('משימה נוצרה בהצלחה');
       return;
     }
     if (!canCreateDecision) return;
-    const created = await decisionsData.createDecision(text, {
+    await decisionsData.createDecision(text, {
       status, // decision-status label id (null when unset/unmapped)
       // Defaults per product spec: affected = the discussion's participants;
       // decider defaults inside the hook to the current user when omitted;
@@ -369,8 +365,6 @@ export function DiscussionCard({
       ...(person?.length ? { decider: person[0] } : {}),
       ...(point?.id ? { pointId: point.id, existingLinkedIds: point.decisionIds || [] } : {}),
     });
-    if (created) onNotify?.('ההחלטה נוצרה');
-    // created === null → createDecision already logged the error (toast via sink).
   };
 
   return (

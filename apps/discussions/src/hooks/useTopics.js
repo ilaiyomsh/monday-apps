@@ -268,7 +268,6 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
         // Swap in the real id in place — no full refetch (avoids the flash/jump).
         setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, _realId: createdId, _pending: false, _createFailed: false } : t)));
         forgetRow(tempId);
-        onSuccess?.('נושא לדיון נוצר בהצלחה');
       })
       .catch((err) => {
         if (!err?.__loggedId) logger.error('useTopics', 'הוספת נושא נכשלה', err);
@@ -277,7 +276,7 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
         setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, _pending: false, _createFailed: true } : t)));
       })
       .finally(() => { pendingCreates.current.delete(tempId); });
-  }, [discussionId, onSuccess, forgetRow]);
+  }, [discussionId, forgetRow]);
 
   // Add a new TOPIC (item) linked to the discussion. Fully optimistic: the row
   // appears INSTANTLY as a normal topic (no fade/lock/spinner) and is editable
@@ -337,7 +336,6 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
             : topic
         )));
         forgetRow(tempId);
-        onSuccess?.('נקודה לדיון נוצרה בהצלחה');
       })
       .catch((err) => {
         if (!err?.__loggedId) logger.error('useTopics', 'הוספת נקודה נכשלה', err);
@@ -350,7 +348,7 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
         )));
       })
       .finally(() => { pendingCreates.current.delete(tempId); });
-  }, [resolveRealId, onSuccess, currentUser, forgetRow]);
+  }, [resolveRealId, currentUser, forgetRow]);
 
   // Add a discussion POINT = a subitem under the topic. Fully optimistic: the
   // point appears INSTANTLY (no fade/lock/spinner) and is editable right away;

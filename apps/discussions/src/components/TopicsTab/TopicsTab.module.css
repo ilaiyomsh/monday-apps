@@ -431,6 +431,9 @@
 .colHeadLead {
   box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
   border-start-start-radius: var(--border-radius-medium, 8px);
+  /* Close the lead (checkbox/accent) column with a right rule, matching the
+     Tasks table's frozen `.selectCell` separator (TaskTable `.taskCell`). */
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
 }
 
 /* FROZEN leading column (accent bar) + FROZEN name header — pinned during the
@@ -451,15 +454,6 @@
   z-index: 3;
   background: #ffffff;
 }
-
-.noPoints {
-  padding: 10px 8px;
-  padding-inline-start: 16px;
-  color: var(--secondary-text-color, #676879);
-  font-size: 13px;
-  box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
-}
-
 
 /* Eye toggle in the group header — hide/show a topic. Sits just to the right of
    the name (right edge of the name); always visible but subtle, full on hover.
