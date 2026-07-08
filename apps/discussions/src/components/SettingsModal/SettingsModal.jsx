@@ -25,6 +25,13 @@ function seedExportTemplate(stored) {
   return base;
 }
 
+// Merge the board-key scaffold over the stored boards so a board ROLE added to
+// BOARD_KEYS after the instance was saved (e.g. `decisions`) still renders its
+// mapping section — preserving every board id the user already set.
+function mergeBoardsWithSchema(stored) {
+  return { ...buildEmptyConfig().boards, ...(stored || {}) };
+}
+
 // Merge the alias schema over the stored mapping so columns added to the schema
 // AFTER a user saved settings (summaryFileID, topicNotForDiscussionID,
 // pointNotForDiscussionID) still render in the modal — preserving any id/verified
@@ -103,7 +110,7 @@ export function SettingsModal({ isOpen, onClose }) {
   // settings is null until a mapping is stored; seed the editable draft from an
   // empty scaffold (alias/type/title with blank ids) so first-time config works.
   const draft = settings || buildEmptyConfig();
-  const [boards, setBoards] = useState(draft.boards);
+  const [boards, setBoards] = useState(mergeBoardsWithSchema(draft.boards));
   const [columns, setColumns] = useState(mergeColumnsWithSchema(draft.columns));
   const [preferences, setPreferences] = useState({ ...DEFAULT_PREFERENCES, ...(draft.preferences || {}) });
   // Live tasks-status labels for the "delayed done statuses" preference (empty
@@ -134,7 +141,7 @@ export function SettingsModal({ isOpen, onClose }) {
   useEffect(() => {
     if (isOpen) {
       const seed = settings || buildEmptyConfig();
-      setBoards(seed.boards);
+      setBoards(mergeBoardsWithSchema(seed.boards));
       setColumns(mergeColumnsWithSchema(seed.columns));
       setPreferences({ ...DEFAULT_PREFERENCES, ...(seed.preferences || {}) });
       setPermissions(seedPermissions(seed.permissions));
@@ -265,6 +272,7 @@ export function SettingsModal({ isOpen, onClose }) {
     discussions: 'דיונים',
     tasks: 'משימות',
     topics: 'נושאים לדיון',
+    decisions: 'החלטות',
   };
 
   const DISCUSSIONS_SETTINGS_FIELDS = [
@@ -279,6 +287,7 @@ export function SettingsModal({ isOpen, onClose }) {
     'previousDiscussionID',
     'tasksBoardLinkID',
     'topicsBoardLinkID',
+    'decisionsBoardLinkID', // לוח החלטות — two-way pair of the decisions board's discussionLinkID
   ];
   const TASKS_SETTINGS_FIELDS = [
     'taskCreatorID',
@@ -300,8 +309,19 @@ export function SettingsModal({ isOpen, onClose }) {
     'pointNotForDiscussionID', // point-level "not for discussion" checkbox (on the subitems board)
     'pointCheckedID', // 'האם נידונה' — discussed checkbox on the SUBITEMS board (topics table)
     'pointCreatorID', // 'יוצר נקודה' — people column on the SUBITEMS board; avatar per point
+    'pointDecisionsLinkID', // 'החלטות (נקודה)' — board_relation on the SUBITEMS board to decisions created from the point
+    'pointTasksLinkID', // 'משימות (נקודה)' — board_relation on the SUBITEMS board to tasks created from the point
     // 'pointResponsesID' ('התייחסויות') intentionally NOT mapped here — the topics-table
     // redesign removed the responses cell, so the field is hidden from Settings.
+  ];
+  const DECISIONS_SETTINGS_FIELDS = [
+    'decisionCreatorID', // 'יוצר החלטה' — people column; decision-tier creator role
+    'deciderID', // 'מחליט' — people column; decision-tier decider role
+    'affectedID', // 'מושפעים' — people column
+    'decisionStatusID', // 'סטאטוס החלטה' — status column (labels come from the column)
+    'decisionPriorityID', // 'עדיפות' — second status column
+    'decisionDateID', // 'תאריך' — date column
+    'discussionLinkID', // 'דיון' — two-way pair of the discussions board's decisionsBoardLinkID
   ];
 
   // Aliases whose real column lives on the board's SUBITEMS board, not the board itself.
@@ -309,6 +329,8 @@ export function SettingsModal({ isOpen, onClose }) {
     'pointCheckedID',
     'pointNotForDiscussionID',
     'pointCreatorID',
+    'pointDecisionsLinkID',
+    'pointTasksLinkID',
   ]);
 
   const loadBoardColumns = async (boardId) => {
@@ -524,7 +546,9 @@ export function SettingsModal({ isOpen, onClose }) {
                             ? TASKS_SETTINGS_FIELDS
                             : boardKey === 'topics'
                               ? TOPICS_SETTINGS_FIELDS
-                              : Object.keys(columns?.[boardKey] || {});
+                              : boardKey === 'decisions'
+                                ? DECISIONS_SETTINGS_FIELDS
+                                : Object.keys(columns?.[boardKey] || {});
                         const entries = aliases
                           .map((alias) => [alias, columns?.[boardKey]?.[alias]])
                           .filter(([, col]) => Boolean(col));

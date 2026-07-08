@@ -1,0 +1,380 @@
+import { useState, useEffect, useCallback, useContext } from 'react';
+import { החלטות1Board } from '@api/BoardSDK.js';
+import { api, parseValue, cvSelection, formatValue } from '../utils/mondayApi/monday-client.js';
+import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
+import { MondayContext } from '@generated/contexts/MondayContext.jsx';
+import logger from '../utils/logger';
+
+// Undo window for deferred decision deletion — must match the delete toast's
+// auto-hide duration so the real delete fires exactly when "בטל" disappears.
+// (Mirrors useTasks' DELETE_GRACE_MS.)
+const DELETE_GRACE_MS = 6000;
+
+// The decisions board is mapped MANUALLY in Settings (not wizard-created), so an
+// unmapped board/relation is an EXPECTED state, not an error — every surface
+// degrades to an empty view. Warn once per session (not per fetch) so the log
+// isn't flooded while the owner hasn't mapped the board yet.
+let warnedUnmapped = false;
+function warnUnmappedOnce(detail) {
+  if (warnedUnmapped) return;
+  warnedUnmapped = true;
+  logger.warn('useDecisions', 'לוח ההחלטות או עמודת "לוח החלטות" אינם ממופים — מפו אותם בהגדרות', detail);
+}
+
+// yyyy-mm-dd for monday date columns (local date, mirrors useTasks).
+function formatDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// Discussion-side fetch: from the discussion id we read the decisionsBoardLinkID
+// board_relation column and pull its linked_items (the decisions), deserializing
+// ALL configured decisions columns. Server-side query_params filtering on a
+// board_relation column does NOT work (it matches by item NAME, not id), so we
+// always read the relation FROM the discussion side — exactly like
+// useTasks.fetchTasksByDiscussion.
+async function fetchDecisionsByDiscussion(discussionId) {
+  const decisionsBoardId = getBoardId('decisions');
+  const discussionColumns = getColumns('discussions') || {};
+  const decisionsLinkColId = discussionColumns?.decisionsBoardLinkID?.id;
+  if (!decisionsBoardId || !decisionsLinkColId) {
+    // Graceful degradation — unmapped board/relation is NOT an error.
+    warnUnmappedOnce({ discussionId, decisionsBoardId: decisionsBoardId || null, decisionsLinkColId: decisionsLinkColId || null });
+    return [];
+  }
+
+  const decisionColumns = getColumns('decisions') || {};
+  const mapped = Object.entries(decisionColumns).filter(([, col]) => col?.id);
+  const decisionCols = mapped.map(([, col]) => col.id);
+  const decisionCv = cvSelection(mapped.map(([, col]) => col.type));
+
+  const data = await api(
+    `query ($discussionId: [ID!], $decisionsLinkCol: [String!], $decisionCols: [String!]) {
+      items(ids: $discussionId) {
+        column_values(ids: $decisionsLinkCol) {
+          ... on BoardRelationValue {
+            linked_items {
+              id
+              name
+              created_at
+              column_values(ids: $decisionCols) { ${decisionCv} }
+            }
+          }
+        }
+      }
+    }`,
+    {
+      discussionId: [String(discussionId)],
+      decisionsLinkCol: [String(decisionsLinkColId)],
+      decisionCols,
+    },
+    'useDecisions.fetchDecisionsByDiscussion'
+  );
+
+  const linkedItems = data?.items?.[0]?.column_values?.[0]?.linked_items || [];
+  return linkedItems.map((item) => {
+    const byId = {};
+    (item.column_values || []).forEach((cv) => {
+      byId[cv.id] = cv;
+    });
+    const out = { id: String(item.id), name: item.name, created_at: item.created_at };
+    Object.entries(decisionColumns).forEach(([alias, col]) => {
+      if (!col?.id) return;
+      out[alias] = parseValue(col.type, byId[col.id]);
+    });
+    return out;
+  });
+}
+
+// Write a newly-created item's id into a topic POINT's (subitem's)
+// board_relation link column (pointDecisionsLinkID / pointTasksLinkID). Uses
+// the SUBITEMS board id (resolved from the point item — subitem columns are
+// written with the subitem board's own id, same path as useTopics'
+// pointCheckedID writes) and APPENDS to the existing linked ids —
+// board_relation writes REPLACE, so the caller passes the current ids via
+// `existingLinkedIds` to avoid an extra query.
+async function linkItemToPoint(alias, pointId, itemId, existingLinkedIds = []) {
+  const linkCol = getColumns('topics')?.[alias];
+  if (!linkCol?.id) {
+    logger.warn('useDecisions', 'לא ניתן לקשר פריט לנקודה — עמודת הקישור אינה ממופה בהגדרות', { alias, pointId, itemId });
+    return;
+  }
+  const data = await api(
+    `query ($ids: [ID!]) { items(ids: $ids) { id board { id } } }`,
+    { ids: [String(pointId)] },
+    'useDecisions.linkItemToPoint.resolveBoard'
+  );
+  const subBoardId = data?.items?.[0]?.board?.id;
+  if (!subBoardId) {
+    logger.warn('useDecisions', 'לא ניתן לקשר פריט לנקודה — לוח הסאב־אייטמים לא נמצא', { alias, pointId, itemId });
+    return;
+  }
+  const ids = [...new Set([...(existingLinkedIds || []).map(String), String(itemId)])];
+  await api(
+    `mutation ($boardId: ID!, $itemId: ID!, $cv: JSON!) {
+      change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $cv) { id }
+    }`,
+    {
+      boardId: String(subBoardId),
+      itemId: String(pointId),
+      cv: JSON.stringify({ [linkCol.id]: formatValue('board_relation', { linkedItems: ids.map((id) => ({ id })) }) }),
+    },
+    'useDecisions.linkItemToPoint'
+  );
+}
+
+// Decision → point link (used by createDecision's pointId option).
+const linkDecisionToPoint = (pointId, decisionId, existingLinkedIds = []) =>
+  linkItemToPoint('pointDecisionsLinkID', pointId, decisionId, existingLinkedIds);
+
+// Task → point link — the SAME code path, over pointTasksLinkID. Exported for
+// DiscussionCard's point-scoped quick-create task flow (useTasks.createTask
+// knows nothing about points).
+export const linkTaskToPoint = (pointId, taskId, existingLinkedIds = []) =>
+  linkItemToPoint('pointTasksLinkID', pointId, taskId, existingLinkedIds);
+
+export function useDecisions(discussionId) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Current user id — used to stamp the decision creator (decisionCreatorID) and
+  // the default decider (deciderID) on create. Read MondayContext SOFTLY
+  // (useContext, not useMondayContext) so the hook still works in surfaces/tests
+  // rendered without a MondayProvider; stamping simply no-ops when unavailable.
+  const ctxApi = useContext(MondayContext);
+  const currentUserId = ctxApi?.currentUser?.id ?? ctxApi?.context?.user?.id ?? null;
+
+  useEffect(() => {
+    if (!discussionId) { setItems([]); setLoading(false); return; }
+    let cancelled = false;
+    async function fetch() {
+      try {
+        setLoading(true);
+        const fetchedItems = await fetchDecisionsByDiscussion(discussionId);
+        if (!cancelled) {
+          setItems(fetchedItems);
+          logger.info('useDecisions', 'Decisions fetch completed', { discussionId, count: fetchedItems.length });
+        }
+      } catch (err) {
+        logger.error('useDecisions', 'Error fetching decisions', { discussionId, err });
+      }
+      finally { if (!cancelled) setLoading(false); }
+    }
+    fetch();
+    return () => { cancelled = true; };
+  }, [discussionId]);
+
+  // Silent refetch — re-pulls the discussion's decisions WITHOUT toggling
+  // `loading` (no skeleton flash). Used after a create so the list reflects the
+  // authoritative server state.
+  const refresh = useCallback(async () => {
+    if (!discussionId) return;
+    try {
+      const fetchedItems = await fetchDecisionsByDiscussion(discussionId);
+      setItems(fetchedItems);
+    } catch (err) {
+      logger.error('useDecisions', 'Error refreshing decisions', { discussionId, err });
+    }
+  }, [discussionId]);
+
+  const updateDecisionName = async (decisionId, name) => {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    let prev = [];
+    setItems((current) => {
+      prev = current;
+      return current.map((i) => (i.id === decisionId ? { ...i, name: trimmed } : i));
+    });
+    try {
+      const b = new החלטות1Board();
+      await b.item(decisionId).update({ name: trimmed }).execute();
+    } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
+  };
+
+  const updateDecisionStatus = async (decisionId, status) => {
+    let prev = [];
+    setItems((current) => {
+      prev = current;
+      return current.map((i) => (i.id === decisionId ? { ...i, decisionStatusID: status } : i));
+    });
+    try {
+      const b = new החלטות1Board();
+      await b.item(decisionId).update({ decisionStatusID: status }).execute();
+    } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
+  };
+
+  const updateDecisionPriority = async (decisionId, priority) => {
+    let prev = [];
+    setItems((current) => {
+      prev = current;
+      return current.map((i) => (i.id === decisionId ? { ...i, decisionPriorityID: priority } : i));
+    });
+    try {
+      const b = new החלטות1Board();
+      await b.item(decisionId).update({ decisionPriorityID: priority }).execute();
+    } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
+  };
+
+  const updateDecisionDate = async (decisionId, date) => {
+    let prev = [];
+    setItems((current) => {
+      prev = current;
+      return current.map((i) => (i.id === decisionId ? { ...i, decisionDateID: date } : i));
+    });
+    try {
+      const b = new החלטות1Board();
+      const f = date ? formatDate(date) : null;
+      await b.item(decisionId).update({ decisionDateID: f }).execute();
+    } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
+  };
+
+  const updateDecisionAffected = async (decisionId, people) => {
+    let prev = [];
+    setItems((current) => {
+      prev = current;
+      return current.map((i) => (i.id === decisionId ? { ...i, affectedID: people } : i));
+    });
+    try {
+      const b = new החלטות1Board();
+      await b.item(decisionId).update({ affectedID: (people || []).map((p) => Number(p.id)) }).execute();
+    } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
+  };
+
+  const deleteDecision = useCallback(async (decisionId) => {
+    if (!decisionId) return false;
+    const prev = [...items];
+    setItems((current) => current.filter((i) => i.id !== decisionId));
+    try {
+      await api(`mutation ($itemId: ID!) { delete_item(item_id: $itemId) { id } }`, { itemId: decisionId }, 'useDecisions.deleteDecision');
+      return true;
+    } catch (err) {
+      logger.error('useDecisions', 'Error deleting decision', err);
+      setItems(prev);
+      return false;
+    }
+  }, [items]);
+
+  // Deferred ("soft") delete with an undo window: the rows vanish from the UI
+  // immediately, but the real delete_item fires only after DELETE_GRACE_MS — so
+  // the returned `undo()` (wired to the toast's "בטל" button) can cancel the
+  // pending delete and restore the rows. (Mirrors useTasks.softDeleteTasks.)
+  const softDeleteDecisions = useCallback((ids) => {
+    const idList = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
+    if (!idList.length) return { undo: () => {}, count: 0 };
+    const idSet = new Set(idList.map(String));
+    const removed = items.filter((i) => idSet.has(String(i.id))); // snapshot for restore
+    setItems((current) => current.filter((i) => !idSet.has(String(i.id))));
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      idList.forEach((id) => {
+        api(`mutation ($itemId: ID!) { delete_item(item_id: $itemId) { id } }`, { itemId: id }, 'useDecisions.softDeleteDecisions')
+          .catch((err) => logger.error('useDecisions', 'Error deleting decision', err));
+      });
+    }, DELETE_GRACE_MS);
+
+    const undo = () => {
+      if (cancelled) return;
+      cancelled = true;
+      clearTimeout(timer);
+      setItems((current) => {
+        const have = new Set(current.map((i) => String(i.id)));
+        return [...current, ...removed.filter((i) => !have.has(String(i.id)))];
+      });
+    };
+    return { undo, count: idList.length };
+  }, [items]);
+
+  // Create a decision linked to this discussion and add it to the list
+  // optimistically. `text` is the decision wording (= the item NAME). `opts`:
+  //   { status, priority, affected: people[], date: Date|null, decider,
+  //     pointId, existingLinkedIds }
+  //   - date: omitted → today; explicit null → no date.
+  //   - decider: defaults to the current user.
+  //   - pointId + existingLinkedIds: also APPEND the new decision to the topic
+  //     point's (subitem's) pointDecisionsLinkID relation. The caller passes the
+  //     point's current linked ids to avoid an extra read (relation writes replace).
+  const createDecision = useCallback(async (text, opts = {}) => {
+    const trimmed = (text || '').trim();
+    if (!trimmed || !discussionId) return null;
+    if (!getBoardId('decisions')) {
+      // Graceful degradation — never fire a query when the board is unmapped.
+      warnUnmappedOnce({ discussionId, action: 'createDecision' });
+      return null;
+    }
+    const {
+      status = null,
+      priority = null,
+      affected = [],
+      date = undefined,
+      decider = null,
+      pointId = null,
+      existingLinkedIds = [],
+    } = opts || {};
+    // Default the decision date to today; explicit null means "no date".
+    const effectiveDate = date === undefined ? new Date() : date;
+    const deciderId = decider != null ? (decider?.id ?? decider) : currentUserId;
+
+    const tempId = `temp-${Date.now()}`;
+    setItems((prev) => [...prev, {
+      id: tempId,
+      name: trimmed,
+      decisionStatusID: status,
+      decisionPriorityID: priority,
+      affectedID: affected,
+      decisionDateID: effectiveDate,
+    }]);
+    try {
+      const b = new החלטות1Board();
+      const decisionCols = getColumns('decisions') || {};
+      // monday's create_item IGNORES board_relation values, so the discussion
+      // link (discussionLinkID) — and the point link — are set AFTER creation
+      // via change_multiple_column_values (the verified write path).
+      const data = { name: trimmed };
+      if (status != null) data.decisionStatusID = status; // status is a label id; 0 is valid
+      if (priority != null) data.decisionPriorityID = priority;
+      // Stamp the decision creator with the current user (drives the decision-tier
+      // "creator" role for the permissions matrix). Skipped when unmapped / no user.
+      if (currentUserId != null && decisionCols?.decisionCreatorID?.id) {
+        data.decisionCreatorID = [Number(currentUserId)];
+      }
+      // Decider defaults to the current user (opts.decider overrides).
+      if (deciderId != null && decisionCols?.deciderID?.id) {
+        data.deciderID = [Number(deciderId)];
+      }
+      if (affected.length && decisionCols?.affectedID?.id) {
+        data.affectedID = affected.map((p) => Number(p?.id ?? p));
+      }
+      if (effectiveDate) data.decisionDateID = formatDate(effectiveDate);
+      const created = await b.item().create(data, { createLabelsIfMissing: true }).execute();
+      const realId = created.id;
+      await b.item(realId).update({ discussionLinkID: { linkedItems: [{ id: discussionId }] } }).execute();
+      if (pointId) await linkDecisionToPoint(pointId, realId, existingLinkedIds);
+      setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, id: realId } : i)));
+      // Silent refresh so the list reflects the authoritative server state —
+      // fire-and-forget so it doesn't delay the caller or flash a loader.
+      refresh();
+      return { id: realId };
+    } catch (err) {
+      logger.error('useDecisions', 'Error creating decision', err);
+      setItems((prev) => prev.filter((i) => i.id !== tempId));
+      return null;
+    }
+  }, [discussionId, refresh, currentUserId]);
+
+  return {
+    items,
+    loading,
+    refresh,
+    createDecision,
+    updateDecisionName,
+    updateDecisionStatus,
+    updateDecisionPriority,
+    updateDecisionDate,
+    updateDecisionAffected,
+    deleteDecision,
+    softDeleteDecisions,
+  };
+}
+
+export { fetchDecisionsByDiscussion };

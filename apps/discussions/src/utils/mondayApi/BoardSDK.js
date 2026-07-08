@@ -373,3 +373,6 @@ export class משימות1Board extends BoardBase {
 export class נושאיםלדיון1Board extends BoardBase {
   constructor() { super('topics'); }
 }
+export class החלטות1Board extends BoardBase {
+  constructor() { super('decisions'); }
+}

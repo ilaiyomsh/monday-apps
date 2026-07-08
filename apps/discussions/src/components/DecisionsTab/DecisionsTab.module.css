@@ -1,0 +1,363 @@
+/* Decisions tab — monday board-style table (mirrors TaskTable/TasksTab chrome).
+   NOTE: class names are GLOBAL in tests (classNameStrategy: 'non-scoped') and
+   HASHED in prod, so everything here is dec-prefixed to avoid collisions and no
+   selector reaches into another module's classes.
+   The purple #6b4ee6 accent is the decisions CHROME color from the approved
+   mockup (accents only — status/priority DATA colors always come from the
+   mapped columns via useStatusOptions). */
+
+.decisionsRoot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-medium, 16px);
+  /* Same full-bleed layout as TasksTab: left inset keeps the toolbar off the
+     edge, the board bleeds right so row separators run to the right edge. */
+  width: 100%;
+  padding-inline-start: 28px;
+  padding-inline-end: 0;
+  box-sizing: border-box;
+}
+
+.decSkeletonStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-small, 8px);
+}
+
+.decToolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+}
+
+/* Unmapped decisions board — expected state, not an error. */
+.decEmptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  margin-inline-end: 28px;
+  border: 1px dashed var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-medium, 8px);
+  background: var(--primary-background-color, #fff);
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+  font-family: var(--font-family);
+  text-align: center;
+  padding: 16px;
+}
+
+/* Shared horizontal scroll owner (mirrors TasksTab .board): LTR so the table
+   anchors LEFT (accent strip + name on the left) and separators run right. */
+.decBoard {
+  overflow: auto hidden;
+  width: 100%;
+  direction: ltr;
+}
+
+/* Bounded + rounded on the LEFT, OPEN on the right (no right border) so the
+   row separators run to the edge — same shape as TaskTable. */
+.decTable {
+  width: max-content;
+  min-width: 100%;
+  background: #ffffff;
+  border: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-inline-end: none;
+  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
+  font-family: var(--font-family);
+  direction: ltr;
+}
+
+/* Shared grid template (header + body). mockup: 40px rows,
+   החלטה | מחליט | מושפעים | עדיפות | סטאטוס | תאריך. */
+.decRow {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.8fr) 130px 150px 140px 160px 110px;
+  align-items: stretch;
+  min-height: 40px;
+  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  position: relative;
+}
+
+.decBodyRow {
+  transition: background-color var(--motion-productive-short, 0.1s) ease;
+}
+.decBodyRow:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+/* Optimistic row (temp- id): faded + locked until the server id arrives. */
+.decPending {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: progress;
+}
+.decPending:hover {
+  background: transparent;
+}
+
+.decCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  font-family: var(--font-family);
+}
+
+.decHeadCell {
+  font-size: 14px;
+  color: var(--primary-text-color, #323338);
+}
+
+.decNameHead {
+  justify-content: flex-start;
+  padding: 0 14px;
+}
+
+/* החלטה cell — inset purple accent bar (decisions chrome color). */
+.decNameCell {
+  justify-content: flex-start;
+  gap: 6px;
+  padding-inline-start: 14px;
+  padding-inline-end: 8px;
+  box-shadow: inset 6px 0 0 #6b4ee6;
+  overflow: hidden;
+}
+
+.decNameText,
+.decNameBtn {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 40px; /* match row height */
+  color: var(--primary-text-color, #323338);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family);
+  text-align: start;
+}
+.decNameBtn {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.decNameInput {
+  width: 100%;
+  min-width: 0;
+  font-size: 14px;
+  padding: 2px 6px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  box-sizing: border-box;
+  font-family: var(--font-family);
+}
+.decNameInput:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+/* Hover-revealed delete (inline confirm replaces window.confirm). */
+.decDeleteBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease, background-color 0.1s ease, color 0.1s ease;
+}
+.decBodyRow:hover .decDeleteBtn,
+.decDeleteBtn:focus-visible {
+  opacity: 1;
+}
+.decDeleteBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--negative-color, #d83a52);
+}
+.decConfirmDel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.decConfirmText {
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.decConfirmBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.decConfirmBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+}
+.decConfirmYes:hover {
+  color: var(--negative-color, #d83a52);
+}
+
+.decMuted {
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+}
+
+/* סטאטוס — full-fill cell (monday native): the trigger/fill spans the cell. */
+.decStatusCell {
+  padding: 0;
+  align-items: stretch;
+}
+.decFillTrigger {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.decFill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 38px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.decFillEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  color: var(--secondary-text-color, #676879);
+  font-size: 13px;
+  font-family: var(--font-family);
+}
+
+/* עדיפות — compact pill (mockup: 100×26, radius 4). */
+.decPillTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.decPill {
+  width: 100px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--ui-background-color, #eceef3);
+  color: var(--secondary-text-color, #676879);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.decPillFilled {
+  color: #ffffff;
+}
+
+/* Shared picker menu (status + priority) — RTL Hebrew labels. */
+.decMenu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px;
+  width: 160px;
+  direction: rtl;
+}
+.decMenuOption {
+  height: 36px;
+  border: none;
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-family);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.decMenuOption:hover {
+  filter: brightness(0.92);
+}
+
+/* Read-only empty table hint (only when the user can't add decisions). */
+.decEmptyRow {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+  font-family: var(--font-family);
+  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+}
+.decEmptyRow:last-child {
+  border-bottom: none;
+}
+
+/* "+ הוסף החלטה" bottom row — half-opacity purple accent, rounded bottom-left. */
+.decAddRow {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #9699a6);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: start;
+  font-family: var(--font-family);
+}
+.decAddRow:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+.decAddRowInner {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  padding-inline-start: 18px;
+  box-shadow: inset 6px 0 0 rgba(107, 78, 230, 0.5);
+  align-self: stretch;
+  border-end-start-radius: var(--border-radius-medium, 8px);
+}

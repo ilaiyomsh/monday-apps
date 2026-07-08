@@ -21,9 +21,12 @@
   margin-inline: var(--section-rule-inset, 16px);
 }
 
+/* Mockup top accent: 4px multi-color gradient (chrome color, deliberately
+   hardcoded — these are brand accents, not data-driven status colors). */
 .gradientBar {
-  height: 6px;
+  height: 4px;
   width: 100%;
+  background: linear-gradient(to left, #579bfc, #9d50dd, #4eccc6, #00c875);
 }
 
 .headerInner {
@@ -39,6 +42,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Two nav buttons + gear + view toggle + "חדש" can overrun the narrow
+     sidebar — degrade by wrapping instead of overflowing. */
+  flex-wrap: wrap;
+  row-gap: var(--spacing-xs, 4px);
 }
 
 .title {
@@ -51,8 +58,8 @@
   gap: var(--spacing-xs, 4px);
 }
 
-/* Search field — leading magnifying-glass icon, no placeholder text (matches
-   monday's native search look, same pattern as PersonPicker). */
+/* Search field — leading magnifying-glass icon + "חיפוש דיון" placeholder
+   (mockup), same trigger pattern as PersonPicker. */
 .searchWrap {
   position: relative;
   display: flex;
@@ -389,17 +396,19 @@
   to { transform: rotate(360deg); }
 }
 
-/* Discussion item button */
+/* Discussion item button — mockup row: accent dot + two stacked lines
+   (name over a "date · time" subtitle), RTL-start aligned. */
 .item {
   width: 100%;
   /* Pin the rendered height so the loading Skeleton (ROW_SKELETON_H in
-     DiscussionList.jsx, = --list-row-height) matches exactly and rows never
-     jump on load. Name is single-line (nowrap + ellipsis) so this can't clip. */
-  min-height: var(--list-row-height, 36px);
-  text-align: left;
+     DiscussionList.jsx) matches exactly and rows never jump on load: 20px name
+     line + 2px gap + 16px subtitle + 8px top/bottom padding = 54px. Both lines
+     are single-line (nowrap + ellipsis) so this can't clip. */
+  min-height: 54px;
+  text-align: start;
   padding: var(--spacing-small, 8px) var(--spacing-small, 12px);
-  /* Just enough trailing room for the kebab (⋯, 28px @ inset 8px) so the date
-     sits right beside it; the name truncates on the left and never collides. */
+  /* Just enough trailing room for the kebab (⋯, 28px @ inset 8px); the name
+     and subtitle truncate before ever colliding with it. */
   padding-inline-end: 42px;
   border: none;
   border-left: 3px solid transparent;
@@ -414,13 +423,16 @@
   background-color: var(--primary-background-hover-color, rgba(41, 47, 76, 0.06));
 }
 
+/* Mockup selected row: soft blue fill; the accent-colored side border is set
+   inline (borderLeftColor = the row's accent) on top of .item's 3px border. */
 .itemSelected {
-  background-color: var(--primary-selected-color, rgba(0, 115, 234, 0.08));
+  background-color: #f0f4ff;
 }
 
 .itemContent {
   display: flex;
-  align-items: center;
+  /* Dot rides the first (name) line, mockup-style. */
+  align-items: flex-start;
   gap: 10px;
 }
 
@@ -429,24 +441,25 @@
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+  /* Optically center on the 20px name line. */
+  margin-top: 6px;
 }
 
-/* One line: name flush left, date flush right. */
+/* Two stacked lines: name on top, "date · time" subtitle below. */
 .itemBody {
   flex: 1 1 0;
   min-width: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .itemName {
-  flex: 1 1 auto;
   min-width: 0;
   margin: 0;
-  text-align: left;
+  text-align: start;
   font-size: var(--font-size-general-label, 14px);
+  line-height: 20px;
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-color, #323338);
   overflow: hidden;
@@ -455,10 +468,11 @@
 }
 
 .itemDate {
-  flex-shrink: 0;
-  direction: ltr;
   font-size: 12px;
+  line-height: 16px;
   color: var(--secondary-text-color, #676879);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

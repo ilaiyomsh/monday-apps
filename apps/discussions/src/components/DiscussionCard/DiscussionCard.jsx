@@ -3,6 +3,7 @@ import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
 import { MoveArrowLeft, Link, Info } from '@vibe/icons';
 import { דיונים1Board } from '@api/BoardSDK.js';
 import { useTasks } from '@generated/hooks/useTasks';
+import { useDecisions, linkTaskToPoint } from '@generated/hooks/useDecisions';
 import { useDiscussionDetails } from '@generated/hooks/useDiscussions';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { useViewport } from '@generated/hooks/useViewport.js';
@@ -18,17 +19,20 @@ import {
 import { PreviousTasksTab } from '@generated/components/PreviousTasksTab';
 import { TopicsTab } from '@generated/components/TopicsTab';
 import { TasksTab } from '@generated/components/TasksTab';
+import { DecisionsTab } from '@generated/components/DecisionsTab';
 import { EffectivenessTab } from '@generated/components/EffectivenessTab';
 import { SummaryTab } from '@generated/components/SummaryTab';
 import { NewTaskModal } from '@generated/components/NewTaskModal';
-import { CreateTaskFab } from '@generated/components/CreateTaskFab';
+import { QuickCreateFab } from '@generated/components/QuickCreateFab';
+import { QuickCreateModal } from '@generated/components/QuickCreateModal';
 import { fmtTimeLabel, composeLocalDate, localYmd, toDateInput, toTimeInput } from '@generated/utils/dateTime.js';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import logger from '@generated/utils/logger.js';
 import styles from './DiscussionCard.module.css';
 
 // Ordered tab keys — index <-> key mapping for @vibe/core's index-based Tabs.
-const TAB_KEYS = ['previous', 'topics', 'tasks', 'summary', 'effectiveness'];
+// 'decisions' is also a valid deep-link tab (?app[tab]=decisions).
+const TAB_KEYS = ['previous', 'topics', 'tasks', 'decisions', 'summary', 'effectiveness'];
 
 // Half-hour steps for the header's time menu — full day (the create modal's
 // 6:00–23:00 window is too narrow here: existing discussions carry times like
@@ -63,6 +67,11 @@ export function DiscussionCard({
   const [activeTab, setActiveTab] = useState('previous');
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskDefaults, setNewTaskDefaults] = useState({});
+  // Quick-create modal (FAB / per-point "+"): null when closed, otherwise
+  // { mode: 'decision'|'task', point: <topic point + topicId>|null }. The full
+  // point (with topicId/decisionIds/taskIds) is kept so onCreate can link the
+  // new item to the point's subitem relation columns.
+  const [quickCreate, setQuickCreate] = useState(null);
   const { isMobile } = useViewport();
   const [infoOpen, setInfoOpen] = useState(false);
   const [timeMenuOpen, setTimeMenuOpen] = useState(false);
@@ -132,6 +141,15 @@ export function DiscussionCard({
     (cap, task) => can(cap, { boardKey: 'tasks', item: task }),
     [can]
   );
+  // Decision-tier caps resolve PER-DECISION from the decision item's own people
+  // columns (decisionCreatorID/deciderID) — no discussion ctx needed. The
+  // discussion-tier createDecision cap gates both creation affordances (FAB /
+  // add-row / per-point "+").
+  const canDecision = useCallback(
+    (cap, decision) => can(cap, { item: decision }),
+    [can]
+  );
+  const canCreateDecision = can('createDecision');
   // System-tier: column drag-reorder. Owners/admins only (the resolver returns
   // owner-bypass for this cap in every path), so this equals the old
   // canManageSettings gate but also honors account admins.
@@ -172,6 +190,12 @@ export function DiscussionCard({
   // Pass the discussion's "סוג" (discussionTypeID) so new tasks are stamped with
   // the matching taskTypeID (used by the "by discussion type" previous-tasks view).
   const tasksData = useTasks(discussion?.id, data.discussionTypeID ?? null);
+
+  // Prefetch the discussion's decisions the same way — shared by the Decisions
+  // tab, the Topics tab's per-point counters/popup and the quick-create flow.
+  // useDecisions self-guards when the decisions board is unmapped (no query,
+  // empty items), so every surface degrades gracefully.
+  const decisionsData = useDecisions(discussion?.id);
 
   useEffect(() => {
     if (!discussion?.id || !initialTabDiscussionId) return;
@@ -272,6 +296,59 @@ export function DiscussionCard({
     if (loadingId != null) onDismissToast?.(loadingId);
     if (created) onNotify?.('משימה נוצרה בהצלחה');
     // created === null → createTask already logged the error (toast via sink).
+  };
+
+  // ---- Quick create (FAB on every tab + per-point "+" in the Topics tab) ----
+  const openQuickCreate = (mode, point = null) => setQuickCreate({ mode, point });
+  const closeQuickCreate = () => setQuickCreate(null);
+  // Per-point "+" — opens the modal scoped to the point (mode forced, toggle
+  // hidden per the modal contract). Guarded per kind: a stale control can't
+  // open a create flow the user's role doesn't grant.
+  const handleCreateFromPoint = (kind, point) => {
+    const isDecision = kind === 'decision';
+    if (isDecision ? !canCreateDecision : !createTask) return;
+    openQuickCreate(isDecision ? 'decision' : 'task', point);
+  };
+  // The modal fires this and closes immediately (fire-and-forget). ONE code
+  // path for scoped + unscoped creates: the point (when present) carries its
+  // parent topicId and current linked ids, so the task links to the topic via
+  // createTask's topicId option and to the POINT via linkTaskToPoint; a
+  // decision links to the point through createDecision's own pointId option.
+  const handleQuickCreate = async (kind, { text, person, status, deadline }) => {
+    const point = quickCreate?.point || null;
+    if (kind === 'task') {
+      if (!createTask) return; // capability guard (same as handleCreateTask)
+      const loadingId = onShowLoading?.('יוצר משימה');
+      const created = await tasksData.createTask(text, {
+        status: null,
+        assignee: person || [],
+        deadline,
+        topicId: point?.topicId || null,
+      });
+      if (created && point?.id) {
+        try {
+          await linkTaskToPoint(point.id, created.id, point.taskIds || []);
+        } catch (err) {
+          // The api() funnel already logged+toasted; re-log only un-logged failures.
+          if (!err?.__loggedId) logger.error('DiscussionCard', 'קישור המשימה לנקודה נכשל', err);
+        }
+      }
+      if (loadingId != null) onDismissToast?.(loadingId);
+      if (created) onNotify?.('משימה נוצרה בהצלחה');
+      return;
+    }
+    if (!canCreateDecision) return;
+    const created = await decisionsData.createDecision(text, {
+      status, // decision-status label id (null when unset/unmapped)
+      // Defaults per product spec: affected = the discussion's participants;
+      // decider defaults inside the hook to the current user when omitted;
+      // date omitted → today (the hook's default).
+      affected: Array.isArray(data.participantsID) ? data.participantsID : [],
+      ...(person?.length ? { decider: person[0] } : {}),
+      ...(point?.id ? { pointId: point.id, existingLinkedIds: point.decisionIds || [] } : {}),
+    });
+    if (created) onNotify?.('ההחלטה נוצרה');
+    // created === null → createDecision already logged the error (toast via sink).
   };
 
   return (
@@ -450,6 +527,7 @@ export function DiscussionCard({
               <Tab>הנחיות קודמות</Tab>
               <Tab>נושאים</Tab>
               <Tab>משימות</Tab>
+              <Tab>החלטות</Tab>
               <Tab>סיכום</Tab>
               <Tab>אפקטיביות</Tab>
             </TabList>
@@ -467,11 +545,18 @@ export function DiscussionCard({
         </div>
         <div className={activeTab === 'topics' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'topics' ? undefined : 'none' }}>
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast}
-            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canReorderColumns={canReorderColumns} />
+            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canReorderColumns={canReorderColumns}
+            onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
+            decisionsItems={decisionsData.items} tasksItems={tasksData.items} />
         </div>
         {activeTab === 'tasks' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
             <TasksTab data={tasksData} onNewTask={openNewTaskModal} onNotify={onNotify} canTask={canTask} canCreateTask={createTask} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
+          </div>
+        )}
+        {activeTab === 'decisions' && (
+          <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
+            <DecisionsTab data={decisionsData} onNewDecision={() => openQuickCreate('decision')} onNotify={onNotify} canDecision={canDecision} canCreateDecision={canCreateDecision} />
           </div>
         )}
         {activeTab === 'summary' && (
@@ -486,9 +571,26 @@ export function DiscussionCard({
         )}
       </div>
 
-      {/* New-task FAB — only on the "נושאים" (topics) tab, with a discussion
-          selected. Hides while the modal is open. */}
-      {createTask && !newTaskOpen && activeTab === 'topics' && <CreateTaskFab onClick={() => openNewTaskModal({})} />}
+      {/* Quick-create FAB — on EVERY tab (per the approved mockup), with a
+          discussion selected. Hidden while either create modal is open, and
+          entirely absent when the user can create neither tasks nor decisions.
+          On the "החלטות" tab it opens in decision mode, elsewhere in task mode
+          (the modal clamps to an allowed side via allowTask/allowDecision). */}
+      {(createTask || canCreateDecision) && !newTaskOpen && !quickCreate && (
+        <QuickCreateFab onClick={() => openQuickCreate(activeTab === 'decisions' ? 'decision' : 'task')} />
+      )}
+      <QuickCreateModal
+        open={!!quickCreate}
+        initialMode={quickCreate?.mode || 'task'}
+        scopedPoint={quickCreate?.point || null}
+        discussion={data}
+        participants={Array.isArray(data.participantsID) ? data.participantsID : []}
+        currentUser={currentUser}
+        onClose={closeQuickCreate}
+        onCreate={handleQuickCreate}
+        allowTask={createTask}
+        allowDecision={canCreateDecision}
+      />
       <NewTaskModal
         open={newTaskOpen}
         onClose={closeNewTaskModal}

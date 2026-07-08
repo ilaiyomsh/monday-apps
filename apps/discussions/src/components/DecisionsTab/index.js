@@ -1,0 +1,1 @@
+export { DecisionsTab } from './DecisionsTab';
