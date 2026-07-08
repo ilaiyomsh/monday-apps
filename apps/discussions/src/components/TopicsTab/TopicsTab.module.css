@@ -59,6 +59,16 @@
   width: 100%;
   padding: 0 2px;
 }
+/* Whole-header drag (the six-dot grip was removed — the header itself drags the
+   group). grab cursor on the header; its buttons keep their own pointer cursor.
+   touch-action:none lets the PointerSensor claim vertical drags on touch. */
+.sectionHeaderDraggable {
+  cursor: grab;
+  touch-action: none;
+}
+.sectionHeaderDraggable:active {
+  cursor: grabbing;
+}
 
 /* Leading collapse caret — neutral grey. Open: points down; collapsed: points
    toward the leading (right) side in LTR. */
@@ -84,28 +94,6 @@
 }
 .chevronCollapsed {
   transform: rotate(-90deg);
-}
-
-/* Drag handle — subtle until header hover. */
-.grip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  padding: 2px;
-  color: var(--secondary-text-color, #676879);
-  cursor: grab;
-  opacity: 0;
-  flex-shrink: 0;
-  touch-action: none;
-  transition: opacity var(--motion-productive-short, 0.15s) ease;
-}
-.sectionHeader:hover .grip {
-  opacity: 0.7;
-}
-.grip:active {
-  cursor: grabbing;
 }
 
 /* Title toggle zone — the solid color label badge. */

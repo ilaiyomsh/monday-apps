@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Avatar, Dialog, DialogContentContainer } from '@vibe/core';
-import { GripVertical, Trash2, EyeOff, Eye, MoreHorizontal, Check } from 'lucide-react';
+import { Trash2, EyeOff, Eye, MoreHorizontal, Check } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import styles from './TopicPointRow.module.css';
@@ -105,8 +105,14 @@ export function RowKebabMenu({ excluded, onToggleHide, onDelete, kind = 'נקו�
  * החלטות/משימות cells: a dashed "+" (create a decision/task FROM this point —
  * rendered only when the create callback is provided, so the parent gates it by
  * capability) and a round counter pill (filled when >0) that opens the
- * PointItemsPopup. The kebab (hide/delete) + drag grip moved INTO the name cell
- * (hover-revealed) — the lead column is now the bare accent bar per the mockup.
+ * PointItemsPopup. The hide/delete kebab lives (hover-revealed) in the name cell;
+ * the lead column is the bare accent bar per the mockup.
+ *
+ * DRAG-TO-REORDER: the WHOLE ROW is the drag handle (native monday board feel) —
+ * the six-dot grip was removed. dnd-kit's PointerSensor activation distance (set
+ * in TopicsTab, ~8px) means a small press-move starts a drag while a plain click
+ * still edits the cell. Interactive cells call stopPropagation so their clicks
+ * never bubble into a drag start.
  */
 export function TopicPointRow({
   point, rowStyle,
@@ -116,7 +122,7 @@ export function TopicPointRow({
   onToggle, onToggleNotForDiscussion, onRename, onDelete,
   // Granular discussion-tier caps. Each equals the legacy canEdit while the
   // permissions feature is off, so behavior is unchanged. point edit (rename +
-  // drag), delete (kebab delete + hide), check ("נידונה" toggle).
+  // whole-row drag), delete (kebab delete + hide), check ("נידונה" toggle).
   canEditPoint = true, canDelete = true, canCheck = true,
   // Decisions/tasks link counters (linked ids length, from pointDecisionsLinkID /
   // pointTasksLinkID; 0 when the columns are unmapped).
@@ -144,8 +150,19 @@ export function TopicPointRow({
   };
   const stop = (e) => e.stopPropagation();
 
+  // Whole-row drag (native monday feel): the sortable listeners/attributes ride
+  // on the ROW itself when the point is editable — no six-dot grip. The
+  // PointerSensor's activation distance (TopicsTab) keeps a plain click editing
+  // the cell; interactive cells stopPropagation so their clicks don't start a drag.
+  const dragProps = canEditPoint ? { ...attributes, ...listeners } : {};
+
   return (
-    <div ref={setNodeRef} style={style} className={`${styles.row} ${excluded ? styles.excluded : ''}`}>
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`${styles.row} ${excluded ? styles.excluded : ''} ${canEditPoint ? styles.rowDraggable : ''}`}
+      {...dragProps}
+    >
       {/* accent bar (28px lead column) */}
       <span className={styles.lead} aria-hidden="true" />
 
@@ -159,11 +176,6 @@ export function TopicPointRow({
               onToggleHide={canEditPoint ? () => onToggleNotForDiscussion?.(point, !excluded) : undefined}
               onDelete={canDelete && onDelete ? () => onDelete(point) : undefined}
             />
-            {canEditPoint && (
-              <button type="button" className={styles.grip} {...attributes} {...listeners} aria-label="גרור לסידור">
-                <GripVertical size={14} />
-              </button>
-            )}
           </span>
         )}
         {editingName ? (

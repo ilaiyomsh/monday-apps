@@ -5,7 +5,7 @@ import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { Plus, ChevronDown, GripVertical, Eye, EyeOff } from 'lucide-react';
+import { Plus, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -185,7 +185,9 @@ function SortableTopicSection({
   // visible (grey "עדיפות" placeholder) for editors so they can still set one.
   const hasPriorityLabel = topic.priority != null && priorityLabelById?.[topic.priority] != null;
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // Activation distance (8px) lets a plain click inside a cell edit/toggle while
+  // a small press-move starts the whole-row drag (native monday board feel).
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
   const handlePointDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return;
     const ids = points.map((p) => String(p.id));
@@ -209,13 +211,22 @@ function SortableTopicSection({
     setEditingTitle(false);
   };
 
+  // Whole-header drag (native monday feel): the sortable listeners/attributes
+  // ride on the section HEADER when the topic is editable — no six-dot grip. The
+  // PointerSensor activation distance (TopicsTab, ~8px) keeps a plain click on
+  // the chevron/title/eye/kebab working; only a press-move starts a group drag.
+  const headerDragProps = canEditTopic ? { ...attributes, ...listeners } : {};
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       className={`${styles.section} ${excluded ? styles.sectionExcluded : ''}`}
     >
-      <div className={styles.sectionHeader}>
+      <div
+        className={`${styles.sectionHeader} ${canEditTopic ? styles.sectionHeaderDraggable : ''}`}
+        {...headerDragProps}
+      >
         <button
           type="button"
           className={styles.triangle}
@@ -226,12 +237,6 @@ function SortableTopicSection({
         >
           <ChevronDown size={16} className={`${styles.chevron} ${effectiveOpen ? '' : styles.chevronCollapsed}`} />
         </button>
-
-        {canEditTopic && (
-          <button type="button" className={styles.grip} {...attributes} {...listeners} aria-label="גרור נושא">
-            <GripVertical size={16} />
-          </button>
-        )}
 
         {editingTitle ? (
           <input
@@ -561,7 +566,9 @@ export function TopicsTab({
   };
   const accentByTopicId = getAccentByTopicId(items);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  // 8px activation distance (see SortableTopicSection) — a plain click on a
+  // header control still works; a small press-move starts the group drag.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   useEffect(() => {
     if (loading) return;

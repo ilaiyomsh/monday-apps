@@ -29,7 +29,62 @@
 .decToolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--spacing-small, 8px);
+  width: 100%;
+}
+.decToolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+  min-width: 0;
+}
+/* Filter + Group by + collapse-all cluster (LTR, monday-style pills) — mirrors
+   the Tasks / Previous tabs' toolbar. */
+.decToolbarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+}
+
+/* Grouped view — one section per group: a sticky group title row above its
+   table box (same chrome as the Tasks / Previous tabs). */
+.decGroup {
+  display: flex;
+  flex-direction: column;
+}
+.decGroup + .decGroup {
+  margin-top: 20px;
+}
+.decGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: max-content;
+  margin-bottom: 10px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.decGroupChevron {
+  width: 24px;
+  height: 24px;
+  color: var(--secondary-text-color, #676879);
+  transition: transform var(--motion-productive-short, 0.15s) ease;
+}
+.decGroupChevronCollapsed {
+  transform: rotate(-90deg);
+}
+.decGroupTitle {
+  font-size: 18px;
+  font-weight: 500;
+  font-variation-settings: 'wght' 500;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
 }
 
 /* Unmapped decisions board — expected state, not an error. */
@@ -408,4 +463,25 @@
   box-shadow: inset 6px 0 0 rgba(107, 78, 230, 0.5);
   align-self: stretch;
   border-end-start-radius: var(--border-radius-medium, 8px);
+}
+/* Inline add-row: leading + icon and a borderless, transparent text input that
+   inherits the row font (native monday "add item" feel). */
+.decAddIcon {
+  flex-shrink: 0;
+  margin-inline-end: 6px;
+  color: var(--secondary-text-color, #9699a6);
+}
+.decAddInput {
+  flex: 1;
+  min-width: 200px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  padding: 0;
+}
+.decAddInput::placeholder {
+  color: var(--placeholder-color, #9699a6);
 }
