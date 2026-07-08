@@ -429,11 +429,32 @@
 /* Leading cell of the column header — hosts the accent color strip rounded at the
    TOP-left to match the table's rounded-left outer border (S2). */
 .colHeadLead {
+  /* Center the per-topic select-all checkbox in the 36px lead track (mirrors
+     TaskTable's `.selectCell`); the 6px inset strip is the topic accent color. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
   border-start-start-radius: var(--border-radius-medium, 8px);
   /* Close the lead (checkbox/accent) column with a right rule, matching the
      Tasks table's frozen `.selectCell` separator (TaskTable `.taskCell`). */
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+}
+/* Select-all-in-topic checkbox centered in the column-header lead cell (mirrors
+   TaskTable's `.selectCell > label`): reset the vibe Checkbox wrapper margins and
+   nudge the 16px box to sit visually centered just after the 6px color strip. */
+.colHeadSelect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.colHeadSelect > label {
+  margin: 0;
+  transform: translateX(2px);
+}
+.colHeadSelect > label > :last-child {
+  margin-inline-start: 0;
 }
 
 /* FROZEN leading column (accent bar) + FROZEN name header — pinned during the
@@ -503,21 +524,9 @@
 }
 
 
-/* ---- Round 7: point multi-select checkbox + floating bulk-action bar ---- */
-
-/* Select-all-in-topic checkbox in the section header (before the chevron). */
-.topicSelect {
-  display: inline-flex;
-  align-items: center;
-  flex-shrink: 0;
-  margin-inline-end: 4px;
-}
-.topicSelect > label {
-  margin: 0;
-}
-.topicSelect > label > :last-child {
-  margin-inline-start: 0;
-}
+/* ---- Round 7: point multi-select bulk-action bar ---- */
+/* (The per-topic select-all checkbox now lives in the points' column-header lead
+   cell — see .colHeadSelect above — so the group-title row has no checkbox.) */
 
 /* Floating bulk-action bar — appears when ≥1 point is selected. Same chrome as
    the Tasks/Decisions action bars (kept aligned per the multi-select convention). */

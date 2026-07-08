@@ -259,20 +259,20 @@ function SortableTopicSection({
         className={`${styles.sectionHeader} ${canEditTopic ? styles.sectionHeaderDraggable : ''}`}
         {...headerDragProps}
       >
-        {/* Select-all-in-topic checkbox (Round 7 multi-select) — toggles every
-            point of this topic. Stops propagation so it never starts a header drag. */}
-        {selectable && points.length > 0 && (
-          <span
-            className={styles.topicSelect}
-            onClick={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <TopicSelectAll
-              points={points}
-              selectedPointIds={selectedPointIds}
-              onToggleTopicPoints={onToggleTopicPoints}
-            />
-          </span>
+        {/* Hover-revealed 3-dot kebab (⋯) at the LEFT of the group header —
+            deletes the WHOLE topic (inline confirm-before-delete). Matches
+            monday's group ⋯ menu: hidden at rest, opacity 0→1 on header hover
+            (styles in .headerKebab). No select-all checkbox lives here anymore —
+            the per-topic select-all moved into the points' column-header leading
+            cell, so this group-title row reads like the Tasks group header
+            (chevron + colored title + the kept eye/count/avatar/priority). */}
+        {canDelete && (
+          <RowKebabMenu
+            excluded={excluded}
+            kind="נושא"
+            className={styles.headerKebab}
+            onDelete={() => deleteTopic(topic.id)}
+          />
         )}
         <button
           type="button"
@@ -375,14 +375,6 @@ function SortableTopicSection({
             שמירה נכשלה · נסה שוב
           </button>
         )}
-        {canDelete && (
-          <RowKebabMenu
-            excluded={excluded}
-            kind="נושא"
-            className={styles.headerKebab}
-            onDelete={() => deleteTopic(topic.id)}
-          />
-        )}
       </div>
 
       {effectiveOpen && (
@@ -391,7 +383,26 @@ function SortableTopicSection({
               rowStyle). Owners get a ResizeHandle on each column's trailing edge
               (the cell becomes a positioning context for the absolute handle). */}
           <div className={styles.colHead} style={rowStyle}>
-            <span className={`${styles.colHeadLead} ${styles.frozenLead}`} aria-hidden="true" />
+            {/* Leading cell — hosts the per-topic SELECT-ALL checkbox (relocated
+                here from the group-title row), mirroring how TaskTable puts the
+                group select-all in the table header's leading `.selectCell`. It
+                selects/deselects every point of this topic; when the topic has no
+                points (or selection is off) it's just the bare accent strip. */}
+            <span className={`${styles.colHeadLead} ${styles.frozenLead}`}>
+              {selectable && points.length > 0 && (
+                <span
+                  className={styles.colHeadSelect}
+                  onClick={(e) => e.stopPropagation()}
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <TopicSelectAll
+                    points={points}
+                    selectedPointIds={selectedPointIds}
+                    onToggleTopicPoints={onToggleTopicPoints}
+                  />
+                </span>
+              )}
+            </span>
             {/* Frozen name header — sticky (its own positioning context) so it
                 pins during horizontal scroll AND hosts the resize handle, exactly
                 like TaskTable's frozen `.taskFirst`. No inline `relative` here:
