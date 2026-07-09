@@ -294,6 +294,25 @@
   gap: 12px;
 }
 
+/* Header people fields ONLY: neutralize the shared PersonPicker trigger's own
+   horizontal padding + full-width centering (its base is padding: 3px 8px;
+   width: 100%; min-width: 56px; justify-content: center) so its avatar /
+   placeholder sits the SAME 12px from the divider as the plain-text תאריך/שעה
+   values — whose inline triggers already hug their content (padding:0). Scoped
+   via .peopleGroupAvatars so the shared picker stays untouched inside the
+   tables / modals. With the padding gone and the trigger hugging its content,
+   EVERY field — text and people alike — is an equal 12px from each divider, so
+   the row reads evenly: תאריך | שעה | מנהל | רשם דיון | משתתפים. Vertical size
+   (min-height) is left as-is, so the click target and the short centered divider
+   are unchanged. Read-only people fields already use PersonList's .expandTrigger
+   (padding:0), so read-only and edit modes now align identically. */
+.peopleGroupAvatars :global(.trigger) {
+  width: auto;
+  min-width: 0;
+  padding-inline: 0;
+  justify-content: flex-start;
+}
+
 /* Bold column-title label next to a group's avatars (title comes from the live
    board column, not the schema). */
 .peopleGroupLabel {

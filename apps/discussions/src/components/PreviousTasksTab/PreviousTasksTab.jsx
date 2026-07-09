@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Skeleton, Button, Text, Dropdown } from '@vibe/core';
 import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
@@ -463,6 +463,31 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const toggleSelect = (id, checked) =>
     setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
   const clearSelection = () => setSelectedIds(new Set());
+  // ESC clears this tab's multi-selection. The document-level listener is live
+  // ONLY while something is selected, and it no-ops unless THIS view is actually
+  // visible (offsetParent is null when a tab is hidden behind another) — so it
+  // never clears a different tab's selection. ESC still closes an open editor /
+  // overlay first: we bail when the event was already handled, when the user is
+  // typing in a text field (inline rename / people-picker search), or when a
+  // dialog / listbox / menu (status / date / person picker) is open.
+  const rootRef = useRef(null);
+  const hasSelection = selectedIds.size > 0;
+  useEffect(() => {
+    if (!hasSelection) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (!rootRef.current || rootRef.current.offsetParent === null) return;
+      const el = e.target;
+      const tag = el && el.tagName;
+      const typing = tag === 'TEXTAREA' || (el && el.isContentEditable)
+        || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset)$/.test(el.type || ''));
+      if (typing) return;
+      if (document.querySelector('[role="dialog"],[role="listbox"],[role="menu"]')) return;
+      setSelectedIds(new Set());
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [hasSelection]);
   const itemById = useMemo(() => {
     const m = new Map();
     tasks.forEach((t) => m.set(String(t.id), t));
@@ -877,7 +902,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   }
 
   return (
-    <div className={styles.root}>
+    <div ref={rootRef} className={styles.root}>
       <div className={styles.toolbar}>
         {/* One left-aligned cluster (like My Tasks): the discussion-type/source chip, then filter + group-by + collapse-all. */}
         <div className={styles.prevChip} dir="rtl">
