@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { החלטות1Board } from '@api/BoardSDK.js';
-import { api, parseValue, cvSelection, formatValue } from '../utils/mondayApi/monday-client.js';
+import { api, formatValue } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
 import { MondayContext } from '@generated/contexts/MondayContext.jsx';
 import logger from '../utils/logger';
@@ -27,63 +27,65 @@ function formatDate(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-// Discussion-side fetch: from the discussion id we read the decisionsBoardLinkID
-// board_relation column and pull its linked_items (the decisions), deserializing
-// ALL configured decisions columns. Server-side query_params filtering on a
-// board_relation column does NOT work (it matches by item NAME, not id), so we
-// always read the relation FROM the discussion side — exactly like
-// useTasks.fetchTasksByDiscussion.
+// How many decision items to pull per page while scanning the decisions board
+// for those linked to this discussion (mirrors useMyDecisions / the aggregate paging).
+const DECISIONS_PAGE_SIZE = 100;
+// Hard stop on pagination so a huge/misconfigured board can't loop forever
+// (mirrors BoardSDK.AggregateBuilder's guard — up to DECISIONS_PAGE_GUARD pages).
+const DECISIONS_PAGE_GUARD = 20;
+
+// Load the decisions linked to THIS discussion by reading the DECISIONS board
+// and filtering on the DECISION-side link (decisions.discussionLinkID) — the
+// board_relation that create actually populates.
+//
+// WHY the decision side (not the discussion side): a naive reload would read the
+// discussions board's decisionsBoardLinkID, but the decisions board is mapped
+// MANUALLY in Settings (no bidirectional reflection column), so a decision's own
+// discussionLinkID write does NOT reflect into discussions.decisionsBoardLinkID —
+// that column stays EMPTY. Reading it therefore returned nothing: created
+// decisions "disappeared" on re-entering a discussion, and the Topics per-point
+// decision counts (which intersect a point's linked ids with the LOADED
+// decisions) stayed 0. The decision-side link IS populated, so we read from
+// there and the reload is reliable.
+//
+// monday query_params can't filter a board_relation by linked item id (it
+// matches by NAME, not id — see BoardSDK.ItemsQueryBuilder), so we scan the
+// board page-by-page and keep, CLIENT-SIDE, only the decisions whose
+// discussionLinkID links to `discussionId`. Each kept decision is deserialized
+// via BoardSDK.mapItem — the SAME alias parse used everywhere (name,
+// decisionStatusID, deciderID, affectedID, decisionDateID, discussionLinkID, …) —
+// so the returned row shape is unchanged for the rest of the hook.
 async function fetchDecisionsByDiscussion(discussionId) {
   const decisionsBoardId = getBoardId('decisions');
-  const discussionColumns = getColumns('discussions') || {};
-  const decisionsLinkColId = discussionColumns?.decisionsBoardLinkID?.id;
-  if (!decisionsBoardId || !decisionsLinkColId) {
-    // Graceful degradation — unmapped board/relation is NOT an error.
-    warnUnmappedOnce({ discussionId, decisionsBoardId: decisionsBoardId || null, decisionsLinkColId: decisionsLinkColId || null });
+  const decisionColumns = getColumns('decisions') || {};
+  const discussionLinkColId = decisionColumns?.discussionLinkID?.id;
+  if (!decisionsBoardId || !discussionLinkColId) {
+    // Graceful degradation — an unmapped decisions board / decision-side link
+    // column is an EXPECTED state (decisions is mapped manually), NOT an error.
+    warnUnmappedOnce({ discussionId, decisionsBoardId: decisionsBoardId || null, discussionLinkColId: discussionLinkColId || null });
     return [];
   }
 
-  const decisionColumns = getColumns('decisions') || {};
-  const mapped = Object.entries(decisionColumns).filter(([, col]) => col?.id);
-  const decisionCols = mapped.map(([, col]) => col.id);
-  const decisionCv = cvSelection(mapped.map(([, col]) => col.type));
+  const target = String(discussionId);
+  const out = [];
+  let cursor = null;
+  let guard = 0;
+  do {
+    const res = await new החלטות1Board()
+      .items()
+      .withPagination({ limit: DECISIONS_PAGE_SIZE, ...(cursor ? { cursor } : {}) })
+      .execute();
+    for (const it of res.items || []) {
+      // discussionLinkID parses to { linkedItems, ids, text }; `ids` are the
+      // linked discussion item ids. Keep only decisions linked to THIS discussion.
+      const linkedIds = (it.discussionLinkID?.ids || []).map(String);
+      if (linkedIds.includes(target)) out.push(it);
+    }
+    cursor = res.cursor || null;
+    guard += 1;
+  } while (cursor && guard < DECISIONS_PAGE_GUARD);
 
-  const data = await api(
-    `query ($discussionId: [ID!], $decisionsLinkCol: [String!], $decisionCols: [String!]) {
-      items(ids: $discussionId) {
-        column_values(ids: $decisionsLinkCol) {
-          ... on BoardRelationValue {
-            linked_items {
-              id
-              name
-              created_at
-              column_values(ids: $decisionCols) { ${decisionCv} }
-            }
-          }
-        }
-      }
-    }`,
-    {
-      discussionId: [String(discussionId)],
-      decisionsLinkCol: [String(decisionsLinkColId)],
-      decisionCols,
-    },
-    'useDecisions.fetchDecisionsByDiscussion'
-  );
-
-  const linkedItems = data?.items?.[0]?.column_values?.[0]?.linked_items || [];
-  return linkedItems.map((item) => {
-    const byId = {};
-    (item.column_values || []).forEach((cv) => {
-      byId[cv.id] = cv;
-    });
-    const out = { id: String(item.id), name: item.name, created_at: item.created_at };
-    Object.entries(decisionColumns).forEach(([alias, col]) => {
-      if (!col?.id) return;
-      out[alias] = parseValue(col.type, byId[col.id]);
-    });
-    return out;
-  });
+  return out;
 }
 
 // Write a newly-created item's id into a topic POINT's (subitem's)
@@ -133,23 +135,23 @@ const linkDecisionToPoint = (pointId, decisionId, existingLinkedIds = []) =>
 export const linkTaskToPoint = (pointId, taskId, existingLinkedIds = []) =>
   linkItemToPoint('pointTasksLinkID', pointId, taskId, existingLinkedIds);
 
-// Persist the discussion↔decisions link on the DISCUSSION side — the
-// discussions board's `decisionsBoardLinkID` board_relation, which is the exact
-// column fetchDecisionsByDiscussion READS on (re)load.
+// BEST-EFFORT mirror of the link onto the DISCUSSION side — the discussions
+// board's `decisionsBoardLinkID` board_relation. Kept for completeness (so the
+// discussions board shows the relation where it IS mapped), but the reload NO
+// LONGER depends on it: fetchDecisionsByDiscussion reads the DECISION side
+// (decisions.discussionLinkID) — see its comment.
 //
-// WHY THIS IS NEEDED (the "decisions vanish on re-entry" bug): tasks work
-// because the wizard (provisionBoards) creates the discussions→tasks relation
-// as a BIDIRECTIONAL connect column (allowCreateReflectionColumn), so writing a
-// task's reflection column (tasks.discussionLinkID) auto-populates the
-// discussion's tasksBoardLinkID that the reload reads. The decisions board is
+// History (the "decisions vanish on re-entry" bug): the decisions board is
 // mapped MANUALLY in Settings, so decisions.discussionLinkID and
-// discussions.decisionsBoardLinkID are two INDEPENDENT one-way relations — the
-// decision-side write does NOT populate the discussion side. So a created
-// decision was never linked on the side the reload reads and disappeared on
-// remount. We therefore write the discussion side EXPLICITLY. board_relation
-// writes REPLACE, so the caller passes the FULL current linked-id set (existing
-// + the new decision). Goes through api() → assertNoGraphQLErrors. No-ops
-// (graceful degrade) when the board/column is unmapped.
+// discussions.decisionsBoardLinkID are two INDEPENDENT one-way relations (no
+// bidirectional reflection like the wizard-created tasks relation). The
+// decision-side write does NOT populate the discussion side, so this
+// discussion-side column is typically EMPTY — reading it is exactly what made
+// created decisions disappear on remount. The load now reads the (populated)
+// decision side; this write is a harmless extra. board_relation writes REPLACE,
+// so the caller passes the FULL current linked-id set (existing + the new
+// decision). Goes through api() → assertNoGraphQLErrors. No-ops (graceful
+// degrade) when the board/column is unmapped.
 async function linkDecisionsToDiscussion(discussionId, linkedDecisionIds) {
   const discussionsBoardId = getBoardId('discussions');
   const linkColId = getColumns('discussions')?.decisionsBoardLinkID?.id;
@@ -454,17 +456,19 @@ export function useDecisions(discussionId) {
       // relation window (this is what makes rapid multi-row creation stable).
       rememberCreated(realId);
       // (1) DECISION-side link: populates the decision item's own "דיון" column
-      //     (discussionLinkID). create_item ignores board_relation values, so
-      //     it's set here via the verified change_multiple_column_values path.
+      //     (discussionLinkID) — the RELOAD source of truth
+      //     (fetchDecisionsByDiscussion filters the decisions board by it).
+      //     create_item ignores board_relation values, so it's set here via the
+      //     verified change_multiple_column_values path.
       await b.item(realId).update({ discussionLinkID: { linkedItems: [{ id: discussionId }] } }).execute();
-      // (2) DISCUSSION-side link: write discussions.decisionsBoardLinkID — the
-      //     column fetchDecisionsByDiscussion READS on reload. The decisions
-      //     board is mapped manually (no reflection column), so (1) does NOT
-      //     populate it; without this the decision vanished on re-entry. Serialize
-      //     the write per hook (board_relation writes REPLACE) so concurrent
-      //     creates don't clobber each other, sending the FULL linked-id set.
-      //     Awaited so a hard link failure flags the row (retryable) — an
-      //     unlinked decision is exactly the bug we're fixing.
+      // (2) DISCUSSION-side link (BEST-EFFORT): mirror onto
+      //     discussions.decisionsBoardLinkID. The decisions board is mapped
+      //     manually (no reflection column), so (1) does NOT populate it; the
+      //     reload NO LONGER reads it (it reads the decision side above) — we
+      //     still write it where mapped for a consistent discussions board.
+      //     Serialize the write per hook (board_relation writes REPLACE) so
+      //     concurrent creates don't clobber each other, sending the FULL
+      //     linked-id set. Awaited so a hard failure still flags the row (retryable).
       linkedIdsRef.current.add(String(realId));
       {
         const myWrite = linkWriteChainRef.current
