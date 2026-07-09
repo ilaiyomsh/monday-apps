@@ -462,3 +462,50 @@
     opacity: 0;
   }
 }
+
+
+/* Brief, non-blocking success ✓ shown centered (where the quick-create modal
+   was) right after a task/decision is created via QuickCreateModal. It fades in,
+   pops, then fades out on its own in ~1.2s — it never blocks the UI
+   (pointer-events: none) and needs no dismissal. Keyed by successKey in the JSX
+   so a rapid second create restarts this animation. Green uses the app's
+   --status-done token (same green as the "done" status fill). */
+.createSuccess {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 4300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: hsl(var(--status-done, 145 63% 42%));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: createSuccessPop 1200ms ease forwards;
+}
+
+@keyframes createSuccessPop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  32%  { transform: translate(-50%, -50%) scale(1); }
+  72%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Respect reduced-motion: keep the same timing/fade but drop the scale pop. */
+@media (prefers-reduced-motion: reduce) {
+  .createSuccess {
+    animation: createSuccessFade 1200ms ease forwards;
+  }
+}
+@keyframes createSuccessFade {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
