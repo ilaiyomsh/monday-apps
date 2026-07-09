@@ -133,6 +133,44 @@ const linkDecisionToPoint = (pointId, decisionId, existingLinkedIds = []) =>
 export const linkTaskToPoint = (pointId, taskId, existingLinkedIds = []) =>
   linkItemToPoint('pointTasksLinkID', pointId, taskId, existingLinkedIds);
 
+// Persist the discussion↔decisions link on the DISCUSSION side — the
+// discussions board's `decisionsBoardLinkID` board_relation, which is the exact
+// column fetchDecisionsByDiscussion READS on (re)load.
+//
+// WHY THIS IS NEEDED (the "decisions vanish on re-entry" bug): tasks work
+// because the wizard (provisionBoards) creates the discussions→tasks relation
+// as a BIDIRECTIONAL connect column (allowCreateReflectionColumn), so writing a
+// task's reflection column (tasks.discussionLinkID) auto-populates the
+// discussion's tasksBoardLinkID that the reload reads. The decisions board is
+// mapped MANUALLY in Settings, so decisions.discussionLinkID and
+// discussions.decisionsBoardLinkID are two INDEPENDENT one-way relations — the
+// decision-side write does NOT populate the discussion side. So a created
+// decision was never linked on the side the reload reads and disappeared on
+// remount. We therefore write the discussion side EXPLICITLY. board_relation
+// writes REPLACE, so the caller passes the FULL current linked-id set (existing
+// + the new decision). Goes through api() → assertNoGraphQLErrors. No-ops
+// (graceful degrade) when the board/column is unmapped.
+async function linkDecisionsToDiscussion(discussionId, linkedDecisionIds) {
+  const discussionsBoardId = getBoardId('discussions');
+  const linkColId = getColumns('discussions')?.decisionsBoardLinkID?.id;
+  if (!discussionsBoardId || !linkColId) {
+    warnUnmappedOnce({ discussionId, action: 'linkDecisionsToDiscussion', discussionsBoardId: discussionsBoardId || null, linkColId: linkColId || null });
+    return;
+  }
+  const ids = [...new Set((linkedDecisionIds || []).map(String))];
+  await api(
+    `mutation ($boardId: ID!, $itemId: ID!, $cv: JSON!) {
+      change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $cv) { id }
+    }`,
+    {
+      boardId: String(discussionsBoardId),
+      itemId: String(discussionId),
+      cv: JSON.stringify({ [linkColId]: formatValue('board_relation', { linkedItems: ids.map((id) => ({ id })) }) }),
+    },
+    'useDecisions.linkDecisionsToDiscussion'
+  );
+}
+
 export function useDecisions(discussionId) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -164,8 +202,21 @@ export function useDecisions(discussionId) {
   // (assigned each render, just before the hook returns).
   const flushersRef = useRef({});
 
+  // Reload-persistence (Task 1): the authoritative set of REAL decision ids
+  // linked to THIS discussion. Seeded from the load (the decisions already
+  // linked) and kept current as decisions are created/deleted, so a create's
+  // discussion-side write (linkDecisionsToDiscussion) sends the FULL set and
+  // never clobbers siblings. `linkWriteChainRef` SERIALIZES those writes per
+  // hook so concurrent creates apply in order (board_relation writes REPLACE).
+  const linkedIdsRef = useRef(new Set());
+  const linkWriteChainRef = useRef(Promise.resolve());
+
   useEffect(() => {
-    if (!discussionId) { setItems([]); setLoading(false); return; }
+    if (!discussionId) { setItems([]); setLoading(false); linkedIdsRef.current = new Set(); return; }
+    // Fresh discussion → reset the link set; the fetch below UNIONS the server's
+    // linked decisions into it (union, not replace, so a decision created during
+    // the initial load isn't dropped from the set).
+    linkedIdsRef.current = new Set();
     let cancelled = false;
     async function fetch() {
       try {
@@ -173,6 +224,9 @@ export function useDecisions(discussionId) {
         const fetchedItems = await fetchDecisionsByDiscussion(discussionId);
         if (!cancelled) {
           setItems(fetchedItems);
+          // Seed the discussion-link set with the decisions ALREADY linked, so a
+          // create appends to (never clobbers) them. Union — see the effect note.
+          fetchedItems.forEach((i) => linkedIdsRef.current.add(String(i.id)));
           logger.info('useDecisions', 'Decisions fetch completed', { discussionId, count: fetchedItems.length });
         }
       } catch (err) {
@@ -202,6 +256,9 @@ export function useDecisions(discussionId) {
     if (!discussionId) return;
     try {
       const fetchedItems = await fetchDecisionsByDiscussion(discussionId);
+      // Keep the discussion-link set comprehensive (union server ids); deletes
+      // prune it, so a later create's discussion-side write reflects the truth.
+      fetchedItems.forEach((i) => linkedIdsRef.current.add(String(i.id)));
       setItems((current) => mergeServerList(current, fetchedItems));
     } catch (err) {
       logger.error('useDecisions', 'Error refreshing decisions', { discussionId, err });
@@ -295,6 +352,7 @@ export function useDecisions(discussionId) {
   const deleteDecision = useCallback(async (decisionId) => {
     if (!decisionId) return false;
     forgetCreated(decisionId); // so a later create's refresh can't resurrect it
+    linkedIdsRef.current.delete(String(decisionId)); // drop from the discussion-link set (no re-link on a later create)
     const prev = [...items];
     setItems((current) => current.filter((i) => i.id !== decisionId));
     // A temp row never reached the board — local removal is enough.
@@ -327,6 +385,10 @@ export function useDecisions(discussionId) {
     const timer = setTimeout(() => {
       if (cancelled) return;
       idList.forEach((id) => {
+        // Now really gone: drop it from the discussion-link set so a later create
+        // doesn't re-link a deleted decision. (Kept in the set until here so an
+        // undo — or a create during the grace window — leaves the link intact.)
+        linkedIdsRef.current.delete(String(id));
         // Temp rows never reached the board — just drop their bookkeeping.
         if (isTempId(id)) { forgetRow(id); return; }
         api(`mutation ($itemId: ID!) { delete_item(item_id: $itemId) { id } }`, { itemId: id }, 'useDecisions.softDeleteDecisions')
@@ -386,15 +448,34 @@ export function useDecisions(discussionId) {
       if (effectiveDate) data.decisionDateID = formatDate(effectiveDate);
       const created = await b.item().create(data, { createLabelsIfMissing: true }).execute();
       const realId = created.id;
-      await b.item(realId).update({ discussionLinkID: { linkedItems: [{ id: discussionId }] } }).execute();
-      if (pointId) await linkDecisionToPoint(pointId, realId, existingLinkedIds);
-      // PROTECT the real id BEFORE the reconcile/flush below, so a CONCURRENT
-      // create's fire-and-forget refresh() can't evict this just-created decision
-      // during the eventually-consistent relation window. Marking it AFTER the
-      // flush (as it was) left a gap: while awaiting the flush of a row's queued
-      // edits, another create's refresh saw the just-reconciled real row as
-      // neither temp nor protected and dropped it — the decisions vanish bug.
+      // PROTECT the real id IMMEDIATELY — before ANY of the awaited link writes
+      // below — so a CONCURRENT create's fire-and-forget refresh() can never
+      // evict this just-created decision during the eventually-consistent
+      // relation window (this is what makes rapid multi-row creation stable).
       rememberCreated(realId);
+      // (1) DECISION-side link: populates the decision item's own "דיון" column
+      //     (discussionLinkID). create_item ignores board_relation values, so
+      //     it's set here via the verified change_multiple_column_values path.
+      await b.item(realId).update({ discussionLinkID: { linkedItems: [{ id: discussionId }] } }).execute();
+      // (2) DISCUSSION-side link: write discussions.decisionsBoardLinkID — the
+      //     column fetchDecisionsByDiscussion READS on reload. The decisions
+      //     board is mapped manually (no reflection column), so (1) does NOT
+      //     populate it; without this the decision vanished on re-entry. Serialize
+      //     the write per hook (board_relation writes REPLACE) so concurrent
+      //     creates don't clobber each other, sending the FULL linked-id set.
+      //     Awaited so a hard link failure flags the row (retryable) — an
+      //     unlinked decision is exactly the bug we're fixing.
+      linkedIdsRef.current.add(String(realId));
+      {
+        const myWrite = linkWriteChainRef.current
+          .catch(() => {}) // ignore a PRIOR create's failure so the chain survives
+          .then(() => linkDecisionsToDiscussion(discussionId, [...linkedIdsRef.current]));
+        linkWriteChainRef.current = myWrite.catch(() => {}); // keep chain alive for the next create
+        await myWrite; // MY rejection → this try's catch (retryable row)
+      }
+      // (3) POINT-side link (optional): append the decision to the topic point's
+      //     pointDecisionsLinkID relation so the per-point counter reflects it.
+      if (pointId) await linkDecisionToPoint(pointId, realId, existingLinkedIds);
       // RECONCILE: swap temp→real IN PLACE (the spread preserves any edits the
       // user applied while the row was still optimistic). IDEMPOTENT: if the temp
       // row is somehow gone and the real row isn't present either, RE-ADD it so a

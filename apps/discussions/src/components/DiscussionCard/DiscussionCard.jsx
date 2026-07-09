@@ -335,6 +335,13 @@ export function DiscussionCard({
   // decision links to the point through createDecision's own pointId option.
   const handleQuickCreate = async (kind, { text, person, status, deadline }) => {
     const point = quickCreate?.point || null;
+    // A session-created point keeps its TEMP id in `point.id` (its REAL subitem
+    // id lives in `point._realId` until a topics refetch swaps it). The point↔item
+    // link must be written against the REAL subitem id — a temp id can't resolve
+    // to a subitems board, so linkItemToPoint would silently no-op and the
+    // per-point counter stayed 0. Prefer _realId, and never link against a temp id.
+    const pointRealId = point ? (point._realId || point.id) : null;
+    const pointIsReal = pointRealId != null && !String(pointRealId).startsWith('temp-');
     if (kind === 'task') {
       if (!createTask) return; // capability guard (same as handleCreateTask)
       const loadingId = onShowLoading?.('יוצר משימה');
@@ -344,9 +351,9 @@ export function DiscussionCard({
         deadline,
         topicId: point?.topicId || null,
       });
-      if (created && point?.id) {
+      if (created && pointIsReal) {
         try {
-          await linkTaskToPoint(point.id, created.id, point.taskIds || []);
+          await linkTaskToPoint(pointRealId, created.id, point.taskIds || []);
         } catch (err) {
           // The api() funnel already logged+toasted; re-log only un-logged failures.
           if (!err?.__loggedId) logger.error('DiscussionCard', 'קישור המשימה לנקודה נכשל', err);
@@ -363,7 +370,7 @@ export function DiscussionCard({
       // date omitted → today (the hook's default).
       affected: Array.isArray(data.participantsID) ? data.participantsID : [],
       ...(person?.length ? { decider: person[0] } : {}),
-      ...(point?.id ? { pointId: point.id, existingLinkedIds: point.decisionIds || [] } : {}),
+      ...(pointIsReal ? { pointId: pointRealId, existingLinkedIds: point.decisionIds || [] } : {}),
     });
   };
 
