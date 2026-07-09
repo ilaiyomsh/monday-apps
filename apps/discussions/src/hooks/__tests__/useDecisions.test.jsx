@@ -232,3 +232,69 @@ describe('useDecisions — a failed create shows retry, never an unhandled rejec
     }
   });
 });
+
+
+
+// ---------------------------------------------------------------------------
+// Round 19 (BUG): created decisions vanished after leaving + re-entering a
+// discussion. Root cause: the create wrote only the DECISION side of the link
+// (decisions.discussionLinkID), relying on a reflection into the DISCUSSION side
+// (discussions.decisionsBoardLinkID) — the column the reload READS. But the
+// decisions board is mapped MANUALLY (not wizard-provisioned with a reflection
+// column), so that never populated and the reload found nothing. The fix writes
+// discussions.decisionsBoardLinkID explicitly. This test proves the full cycle:
+// create writes that column, and a FRESH mount (remount = re-entering) reloads
+// the decision from it.
+// ---------------------------------------------------------------------------
+describe('useDecisions — a created decision persists its discussion link and reloads (remount-safe)', () => {
+  it('writes discussions.decisionsBoardLinkID on create so a remount brings the decision back', async () => {
+    setActiveConfig({
+      boards: { discussions: { id: 'disc-board' }, decisions: { id: 'dec-board' } },
+      columns: {
+        discussions: { decisionsBoardLinkID: { id: 'disc_link', type: 'board_relation' } },
+        decisions: {},
+      },
+    });
+
+    // Tiny stateful fake: the discussion-side link column is the source of truth
+    // the fetch reads — exactly what the reload depends on. Only the discussion-
+    // side write (disc-board + disc_link) mutates it; the decision-side write
+    // (dec-board, empty cv) is a no-op here, mirroring the manual-map reality.
+    let serverLinked = [];
+    api.mockImplementation(async (query, vars) => {
+      if (query.includes('create_item')) return { create_item: { id: '9001' } };
+      if (query.includes('change_multiple_column_values')) {
+        if (String(vars.boardId) === 'disc-board' && vars.cv?.includes('disc_link')) {
+          const ids = JSON.parse(vars.cv).disc_link.item_ids || [];
+          serverLinked = ids.map((id) => ({ id: String(id), name: 'החלטה חשובה' }));
+        }
+        return { change_multiple_column_values: { id: 'ok' } };
+      }
+      if (query.includes('linked_items')) {
+        return { items: [{ column_values: [{ linked_items: serverLinked }] }] };
+      }
+      return {};
+    });
+
+    // 1) First mount — no decisions yet.
+    const first = renderHook(() => useDecisions('disc-1'));
+    await waitFor(() => expect(first.result.current.loading).toBe(false));
+    expect(first.result.current.items).toHaveLength(0);
+
+    // 2) Create a decision → the DISCUSSION-side link column gets the new id.
+    await act(async () => { await first.result.current.createDecision('החלטה חשובה'); });
+    const linkWrite = api.mock.calls.find(([q, v]) =>
+      q.includes('change_multiple_column_values')
+      && String(v.boardId) === 'disc-board'
+      && v.cv?.includes('disc_link'));
+    expect(linkWrite).toBeTruthy();
+    expect(JSON.parse(linkWrite[1].cv).disc_link.item_ids).toContain(9001);
+
+    // 3) LEAVE + RE-ENTER: a brand-new hook instance (fresh mount) must reload
+    //    the decision from the server (it would be EMPTY before the fix).
+    first.unmount();
+    const second = renderHook(() => useDecisions('disc-1'));
+    await waitFor(() => expect(second.result.current.loading).toBe(false));
+    expect(second.result.current.items.map((i) => String(i.id))).toContain('9001');
+  });
+});
