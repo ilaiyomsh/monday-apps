@@ -3,7 +3,7 @@ import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
 import { MoveArrowLeft, Link, Info } from '@vibe/icons';
 import { דיונים1Board } from '@api/BoardSDK.js';
 import { useTasks } from '@generated/hooks/useTasks';
-import { useDecisions, linkTaskToPoint } from '@generated/hooks/useDecisions';
+import { useDecisions } from '@generated/hooks/useDecisions';
 import { useDiscussionDetails } from '@generated/hooks/useDiscussions';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { useViewport } from '@generated/hooks/useViewport.js';
@@ -28,6 +28,7 @@ import { QuickCreateModal } from '@generated/components/QuickCreateModal';
 import { fmtTimeLabel, composeLocalDate, localYmd, toDateInput, toTimeInput } from '@generated/utils/dateTime.js';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import logger from '@generated/utils/logger.js';
+import { loadPointItems, addPointItem, mergePointItemIn, prunePointItems } from '@generated/utils/pointItems.js';
 import styles from './DiscussionCard.module.css';
 
 // Ordered tab keys — index <-> key mapping for @vibe/core's index-based Tabs.
@@ -197,6 +198,38 @@ export function DiscussionCard({
   // empty items), so every surface degrades gracefully.
   const decisionsData = useDecisions(discussion?.id);
 
+  // ---- Point → decisions/tasks associations (monday.storage; see pointItems) ----
+  // A decision/task created FROM a topic point is remembered per discussion so the
+  // Topics tab's per-point counter + names popup can resolve it and it survives a
+  // reload (the subitems board has no relation column for this — see pointItems.js).
+  // Shape { [pointRealId]: { decisions: [], tasks: [] } }; passed to TopicsTab,
+  // which intersects the ids with the loaded decisions/tasks for the count/names.
+  const [pointItemsByPoint, setPointItemsByPoint] = useState({});
+  // Load the stored map when the discussion changes.
+  useEffect(() => {
+    const id = discussion?.id;
+    if (!id) { setPointItemsByPoint({}); return undefined; }
+    let cancelled = false;
+    loadPointItems(id).then((m) => { if (!cancelled) setPointItemsByPoint(m); });
+    return () => { cancelled = true; };
+  }, [discussion?.id]);
+  // Once BOTH lists have loaded, prune stored ids that no longer exist. Stale ids
+  // are harmless for the count (it intersects with the loaded lists) — this is
+  // just housekeeping of the persisted JSON. Runs on the load→loaded transition
+  // only (a silent refresh after a create keeps `loading` false), so it never
+  // races a just-created id out of the store.
+  useEffect(() => {
+    const id = discussion?.id;
+    if (!id || decisionsData.loading || tasksData.loading) return;
+    prunePointItems(id, {
+      decisions: decisionsData.items.map((d) => String(d.id)),
+      tasks: tasksData.items.map((t) => String(t.id)),
+    }).catch(() => {});
+    // items are read at run time; depending on them would re-run on every
+    // optimistic change — the loading transition is the correct, race-free trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discussion?.id, decisionsData.loading, tasksData.loading]);
+
   useEffect(() => {
     if (!discussion?.id || !initialTabDiscussionId) return;
     if (String(discussion.id) !== String(initialTabDiscussionId)) return;
@@ -328,20 +361,28 @@ export function DiscussionCard({
     if (isDecision ? !canCreateDecision : !createTask) return;
     openQuickCreate(isDecision ? 'decision' : 'task', point);
   };
-  // The modal fires this and closes immediately (fire-and-forget). ONE code
-  // path for scoped + unscoped creates: the point (when present) carries its
-  // parent topicId and current linked ids, so the task links to the topic via
-  // createTask's topicId option and to the POINT via linkTaskToPoint; a
-  // decision links to the point through createDecision's own pointId option.
+  // The modal fires this and closes immediately (fire-and-forget). ONE code path
+  // for scoped + unscoped creates: when a point is present the task links to the
+  // topic via createTask's topicId option, and BOTH kinds record the created item
+  // under the point in the pointItems store (the source of truth for the per-point
+  // counter — the subitems board has no relation column for this).
   const handleQuickCreate = async (kind, { text, person, status, deadline }) => {
     const point = quickCreate?.point || null;
     // A session-created point keeps its TEMP id in `point.id` (its REAL subitem
-    // id lives in `point._realId` until a topics refetch swaps it). The point↔item
-    // link must be written against the REAL subitem id — a temp id can't resolve
-    // to a subitems board, so linkItemToPoint would silently no-op and the
-    // per-point counter stayed 0. Prefer _realId, and never link against a temp id.
+    // id lives in `point._realId` until a topics refetch swaps it). The point→item
+    // association is stored keyed by the REAL subitem id — a temp id would never
+    // match the id the Topics tab reads back — so we only record it once the
+    // point has a real id. Prefer _realId, and never record against a temp id.
     const pointRealId = point ? (point._realId || point.id) : null;
     const pointIsReal = pointRealId != null && !String(pointRealId).startsWith('temp-');
+    // Record a created decision/task under its origin point: optimistically in
+    // local state (the counter bumps immediately) AND in monday.storage (persists
+    // across reload). The Topics tab intersects these ids with the loaded lists.
+    const recordPointItem = (itemId) => {
+      if (!pointIsReal || itemId == null) return;
+      setPointItemsByPoint((prev) => mergePointItemIn(prev, pointRealId, kind, itemId));
+      addPointItem(discussion.id, pointRealId, kind, itemId).catch(() => {});
+    };
     if (kind === 'task') {
       if (!createTask) return; // capability guard (same as handleCreateTask)
       const loadingId = onShowLoading?.('יוצר משימה');
@@ -351,27 +392,20 @@ export function DiscussionCard({
         deadline,
         topicId: point?.topicId || null,
       });
-      if (created && pointIsReal) {
-        try {
-          await linkTaskToPoint(pointRealId, created.id, point.taskIds || []);
-        } catch (err) {
-          // The api() funnel already logged+toasted; re-log only un-logged failures.
-          if (!err?.__loggedId) logger.error('DiscussionCard', 'קישור המשימה לנקודה נכשל', err);
-        }
-      }
+      if (created) recordPointItem(created.id);
       if (loadingId != null) onDismissToast?.(loadingId);
       return;
     }
     if (!canCreateDecision) return;
-    await decisionsData.createDecision(text, {
+    const created = await decisionsData.createDecision(text, {
       status, // decision-status label id (null when unset/unmapped)
       // Defaults per product spec: affected = the discussion's participants;
       // decider defaults inside the hook to the current user when omitted;
       // date omitted → today (the hook's default).
       affected: Array.isArray(data.participantsID) ? data.participantsID : [],
       ...(person?.length ? { decider: person[0] } : {}),
-      ...(pointIsReal ? { pointId: pointRealId, existingLinkedIds: point.decisionIds || [] } : {}),
     });
+    if (created) recordPointItem(created.id);
   };
 
   return (
@@ -570,7 +604,7 @@ export function DiscussionCard({
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast}
             addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canReorderColumns={canReorderColumns}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
-            decisionsItems={decisionsData.items} tasksItems={tasksData.items} />
+            decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} />
         </div>
         {activeTab === 'tasks' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
