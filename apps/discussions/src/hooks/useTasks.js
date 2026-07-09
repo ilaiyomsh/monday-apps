@@ -459,12 +459,17 @@ export function useTasks(discussionId, discussionTypeId = null) {
     // opts may be an options object, or a bare status value (a label id) for the
     // quick-add back-compat. A status id can be 0, so don't treat it as empty.
     const o = (opts && typeof opts === 'object') ? opts : (opts != null ? { status: opts } : {});
-    const { status = null, assignee = [], deadline = null } = o;
+    const { status = null, assignee = [], deadline = null, prepend = false } = o;
     const tempId = nextTempId();
     stashCreateArgs(tempId, { name, o });
-    setItems(prev => [...prev, {
+    // The optimistic row is APPENDED by default (bottom of its group). The top
+    // blue "משימה חדשה" button passes { prepend:true } so its new task lands at
+    // the TOP of the topmost group / list instead. `prepend` is a placement hint
+    // only — runCreate ignores it, so it never reaches the board write.
+    const optimisticRow = {
       id: tempId, name, responsibilityID: assignee, deadlineID: deadline, statusID: status,
-    }]);
+    };
+    setItems(prev => (prepend ? [optimisticRow, ...prev] : [...prev, optimisticRow]));
     return runCreate(tempId, name, o);
   }, [runCreate, stashCreateArgs]);
 

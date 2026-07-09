@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Avatar, Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
-import { Update } from '@vibe/icons';
+import { Update, Edit } from '@vibe/icons';
 import { Trash2, EyeOff, Eye, MoreHorizontal, Check, X } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -231,6 +231,19 @@ export function TopicPointRow({
           >
             {point.name}
           </span>
+        )}
+        {/* Hover rename pencil — the same inline rename as double-clicking the
+            name, made explicit + discoverable (mirrors the tasks pencil). */}
+        {canEditPoint && !editingName && (
+          <button
+            type="button"
+            className={styles.renameBtn}
+            title="עריכת שם"
+            aria-label={`ערוך שם נקודה: ${point.name}`}
+            onClick={(e) => { e.stopPropagation(); setNameDraft(point.name || ''); setEditingName(true); }}
+          >
+            <Edit size={16} />
+          </button>
         )}
         {failed && (
           <span className={styles.createFailedActions} onClick={stop} onPointerDown={stop}>

@@ -546,6 +546,7 @@ export function useDecisions(discussionId) {
       decider = null,
       pointId = null,
       existingLinkedIds = [],
+      prepend = false,
     } = opts || {};
     // Default the decision date to today; explicit null means "no date".
     const effectiveDate = date === undefined ? new Date() : date;
@@ -554,14 +555,19 @@ export function useDecisions(discussionId) {
 
     const tempId = nextTempId();
     stashCreateArgs(tempId, { trimmed, norm });
-    setItems((prev) => [...prev, {
+    // Optimistic row is APPENDED by default (bottom of its group). The top blue
+    // "החלטה חדשה" button passes { prepend:true } so its new decision lands at the
+    // TOP of the topmost group / list instead. `prepend` is a placement hint only
+    // (not part of `norm`), so it never reaches runCreateDecision's board write.
+    const optimisticRow = {
       id: tempId,
       name: trimmed,
       decisionStatusID: status,
       decisionPriorityID: priority,
       affectedID: affected,
       decisionDateID: effectiveDate,
-    }]);
+    };
+    setItems((prev) => (prepend ? [optimisticRow, ...prev] : [...prev, optimisticRow]));
     return runCreateDecision(tempId, trimmed, norm);
   }, [discussionId, currentUserId, runCreateDecision, stashCreateArgs]);
 

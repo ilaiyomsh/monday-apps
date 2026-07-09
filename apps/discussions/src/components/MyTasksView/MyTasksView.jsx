@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton, Button } from '@vibe/core';
 import { DropdownChevronDown, Search, Filter, Sort, Group, Collapse, Expand, CloseSmall } from '@vibe/icons';
+import { ArrowLeft } from 'lucide-react';
 import { useMyTasks } from '@generated/hooks/useMyTasks.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
@@ -89,6 +90,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const [collapsed, setCollapsed] = useState({});
   const [discDateMap, setDiscDateMap] = useState({});
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const rootRef = useRef(null);
   const toggleSelect = (id, checked) =>
     setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
   const clearSelection = () => setSelectedIds(new Set());
@@ -161,6 +163,28 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     }),
     [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t]
   );
+
+  // ESC clears the multi-selection. Live only while something is selected, and a
+  // no-op unless THIS view is actually visible (offsetParent) — it also yields to
+  // an open editor/overlay (typing field, or a dialog/listbox/menu open). Mirrors
+  // the in-discussion Tasks/Decisions tabs and MyDecisionsView.
+  const hasSelection = selectedIds.size > 0;
+  useEffect(() => {
+    if (!hasSelection) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (!rootRef.current || rootRef.current.offsetParent === null) return;
+      const el = e.target;
+      const tag = el && el.tagName;
+      const typing = tag === 'TEXTAREA' || (el && el.isContentEditable)
+        || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset)$/.test(el.type || ''));
+      if (typing) return;
+      if (document.querySelector('[role="dialog"],[role="listbox"],[role="menu"]')) return;
+      setSelectedIds(new Set());
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [hasSelection]);
 
   // Prune selected ids that are no longer loaded (filter/search/pagination churn).
   useEffect(() => {
@@ -388,14 +412,18 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const needDiscDates = group.col === 'discussion' && (group.order === 'dateAsc' || group.order === 'dateDesc');
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {/* Top row: back to discussions (its own row, above the toolbar). */}
+      {/* Top row: back to discussions (its own row, above the toolbar) — left-
+          pointing arrow + label, matching the MyDecisionsView back button. */}
       {onBackToDiscussions && (
         <div className={styles.topBar} dir="ltr">
           <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
-            דיונים
+            <span className={styles.backBtnInner}>
+              <ArrowLeft size={16} aria-hidden="true" />
+              לתצוגת הדיונים
+            </span>
           </Button>
         </div>
       )}

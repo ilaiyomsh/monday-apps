@@ -43,6 +43,33 @@
   color: var(--primary-color, #0073ea);
 }
 
+/* Rename pencil — hover-revealed near the name (mirrors MyTasksRow's .renameBtn).
+   Shown only when onRenameTask is wired; triggers the same inline rename as
+   clicking the name. */
+.renameBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  opacity: 0;
+  transition: background-color 0.1s ease, color 0.1s ease, opacity 0.1s ease;
+}
+.bodyRow:hover .renameBtn,
+.renameBtn:focus-visible {
+  opacity: 1;
+}
+.renameBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+
 /* Failed optimistic create: the row stays EDITABLE (no lock/fade) but is marked
    clearly with a red inset accent + tint so the user can retry or dismiss it. */
 .createFailed {

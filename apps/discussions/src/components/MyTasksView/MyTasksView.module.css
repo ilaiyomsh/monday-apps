@@ -24,12 +24,18 @@
   padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
 }
 
-/* "דיונים" back button — its own row above the toolbar. */
+/* "לתצוגת הדיונים" back button — its own row above the toolbar. */
 .topBar {
   flex: none;
   display: flex;
   align-items: center;
   padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+}
+/* Back-button content: left-pointing arrow + label, inline (matches MyDecisionsView). */
+.backBtnInner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* THE single scroll container — both axes. All group tables live inside one

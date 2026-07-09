@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton, Button, Dialog, DialogContentContainer, Checkbox, Text } from '@vibe/core';
-import { DropdownChevronDown, Filter, CloseSmall, Update } from '@vibe/icons';
+import { DropdownChevronDown, Filter, CloseSmall, Update, Edit } from '@vibe/icons';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -263,6 +263,19 @@ function DecisionRow({
           </button>
         ) : (
           <span className={styles.decNameText} title={decision.name}>{decision.name}</span>
+        )}
+        {/* Hover rename pencil — same inline rename as clicking the name, made
+            explicit + discoverable on every row (mirrors the tasks pencil). */}
+        {canRename && !editingName && (
+          <button
+            type="button"
+            className={styles.decRenameBtn}
+            title="עריכת שם"
+            aria-label={`ערוך החלטה: ${decision.name}`}
+            onClick={(e) => { e.stopPropagation(); startEditName(); }}
+          >
+            <Edit size={16} />
+          </button>
         )}
         {canDelete && (
           confirmDel ? (

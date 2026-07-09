@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
-import { CloseSmall, Update } from '@vibe/icons';
+import { CloseSmall, Update, Edit } from '@vibe/icons';
 import { Trash2, Check, X } from 'lucide-react';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -179,6 +179,20 @@ export function TaskTableRow({
               }}
               onBlur={saveName}
             />
+          ) : onOpenCard ? (
+            // When the row can open a card (Previous-tasks tab), the NAME opens
+            // the card and the hover pencil below does the rename (mirrors
+            // MyTasksRow). onRenameTask alone (Tasks tab, no onOpenCard) keeps the
+            // name-as-rename click too.
+            <button
+              type="button"
+              className={styles.nameBtn}
+              onClick={(e) => { e.stopPropagation(); onOpenCard(task.id); }}
+              title={nameTitle}
+              aria-label={`פתח כרטיס משימה: ${task.name}`}
+            >
+              {task.name}
+            </button>
           ) : onRenameTask ? (
             <button
               type="button"
@@ -189,18 +203,21 @@ export function TaskTableRow({
             >
               {task.name}
             </button>
-          ) : onOpenCard ? (
-            <button
-              type="button"
-              className={styles.nameBtn}
-              onClick={(e) => { e.stopPropagation(); onOpenCard(task.id); }}
-              title={nameTitle}
-              aria-label={`פתח כרטיס משימה: ${task.name}`}
-            >
-              {task.name}
-            </button>
           ) : (
             <span className={styles.nameText} title={nameTitle}>{task.name}</span>
+          )}
+          {/* Hover rename pencil — the same inline-rename affordance as clicking
+              the name, made explicit + discoverable on every row (like MyTasksRow). */}
+          {onRenameTask && !editingName && (
+            <button
+              type="button"
+              className={styles.renameBtn}
+              title="עריכת שם"
+              aria-label={`ערוך שם משימה: ${task.name}`}
+              onClick={(e) => { e.stopPropagation(); startEditName(); }}
+            >
+              <Edit size={16} />
+            </button>
           )}
           {onDeleteTask && (
             confirmDel ? (

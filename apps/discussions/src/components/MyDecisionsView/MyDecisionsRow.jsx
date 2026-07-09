@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
-import { Update, CloseSmall } from '@vibe/icons';
+import { Update, CloseSmall, Edit } from '@vibe/icons';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { PersonList } from '@generated/components/PersonAvatar';
 import { isValidStatus } from '@generated/constants/statusConfig';
@@ -131,6 +131,9 @@ export function MyDecisionsRow({
   onStatusChange,
   onPriorityChange,
   onDateChange,
+  // Inline rename handler (permission-gated by the table). When provided, a
+  // hover pencil appears and inline name-editing is enabled.
+  onRenameDecision,
   // Selection (round 27) — a leading checkbox cell when selectable.
   selectable = false,
   selected = false,
@@ -138,6 +141,18 @@ export function MyDecisionsRow({
 }) {
   const statusOpts = useStatusOptions('decisions', 'decisionStatusID');
   const priorityOpts = useStatusOptions('decisions', 'decisionPriorityID');
+
+  // Inline rename (hover pencil) — the pencil shows only when onRenameDecision is
+  // provided. Clicking the NAME still opens the item card; rename is a separate
+  // affordance (mirrors MyTasksRow).
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const startEditName = () => { setNameDraft(decision.name || ''); setEditingName(true); };
+  const saveName = () => {
+    const next = nameDraft.trim();
+    if (next && next !== decision.name) onRenameDecision?.(decision.id, next);
+    setEditingName(false);
+  };
 
   const date = decision.decisionDateID;
   const discussion = getDecisionDiscussion(decision);
@@ -161,23 +176,53 @@ export function MyDecisionsRow({
     // decision text — clicking opens the item card on the Updates pane.
     name: (
       <div key="name" className={`${grid.taskCell} ${grid.taskFirst} ${styles.name}`}>
-        <button
-          type="button"
-          className={styles.nameText}
-          title={decision.name}
-          onClick={(e) => { e.stopPropagation(); openItemCard(decision.id); }}
-        >
-          {decision.name}
-        </button>
-        <button
-          type="button"
-          className={styles.updatesBtn}
-          title="עדכונים"
-          aria-label="פתח עדכונים"
-          onClick={(e) => { e.stopPropagation(); openItemCard(decision.id); }}
-        >
-          <Update size={18} />
-        </button>
+        {editingName ? (
+          <input
+            className={styles.nameInput}
+            autoFocus
+            value={nameDraft}
+            onClick={stop}
+            onChange={(e) => setNameDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); saveName(); }
+              if (e.key === 'Escape') setEditingName(false);
+            }}
+            onBlur={saveName}
+          />
+        ) : (
+          <>
+            <button
+              type="button"
+              className={styles.nameText}
+              title={decision.name}
+              onClick={(e) => { e.stopPropagation(); openItemCard(decision.id); }}
+            >
+              {decision.name}
+            </button>
+            {/* Hover rename pencil — permission-gated (onRenameDecision). Opens
+                inline name-editing; the name click still opens the card. */}
+            {onRenameDecision && (
+              <button
+                type="button"
+                className={styles.renameBtn}
+                title="עריכת שם"
+                aria-label={`ערוך החלטה: ${decision.name}`}
+                onClick={(e) => { e.stopPropagation(); startEditName(); }}
+              >
+                <Edit size={16} />
+              </button>
+            )}
+            <button
+              type="button"
+              className={styles.updatesBtn}
+              title="עדכונים"
+              aria-label="פתח עדכונים"
+              onClick={(e) => { e.stopPropagation(); openItemCard(decision.id); }}
+            >
+              <Update size={18} />
+            </button>
+          </>
+        )}
       </div>
     ),
     // decider — compact avatar(s), click-to-expand list (PersonList). Falls back
