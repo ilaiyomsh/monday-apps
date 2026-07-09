@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { החלטות1Board } from '@api/BoardSDK.js';
+import { api } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
 import logger from '../utils/logger.js';
 
@@ -36,6 +37,9 @@ import logger from '../utils/logger.js';
  */
 
 const PAGE_SIZE = 100;
+// Undo window for deferred bulk delete — matches the delete toast auto-hide
+// (mirrors useMyTasks / useDecisions).
+const DELETE_GRACE_MS = 6000;
 
 // Columns the "My Decisions" view renders / permission-gates on.
 const RENDERED_COLUMNS = [
@@ -120,7 +124,36 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
         .where(where)
         .execute();
       if (reqId !== reqIdRef.current) return; // a newer request superseded this one
-      setItems(res.items || []);
+      let list = res.items || [];
+      // Round 27 — CREATOR-AS-DEFAULT-DECIDER: in the "החלטות שקיבלתי" (decider)
+      // sub-tab a decision that has a creator but NO decider is treated as
+      // decided BY its creator, so it must also surface for that creator. The
+      // server rule above only matches the decider people column, so we
+      // additionally pull the decisions THIS user created and merge in the ones
+      // whose decider is EMPTY (effectiveDecider === me). Display/logic fallback
+      // only — the board is never written. Skipped when the creator column is
+      // unmapped; a failure here is non-fatal (the decider list still renders).
+      if (subTab === 'decider' && getColumns('decisions')?.decisionCreatorID?.id) {
+        try {
+          const creatorWhere = { decisionCreatorID: String(userId) };
+          if (search && String(search).trim()) creatorWhere.name = String(search).trim();
+          const createdRes = await new החלטות1Board()
+            .items()
+            .withColumns(RENDERED_COLUMNS)
+            .withPagination({ limit: PAGE_SIZE })
+            .where(creatorWhere)
+            .execute();
+          if (reqId !== reqIdRef.current) return;
+          const have = new Set(list.map((d) => String(d.id)));
+          const fallback = (createdRes.items || []).filter(
+            (d) => !have.has(String(d.id)) && (!Array.isArray(d.deciderID) || d.deciderID.length === 0)
+          );
+          list = [...list, ...fallback];
+        } catch (creatorErr) {
+          logger.warn('useMyDecisions', 'creator-fallback fetch failed', creatorErr);
+        }
+      }
+      setItems(list);
       setCursor(res.cursor || null);
       setError(null);
     } catch (err) {
@@ -204,6 +237,38 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     }
   }, []);
 
+  // Deferred bulk delete with an undo window (mirrors useMyTasks.softDeleteTasks
+  // / useDecisions.softDeleteDecisions): rows vanish optimistically now, the real
+  // delete_item fires only after DELETE_GRACE_MS, and the returned undo() (wired
+  // to the toast's "בטל") cancels the pending delete and restores the rows.
+  const softDeleteDecisions = useCallback((ids) => {
+    const idList = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
+    if (!idList.length) return { undo: () => {}, count: 0 };
+    const idSet = new Set(idList.map(String));
+    const removed = itemsRef.current.filter((i) => idSet.has(String(i.id))); // snapshot for restore
+    setItems((current) => current.filter((i) => !idSet.has(String(i.id))));
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      idList.forEach((id) => {
+        api(`mutation ($itemId: ID!) { delete_item(item_id: $itemId) { id } }`, { itemId: id }, 'useMyDecisions.softDeleteDecisions')
+          .catch((err) => logger.error('useMyDecisions', 'Error deleting decision', err));
+      });
+    }, DELETE_GRACE_MS);
+
+    const undo = () => {
+      if (cancelled) return;
+      cancelled = true;
+      clearTimeout(timer);
+      setItems((current) => {
+        const have = new Set(current.map((i) => String(i.id)));
+        return [...current, ...removed.filter((i) => !have.has(String(i.id)))];
+      });
+    };
+    return { undo, count: idList.length };
+  }, []);
+
   const refresh = useCallback(() => fetchPage(), [fetchPage]);
 
   return {
@@ -219,6 +284,7 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     updateDecisionStatus,
     updateDecisionPriority,
     updateDecisionDate,
+    softDeleteDecisions,
     refresh,
   };
 }

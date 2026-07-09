@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Skeleton, Button } from '@vibe/core';
-import { DropdownChevronDown, Search, Filter, Sort, Group, Collapse, Expand } from '@vibe/icons';
+import { DropdownChevronDown, Search, Filter, Sort, Group, Collapse, Expand, CloseSmall } from '@vibe/icons';
+import { ArrowLeft } from 'lucide-react';
 import { useMyDecisions } from '@generated/hooks/useMyDecisions.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
@@ -22,7 +23,7 @@ import { Segment } from '../MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '../MyTasksView/controls/BuilderIcon.jsx';
 import {
   SORT_COLUMNS, GROUP_COLUMNS, FILTER_COLUMNS, OP_LABEL, DEADLINE_RANGES,
-  sortTasks, filterTasks, filterCount, emptyFilter, DEFAULT_SORT, DEFAULT_GROUP,
+  sortTasks, filterTasks, filterCount, emptyFilter, DEFAULT_SORT,
   serializeFilter, deserializeFilter,
 } from '../MyTasksView/controls/controls.js';
 import styles from './MyDecisionsView.module.css';
@@ -52,7 +53,23 @@ import bs from '../MyTasksView/controls/builder.module.css';
 const TYPE_ICON = { status: 'status', date: 'date', text: 'text', relation: 'relation' };
 
 const firstSortDir = (col) => (SORT_COLUMNS.find((c) => c.key === col) || SORT_COLUMNS[0]).dirs[0].key;
-const firstGroupOrder = (col) => (GROUP_COLUMNS.find((c) => c.key === col) || GROUP_COLUMNS[0]).orders[0].key;
+
+// Group-by columns for the DECISIONS view: the shared status/priority/discussion
+// columns PLUS a date group (by the decision date). Kept LOCAL so the shared
+// MyTasks GROUP_COLUMNS stays untouched. Date is FIRST so it's the default.
+const DEC_GROUP_COLUMNS = [
+  {
+    key: 'deadline', type: 'date',
+    orders: [
+      { key: 'dateDesc', label: 'Date ↓', icon: 'calDown' },
+      { key: 'dateAsc', label: 'Date ↑', icon: 'calUp' },
+    ],
+  },
+  ...GROUP_COLUMNS,
+];
+// Default view = grouped BY DATE, most-recent day first (descending).
+const DEC_DEFAULT_GROUP = { col: 'deadline', order: 'dateDesc' };
+const firstGroupOrder = (col) => (DEC_GROUP_COLUMNS.find((c) => c.key === col) || DEC_GROUP_COLUMNS[0]).orders[0].key;
 const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'Choose a date range';
 const rangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
 
@@ -66,7 +83,9 @@ const COL_NAME = {
 };
 
 const SUB_TABS = [
-  { key: 'decider', label: 'החלטות שאני מחליט' },
+  // "החלטות שקיבלתי" (round 27 rename) — still filters to decisions I decide
+  // (deciderID any_of me), now WITH the creator-as-default-decider fallback.
+  { key: 'decider', label: 'החלטות שקיבלתי' },
   { key: 'affected', label: 'החלטות שמשפיעות עליי' },
 ];
 
@@ -102,8 +121,12 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   });
   const [group, setGroup] = useState(() => {
     const g = savedView?.group;
-    if (!g || !GROUP_COLUMNS.some((c) => c.key === g.col)) return { ...DEFAULT_GROUP };
-    return { col: g.col, order: g.order || firstGroupOrder(g.col) };
+    // A saved group with 'none' is honored; otherwise fall back to the
+    // group-by-date default (most-recent-first) unless a valid saved col exists.
+    if (g && (g.col === 'none' || DEC_GROUP_COLUMNS.some((c) => c.key === g.col))) {
+      return g.col === 'none' ? { col: 'none' } : { col: g.col, order: g.order || firstGroupOrder(g.col) };
+    }
+    return { ...DEC_DEFAULT_GROUP };
   });
   const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
   const [filterRows, setFilterRows] = useState(() => (
@@ -113,6 +136,14 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   ));
   const [collapsed, setCollapsed] = useState({});
   const [discDateMap, setDiscDateMap] = useState({});
+  // Multi-select (round 27) — a leading checkbox column + a floating action bar,
+  // batch edit (a change on a selected row applies to the whole selection), bulk
+  // delete, and ESC-to-clear. Mirrors the in-discussion Decisions tab.
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const rootRef = useRef(null);
+  const toggleSelect = (id, checked) =>
+    setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
+  const clearSelection = () => setSelectedIds(new Set());
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
@@ -121,7 +152,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
 
   const {
     items, loading, loadingMore, hasMore, error, configured, loadMore,
-    updateDecisionStatus, updateDecisionPriority, updateDecisionDate,
+    updateDecisionStatus, updateDecisionPriority, updateDecisionDate, softDeleteDecisions,
   } = useMyDecisions(subTab, { currentUser, context, search: debouncedSearch });
 
   // Board mapped at all? (vs only the ACTIVE sub-tab's people column missing).
@@ -138,6 +169,65 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     (cap, decision) => can(cap, { boardKey: 'decisions', item: decision }),
     [can]
   );
+
+  // --- Multi-select batch + delete (mirrors the in-discussion Decisions tab) ---
+  const itemById = useMemo(() => new Map(items.map((d) => [String(d.id), d])), [items]);
+  const allow = useCallback((cap, id) => canDecision(cap, itemById.get(String(id))), [canDecision, itemById]);
+  // A column change on a SELECTED row applies to EVERY selected row (monday
+  // behavior); otherwise it's a single-row edit. Targets are filtered per
+  // capability so a mixed selection applies only to the allowed subset.
+  const resolveTargetIds = useCallback((originId, cap) => {
+    const base = (selectedIds.size > 1 && selectedIds.has(originId)) ? [...selectedIds] : [originId];
+    return cap ? base.filter((id) => allow(cap, id)) : base;
+  }, [selectedIds, allow]);
+  const applyStatus = useCallback((id, status) => resolveTargetIds(id, 'editDecisionStatus').forEach((t) => updateDecisionStatus(t, status)), [resolveTargetIds, updateDecisionStatus]);
+  const applyPriority = useCallback((id, value) => resolveTargetIds(id, 'editDecisionPriority').forEach((t) => updateDecisionPriority(t, value)), [resolveTargetIds, updateDecisionPriority]);
+  const applyDate = useCallback((id, date) => resolveTargetIds(id, 'editDecisionDate').forEach((t) => updateDecisionDate(t, date)), [resolveTargetIds, updateDecisionDate]);
+  // Only the selected decisions the user may delete (mixed selection → the
+  // allowed subset). The action bar's delete is disabled when none qualify.
+  const deletableSelectedIds = useMemo(
+    () => [...selectedIds].filter((id) => allow('deleteDecision', id)),
+    [selectedIds, allow]
+  );
+  const deleteSelected = () => {
+    const ids = deletableSelectedIds;
+    if (ids.length === 0) return;
+    clearSelection();
+    const { undo } = softDeleteDecisions(ids);
+    const msg = ids.length === 1 ? 'ההחלטה נמחקה' : `${ids.length} החלטות נמחקו`;
+    onNotify?.(msg, 'info', 6000, { label: 'בטל', onClick: undo });
+  };
+
+  // ESC clears the multi-selection. Live only while something is selected, and
+  // a no-op unless THIS view is actually visible (offsetParent) — it also yields
+  // to an open editor/overlay (typing field, or a dialog/listbox/menu open).
+  const hasSelection = selectedIds.size > 0;
+  useEffect(() => {
+    if (!hasSelection) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (!rootRef.current || rootRef.current.offsetParent === null) return;
+      const el = e.target;
+      const tag = el && el.tagName;
+      const typing = tag === 'TEXTAREA' || (el && el.isContentEditable)
+        || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset)$/.test(el.type || ''));
+      if (typing) return;
+      if (document.querySelector('[role="dialog"],[role="listbox"],[role="menu"]')) return;
+      setSelectedIds(new Set());
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [hasSelection]);
+  // Drop selected ids no longer loaded (filter/search/pagination/sub-tab churn).
+  useEffect(() => {
+    setSelectedIds((current) => {
+      if (current.size === 0) return current;
+      const valid = new Set(items.map((d) => d.id));
+      const next = new Set();
+      current.forEach((id) => { if (valid.has(id)) next.add(id); });
+      return next.size === current.size ? current : next;
+    });
+  }, [items]);
 
   const { options: statusOptions, labelById, colorById, orderById } = useStatusOptions('decisions', 'decisionStatusID');
   const {
@@ -166,6 +256,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
       noStatusLabel: 'ללא סטאטוס',
       noPriorityLabel: 'ללא עדיפות',
       noDiscussionLabel: 'ללא דיון',
+      noDateLabel: 'ללא תאריך',
       allTasksLabel: 'החלטות',
     }),
     [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById]
@@ -256,7 +347,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
 
   // ---------- Group panel body ----------
   const renderGroupBody = ({ mobile, openId, setOpenId }) => {
-    const colOptions = GROUP_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === group.col }));
+    const colOptions = DEC_GROUP_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === group.col }));
     if (group.col === 'none') {
       const colSeg = (
         <Segment id="gcol" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
@@ -264,7 +355,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
       );
       return mobile ? field(true, 'Column', colSeg) : <div className={bs.bRow}>{colSeg}</div>;
     }
-    const gc = GROUP_COLUMNS.find((c) => c.key === group.col) || GROUP_COLUMNS[0];
+    const gc = DEC_GROUP_COLUMNS.find((c) => c.key === group.col) || DEC_GROUP_COLUMNS[0];
     const ord = gc.orders.find((o) => o.key === group.order) || gc.orders[0];
     const colSeg = (
       <Segment id="gcol" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
@@ -371,7 +462,10 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   const backBar = onBackToDiscussions ? (
     <div className={styles.topBar} dir="ltr">
       <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
-        דיונים
+        <span className={styles.backBtnInner}>
+          <ArrowLeft size={16} aria-hidden="true" />
+          לתצוגת הדיונים
+        </span>
       </Button>
     </div>
   ) : null;
@@ -391,7 +485,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   }
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
       {backBar}
@@ -463,6 +557,27 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
         </button>
       </div>
 
+      {/* Floating bulk-action bar — count + delete + close (mirrors the
+          in-discussion Decisions tab). Batch status/priority/date edits happen
+          inline on any selected row (they cascade to the whole selection). */}
+      {selectedIds.size > 0 && (
+        <div className={styles.actionBar} role="region" aria-label="פעולות על החלטות נבחרות">
+          <div className={styles.actionBarLeft}>
+            <span>{selectedIds.size} נבחרו</span>
+          </div>
+          <div className={styles.actionBarCenter}>
+            <Button kind={"secondary"} size={"small"} disabled={deletableSelectedIds.length === 0} onClick={deleteSelected}>
+              מחיקה
+            </Button>
+          </div>
+          <div className={styles.actionBarRight}>
+            <button type="button" className={styles.closeSelectionBtn} onClick={clearSelection} aria-label="בטל בחירה">
+              <CloseSmall size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className={styles.board}>
       {loading ? (
         <div className={styles.skeletonStack}>
@@ -514,9 +629,19 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
                     color={grp.color}
                     canManageSettings={canManageSettings}
                     canDecision={canDecision}
-                    onStatusChange={updateDecisionStatus}
-                    onPriorityChange={updateDecisionPriority}
-                    onDateChange={updateDecisionDate}
+                    onStatusChange={applyStatus}
+                    onPriorityChange={applyPriority}
+                    onDateChange={applyDate}
+                    selectable
+                    selectedIds={selectedIds}
+                    onToggleSelect={toggleSelect}
+                    selectAllChecked={grp.items.length > 0 && grp.items.every((d) => selectedIds.has(d.id))}
+                    selectAllIndeterminate={grp.items.some((d) => selectedIds.has(d.id)) && !grp.items.every((d) => selectedIds.has(d.id))}
+                    onToggleSelectAll={(checked) => setSelectedIds((prev) => {
+                      const n = new Set(prev);
+                      grp.items.forEach((d) => (checked ? n.add(d.id) : n.delete(d.id)));
+                      return n;
+                    })}
                   />
                 )}
               </div>

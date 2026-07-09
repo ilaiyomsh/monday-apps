@@ -43,3 +43,18 @@ export function getDecisionDiscussion(decision) {
   if (id != null) return { id: String(id), name: rel.text || '' };
   return null;
 }
+
+// A people value, always as an array.
+function peopleArr(v) {
+  return Array.isArray(v) ? v : [];
+}
+
+// EFFECTIVE decider = the actual decider(s) when set, else the creator as the
+// default decider (round 27: a decision with a creator but an empty מחליט is
+// treated as decided-by-its-creator). Display/logic fallback ONLY — the board is
+// never written. Returns a people[] ({ id, name }) suitable for PersonList.
+export function getEffectiveDecider(decision) {
+  const decider = peopleArr(decision?.deciderID);
+  if (decider.length > 0) return decider;
+  return peopleArr(decision?.decisionCreatorID);
+}

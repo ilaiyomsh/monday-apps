@@ -1,33 +1,36 @@
 import React from 'react';
+import { Checkbox } from '@vibe/core';
 import { MyDecisionsRow } from './MyDecisionsRow.jsx';
 import { getColumns } from '../../utils/mondayApi/board-config-store.js';
 import { useColumnWidths } from '../../hooks/useColumnWidths.js';
+import { useColumnOrder } from '../../hooks/useColumnOrder.js';
 import { useViewport } from '../../hooks/useViewport.js';
 import { ResizeHandle } from '../ResizeHandle';
+import { ColumnHeaderDnd, SortableHeaderCell } from '../SortableColumnHeader';
 import styles from './MyDecisionsTable.module.css';
 
-// "ההחלטות שלי" board-style table — mirrors MyTasksTable's structure (LTR grid,
-// frozen first column, shared board scroll) over the DECISIONS board. Column
-// order:
-//   name (החלטה, frozen) | decider | affected | priority | status | date | discussion
+// "ההחלטות שלי" board-style table — mirrors MyTasksTable / TaskTable: a frozen
+// first column (החלטה), an optional leading selection-checkbox track, and
+// owner-draggable column RESIZE + REORDER (useColumnWidths + useColumnOrder under
+// the OWN 'myDecisions' tableId, persisted per instance). Column order:
+//   name (החלטה, frozen) | decider | affected | priority | status | date | discussion (דיון מקור)
 // Status / priority / date are inline-editable PER ROW, gated by the
 // board-permissions matrix via `canDecision`. Columns whose alias isn't mapped
-// in Settings are HIDDEN (graceful degradation — decisions is mapped manually).
-//
-// Column widths are draggable + persisted per-instance via useColumnWidths
-// (tableId 'myDecisions'); handles show ONLY to owners on a non-touch viewport.
-// No drag-reorder here (deliberately simpler than MyTasksTable).
+// in Settings are HIDDEN (decisions is mapped manually).
 
 // Default widths (px) — local to this table (constants/columnWidths.js carries
-// only the My-Tasks tables; decisions keeps its own defs to avoid touching it).
+// only the My-Tasks tables; decisions keeps its own defs). EVERY column —
+// INCLUDING דיון מקור — is a fixed-px RESIZABLE track (the table fills width via
+// .taskTable min-width:100%), so the discussion column shrinks/reorders like the
+// rest (no fill track that would snap it back to the edge).
 const W = {
-  name: { default: 300, min: 180, max: 640 },
+  name: { default: 300, min: 160, max: 640 },
   decider: { default: 110, min: 80, max: 220 },
   affected: { default: 140, min: 100, max: 280 },
   priority: { default: 130, min: 90, max: 240 },
   status: { default: 160, min: 100, max: 260 },
   date: { default: 130, min: 100, max: 220 },
-  discussion: { default: 200, min: 140, max: 480, flex: true },
+  discussion: { default: 220, min: 120, max: 480 },
 };
 // Compact fixed widths for the mobile-app template.
 const M = {
@@ -61,6 +64,15 @@ export function MyDecisionsTable({
   onStatusChange,
   onPriorityChange,
   onDateChange,
+  // Selection (mirrors MyTasksTable). 'sel' is a FIXED 36px leading track pinned
+  // first — deliberately kept OUT of useColumnOrder/useColumnWidths persistence
+  // so it can never be reordered away or stored.
+  selectable = false,
+  selectedIds,
+  onToggleSelect,
+  selectAllChecked = false,
+  selectAllIndeterminate = false,
+  onToggleSelectAll,
 }) {
   const { isMobile } = useViewport();
   const cols = getColumns('decisions') || {};
@@ -70,8 +82,8 @@ export function MyDecisionsTable({
   const showDate = !!cols.decisionDateID?.id;
   const showDiscussion = !!cols.discussionLinkID?.id;
 
-  // Visible columns in order, each carrying its width params.
-  const defs = [
+  // Visible columns in DEFAULT order, each carrying its width params.
+  const baseDefs = [
     { key: 'name', ...W.name },
     showDecider && { key: 'decider', ...W.decider },
     showAffected && { key: 'affected', ...W.affected },
@@ -80,21 +92,55 @@ export function MyDecisionsTable({
     showDate && { key: 'date', ...W.date },
     showDiscussion && { key: 'discussion', ...W.discussion },
   ].filter(Boolean);
-  const renderKeys = defs.map((d) => d.key);
 
-  const { gridTemplate, startResize } = useColumnWidths('myDecisions', defs);
+  // Apply the persisted column ORDER (name pinned first), then drive widths +
+  // cell render order from the SAME ordered list so they can never drift.
+  const defsByKey = Object.fromEntries(baseDefs.map((d) => [d.key, d]));
+  const { order, reorder } = useColumnOrder('myDecisions', baseDefs.map((d) => d.key));
+  const defs = order.map((k) => defsByKey[k]).filter(Boolean);
+
+  // 'sel' is a fixed leading track, prepended ONLY for rendering + width
+  // measurement — never fed to useColumnOrder (so it can't be persisted or
+  // reordered) and skipped by startResize (fixed defs are non-resizable).
+  const selDef = selectable ? [{ key: 'sel', fixed: 36 }] : [];
+  const renderKeys = selectable ? ['sel', ...order] : order;
+
+  const { gridTemplate, startResize } = useColumnWidths('myDecisions', [...selDef, ...defs]);
   // On phones use a compact fixed template (shared board-level horizontal
-  // scroll, frozen narrow name column — same approach as MyTasksTable).
-  const mobileTemplate = defs.map((d) => M[d.key] ?? '140px').join(' ');
+  // scroll, frozen narrow name column). Prepend the fixed 36px selection track.
+  const mobileTemplate = [
+    ...(selectable ? ['36px'] : []),
+    ...defs.map((d) => (d.key === 'name' ? (M.name ?? '40vw') : M[d.key] ?? '140px')),
+  ].join(' ');
   const rowStyle = { gridTemplateColumns: isMobile ? mobileTemplate : gridTemplate };
 
-  // Owner-only, mouse-only resize (everyone gets the stored widths applied).
+  // Owner-only, mouse-only resize + reorder (everyone gets the stored widths/
+  // order applied; only owners on a non-touch viewport see handles + can drag).
   const canResize = canManageSettings && !isMobile;
+  const canReorder = canManageSettings && !isMobile;
+  // Non-first header cells need a positioning context for the absolute handle;
+  // the frozen .taskFirst is already sticky (a containing block), so it doesn't.
   const relStyle = canResize ? { position: 'relative' } : undefined;
   const handle = (key) =>
     canResize ? <ResizeHandle onMouseDown={(e) => startResize(key, e)} /> : null;
 
+  // Movable column ids = everything except the frozen, pinned-first name column
+  // ('sel' is never part of `order`, so it's already excluded).
+  const movableIds = order.filter((k) => k !== 'name');
+
   const renderHeaderCell = (key) => {
+    if (key === 'sel') {
+      return (
+        <div key="sel" className={`${styles.taskCell} ${styles.selectCell}`} onClick={(e) => e.stopPropagation()}>
+          <Checkbox
+            checked={selectAllChecked}
+            indeterminate={selectAllIndeterminate}
+            onChange={(e) => onToggleSelectAll?.(e.target.checked)}
+            ariaLabel={selectAllChecked ? 'בטל בחירת קבוצה' : 'בחר את כל הקבוצה'}
+          />
+        </div>
+      );
+    }
     if (key === 'name') {
       return (
         <div key="name" className={`${styles.taskCell} ${styles.taskFirst} ${styles.nameHead}`}>
@@ -103,25 +149,29 @@ export function MyDecisionsTable({
         </div>
       );
     }
-    return (
-      <div key={key} className={styles.taskCell} style={relStyle}>
-        {TITLE[key]}
-        {handle(key)}
-      </div>
+    const inner = (<>{TITLE[key]}{handle(key)}</>);
+    return canReorder ? (
+      <SortableHeaderCell key={key} id={key} className={styles.taskCell} style={relStyle}>
+        {inner}
+      </SortableHeaderCell>
+    ) : (
+      <div key={key} className={styles.taskCell} style={relStyle}>{inner}</div>
     );
   };
 
   return (
     <div className={styles.taskTableScroll}>
       <div
-        className={styles.taskTable}
+        className={`${styles.taskTable} ${selectable ? styles.selectable : ''}`}
         dir="ltr"
         // Purple decisions accent by default; a status/priority grouping's label
         // color overrides it (chrome only — label colors come from the column).
         style={{ '--group-color': color || 'var(--decisions-accent, #6b4ee6)' }}
       >
         <div className={`${styles.taskRow} ${styles.taskHead}`} style={rowStyle}>
-          {renderKeys.map(renderHeaderCell)}
+          <ColumnHeaderDnd enabled={canReorder} ids={movableIds} labels={TITLE} onReorder={reorder}>
+            {renderKeys.map(renderHeaderCell)}
+          </ColumnHeaderDnd>
         </div>
 
         {decisions.map((decision) => (
@@ -138,6 +188,9 @@ export function MyDecisionsTable({
             onStatusChange={onStatusChange && canDecision('editDecisionStatus', decision) ? onStatusChange : undefined}
             onPriorityChange={onPriorityChange && canDecision('editDecisionPriority', decision) ? onPriorityChange : undefined}
             onDateChange={onDateChange && canDecision('editDecisionDate', decision) ? onDateChange : undefined}
+            selectable={selectable}
+            selected={selectable ? !!selectedIds?.has(decision.id) : false}
+            onToggleSelect={onToggleSelect}
           />
         ))}
       </div>
