@@ -16,3 +16,32 @@
 .container > * {
   pointer-events: auto;
 }
+
+
+/* Toast content row: the message plus an optional leading action (undo). LTR so
+   the action button sits on the LEFT and the message on the right; the message
+   span keeps its own dir="rtl" for correct Hebrew bidi. */
+.body {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  direction: ltr;
+}
+
+/* "בטל" (undo) / generic action button — a link-style button that inherits the
+   toast's text color (white on the green success toast) and sits to the LEFT. */
+.undoBtn {
+  flex: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  white-space: nowrap;
+}
+.undoBtn:hover {
+  opacity: 0.85;
+}

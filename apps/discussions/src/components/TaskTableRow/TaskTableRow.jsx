@@ -347,7 +347,7 @@ export function TaskTableRow({
             onDialogDidShow={() => { updateStatusPosition(); setStatusOpen(true); }}
             onDialogDidHide={() => setStatusOpen(false)}
             position={statusPosition}
-            zIndex={1000}
+            zIndex={10000}
             content={() => (
               <DialogContentContainer>
                 <div className={styles.statusMenu}>
@@ -398,7 +398,7 @@ export function TaskTableRow({
               onDialogDidShow={() => { updatePriorityPosition(); setPriorityOpen(true); }}
               onDialogDidHide={() => setPriorityOpen(false)}
               position={priorityPosition}
-              zIndex={1000}
+              zIndex={10000}
               content={() => (
                 <DialogContentContainer>
                   <div className={styles.statusMenu}>

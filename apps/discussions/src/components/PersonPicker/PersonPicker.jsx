@@ -4,7 +4,6 @@ import { Avatar, AvatarGroup } from '@vibe/core';
 import { Check, CloseSmall, Search, Person } from '@vibe/icons';
 import { subscribe, getVersion, getAllUsers, getUser, hasRoster, ensureRoster } from '@generated/utils/usersStore.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { monday } from '@generated/utils/mondayApi/monday-client.js';
 import logger from '@generated/utils/logger.js';
 import styles from './PersonPicker.module.css';
 
@@ -24,9 +23,10 @@ function initialsOf(name) {
  * once (Vibe's Dialog double-rendered its content here). Same {selected,onChange}
  * API. ("Invite by email" isn't available to embedded apps; omitted.)
  *
- * `single`: cap the selection at one person (task-assignee fields). A second
- * pick is blocked and a notice tells the user to clear the current one first —
- * deselecting the existing person is still allowed.
+ * `single`: single-person fields (מנהל / מחליט / lead / recorder / task
+ * assignee, etc.). Picking a DIFFERENT person REPLACES the current selection —
+ * no need to clear the existing one first; clicking the already-selected person
+ * deselects it. Multi (משתתפים / מושפעים) is unaffected.
  */
 export function PersonPicker({ selected = [], onChange, bordered = false, closeOnSelect = false, single = false }) {
   const [open, setOpen] = useState(false);
@@ -101,21 +101,10 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
     logger.info('PersonPicker', 'option clicked → toggle user', { id: user.id, name: user.name });
     if (selectedIds.includes(String(user.id))) {
       removeUser(user.id);
-    } else if (single && selected.length >= 1) {
-      // single-assignee mode: one person max. Block the extra pick (the popover
-      // stays open so the user can deselect the current person first) and surface
-      // a Hebrew notice. monday.execute is a no-op outside the iframe / in tests.
-      logger.info('PersonPicker', 'single mode → blocked extra selection', { id: user.id });
-      try {
-        monday.execute('notice', {
-          message: 'ניתן להקצות אחראי אחד בלבד',
-          type: 'error',
-          timeout: 4000,
-        });
-      } catch (err) {
-        logger.warn('PersonPicker', 'failed to show single-assignee notice', err);
-      }
-      return;
+    } else if (single) {
+      // single-person mode: picking a DIFFERENT person REPLACES the current
+      // selection (no "only one allowed" block, no need to clear it first).
+      onChange([{ id: user.id, kind: 'person', name: user.name }]);
     } else {
       onChange([...selected, { id: user.id, kind: 'person', name: user.name }]);
     }
@@ -179,6 +168,7 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
                 text={initialsOf(p.name || u?.name)}
                 type={u?.photo_thumb ? 'img' : 'text'}
                 ariaLabel={p.name}
+                tooltipProps={{ content: p.name || u?.name }}
               />
             );
           })()
@@ -194,6 +184,7 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
                   text={initialsOf(p.name || u?.name)}
                   type={u?.photo_thumb ? 'img' : 'text'}
                   ariaLabel={p.name}
+                  tooltipProps={{ content: p.name || u?.name }}
                 />
               );
             })}

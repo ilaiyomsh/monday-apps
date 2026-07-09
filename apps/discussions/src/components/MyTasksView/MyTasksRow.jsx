@@ -76,7 +76,7 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
         onDialogDidShow={() => { updatePosition(); setOpen(true); }}
         onDialogDidHide={() => setOpen(false)}
         position={position}
-        zIndex={1000}
+        zIndex={10000}
         content={() => (
           <DialogContentContainer>
             <div className={row.statusMenu}>

@@ -326,7 +326,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     // window, and "בטל" cancels it and restores the rows.
     const { undo } = softDeleteTasks(ids);
     const msg = ids.length === 1 ? 'המשימה נמחקה' : `${ids.length} משימות נמחקו`;
-    onNotify?.(msg, 'info', 6000, { label: 'בטל', onClick: undo });
+    onNotify?.(msg, 'success', 6000, { label: 'בטל', onClick: undo });
   };
 
   // ---------- Filter panel body (mirrors PreviousTasksTab; status + deadline + person) ----------

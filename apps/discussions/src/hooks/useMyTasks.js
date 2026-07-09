@@ -35,6 +35,9 @@ import logger from '../utils/logger.js';
 const PAGE_SIZE = 100;
 // Undo window for deferred bulk delete — matches the delete toast auto-hide.
 const DELETE_GRACE_MS = 6000;
+// Staged loading window: phase 1 renders the user's ACTIONABLE tasks (not
+// "done" + created within the last month) ASAP; phase 2 loads the full page.
+const LAST_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
 // Columns the "My Tasks" view renders / filters on. Kept lean so the page query
 // stays light. discussionLinkID is the discussion board_relation (for the discussion
@@ -69,7 +72,7 @@ export function buildMyTasksWhere({ userId, taskCreatorId, search }) {
   return where;
 }
 
-export function useMyTasks({ currentUser, context, taskCreatorId = null, search = '', sort = null } = {}) {
+export function useMyTasks({ currentUser, context, taskCreatorId = null, search = '', sort = null, notDoneStatusIds = [] } = {}) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -86,6 +89,10 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
   // the time the write rejects), so we keep this ref in lockstep with state.
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  // Latest not-"done" status label ids (for the staged phase-1 filter), held in
+  // a ref so a late status-options load doesn't churn the fetch dependencies.
+  const notDoneStatusIdsRef = useRef(notDoneStatusIds);
+  notDoneStatusIdsRef.current = notDoneStatusIds;
 
   const fetchPage = useCallback(async () => {
     const reqId = ++reqIdRef.current;
@@ -96,31 +103,84 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
       setLoading(false);
       return;
     }
-    try {
-      setLoading(true);
-      const where = buildMyTasksWhere({ userId, taskCreatorId, search });
+    const baseWhere = buildMyTasksWhere({ userId, taskCreatorId, search });
+    // Build a page query for a given `where`. Sort is { column, direction } over
+    // an aliased column (deadline = deadlineID, status = statusID; BoardSDK maps
+    // the alias). Priority sort is client-side in the view, so never passed here.
+    const buildQuery = (where) => {
       let q = new משימות1Board().items()
         .withColumns(RENDERED_COLUMNS)
         .withGroup() // need item.group for the board-group grouping
         .withPagination({ limit: PAGE_SIZE })
         .where(where);
-      // Sort is { column, direction } over an aliased column (e.g. deadline =
-      // deadlineID, status = statusID). monday orders by the real column id (BoardSDK
-      // resolves the alias). Priority sort is done CLIENT-SIDE in the view (the
-      // label display order — not the label id — defines priorityID), so it is
-      // never passed here. Name/discussion sorts fall back to client order.
       if (sort?.column) q = q.orderBy({ column: sort.column, direction: sort.direction || 'asc' });
-      const res = await q.execute();
+      return q;
+    };
+    // STAGED LOAD (perceived speed): only on a FRESH load (nothing shown yet).
+    // Phase 1 = the user's actionable tasks — NOT in a "done" status AND created
+    // within the last month — rendered ASAP. Phase 2 = the full page (+ the real
+    // pagination cursor), merged in (dedupe). On a refetch that already has rows
+    // (search/sort change) skip straight to the single full query, so the list
+    // never shrinks-then-grows.
+    const staged = itemsRef.current.length === 0;
+    let phase1Items = [];
+    if (staged) {
+      try {
+        setLoading(true);
+        const p1Where = { ...baseWhere };
+        const notDone = notDoneStatusIdsRef.current;
+        // "not done" via any_of over the NON-done label ids (reuses the proven
+        // status any_of path). Skipped when the done set is unknown (options not
+        // loaded yet) — phase 1 then applies only the last-month trim below.
+        if (Array.isArray(notDone) && notDone.length) p1Where.statusID = notDone;
+        const r1 = await buildQuery(p1Where).execute();
+        if (reqId !== reqIdRef.current) return; // a newer request superseded this one
+        const monthAgo = Date.now() - LAST_MONTH_MS;
+        phase1Items = (r1.items || []).filter((t) => {
+          const ts = t?.created_at ? Date.parse(t.created_at) : NaN;
+          return Number.isNaN(ts) ? true : ts >= monthAgo; // unknown created_at → keep
+        });
+        setItems(phase1Items);
+        setCursor(r1.cursor || null);
+        setError(null);
+        setLoading(false); // first paint done — phase 2 fills in the rest
+      } catch (err) {
+        if (reqId !== reqIdRef.current) return;
+        // Phase 1 is best-effort — fall through to the full load below.
+        logger.warn('useMyTasks', 'staged phase-1 fetch failed; loading full set', err);
+        phase1Items = [];
+      }
+    }
+    try {
+      if (!staged) setLoading(true);
+      const r2 = await buildQuery(baseWhere).execute();
       if (reqId !== reqIdRef.current) return; // a newer request superseded this one
-      setItems(res.items || []);
-      setCursor(res.cursor || null);
+      const full = r2.items || [];
+      if (staged) {
+        // Augment what phase 1 rendered: ADD the server rows not yet shown,
+        // preserving current order + any optimistic rows that raced in (a create
+        // /edit). A functional update reads the LIVE list, so nothing that was
+        // already shown flickers out (final data stays complete).
+        setItems((current) => {
+          const have = new Set(current.map((t) => String(t.id)));
+          return [...current, ...full.filter((t) => !have.has(String(t.id)))];
+        });
+      } else {
+        // Refetch (search/sort change) — the full page is authoritative.
+        setItems(full);
+      }
+      setCursor(r2.cursor || null);
       setError(null);
     } catch (err) {
       if (reqId !== reqIdRef.current) return;
       logger.error('useMyTasks', 'Error fetching my tasks', { userId, err });
-      setError(err?.message || 'fetch failed');
-      setItems([]);
-      setCursor(null);
+      // Only surface an error (and clear) when nothing was shown; if phase 1
+      // already rendered rows, keep them and swallow the phase-2 failure.
+      if (!(staged && phase1Items.length)) {
+        setError(err?.message || 'fetch failed');
+        setItems([]);
+        setCursor(null);
+      }
     } finally {
       if (reqId === reqIdRef.current) setLoading(false);
     }

@@ -114,9 +114,42 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
       setLoading(false);
       return;
     }
+    const baseWhere = buildMyDecisionsWhere({ subTab, userId, search });
+    // STAGED LOAD (perceived speed): only on a FRESH load (nothing shown yet).
+    // Phase 1 = decisions from the LAST MONTH (server-side date range on the
+    // mapped decision-date column) rendered ASAP; phase 2 = the full set (incl.
+    // the creator-as-decider fallback) merged in (dedupe). On a refetch that
+    // already has rows (sub-tab / search change) skip to the single full query.
+    const staged = itemsRef.current.length === 0;
+    const dateColMapped = !!getColumns('decisions')?.decisionDateID?.id;
+    let phase1Items = [];
+    if (staged && dateColMapped) {
+      try {
+        setLoading(true);
+        const now = new Date();
+        const from = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const r1 = await new החלטות1Board()
+          .items()
+          .withColumns(RENDERED_COLUMNS)
+          .withPagination({ limit: PAGE_SIZE })
+          .where({ ...baseWhere, decisionDateID: { between: [ymd(from), ymd(now)] } })
+          .execute();
+        if (reqId !== reqIdRef.current) return;
+        phase1Items = r1.items || [];
+        setItems(phase1Items);
+        setCursor(r1.cursor || null);
+        setError(null);
+        setLoading(false); // first paint done — phase 2 fills in the rest
+      } catch (err) {
+        if (reqId !== reqIdRef.current) return;
+        logger.warn('useMyDecisions', 'staged phase-1 fetch failed; loading full set', err);
+        phase1Items = [];
+      }
+    }
     try {
-      setLoading(true);
-      const where = buildMyDecisionsWhere({ subTab, userId, search });
+      if (!(staged && dateColMapped)) setLoading(true);
+      const where = baseWhere;
       const res = await new החלטות1Board()
         .items()
         .withColumns(RENDERED_COLUMNS)
@@ -153,15 +186,28 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
           logger.warn('useMyDecisions', 'creator-fallback fetch failed', creatorErr);
         }
       }
-      setItems(list);
+      // Phase 2 merge: on a staged load, AUGMENT what phase 1 rendered (add the
+      // rows it didn't return, preserving current order + any optimistic edits);
+      // on a refetch (sub-tab / search change) the full list is authoritative.
+      if (staged && dateColMapped) {
+        setItems((current) => {
+          const have2 = new Set(current.map((d) => String(d.id)));
+          return [...current, ...list.filter((d) => !have2.has(String(d.id)))];
+        });
+      } else {
+        setItems(list);
+      }
       setCursor(res.cursor || null);
       setError(null);
     } catch (err) {
       if (reqId !== reqIdRef.current) return;
       logger.error('useMyDecisions', 'Error fetching my decisions', { subTab, userId, err });
-      setError(err?.message || 'fetch failed');
-      setItems([]);
-      setCursor(null);
+      // Keep phase-1 rows already shown; only surface an error on a fresh load.
+      if (!(staged && dateColMapped && phase1Items.length)) {
+        setError(err?.message || 'fetch failed');
+        setItems([]);
+        setCursor(null);
+      }
     } finally {
       if (reqId === reqIdRef.current) setLoading(false);
     }

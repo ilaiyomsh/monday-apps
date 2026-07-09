@@ -13,7 +13,7 @@ import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { MyTasksTable } from './MyTasksTable.jsx';
-import { groupMyTasks } from './grouping.js';
+import { groupMyTasks, NO_DISCUSSION } from './grouping.js';
 import { BuilderControl } from './controls/BuilderControl.jsx';
 import { Segment } from './controls/Segment.jsx';
 import { BuilderIcon } from './controls/BuilderIcon.jsx';
@@ -121,7 +121,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     clearSelection();
     const { undo } = softDeleteTasks(ids);
     const msg = ids.length === 1 ? 'המשימה נמחקה' : `${ids.length} משימות נמחקו`;
-    onNotify?.(msg, 'info', 6000, { label: 'בטל', onClick: undo });
+    onNotify?.(msg, 'success', 6000, { label: 'בטל', onClick: undo });
   };
 
   useEffect(() => {
@@ -129,11 +129,19 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     return () => clearTimeout(timer);
   }, [search]);
 
+  // Status options (for the fills + the staged phase-1 "not done" filter). Loaded
+  // once (cached); notDoneStatusIds is [] until ready, so the staged phase-1 then
+  // degrades gracefully to the last-month trim alone in that brief window.
+  const { options: statusOptions, labelById, colorById, orderById } = useStatusOptions('tasks', 'statusID');
+  const notDoneStatusIds = useMemo(
+    () => (statusOptions || []).filter((o) => !o.isDone).map((o) => Number(o.id)),
+    [statusOptions]
+  );
   const {
     items, loading, loadingMore, hasMore, error, loadMore,
     updateTaskStatus, updateTaskPriority, updateTaskNotes, updateTaskDeadline, updateTaskName,
     softDeleteTasks, createTask,
-  } = useMyTasks({ currentUser, context, search: debouncedSearch });
+  } = useMyTasks({ currentUser, context, search: debouncedSearch, notDoneStatusIds });
 
   // Per-task permission gate. Task-tier caps resolve from the TASK's own people
   // columns (creator/responsible) — there is no parent discussion in this
@@ -144,7 +152,6 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const itemById = useMemo(() => new Map(items.map((t) => [String(t.id), t])), [items]);
   const allow = useCallback((cap, taskId) => canTask(cap, itemById.get(String(taskId))), [canTask, itemById]);
 
-  const { options: statusOptions, labelById, colorById, orderById } = useStatusOptions('tasks', 'statusID');
   const {
     options: priorityOptions,
     labelById: priorityLabelById,
@@ -173,13 +180,28 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t]
   );
 
-  // Surface the just-created task at the VERY TOP of the first group, regardless
-  // of where its value would route it under the active Group by. Lift the row
-  // whose id === newRowId out of its natural bucket and prepend it to the first
-  // group; drop any bucket left empty by the lift (except the first). The pin is
-  // released when the grouped view's inputs change (see the effect below).
+  // Surface the just-created task at the VERY TOP of the view. Under GROUP BY
+  // DISCUSSION the new (unlinked) task lives in "ללא דיון", so that group is
+  // pinned to the top; under every other Group by the row is lifted to the top
+  // of the first group. The pin releases when the grouped view's inputs change
+  // (see the effect below).
   const displayGroups = useMemo(() => {
     if (!newRowId || grouped.length === 0) return grouped;
+    // Under GROUP BY DISCUSSION a newly created task is UNLINKED, so it lives in
+    // the "ללא דיון" bucket. Pin THAT group to the TOP (rather than lifting the
+    // row under an unrelated discussion), with the new row first inside it.
+    if (group.col === 'discussion') {
+      const idx = grouped.findIndex((g) => g.key === NO_DISCUSSION);
+      if (idx === -1) return grouped; // no unlinked bucket (row filtered out) — nothing to pin
+      const noDisc = grouped[idx];
+      const rowIdx = noDisc.items.findIndex((tk) => String(tk.id) === String(newRowId));
+      const items = rowIdx === -1
+        ? noDisc.items
+        : [noDisc.items[rowIdx], ...noDisc.items.filter((_, i) => i !== rowIdx)];
+      return [{ ...noDisc, items }, ...grouped.filter((_, i) => i !== idx)];
+    }
+    // Every other grouping: lift the new row out of its natural bucket to the
+    // very top of the FIRST group (surfaces it at the top of the view, as today).
     let pinnedRow = null;
     const stripped = grouped.map((g) => {
       const idx = g.items.findIndex((tk) => String(tk.id) === String(newRowId));
@@ -193,14 +215,28 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       { ...first, items: [pinnedRow, ...first.items] },
       ...rest.filter((g) => g.items.length > 0),
     ];
-  }, [grouped, newRowId]);
+  }, [grouped, newRowId, group.col]);
 
-  // When creating with no visible groups yet (zero tasks under a non-"none"
-  // grouping yields no buckets), synthesize one group so the draft row still has
-  // a place to render at the top.
-  const groupsForRender = (creatingNew && displayGroups.length === 0)
-    ? [{ key: '__creating__', label: t('myTasks.allTasks'), color: null, status: undefined, items: [] }]
-    : displayGroups;
+  // While drafting a new task inline, it must render in the group that will HOST
+  // it: the "ללא דיון" bucket under discussion grouping (pinned to the TOP), or
+  // the topmost group otherwise. Synthesize an empty host group when none exists.
+  const groupsForRender = useMemo(() => {
+    if (!creatingNew) return displayGroups;
+    if (group.col === 'discussion') {
+      const idx = displayGroups.findIndex((g) => g.key === NO_DISCUSSION);
+      if (idx === -1) {
+        return [
+          { key: NO_DISCUSSION, label: t('myTasks.noDiscussion'), color: null, status: undefined, items: [] },
+          ...displayGroups,
+        ];
+      }
+      return [displayGroups[idx], ...displayGroups.filter((_, i) => i !== idx)];
+    }
+    if (displayGroups.length === 0) {
+      return [{ key: '__creating__', label: t('myTasks.allTasks'), color: null, status: undefined, items: [] }];
+    }
+    return displayGroups;
+  }, [creatingNew, displayGroups, group.col, t]);
 
   // Release the top-of-view pin whenever the grouped view's inputs change — once
   // the user re-sorts / re-groups / filters / searches, the new row settles into
@@ -297,9 +333,14 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   // group if collapsed so the draft row is visible, and capture that group's
   // seed (status/priority) so the committed task inherits it.
   const startCreateNew = () => {
-    const top = grouped[0] || null;
-    if (top && collapsed[top.key]) setCollapsed((p) => ({ ...p, [top.key]: false }));
-    setNewSeed(top ? seedForGroup(top) : null);
+    // The draft's host group: "ללא דיון" under discussion grouping (a new task is
+    // unlinked), else the topmost group. Expand it if collapsed so the draft row
+    // is visible, and capture its seed (status/priority) for the committed task.
+    const host = group.col === 'discussion'
+      ? (grouped.find((g) => g.key === NO_DISCUSSION) || null)
+      : (grouped[0] || null);
+    if (host && collapsed[host.key]) setCollapsed((p) => ({ ...p, [host.key]: false }));
+    setNewSeed(host ? seedForGroup(host) : null);
     setCreatingNew(true);
   };
   // Commit the draft: create the task with `prepend` so its optimistic row lands
