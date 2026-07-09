@@ -29,6 +29,7 @@ import { TOPICS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js'
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
+import { getPointItemIds } from '@generated/utils/pointItems.js';
 import styles from './TopicsTab.module.css';
 
 const NEUTRAL = 'hsl(var(--status-default))';
@@ -178,8 +179,11 @@ function SortableTopicSection({
   // select-all-in-topic checkbox.
   selectable = false, selectedPointIds, onTogglePointSelect, onToggleTopicPoints,
   // Sets of the discussion's REAL decision/task ids — the per-point counters
-  // intersect the point's linked ids with these so the count is accurate.
+  // intersect the point's STORED ids with these so the count is accurate.
   decisionIdSet, taskIdSet,
+  // Per-point decision/task associations (pointItems store, keyed by the point's
+  // REAL id) — the source of the per-point counters + names popup.
+  pointItemsByPoint,
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(topic.id) });
   const accentTri = `var(${accent})`;
@@ -436,12 +440,10 @@ function SortableTopicSection({
                   canEditPoint={canEditTopic}
                   canDelete={canDelete}
                   canCheck={canCheck}
-                  decisionCount={decisionIdSet
-                    ? (point.decisionIds || []).filter((id) => decisionIdSet.has(String(id))).length
-                    : (point.decisionIds || []).length}
-                  taskCount={taskIdSet
-                    ? (point.taskIds || []).filter((id) => taskIdSet.has(String(id))).length
-                    : (point.taskIds || []).length}
+                  decisionCount={getPointItemIds(pointItemsByPoint, point._realId || point.id, 'decision')
+                    .filter((id) => decisionIdSet.has(String(id))).length}
+                  taskCount={getPointItemIds(pointItemsByPoint, point._realId || point.id, 'task')
+                    .filter((id) => taskIdSet.has(String(id))).length}
                   // Stamp the parent topic id onto the scoped point — the
                   // quick-create task flow links the new task to the topic too.
                   onCreateDecision={onCreatePointDecision ? () => onCreatePointDecision({ ...point, topicId: topic.id }) : undefined}
@@ -519,6 +521,12 @@ export function TopicsTab({
   //     popup resolves linked ids against them — NO new queries here.
   onCreateFromPoint,
   decisionsItems = [], tasksItems = [],
+  // Point → decisions/tasks associations from the pointItems store (owned by
+  // DiscussionCard). Shape { [pointRealId]: { decisions: [], tasks: [] } }; the
+  // per-point counter + names popup resolve against this INTERSECTED with the
+  // loaded decisions/tasks. Replaces the old (never-populated) subitems
+  // board_relation read — see utils/pointItems.js.
+  pointItemsByPoint = {},
 }) {
   const {
     items, loading, addTopic, addPoint, retryCreate, togglePoint, refetch,
@@ -531,12 +539,10 @@ export function TopicsTab({
 
   // Sets of the discussion's REAL, still-existing decision / task ids (from the
   // prefetched lists in DiscussionCard). The per-point החלטות/משימות counters
-  // intersect the point's linked ids (pointDecisionsLinkID / pointTasksLinkID)
-  // with these, so the count reflects decisions/tasks that ACTUALLY exist and
-  // are linked to the point — deleted/stale linked ids no longer inflate it, and
-  // when the subitem link column is unmapped the point simply has no linked ids
-  // (count 0). This is what makes the Topics "החלטות" count show a real number
-  // instead of a stale/blank value.
+  // intersect the point's STORED ids (pointItemsByPoint) with these, so the count
+  // reflects decisions/tasks that ACTUALLY exist and were created FROM the point —
+  // since-deleted ids no longer inflate it, and a point with no stored ids shows 0.
+  // This is what makes the Topics "החלטות" count show a real, persistent number.
   const decisionIdSet = useMemo(
     () => new Set((decisionsItems || []).map((d) => String(d.id))),
     [decisionsItems]
@@ -640,35 +646,17 @@ export function TopicsTab({
     return popup.point;
   }, [popup, items]);
 
-  // Popup rows = the point's linked ids matched against the discussion's
-  // already-loaded decisions/tasks lists (props) — no new queries.
+  // Popup rows = the point's STORED decision/task ids (pointItemsByPoint, keyed by
+  // the point's REAL id) matched against the discussion's already-loaded lists
+  // (props) — no new queries, names only. A silent refetch may replace the point
+  // objects; the ids come from the store (parent-owned) so they stay correct.
   const popupItems = useMemo(() => {
     if (!popup || !livePopupPoint) return [];
-    const ids = popup.kind === 'decision'
-      ? (livePopupPoint.decisionIds || [])
-      : (livePopupPoint.taskIds || []);
+    const ids = getPointItemIds(pointItemsByPoint, livePopupPoint._realId || livePopupPoint.id, popup.kind);
     const source = popup.kind === 'decision' ? (decisionsItems || []) : (tasksItems || []);
     const byId = new Map(source.map((x) => [String(x.id), x]));
     return ids.map((id) => byId.get(String(id))).filter(Boolean);
-  }, [popup, livePopupPoint, decisionsItems, tasksItems]);
-
-  // Refresh mechanism for the per-point link counters: when the parent's
-  // decisions/tasks lists change (a create-from-point completed and the parent
-  // refreshed its list), silently re-read the topics so the subitems' linked ids
-  // (pointDecisionsLinkID / pointTasksLinkID) pick up the new link. Optimistic
-  // temp ids are excluded so we only react to REAL board changes.
-  const linkFingerprintRef = useRef(null);
-  useEffect(() => {
-    const fingerprint = [
-      ...(decisionsItems || []).map((d) => String(d.id)),
-      '|',
-      ...(tasksItems || []).map((t) => String(t.id)),
-    ].filter((id) => !id.startsWith('temp-')).join(',');
-    if (linkFingerprintRef.current === null) { linkFingerprintRef.current = fingerprint; return; }
-    if (linkFingerprintRef.current === fingerprint) return;
-    linkFingerprintRef.current = fingerprint;
-    refetch({ showLoader: false });
-  }, [decisionsItems, tasksItems, refetch]);
+  }, [popup, livePopupPoint, decisionsItems, tasksItems, pointItemsByPoint]);
 
   // Resolve every creator (topics + points) to a user object for the avatars.
   const creatorIds = useMemo(() => {
@@ -876,6 +864,7 @@ export function TopicsTab({
               onToggleTopicPoints={toggleTopicPoints}
               decisionIdSet={decisionIdSet}
               taskIdSet={taskIdSet}
+              pointItemsByPoint={pointItemsByPoint}
             />
           ))}
         </SortableContext>
