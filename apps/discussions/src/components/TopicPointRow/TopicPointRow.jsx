@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Avatar, Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
 import { Update, Edit } from '@vibe/icons';
-import { Trash2, EyeOff, Eye, MoreHorizontal, Check, X } from 'lucide-react';
+import { Trash2, EyeOff, Eye, MoreHorizontal, Check } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { monday } from '@api/monday-client.js';
@@ -35,6 +35,7 @@ export function CreatorAvatar({ userId, usersById, size = 'small' }) {
       text={initialsOf(user?.name)}
       type={user?.photo_thumb ? 'img' : 'text'}
       ariaLabel={user?.name || 'יוצר'}
+      tooltipProps={{ content: user?.name || 'יוצר' }}
     />
   );
 }
@@ -122,8 +123,8 @@ export function RowKebabMenu({ excluded, onToggleHide, onDelete, kind = 'נקו�
  * checkbox carrying the topic accent strip (inset 6px) — like Tasks' `.selectCell`.
  * The NAME cell is the start-aligned name with the "updates" chat-bubble icon
  * pinned to its trailing edge (like `.taskFirst` + `.updatesBtn`); the point's
- * hide(eye) + delete actions are hover-revealed there too (like Tasks' hover
- * trash), instead of a persistent kebab.
+ * hide(eye) action is hover-revealed there too. There is no per-row delete
+ * (trash) affordance — points are deleted via the נושאים tab's bulk delete.
  *
  * DRAG-TO-REORDER: the WHOLE ROW is the drag handle (native monday board feel) —
  * the six-dot grip was removed. dnd-kit's PointerSensor activation distance (set
@@ -136,14 +137,15 @@ export function TopicPointRow({
   // Kept for signature compatibility (the per-point creator avatar column was
   // removed from the table; the read/write path in useTopics stays intact).
   usersById, // eslint-disable-line no-unused-vars
-  onToggle, onToggleNotForDiscussion, onRename, onDelete,
-  // Optimistic-create error affordance: retry re-runs a failed point create
-  // (dismissal reuses the existing hover-trash / onDelete).
+  onToggle, onToggleNotForDiscussion, onRename,
+  // Optimistic-create error affordance: retry re-runs a failed point create.
+  // (Deletion is via the נושאים tab's multi-select bulk delete — the per-row
+  // trash affordance was removed.)
   onRetryCreate,
   // Granular discussion-tier caps. Each equals the legacy canEdit while the
   // permissions feature is off, so behavior is unchanged. point edit (rename +
-  // whole-row drag + hide), delete (hover delete), check ("נידונה" toggle).
-  canEditPoint = true, canDelete = true, canCheck = true,
+  // whole-row drag + hide), check ("נידונה" toggle).
+  canEditPoint = true, canCheck = true,
   // Decisions/tasks link counters (linked ids length, from pointDecisionsLinkID /
   // pointTasksLinkID; 0 when the columns are unmapped).
   decisionCount = 0, taskCount = 0,
@@ -158,8 +160,6 @@ export function TopicPointRow({
   const failed = point._createFailed === true;
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(point.name || '');
-  // Inline delete confirmation for the hover trash (mirrors TaskTableRow).
-  const [confirmDel, setConfirmDel] = useState(false);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(point.id) });
   const style = {
@@ -273,41 +273,6 @@ export function TopicPointRow({
           >
             {excluded ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
-        )}
-        {canDelete && onDelete && (
-          confirmDel ? (
-            <span className={styles.confirmDel} onClick={stop}>
-              <span className={styles.confirmText}>למחוק?</span>
-              <button
-                type="button"
-                className={`${styles.confirmBtn} ${styles.confirmYes}`}
-                onClick={(e) => { e.stopPropagation(); onDelete(point); setConfirmDel(false); }}
-                aria-label="אישור מחיקה"
-                title="אישור"
-              >
-                <Check size={14} />
-              </button>
-              <button
-                type="button"
-                className={styles.confirmBtn}
-                onClick={(e) => { e.stopPropagation(); setConfirmDel(false); }}
-                aria-label="ביטול מחיקה"
-                title="ביטול"
-              >
-                <X size={14} />
-              </button>
-            </span>
-          ) : (
-            <button
-              type="button"
-              className={styles.deleteBtn}
-              onClick={(e) => { e.stopPropagation(); setConfirmDel(true); }}
-              aria-label="מחק נקודה"
-              title="מחק נקודה"
-            >
-              <Trash2 size={18} />
-            </button>
-          )
         )}
         {/* monday "updates" speech-bubble icon at the trailing edge of the name
             cell — identical affordance to the Tasks name cell (opens the point's

@@ -150,7 +150,7 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
       onDialogDidShow={() => { updatePosition(); setOpen(true); }}
       onDialogDidHide={() => setOpen(false)}
       position={position}
-      zIndex={1000}
+      zIndex={10000}
       content={() => (
         <DialogContentContainer>
           <div className={styles.decMenu}>
@@ -663,7 +663,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     setSelectedIds(new Set());
     const { undo } = softDeleteDecisions(ids);
     const msg = ids.length === 1 ? 'ההחלטה נמחקה' : `${ids.length} החלטות נמחקו`;
-    onNotify?.(msg, 'info', 6000, { label: 'בטל', onClick: undo });
+    onNotify?.(msg, 'success', 6000, { label: 'בטל', onClick: undo });
   };
 
   // Batch edit (Round 13): a column change on a SELECTED row applies to EVERY
@@ -744,7 +744,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   // now, the real delete fires when the toast's "בטל" expires.
   const handleDelete = (id) => {
     const { undo } = softDeleteDecisions(id);
-    onNotify?.('ההחלטה נמחקה', 'info', 6000, { label: 'בטל', onClick: undo });
+    onNotify?.('ההחלטה נמחקה', 'success', 6000, { label: 'בטל', onClick: undo });
   };
 
   // ---------- Filter panel body (mirrors the Tasks / Previous tabs) ----------

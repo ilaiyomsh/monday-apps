@@ -41,18 +41,10 @@ export function ToastContainer({ toasts = [], onRemove, onShowErrorDetails }) {
             },
           });
         }
-        // Generic single-action button (e.g. "בטל" / undo). Running it also
-        // dismisses the toast so the action can't be triggered twice.
-        if (toast.action) {
-          actions.push({
-            type: 'button',
-            content: toast.action.label,
-            onClick: () => {
-              toast.action.onClick?.();
-              onRemove?.(toast.id);
-            },
-          });
-        }
+        // NOTE: a generic `action` (e.g. "בטל" / undo) is intentionally NOT
+        // pushed into Vibe's `actions` (those render at the message's trailing
+        // edge). It is rendered inside the toast content to the LEFT of the
+        // message (see the .body flex row below).
 
         // A loading toast stays open until removed programmatically (duration 0
         // → no auto-hide, not user-closeable). It shows an hourglass (⏳) we
@@ -77,9 +69,23 @@ export function ToastContainer({ toasts = [], onRemove, onShowErrorDetails }) {
             {/* dir="rtl" + plaintext bidi so a Hebrew message with leading
                 numbers or a trailing ellipsis ("3 משימות…", "יוצר משימה…")
                 keeps correct RTL order. Loading toasts get a leading ⏳. */}
-            <span dir="rtl" style={{ display: 'inline-block', unicodeBidi: 'plaintext' }}>
-              {isLoading && <span aria-hidden="true" style={{ marginInlineEnd: 6 }}>⏳</span>}
-              {toast.message}
+            <span className={styles.body}>
+              {/* Undo (or any generic action) sits to the LEFT of the message —
+                  the LTR flex row places this first child on the left, the
+                  message on the right. Running it also dismisses the toast. */}
+              {toast.action && (
+                <button
+                  type="button"
+                  className={styles.undoBtn}
+                  onClick={() => { toast.action.onClick?.(); onRemove?.(toast.id); }}
+                >
+                  {toast.action.label}
+                </button>
+              )}
+              <span dir="rtl" style={{ display: 'inline-block', unicodeBidi: 'plaintext' }}>
+                {isLoading && <span aria-hidden="true" style={{ marginInlineEnd: 6 }}>⏳</span>}
+                {toast.message}
+              </span>
             </span>
           </VibeToast>
         );

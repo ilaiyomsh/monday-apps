@@ -83,11 +83,15 @@ const COL_NAME = {
   discussion: 'דיון מקור',
 };
 
+// Order matters: the toggle track is `direction: rtl`, so the FIRST item renders
+// on the RIGHT and the LAST on the LEFT. "החלטות שקיבלתי" (decider) must sit on
+// the LEFT, so it is listed LAST here. It is also the DEFAULT selected sub-tab
+// (useState('decider') below), reset on every entry into the view.
 const SUB_TABS = [
-  // "החלטות שקיבלתי" (round 27 rename) — still filters to decisions I decide
-  // (deciderID any_of me), now WITH the creator-as-default-decider fallback.
-  { key: 'decider', label: 'החלטות שקיבלתי' },
   { key: 'affected', label: 'החלטות שמשפיעות עליי' },
+  // "החלטות שקיבלתי" (round 27 rename) — filters to decisions I decide
+  // (deciderID any_of me), WITH the creator-as-default-decider fallback.
+  { key: 'decider', label: 'החלטות שקיבלתי' },
 ];
 
 // Hidden loader: mounted ONLY when "group by discussion → order by date" is
@@ -196,7 +200,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     clearSelection();
     const { undo } = softDeleteDecisions(ids);
     const msg = ids.length === 1 ? 'ההחלטה נמחקה' : `${ids.length} החלטות נמחקו`;
-    onNotify?.(msg, 'info', 6000, { label: 'בטל', onClick: undo });
+    onNotify?.(msg, 'success', 6000, { label: 'בטל', onClick: undo });
   };
 
   // ESC clears the multi-selection. Live only while something is selected, and

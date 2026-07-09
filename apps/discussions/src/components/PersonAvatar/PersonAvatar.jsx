@@ -33,6 +33,7 @@ export function PersonAvatar({ person, size = 'default', showName = true }) {
         text={initialsOf(displayName)}
         type={photo ? "img" : "text"}
         ariaLabel={displayName}
+        tooltipProps={{ content: displayName }}
       />
       {showName && <Text className={styles.name}>{displayName}</Text>}
     </Flex>
@@ -59,6 +60,7 @@ function PersonListCompact({ people, byId, avatarSize, size, max }) {
             text={initialsOf(name)}
             type={photo ? "img" : "text"}
             ariaLabel={name}
+            tooltipProps={{ content: name }}
           />
         );
       })}
@@ -73,7 +75,7 @@ function PersonListCompact({ people, byId, avatarSize, size, max }) {
       onDialogDidShow={() => setOpen(true)}
       onDialogDidHide={() => setOpen(false)}
       position="bottom"
-      zIndex={1000}
+      zIndex={10000}
       content={() => (
         <DialogContentContainer>
           <div className={styles.expandList}>

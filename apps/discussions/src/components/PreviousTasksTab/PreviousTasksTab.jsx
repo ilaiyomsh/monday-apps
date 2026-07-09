@@ -652,7 +652,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     };
 
     const msg = ids.length === 1 ? 'המשימה נמחקה' : `${ids.length} משימות נמחקו`;
-    onNotify?.(msg, 'info', DELETE_GRACE_MS, { label: 'בטל', onClick: undo });
+    onNotify?.(msg, 'success', DELETE_GRACE_MS, { label: 'בטל', onClick: undo });
   };
 
   // ---- Sort + Filter (client-side, over the loaded tasks; same engine + saved-

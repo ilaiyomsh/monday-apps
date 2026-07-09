@@ -7,6 +7,10 @@ import { useMondayContext } from '../contexts/MondayContext.jsx';
 import { useOptimisticRows } from './useOptimisticRows.js';
 import logger from '../utils/logger.js';
 
+// Undo window for the deferred point (subitem) delete — matches the delete
+// toast's auto-hide, so the real delete_item fires exactly when "בטל" disappears.
+const DELETE_GRACE_MS = 6000;
+
 /*
  * Model (confirmed with the user):
  *   TOPIC  = an item on the topics board   -> a collapsible section in the UI.
@@ -624,6 +628,62 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     }
   }, [fetchTopics]);
 
+  // Soft-delete one or more POINTS (subitems) with an undo window — mirrors
+  // useTasks.softDeleteTasks / useMyTasks.softDeleteTasks: the rows vanish
+  // optimistically now, the real delete_item fires only after DELETE_GRACE_MS,
+  // and the returned undo() (wired to the delete toast's "בטל") cancels the
+  // pending delete and restores each point to its ORIGINAL topic + position.
+  // Temp (never-persisted) points are just removed locally. Returns { undo, count }.
+  const softDeletePoints = useCallback((points) => {
+    const list = (Array.isArray(points) ? points : [points]).filter(Boolean);
+    if (!list.length) return { undo: () => {}, count: 0 };
+    const ids = new Set(list.map((p) => String(p.id)));
+    // Snapshot each removed point WITH its topic id + index so undo restores order.
+    const removed = [];
+    itemsRef.current.forEach((topic) => {
+      (topic._subitems || []).forEach((sub, index) => {
+        if (ids.has(String(sub.id))) removed.push({ topicId: String(topic.id), index, point: sub });
+      });
+    });
+    // Optimistic removal now.
+    setItems((prev) => prev.map((topic) => ({
+      ...topic,
+      _subitems: (topic._subitems || []).filter((s) => !ids.has(String(s.id))),
+    })));
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      removed.forEach(({ point }) => {
+        const itemId = String(point._realId || point.id);
+        if (itemId.startsWith('temp-')) return; // never persisted — local removal is enough
+        api(`mutation ($itemId: ID!) { delete_item(item_id: $itemId) { id } }`, { itemId }, 'useTopics.softDeletePoints')
+          .catch((err) => { if (!err?.__loggedId) logger.error('useTopics', 'מחיקת נקודה נכשלה', err); });
+      });
+    }, DELETE_GRACE_MS);
+
+    const undo = () => {
+      if (cancelled) return;
+      cancelled = true;
+      clearTimeout(timer);
+      // Reinsert each removed point into its topic at its original index.
+      setItems((prev) => prev.map((topic) => {
+        const restores = removed
+          .filter((r) => r.topicId === String(topic.id))
+          .sort((a, b) => a.index - b.index);
+        if (!restores.length) return topic;
+        const subs = [...(topic._subitems || [])];
+        restores.forEach(({ index, point }) => {
+          if (!subs.some((s) => String(s.id) === String(point.id))) {
+            subs.splice(Math.min(index, subs.length), 0, point);
+          }
+        });
+        return { ...topic, _subitems: subs };
+      }));
+    };
+    return { undo, count: list.length };
+  }, []);
+
   // Reorder TOPICS (drag). Persisted app-side in monday.storage (see topicOrder).
   const reorderTopics = useCallback((orderedIds) => {
     const ids = orderedIds.map(String);
@@ -678,6 +738,7 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     deleteTopic,
     renamePoint,
     deletePoint,
+    softDeletePoints,
     reorderTopics,
     reorderPoints,
     refetch: fetchTopics,

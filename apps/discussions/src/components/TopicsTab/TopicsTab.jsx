@@ -89,7 +89,7 @@ function PriorityPill({ value, options, labelById, colorById, canEdit, onChange 
         onDialogDidShow={() => { updatePosition(); setOpen(true); }}
         onDialogDidHide={() => setOpen(false)}
         position={position}
-        zIndex={1000}
+        zIndex={10000}
         content={() => (
           <DialogContentContainer>
             <div className={styles.prioMenu}>
@@ -156,11 +156,12 @@ function SortableTopicSection({
   topic, accent, open, onToggleOpen, usersById,
   renameTopic,
   // Optimistic-create error affordance (topic OR its points): retry re-runs the
-  // failed create; dismissal reuses the existing kebab delete / point trash.
+  // failed create. (A failed TOPIC can be removed via the header kebab; a failed
+  // POINT via multi-select bulk delete — the per-point trash was removed.)
   onRetryCreate,
   deleteTopic, addPoint, togglePoint,
   togglePointNotForDiscussion, toggleTopicNotForDiscussion,
-  renamePoint, deletePoint, reorderPoints,
+  renamePoint, reorderPoints,
   // Shared fixed grid template (same object for header + rows).
   rowStyle,
   // Granular discussion-tier caps (each equals the legacy canEdit while the
@@ -435,10 +436,8 @@ function SortableTopicSection({
                   onToggle={togglePoint}
                   onToggleNotForDiscussion={togglePointNotForDiscussion}
                   onRename={renamePoint}
-                  onDelete={deletePoint}
                   onRetryCreate={onRetryCreate}
                   canEditPoint={canEditTopic}
-                  canDelete={canDelete}
                   canCheck={canCheck}
                   decisionCount={getPointItemIds(pointItemsByPoint, point._realId || point.id, 'decision')
                     .filter((id) => decisionIdSet.has(String(id))).length}
@@ -531,7 +530,7 @@ export function TopicsTab({
   const {
     items, loading, addTopic, addPoint, retryCreate, togglePoint, refetch,
     togglePointNotForDiscussion, toggleTopicNotForDiscussion, updateTopicPriority,
-    renameTopic, deleteTopic, renamePoint, deletePoint, reorderTopics, reorderPoints,
+    renameTopic, deleteTopic, renamePoint, softDeletePoints, reorderTopics, reorderPoints,
   } = useTopics(discussion.id, { onSuccess: onNotify, onLoading: onNotifyLoading, onDismiss: onDismissToast });
 
   const priorityMapped = !!getColumns('topics')?.topicPriorityID?.id;
@@ -625,8 +624,12 @@ export function TopicsTab({
     if (!deleteTopicOrPoint || selectedPoints.length === 0) return;
     const pts = selectedPoints;
     clearPointSelection();
-    pts.forEach((p) => deletePoint(p));
-    onNotify?.(pts.length === 1 ? 'הנקודה נמחקה' : `${pts.length} נקודות נמחקו`, 'success');
+    // Soft-delete with an undo window; GREEN (success) toast with a "בטל" (undo)
+    // button rendered to the LEFT of the message (see Toast) that restores the
+    // deleted points.
+    const { undo, count } = softDeletePoints(pts);
+    const msg = count === 1 ? 'הנקודה נמחקה' : `${count} נקודות נמחקו`;
+    onNotify?.(msg, 'success', 6000, { label: 'בטל', onClick: undo });
   };
   // Bulk hide — set every selected point's "not for discussion" flag.
   const hideSelectedPoints = () => {
@@ -866,7 +869,6 @@ export function TopicsTab({
               togglePointNotForDiscussion={togglePointNotForDiscussion}
               toggleTopicNotForDiscussion={toggleTopicNotForDiscussion}
               renamePoint={renamePoint}
-              deletePoint={deletePoint}
               reorderPoints={reorderPoints}
               rowStyle={rowStyle}
               canAdd={addTopicOrPoint}

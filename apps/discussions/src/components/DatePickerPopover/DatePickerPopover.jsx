@@ -22,7 +22,7 @@ import styles from './DatePickerPopover.module.css';
  *              trigger. allowClear=false hides the ניקוי footer action (for
  *              required fields like the discussion date).
  */
-export function DatePickerPopover({ value, onChange, variant = 'cell', placeholder = 'בחר תאריך', zIndex = 1000, formatDate, triggerClassName = '', allowClear = true }) {
+export function DatePickerPopover({ value, onChange, variant = 'cell', placeholder = 'בחר תאריך', zIndex = 10000, formatDate, triggerClassName = '', allowClear = true }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState('bottom-start');
   const triggerRef = useRef(null);
