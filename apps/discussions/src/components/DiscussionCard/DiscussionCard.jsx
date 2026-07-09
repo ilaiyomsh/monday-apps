@@ -581,16 +581,30 @@ export function DiscussionCard({
                     )}
                   </div>
                 )}
-                {headerPeopleGroups.map((g) => (
-                  <div key={g.alias} className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
-                    <span className={styles.peopleGroupLabel}>{g.title}</span>
-                    {editDiscussionFields ? (
-                      <PersonPicker selected={g.people} onChange={(p) => persistPeople(g.alias, p)} />
-                    ) : (
-                      <PersonList people={g.people} size="sm" showNames={false} max={3} />
-                    )}
-                  </div>
-                ))}
+                {headerPeopleGroups.map((g) => {
+                  // מנהל (lead) + רשם דיון (coordinator) — and any future single
+                  // role — are one-person fields: cap them at a single person and
+                  // CLOSE the picker right after a pick (exactly like the decision/
+                  // task row pickers, and the create modal's lead/coordinator).
+                  // Only משתתפים (participants) is multi-select, so it stays open
+                  // after each selection.
+                  const singleRole = g.alias !== 'participantsID';
+                  return (
+                    <div key={g.alias} className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
+                      <span className={styles.peopleGroupLabel}>{g.title}</span>
+                      {editDiscussionFields ? (
+                        <PersonPicker
+                          selected={g.people}
+                          onChange={(p) => persistPeople(g.alias, p)}
+                          single={singleRole}
+                          closeOnSelect={singleRole}
+                        />
+                      ) : (
+                        <PersonList people={g.people} size="sm" showNames={false} max={3} />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )
           )}
