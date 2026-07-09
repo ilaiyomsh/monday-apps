@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Skeleton, Button } from '@vibe/core';
-import { DropdownChevronDown, Search, Filter, Sort, Group, Collapse, Expand, CloseSmall } from '@vibe/icons';
+import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
 import { ArrowLeft } from 'lucide-react';
 import { useMyDecisions } from '@generated/hooks/useMyDecisions.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
@@ -11,6 +11,7 @@ import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { getBoardId } from '@api/board-config-store.js';
 import { MyDecisionsTable } from './MyDecisionsTable.jsx';
 import { toPipelineRows } from './decisionPipeline.js';
@@ -459,15 +460,16 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   const showSearch = searchOpen || search.length > 0;
   const needDiscDates = group.col === 'discussion' && (group.order === 'dateAsc' || group.order === 'dateDesc');
 
-  const backBar = onBackToDiscussions ? (
-    <div className={styles.topBar} dir="ltr">
-      <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
-        <span className={styles.backBtnInner}>
-          <ArrowLeft size={16} aria-hidden="true" />
-          לתצוגת הדיונים
-        </span>
-      </Button>
-    </div>
+  // Back button element (no wrapper). The mapped view renders it INSIDE the
+  // header row, immediately to the LEFT of the sub-tabs toggle (RTL: the toggle
+  // sits to its right); the unmapped view wraps it alone in a .topBar row.
+  const backButton = onBackToDiscussions ? (
+    <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
+      <span className={styles.backBtnInner}>
+        <ArrowLeft size={16} aria-hidden="true" />
+        לתצוגת הדיונים
+      </span>
+    </Button>
   ) : null;
 
   // ---- unmapped decisions BOARD: the whole surface is inert (hook fired no
@@ -475,7 +477,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   if (!boardMapped) {
     return (
       <div className={styles.root}>
-        {backBar}
+        {backButton && <div className={styles.topBar} dir="ltr">{backButton}</div>}
         <div className={styles.empty}>
           <div className={styles.emptyTitle}>לוח ההחלטות טרם הוגדר</div>
           <div className={styles.emptyHint}>מפו אותו בהגדרות</div>
@@ -488,22 +490,26 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {backBar}
-
-      {/* Sub-tabs: which people column scopes the server-side query. */}
-      <div className={styles.subTabs} role="tablist" aria-label="סינון החלטות לפי תפקיד">
-        {SUB_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            role="tab"
-            aria-selected={subTab === tab.key}
-            className={`${styles.subTab}${subTab === tab.key ? ` ${styles.subTabActive}` : ''}`}
-            onClick={() => setSubTab(tab.key)}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Header row: the sub-tabs toggle sits immediately to the RIGHT of the
+          "לתצוגת הדיונים" back button, on the SAME row and at the SAME height
+          (both @vibe small = 32px), vertically aligned. */}
+      <div className={styles.topBar} dir="ltr">
+        {backButton}
+        {/* Sub-tabs: which people column scopes the server-side query. */}
+        <div className={styles.subTabs} role="tablist" aria-label="סינון החלטות לפי תפקיד">
+          {SUB_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={subTab === tab.key}
+              className={`${styles.subTab}${subTab === tab.key ? ` ${styles.subTabActive}` : ''}`}
+              onClick={() => setSubTab(tab.key)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* monday-style toolbar: English pills, left-aligned (LTR) */}
@@ -551,10 +557,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
           renderBody={renderGroupBody}
         />
 
-        <button type="button" className={styles.pill} onClick={toggleAll}>
-          {allCollapsed ? <Expand className={styles.pillIcon} /> : <Collapse className={styles.pillIcon} />}
-          <span>{allCollapsed ? 'Expand all' : 'Collapse all'}</span>
-        </button>
+        <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
       </div>
 
       {/* Floating bulk-action bar — count + delete + close (mirrors the
