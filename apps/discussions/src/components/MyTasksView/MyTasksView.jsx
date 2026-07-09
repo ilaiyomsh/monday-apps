@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton, Button } from '@vibe/core';
-import { DropdownChevronDown, Search, Filter, Sort, Group, Collapse, Expand, CloseSmall } from '@vibe/icons';
+import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
 import { ArrowLeft } from 'lucide-react';
 import { useMyTasks } from '@generated/hooks/useMyTasks.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
@@ -11,6 +11,7 @@ import { useViewport } from '@generated/hooks/useViewport.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { MyTasksTable } from './MyTasksTable.jsx';
 import { groupMyTasks } from './grouping.js';
 import { BuilderControl } from './controls/BuilderControl.jsx';
@@ -477,10 +478,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
           renderBody={renderGroupBody}
         />
 
-        <button type="button" className={styles.pill} onClick={toggleAll}>
-          {allCollapsed ? <Expand className={styles.pillIcon} /> : <Collapse className={styles.pillIcon} />}
-          <span>{allCollapsed ? 'Expand all' : 'Collapse all'}</span>
-        </button>
+        <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
       </div>
 
       {selectedIds.size > 0 && (

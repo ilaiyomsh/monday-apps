@@ -21,6 +21,11 @@
   flex: none;
   display: flex;
   align-items: center;
+  /* Back button + sub-tabs toggle share this ONE row: the toggle sits just to
+     the RIGHT of the back button (RTL content inside an LTR row), both
+     vertically centered and the same height. Wrap gracefully when narrow. */
+  flex-wrap: wrap;
+  gap: var(--spacing-small, 8px);
   padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
 }
 /* Back-button content: left-pointing arrow + label, inline. */
@@ -40,11 +45,12 @@
   align-items: stretch;
   gap: 4px;
   width: fit-content;
-  max-width: calc(100% - 32px);
-  margin: var(--spacing-small, 8px) var(--spacing-medium, 16px) 0;
-  /* Round 27: the toggle is EXACTLY as tall as the "לתצוגת הדיונים" back button
-     (@vibe small button = 32px) so the two align. box-sizing keeps the 4px track
-     padding inside the 32px total. */
+  /* Round 29: the toggle now sits on the SAME row as (and immediately to the
+     RIGHT of) the "לתצוגת הדיונים" back button — no own margin; the .topBar
+     flex gap spaces the two. It stays EXACTLY as tall as that @vibe small
+     button (32px) so the two align; box-sizing keeps the 4px track padding
+     inside the 32px total. */
+  margin: 0;
   height: 32px;
   box-sizing: border-box;
   padding: 4px;
