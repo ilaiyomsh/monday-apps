@@ -74,12 +74,13 @@ export function DiscussionCard({
   // point (with topicId/decisionIds/taskIds) is kept so onCreate can link the
   // new item to the point's subitem relation columns.
   const [quickCreate, setQuickCreate] = useState(null);
-  // Brief success ✓ flash after a SUCCESSFUL quick-create (QuickCreateModal —
-  // the create-from-point / FAB flow, whose submit is handleQuickCreate).
-  // successKey bumps on each success so the CSS pop animation restarts on rapid
-  // consecutive creates; the effect below auto-clears it ~1.2s later, so it's
-  // non-blocking and needs no dismissal. Other create paths (inline add rows,
-  // NewTaskModal) don't call flashCreateSuccess, so they're unaffected.
+  // Brief success ✓ flash after a SUCCESSFUL task/decision create — the SOLE
+  // create feedback (no toast). Fires on EVERY create path: QuickCreateModal /
+  // FAB / per-point (handleQuickCreate), the NewTaskModal (handleCreateTask) and
+  // the Tasks-tab inline add row (handleInlineCreateTask). successKey bumps on
+  // each success so the CSS pop animation restarts on rapid consecutive creates;
+  // the effect below auto-clears it ~1.2s later, so it's non-blocking and needs
+  // no dismissal.
   const [successKey, setSuccessKey] = useState(0);
   const [successVisible, setSuccessVisible] = useState(false);
   const flashCreateSuccess = useCallback(() => {
@@ -338,23 +339,23 @@ export function DiscussionCard({
     setNewTaskDefaults({});
   };
   // Task creation feedback. The modal fires this and closes IMMEDIATELY (so the
-  // Tasks tab still feels instant — the optimistic row is already there); the
-  // loader toast → success runs in the background, consistent on every tab.
+  // Tasks tab still feels instant — the optimistic row is already there); on
+  // success we flash the brief ✓ (the SOLE create feedback — no toast). Errors
+  // still surface via the logger → UI sink.
   const handleCreateTask = async (name, opts) => {
     if (!createTask) return; // guard: only roles granted createTask may create tasks
-    const loadingId = onShowLoading?.('יוצר משימה');
-    await tasksData.createTask(name, opts);
-    if (loadingId != null) onDismissToast?.(loadingId);
-    // No success toast on create (per product): errors still surface via the logger sink.
+    const created = await tasksData.createTask(name, opts);
+    if (created) flashCreateSuccess();
   };
 
   // Inline add (Tasks tab add-row): create with just a name (+ the group's seed
-  // status/assignee). Optimistic row shows instantly, so NO loader toast here —
-  // just a quiet success on completion (mirrors the Topics inline add feel).
-  // deadline/assignee stay optional and are filled inline on the row afterward.
+  // status/assignee). Optimistic row shows instantly; on success we flash the
+  // brief ✓ — the same SOLE create feedback used on every task-create path (no
+  // toast). deadline/assignee stay optional and are filled inline afterward.
   const handleInlineCreateTask = async (name, opts) => {
     if (!createTask) return;
-    await tasksData.createTask(name, opts || {});
+    const created = await tasksData.createTask(name, opts || {});
+    if (created) flashCreateSuccess();
   };
 
   // Inline add (Decisions tab add-row): create with just a name. Defaults match
@@ -403,7 +404,6 @@ export function DiscussionCard({
     };
     if (kind === 'task') {
       if (!createTask) return; // capability guard (same as handleCreateTask)
-      const loadingId = onShowLoading?.('יוצר משימה');
       const created = await tasksData.createTask(text, {
         status: null,
         assignee: person || [],
@@ -411,7 +411,6 @@ export function DiscussionCard({
         topicId: point?.topicId || null,
       });
       if (created) { recordPointItem(created.id); flashCreateSuccess(); }
-      if (loadingId != null) onDismissToast?.(loadingId);
       return;
     }
     if (!canCreateDecision) return;
@@ -672,10 +671,12 @@ export function DiscussionCard({
         onCreate={handleCreateTask}
         defaults={newTaskDefaults}
       />
-      {/* Short, non-blocking success ✓ shown centered (where the quick-create
-          modal was) right after a task/decision is created via QuickCreateModal.
-          Keyed by successKey so a rapid second create restarts the animation;
-          auto-fades in ~1.2s (see the effect + .createSuccess CSS). */}
+      {/* Short, non-blocking success ✓ shown centered right after a task/decision
+          is created via ANY path (QuickCreateModal / FAB / per-point, the
+          NewTaskModal, or the Tasks-tab inline add row) — the SOLE create
+          feedback (no toast). Keyed by successKey so a rapid second create
+          restarts the animation; auto-fades in ~1.2s (see the effect +
+          .createSuccess CSS). */}
       {successVisible && (
         <div
           key={successKey}
