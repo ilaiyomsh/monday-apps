@@ -3,10 +3,12 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /*
- * Inline task creation (no modal): the blue "משימה חדשה" toolbar button and each
- * group's "+ הוסף משימה" row call createTask IMMEDIATELY with the fixed name
- * "משימה חדשה" and the group's seed value (status/priority grouping only —
- * discussion/none grouping seeds nothing).
+ * Inline task creation from the blue "משימה חדשה" toolbar button. Clicking it
+ * does NOT create immediately: it opens a focused, pre-selected name input as the
+ * FIRST row of the topmost group. Typing + Enter commits via createTask with
+ * `prepend:true` (so the optimistic row lands at the very top) and the topmost
+ * group's seed (status/priority grouping only). Escape / empty discards.
+ * The per-group "+ הוסף משימה" footer row still creates immediately.
  */
 
 const vp = vi.hoisted(() => ({ mobile: false }));
@@ -40,10 +42,21 @@ vi.mock('@generated/hooks/usePermission.js', () => ({ usePermission: () => () =>
 vi.mock('@generated/hooks/useSavedViews.js', () => ({
   useSavedViews: () => ({ view: saved.view, canSave: false, saveView: () => {} }),
 }));
-// Dumb table that surfaces the per-group add-row hook as a labeled button.
+// Dumb table that surfaces BOTH the per-group add-row hook (as a labeled button)
+// and the top-of-group inline draft input (newTaskRow) so we can drive them.
 vi.mock('../MyTasksTable.jsx', () => ({
-  MyTasksTable: ({ tasks, onAddTask }) => (
+  MyTasksTable: ({ tasks, onAddTask, newTaskRow }) => (
     <div data-testid="table">
+      {newTaskRow ? (
+        <input
+          data-testid="new-task-input"
+          defaultValue={newTaskRow.defaultName}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') newTaskRow.onCommit(e.currentTarget.value);
+            if (e.key === 'Escape') newTaskRow.onCancel();
+          }}
+        />
+      ) : null}
       {tasks.map((t) => <div key={t.id}>{t.name}</div>)}
       {onAddTask ? <button type="button" onClick={onAddTask}>add-{tasks[0]?.statusID ?? 'none'}</button> : null}
     </div>
@@ -52,24 +65,87 @@ vi.mock('../MyTasksTable.jsx', () => ({
 
 import { MyTasksView } from '../MyTasksView.jsx';
 
-describe('MyTasksView — inline task creation (no modal)', () => {
+describe('MyTasksView — blue "משימה חדשה" button (inline, top of view)', () => {
   beforeEach(() => {
     vp.mobile = false;
     saved.view = null;
     spies.createTask = vi.fn(async () => ({ id: 'real-1' }));
   });
 
-  it('blue toolbar button creates immediately with the fixed name (no grouping → no seed)', () => {
+  it('opens an inline draft input at the top — does NOT create immediately', () => {
     render(<MyTasksView />);
     fireEvent.click(screen.getByText('משימה חדשה'));
+    expect(spies.createTask).not.toHaveBeenCalled();
+    const input = screen.getByTestId('new-task-input');
+    expect(input).toBeTruthy();
+    expect(input.value).toBe('משימה חדשה'); // default (pre-selected in the real row)
+  });
+
+  it('typing a name + Enter creates it with prepend + the typed name (no grouping → no seed)', () => {
+    render(<MyTasksView />);
+    fireEvent.click(screen.getByText('משימה חדשה'));
+    const input = screen.getByTestId('new-task-input');
+    fireEvent.change(input, { target: { value: 'לקנות חלב' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
     expect(spies.createTask).toHaveBeenCalledTimes(1);
     const arg = spies.createTask.mock.calls[0][0];
-    expect(arg.name).toBe('משימה חדשה');
+    expect(arg.name).toBe('לקנות חלב');
+    expect(arg.prepend).toBe(true);
     expect(arg.status ?? null).toBeNull();
     expect(arg.priority ?? null).toBeNull();
   });
 
-  it('group add-row creates immediately with that group\'s status seed', () => {
+  it('Enter with the unchanged default commits the default name (pre-selected default)', () => {
+    render(<MyTasksView />);
+    fireEvent.click(screen.getByText('משימה חדשה'));
+    fireEvent.keyDown(screen.getByTestId('new-task-input'), { key: 'Enter' });
+    expect(spies.createTask).toHaveBeenCalledTimes(1);
+    expect(spies.createTask.mock.calls[0][0].name).toBe('משימה חדשה');
+    expect(spies.createTask.mock.calls[0][0].prepend).toBe(true);
+  });
+
+  it('Escape discards — no task created, input removed', () => {
+    render(<MyTasksView />);
+    fireEvent.click(screen.getByText('משימה חדשה'));
+    fireEvent.keyDown(screen.getByTestId('new-task-input'), { key: 'Escape' });
+    expect(spies.createTask).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('new-task-input')).toBeNull();
+  });
+
+  it('with status grouping, the committed task is seeded with the TOPMOST group value', () => {
+    saved.view = { group: { col: 'status', order: 'labelAsc' } };
+    render(<MyTasksView />);
+    fireEvent.click(screen.getByText('משימה חדשה'));
+    const input = screen.getByTestId('new-task-input');
+    fireEvent.change(input, { target: { value: 'משהו' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    const arg = spies.createTask.mock.calls[0][0];
+    expect(arg.status).toBe('s1'); // labelAsc → s1 (rank 0) is the top group
+    expect(arg.prepend).toBe(true);
+  });
+
+  it('discussion grouping seeds nothing (task created unlinked)', () => {
+    saved.view = { group: { col: 'discussion', order: 'azAsc' } };
+    render(<MyTasksView />);
+    fireEvent.click(screen.getByText('משימה חדשה'));
+    const input = screen.getByTestId('new-task-input');
+    fireEvent.change(input, { target: { value: 'משהו' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    const arg = spies.createTask.mock.calls[0][0];
+    expect(arg.status ?? null).toBeNull();
+    expect(arg.priority ?? null).toBeNull();
+    expect(arg.prepend).toBe(true);
+  });
+});
+
+describe('MyTasksView — per-group "+ הוסף משימה" footer (immediate create)', () => {
+  beforeEach(() => {
+    vp.mobile = false;
+    saved.view = null;
+    spies.createTask = vi.fn(async () => ({ id: 'real-1' }));
+  });
+
+  it("creates immediately with that group's status seed", () => {
     saved.view = { group: { col: 'status', order: 'labelAsc' } };
     render(<MyTasksView />);
     fireEvent.click(screen.getByText('add-s2'));
@@ -77,24 +153,5 @@ describe('MyTasksView — inline task creation (no modal)', () => {
     const arg = spies.createTask.mock.calls[0][0];
     expect(arg.name).toBe('משימה חדשה');
     expect(arg.status).toBe('s2');
-  });
-
-  it('blue button with grouping seeds the TOPMOST group\'s value', () => {
-    saved.view = { group: { col: 'status', order: 'labelAsc' } };
-    render(<MyTasksView />);
-    fireEvent.click(screen.getByText('משימה חדשה'));
-    expect(spies.createTask).toHaveBeenCalledTimes(1);
-    const arg = spies.createTask.mock.calls[0][0];
-    expect(arg.name).toBe('משימה חדשה');
-    expect(arg.status).toBe('s1'); // labelAsc → s1 (rank 0) is the top group
-  });
-
-  it('discussion grouping seeds nothing (task lands in "ללא דיון")', () => {
-    saved.view = { group: { col: 'discussion', order: 'azAsc' } };
-    render(<MyTasksView />);
-    fireEvent.click(screen.getByText('משימה חדשה'));
-    const arg = spies.createTask.mock.calls[0][0];
-    expect(arg.status ?? null).toBeNull();
-    expect(arg.priority ?? null).toBeNull();
   });
 });

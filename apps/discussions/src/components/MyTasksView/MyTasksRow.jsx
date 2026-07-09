@@ -173,6 +173,9 @@ export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, on
             autoFocus
             value={nameDraft}
             onClick={stop}
+            // Select-on-focus: the current name is highlighted the moment the
+            // input opens, so the first keystroke replaces it (no manual select).
+            onFocus={(e) => e.target.select()}
             onChange={(e) => setNameDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); saveName(); }
