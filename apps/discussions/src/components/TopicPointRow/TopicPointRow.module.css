@@ -292,6 +292,33 @@
   color: var(--negative-color, #d83a52);
 }
 
+/* Rename pencil — hover-revealed near the name (mirrors the tasks pencil / the
+   hide+delete reveal above). Triggers the same inline rename as double-clicking
+   the name. */
+.renameBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease, background-color 0.1s ease, color 0.1s ease;
+}
+.row:hover .renameBtn,
+.renameBtn:focus-visible {
+  opacity: 1;
+}
+.renameBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+
 /* Inline delete confirmation (mirrors TaskTableRow's .confirmDel) — stays visible
    regardless of hover so the user can complete/cancel it. */
 .confirmDel {

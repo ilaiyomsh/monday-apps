@@ -69,6 +69,48 @@
   color: var(--primary-color, #0073ea);
 }
 
+/* Inline rename input — swaps in for the name while editing (mirrors MyTasksRow). */
+.nameInput {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 4px;
+  padding: 0 6px;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  background: var(--primary-background-color, #fff);
+}
+.nameInput:focus-visible {
+  outline: none;
+}
+/* Rename pencil — hover-revealed near the name (mirrors MyTasksRow's .renameBtn).
+   Shown only when onRenameDecision is wired. */
+.renameBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  opacity: 0;
+  transition: background-color 0.1s ease, color 0.1s ease, opacity 0.1s ease;
+}
+.bodyRow:hover .renameBtn,
+.renameBtn:focus-visible {
+  opacity: 1;
+}
+.renameBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+
 /* people cells (decider / affected) — centered compact avatar groups */
 .peopleCell {
   justify-content: center;

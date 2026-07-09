@@ -152,7 +152,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
 
   const {
     items, loading, loadingMore, hasMore, error, configured, loadMore,
-    updateDecisionStatus, updateDecisionPriority, updateDecisionDate, softDeleteDecisions,
+    updateDecisionStatus, updateDecisionPriority, updateDecisionDate, updateDecisionName, softDeleteDecisions,
   } = useMyDecisions(subTab, { currentUser, context, search: debouncedSearch });
 
   // Board mapped at all? (vs only the ACTIVE sub-tab's people column missing).
@@ -632,6 +632,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
                     onStatusChange={applyStatus}
                     onPriorityChange={applyPriority}
                     onDateChange={applyDate}
+                    onRenameDecision={updateDecisionName}
                     selectable
                     selectedIds={selectedIds}
                     onToggleSelect={toggleSelect}

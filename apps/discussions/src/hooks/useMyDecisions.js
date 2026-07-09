@@ -237,6 +237,23 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     }
   }, []);
 
+  // Optimistic inline rename — mirrors useDecisions.updateDecisionName ({ name }
+  // rides change_multiple_column_values' name key). Empty names are ignored.
+  const updateDecisionName = useCallback(async (decisionId, name) => {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
+    setItems((current) =>
+      current.map((d) => (String(d.id) === String(decisionId) ? { ...d, name: trimmed } : d))
+    );
+    try {
+      await new החלטות1Board().item(decisionId).update({ name: trimmed }).execute();
+    } catch (err) {
+      logger.error('useMyDecisions', 'Error renaming decision', err);
+      setItems(prev);
+    }
+  }, []);
+
   // Deferred bulk delete with an undo window (mirrors useMyTasks.softDeleteTasks
   // / useDecisions.softDeleteDecisions): rows vanish optimistically now, the real
   // delete_item fires only after DELETE_GRACE_MS, and the returned undo() (wired
@@ -284,6 +301,7 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     updateDecisionStatus,
     updateDecisionPriority,
     updateDecisionDate,
+    updateDecisionName,
     softDeleteDecisions,
     refresh,
   };

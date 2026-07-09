@@ -74,13 +74,13 @@ export function DiscussionCard({
   // point (with topicId/decisionIds/taskIds) is kept so onCreate can link the
   // new item to the point's subitem relation columns.
   const [quickCreate, setQuickCreate] = useState(null);
-  // Brief success ✓ flash after a SUCCESSFUL task/decision create — the SOLE
-  // create feedback (no toast). Fires on EVERY create path: QuickCreateModal /
-  // FAB / per-point (handleQuickCreate), the NewTaskModal (handleCreateTask) and
-  // the Tasks-tab inline add row (handleInlineCreateTask). successKey bumps on
-  // each success so the CSS pop animation restarts on rapid consecutive creates;
-  // the effect below auto-clears it ~1.2s later, so it's non-blocking and needs
-  // no dismissal.
+  // Brief success ✓ flash — shown ONLY when a task/decision is created FROM A
+  // TOPIC POINT (the per-point "+" quick-create in the Topics tab). Every other
+  // create path (the "משימה חדשה" NewTaskModal, the Tasks-tab inline add row, the
+  // Decisions add row, and the FAB / quick-create when NOT scoped to a point)
+  // creates SILENTLY — no ✓. successKey bumps on each success so the CSS pop
+  // animation restarts on rapid consecutive creates; the effect below auto-clears
+  // it ~1.2s later, so it's non-blocking and needs no dismissal.
   const [successKey, setSuccessKey] = useState(0);
   const [successVisible, setSuccessVisible] = useState(false);
   const flashCreateSuccess = useCallback(() => {
@@ -338,24 +338,23 @@ export function DiscussionCard({
     setNewTaskOpen(false);
     setNewTaskDefaults({});
   };
-  // Task creation feedback. The modal fires this and closes IMMEDIATELY (so the
-  // Tasks tab still feels instant — the optimistic row is already there); on
-  // success we flash the brief ✓ (the SOLE create feedback — no toast). Errors
-  // still surface via the logger → UI sink.
+  // Top blue "משימה חדשה" button (NewTaskModal). The modal fires this and closes
+  // IMMEDIATELY (the optimistic row is already there). NO ✓ flash — the success
+  // ✓ is scoped to from-point creates only (see handleQuickCreate). The new task
+  // is PREPENDED so it appears at the TOP of the topmost group. Errors still
+  // surface via the logger → UI sink.
   const handleCreateTask = async (name, opts) => {
     if (!createTask) return; // guard: only roles granted createTask may create tasks
-    const created = await tasksData.createTask(name, opts);
-    if (created) flashCreateSuccess();
+    await tasksData.createTask(name, { ...(opts || {}), prepend: true });
   };
 
   // Inline add (Tasks tab add-row): create with just a name (+ the group's seed
-  // status/assignee). Optimistic row shows instantly; on success we flash the
-  // brief ✓ — the same SOLE create feedback used on every task-create path (no
-  // toast). deadline/assignee stay optional and are filled inline afterward.
+  // status/assignee). The optimistic row shows instantly at its group's BOTTOM
+  // (where the add-row sits — current placement kept). NO ✓ flash (from-point
+  // only). deadline/assignee stay optional and are filled inline afterward.
   const handleInlineCreateTask = async (name, opts) => {
     if (!createTask) return;
-    const created = await tasksData.createTask(name, opts || {});
-    if (created) flashCreateSuccess();
+    await tasksData.createTask(name, opts || {});
   };
 
   // Inline add (Decisions tab add-row): create with just a name. Defaults match
@@ -370,7 +369,11 @@ export function DiscussionCard({
   };
 
   // ---- Quick create (FAB on every tab + per-point "+" in the Topics tab) ----
-  const openQuickCreate = (mode, point = null) => setQuickCreate({ mode, point });
+  // `source` records WHY the modal opened, so create placement/feedback can differ:
+  //   'topButton' → the Decisions tab's blue "החלטה חדשה" (PREPEND the new item)
+  //   'point'     → the per-point "+" in Topics (fires the ✓ success flash)
+  //   'fab'/null  → the floating quick-create (silent, appended — current behavior)
+  const openQuickCreate = (mode, point = null, source = null) => setQuickCreate({ mode, point, source });
   const closeQuickCreate = () => setQuickCreate(null);
   // Per-point "+" — opens the modal scoped to the point (mode forced, toggle
   // hidden per the modal contract). Guarded per kind: a stale control can't
@@ -378,7 +381,7 @@ export function DiscussionCard({
   const handleCreateFromPoint = (kind, point) => {
     const isDecision = kind === 'decision';
     if (isDecision ? !canCreateDecision : !createTask) return;
-    openQuickCreate(isDecision ? 'decision' : 'task', point);
+    openQuickCreate(isDecision ? 'decision' : 'task', point, 'point');
   };
   // The modal fires this and closes immediately (fire-and-forget). ONE code path
   // for scoped + unscoped creates: when a point is present the task links to the
@@ -387,6 +390,11 @@ export function DiscussionCard({
   // counter — the subitems board has no relation column for this).
   const handleQuickCreate = async (kind, { text, person, status, deadline }) => {
     const point = quickCreate?.point || null;
+    // The success ✓ flash fires ONLY when the create ORIGINATES FROM A POINT (the
+    // per-point "+" opens the modal WITH a point). The top decisions button opens
+    // it with source:'topButton' → PREPEND the new item to the topmost group.
+    const fromPoint = !!point;
+    const prepend = quickCreate?.source === 'topButton';
     // A session-created point keeps its TEMP id in `point.id` (its REAL subitem
     // id lives in `point._realId` until a topics refetch swaps it). The point→item
     // association is stored keyed by the REAL subitem id — a temp id would never
@@ -409,8 +417,9 @@ export function DiscussionCard({
         assignee: person || [],
         deadline,
         topicId: point?.topicId || null,
+        prepend,
       });
-      if (created) { recordPointItem(created.id); flashCreateSuccess(); }
+      if (created) { recordPointItem(created.id); if (fromPoint) flashCreateSuccess(); }
       return;
     }
     if (!canCreateDecision) return;
@@ -421,8 +430,9 @@ export function DiscussionCard({
       // date omitted → today (the hook's default).
       affected: Array.isArray(data.participantsID) ? data.participantsID : [],
       ...(person?.length ? { decider: person[0] } : {}),
+      prepend,
     });
-    if (created) { recordPointItem(created.id); flashCreateSuccess(); }
+    if (created) { recordPointItem(created.id); if (fromPoint) flashCreateSuccess(); }
   };
 
   return (
@@ -644,7 +654,7 @@ export function DiscussionCard({
         )}
         {activeTab === 'decisions' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
-            <DecisionsTab data={decisionsData} discussionId={discussion.id} onNewDecision={() => openQuickCreate('decision')} onInlineCreate={handleInlineCreateDecision} onNotify={onNotify} canDecision={canDecision} canCreateDecision={canCreateDecision} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
+            <DecisionsTab data={decisionsData} discussionId={discussion.id} onNewDecision={() => openQuickCreate('decision', null, 'topButton')} onInlineCreate={handleInlineCreateDecision} onNotify={onNotify} canDecision={canDecision} canCreateDecision={canCreateDecision} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
           </div>
         )}
         {activeTab === 'summary' && (
@@ -665,7 +675,7 @@ export function DiscussionCard({
           On the "החלטות" tab it opens in decision mode, elsewhere in task mode
           (the modal clamps to an allowed side via allowTask/allowDecision). */}
       {(createTask || canCreateDecision) && !newTaskOpen && !quickCreate && (
-        <QuickCreateFab onClick={() => openQuickCreate(activeTab === 'decisions' ? 'decision' : 'task')} />
+        <QuickCreateFab onClick={() => openQuickCreate(activeTab === 'decisions' ? 'decision' : 'task', null, 'fab')} />
       )}
       <QuickCreateModal
         open={!!quickCreate}
@@ -686,11 +696,10 @@ export function DiscussionCard({
         defaults={newTaskDefaults}
       />
       {/* Short, non-blocking success ✓ shown centered right after a task/decision
-          is created via ANY path (QuickCreateModal / FAB / per-point, the
-          NewTaskModal, or the Tasks-tab inline add row) — the SOLE create
-          feedback (no toast). Keyed by successKey so a rapid second create
-          restarts the animation; auto-fades in ~1.2s (see the effect +
-          .createSuccess CSS). */}
+          is created FROM A TOPIC POINT (the per-point "+" quick-create). Other
+          create paths (the top blue buttons, the inline add rows, the FAB) are
+          SILENT. Keyed by successKey so a rapid second create restarts the
+          animation; auto-fades in ~1.2s (see the effect + .createSuccess CSS). */}
       {successVisible && (
         <div
           key={successKey}

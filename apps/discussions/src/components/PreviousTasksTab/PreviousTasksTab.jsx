@@ -336,6 +336,21 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
 
   // Updates go through BoardSDK (same as useTasks) so board_id + the column-value
   // formatting are handled in one place — change_multiple_column_values requires board_id.
+  // Optimistic inline rename (mirrors updateStatus). Writes the item name via
+  // BoardSDK's { name } key; reverts on error. Per-task permission gating is
+  // applied by TaskTable (onRenameTask is withheld when canTask('editTaskName')
+  // is false for that row).
+  const updateName = async (id, name) => {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    let prev = [];
+    setTasks((current) => {
+      prev = current;
+      return current.map((t) => (t.id === id ? { ...t, name: trimmed } : t));
+    });
+    try { await new משימות1Board().item(id).update({ name: trimmed }).execute(); }
+    catch (err) { logger.error('PreviousTasksTab', 'שגיאה בעדכון משימה', err); setTasks(prev); }
+  };
   const updateStatus = async (id, s) => {
     let prev = [];
     setTasks((current) => {
@@ -1019,6 +1034,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
                   onPriorityChange={applyPriorityChange}
                   onAssigneeChange={applyAssigneeChange}
                   onDeadlineChange={applyDeadlineChange}
+                  onRenameTask={updateName}
                   selectable={canSelect} selectedIds={selectedIds} onToggleSelect={toggleSelect}
                   selectAllChecked={groupAllSelected}
                   selectAllIndeterminate={groupSomeSelected}

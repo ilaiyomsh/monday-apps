@@ -64,6 +64,9 @@ export function MyDecisionsTable({
   onStatusChange,
   onPriorityChange,
   onDateChange,
+  // Inline rename handler (single-row; gated per-row by canDecision). Threaded to
+  // each row so the hover pencil appears + inline name-editing works.
+  onRenameDecision,
   // Selection (mirrors MyTasksTable). 'sel' is a FIXED 36px leading track pinned
   // first — deliberately kept OUT of useColumnOrder/useColumnWidths persistence
   // so it can never be reordered away or stored.
@@ -188,6 +191,7 @@ export function MyDecisionsTable({
             onStatusChange={onStatusChange && canDecision('editDecisionStatus', decision) ? onStatusChange : undefined}
             onPriorityChange={onPriorityChange && canDecision('editDecisionPriority', decision) ? onPriorityChange : undefined}
             onDateChange={onDateChange && canDecision('editDecisionDate', decision) ? onDateChange : undefined}
+            onRenameDecision={onRenameDecision && canDecision('editDecisionName', decision) ? onRenameDecision : undefined}
             selectable={selectable}
             selected={selectable ? !!selectedIds?.has(decision.id) : false}
             onToggleSelect={onToggleSelect}
