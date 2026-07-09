@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Dialog, DialogContentContainer } from '@vibe/core';
+import { Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
 import { Update, CloseSmall } from '@vibe/icons';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { PersonList } from '@generated/components/PersonAvatar';
@@ -7,7 +7,7 @@ import { isValidStatus } from '@generated/constants/statusConfig';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { monday } from '@api/monday-client.js';
-import { getDecisionDiscussion } from './decisionPipeline.js';
+import { getDecisionDiscussion, getEffectiveDecider } from './decisionPipeline.js';
 import grid from './MyDecisionsTable.module.css';
 import row from '../TaskTableRow/TaskTableRow.module.css';
 import styles from './MyDecisionsRow.module.css';
@@ -131,16 +131,33 @@ export function MyDecisionsRow({
   onStatusChange,
   onPriorityChange,
   onDateChange,
+  // Selection (round 27) — a leading checkbox cell when selectable.
+  selectable = false,
+  selected = false,
+  onToggleSelect,
 }) {
   const statusOpts = useStatusOptions('decisions', 'decisionStatusID');
   const priorityOpts = useStatusOptions('decisions', 'decisionPriorityID');
 
   const date = decision.decisionDateID;
   const discussion = getDecisionDiscussion(decision);
+  // מחליט display: the real decider(s), or — when empty — the creator as the
+  // default decider (round 27 creator-as-default-decider fallback).
+  const effectiveDecider = getEffectiveDecider(decision);
 
   // One renderer per column key — header (MyDecisionsTable) and body cells
   // render from the SAME `columns` order array.
   const cellByKey = {
+    // selection checkbox (multi-select) — pinned leading cell.
+    sel: (
+      <div key="sel" className={`${grid.taskCell} ${grid.selectCell}`} onClick={stop}>
+        <Checkbox
+          checked={selected}
+          onChange={(e) => onToggleSelect?.(decision.id, e.target.checked)}
+          ariaLabel={`בחר החלטה ${decision.name}`}
+        />
+      </div>
+    ),
     // decision text — clicking opens the item card on the Updates pane.
     name: (
       <div key="name" className={`${grid.taskCell} ${grid.taskFirst} ${styles.name}`}>
@@ -163,10 +180,11 @@ export function MyDecisionsRow({
         </button>
       </div>
     ),
-    // decider — compact avatar(s), click-to-expand list (PersonList).
+    // decider — compact avatar(s), click-to-expand list (PersonList). Falls back
+    // to the creator when no decider is set (creator-as-default-decider).
     decider: showDecider ? (
       <div key="decider" className={`${grid.taskCell} ${styles.peopleCell}`} onClick={stop}>
-        <PersonList people={decision.deciderID || []} size="sm" showNames={false} max={2} />
+        <PersonList people={effectiveDecider} size="sm" showNames={false} max={2} />
       </div>
     ) : null,
     // affected — 3 avatars + "+N" overflow counter (monday people-column idiom).
@@ -250,7 +268,10 @@ export function MyDecisionsRow({
     ) : null,
   };
 
-  const orderedKeys = columns || ['name', 'decider', 'affected', 'priority', 'status', 'date', 'discussion'];
+  const orderedKeys = columns || [
+    ...(selectable ? ['sel'] : []),
+    'name', 'decider', 'affected', 'priority', 'status', 'date', 'discussion',
+  ];
 
   return (
     <div className={`${grid.taskRow} ${styles.bodyRow}`} style={rowStyle}>

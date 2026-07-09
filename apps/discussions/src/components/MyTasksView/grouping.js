@@ -22,12 +22,13 @@
  *   items  — the tasks in the group
  */
 
-export const GROUP_MODES = ['none', 'discussion', 'status', 'priority'];
+export const GROUP_MODES = ['none', 'discussion', 'status', 'priority', 'deadline'];
 
 export const NO_STATUS = '__none__';
 export const NO_PRIORITY = '__no_priority__';
 export const NO_DISCUSSION = '__no_discussion__';
 export const NO_GROUP = '__no_group__';
+export const NO_DATE = '__no_date__';
 export const ALL_TASKS = '__all__';
 
 // 20-color monday LABEL palette (hex), mirrors theme-tokens.css --topic-color-1..20
@@ -216,6 +217,43 @@ function groupByBoardGroup(tasks, { noGroupLabel } = {}) {
   });
 }
 
+// Calendar-day key + label for date grouping (kept DOM/locale-free for jsdom
+// unit tests — dd/mm/yyyy, the app's date display format).
+function dayKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function dayLabel(d) {
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+// Group by the date column (the shared `deadlineID` alias — the decision date on
+// the decisions pipeline). Buckets by CALENDAR DAY; `order` is dateDesc (most
+// recent day FIRST — the My-Decisions default) or dateAsc. The "no date" bucket
+// always sorts LAST. Group objects carry an internal `time` for the sort only.
+function groupByDate(tasks, { noDateLabel, order = 'dateDesc' } = {}) {
+  const groups = new Map();
+  tasks.forEach((t) => {
+    const d = t.deadlineID instanceof Date ? t.deadlineID : null;
+    const key = d ? `date:${dayKey(d)}` : NO_DATE;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        key,
+        time: d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() : null,
+        label: d ? dayLabel(d) : (noDateLabel || 'ללא תאריך'),
+        color: null,
+        status: undefined,
+        items: [],
+      });
+    }
+    groups.get(key).items.push(t);
+  });
+  const dir = order === 'dateAsc' ? 1 : -1; // default dateDesc — most recent day first
+  const all = [...groups.values()];
+  const dated = all.filter((g) => g.time != null).sort((a, b) => (a.time - b.time) * dir);
+  const undated = all.filter((g) => g.time == null);
+  return [...dated, ...undated];
+}
+
 // Top-level dispatcher. `mode` is one of GROUP_MODES; `opts` carries the status
 // maps (for 'status'/'priority'), the chosen `order`, the injected
 // `discussionDateById` map (for discussion date order), and localized labels.
@@ -230,6 +268,8 @@ export function groupMyTasks(tasks, mode, opts = {}) {
       return groupByStatus(list, opts);
     case 'priority':
       return groupByPriority(list, opts);
+    case 'deadline':
+      return groupByDate(list, opts);
     case 'group':
       return groupByBoardGroup(list, opts);
     default:

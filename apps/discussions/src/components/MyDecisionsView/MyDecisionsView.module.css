@@ -16,12 +16,18 @@
   box-sizing: border-box;
 }
 
-/* "דיונים" back button — its own row above the sub-tabs. */
+/* "לתצוגת הדיונים" back button — its own row above the sub-tabs. */
 .topBar {
   flex: none;
   display: flex;
   align-items: center;
   padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+}
+/* Back-button content: left-pointing arrow + label, inline. */
+.backBtnInner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* Sub-tabs segmented control (RTL — Hebrew labels): 'החלטות שאני מחליט' /
@@ -31,22 +37,31 @@
   flex: none;
   direction: rtl;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 4px;
   width: fit-content;
   max-width: calc(100% - 32px);
   margin: var(--spacing-small, 8px) var(--spacing-medium, 16px) 0;
+  /* Round 27: the toggle is EXACTLY as tall as the "לתצוגת הדיונים" back button
+     (@vibe small button = 32px) so the two align. box-sizing keeps the 4px track
+     padding inside the 32px total. */
+  height: 32px;
+  box-sizing: border-box;
   padding: 4px;
   border-radius: 8px;
   background: var(--primary-background-hover-color, #f0f1f3);
 }
 .subTab {
+  display: inline-flex;
+  align-items: center;
   border: none;
   border-radius: 6px;
   background: transparent;
-  padding: 6px 14px;
+  height: 100%;
+  padding: 0 14px;
   color: var(--secondary-text-color, #676879);
   font-size: 14px;
+  line-height: 1;
   font-family: var(--font-family);
   cursor: pointer;
   white-space: nowrap;
@@ -248,4 +263,60 @@
   display: flex;
   justify-content: center;
   padding: 8px 0 16px;
+}
+
+/* Floating selection bar — shown when ≥1 decision is selected (mirrors
+   MyTasksView / the in-discussion Decisions tab): a count on the left, actions
+   (delete) in the center, a close (X) on the right. Batch status/priority/date
+   edits are done inline on any selected row (they cascade to the selection). */
+.actionBar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+.actionBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding-inline-end: 2px;
+}
+.actionBarCenter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 2px;
+}
+.actionBarRight {
+  display: flex;
+  align-items: center;
+  padding-inline-start: 2px;
+}
+.closeSelectionBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.closeSelectionBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
 }
