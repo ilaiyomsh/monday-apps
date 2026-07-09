@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
 import { MoveArrowLeft, Link, Info } from '@vibe/icons';
+import { Check } from 'lucide-react';
 import { דיונים1Board } from '@api/BoardSDK.js';
 import { useTasks } from '@generated/hooks/useTasks';
 import { useDecisions } from '@generated/hooks/useDecisions';
@@ -73,6 +74,23 @@ export function DiscussionCard({
   // point (with topicId/decisionIds/taskIds) is kept so onCreate can link the
   // new item to the point's subitem relation columns.
   const [quickCreate, setQuickCreate] = useState(null);
+  // Brief success ✓ flash after a SUCCESSFUL quick-create (QuickCreateModal —
+  // the create-from-point / FAB flow, whose submit is handleQuickCreate).
+  // successKey bumps on each success so the CSS pop animation restarts on rapid
+  // consecutive creates; the effect below auto-clears it ~1.2s later, so it's
+  // non-blocking and needs no dismissal. Other create paths (inline add rows,
+  // NewTaskModal) don't call flashCreateSuccess, so they're unaffected.
+  const [successKey, setSuccessKey] = useState(0);
+  const [successVisible, setSuccessVisible] = useState(false);
+  const flashCreateSuccess = useCallback(() => {
+    setSuccessKey((k) => k + 1);
+    setSuccessVisible(true);
+  }, []);
+  useEffect(() => {
+    if (!successVisible) return undefined;
+    const timer = setTimeout(() => setSuccessVisible(false), 1200);
+    return () => clearTimeout(timer);
+  }, [successVisible, successKey]);
   const { isMobile } = useViewport();
   const [infoOpen, setInfoOpen] = useState(false);
   const [timeMenuOpen, setTimeMenuOpen] = useState(false);
@@ -392,7 +410,7 @@ export function DiscussionCard({
         deadline,
         topicId: point?.topicId || null,
       });
-      if (created) recordPointItem(created.id);
+      if (created) { recordPointItem(created.id); flashCreateSuccess(); }
       if (loadingId != null) onDismissToast?.(loadingId);
       return;
     }
@@ -405,7 +423,7 @@ export function DiscussionCard({
       affected: Array.isArray(data.participantsID) ? data.participantsID : [],
       ...(person?.length ? { decider: person[0] } : {}),
     });
-    if (created) recordPointItem(created.id);
+    if (created) { recordPointItem(created.id); flashCreateSuccess(); }
   };
 
   return (
@@ -654,6 +672,21 @@ export function DiscussionCard({
         onCreate={handleCreateTask}
         defaults={newTaskDefaults}
       />
+      {/* Short, non-blocking success ✓ shown centered (where the quick-create
+          modal was) right after a task/decision is created via QuickCreateModal.
+          Keyed by successKey so a rapid second create restarts the animation;
+          auto-fades in ~1.2s (see the effect + .createSuccess CSS). */}
+      {successVisible && (
+        <div
+          key={successKey}
+          className={styles.createSuccess}
+          role="status"
+          aria-live="polite"
+          aria-label="נוצר בהצלחה"
+        >
+          <Check size={30} strokeWidth={3} aria-hidden="true" />
+        </div>
+      )}
     </div>
   );
 }
