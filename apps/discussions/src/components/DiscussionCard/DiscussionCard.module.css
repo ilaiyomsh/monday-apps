@@ -264,12 +264,16 @@
   align-items: center;
   align-self: stretch;
   gap: 6px;
+  /* Symmetric horizontal gap: an EQUAL 12px on both the inline-start and
+     inline-end of every field, applied uniformly to ALL groups (including the
+     first and last — no edge overrides). Each field is therefore equidistant
+     from its neighbouring divider(s), and the divider sits centered in the 24px
+     trough between two adjacent fields — date, time and every people column
+     share the exact same left/right gap. */
   padding-inline: 12px;
   /* Anchor for the short, centered vertical separator (::before) below. */
   position: relative;
 }
-.peopleGroup:first-child { padding-inline-start: 0; }
-.peopleGroup:last-child { padding-inline-end: 0; }
 /* Vertical separator between fields: a SHORT, vertically-centered bar (not a
    full-height line). A centered ::before instead of a stretched border, so it
    reads as a short divider between fields. Same 1px thickness + color; only the
