@@ -175,3 +175,31 @@
   background: var(--primary-background-hover-color, #f5f6f8);
   color: var(--secondary-text-color, #676879);
 }
+
+/* Inline "new task" draft row (top of the topmost group). Same grid as a body
+   row; the frozen name cell holds the focused, pre-selected name input. Opaque
+   white so the horizontally-scrolled cells can't bleed through the frozen name
+   cell (same reason .taskFirst is opaque). */
+.newRow {
+  background: #ffffff;
+}
+.newRow .taskFirst {
+  background: #ffffff;
+}
+/* Name input for the draft row — mirrors MyTasksRow's inline rename .nameInput
+   (blue outline, 28px) so the new-task edit looks identical to a rename edit. */
+.newNameInput {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 4px;
+  padding: 0 6px;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  background: var(--primary-background-color, #fff);
+}
+.newNameInput:focus-visible {
+  outline: none;
+}

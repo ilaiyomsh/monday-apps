@@ -91,6 +91,14 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const [collapsed, setCollapsed] = useState({});
   const [discDateMap, setDiscDateMap] = useState({});
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  // Inline "new task" (blue toolbar button): `creatingNew` shows a focused,
+  // pre-selected name input as the FIRST row of the topmost group; `newSeed` is
+  // the topmost group's seed captured when creation starts; `newRowId` is the
+  // just-created row (temp id, then real id) kept PINNED to the very top of the
+  // first group so the user always sees it there, whatever the active Group by.
+  const [creatingNew, setCreatingNew] = useState(false);
+  const [newSeed, setNewSeed] = useState(null);
+  const [newRowId, setNewRowId] = useState(null);
   const rootRef = useRef(null);
   const toggleSelect = (id, checked) =>
     setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
@@ -164,6 +172,40 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     }),
     [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t]
   );
+
+  // Surface the just-created task at the VERY TOP of the first group, regardless
+  // of where its value would route it under the active Group by. Lift the row
+  // whose id === newRowId out of its natural bucket and prepend it to the first
+  // group; drop any bucket left empty by the lift (except the first). The pin is
+  // released when the grouped view's inputs change (see the effect below).
+  const displayGroups = useMemo(() => {
+    if (!newRowId || grouped.length === 0) return grouped;
+    let pinnedRow = null;
+    const stripped = grouped.map((g) => {
+      const idx = g.items.findIndex((tk) => String(tk.id) === String(newRowId));
+      if (idx === -1) return g;
+      pinnedRow = g.items[idx];
+      return { ...g, items: g.items.filter((_, i) => i !== idx) };
+    });
+    if (!pinnedRow) return grouped; // not loaded (filtered out) — nothing to pin
+    const [first, ...rest] = stripped;
+    return [
+      { ...first, items: [pinnedRow, ...first.items] },
+      ...rest.filter((g) => g.items.length > 0),
+    ];
+  }, [grouped, newRowId]);
+
+  // When creating with no visible groups yet (zero tasks under a non-"none"
+  // grouping yields no buckets), synthesize one group so the draft row still has
+  // a place to render at the top.
+  const groupsForRender = (creatingNew && displayGroups.length === 0)
+    ? [{ key: '__creating__', label: t('myTasks.allTasks'), color: null, status: undefined, items: [] }]
+    : displayGroups;
+
+  // Release the top-of-view pin whenever the grouped view's inputs change — once
+  // the user re-sorts / re-groups / filters / searches, the new row settles into
+  // its natural position like any other task.
+  useEffect(() => { setNewRowId(null); }, [group, sort, filter, debouncedSearch]);
 
   // ESC clears the multi-selection. Live only while something is selected, and a
   // no-op unless THIS view is actually visible (offsetParent) — it also yields to
@@ -249,13 +291,37 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     else { const c = {}; grouped.forEach((g) => { c[g.key] = true; }); setCollapsed(c); }
   };
 
-  // Blue toolbar button: create at the BOTTOM of the TOPMOST group, seeded with
-  // that group's value; expand it if collapsed so the new row is visible.
-  const addTaskToTopGroup = () => {
+  // Blue toolbar button ("משימה חדשה"): open an inline draft row at the VERY TOP
+  // of the view (first row of the topmost group) with its name in edit mode —
+  // instead of creating a fixed-named task at the bottom. Expand the topmost
+  // group if collapsed so the draft row is visible, and capture that group's
+  // seed (status/priority) so the committed task inherits it.
+  const startCreateNew = () => {
     const top = grouped[0] || null;
     if (top && collapsed[top.key]) setCollapsed((p) => ({ ...p, [top.key]: false }));
-    return addTask(top ? seedForGroup(top) : null);
+    setNewSeed(top ? seedForGroup(top) : null);
+    setCreatingNew(true);
   };
+  // Commit the draft: create the task with `prepend` so its optimistic row lands
+  // at the FRONT of the list, seeded with the topmost group's value, and pin it
+  // to the top of the first group (newRowId) across the optimistic→real swap so
+  // it stays put. An empty name discards (nothing created) — consistent with the
+  // in-discussion inline add-row. The name is committed AS the task's name, so we
+  // never create a fixed "משימה חדשה" the user then has to rename.
+  const commitNewTask = (name) => {
+    setCreatingNew(false);
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    createTask({
+      name: trimmed,
+      status: newSeed?.status ?? null,
+      priority: newSeed?.priority ?? null,
+      prepend: true,
+      onOptimistic: (tempId) => setNewRowId(tempId),
+      onReconcile: (tempId, realId) => setNewRowId((cur) => (String(cur) === String(tempId) ? realId : cur)),
+    });
+  };
+  const cancelNewTask = () => setCreatingNew(false);
 
   const COL_NAME = {
     priority: t('myTasks.colPriority'),
@@ -431,7 +497,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
 
       {/* monday-style toolbar: "משימה חדשה" + English pills, left-aligned (LTR) */}
       <div className={styles.toolbar} dir="ltr">
-        <Button kind={"primary"} size={"small"} onClick={addTaskToTopGroup}>
+        <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
           משימה חדשה
         </Button>
 
@@ -504,7 +570,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         </div>
       ) : error ? (
         <div className={styles.empty}>{t('myTasks.error')}</div>
-      ) : items.length === 0 ? (
+      ) : (items.length === 0 && !creatingNew) ? (
         <div className={styles.empty}>
           <div className={styles.emptyTitle}>{t('myTasks.empty')}</div>
           <div className={styles.emptyHint}>{t('myTasks.emptyHint')}</div>
@@ -512,7 +578,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       ) : (
         <div className={styles.groupScrollInner}>
           <div className={styles.groupStack}>
-            {grouped.map((grp) => (
+            {groupsForRender.map((grp, gi) => (
               <div key={grp.key}>
                 <button
                   type="button"
@@ -553,6 +619,11 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                       return n;
                     })}
                     onAddTask={() => addTask(seedForGroup(grp))}
+                    newTaskRow={creatingNew && gi === 0 ? {
+                      defaultName: 'משימה חדשה',
+                      onCommit: commitNewTask,
+                      onCancel: cancelNewTask,
+                    } : null}
                   />
                 )}
               </div>

@@ -29,6 +29,8 @@ const sdkState = {
   execute: vi.fn(),
   updatePayloads: [],
   updateExecute: vi.fn(async () => ({ id: 'X' })),
+  createPayloads: [],
+  createExecute: vi.fn(async () => ({ id: 'NEW' })),
 };
 
 vi.mock('@api/BoardSDK.js', () => {
@@ -49,6 +51,10 @@ vi.mock('@api/BoardSDK.js', () => {
         update: (payload) => {
           sdkState.updatePayloads.push({ id, payload });
           return { execute: sdkState.updateExecute };
+        },
+        create: (payload, opts) => {
+          sdkState.createPayloads.push({ payload, opts });
+          return { execute: sdkState.createExecute };
         },
       };
     }
@@ -73,6 +79,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   sdkState.updatePayloads = [];
   sdkState.updateExecute = vi.fn(async () => ({ id: 'X' }));
+  sdkState.createPayloads = [];
+  sdkState.createExecute = vi.fn(async () => ({ id: 'NEW' }));
   sdkState.execute = vi.fn(async () => page([task(1), task(2)]));
 });
 
@@ -188,5 +196,35 @@ describe('useMyTasks — optimistic inline edits', () => {
     sdkState.updateExecute = vi.fn(async () => { throw new Error('boom'); });
     await act(async () => { await result.current.updateTaskNotes('1', 'changed'); });
     expect(result.current.items.find((t) => t.id === '1').taskNotesID).toBe('orig');
+  });
+});
+
+describe('useMyTasks — createTask (prepend + reconcile)', () => {
+  it('prepends the optimistic row to the FRONT with prepend:true, then swaps temp→real', async () => {
+    const { result } = await mounted(); // items ['1','2']
+    await act(async () => { await result.current.createTask({ name: 'חדשה', prepend: true }); });
+    expect(result.current.items[0].name).toBe('חדשה');
+    expect(result.current.items.map((t) => t.id)).toEqual(['NEW', '1', '2']);
+  });
+
+  it('appends to the BOTTOM by default (no prepend)', async () => {
+    const { result } = await mounted();
+    await act(async () => { await result.current.createTask({ name: 'אחרונה' }); });
+    const last = result.current.items[result.current.items.length - 1];
+    expect(last.name).toBe('אחרונה');
+    expect(last.id).toBe('NEW');
+  });
+
+  it('fires onOptimistic(tempId) then onReconcile(tempId, realId)', async () => {
+    const { result } = await mounted();
+    const onOptimistic = vi.fn();
+    const onReconcile = vi.fn();
+    await act(async () => {
+      await result.current.createTask({ name: 'x', prepend: true, onOptimistic, onReconcile });
+    });
+    expect(onOptimistic).toHaveBeenCalledTimes(1);
+    const tempId = onOptimistic.mock.calls[0][0];
+    expect(String(tempId)).toMatch(/^temp-/);
+    expect(onReconcile).toHaveBeenCalledWith(tempId, 'NEW');
   });
 });

@@ -263,29 +263,36 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
   // task created here without me as assignee would never appear in the list.
   // taskCreatorID is stamped too (mirrors useTasks.createTask). status/priority
   // are label ids (0 is valid); deadline is a Date; notes is text. The new row is
-  // APPENDED optimistically — insertion order puts it at the BOTTOM of its group
-  // — and its temp id is swapped for the real one on success (no full refetch →
-  // no skeleton flash).
-  const createTask = useCallback(async ({ name, status = null, priority = null, deadline = null, notes = '' } = {}) => {
+  // APPENDED optimistically by default (bottom of its group); pass `prepend:true`
+  // (the top "משימה חדשה" button) to insert it at the FRONT instead, so it can be
+  // surfaced at the very top of the view. Its temp id is swapped for the real one
+  // on success (no full refetch → no skeleton flash). Optional callbacks let the
+  // caller track the row across that swap: `onOptimistic(tempId)` fires the moment
+  // the optimistic row is inserted, `onReconcile(tempId, realId)` the moment the
+  // temp id becomes the real id — used by the view to keep the new row pinned to
+  // the top through the create round-trip.
+  const createTask = useCallback(async ({
+    name, status = null, priority = null, deadline = null, notes = '',
+    prepend = false, onOptimistic = null, onReconcile = null,
+  } = {}) => {
     const trimmed = (name || '').trim();
     if (!trimmed || !userId) return null;
     const tempId = `temp-${Date.now()}`;
     const meAsPerson = [{ id: String(userId), name: currentUser?.name || '' }];
-    setItems((prev) => [
-      ...prev,
-      {
-        id: tempId,
-        name: trimmed,
-        responsibilityID: meAsPerson,
-        // Stamp the creator locally too — the permission gate (canTask) reads
-        // it, so the fresh optimistic row is immediately editable by its maker.
-        taskCreatorID: meAsPerson,
-        deadlineID: deadline instanceof Date ? deadline : null,
-        statusID: status,
-        priorityID: priority,
-        taskNotesID: notes || '',
-      },
-    ]);
+    const optimisticRow = {
+      id: tempId,
+      name: trimmed,
+      responsibilityID: meAsPerson,
+      // Stamp the creator locally too — the permission gate (canTask) reads
+      // it, so the fresh optimistic row is immediately editable by its maker.
+      taskCreatorID: meAsPerson,
+      deadlineID: deadline instanceof Date ? deadline : null,
+      statusID: status,
+      priorityID: priority,
+      taskNotesID: notes || '',
+    };
+    setItems((prev) => (prepend ? [optimisticRow, ...prev] : [...prev, optimisticRow]));
+    onOptimistic?.(tempId);
     try {
       const data = { name: trimmed, responsibilityID: [Number(userId)] };
       if (getColumns('tasks')?.taskCreatorID?.id) data.taskCreatorID = [Number(userId)];
@@ -298,6 +305,10 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
       const created = await new משימות1Board().item().create(data, { createLabelsIfMissing: true }).execute();
       const realId = created.id;
       setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, id: realId } : t)));
+      // Let the caller migrate any temp-id tracking (e.g. the top-of-view pin)
+      // to the real id in the SAME tick as the swap, so the row never flickers
+      // out of its pinned position during reconciliation.
+      onReconcile?.(tempId, realId);
       return { id: realId };
     } catch (err) {
       logger.error('useMyTasks', 'Error creating task', err);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Checkbox } from '@vibe/core';
 import { MyTasksRow } from './MyTasksRow.jsx';
@@ -38,6 +38,13 @@ export function MyTasksTable({
   // Inline "+ הוסף משימה" footer row (same as TasksTab). When provided, a click
   // creates a task IMMEDIATELY, seeded with this group's status/priority.
   onAddTask,
+  // Inline "new task" draft row pinned as the FIRST row of this table (top of
+  // the topmost group). When provided, its name cell is a focused, pre-selected
+  // text input: typing + Enter (or blur) commits via onCommit(name); Escape
+  // discards via onCancel(). Only the topmost group receives this (from the blue
+  // "משימה חדשה" toolbar button) — it is what makes a new task appear at the very
+  // top in edit mode, instead of being created with a fixed name at the bottom.
+  newTaskRow = null,
   // Selection (mirrors TaskTable). 'sel' is a FIXED 36px leading track pinned
   // first — deliberately kept OUT of useColumnOrder/useColumnWidths persistence
   // so it can never be reordered away or stored.
@@ -154,6 +161,16 @@ export function MyTasksTable({
           </ColumnHeaderDnd>
         </div>
 
+        {newTaskRow ? (
+          <NewTaskDraftRow
+            columns={renderKeys}
+            rowStyle={rowStyle}
+            defaultName={newTaskRow.defaultName}
+            onCommit={newTaskRow.onCommit}
+            onCancel={newTaskRow.onCancel}
+          />
+        ) : null}
+
         {tasks.map((task) => (
           <MyTasksRow
             key={task.id}
@@ -181,6 +198,59 @@ export function MyTasksTable({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// Inline "new task" draft row (rendered as the FIRST row of the topmost group).
+// Mirrors a body row's grid: every cell is empty except NAME, which holds a text
+// input focused with its text pre-SELECTED on mount — so the user types the name
+// immediately (first keystroke replaces the default) and Enter commits, creating
+// the task. Blur commits too; Escape discards. The `done` guard makes the three
+// exits mutually exclusive so Enter/blur can't double-fire a create. Mirrors the
+// in-discussion TaskTable inline add-row + the MyTasksRow rename input.
+function NewTaskDraftRow({ columns, rowStyle, defaultName, onCommit, onCancel }) {
+  const inputRef = useRef(null);
+  const done = useRef(false);
+  useEffect(() => {
+    const el = inputRef.current;
+    if (el) { el.focus(); el.select(); }
+  }, []);
+  const commit = () => {
+    if (done.current) return;
+    done.current = true;
+    onCommit?.(inputRef.current ? inputRef.current.value : '');
+  };
+  const cancel = () => {
+    if (done.current) return;
+    done.current = true;
+    onCancel?.();
+  };
+  return (
+    <div className={`${styles.taskRow} ${styles.newRow}`} style={rowStyle}>
+      {columns.map((key) => {
+        if (key === 'name') {
+          return (
+            <div key="name" className={`${styles.taskCell} ${styles.taskFirst}`}>
+              <input
+                ref={inputRef}
+                className={styles.newNameInput}
+                defaultValue={defaultName}
+                aria-label="שם משימה חדשה"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                  if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+                }}
+                onBlur={commit}
+              />
+            </div>
+          );
+        }
+        if (key === 'sel') {
+          return <div key="sel" className={`${styles.taskCell} ${styles.selectCell}`} />;
+        }
+        return <div key={key} className={styles.taskCell} />;
+      })}
     </div>
   );
 }
