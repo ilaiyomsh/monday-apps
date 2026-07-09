@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 
 // Mock ONLY api(); keep the real parseValue/formatValue/cvSelection so the
-// board_relation write shape assertion exercises the real serializer.
+// board_relation write shape assertion exercises the real serializer AND the
+// BoardSDK item read (mapItem/parseValue) runs for real over the mocked responses.
 const { api } = vi.hoisted(() => ({ api: vi.fn() }));
 vi.mock('../../utils/mondayApi/monday-client.js', async (importOriginal) => {
   const actual = await importOriginal();
@@ -74,33 +75,43 @@ describe('linkTaskToPoint — subitem board_relation write', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The decisions board is mapped MANUALLY in Settings, so decisions are linked to
+// a discussion ONLY on the DECISION side (decisions.discussionLinkID). The
+// reload therefore READS the decisions board (items_page) and filters by that
+// link — NOT the (empty) discussions.decisionsBoardLinkID relation. Shared,
+// mapped config for the create/reload tests below:
+// ---------------------------------------------------------------------------
+const MAPPED_CFG = {
+  boards: { discussions: { id: 'disc-board' }, decisions: { id: 'dec-board' } },
+  columns: {
+    // Discussion-side relation is mapped but stays EMPTY — kept only for the
+    // create's best-effort mirror write; the reload does NOT read it.
+    discussions: { decisionsBoardLinkID: { id: 'disc_link', type: 'board_relation' } },
+    decisions: { discussionLinkID: { id: 'dec_disc_link', type: 'board_relation' } },
+  },
+};
+// An empty decisions board page — models an eventually-consistent server that
+// has not yet surfaced a just-created decision (the window the create tests hit).
+const EMPTY_DECISIONS_PAGE = { boards: [{ items_page: { cursor: null, items: [] } }] };
 
 // ---------------------------------------------------------------------------
 // Regression (Round 16): creating a decision and IMMEDIATELY creating a second
 // one used to DELETE the second decision. Root cause: the first create's
-// fire-and-forget refresh() rebuilt the list and its merge DROPPED any temp row
-// (`sid.startsWith('temp-')` was excluded). While two creates overlap, the
-// second row is still an optimistic temp row when the first refresh runs, so it
-// was removed — and the second create's reconcile (temp→real) then found no row
-// to swap, so the freshly-created decision vanished from the UI (though it
-// existed on the board). The fix KEEPS in-flight temp rows through refresh.
+// fire-and-forget refresh() rebuilt the list and its merge DROPPED any temp row.
+// While two creates overlap, the second row is still an optimistic temp row when
+// the first refresh runs, so it was removed — and the second create's reconcile
+// then found no row to swap, so the freshly-created decision vanished. The fix
+// KEEPS in-flight temp rows through refresh. The reload now reads the DECISIONS
+// board (items_page); an EMPTY page models the eventually-consistent window that
+// must NOT drop the still-optimistic row.
 // ---------------------------------------------------------------------------
 describe('useDecisions — two rapid creates both persist (no dropped second row)', () => {
   it('does not drop the still-optimistic second row on the first create refresh, then reconciles both', async () => {
-    // Decisions board + the discussion's board_relation link column are mapped so
-    // create fires AND refresh()'s relation read hits the (mocked) api; that read
-    // returns an EMPTY relation — an eventually-consistent server that has not yet
-    // surfaced the just-created decisions (exactly the window that caused the bug).
-    setActiveConfig({
-      boards: { discussions: { id: 'disc-board' }, decisions: { id: 'dec-board' } },
-      columns: {
-        discussions: { decisionsBoardLinkID: { id: 'disc_link', type: 'board_relation' } },
-        decisions: {},
-      },
-    });
+    setActiveConfig(MAPPED_CFG);
 
     let createSeq = 0;
-    let linkedItemsQueries = 0;
+    let fetchQueries = 0;
     let releaseSecondCreate;
     const gate = new Promise((res) => { releaseSecondCreate = res; });
     api.mockImplementation(async (query) => {
@@ -113,15 +124,15 @@ describe('useDecisions — two rapid creates both persist (no dropped second row
       if (query.includes('change_multiple_column_values')) {
         return { change_multiple_column_values: { id: 'ok' } };
       }
-      if (query.includes('linked_items')) {
-        linkedItemsQueries += 1;
-        return { items: [{ column_values: [{ linked_items: [] }] }] }; // server hasn't caught up
+      if (query.includes('items_page')) {
+        fetchQueries += 1;
+        return EMPTY_DECISIONS_PAGE; // decisions board hasn't surfaced them yet
       }
       return {};
     });
 
     const { result } = renderHook(() => useDecisions('disc-1'));
-    await waitFor(() => expect(result.current.loading).toBe(false)); // initial fetch = 1st relation read
+    await waitFor(() => expect(result.current.loading).toBe(false)); // initial fetch = 1st board read
 
     // Fire both creates back-to-back (rapid entry). The 2nd create_item is gated.
     await act(async () => {
@@ -129,9 +140,9 @@ describe('useDecisions — two rapid creates both persist (no dropped second row
       result.current.createDecision('החלטה שנייה');
     });
 
-    // Wait until the 1st create's refresh has actually run (2nd relation read)
+    // Wait until the 1st create's refresh has actually run (2nd board read)
     // WHILE the 2nd create is still gated (its row still a temp row).
-    await waitFor(() => expect(linkedItemsQueries).toBeGreaterThanOrEqual(2));
+    await waitFor(() => expect(fetchQueries).toBeGreaterThanOrEqual(2));
 
     // The still-temp second row MUST survive the first create's refresh (the bug
     // dropped it here → the list would collapse to just real-A).
@@ -148,28 +159,21 @@ describe('useDecisions — two rapid creates both persist (no dropped second row
   });
 });
 
-
 // ---------------------------------------------------------------------------
 // Round 18: THREE rapid decision creates must ALL persist even though every
-// refresh's (eventually-consistent) relation read comes back empty. Exercises
-// the shared multi-row merge + protect-before-flush: each create protects its
-// real id the instant it's known, so a concurrent create's refresh can never
-// evict a just-reconciled row.
+// refresh's (eventually-consistent) decisions-board read comes back empty.
+// Exercises the shared multi-row merge + protect-before-flush: each create
+// protects its real id the instant it's known, so a concurrent create's refresh
+// can never evict a just-reconciled row.
 // ---------------------------------------------------------------------------
 describe('useDecisions — three rapid creates all persist (multi-row safe)', () => {
   it('reconciles all three to their own real ids, none dropped by an overlapping refresh', async () => {
-    setActiveConfig({
-      boards: { discussions: { id: 'disc-board' }, decisions: { id: 'dec-board' } },
-      columns: {
-        discussions: { decisionsBoardLinkID: { id: 'disc_link', type: 'board_relation' } },
-        decisions: {},
-      },
-    });
+    setActiveConfig(MAPPED_CFG);
     let createSeq = 0;
     api.mockImplementation(async (query) => {
       if (query.includes('create_item')) { createSeq += 1; return { create_item: { id: `real-${createSeq}` } }; }
       if (query.includes('change_multiple_column_values')) return { change_multiple_column_values: { id: 'ok' } };
-      if (query.includes('linked_items')) return { items: [{ column_values: [{ linked_items: [] }] }] }; // server lagging
+      if (query.includes('items_page')) return EMPTY_DECISIONS_PAGE; // server lagging
       return {};
     });
 
@@ -190,7 +194,6 @@ describe('useDecisions — three rapid creates all persist (multi-row safe)', ()
   });
 });
 
-
 // ---------------------------------------------------------------------------
 // Round 18: a decision create whose network call REJECTS must keep the row in a
 // retryable error state and never surface as an unhandled rejection (the "אירעה
@@ -198,16 +201,10 @@ describe('useDecisions — three rapid creates all persist (multi-row safe)', ()
 // ---------------------------------------------------------------------------
 describe('useDecisions — a failed create shows retry, never an unhandled rejection', () => {
   it('resolves to null, flags the temp row _createFailed, raises no unhandledrejection', async () => {
-    setActiveConfig({
-      boards: { discussions: { id: 'disc-board' }, decisions: { id: 'dec-board' } },
-      columns: {
-        discussions: { decisionsBoardLinkID: { id: 'disc_link', type: 'board_relation' } },
-        decisions: {},
-      },
-    });
+    setActiveConfig(MAPPED_CFG);
     api.mockImplementation(async (query) => {
       if (query.includes('create_item')) throw new Error('network boom'); // no monday/graphql text
-      if (query.includes('linked_items')) return { items: [{ column_values: [{ linked_items: [] }] }] };
+      if (query.includes('items_page')) return EMPTY_DECISIONS_PAGE;
       return {};
     });
     const unhandled = vi.fn();
@@ -233,67 +230,148 @@ describe('useDecisions — a failed create shows retry, never an unhandled rejec
   });
 });
 
+// ---------------------------------------------------------------------------
+// Round 20 (REAL FIX): decisions are linked to their discussion ONLY on the
+// DECISION side (decisions.discussionLinkID); the discussion side
+// (discussions.decisionsBoardLinkID) stays EMPTY because the decisions board is
+// mapped MANUALLY (no bidirectional reflection). So the reload READS the
+// decisions board and filters by the decision-side link. These prove the load
+// returns the decisions linked (decision-side) to the discussion, EXCLUDES
+// decisions linked to a DIFFERENT discussion, and reloads on a fresh mount.
+// ---------------------------------------------------------------------------
+describe('useDecisions — loads decisions by the DECISION-side link (Round 20 fix)', () => {
+  const cfg = {
+    boards: { discussions: { id: 'disc-board' }, decisions: { id: 'dec-board' } },
+    columns: {
+      discussions: { decisionsBoardLinkID: { id: 'disc_link', type: 'board_relation' } },
+      decisions: {
+        discussionLinkID: { id: 'dec_disc_link', type: 'board_relation' },
+        decisionStatusID: { id: 'dec_status', type: 'status' },
+      },
+    },
+  };
 
+  // A decisions board with three decisions: 501 & 502 linked (decision-side) to
+  // disc-1, and 777 linked to a DIFFERENT discussion (disc-2). The discussion
+  // side is never consulted.
+  function mockDecisionsBoard() {
+    const rel = (discId) => ({ id: 'dec_disc_link', linked_item_ids: [discId], linked_items: [{ id: discId, name: 'דיון' }] });
+    api.mockImplementation(async (query) => {
+      if (query.includes('items_page')) {
+        return { boards: [{ items_page: { cursor: null, items: [
+          { id: '501', name: 'החלטה א', created_at: '2026-07-01T00:00:00Z', column_values: [rel('disc-1'), { id: 'dec_status', text: 'פתוח', index: 0 }] },
+          { id: '502', name: 'החלטה ב', created_at: '2026-07-02T00:00:00Z', column_values: [rel('disc-1'), { id: 'dec_status', text: 'סגור', index: 2 }] },
+          { id: '777', name: 'החלטה של דיון אחר', created_at: '2026-07-03T00:00:00Z', column_values: [rel('disc-2')] },
+        ] } }] };
+      }
+      return {};
+    });
+  }
+
+  it('fetchDecisionsByDiscussion returns only decisions linked (decision-side) to the discussion, excluding others', async () => {
+    setActiveConfig(cfg);
+    mockDecisionsBoard();
+    const items = await fetchDecisionsByDiscussion('disc-1');
+    expect(items.map((i) => String(i.id)).sort()).toEqual(['501', '502']); // 777 (disc-2) excluded
+    // Reads the DECISIONS board (items_page), not the discussion-side relation.
+    expect(api.mock.calls.some(([q]) => q.includes('items_page'))).toBe(true);
+    // Deserialized shape unchanged: name + alias fields present.
+    const a = items.find((i) => String(i.id) === '501');
+    expect(a.name).toBe('החלטה א');
+    expect(a.decisionStatusID).toBe(0);
+    expect(a.discussionLinkID.ids).toContain('disc-1');
+  });
+
+  it('a fresh mount (re-entering the discussion) reloads those decisions', async () => {
+    setActiveConfig(cfg);
+    mockDecisionsBoard();
+    const { result } = renderHook(() => useDecisions('disc-1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.items.map((i) => String(i.id)).sort()).toEqual(['501', '502']);
+  });
+
+  it('returns [] and fires NO query when the decision-side link column is unmapped', async () => {
+    setActiveConfig({
+      boards: { decisions: { id: 'dec-board' } },
+      columns: { decisions: {} }, // discussionLinkID NOT mapped
+    });
+    const items = await fetchDecisionsByDiscussion('disc-1');
+    expect(items).toEqual([]);
+    expect(api).not.toHaveBeenCalled();
+  });
+});
 
 // ---------------------------------------------------------------------------
-// Round 19 (BUG): created decisions vanished after leaving + re-entering a
-// discussion. Root cause: the create wrote only the DECISION side of the link
-// (decisions.discussionLinkID), relying on a reflection into the DISCUSSION side
-// (discussions.decisionsBoardLinkID) — the column the reload READS. But the
-// decisions board is mapped MANUALLY (not wizard-provisioned with a reflection
-// column), so that never populated and the reload found nothing. The fix writes
-// discussions.decisionsBoardLinkID explicitly. This test proves the full cycle:
-// create writes that column, and a FRESH mount (remount = re-entering) reloads
-// the decision from it.
+// Round 20 (full cycle): a created decision must reload after leaving +
+// re-entering, driven by the DECISION-side link. create writes
+// decisions.discussionLinkID (the reload's source of truth); a FRESH mount
+// re-reads the decisions board and brings the decision back. The DISCUSSION-side
+// write is accepted but IGNORED by the fake — mirroring the manual-map reality —
+// proving the reload no longer depends on it. (Supersedes the Round 19 test that
+// relied on the discussion-side column.)
 // ---------------------------------------------------------------------------
-describe('useDecisions — a created decision persists its discussion link and reloads (remount-safe)', () => {
-  it('writes discussions.decisionsBoardLinkID on create so a remount brings the decision back', async () => {
+describe('useDecisions — a created decision reloads via the DECISION-side link (remount-safe)', () => {
+  it('create writes decisions.discussionLinkID; a remount reloads it from the decisions board', async () => {
     setActiveConfig({
       boards: { discussions: { id: 'disc-board' }, decisions: { id: 'dec-board' } },
       columns: {
         discussions: { decisionsBoardLinkID: { id: 'disc_link', type: 'board_relation' } },
-        decisions: {},
+        decisions: { discussionLinkID: { id: 'dec_disc_link', type: 'board_relation' } },
       },
     });
 
-    // Tiny stateful fake: the discussion-side link column is the source of truth
-    // the fetch reads — exactly what the reload depends on. Only the discussion-
-    // side write (disc-board + disc_link) mutates it; the decision-side write
-    // (dec-board, empty cv) is a no-op here, mirroring the manual-map reality.
-    let serverLinked = [];
+    // Stateful fake decisions board. create_item adds a decision with NO link;
+    // the DECISION-side write (change_multiple_column_values on dec-board, the
+    // dec_disc_link column) records which discussion it links to. The reload
+    // reads this board via items_page and filters by dec_disc_link. BoardSDK.update
+    // sends the JSON under `cols`; the discussion-side write (linkDecisionsToDiscussion)
+    // uses `cv` on disc-board and is deliberately IGNORED here.
+    const board = new Map(); // decision id -> { id, name, linkedDiscussionIds }
     api.mockImplementation(async (query, vars) => {
-      if (query.includes('create_item')) return { create_item: { id: '9001' } };
+      if (query.includes('create_item')) {
+        board.set('9001', { id: '9001', name: 'החלטה חשובה', linkedDiscussionIds: [] });
+        return { create_item: { id: '9001' } };
+      }
       if (query.includes('change_multiple_column_values')) {
-        if (String(vars.boardId) === 'disc-board' && vars.cv?.includes('disc_link')) {
-          const ids = JSON.parse(vars.cv).disc_link.item_ids || [];
-          serverLinked = ids.map((id) => ({ id: String(id), name: 'החלטה חשובה' }));
+        if (String(vars.boardId) === 'dec-board' && vars.cols?.includes('dec_disc_link')) {
+          const ids = JSON.parse(vars.cols).dec_disc_link.item_ids || [];
+          const row = board.get('9001');
+          if (row) row.linkedDiscussionIds = ids.map(String);
         }
         return { change_multiple_column_values: { id: 'ok' } };
       }
-      if (query.includes('linked_items')) {
-        return { items: [{ column_values: [{ linked_items: serverLinked }] }] };
+      if (query.includes('items_page')) {
+        const items = [...board.values()].map((r) => ({
+          id: r.id, name: r.name, created_at: '2026-07-08T00:00:00Z',
+          column_values: [{
+            id: 'dec_disc_link',
+            linked_item_ids: r.linkedDiscussionIds,
+            linked_items: r.linkedDiscussionIds.map((id) => ({ id, name: 'דיון' })),
+          }],
+        }));
+        return { boards: [{ items_page: { cursor: null, items } }] };
       }
       return {};
     });
 
     // 1) First mount — no decisions yet.
-    const first = renderHook(() => useDecisions('disc-1'));
+    const first = renderHook(() => useDecisions('4001'));
     await waitFor(() => expect(first.result.current.loading).toBe(false));
     expect(first.result.current.items).toHaveLength(0);
 
-    // 2) Create a decision → the DISCUSSION-side link column gets the new id.
+    // 2) Create a decision → the DECISION-side link column records disc 4001.
     await act(async () => { await first.result.current.createDecision('החלטה חשובה'); });
-    const linkWrite = api.mock.calls.find(([q, v]) =>
+    const decWrite = api.mock.calls.find(([q, v]) =>
       q.includes('change_multiple_column_values')
-      && String(v.boardId) === 'disc-board'
-      && v.cv?.includes('disc_link'));
-    expect(linkWrite).toBeTruthy();
-    expect(JSON.parse(linkWrite[1].cv).disc_link.item_ids).toContain(9001);
+      && String(v.boardId) === 'dec-board'
+      && v.cols?.includes('dec_disc_link'));
+    expect(decWrite).toBeTruthy();
+    expect(JSON.parse(decWrite[1].cols).dec_disc_link.item_ids).toContain(4001);
 
     // 3) LEAVE + RE-ENTER: a brand-new hook instance (fresh mount) must reload
-    //    the decision from the server (it would be EMPTY before the fix).
+    //    the decision from the DECISIONS board (it would be EMPTY before the fix).
     first.unmount();
-    const second = renderHook(() => useDecisions('disc-1'));
+    const second = renderHook(() => useDecisions('4001'));
     await waitFor(() => expect(second.result.current.loading).toBe(false));
     expect(second.result.current.items.map((i) => String(i.id))).toContain('9001');
   });
