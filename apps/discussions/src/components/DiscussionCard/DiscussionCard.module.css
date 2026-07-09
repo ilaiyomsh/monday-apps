@@ -311,6 +311,29 @@
   min-width: 0;
   padding-inline: 0;
   justify-content: flex-start;
+  /* Drop the trigger's 1px (transparent) border in the header too: it added ~1px
+     on each side, so the edit-mode avatar sat ~13px from its divider while the
+     read-only avatar and the plain-text תאריך/שעה values sit at exactly 12px.
+     Zeroing it makes the edit avatar's visible circle an exact 12px from the
+     divider — identical to a text glyph. (The bordered modal variant is a
+     separate class, untouched.) */
+  border-width: 0;
+}
+
+/* Vibe's AvatarGroup — used by the read-only PersonList and by the edit picker
+   whenever MORE than one person is selected — gives EVERY avatar, including the
+   FIRST, an inline-start negative margin (margin-inline-start: -8px) to build the
+   overlap stack. On the LEADING avatar that margin is pure residual whitespace:
+   it pulls the group's box off the visible circle, so the avatar's leading edge
+   no longer sits flush at the group's 12px padding (and it flips to the divider
+   side under LTR). Zero it on the FIRST avatar ONLY — later avatars keep their
+   overlap — so the visible circle's leading edge is an exact 12px from its
+   divider in BOTH read-only and edit modes, matching the label/text ends and
+   giving the group an even internal label↔avatars gap. Targeted via the stable
+   data-vibe attributes because the Vibe class names are content-hashed. Scoped
+   to .peopleGroupAvatars so the shared Avatar/AvatarGroup are untouched elsewhere. */
+.peopleGroupAvatars :global([data-vibe="AvatarGroup"]) > :global([data-vibe="Avatar"]):first-child {
+  margin-inline-start: 0;
 }
 
 /* Bold column-title label next to a group's avatars (title comes from the live

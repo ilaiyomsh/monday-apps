@@ -444,7 +444,10 @@ export default function App() {
         setSelectedDiscussion(updated);
         setShowList(false);
       }
-      notify(meta.isDuplicate ? 'הדיון שוכפל בהצלחה' : 'הדיון נוצר בהצלחה');
+      // No success toast on a plain CREATE — opening the freshly created
+      // discussion card is itself the confirmation. Duplicate keeps its own
+      // notice (a distinct action), and edit keeps 'הדיון עודכן בהצלחה' above.
+      if (meta.isDuplicate) notify('הדיון שוכפל בהצלחה');
     }
   };
 
