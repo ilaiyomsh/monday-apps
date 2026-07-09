@@ -255,9 +255,11 @@
   font-size: 14px;
   font-family: var(--font-family);
   line-height: 20px;
-  /* notes is the only LTR-or-RTL free-text cell — follow the document direction */
-  direction: inherit;
-  text-align: start;
+  /* "פרטים"/notes (long_text_mkxn4zp4) is Hebrew free text — force RTL + right
+     alignment (round 32) so it reads naturally, even though the surrounding
+     My-Tasks table is dir="ltr". Only this column is flipped, not the whole table. */
+  direction: rtl;
+  text-align: right;
 }
 .notesInput::placeholder {
   color: var(--placeholder-color, #9699a6);

@@ -758,14 +758,14 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
               <div className={styles.field}>
                 <Text type="text2" className={styles.label}>{leadLabel}</Text>
                 <div className={styles.fieldWrap}>
-                  <PersonPicker selected={lead} onChange={setLead} bordered single closeOnSelect />
+                  <PersonPicker selected={lead} onChange={setLead} bordered single closeOnSelect boardKey="discussions" />
                   {lead.length > 0 && <FieldClearButton onClear={() => setLead([])} label={`ניקוי ${leadLabel}`} />}
                 </div>
               </div>
               <div className={styles.field}>
                 <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
                 <div className={styles.fieldWrap}>
-                  <PersonPicker selected={coordinator} onChange={setCoordinator} bordered single closeOnSelect />
+                  <PersonPicker selected={coordinator} onChange={setCoordinator} bordered single closeOnSelect boardKey="discussions" />
                   {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
                 </div>
               </div>
@@ -811,7 +811,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                   )}
                 </div>
                 <div className={styles.fieldWrap}>
-                  <PersonPicker selected={participants} onChange={setParticipants} bordered />
+                  <PersonPicker selected={participants} onChange={setParticipants} bordered boardKey="discussions" />
                   {participants.length > 0 && <FieldClearButton onClear={() => setParticipants([])} label="ניקוי משתתפים" />}
                 </div>
               </div>

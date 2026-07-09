@@ -302,6 +302,7 @@ export function TaskTableRow({
               onChange={(p) => onAssigneeChange(task.id, p)}
               closeOnSelect
               single
+              boardKey="tasks"
             />
           ) : (
             <PersonList people={task.responsibilityID} size="sm" showNames max={2} />

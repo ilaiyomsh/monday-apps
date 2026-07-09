@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Avatar, AvatarGroup } from '@vibe/core';
 import { Check, CloseSmall, Search, Person } from '@vibe/icons';
 import { subscribe, getVersion, getAllUsers, getUser, hasRoster, ensureRoster } from '@generated/utils/usersStore.js';
+import { useBoardSubscribers } from '@generated/hooks/useBoardSubscribers.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import logger from '@generated/utils/logger.js';
 import styles from './PersonPicker.module.css';
@@ -28,20 +29,29 @@ function initialsOf(name) {
  * no need to clear the existing one first; clicking the already-selected person
  * deselects it. Multi (משתתפים / מושפעים) is unaffected.
  */
-export function PersonPicker({ selected = [], onChange, bordered = false, closeOnSelect = false, single = false }) {
+export function PersonPicker({ selected = [], onChange, bordered = false, closeOnSelect = false, single = false, boardKey = null }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [pos, setPos] = useState(null);
   const triggerRef = useRef(null);
   const popoverRef = useRef(null);
 
-  // The picker reads the account roster from the shared usersStore (already
-  // pre-warmed for managers). ensureRoster() loads it once if it isn't yet — the
-  // picker needs the full list to pick from, regardless of admin status.
+  // Option source: when `boardKey` is given, restrict to that BOARD'S members
+  // (owners + subscribers) — the only people monday will let you assign to it
+  // (assigning a non-member throws invalidPersonAssignment). Falls back to the
+  // full account roster while board membership is loading or if it comes back
+  // empty, so the picker is never blank. Without a boardKey it uses the account
+  // roster as before (e.g. account-wide role defaults).
   useSyncExternalStore(subscribe, getVersion, getVersion);
-  const subscribers = getAllUsers();
-  const loading = !hasRoster() && subscribers.length === 0;
+  const board = useBoardSubscribers(boardKey);
+  const roster = getAllUsers();
+  const subscribers = boardKey && board.users.length ? board.users : roster;
+  const loading = boardKey
+    ? (board.loading && board.users.length === 0 && roster.length === 0)
+    : (!hasRoster() && roster.length === 0);
 
+  // Always warm the account roster: it's the fallback source, and selected-chip
+  // avatars for people who aren't board members still resolve from it.
   useEffect(() => { ensureRoster(); }, []);
 
   // Close on click-outside / Escape.
