@@ -406,27 +406,36 @@
   font-size: 12px;
 }
 
-/* status picker — full-width colored option bars (monday native) */
+/* status picker — monday-native popover: white rounded card (DialogContentContainer)
+   holding full-width rounded color pills, each filled with the label's real hex,
+   white centered text. ~36px option height + 6px gaps + 4px card padding match
+   monday's status picker. Shared by TaskTableRow, MyTasksRow and MyDecisionsRow
+   (both import `row.statusMenu`/`row.statusOption`), so this is the one place that
+   restyles all three. */
 .statusMenu {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 168px;
-  padding: 2px;
+  width: 172px;
+  padding: 4px;
 }
 .statusOption {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 40px;
+  height: 36px;
+  padding: 0 10px;
   border: none;
   border-radius: var(--border-radius-small, 4px);
   color: var(--text-color-on-primary, #fff);
   font-weight: var(--font-weight-medium, 500);
-  font-size: 16px;
+  font-size: 14px;
   font-family: var(--font-family);
   cursor: pointer;
   transition: filter 0.1s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .statusOption:hover {
   filter: brightness(0.95);

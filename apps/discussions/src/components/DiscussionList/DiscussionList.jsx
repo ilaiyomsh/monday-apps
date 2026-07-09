@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useDiscussions } from '@generated/hooks/useDiscussions';
 import { Skeleton, Button, Text, IconButton } from '@vibe/core';
 import { Calendar, Search, Settings } from '@vibe/icons';
-import { Copy, FileDown, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Copy, FileDown, Filter, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
 import { MONTHS_HE, fmtTimeLabel } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
@@ -35,7 +35,7 @@ function fmtListDate(d) {
    (PersonPicker / CreateDiscussionModal): the menu is rendered position:fixed
    with a high z-index so it is never clipped or covered, which the Vibe
    <Dropdown> menu was (its Dialog z-index isn't controllable from here). */
-function FilterSelect({ options, value, onChange, ariaLabel, searchable = false }) {
+function FilterSelect({ options, value, onChange, ariaLabel, searchable = false, icon: Icon = null, fieldLabel = null }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const [q, setQ] = useState('');
@@ -86,7 +86,11 @@ function FilterSelect({ options, value, onChange, ariaLabel, searchable = false 
         aria-expanded={open}
         aria-label={ariaLabel}
       >
-        <span className={styles.filterValue}>{selected?.label}</span>
+        {/* monday-style funnel filter icon on the RTL-leading (right) side. */}
+        {Icon && <Icon className={styles.filterIcon} aria-hidden="true" />}
+        <span className={styles.filterValue}>
+          {fieldLabel && (value == null || value === 'all') ? fieldLabel : (selected?.label ?? fieldLabel)}
+        </span>
         <span className={`${styles.filterChevron} ${open ? styles.filterChevronOpen : ''}`} aria-hidden="true">▾</span>
       </button>
       {open && pos && createPortal(
@@ -437,6 +441,8 @@ export function DiscussionList({
                   value={typeFilter}
                   onChange={(val) => setTypeFilter(val ?? 'all')}
                   ariaLabel="סינון לפי סוג"
+                  fieldLabel="סוג הדיון"
+                  icon={Filter}
                   searchable
                 />
               </div>
@@ -454,22 +460,27 @@ export function DiscussionList({
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
+              {/* monday-style filter chips at the RTL end (left): סוג הדיון on
+                  the right, the month filter to its left. Both carry a funnel icon. */}
               <div className={styles.filterRow}>
-                <div className={styles.filterCell}>
-                  <FilterSelect
-                    options={monthDropdownOptions}
-                    value={monthFilter}
-                    onChange={(val) => setMonthFilter(val ?? 'all')}
-                    ariaLabel="סינון לפי חודש"
-                  />
-                </div>
                 <div className={styles.filterCell}>
                   <FilterSelect
                     options={typeDropdownOptions}
                     value={typeFilter}
                     onChange={(val) => setTypeFilter(val ?? 'all')}
                     ariaLabel="סינון לפי סוג"
-                  searchable
+                    fieldLabel="סוג הדיון"
+                    icon={Filter}
+                    searchable
+                  />
+                </div>
+                <div className={styles.filterCell}>
+                  <FilterSelect
+                    options={monthDropdownOptions}
+                    value={monthFilter}
+                    onChange={(val) => setMonthFilter(val ?? 'all')}
+                    ariaLabel="סינון לפי חודש"
+                    icon={Filter}
                   />
                 </div>
               </div>

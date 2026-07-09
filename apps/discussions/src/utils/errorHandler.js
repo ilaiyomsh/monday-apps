@@ -190,6 +190,13 @@ const ERROR_MESSAGES = {
         canRetry: false,
         actionRequired: 'הזמן את המשתמש ללוח המשימות'
     },
+    // הקצאת אדם שאינו חבר בלוח — monday מחזיר ColumnValueException שמסתיר את הסיבה
+    // האמיתית מאחורי "בדוק את הקלט". מזוהה ומועדף ב-parseMondayError (ראה מטה).
+    'invalidPersonAssignment': {
+        userMessage: 'לא ניתן להקצות את המשתמש — הוא אינו חבר בלוח. יש להוסיף אותו ללוח לפני ההקצאה.',
+        canRetry: false,
+        actionRequired: 'הוסף את המשתמש כחבר בלוח לפני ההקצאה'
+    },
     'ItemNameTooLongException': {
         userMessage: 'שם הפריט ארוך מדי (מקסימום 255 תווים).',
         canRetry: false,
@@ -375,6 +382,19 @@ export const parseMondayError = (error, response = null, apiRequest = null) => {
         }
     }
     
+    // הקצאת אדם שאינו חבר בלוח: monday מחזיר ColumnValueException שה-error_data/
+    // ההודעה שלו נוקבים באדם ("invalidPersonAssignment" / "unable to assign person
+    // with id …" / "not a subscriber of the board"). קוד ה-ColumnValueException
+    // הגנרי מסתיר זאת כ"בדוק את הקלט", לכן נזהה ונעדיף את הסיבה האמיתית (אי-חברות
+    // בלוח). רץ אחרי קביעת errorCode כדי לגבור על הקוד הגנרי.
+    const personAssignHaystack = [
+        errorMessage,
+        errorData ? JSON.stringify(errorData) : null
+    ].filter(Boolean).join(' ').toLowerCase();
+    if (/invalidpersonassignment|unable to assign person|not a subscriber|not subscribed|not a member/.test(personAssignHaystack)) {
+        errorCode = 'invalidPersonAssignment';
+    }
+
     // Fallback - אם אין קוד שגיאה, נשתמש בהודעה
     if (!errorCode) {
         errorCode = 'UNKNOWN_ERROR';

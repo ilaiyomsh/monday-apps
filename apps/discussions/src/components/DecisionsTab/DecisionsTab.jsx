@@ -361,6 +361,7 @@ function DecisionRow({
             onChange={(people) => onDecider(decision.id, people)}
             single
             closeOnSelect
+            boardKey="decisions"
             {...(deciderPickerProps || {})}
           />
         ) : deciderPeople.length > 0 ? (
@@ -377,6 +378,7 @@ function DecisionRow({
           <PersonPicker
             selected={affected}
             onChange={(people) => onAffected(decision.id, people)}
+            boardKey="decisions"
           />
         ) : (
           <PersonList people={affected} size="sm" showNames={false} max={3} />

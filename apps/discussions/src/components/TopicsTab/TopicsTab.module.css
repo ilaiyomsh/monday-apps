@@ -187,18 +187,25 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 2px;
+  padding: 4px;
   min-width: 160px;
 }
 .prioOption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 36px;
+  padding: 0 10px;
   border: none;
   border-radius: 4px;
   color: #fff;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   font-family: var(--font-family);
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .prioOption:hover {
   filter: brightness(0.95);

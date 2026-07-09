@@ -280,6 +280,7 @@ export function QuickCreateModal({
                 bordered
                 closeOnSelect
                 single
+                boardKey={isDecision ? 'decisions' : 'tasks'}
               />
             </div>
             <div className={styles.field}>

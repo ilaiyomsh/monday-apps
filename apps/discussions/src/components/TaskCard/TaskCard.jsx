@@ -50,6 +50,7 @@ export function TaskCard({ task, onStatusChange, onAssigneeChange, onDeadlineCha
               onChange={(people) => onAssigneeChange(task.id, people)}
               closeOnSelect
               single
+              boardKey="tasks"
             />
           </div>
         ) : (
@@ -100,6 +101,7 @@ export function TaskCard({ task, onStatusChange, onAssigneeChange, onDeadlineCha
                       role="option"
                       aria-selected={task.statusID === opt.id}
                       className={`${styles.statusItem} ${task.statusID === opt.id ? styles.statusItemSelected : ''}`}
+                      style={{ background: opt.color || 'hsl(var(--status-default))' }}
                       onClick={() => { onStatusChange(task.id, opt.id); setStatusOpen(false); }}
                     >
                       {opt.label}
