@@ -464,9 +464,9 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   const showSearch = searchOpen || search.length > 0;
   const needDiscDates = group.col === 'discussion' && (group.order === 'dateAsc' || group.order === 'dateDesc');
 
-  // Back button element (no wrapper). The mapped view renders it INSIDE the
-  // header row, immediately to the LEFT of the sub-tabs toggle (RTL: the toggle
-  // sits to its right); the unmapped view wraps it alone in a .topBar row.
+  // Back button element (no wrapper). The mapped view renders it in a slot at
+  // the FAR RIGHT of the single toolbar row (round 35, pushed via
+  // margin-inline-start:auto); the unmapped view wraps it alone in a .topBar row.
   const backButton = onBackToDiscussions ? (
     <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
       <span className={styles.backBtnInner}>
@@ -494,15 +494,10 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {/* Back button gets its OWN row now — the sub-tabs toggle moved DOWN to
-          the search/toolbar row below (round 33). */}
-      <div className={styles.topBar} dir="ltr">
-        {backButton}
-      </div>
-
-      {/* monday-style toolbar: English pills, left-aligned (LTR). The sub-tabs
-          toggle (round 33) sits at the LEFT (RTL end) of this row — to the LEFT
-          of the Search input — at the same 32px height as the pills. */}
+      {/* Single toolbar row (round 35): English pills left-grouped (LTR) with the
+          sub-tabs toggle at the LEFT (RTL end) of the control group, and the
+          "לתצוגת הדיונים" back button pushed to the FAR RIGHT of the SAME row
+          (its slot uses margin-inline-start:auto). */}
       <div className={styles.toolbar} dir="ltr">
         {/* Sub-tabs: which people column scopes the server-side query. Default
             'decider' ("החלטות שקיבלתי") renders on the LEFT of the track (its own
@@ -565,6 +560,11 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
         />
 
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
+
+        {/* Back to discussions — pinned to the FAR RIGHT (RTL start) of the one
+            toolbar row; its slot's margin-inline-start:auto pushes it there while
+            the sub-tabs + controls stay left-grouped. */}
+        {backButton && <div className={styles.backSlot}>{backButton}</div>}
       </div>
 
       {/* Floating bulk-action bar — count + delete + close (mirrors the

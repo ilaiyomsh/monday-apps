@@ -24,18 +24,20 @@
   padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
 }
 
-/* "לתצוגת הדיונים" back button — its own row above the toolbar. */
-.topBar {
-  flex: none;
-  display: flex;
-  align-items: center;
-  padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
-}
 /* Back-button content: left-pointing arrow + label, inline (matches MyDecisionsView). */
 .backBtnInner {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+/* Round 35: the back button's slot inside the single toolbar row. The auto
+   inline-start margin (LTR: margin-left:auto) absorbs the free space so the
+   button is pushed hard against the RIGHT edge while the controls stay left-
+   grouped. Vertically centered on the row (align-items:center on the toolbar). */
+.backSlot {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* THE single scroll container — both axes. All group tables live inside one
