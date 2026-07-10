@@ -6,8 +6,10 @@ import { DiscussionCard } from '@generated/components/DiscussionCard';
 import { CreateDiscussionModal } from '@generated/components/CreateDiscussionModal';
 import { MyTasksView } from '@generated/components/MyTasksView';
 import { MyDecisionsView } from '@generated/components/MyDecisionsView';
+import { BrandLoader } from '@generated/components/BrandLoader';
 import { useToast } from './hooks/useToast';
 import { useUiErrorSink } from './hooks/useUiErrorSink';
+import { useMinSplash } from './hooks/useMinSplash.js';
 import { useMondayContext } from './contexts/MondayContext.jsx';
 import { useSettings } from './contexts/SettingsContext.jsx';
 import { api } from './utils/mondayApi/monday-client.js';
@@ -182,6 +184,13 @@ export default function App() {
   // the board-view iframe never flips the app into its mobile layout. The CSS
   // gates desktop chrome on `.is-desktop` and mobile-only rules on `.mobile-app`.
   const layoutClass = isMobile ? 'mobile-app' : 'is-desktop';
+
+  // Initial app boot: `context` is null until the monday SDK resolves it (a 4s
+  // watchdog in MondayContext installs an empty context fallback so we never
+  // hang). While it is null — and for a short min window after — the branded
+  // splash covers the app so the animation is seen on a cold start. Purely a
+  // display gate; it changes nothing about how context/settings load.
+  const bootSplash = useMinSplash(context == null);
 
   // Toast queue + the single UI error-display path (logger ERROR records -> toast).
   const {
@@ -555,6 +564,17 @@ export default function App() {
       />
     </>
   );
+
+  // Boot splash: hold the fullscreen branded loader until the context is ready
+  // AND the min window has elapsed, so the animation is seen on a cold start
+  // before the first view renders.
+  if (context == null || bootSplash) {
+    return (
+      <div className={`${styles.appShell} ${layoutClass}`}>
+        <BrandLoader fullscreen />
+      </div>
+    );
+  }
 
   if (effectiveView === 'myTasks') {
     return (

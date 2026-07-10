@@ -1,0 +1,15 @@
+.brandLoader { display:flex; align-items:center; justify-content:center; width:100%; min-height:240px; flex:1 1 auto; }
+.brandLoaderFull { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:var(--primary-background-color, #ffffff); z-index:5; }
+.brandLoaderInner { display:flex; flex-direction:column; align-items:center; gap:18px; animation:bl-fade-in .35s ease both; }
+.brandMark { display:block; overflow:visible; }
+.ring { fill:none; stroke:#e6e9ef; stroke-width:2; stroke-dasharray:3 7; stroke-linecap:round; transform-box:fill-box; transform-origin:center; animation:bl-spin 9s linear infinite; opacity:.7; }
+.table { fill:#d7dbe8; transform-box:fill-box; transform-origin:center; animation:bl-breathe 2.4s ease-in-out infinite; }
+.seat { transform-box:fill-box; transform-origin:center; opacity:0; animation:bl-pop .5s cubic-bezier(.34,1.56,.64,1) forwards, bl-wave 1.8s ease-in-out infinite; animation-delay:calc(var(--i) * .09s), calc(.6s + var(--i) * .12s); }
+@keyframes bl-pop { 0%{opacity:0; transform:scale(0);} 70%{opacity:1; transform:scale(1.18);} 100%{opacity:1; transform:scale(1);} }
+@keyframes bl-wave { 0%,100%{transform:scale(1);} 50%{transform:scale(1.22);} }
+@keyframes bl-breathe { 0%,100%{transform:scale(1); opacity:.9;} 50%{transform:scale(1.08); opacity:1;} }
+@keyframes bl-spin { to{transform:rotate(360deg);} }
+.brandText { font-family:'Figtree','Segoe UI',system-ui,sans-serif; font-size:14px; font-weight:600; letter-spacing:.12em; color:#9aa1b1; animation:bl-text 2.4s ease-in-out infinite; }
+@keyframes bl-text { 0%,100%{opacity:.55;} 50%{opacity:1;} }
+@keyframes bl-fade-in { from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
+@media (prefers-reduced-motion: reduce) { .ring,.table,.seat,.brandText{ animation-duration:.01ms; animation-iteration-count:1; } .seat{opacity:1;} }
