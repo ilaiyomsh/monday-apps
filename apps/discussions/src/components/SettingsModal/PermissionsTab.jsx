@@ -57,8 +57,9 @@ function EyeOffIcon() {
 // (rendered as the group header in the sidebar). disc → the discussions board's
 // people columns (creator/lead/participants); task → the tasks board's people
 // columns (creator/responsible); decision → the decisions board's role columns
-// (creator/decider — PERMISSION_ROLE_SOURCES.decisions; מושפעים is data, not a
-// role); system → global pseudo-roles (no board).
+// (creator/decider/מושפעים — PERMISSION_ROLE_SOURCES.decisions, where the
+// "מושפעים"/affected people column is now a first-class role); system → global
+// pseudo-roles (no board).
 // "כללי" (system) is FIRST — it's the global pseudo-role, shown at the top with
 // no board-source header. Then the per-board tiers, whose roles are ALL the
 // board's mapped people columns (derived dynamically, see buildRoleGroups).
@@ -125,9 +126,11 @@ function buildRoleGroups(columns) {
     const boardKey = TIER_BOARD_KEY[tier.id];
     const cfg = columns?.[boardKey] || {};
     // Only PERMISSION_ROLE_SOURCES aliases keep their alias key — that's what
-    // the resolver reads for mapped roles. Other mapped people columns (e.g.
-    // decisions' affectedID "מושפעים") are NOT alias-roles: the resolver treats
-    // them as EXTRA live columns keyed by raw column id, so the UI must too.
+    // the resolver reads for mapped roles. Any OTHER live people column the owner
+    // added that isn't a designated role source is NOT an alias-role: the
+    // resolver treats it as an EXTRA live column keyed by raw column id, so the
+    // UI must too. (decisions' affectedID "מושפעים" is now a role source, so it
+    // keeps its alias key like creator/decider.)
     const roleSources = PERMISSION_ROLE_SOURCES[boardKey] || [];
     // alias-by-columnId, to preserve alias keys for already-mapped role columns.
     const aliasByColId = {};

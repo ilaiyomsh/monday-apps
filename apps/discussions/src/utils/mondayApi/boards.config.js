@@ -270,7 +270,10 @@ export const CAPABILITIES = [
 export const PERMISSION_ROLE_SOURCES = {
   discussions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID', 'participantsID'],
   tasks: ['taskCreatorID', 'responsibilityID'],
-  decisions: ['decisionCreatorID', 'deciderID'],
+  // decisions: creator + decider + "מושפעים" (affected). `affectedID` is a
+  // first-class role source (not just data) so a user listed in the decision's
+  // affected people column is recognized as the "מושפעים" role by the resolver.
+  decisions: ['decisionCreatorID', 'deciderID', 'affectedID'],
 };
 
 /*
@@ -398,6 +401,23 @@ export const DEFAULT_PERMISSION_SEED = {
       editDecisionDate: true,
       editDecisionAffected: true,
       editDecisionName: true,
+      deleteDecision: false,
+    },
+  },
+  // affected (מושפעים) → the LEAST-privileged decision role: a stakeholder who
+  // may acknowledge/track the decision STATUS but not change its substance
+  // (priority/date/affected list/name) or delete it. Mirrors the task tier's
+  // limited "responsible" role (explicit grant + explicit revokes). Per the
+  // resolver's deny-wins veto, an explicit false here is honored even for a user
+  // who also holds a higher decision role — same semantics as responsible on a
+  // task. The owner can broaden these in the "שדות החלטה" card.
+  'decisions:affectedID': {
+    capabilities: {
+      editDecisionStatus: true,
+      editDecisionPriority: false,
+      editDecisionDate: false,
+      editDecisionAffected: false,
+      editDecisionName: false,
       deleteDecision: false,
     },
   },
