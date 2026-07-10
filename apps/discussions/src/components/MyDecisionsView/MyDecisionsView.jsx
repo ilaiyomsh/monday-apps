@@ -494,12 +494,19 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {/* Header row: the sub-tabs toggle sits immediately to the RIGHT of the
-          "לתצוגת הדיונים" back button, on the SAME row and at the SAME height
-          (both @vibe small = 32px), vertically aligned. */}
+      {/* Back button gets its OWN row now — the sub-tabs toggle moved DOWN to
+          the search/toolbar row below (round 33). */}
       <div className={styles.topBar} dir="ltr">
         {backButton}
-        {/* Sub-tabs: which people column scopes the server-side query. */}
+      </div>
+
+      {/* monday-style toolbar: English pills, left-aligned (LTR). The sub-tabs
+          toggle (round 33) sits at the LEFT (RTL end) of this row — to the LEFT
+          of the Search input — at the same 32px height as the pills. */}
+      <div className={styles.toolbar} dir="ltr">
+        {/* Sub-tabs: which people column scopes the server-side query. Default
+            'decider' ("החלטות שקיבלתי") renders on the LEFT of the track (its own
+            rtl direction + SUB_TABS order) — round-27 behavior preserved. */}
         <div className={styles.subTabs} role="tablist" aria-label="סינון החלטות לפי תפקיד">
           {SUB_TABS.map((tab) => (
             <button
@@ -514,10 +521,6 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
             </button>
           ))}
         </div>
-      </div>
-
-      {/* monday-style toolbar: English pills, left-aligned (LTR) */}
-      <div className={styles.toolbar} dir="ltr">
         {showSearch ? (
           <div className={styles.searchPill}>
             <Search className={styles.pillIcon} aria-hidden="true" />

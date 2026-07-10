@@ -21,6 +21,9 @@ export function DiscussionCalendar({
   // {onEdit, onDuplicate, onExport, onDelete, exportingId} — the standard row
   // actions, surfaced on chip hover.
   rowActions = null,
+  // (item, event) => void — opens the shared right-click context menu at the
+  // cursor for a chip (round 33). Wired on each EventChip's onContextMenu.
+  onItemContextMenu = null,
 }) {
   const eventsByDay = useMemo(() => groupItemsByDay(items), [items]);
   const { typeColor } = useTemplates();
@@ -89,6 +92,7 @@ export function DiscussionCalendar({
             accentFor={accentFor}
             actionsFor={actionsFor}
             onChipClick={onSelect}
+            onChipContextMenu={onItemContextMenu}
             onSlotClick={onCreateAt}
             loading={loading}
           />
@@ -101,6 +105,7 @@ export function DiscussionCalendar({
             actionsFor={actionsFor}
             onDayClick={(day) => onNavigate({ anchor: day, mode: 'week' })}
             onChipClick={onSelect}
+            onChipContextMenu={onItemContextMenu}
             loading={loading}
           />
         )}

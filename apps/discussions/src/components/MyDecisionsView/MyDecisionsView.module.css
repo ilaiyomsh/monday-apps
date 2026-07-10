@@ -16,14 +16,12 @@
   box-sizing: border-box;
 }
 
-/* "לתצוגת הדיונים" back button — its own row above the sub-tabs. */
+/* "לתצוגת הדיונים" back button — its OWN row (round 33: the sub-tabs toggle
+   moved down to the toolbar/search row below). */
 .topBar {
   flex: none;
   display: flex;
   align-items: center;
-  /* Back button + sub-tabs toggle share this ONE row: the toggle sits just to
-     the RIGHT of the back button (RTL content inside an LTR row), both
-     vertically centered and the same height. Wrap gracefully when narrow. */
   flex-wrap: wrap;
   gap: var(--spacing-small, 8px);
   padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
@@ -45,11 +43,10 @@
   align-items: stretch;
   gap: 4px;
   width: fit-content;
-  /* Round 29: the toggle now sits on the SAME row as (and immediately to the
-     RIGHT of) the "לתצוגת הדיונים" back button — no own margin; the .topBar
-     flex gap spaces the two. It stays EXACTLY as tall as that @vibe small
-     button (32px) so the two align; box-sizing keeps the 4px track padding
-     inside the 32px total. */
+  /* Round 33: the toggle sits on the toolbar/search row at its LEFT (RTL) end,
+     to the LEFT of the Search — no own margin; the .toolbar flex gap spaces it
+     from the search. It stays EXACTLY as tall as the @vibe small pills (32px)
+     so the row aligns; box-sizing keeps the 4px track padding inside the 32px. */
   margin: 0;
   height: 32px;
   box-sizing: border-box;

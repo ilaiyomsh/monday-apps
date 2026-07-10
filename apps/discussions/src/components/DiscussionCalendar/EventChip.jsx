@@ -76,7 +76,7 @@ function HoverCard({ item, anchor, actions, onLeave, onEnter, onAction }) {
               ) : (
                 <FileDown className={styles.calHoverIcon} />
               )}
-              <span>ייצוא ל-DOCS</span>
+              <span>ייצוא</span>
             </button>
           )}
           {actions.onDelete && (
@@ -101,7 +101,7 @@ function HoverCard({ item, anchor, actions, onLeave, onEnter, onAction }) {
    A real <button> so it's keyboard-reachable; clicks must not bubble into the
    surrounding day cell (which navigates to week view). Hovering opens the
    actions card; the card is a portal SIBLING (chips can't nest buttons). */
-export function EventChip({ item, accent, selected, onClick, variant = 'month', style, actions }) {
+export function EventChip({ item, accent, selected, onClick, onContextMenu, variant = 'month', style, actions }) {
   const timeLabel = variant === 'month' ? fmtTimeLabel(item.discussionDateID) : '';
   const btnRef = useRef(null);
   const openTimer = useRef(null);
@@ -167,6 +167,7 @@ export function EventChip({ item, accent, selected, onClick, variant = 'month', 
           closeNow();
           onClick?.(item);
         }}
+        onContextMenu={onContextMenu ? (e) => { closeNow(); onContextMenu(item, e); } : undefined}
         onMouseEnter={onChipEnter}
         onMouseLeave={scheduleClose}
         aria-label={item.name}

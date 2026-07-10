@@ -9,7 +9,7 @@ import { SortableRow } from '@generated/components/SortableRow';
 import { useColumnOrder } from '@generated/hooks/useColumnOrder.js';
 import { useRowOrder } from '@generated/hooks/useRowOrder.js';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
-import { Trash2, Check, X, Plus } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 import { PersonAvatar, PersonList } from '@generated/components/PersonAvatar';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -182,7 +182,7 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
 }
 
 function DecisionRow({
-  decision, statusOpts, can, onRename, onStatus, onDate, onDecider, onAffected, onDelete, rowStyle,
+  decision, statusOpts, can, onRename, onStatus, onDate, onDecider, onAffected, rowStyle,
   // Optimistic-create error affordance (a temp row whose create failed): retry
   // re-runs the create; dismiss removes the row locally.
   onRetryCreate, onDismissRow,
@@ -197,7 +197,6 @@ function DecisionRow({
 }) {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(decision.name || '');
-  const [confirmDel, setConfirmDel] = useState(false);
 
   // A freshly-added decision still carrying a temp id has no monday item yet, but
   // it is FULLY EDITABLE right away — edits are queued in useDecisions and flushed
@@ -212,7 +211,6 @@ function DecisionRow({
   const date = decision.decisionDateID instanceof Date ? decision.decisionDateID : null;
 
   const canRename = can('editDecisionName', decision);
-  const canDelete = can('deleteDecision', decision);
 
   const startEditName = () => {
     if (!canRename) return;
@@ -276,41 +274,6 @@ function DecisionRow({
           >
             <Edit size={16} />
           </button>
-        )}
-        {canDelete && (
-          confirmDel ? (
-            <span className={styles.decConfirmDel} onClick={(e) => e.stopPropagation()}>
-              <span className={styles.decConfirmText}>למחוק?</span>
-              <button
-                type="button"
-                className={`${styles.decConfirmBtn} ${styles.decConfirmYes}`}
-                onClick={(e) => { e.stopPropagation(); setConfirmDel(false); onDelete(decision.id); }}
-                aria-label="אישור מחיקה"
-                title="אישור"
-              >
-                <Check size={14} />
-              </button>
-              <button
-                type="button"
-                className={styles.decConfirmBtn}
-                onClick={(e) => { e.stopPropagation(); setConfirmDel(false); }}
-                aria-label="ביטול מחיקה"
-                title="ביטול"
-              >
-                <X size={14} />
-              </button>
-            </span>
-          ) : (
-            <button
-              type="button"
-              className={styles.decDeleteBtn}
-              onClick={(e) => { e.stopPropagation(); setConfirmDel(true); }}
-              aria-label="מחק החלטה"
-              title="מחק החלטה"
-            >
-              <Trash2 size={18} />
-            </button>
-          )
         )}
         {failed && (
           <span className={styles.decCreateFailedActions} onClick={(e) => e.stopPropagation()}>
@@ -742,13 +705,6 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     );
   }
 
-  // Deferred delete with an undo window (softDeleteDecisions): the row vanishes
-  // now, the real delete fires when the toast's "בטל" expires.
-  const handleDelete = (id) => {
-    const { undo } = softDeleteDecisions(id);
-    onNotify?.('ההחלטה נמחקה', 'success', 6000, { label: 'בטל', onClick: undo });
-  };
-
   // ---------- Filter panel body (mirrors the Tasks / Previous tabs) ----------
   const field = (mobile, label, seg) => (mobile
     ? <div className={bs.bField} key={label}><div className={bs.bFieldLabel}>{label}</div>{seg}</div>
@@ -913,7 +869,6 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         updateDecisionDate={applyDecisionDate}
         updateDecisionDecider={applyDecisionDecider}
         updateDecisionAffected={applyDecisionAffected}
-        onDelete={handleDelete}
         onRetryCreate={retryCreate}
         onDismissRow={dismissRow}
         rowStyle={rowStyle}
@@ -1036,7 +991,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
 function DecisionRows({
   list, scope, canReorderRows, columns, selectable, selectedIds, onToggleSelect,
   statusOpts, canDecision, updateDecisionName, updateDecisionStatus, updateDecisionDate,
-  updateDecisionDecider, updateDecisionAffected, onDelete, rowStyle,
+  updateDecisionDecider, updateDecisionAffected, rowStyle,
   onRetryCreate, onDismissRow,
 }) {
   const enabled = !!scope && !!canReorderRows;
@@ -1056,7 +1011,6 @@ function DecisionRows({
       onDate={updateDecisionDate}
       onDecider={updateDecisionDecider}
       onAffected={updateDecisionAffected}
-      onDelete={onDelete}
       onRetryCreate={onRetryCreate}
       onDismissRow={onDismissRow}
       rowStyle={rowStyle}

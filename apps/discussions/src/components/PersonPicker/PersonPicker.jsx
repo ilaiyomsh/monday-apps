@@ -172,14 +172,16 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
             const p = selected[0];
             const u = getUser(p.id);
             return (
-              <Avatar
-                size="small"
-                src={u?.photo_thumb}
-                text={initialsOf(p.name || u?.name)}
-                type={u?.photo_thumb ? 'img' : 'text'}
-                ariaLabel={p.name}
-                tooltipProps={{ content: p.name || u?.name }}
-              />
+              // Native-title name tooltip (round 33) — never clipped / always on top.
+              <span title={p.name || u?.name} style={{ display: 'inline-flex' }}>
+                <Avatar
+                  size="small"
+                  src={u?.photo_thumb}
+                  text={initialsOf(p.name || u?.name)}
+                  type={u?.photo_thumb ? 'img' : 'text'}
+                  ariaLabel={p.name}
+                />
+              </span>
             );
           })()
         ) : (
@@ -194,7 +196,10 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
                   text={initialsOf(p.name || u?.name)}
                   type={u?.photo_thumb ? 'img' : 'text'}
                   ariaLabel={p.name}
-                  tooltipProps={{ content: p.name || u?.name }}
+                  // Overlapping group avatars keep the @vibe tooltip (a wrapper
+                  // span would break the stack) but pinned to z-index 10000 so
+                  // it's never hidden behind other UI (round 33).
+                  tooltipProps={{ content: p.name || u?.name, zIndex: 10000 }}
                 />
               );
             })}
