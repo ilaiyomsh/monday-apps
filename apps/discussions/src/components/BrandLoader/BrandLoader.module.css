@@ -1,15 +1,138 @@
-.brandLoader { display:flex; align-items:center; justify-content:center; width:100%; min-height:240px; flex:1 1 auto; }
-.brandLoaderFull { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:var(--primary-background-color, #ffffff); z-index:5; }
-.brandLoaderInner { display:flex; flex-direction:column; align-items:center; gap:18px; animation:bl-fade-in .35s ease both; }
-.brandMark { display:block; overflow:visible; }
-.ring { fill:none; stroke:#e6e9ef; stroke-width:2; stroke-dasharray:3 7; stroke-linecap:round; transform-box:fill-box; transform-origin:center; animation:bl-spin 9s linear infinite; opacity:.7; }
-.table { fill:#d7dbe8; transform-box:fill-box; transform-origin:center; animation:bl-breathe 2.4s ease-in-out infinite; }
-.seat { transform-box:fill-box; transform-origin:center; opacity:0; animation:bl-pop .5s cubic-bezier(.34,1.56,.64,1) forwards, bl-wave 1.8s ease-in-out infinite; animation-delay:calc(var(--i) * .09s), calc(.6s + var(--i) * .12s); }
-@keyframes bl-pop { 0%{opacity:0; transform:scale(0);} 70%{opacity:1; transform:scale(1.18);} 100%{opacity:1; transform:scale(1);} }
-@keyframes bl-wave { 0%,100%{transform:scale(1);} 50%{transform:scale(1.22);} }
-@keyframes bl-breathe { 0%,100%{transform:scale(1); opacity:.9;} 50%{transform:scale(1.08); opacity:1;} }
-@keyframes bl-spin { to{transform:rotate(360deg);} }
-.brandText { font-family:'Figtree','Segoe UI',system-ui,sans-serif; font-size:14px; font-weight:600; letter-spacing:.12em; color:#9aa1b1; animation:bl-text 2.4s ease-in-out infinite; }
-@keyframes bl-text { 0%,100%{opacity:.55;} 50%{opacity:1;} }
-@keyframes bl-fade-in { from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
-@media (prefers-reduced-motion: reduce) { .ring,.table,.seat,.brandText{ animation-duration:.01ms; animation-iteration-count:1; } .seat{opacity:1;} }
+/* "Meetings" loading splash on a WHITE background. Central table with 8
+   colored people orbiting it (Twyst signature gradient), a spinning gradient
+   arc, and the gradient "Meetings" wordmark whose colors flow as a continuous
+   left-to-right wave, over "Powered by twyst". Non-scoped module → literal
+   class names. */
+.brandLoader,
+.brandLoaderFull {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+}
+.brandLoader {
+  width: 100%;
+  min-height: 260px;
+  flex: 1 1 auto;
+}
+.brandLoaderFull {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  animation: bl-fade 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.mark {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 8px 26px rgba(97, 97, 255, 0.22));
+}
+.ring {
+  fill: none;
+  stroke: rgba(15, 17, 35, 0.10);
+  stroke-width: 2;
+  stroke-dasharray: 2 9;
+  stroke-linecap: round;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bl-spin-rev 18s linear infinite;
+}
+.arc {
+  fill: none;
+  stroke: url(#twystLoaderGrad);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 27 100;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bl-spin 2.4s cubic-bezier(0.6, 0.1, 0.3, 0.9) infinite;
+}
+.table {
+  fill: url(#twystLoaderGrad);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bl-breathe 2.6s ease-in-out infinite;
+}
+.seatGroup {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bl-orbit 7s linear infinite;
+}
+.seat {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: bl-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(var(--i) * 0.08s);
+}
+@keyframes bl-orbit { to { transform: rotate(360deg); } }
+@keyframes bl-pop {
+  0% { opacity: 0; transform: scale(0); }
+  70% { opacity: 1; transform: scale(1.18); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes bl-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.92; }
+  50% { transform: scale(1.07); opacity: 1; }
+}
+@keyframes bl-spin { to { transform: rotate(360deg); } }
+@keyframes bl-spin-rev { to { transform: rotate(-360deg); } }
+
+.textBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.wordmark {
+  font-family: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  /* Symmetric palette (indigo…peach…indigo) so the wave loops seamlessly. */
+  background: linear-gradient(100deg,
+    #6161FF 0%, #97AEFF 18%, #E271FF 34%, #FFA88D 50%,
+    #E271FF 66%, #97AEFF 82%, #6161FF 100%);
+  background-size: 200% 100%;
+  background-position: 0% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: bl-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both,
+    bl-wavegrad 2.8s linear infinite;
+}
+.poweredBy {
+  font-family: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #8288A3;
+  animation: bl-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.62s both;
+}
+@keyframes bl-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+/* Colors travel left -> right across the letters, seamless loop. */
+@keyframes bl-wavegrad {
+  from { background-position: 0% 50%; }
+  to { background-position: 200% 50%; }
+}
+@keyframes bl-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ring, .arc, .table, .seatGroup, .seat, .wordmark, .poweredBy, .inner {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+  .seat { opacity: 1; }
+}
