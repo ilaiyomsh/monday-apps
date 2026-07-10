@@ -22,13 +22,13 @@ vi.mock('@generated/hooks/useStatusOptions.js', () => ({
 import { DiscussionList } from '../DiscussionList.jsx';
 
 // Round 36: the discussions list initial load now shows the branded BrandLoader
-// splash (an animated "round table" mark + "Powered by Twyst") in place of the
+// splash (an animated "round table" mark + the "Meetings" wordmark) in place of the
 // old grey skeleton bars.
 describe('DiscussionList — initial list load shows the branded splash', () => {
-  it('renders the BrandLoader (status role + "Powered by Twyst") while loading', () => {
+  it('renders the BrandLoader (status role + "Meetings" wordmark) while loading', () => {
     render(<DiscussionList onSelect={() => {}} />);
     expect(screen.getByRole('status', { name: 'טוען' })).toBeTruthy();
-    expect(screen.getByText('Powered by Twyst')).toBeTruthy();
+    expect(screen.getByText('Meetings')).toBeTruthy();
   });
 
   it('no longer renders the old grey skeleton bars', () => {
