@@ -523,20 +523,9 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {/* Top row: back to discussions (its own row, above the toolbar) — left-
-          pointing arrow + label, matching the MyDecisionsView back button. */}
-      {onBackToDiscussions && (
-        <div className={styles.topBar} dir="ltr">
-          <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
-            <span className={styles.backBtnInner}>
-              <ArrowLeft size={16} aria-hidden="true" />
-              לתצוגת הדיונים
-            </span>
-          </Button>
-        </div>
-      )}
-
-      {/* monday-style toolbar: "משימה חדשה" + English pills, left-aligned (LTR) */}
+      {/* Single toolbar row (round 35): "משימה חדשה" + English pills, left-
+          grouped (LTR), with the "לתצוגת הדיונים" back button pushed to the FAR
+          RIGHT of the same row (its slot uses margin-inline-start:auto). */}
       <div className={styles.toolbar} dir="ltr">
         <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
           משימה חדשה
@@ -586,6 +575,20 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         />
 
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
+
+        {/* Back to discussions — pinned to the FAR RIGHT (RTL start) of the one
+            toolbar row; its slot's margin-inline-start:auto pushes it there while
+            the controls above stay left-grouped. */}
+        {onBackToDiscussions && (
+          <div className={styles.backSlot}>
+            <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
+              <span className={styles.backBtnInner}>
+                <ArrowLeft size={16} aria-hidden="true" />
+                לתצוגת הדיונים
+              </span>
+            </Button>
+          </div>
+        )}
       </div>
 
       {selectedIds.size > 0 && (

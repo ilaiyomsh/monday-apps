@@ -16,8 +16,9 @@
   box-sizing: border-box;
 }
 
-/* "לתצוגת הדיונים" back button — its OWN row (round 33: the sub-tabs toggle
-   moved down to the toolbar/search row below). */
+/* "לתצוגת הדיונים" back button on its OWN row — used ONLY by the unmapped
+   fallback (which has no toolbar). In the mapped view the back button lives in
+   the single toolbar row, pushed right by .backSlot (round 35). */
 .topBar {
   flex: none;
   display: flex;
@@ -31,6 +32,15 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+/* Round 35: the back button's slot inside the single toolbar row. The auto
+   inline-start margin (LTR: margin-left:auto) absorbs the free space so the
+   button is pushed hard against the RIGHT edge while the sub-tabs + controls
+   stay left-grouped. Vertically centered on the row (toolbar align-items). */
+.backSlot {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Sub-tabs segmented control (RTL — Hebrew labels): 'החלטות שאני מחליט' /
