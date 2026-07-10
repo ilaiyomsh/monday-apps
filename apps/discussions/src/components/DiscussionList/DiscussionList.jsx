@@ -1,23 +1,19 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useDiscussions } from '@generated/hooks/useDiscussions';
-import { Skeleton, Button, Text, IconButton } from '@vibe/core';
+import { Button, Text, IconButton } from '@vibe/core';
 import { Calendar, Search, Settings } from '@vibe/icons';
 import { Copy, FileDown, Filter, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
+import { BrandLoader } from '@generated/components/BrandLoader';
 import { MONTHS_HE, fmtTimeLabel } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
 import { discussionAccentColor } from '@generated/constants/discussionColors.js';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { usePermission } from '@generated/hooks/usePermission.js';
+import { useMinSplash } from '@generated/hooks/useMinSplash.js';
 import styles from './DiscussionList.module.css';
-
-/* Loading-skeleton bar height. MUST equal the rendered height of a real `.item`
-   row (two lines: 20px name + 2px gap + 16px subtitle + 8px top/bottom padding
-   = 54px; see .item min-height in DiscussionList.module.css) so the grey bars
-   don't visibly shrink/jump when the real rows arrive. */
-const ROW_SKELETON_H = 54;
 
 /* List-row subtitle: short weekday + "DD/MM", plus " · HH:MM" when the date
    column carries a real time part ("יום ב׳ 07/07 · 09:00" — mockup dateLabel).
@@ -383,6 +379,13 @@ export function DiscussionList({
 
   const { items, loading, refetching, loadingMore, cursor, loadMore, softDeleteDiscussion } = useDiscussions(filters);
 
+  // Branded splash for the initial list load. useMinSplash keeps it up for a
+  // short min window on each entry (it arms when `loading` rises, which happens
+  // on mount as the first page fetches), so the animation is seen even when the
+  // page resolves instantly from cache. Only the list branch consumes it — the
+  // calendar keeps its own loading UI. Purely presentational; no data change.
+  const splash = useMinSplash(loading);
+
   // Per-discussion edit gate (mirrors DiscussionCard) resolved through the
   // advisory permission hook. The list rows carry discussionCreatorID/
   // discussionLeadID (see LIST_COLUMNS) so this resolves without an extra fetch.
@@ -607,12 +610,8 @@ export function DiscussionList({
         />
       ) : (
       <div className={`${styles.scroll} ${refetching ? styles.refetching : ''}`}>
-        {loading ? (
-          <div className={styles.skeletonList}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} type={"rectangle"} fullWidth height={ROW_SKELETON_H} />
-            ))}
-          </div>
+        {(loading || splash) ? (
+          <BrandLoader />
         ) : items.length === 0 ? (
           <div className={styles.empty}>
             <Text color={"secondary"}>לא נמצאו דיונים</Text>

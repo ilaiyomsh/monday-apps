@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Skeleton, Button } from '@vibe/core';
+import { Button } from '@vibe/core';
 import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
 import { ArrowLeft } from 'lucide-react';
 import { useMyDecisions } from '@generated/hooks/useMyDecisions.js';
@@ -7,11 +7,13 @@ import { usePermission } from '@generated/hooks/usePermission.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDiscussions } from '@generated/hooks/useDiscussions.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
+import { useMinSplash } from '@generated/hooks/useMinSplash.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
+import { BrandLoader } from '@generated/components/BrandLoader';
 import { getBoardId } from '@api/board-config-store.js';
 import { MyDecisionsTable } from './MyDecisionsTable.jsx';
 import { toPipelineRows } from './decisionPipeline.js';
@@ -159,6 +161,12 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     items, loading, loadingMore, hasMore, error, configured, loadMore,
     updateDecisionStatus, updateDecisionPriority, updateDecisionDate, updateDecisionName, softDeleteDecisions,
   } = useMyDecisions(subTab, { currentUser, context, search: debouncedSearch });
+
+  // Branded splash for the initial decisions load. useMinSplash arms when
+  // `loading` rises (on mount / sub-tab switch as the page fetches) and holds a
+  // short min window so the animation is seen on every entry, even when instant.
+  // Purely presentational; it reads `loading` and changes no data/hook logic.
+  const splash = useMinSplash(loading);
 
   // Board mapped at all? (vs only the ACTIVE sub-tab's people column missing).
   // Unmapped board → the full "not configured" empty state, no toolbar/tabs;
@@ -589,10 +597,8 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
       )}
 
       <div className={styles.board}>
-      {loading ? (
-        <div className={styles.skeletonStack}>
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} type="rectangle" height={36} fullWidth />)}
-        </div>
+      {(loading || splash) ? (
+        <BrandLoader />
       ) : !configured ? (
         // Board mapped but the ACTIVE sub-tab's people column isn't — keep the
         // tabs (switching back may work) and explain what's missing.

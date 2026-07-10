@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Skeleton, Button } from '@vibe/core';
+import { Button } from '@vibe/core';
 import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
 import { ArrowLeft } from 'lucide-react';
 import { useMyTasks } from '@generated/hooks/useMyTasks.js';
@@ -8,10 +8,12 @@ import { usePermission } from '@generated/hooks/usePermission.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDiscussions } from '@generated/hooks/useDiscussions.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
+import { useMinSplash } from '@generated/hooks/useMinSplash.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
+import { BrandLoader } from '@generated/components/BrandLoader';
 import { MyTasksTable } from './MyTasksTable.jsx';
 import { groupMyTasks, NO_DISCUSSION } from './grouping.js';
 import { BuilderControl } from './controls/BuilderControl.jsx';
@@ -142,6 +144,12 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     updateTaskStatus, updateTaskPriority, updateTaskNotes, updateTaskDeadline, updateTaskName,
     softDeleteTasks, createTask,
   } = useMyTasks({ currentUser, context, search: debouncedSearch, notDoneStatusIds });
+
+  // Branded splash for the initial tasks load. useMinSplash arms when `loading`
+  // rises (on mount, as the first page fetches) and holds a short min window so
+  // the animation is seen on every entry — even when the page is instant. Purely
+  // presentational; it reads `loading` and changes no data/hook logic.
+  const splash = useMinSplash(loading);
 
   // Per-task permission gate. Task-tier caps resolve from the TASK's own people
   // columns (creator/responsible) — there is no parent discussion in this
@@ -608,10 +616,8 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       )}
 
       <div className={styles.board}>
-      {loading ? (
-        <div className={styles.skeletonStack}>
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} type="rectangle" height={36} fullWidth />)}
-        </div>
+      {(loading || splash) ? (
+        <BrandLoader />
       ) : error ? (
         <div className={styles.empty}>{t('myTasks.error')}</div>
       ) : (items.length === 0 && !creatingNew) ? (
