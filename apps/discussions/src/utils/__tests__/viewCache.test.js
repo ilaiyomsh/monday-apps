@@ -108,3 +108,76 @@ describe('reconcileSeeded — SWR reconcile of a cache seed against a fresh page
     expect(reconcileSeeded(null, [row(1)])).toEqual([row(1)]);
   });
 });
+
+// REGRESSION (round 39): round 37 introduced this cache but its unit tests
+// seeded PLAIN fake objects with no real Date instances, so the JSON Date-loss
+// was never exercised. A fresh row from mapItem/parseValue holds the date
+// columns (deadlineID / decisionDateID) as REAL Date objects (with a `hasTime`
+// flag); a naive JSON round-trip turned them into strings, so a seeded row then
+// threw "E.toLocaleDateString is not a function" the moment MyTasksRow /
+// MyDecisionsRow (or DatePickerPopover / sort / group) touched them. These tests
+// use REAL Dates and assert a seeded row is interchangeable with a fresh one.
+describe('writeViewCache / readViewCache — Date fields survive the JSON round-trip (regression)', () => {
+  const key = 'disc.viewcache.myTasks.42.B1';
+
+  it('reconstructs a task deadlineID as a REAL Date (not a string) so date methods work', () => {
+    const deadline = new Date(2026, 6, 10); // local midnight, date-only (as parseValue builds it)
+    const items = [{ id: '1', name: 'a', deadlineID: deadline, created_at: '2026-07-01T09:00:00Z', statusID: 3 }];
+    expect(writeViewCache(key, items, null)).toBe(true);
+    const hit = readViewCache(key);
+    const seeded = hit.items[0].deadlineID;
+    expect(seeded).toBeInstanceOf(Date);
+    expect(typeof seeded.toLocaleDateString).toBe('function');
+    expect(() => seeded.toLocaleDateString('en-GB')).not.toThrow(); // the exact crashing call
+    expect(seeded.getTime()).toBe(deadline.getTime());
+    // created_at is a STRING in a fresh row — it must STAY a string, never a Date.
+    expect(typeof hit.items[0].created_at).toBe('string');
+    expect(hit.items[0].created_at).toBe('2026-07-01T09:00:00Z');
+    expect(hit.items[0].statusID).toBe(3); // non-date scalars unchanged
+  });
+
+  it('reconstructs a decision decisionDateID as a REAL Date (covers MyDecisions too)', () => {
+    const d = new Date(2026, 0, 5);
+    writeViewCache(key, [{ id: '9', decisionDateID: d, decisionStatusID: 2 }], null);
+    const seeded = readViewCache(key).items[0].decisionDateID;
+    expect(seeded).toBeInstanceOf(Date);
+    expect(seeded.getTime()).toBe(d.getTime());
+  });
+
+  it('preserves the hasTime flag exactly as parseValue set it (timed vs date-only)', () => {
+    const timed = new Date('2026-07-10T13:30:00Z'); timed.hasTime = true;
+    const dateOnly = new Date(2026, 6, 10); dateOnly.hasTime = false;
+    writeViewCache(key, [{ id: '1', deadlineID: timed }, { id: '2', deadlineID: dateOnly }], null);
+    const hit = readViewCache(key);
+    expect(hit.items[0].deadlineID).toBeInstanceOf(Date);
+    expect(hit.items[0].deadlineID.hasTime).toBe(true);
+    expect(hit.items[0].deadlineID.getTime()).toBe(timed.getTime());
+    expect(hit.items[1].deadlineID).toBeInstanceOf(Date);
+    expect(hit.items[1].deadlineID.hasTime).toBe(false);
+  });
+
+  it('leaves a null date field null (no bogus Date minted)', () => {
+    writeViewCache(key, [{ id: '1', deadlineID: null, name: 'x' }], null);
+    const hit = readViewCache(key);
+    expect(hit.items[0].deadlineID).toBeNull();
+  });
+
+  it('a seeded row SORTS / GROUPS / FORMATS identically to a fresh row (interchangeable)', () => {
+    const d = new Date(2026, 2, 15, 9, 0);
+    writeViewCache(key, [{ id: '1', deadlineID: d }], 'C');
+    const seeded = readViewCache(key).items[0].deadlineID;
+    // grouping.groupByDate + controls.sortTasks both gate on `instanceof Date` and call getTime()
+    expect(seeded instanceof Date).toBe(true);
+    expect(seeded.getTime()).toBe(d.getTime());
+    // the row cells render this via toLocaleDateString — must equal the fresh output
+    expect(seeded.toLocaleDateString('en-GB')).toBe(d.toLocaleDateString('en-GB'));
+  });
+
+  it('still round-trips PLAIN (Date-free) rows unchanged (back-compat)', () => {
+    const items = [{ id: '1', name: 'a', statusID: 1 }, { id: '2', name: 'b', statusID: 2 }];
+    writeViewCache(key, items, 'CUR');
+    const hit = readViewCache(key);
+    expect(hit.items).toEqual(items);
+    expect(hit.cursor).toBe('CUR');
+  });
+});

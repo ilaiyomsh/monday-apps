@@ -281,3 +281,30 @@ describe('useMyTasks — instant cache seed (stale-while-revalidate)', () => {
     expect(result.current.hasMore).toBe(true);
   });
 });
+
+// REGRESSION (round 39): a fresh row's deadlineID is a real Date; the round-37
+// JSON cache round-trip turned it into a STRING, so the SEEDED row threw
+// "E.toLocaleDateString is not a function" the moment MyTasksRow rendered it.
+// The round-37 tests missed this because they seeded PLAIN fakes (no real Date).
+// Here we seed a REAL Date and assert the seeded row exposes a real Date.
+describe('useMyTasks — cache seed preserves Date fields (regression)', () => {
+  const KEY = makeViewCacheKey('myTasks', { userId: '42', boardId: 'BOARD1' });
+
+  it('seeds a Date-bearing row from cache as a REAL Date (not a string)', async () => {
+    const deadline = new Date(2026, 6, 10);
+    writeViewCache(KEY, [task(1, { deadlineID: deadline })], 'SEEDCUR');
+    // Hold the background revalidate open so we observe the SEEDED row itself.
+    let resolveExec;
+    sdkState.execute = vi.fn(() => new Promise((r) => { resolveExec = r; }));
+    const { result } = renderHook(() => useMyTasks({ currentUser: { id: '42' }, context: {} }));
+
+    const seeded = result.current.items[0];
+    expect(seeded.id).toBe('1');
+    expect(seeded.deadlineID).toBeInstanceOf(Date);
+    expect(() => seeded.deadlineID.toLocaleDateString('en-GB')).not.toThrow(); // the crash, now safe
+    expect(seeded.deadlineID.getTime()).toBe(deadline.getTime());
+
+    // Let the silent revalidate settle so nothing leaks past the test.
+    await act(async () => { resolveExec(page([task(1, { deadlineID: deadline })], null)); });
+  });
+});

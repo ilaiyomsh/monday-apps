@@ -51,6 +51,53 @@ export function makeViewCacheKey(view, { userId, boardId, subTab = null } = {}) 
   return `${PREFIX}.${seg}.${userId}.${boardId}`;
 }
 
+// --- Date-preserving (de)serialization -------------------------------------
+// A plain JSON round-trip stringifies a Date to an ISO STRING, losing both its
+// Date-ness AND the `hasTime` flag parseValue('date') attaches. The personal-view
+// hooks cache ALREADY-NORMALIZED rows (mapItem/parseValue output), whose date
+// columns (deadlineID / decisionDateID) are Date objects — so a naive seed made
+// those fields strings, and every consumer that calls a Date method on them
+// (`toLocaleDateString` in the row cells + DatePickerPopover, `.getTime()` in
+// sort/group/filter) threw "... is not a function".
+//
+// We tag Date values on write and revive them on read, so a SEEDED row is the
+// exact same shape as a FRESHLY-FETCHED one (Dates reconstructed, hasTime
+// restored). This is type-driven, not field-name-driven: any Date survives, and
+// non-Date values are untouched — notably `created_at`, which is a STRING in a
+// fresh row, STAYS a string (it must not become a Date).
+const DATE_TAG = '@@date';
+
+// Deep-copy `value`, replacing every Date with a typed marker so a plain
+// JSON.stringify preserves it (stringify alone drops Date-ness AND the hasTime
+// flag). Done as an explicit pre-pass — not a stringify replacer — so it never
+// depends on the toJSON-vs-replacer ordering and carries no `this`. Only Dates
+// change shape; strings/numbers/arrays/objects (incl. `created_at`) are copied
+// through unchanged.
+function tagDates(value) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime())
+      ? null // an invalid Date can't seed anything useful
+      : { [DATE_TAG]: value.toISOString(), hasTime: value.hasTime === true };
+  }
+  if (Array.isArray(value)) return value.map(tagDates);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, tagDates(v)]));
+  }
+  return value;
+}
+
+// JSON.parse reviver. Reconstruct a real Date (and the hasTime flag, exactly as
+// parseValue sets it: an own boolean) from the marker; a corrupt marker → null.
+function reviveDates(key, value) {
+  if (value && typeof value === 'object' && typeof value[DATE_TAG] === 'string') {
+    const d = new Date(value[DATE_TAG]);
+    if (Number.isNaN(d.getTime())) return null;
+    d.hasTime = value.hasTime === true;
+    return d;
+  }
+  return value;
+}
+
 // Read + validate an entry. Returns { items, cursor, ts, stale } or null on a
 // miss / version mismatch / hard-expiry / any storage or parse error.
 export function readViewCache(key, { ttlMs = VIEW_CACHE_TTL_MS, now = Date.now() } = {}) {
@@ -65,7 +112,7 @@ export function readViewCache(key, { ttlMs = VIEW_CACHE_TTL_MS, now = Date.now()
   if (!raw) return null;
   let parsed;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(raw, reviveDates); // revive tagged Date fields back into real Dates
   } catch {
     return null; // corrupt entry — treat as a miss
   }
@@ -92,7 +139,8 @@ export function writeViewCache(key, items, cursor = null, { now = Date.now() } =
   if (!store || !key || !Array.isArray(items)) return false;
   let raw;
   try {
-    raw = JSON.stringify({ version: VIEW_CACHE_VERSION, ts: now, items, cursor: cursor ?? null });
+    // Tag Date fields (tagDates) so they survive as real Dates on read.
+    raw = JSON.stringify(tagDates({ version: VIEW_CACHE_VERSION, ts: now, items, cursor: cursor ?? null }));
   } catch {
     return false; // non-serializable row (shouldn't happen for plain data)
   }
