@@ -94,10 +94,10 @@
 .filterRow {
   display: flex;
   gap: var(--spacing-small, 8px);
-  /* monday-style filter chips sit at the RTL end (left) of the toolbar, sized to
-     their content instead of stretching full-width; wrap on a narrow sidebar. */
-  justify-content: flex-end;
-  flex-wrap: wrap;
+  /* Full-width filter chips (round 38): the row spans the toolbar and each chip
+     flexes to fill half of it, so the two together match the search-input width
+     directly above. No wrap — flex-shrink keeps both on one row edge-to-edge. */
+  width: 100%;
 }
 
 /* Calendar view: search + type filter share one row (month nav lives in the grid). */
@@ -228,11 +228,11 @@
 }
 
 .filterCell {
-  /* Chip sized to its content (not a stretched 50/50 split); capped so a long
-     custom type name ellipsizes instead of pushing the row wide. */
-  flex: 0 1 auto;
+  /* Each chip stretches to fill an equal half of the row (round 38), so the two
+     together span the full search-input width. min-width:0 lets a long label
+     ellipsize when a chip is narrow instead of pushing the row wide. */
+  flex: 1 1 0;
   min-width: 0;
-  max-width: 190px;
 }
 
 /* Scroll area */
