@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { משימות1Board } from '@api/BoardSDK.js';
 import { api, parseValue, cvSelection } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
+import { makeViewCacheKey, readViewCache, writeViewCache, reconcileSeeded } from '../utils/viewCache.js';
 import logger from '../utils/logger.js';
 
 /*
@@ -72,14 +73,49 @@ export function buildMyTasksWhere({ userId, taskCreatorId, search }) {
   return where;
 }
 
-export function useMyTasks({ currentUser, context, taskCreatorId = null, search = '', sort = null, notDoneStatusIds = [] } = {}) {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [cursor, setCursor] = useState(null);
-  const [error, setError] = useState(null);
+// The My-Tasks first-page query, factored out so the hook AND the background
+// prefetch build byte-identical queries (same columns / group / page size).
+function tasksItemsQuery({ where, sort }) {
+  let q = new משימות1Board().items()
+    .withColumns(RENDERED_COLUMNS)
+    .withGroup() // need item.group for the board-group grouping
+    .withPagination({ limit: PAGE_SIZE })
+    .where(where);
+  if (sort?.column) q = q.orderBy({ column: sort.column, direction: sort.direction || 'asc' });
+  return q;
+}
 
+export function useMyTasks({ currentUser, context, taskCreatorId = null, search = '', sort = null, notDoneStatusIds = [] } = {}) {
   const userId = resolveUserId(currentUser, context);
+  // Instant-cache seed (stale-while-revalidate): on the FIRST mount only, seed
+  // state SYNCHRONOUSLY from the versioned view cache for an instant first
+  // paint. Only the DEFAULT query (no creator filter / no search / no server
+  // sort) is cached, so a filtered result never seeds the default view. The
+  // seed is ALWAYS revalidated by the fetch below (which overwrites the cache);
+  // a cache miss ⇒ behavior is exactly as before (empty list + loading:true).
+  const isDefaultQuery = !taskCreatorId && !(search && String(search).trim()) && !sort?.column;
+  const cacheKey = isDefaultQuery ? makeViewCacheKey('myTasks', { userId, boardId: getBoardId('tasks') }) : null;
+  const seedRef = useRef(undefined);
+  if (seedRef.current === undefined) {
+    const hit = cacheKey ? readViewCache(cacheKey) : null;
+    seedRef.current = hit && Array.isArray(hit.items) && hit.items.length ? hit : null;
+  }
+  const seed = seedRef.current;
+
+  const [items, setItems] = useState(() => (seed ? seed.items : []));
+  const [loading, setLoading] = useState(() => (seed ? false : true));
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [cursor, setCursor] = useState(() => (seed ? seed.cursor || null : null));
+  const [error, setError] = useState(null);
+  // The first fetch after a seed is a SILENT background revalidate (keep the
+  // seeded rows visible, no spinner); every later fetch behaves exactly as
+  // before. One-shot — consumed on the first fetchPage run.
+  const silentSeedRef = useRef(!!seed);
+  // Ids the user has locally mutated this session (optimistic edit/create/
+  // delete). The silent seeded revalidate PROTECTS these so a fresh page never
+  // clobbers an in-flight change or re-adds a just-deleted (deferred) row.
+  const dirtyIdsRef = useRef(new Set());
+
   // Stable filter key so the fetch effect only re-runs on a real change.
   const filterKey = JSON.stringify({ userId, taskCreatorId, search: (search || '').trim(), sort });
   const reqIdRef = useRef(0);
@@ -104,18 +140,16 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
       return;
     }
     const baseWhere = buildMyTasksWhere({ userId, taskCreatorId, search });
-    // Build a page query for a given `where`. Sort is { column, direction } over
-    // an aliased column (deadline = deadlineID, status = statusID; BoardSDK maps
-    // the alias). Priority sort is client-side in the view, so never passed here.
-    const buildQuery = (where) => {
-      let q = new משימות1Board().items()
-        .withColumns(RENDERED_COLUMNS)
-        .withGroup() // need item.group for the board-group grouping
-        .withPagination({ limit: PAGE_SIZE })
-        .where(where);
-      if (sort?.column) q = q.orderBy({ column: sort.column, direction: sort.direction || 'asc' });
-      return q;
-    };
+    // Consume the one-shot "silent seeded revalidate" flag: the first fetch
+    // after a cache seed keeps the seeded rows visible (no spinner) and
+    // reconciles the fresh page onto them; every later fetch is unchanged.
+    const silentSeeded = silentSeedRef.current;
+    silentSeedRef.current = false;
+    // Build a page query for a given `where` (shared with the prefetch helper).
+    // Sort is { column, direction } over an aliased column (deadline = deadlineID,
+    // status = statusID; BoardSDK maps the alias). Priority sort is client-side
+    // in the view, so never passed here.
+    const buildQuery = (where) => tasksItemsQuery({ where, sort });
     // STAGED LOAD (perceived speed): only on a FRESH load (nothing shown yet).
     // Phase 1 = the user's actionable tasks — NOT in a "done" status AND created
     // within the last month — rendered ASAP. Phase 2 = the full page (+ the real
@@ -152,7 +186,9 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
       }
     }
     try {
-      if (!staged) setLoading(true);
+      // A SILENT cache-seeded revalidate keeps the seeded rows on screen (no
+      // spinner); a real refetch (search/sort change) shows loading as before.
+      if (!staged && !silentSeeded) setLoading(true);
       const r2 = await buildQuery(baseWhere).execute();
       if (reqId !== reqIdRef.current) return; // a newer request superseded this one
       const full = r2.items || [];
@@ -165,18 +201,27 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
           const have = new Set(current.map((t) => String(t.id)));
           return [...current, ...full.filter((t) => !have.has(String(t.id)))];
         });
+      } else if (silentSeeded) {
+        // Cache seed → fresh page: reconcile on id. The fresh page is
+        // authoritative (picks up remote edits/deletes), but locally-touched
+        // ids keep their optimistic value / stay deleted, so an in-flight change
+        // is never clobbered.
+        setItems((current) => reconcileSeeded(current, full, dirtyIdsRef.current));
       } else {
         // Refetch (search/sort change) — the full page is authoritative.
         setItems(full);
       }
       setCursor(r2.cursor || null);
       setError(null);
+      // Refresh the DEFAULT-query cache so the next entry seeds fresh data.
+      if (cacheKey) writeViewCache(cacheKey, full, r2.cursor || null);
     } catch (err) {
       if (reqId !== reqIdRef.current) return;
       logger.error('useMyTasks', 'Error fetching my tasks', { userId, err });
-      // Only surface an error (and clear) when nothing was shown; if phase 1
-      // already rendered rows, keep them and swallow the phase-2 failure.
-      if (!(staged && phase1Items.length)) {
+      // Keep already-visible rows: a staged phase-1 paint OR a cache seed must
+      // NOT be cleared by a failed (re)validate — only surface an error and
+      // clear when nothing is on screen yet.
+      if (!((staged && phase1Items.length) || silentSeeded)) {
         setError(err?.message || 'fetch failed');
         setItems([]);
         setCursor(null);
@@ -218,6 +263,7 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
   // is valid, so callers guard on null/'' upstream).
   const updateStatusColumn = useCallback((alias) => async (taskId, value) => {
     const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
+    dirtyIdsRef.current.add(String(taskId)); // protect this row from a seeded revalidate
     setItems((current) =>
       current.map((t) => (String(t.id) === String(taskId) ? { ...t, [alias]: value } : t))
     );
@@ -236,6 +282,7 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
   // write shape mirrors useTasks.updateTaskDeadline (local Y-M-D string).
   const updateTaskDeadline = useCallback(async (taskId, date) => {
     const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
+    dirtyIdsRef.current.add(String(taskId)); // protect this row from a seeded revalidate
     setItems((current) =>
       current.map((t) => (String(t.id) === String(taskId) ? { ...t, deadlineID: date || null } : t))
     );
@@ -256,6 +303,7 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     const trimmed = (name || '').trim();
     if (!trimmed) return;
     const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
+    dirtyIdsRef.current.add(String(taskId)); // protect this row from a seeded revalidate
     setItems((current) =>
       current.map((t) => (String(t.id) === String(taskId) ? { ...t, name: trimmed } : t))
     );
@@ -272,6 +320,7 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
   const updateTaskNotes = useCallback(async (taskId, notes) => {
     const next = notes == null ? '' : String(notes);
     const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
+    dirtyIdsRef.current.add(String(taskId)); // protect this row from a seeded revalidate
     setItems((current) =>
       current.map((t) => (String(t.id) === String(taskId) ? { ...t, taskNotesID: next } : t))
     );
@@ -291,6 +340,7 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     const idList = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
     if (!idList.length) return { undo: () => {}, count: 0 };
     const idSet = new Set(idList.map(String));
+    idList.forEach((id) => dirtyIdsRef.current.add(String(id))); // keep them removed through a seeded revalidate
     const removed = itemsRef.current.filter((i) => idSet.has(String(i.id))); // snapshot for restore
     setItems((current) => current.filter((i) => !idSet.has(String(i.id))));
 
@@ -338,6 +388,7 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     const trimmed = (name || '').trim();
     if (!trimmed || !userId) return null;
     const tempId = `temp-${Date.now()}`;
+    dirtyIdsRef.current.add(String(tempId)); // protect the optimistic row from a seeded revalidate
     const meAsPerson = [{ id: String(userId), name: currentUser?.name || '' }];
     const optimisticRow = {
       id: tempId,
@@ -364,6 +415,7 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
       if (notes && String(notes).trim()) data.taskNotesID = String(notes);
       const created = await new משימות1Board().item().create(data, { createLabelsIfMissing: true }).execute();
       const realId = created.id;
+      dirtyIdsRef.current.add(String(realId)); // the reconciled row stays protected under its real id
       setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, id: realId } : t)));
       // Let the caller migrate any temp-id tracking (e.g. the top-of-view pin)
       // to the real id in the SAME tick as the swap, so the row never flickers
@@ -436,5 +488,26 @@ export async function fetchTaskCreators({ userId, limit = 300 } = {}) {
   } catch (err) {
     logger.error('useMyTasks', 'Error fetching task creators', err);
     return [];
+  }
+}
+
+// Warm the My-Tasks view cache in the background (used by App.jsx's post-boot
+// prefetch). Runs the SAME default first-page query the hook seeds from and
+// writes the result into the view cache. Never touches React state; swallows +
+// logs its own errors so it can never crash the UI. No-ops (returns false) when
+// the board / user / columns aren't ready yet.
+export async function prefetchMyTasks({ currentUser, context } = {}) {
+  try {
+    const userId = resolveUserId(currentUser, context);
+    const boardId = getBoardId('tasks');
+    if (!userId || !boardId || !getColumns('tasks')?.responsibilityID?.id) return false;
+    const key = makeViewCacheKey('myTasks', { userId, boardId });
+    if (!key) return false;
+    const res = await tasksItemsQuery({ where: buildMyTasksWhere({ userId }) }).execute();
+    writeViewCache(key, res.items || [], res.cursor || null);
+    return true;
+  } catch (err) {
+    logger.warn('useMyTasks', 'prefetch failed', err);
+    return false;
   }
 }

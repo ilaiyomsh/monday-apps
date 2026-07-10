@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { החלטות1Board } from '@api/BoardSDK.js';
 import { api } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
+import { makeViewCacheKey, readViewCache, writeViewCache, reconcileSeeded } from '../utils/viewCache.js';
 import logger from '../utils/logger.js';
 
 /*
@@ -84,15 +85,49 @@ export function isMyDecisionsConfigured(subTab) {
   return !!(getBoardId('decisions') && getColumns('decisions')?.[alias]?.id);
 }
 
-export function useMyDecisions(subTab = 'decider', { currentUser, context, search = '' } = {}) {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [cursor, setCursor] = useState(null);
-  const [error, setError] = useState(null);
+// The My-Decisions first-page query, factored out so the hook AND the background
+// prefetch build byte-identical queries (same columns / page size).
+function decisionsItemsQuery(where) {
+  return new החלטות1Board()
+    .items()
+    .withColumns(RENDERED_COLUMNS)
+    .withPagination({ limit: PAGE_SIZE })
+    .where(where);
+}
 
+export function useMyDecisions(subTab = 'decider', { currentUser, context, search = '' } = {}) {
   const userId = resolveUserId(currentUser, context);
   const configured = isMyDecisionsConfigured(subTab);
+  // Instant-cache seed (stale-while-revalidate): on the FIRST mount only, seed
+  // state SYNCHRONOUSLY from the versioned view cache — keyed by SUB-TAB, since
+  // the two sub-tabs hold different lists — for an instant first paint. Only the
+  // DEFAULT query (no search) is cached. The seed is ALWAYS revalidated by the
+  // fetch below (which overwrites the cache); a cache miss ⇒ behavior is exactly
+  // as before (empty list + loading:true).
+  const isDefaultQuery = !(search && String(search).trim());
+  const cacheKey = (isDefaultQuery && configured)
+    ? makeViewCacheKey('myDecisions', { userId, boardId: getBoardId('decisions'), subTab })
+    : null;
+  const seedRef = useRef(undefined);
+  if (seedRef.current === undefined) {
+    const hit = cacheKey ? readViewCache(cacheKey) : null;
+    seedRef.current = hit && Array.isArray(hit.items) && hit.items.length ? hit : null;
+  }
+  const seed = seedRef.current;
+
+  const [items, setItems] = useState(() => (seed ? seed.items : []));
+  const [loading, setLoading] = useState(() => (seed ? false : true));
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [cursor, setCursor] = useState(() => (seed ? seed.cursor || null : null));
+  const [error, setError] = useState(null);
+  // The first fetch after a seed is a SILENT background revalidate (keep the
+  // seeded rows visible, no spinner); every later fetch behaves as before.
+  const silentSeedRef = useRef(!!seed);
+  // Ids the user has locally mutated this session — the silent seeded revalidate
+  // PROTECTS these so a fresh page never clobbers an in-flight change or re-adds
+  // a just-deleted (deferred) row.
+  const dirtyIdsRef = useRef(new Set());
+
   // Stable filter key so the fetch effect only re-runs on a real change
   // (sub-tab switch, user change, search change).
   const filterKey = JSON.stringify({ subTab, userId, search: (search || '').trim(), configured });
@@ -115,6 +150,11 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
       return;
     }
     const baseWhere = buildMyDecisionsWhere({ subTab, userId, search });
+    // Consume the one-shot "silent seeded revalidate" flag: the first fetch
+    // after a cache seed keeps the seeded rows visible (no spinner) and
+    // reconciles the fresh set onto them; every later fetch is unchanged.
+    const silentSeeded = silentSeedRef.current;
+    silentSeedRef.current = false;
     // STAGED LOAD (perceived speed): only on a FRESH load (nothing shown yet).
     // Phase 1 = decisions from the LAST MONTH (server-side date range on the
     // mapped decision-date column) rendered ASAP; phase 2 = the full set (incl.
@@ -129,12 +169,7 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
         const now = new Date();
         const from = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
         const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-        const r1 = await new החלטות1Board()
-          .items()
-          .withColumns(RENDERED_COLUMNS)
-          .withPagination({ limit: PAGE_SIZE })
-          .where({ ...baseWhere, decisionDateID: { between: [ymd(from), ymd(now)] } })
-          .execute();
+        const r1 = await decisionsItemsQuery({ ...baseWhere, decisionDateID: { between: [ymd(from), ymd(now)] } }).execute();
         if (reqId !== reqIdRef.current) return;
         phase1Items = r1.items || [];
         setItems(phase1Items);
@@ -148,14 +183,11 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
       }
     }
     try {
-      if (!(staged && dateColMapped)) setLoading(true);
+      // A SILENT cache-seeded revalidate keeps the seeded rows on screen (no
+      // spinner); a real refetch (sub-tab / search change) shows loading as before.
+      if (!(staged && dateColMapped) && !silentSeeded) setLoading(true);
       const where = baseWhere;
-      const res = await new החלטות1Board()
-        .items()
-        .withColumns(RENDERED_COLUMNS)
-        .withPagination({ limit: PAGE_SIZE })
-        .where(where)
-        .execute();
+      const res = await decisionsItemsQuery(where).execute();
       if (reqId !== reqIdRef.current) return; // a newer request superseded this one
       let list = res.items || [];
       // Round 27 — CREATOR-AS-DEFAULT-DECIDER: in the "החלטות שקיבלתי" (decider)
@@ -170,12 +202,7 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
         try {
           const creatorWhere = { decisionCreatorID: String(userId) };
           if (search && String(search).trim()) creatorWhere.name = String(search).trim();
-          const createdRes = await new החלטות1Board()
-            .items()
-            .withColumns(RENDERED_COLUMNS)
-            .withPagination({ limit: PAGE_SIZE })
-            .where(creatorWhere)
-            .execute();
+          const createdRes = await decisionsItemsQuery(creatorWhere).execute();
           if (reqId !== reqIdRef.current) return;
           const have = new Set(list.map((d) => String(d.id)));
           const fallback = (createdRes.items || []).filter(
@@ -188,22 +215,29 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
       }
       // Phase 2 merge: on a staged load, AUGMENT what phase 1 rendered (add the
       // rows it didn't return, preserving current order + any optimistic edits);
-      // on a refetch (sub-tab / search change) the full list is authoritative.
+      // a silent cache seed reconciles on id (fresh authoritative, local edits
+      // protected); on a refetch (sub-tab / search change) the full list wins.
       if (staged && dateColMapped) {
         setItems((current) => {
           const have2 = new Set(current.map((d) => String(d.id)));
           return [...current, ...list.filter((d) => !have2.has(String(d.id)))];
         });
+      } else if (silentSeeded) {
+        setItems((current) => reconcileSeeded(current, list, dirtyIdsRef.current));
       } else {
         setItems(list);
       }
       setCursor(res.cursor || null);
       setError(null);
+      // Refresh the DEFAULT-query cache (this sub-tab) so the next entry seeds fresh.
+      if (cacheKey) writeViewCache(cacheKey, list, res.cursor || null);
     } catch (err) {
       if (reqId !== reqIdRef.current) return;
       logger.error('useMyDecisions', 'Error fetching my decisions', { subTab, userId, err });
-      // Keep phase-1 rows already shown; only surface an error on a fresh load.
-      if (!(staged && dateColMapped && phase1Items.length)) {
+      // Keep already-visible rows: a staged phase-1 paint OR a cache seed must
+      // NOT be cleared by a failed (re)validate — only surface an error when
+      // nothing is on screen yet.
+      if (!((staged && dateColMapped && phase1Items.length) || silentSeeded)) {
         setError(err?.message || 'fetch failed');
         setItems([]);
         setCursor(null);
@@ -211,7 +245,7 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     } finally {
       if (reqId === reqIdRef.current) setLoading(false);
     }
-  }, [subTab, userId, search, configured]);
+  }, [subTab, userId, search, configured, cacheKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchPage();
@@ -245,6 +279,7 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
   // (id 0 is valid — callers guard on null/'' upstream).
   const updateStatusColumn = useCallback((alias) => async (decisionId, value) => {
     const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
+    dirtyIdsRef.current.add(String(decisionId)); // protect this row from a seeded revalidate
     setItems((current) =>
       current.map((d) => (String(d.id) === String(decisionId) ? { ...d, [alias]: value } : d))
     );
@@ -269,6 +304,7 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
   // mirrors useDecisions.updateDecisionDate (local Y-M-D string).
   const updateDecisionDate = useCallback(async (decisionId, date) => {
     const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
+    dirtyIdsRef.current.add(String(decisionId)); // protect this row from a seeded revalidate
     setItems((current) =>
       current.map((d) => (String(d.id) === String(decisionId) ? { ...d, decisionDateID: date || null } : d))
     );
@@ -289,6 +325,7 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     const trimmed = (name || '').trim();
     if (!trimmed) return;
     const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
+    dirtyIdsRef.current.add(String(decisionId)); // protect this row from a seeded revalidate
     setItems((current) =>
       current.map((d) => (String(d.id) === String(decisionId) ? { ...d, name: trimmed } : d))
     );
@@ -308,6 +345,7 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     const idList = (Array.isArray(ids) ? ids : [ids]).filter(Boolean);
     if (!idList.length) return { undo: () => {}, count: 0 };
     const idSet = new Set(idList.map(String));
+    idList.forEach((id) => dirtyIdsRef.current.add(String(id))); // keep them removed through a seeded revalidate
     const removed = itemsRef.current.filter((i) => idSet.has(String(i.id))); // snapshot for restore
     setItems((current) => current.filter((i) => !idSet.has(String(i.id))));
 
@@ -351,6 +389,43 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     softDeleteDecisions,
     refresh,
   };
+}
+
+// Warm the My-Decisions view cache in the background (used by App.jsx's
+// post-boot prefetch). Runs the SAME default first-page query the hook seeds
+// from — including the decider creator-as-default-decider fallback — and writes
+// it into the sub-tab's view cache. Never touches React state; swallows + logs
+// its own errors so it can never crash the UI. No-ops (returns false) when the
+// board / user / sub-tab column aren't mapped yet.
+export async function prefetchMyDecisions(subTab = 'decider', { currentUser, context } = {}) {
+  try {
+    const userId = resolveUserId(currentUser, context);
+    const boardId = getBoardId('decisions');
+    if (!userId || !boardId || !isMyDecisionsConfigured(subTab)) return false;
+    const key = makeViewCacheKey('myDecisions', { userId, boardId, subTab });
+    if (!key) return false;
+    const res = await decisionsItemsQuery(buildMyDecisionsWhere({ subTab, userId })).execute();
+    let list = res.items || [];
+    // Mirror the hook's creator-as-default-decider fallback so the warmed cache
+    // matches what the view shows (decider sub-tab only).
+    if (subTab === 'decider' && getColumns('decisions')?.decisionCreatorID?.id) {
+      try {
+        const createdRes = await decisionsItemsQuery({ decisionCreatorID: String(userId) }).execute();
+        const have = new Set(list.map((d) => String(d.id)));
+        const fallback = (createdRes.items || []).filter(
+          (d) => !have.has(String(d.id)) && (!Array.isArray(d.deciderID) || d.deciderID.length === 0)
+        );
+        list = [...list, ...fallback];
+      } catch (creatorErr) {
+        logger.warn('useMyDecisions', 'prefetch creator-fallback failed', creatorErr);
+      }
+    }
+    writeViewCache(key, list, res.cursor || null);
+    return true;
+  } catch (err) {
+    logger.warn('useMyDecisions', 'prefetch failed', err);
+    return false;
+  }
 }
 
 export default useMyDecisions;

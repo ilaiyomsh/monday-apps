@@ -20,6 +20,8 @@ import { DEFAULT_EXPORT_TEMPLATE } from './utils/mondayApi/boards.config.js';
 import { hydrateFromStorage, ensureRoster } from './utils/usersStore.js';
 import { ensurePeopleColumns } from './utils/mondayApi/peopleColumns.js';
 import { usePermission } from './hooks/usePermission.js';
+import { prefetchMyTasks } from './hooks/useMyTasks.js';
+import { prefetchMyDecisions } from './hooks/useMyDecisions.js';
 import logger from './utils/logger.js';
 import { ToastContainer } from './components/Toast';
 import { ErrorDetailsModal } from './components/ErrorDetailsModal';
@@ -347,6 +349,42 @@ export default function App() {
   useEffect(() => {
     if (settings?.permissions?.enabled) ensurePeopleColumns();
   }, [settings?.permissions?.enabled]);
+
+  // Round 37 — BACKGROUND PREFETCH: once booted and sitting on the discussions
+  // view, warm the "המשימות שלי" / "ההחלטות שלי" caches ONCE per session during
+  // idle time, so first entry into those views paints instantly from cache.
+  // Gated on `settings` (board config is published by then) + a ref so it fires
+  // a single time; skipped when already on those views (their own fetch is the
+  // source of truth). The prefetch helpers only WRITE the view cache and swallow
+  // their own errors — they never touch a mounted view's React state or crash UI.
+  const prefetchedRef = useRef(false);
+  useEffect(() => {
+    if (context == null || !settings) return undefined;    // not booted / config not published yet
+    if (effectiveView !== 'discussions') return undefined; // don't compete with a live view's own fetch
+    if (prefetchedRef.current) return undefined;           // once per session
+    prefetchedRef.current = true;
+
+    let cancelled = false;
+    const warm = () => {
+      if (cancelled) return;
+      prefetchMyTasks({ currentUser, context }).catch(() => {});
+      prefetchMyDecisions('decider', { currentUser, context }).catch(() => {});
+    };
+    let idleId = null;
+    let timerId = null;
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      idleId = window.requestIdleCallback(warm, { timeout: 3000 });
+    } else {
+      timerId = setTimeout(warm, 1500);
+    }
+    return () => {
+      cancelled = true;
+      if (idleId != null && typeof window !== 'undefined' && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timerId != null) clearTimeout(timerId);
+    };
+  }, [context, settings, effectiveView, currentUser]);
 
   const handleSelect = (discussion) => {
     setSelectedDiscussion(discussion);
