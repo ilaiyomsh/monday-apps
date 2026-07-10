@@ -16,9 +16,9 @@
   box-sizing: border-box;
 }
 
-/* "לתצוגת הדיונים" back button on its OWN row — used ONLY by the unmapped
-   fallback (which has no toolbar). In the mapped view the back button lives in
-   the single toolbar row, pushed right by .backSlot (round 35). */
+/* "בחזרה לתצוגת הדיונים" back button on its OWN row — used ONLY by the unmapped
+   fallback (which has no toolbar). In the mapped view the back button now lives
+   inline in the toolbar row, right after the sub-tabs toggle (round 40). */
 .topBar {
   flex: none;
   display: flex;
@@ -27,20 +27,30 @@
   gap: var(--spacing-small, 8px);
   padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
 }
+
+/* View title (round 40) — matches the discussion-detail title (DiscussionCard's
+   .title: font-size-h2 / bold / line-height 1.2). Sits above the toolbar row;
+   RTL + right-aligned Hebrew, horizontal padding matching the toolbar. */
+.viewTitle {
+  flex: none;
+  margin: 0;
+  padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+  font-size: var(--font-size-h2, 28px);
+  font-weight: var(--font-weight-bold, 700);
+  line-height: 1.2;
+  color: var(--text-color, #323338);
+  direction: rtl;
+  text-align: right;
+}
+:global(.mobile-app) .viewTitle {
+  font-size: 22px;
+}
+
 /* Back-button content: left-pointing arrow + label, inline. */
 .backBtnInner {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-/* Round 35: the back button's slot inside the single toolbar row. The auto
-   inline-start margin (LTR: margin-left:auto) absorbs the free space so the
-   button is pushed hard against the RIGHT edge while the sub-tabs + controls
-   stay left-grouped. Vertically centered on the row (toolbar align-items). */
-.backSlot {
-  margin-inline-start: auto;
-  display: inline-flex;
-  align-items: center;
 }
 
 /* Sub-tabs segmented control (RTL — Hebrew labels): 'החלטות שאני מחליט' /
@@ -53,10 +63,12 @@
   align-items: stretch;
   gap: 4px;
   width: fit-content;
-  /* Round 33: the toggle sits on the toolbar/search row at its LEFT (RTL) end,
-     to the LEFT of the Search — no own margin; the .toolbar flex gap spaces it
-     from the search. It stays EXACTLY as tall as the @vibe small pills (32px)
-     so the row aligns; box-sizing keeps the 4px track padding inside the 32px. */
+  /* Round 33/40: the toggle is the FIRST toolbar child; on the RTL toolbar that
+     puts it at the RIGHT (start) of the row, with the back button + controls to
+     its left — no own margin; the .toolbar flex gap spaces it from its neighbor.
+     It stays EXACTLY as tall as the @vibe small pills (32px) so the row aligns;
+     box-sizing keeps the 4px track padding inside the 32px. Its OWN dir:rtl
+     (below) keeps "החלטות שקיבלתי" on the toggle's left + default (round 27/33). */
   margin: 0;
   height: 32px;
   box-sizing: border-box;
@@ -93,8 +105,10 @@
   color: var(--decisions-accent, #6b4ee6);
 }
 
-/* monday-style toolbar: a left-aligned (LTR) row of pill buttons. Sits above
-   the scrolling board as a fixed flex row. */
+/* monday-style toolbar (round 40): an RTL, right-anchored row of pill buttons
+   (justify-content:flex-start + dir="rtl" ⇒ the cluster hugs the RIGHT edge, so
+   the sub-tabs toggle is rightmost and the back button tucks after it). Sits
+   below the view title, above the scrolling board as a fixed flex row. */
 .toolbar {
   display: flex;
   align-items: center;

@@ -1,0 +1,85 @@
+/* NotesEditor (round 40) — monday long-text cell behavior. Class names are
+   prefixed (non-scoped CSS modules emit literal global names) to avoid clashing
+   with other modules' .actions/.textarea/etc. */
+
+/* The cell trigger: ONE line of text (ellipsis) — no in-cell scrollbar. RTL +
+   right-aligned (round 33). Fills the cell so the whole area is clickable. */
+.notesCellTrigger {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-family);
+  direction: rtl;
+  text-align: right;
+}
+/* Subtle "editable cell" outline on hover — an inset ring (not a fill) so it
+   never fights the row's own hover/selected tint. */
+.notesCellTrigger:hover {
+  box-shadow: inset 0 0 0 1px var(--ui-border-color, #d0d4e4);
+}
+.notesCellTrigger:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+/* Both spans clamp to a single line with an ellipsis. */
+.notesCellText,
+.notesCellPlaceholder {
+  display: block;
+  width: 100%;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notesCellText {
+  color: var(--primary-text-color, #323338);
+}
+.notesCellPlaceholder {
+  color: var(--placeholder-color, #9699a6);
+}
+
+/* Editor popover body (inside @vibe's portaled DialogContentContainer). */
+.notesEditorBody {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 300px;
+  max-width: 80vw;
+}
+.notesTextarea {
+  width: 100%;
+  min-height: 140px;
+  max-height: 320px;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  line-height: 20px;
+  font-family: var(--font-family);
+  direction: rtl;
+  text-align: right;
+}
+.notesTextarea:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+.notesTextarea::placeholder {
+  color: var(--placeholder-color, #9699a6);
+}
+.notesEditorActions {
+  display: flex;
+  justify-content: flex-start;
+}

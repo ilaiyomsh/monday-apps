@@ -10,9 +10,11 @@
   box-sizing: border-box;
 }
 
-/* monday-style toolbar: a left-aligned (LTR) row of pill buttons. Sits above the
-   scrolling board as the first flex row (no longer sticky — the board scrolls,
-   not the root). */
+/* monday-style toolbar (round 40): an RTL, right-anchored row of pill buttons
+   (justify-content:flex-start + dir="rtl" ⇒ the cluster hugs the RIGHT edge, so
+   "משימה חדשה" is rightmost and the back button tucks immediately after it). Sits
+   below the view title, above the scrolling board (not sticky — the board
+   scrolls, not the root). */
 .toolbar {
   display: flex;
   align-items: center;
@@ -24,20 +26,30 @@
   padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
 }
 
+/* View title (round 40) — matches the discussion-detail title (DiscussionCard's
+   .title: font-size-h2 / bold / line-height 1.2). Sits above the toolbar row;
+   RTL + right-aligned Hebrew, with horizontal padding matching the toolbar. */
+.viewTitle {
+  flex: none;
+  margin: 0;
+  padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+  font-size: var(--font-size-h2, 28px);
+  font-weight: var(--font-weight-bold, 700);
+  line-height: 1.2;
+  color: var(--text-color, #323338);
+  direction: rtl;
+  text-align: right;
+}
+/* Scale the title down on phones, like the discussion header does. */
+:global(.mobile-app) .viewTitle {
+  font-size: 22px;
+}
+
 /* Back-button content: left-pointing arrow + label, inline (matches MyDecisionsView). */
 .backBtnInner {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-}
-/* Round 35: the back button's slot inside the single toolbar row. The auto
-   inline-start margin (LTR: margin-left:auto) absorbs the free space so the
-   button is pushed hard against the RIGHT edge while the controls stay left-
-   grouped. Vertically centered on the row (align-items:center on the toolbar). */
-.backSlot {
-  margin-inline-start: auto;
-  display: inline-flex;
-  align-items: center;
 }
 
 /* THE single scroll container — both axes. All group tables live inside one

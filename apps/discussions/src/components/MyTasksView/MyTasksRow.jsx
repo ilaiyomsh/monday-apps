@@ -1,8 +1,9 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
 import { Update, Edit, CloseSmall } from '@vibe/icons';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { NotesEditor } from '@generated/components/NotesEditor';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
@@ -114,31 +115,17 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
 
 export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, rowStyle, showDeadline = true, showPriority = true, showNotes = true, selectable = false, selected = false, onToggleSelect }) {
   const { t } = useTranslation();
-  const [notesDraft, setNotesDraft] = useState(task.taskNotesID || '');
-  const [editingNotes, setEditingNotes] = useState(false);
   // Inline rename (permission-gated: the pencil shows only when onRenameTask is
   // provided). Clicking the NAME itself still opens the item card — rename is a
   // separate affordance so the primary click behavior doesn't change.
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
 
-  // Keep the local notes draft in sync when the row's notes change from outside
-  // (optimistic update / revert) and we're not actively editing.
-  useEffect(() => {
-    if (!editingNotes) setNotesDraft(task.taskNotesID || '');
-  }, [task.taskNotesID, editingNotes]);
-
   const statusOpts = useStatusOptions('tasks', 'statusID');
   const priorityOpts = useStatusOptions('tasks', 'priorityID');
 
   const deadline = task.deadlineID;
   const discussion = getTaskDiscussion(task);
-
-  const commitNotes = () => {
-    setEditingNotes(false);
-    const next = notesDraft;
-    if ((task.taskNotesID || '') !== (next || '')) onNotesChange?.(task.id, next);
-  };
 
   const startEditName = () => {
     setNameDraft(task.name || '');
@@ -271,21 +258,17 @@ export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, on
         onChange={onStatusChange}
       />
     ),
-    // notes — inline editable; hidden when the notes column isn't mapped
+    // notes — long-text cell (round 40): the cell shows the current text on ONE
+    // line (ellipsis, no in-cell scrollbar) with the full text on hover (native
+    // title tooltip); clicking opens the larger NotesEditor popover. Reuses the
+    // EXISTING onNotesChange (updateTaskNotes) write path — no data-logic change.
     notes: showNotes ? (
       <div key="notes" className={`${grid.taskCell} ${styles.notesCell}`} onClick={stop}>
-        <textarea
-          className={styles.notesInput}
-          rows={1}
-          value={notesDraft}
+        <NotesEditor
+          value={task.taskNotesID || ''}
           placeholder={t('myTasks.notesPlaceholder')}
-          onFocus={() => setEditingNotes(true)}
-          onChange={(e) => setNotesDraft(e.target.value)}
-          onBlur={commitNotes}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur(); }
-            if (e.key === 'Escape') { setNotesDraft(task.taskNotesID || ''); setEditingNotes(false); e.currentTarget.blur(); }
-          }}
+          ariaLabel={t('myTasks.colNotes')}
+          onCommit={(next) => onNotesChange?.(task.id, next)}
         />
       </div>
     ) : null,
