@@ -1,8 +1,9 @@
-/* "Meetings" loading splash on a WHITE background. Mark = the monday app icon
-   (central hub + 3 connected nodes) in the Twyst gradient; the 3 colored nodes
-   step CLOCKWISE in discrete jumps around the hub. "Meetings" wordmark colors
-   flow as a continuous left-to-right wave, over "Powered by twyst".
-   Non-scoped module → literal class names. */
+/* "Meetings" loading splash on a WHITE background. Mark = the monday app icon:
+   a central "pizza" (disc split into 8 slices) + 3 person figures whose shoulder
+   arcs curve around the disc. Colorized with the Twyst gradient; the 3 people
+   SLIDE clockwise to the next seat in a cool eased hop (visible movement, not a
+   teleport). The "Meetings" wordmark colors flow as a left-to-right wave, over
+   "Powered by twyst". Non-scoped module → literal class names. */
 .brandLoader,
 .brandLoaderFull {
   display: flex;
@@ -34,30 +35,30 @@
   overflow: visible;
   filter: drop-shadow(0 8px 24px rgba(97, 97, 255, 0.22));
 }
-.spokes line {
-  stroke: url(#twystLoaderGrad);
-  stroke-width: 4;
-  stroke-linecap: round;
-  opacity: 0.35;
-}
-.hub {
-  fill: url(#twystLoaderGrad);
+.pizza {
   transform-box: fill-box;
   transform-origin: center;
   animation: bl-breathe 2.6s ease-in-out infinite;
 }
-.nodeGroup {
+.people {
   transform-box: view-box;
-  transform-origin: 48px 48px;
-  animation: bl-step 1.8s steps(3, end) infinite;
+  transform-origin: 50px 50px;
+  animation: bl-hop 3s cubic-bezier(0.55, 0, 0.2, 1) infinite;
 }
-.node {
-  filter: drop-shadow(0 1px 3px rgba(15, 17, 35, 0.18));
+/* Park at a seat, then visibly slide 120° to the next (with a slight lift),
+   three times per loop = a cool clockwise hop rather than an instant jump. */
+@keyframes bl-hop {
+  0%, 18%   { transform: rotate(0deg) scale(1); }
+  26%       { transform: rotate(60deg) scale(1.06); }
+  33%, 51%  { transform: rotate(120deg) scale(1); }
+  59%       { transform: rotate(180deg) scale(1.06); }
+  66%, 84%  { transform: rotate(240deg) scale(1); }
+  92%       { transform: rotate(300deg) scale(1.06); }
+  100%      { transform: rotate(360deg) scale(1); }
 }
-@keyframes bl-step { to { transform: rotate(360deg); } }
 @keyframes bl-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.95; }
-  50% { transform: scale(1.08); opacity: 1; }
+  0%, 100% { transform: scale(1); opacity: 0.96; }
+  50% { transform: scale(1.05); opacity: 1; }
 }
 
 .textBlock {
@@ -103,7 +104,7 @@
 @keyframes bl-fade { from { opacity: 0; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .hub, .nodeGroup, .wordmark, .poweredBy, .inner {
+  .pizza, .people, .wordmark, .poweredBy, .inner {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }
