@@ -1,15 +1,162 @@
-.brandLoader { display:flex; align-items:center; justify-content:center; width:100%; min-height:240px; flex:1 1 auto; }
-.brandLoaderFull { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:var(--primary-background-color, #ffffff); z-index:5; }
-.brandLoaderInner { display:flex; flex-direction:column; align-items:center; gap:18px; animation:bl-fade-in .35s ease both; }
-.brandMark { display:block; overflow:visible; }
-.ring { fill:none; stroke:#e6e9ef; stroke-width:2; stroke-dasharray:3 7; stroke-linecap:round; transform-box:fill-box; transform-origin:center; animation:bl-spin 9s linear infinite; opacity:.7; }
-.table { fill:#d7dbe8; transform-box:fill-box; transform-origin:center; animation:bl-breathe 2.4s ease-in-out infinite; }
-.seat { transform-box:fill-box; transform-origin:center; opacity:0; animation:bl-pop .5s cubic-bezier(.34,1.56,.64,1) forwards, bl-wave 1.8s ease-in-out infinite; animation-delay:calc(var(--i) * .09s), calc(.6s + var(--i) * .12s); }
-@keyframes bl-pop { 0%{opacity:0; transform:scale(0);} 70%{opacity:1; transform:scale(1.18);} 100%{opacity:1; transform:scale(1);} }
-@keyframes bl-wave { 0%,100%{transform:scale(1);} 50%{transform:scale(1.22);} }
-@keyframes bl-breathe { 0%,100%{transform:scale(1); opacity:.9;} 50%{transform:scale(1.08); opacity:1;} }
-@keyframes bl-spin { to{transform:rotate(360deg);} }
-.brandText { font-family:'Figtree','Segoe UI',system-ui,sans-serif; font-size:14px; font-weight:600; letter-spacing:.12em; color:#9aa1b1; animation:bl-text 2.4s ease-in-out infinite; }
-@keyframes bl-text { 0%,100%{opacity:.55;} 50%{opacity:1;} }
-@keyframes bl-fade-in { from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:none;} }
-@media (prefers-reduced-motion: reduce) { .ring,.table,.seat,.brandText{ animation-duration:.01ms; animation-iteration-count:1; } .seat{opacity:1;} }
+/* Twyst-branded loading splash. Dark "ink" atmosphere (#0F1123 with soft
+   indigo/magenta glows) + the signature gradient mark, an animated squiggle,
+   and the twyst. wordmark. Non-scoped module → literal class names. */
+.brandLoader,
+.brandLoaderFull {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #0F1123;
+  background-image:
+    radial-gradient(90% 70% at 80% 12%, rgba(97, 97, 255, 0.32) 0%, transparent 55%),
+    radial-gradient(70% 60% at 12% 92%, rgba(226, 113, 255, 0.20) 0%, transparent 55%),
+    radial-gradient(80% 80% at 50% 55%, rgba(151, 174, 255, 0.10) 0%, transparent 60%);
+}
+.brandLoader {
+  width: 100%;
+  min-height: 260px;
+  flex: 1 1 auto;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.brandLoaderFull {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  animation: bl-fade 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.mark {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 10px 34px rgba(97, 97, 255, 0.45));
+}
+.ring {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.10);
+  stroke-width: 2;
+  stroke-dasharray: 2 9;
+  stroke-linecap: round;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bl-spin-rev 16s linear infinite;
+}
+.arc {
+  fill: none;
+  stroke: url(#twystLoaderGrad);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 27 100;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bl-spin 2.2s cubic-bezier(0.6, 0.1, 0.3, 0.9) infinite;
+}
+.table {
+  fill: url(#twystLoaderGrad);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bl-breathe 2.6s ease-in-out infinite;
+}
+.seat {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation: bl-pop 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+    bl-wave 2s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.08s), calc(0.7s + var(--i) * 0.1s);
+}
+@keyframes bl-pop {
+  0% { opacity: 0; transform: scale(0); }
+  70% { opacity: 1; transform: scale(1.18); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes bl-wave {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.16); }
+}
+@keyframes bl-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.92; }
+  50% { transform: scale(1.07); opacity: 1; }
+}
+@keyframes bl-spin { to { transform: rotate(360deg); } }
+@keyframes bl-spin-rev { to { transform: rotate(-360deg); } }
+
+.squiggle {
+  display: block;
+  overflow: visible;
+}
+.squigglePath {
+  fill: none;
+  stroke: url(#twystSquiggleGrad);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: bl-draw 1.5s cubic-bezier(0.16, 1, 0.3, 1) 0.35s forwards;
+}
+@keyframes bl-draw { to { stroke-dashoffset: 0; } }
+
+.textBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.eyebrow {
+  font-family: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(241, 241, 242, 0.55);
+  animation: bl-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both;
+}
+.wordmark {
+  font-family: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  background: linear-gradient(110deg, #6161FF 0%, #97AEFF 26%, #E271FF 58%, #FFA88D 100%);
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: bl-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.58s both,
+    bl-shimmer 4s linear 1.2s infinite;
+}
+.dot {
+  color: #FFA88D;
+  -webkit-text-fill-color: #FFA88D;
+}
+.tagline {
+  font-family: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  color: rgba(255, 168, 141, 0.92);
+  letter-spacing: 0.01em;
+  animation: bl-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.7s both;
+}
+@keyframes bl-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bl-shimmer { to { background-position: 220% 0; } }
+@keyframes bl-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ring, .arc, .table, .seat, .wordmark, .eyebrow, .tagline, .squigglePath, .inner {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+  .seat { opacity: 1; }
+  .squigglePath { stroke-dashoffset: 0; }
+}
