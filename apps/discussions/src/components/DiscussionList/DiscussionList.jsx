@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useDiscussions } from '@generated/hooks/useDiscussions';
 import { Skeleton, Button, Text, IconButton } from '@vibe/core';
@@ -131,6 +131,80 @@ function FilterSelect({ options, value, onChange, ariaLabel, searchable = false,
   );
 }
 
+/* Shared body for the discussion actions menus — the row kebab (⋯) AND the
+   right-click context menu render the exact same four actions
+   (edit / duplicate / export / delete) with an inline delete-confirm step.
+   `run` closes the host menu then fires the reused handler. Actions that are
+   null (gated off for this discussion) are simply omitted. */
+function DiscussionMenuBody({ item, actions, confirmDel, setConfirmDel, onClose }) {
+  const run = (fn) => (e) => {
+    e.stopPropagation();
+    onClose();
+    fn?.(item);
+  };
+  if (confirmDel) {
+    return (
+      <div className={styles.menuConfirm}>
+        <span className={styles.menuConfirmText}>למחוק את הדיון?</span>
+        <div className={styles.menuConfirmActions}>
+          <button type="button" className={`${styles.menuConfirmBtn} ${styles.menuConfirmYes}`} onClick={run(actions.onDelete)} role="menuitem">
+            מחק
+          </button>
+          <button type="button" className={styles.menuConfirmBtn} onClick={(e) => { e.stopPropagation(); setConfirmDel(false); }} role="menuitem">
+            ביטול
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <>
+      {actions.onEdit && (
+        <button type="button" className={styles.menuItem} onClick={run(actions.onEdit)} role="menuitem">
+          <Pencil className={styles.menuItemIcon} />
+          <span>עריכה</span>
+        </button>
+      )}
+      {actions.onDuplicate && (
+        <button type="button" className={styles.menuItem} onClick={run(actions.onDuplicate)} role="menuitem">
+          <Copy className={styles.menuItemIcon} />
+          <span>שכפול</span>
+        </button>
+      )}
+      {actions.onExport && (
+        <button
+          type="button"
+          className={styles.menuItem}
+          disabled={actions.exporting}
+          onClick={run(actions.onExport)}
+          role="menuitem"
+        >
+          {actions.exporting ? (
+            <Loader2 className={`${styles.menuItemIcon} ${styles.spinning}`} />
+          ) : (
+            <FileDown className={styles.menuItemIcon} />
+          )}
+          <span>ייצוא</span>
+        </button>
+      )}
+      {actions.onDelete && (
+        <>
+          <div className={styles.menuDivider} />
+          <button
+            type="button"
+            className={`${styles.menuItem} ${styles.menuItemDanger}`}
+            onClick={(e) => { e.stopPropagation(); setConfirmDel(true); }}
+            role="menuitem"
+          >
+            <Trash2 className={styles.menuItemIcon} />
+            <span>מחיקה</span>
+          </button>
+        </>
+      )}
+    </>
+  );
+}
+
 /* Per-row kebab (⋯) menu — monday-like. Opens a fixed-position popup with four
    actions: edit / duplicate / export / delete. Delete swaps the menu to an
    inline confirm step (the app deliberately avoids window.confirm). Modeled on
@@ -173,12 +247,6 @@ function RowMenu({ item, onEdit, onDuplicate, onExport, onDelete, exporting }) {
     setOpen(true);
   };
 
-  const run = (fn) => (e) => {
-    e.stopPropagation();
-    close();
-    fn?.(item);
-  };
-
   return (
     <>
       <button
@@ -201,68 +269,77 @@ function RowMenu({ item, onEdit, onDuplicate, onExport, onDelete, exporting }) {
           style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 10000 }}
           onClick={(e) => e.stopPropagation()}
         >
-          {confirmDel ? (
-            <div className={styles.menuConfirm}>
-              <span className={styles.menuConfirmText}>למחוק את הדיון?</span>
-              <div className={styles.menuConfirmActions}>
-                <button type="button" className={`${styles.menuConfirmBtn} ${styles.menuConfirmYes}`} onClick={run(onDelete)} role="menuitem">
-                  מחק
-                </button>
-                <button type="button" className={styles.menuConfirmBtn} onClick={(e) => { e.stopPropagation(); setConfirmDel(false); }} role="menuitem">
-                  ביטול
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {onEdit && (
-                <button type="button" className={styles.menuItem} onClick={run(onEdit)} role="menuitem">
-                  <Pencil className={styles.menuItemIcon} />
-                  <span>עריכה</span>
-                </button>
-              )}
-              {onDuplicate && (
-                <button type="button" className={styles.menuItem} onClick={run(onDuplicate)} role="menuitem">
-                  <Copy className={styles.menuItemIcon} />
-                  <span>שכפול</span>
-                </button>
-              )}
-              {onExport && (
-                <button
-                  type="button"
-                  className={styles.menuItem}
-                  disabled={exporting}
-                  onClick={run(onExport)}
-                  role="menuitem"
-                >
-                  {exporting ? (
-                    <Loader2 className={`${styles.menuItemIcon} ${styles.spinning}`} />
-                  ) : (
-                    <FileDown className={styles.menuItemIcon} />
-                  )}
-                  <span>ייצוא ל-DOCS</span>
-                </button>
-              )}
-              {onDelete && (
-                <>
-                  <div className={styles.menuDivider} />
-                  <button
-                    type="button"
-                    className={`${styles.menuItem} ${styles.menuItemDanger}`}
-                    onClick={(e) => { e.stopPropagation(); setConfirmDel(true); }}
-                    role="menuitem"
-                  >
-                    <Trash2 className={styles.menuItemIcon} />
-                    <span>מחיקה</span>
-                  </button>
-                </>
-              )}
-            </>
-          )}
+          <DiscussionMenuBody
+            item={item}
+            actions={{ onEdit, onDuplicate, onExport, onDelete, exporting }}
+            confirmDel={confirmDel}
+            setConfirmDel={setConfirmDel}
+            onClose={close}
+          />
         </div>,
         document.body
       )}
     </>
+  );
+}
+
+/* Right-click context menu (round 33) for a discussion — the SAME four actions
+   as the row kebab, anchored at the cursor. A single instance is hosted by
+   DiscussionList and opened by BOTH the list rows and the calendar chips, so it
+   works in both views. Portal + fixed position + z-index 10000 so it is never
+   clipped and always paints above the app; closes on outside-click / Esc /
+   scroll / resize (mirrors RowMenu / FilterSelect). */
+function DiscussionContextMenu({ item, x, y, actions, onClose }) {
+  const menuRef = useRef(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [pos, setPos] = useState({ top: y, left: x });
+
+  useEffect(() => {
+    const onDown = (e) => { if (menuRef.current?.contains(e.target)) return; onClose(); };
+    const onEsc = (e) => { if (e.key === 'Escape') onClose(); };
+    const reposition = () => onClose();
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  }, [onClose]);
+
+  // Clamp inside the viewport once the menu has a measured size (so a click near
+  // an edge doesn't push it off-screen).
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)),
+      left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)),
+    });
+  }, [x, y]);
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className={styles.rowMenu}
+      role="menu"
+      style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 10000 }}
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <DiscussionMenuBody
+        item={item}
+        actions={actions}
+        confirmDel={confirmDel}
+        setConfirmDel={setConfirmDel}
+        onClose={onClose}
+      />
+    </div>,
+    document.body
   );
 }
 
@@ -282,6 +359,10 @@ export function DiscussionList({
   });
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' or a status label id (string)
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  // Right-click context menu (round 33) — {item, x, y} while open. A single
+  // instance serves BOTH the list rows and the calendar chips (both live inside
+  // this component's tree).
+  const [ctxMenu, setCtxMenu] = useState(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -335,6 +416,27 @@ export function DiscussionList({
   const handleRowDelete = (item) => {
     const { undo } = softDeleteDiscussion(item.id);
     onDelete?.(item, { undo });
+  };
+
+  // Per-discussion action set (round 33) — the SAME gating as the row kebab:
+  // edit/delete need editDiscussionFields, export needs exportDocs, duplicate is
+  // ungated (mirrors RowMenu). Reuses the existing App handlers + soft-delete.
+  const resolveItemActions = (item) => ({
+    onEdit: (onEdit && canEditItem(item)) ? onEdit : null,
+    onDuplicate: onDuplicate || null,
+    onExport: (onExport && canExportItem(item)) ? onExport : null,
+    onDelete: (onDelete && canEditItem(item)) ? handleRowDelete : null,
+    exporting: exportingId === item.id,
+  });
+  // Open the shared right-click menu at the cursor — from a list row OR a calendar
+  // chip. Suppress the native browser menu; no-op when the user has no action on
+  // this discussion (so we never show an empty menu).
+  const openItemContextMenu = (item, e) => {
+    const actions = resolveItemActions(item);
+    if (!actions.onEdit && !actions.onDuplicate && !actions.onExport && !actions.onDelete) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ item, x: e.clientX, y: e.clientY });
   };
 
   const monthOptions = useMemo(() => {
@@ -501,6 +603,7 @@ export function DiscussionList({
           onSelect={onSelect}
           onCreateAt={canCreateDiscussion ? onCreateAt : undefined}
           rowActions={rowActions}
+          onItemContextMenu={openItemContextMenu}
         />
       ) : (
       <div className={`${styles.scroll} ${refetching ? styles.refetching : ''}`}>
@@ -523,6 +626,7 @@ export function DiscussionList({
                 <div key={item.id} className={styles.itemWrap}>
                   <button
                     onClick={() => onSelect(item)}
+                    onContextMenu={(e) => openItemContextMenu(item, e)}
                     aria-label={item.name}
                     className={`${styles.item} ${isSelected ? styles.itemSelected : ''}`}
                     style={isSelected ? { borderLeftColor: accent } : undefined}
@@ -571,6 +675,18 @@ export function DiscussionList({
           </div>
         )}
       </div>
+      )}
+
+      {/* Single right-click menu instance — serves both the list rows and the
+          calendar chips (round 33). Rendered here so one portal covers both views. */}
+      {ctxMenu && (
+        <DiscussionContextMenu
+          item={ctxMenu.item}
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          actions={resolveItemActions(ctxMenu.item)}
+          onClose={() => setCtxMenu(null)}
+        />
       )}
     </div>
   );

@@ -28,15 +28,19 @@ function openItemCard(itemId) {
 export function CreatorAvatar({ userId, usersById, size = 'small' }) {
   if (!userId) return <span className={styles.avatarEmpty} aria-hidden="true" />;
   const user = usersById?.[String(userId)];
+  const label = user?.name || 'יוצר';
   return (
-    <Avatar
-      size={size}
-      src={user?.photo_thumb}
-      text={initialsOf(user?.name)}
-      type={user?.photo_thumb ? 'img' : 'text'}
-      ariaLabel={user?.name || 'יוצר'}
-      tooltipProps={{ content: user?.name || 'יוצר' }}
-    />
+    // Native-title name tooltip (round 33): browser-rendered, so it is never
+    // clipped by an overflow ancestor and always paints above all app UI.
+    <span title={label} style={{ display: 'inline-flex' }}>
+      <Avatar
+        size={size}
+        src={user?.photo_thumb}
+        text={initialsOf(user?.name)}
+        type={user?.photo_thumb ? 'img' : 'text'}
+        ariaLabel={label}
+      />
+    </span>
   );
 }
 

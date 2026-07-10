@@ -27,14 +27,19 @@ export function PersonAvatar({ person, size = 'default', showName = true }) {
 
   return (
     <Flex gap={6} align="center">
-      <Avatar
-        size={SIZE_MAP[size] || "small"}
-        src={photo}
-        text={initialsOf(displayName)}
-        type={photo ? "img" : "text"}
-        ariaLabel={displayName}
-        tooltipProps={{ content: displayName }}
-      />
+      {/* Name tooltip via the NATIVE title attribute (round 33): browser-rendered
+          so it is never clipped by an overflow ancestor and always paints above
+          all app UI — the @vibe Avatar tooltip was getting hidden behind other
+          elements. */}
+      <span className={styles.avatarTip} title={displayName}>
+        <Avatar
+          size={SIZE_MAP[size] || "small"}
+          src={photo}
+          text={initialsOf(displayName)}
+          type={photo ? "img" : "text"}
+          ariaLabel={displayName}
+        />
+      </span>
       {showName && <Text className={styles.name}>{displayName}</Text>}
     </Flex>
   );
@@ -60,7 +65,10 @@ function PersonListCompact({ people, byId, avatarSize, size, max }) {
             text={initialsOf(name)}
             type={photo ? "img" : "text"}
             ariaLabel={name}
-            tooltipProps={{ content: name }}
+            // Overlapping AvatarGroup avatars can't be wrapped in a native-title
+            // span without breaking the stack, so keep the @vibe tooltip but pin
+            // it to the app popover z-index (10000) so it's never hidden (round 33).
+            tooltipProps={{ content: name, zIndex: 10000 }}
           />
         );
       })}

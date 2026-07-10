@@ -44,7 +44,7 @@ function NowLine() {
 /* One day column: 24 clickable hour slots (create-discussion affordance) with
    the day's timed chips absolutely positioned as SIBLINGS of the slots (chips
    are buttons; nesting them inside the slot buttons would be invalid HTML). */
-function DayColumn({ day, isToday, timedEvents, selectedId, accentFor, actionsFor, onChipClick, onSlotClick }) {
+function DayColumn({ day, isToday, timedEvents, selectedId, accentFor, actionsFor, onChipClick, onChipContextMenu, onSlotClick }) {
   const laidOut = useMemo(() => layoutDayEvents(timedEvents), [timedEvents]);
   const dayLabel = `יום ${WEEKDAYS_HE_LONG[day.getDay()]} ${day.getDate()} ב${MONTHS_HE[day.getMonth()]}`;
   return (
@@ -66,6 +66,7 @@ function DayColumn({ day, isToday, timedEvents, selectedId, accentFor, actionsFo
           accent={accentFor(item)}
           selected={selectedId === item.id}
           onClick={onChipClick}
+          onContextMenu={onChipContextMenu}
           variant="timed"
           actions={actionsFor(item)}
           style={{
@@ -81,7 +82,7 @@ function DayColumn({ day, isToday, timedEvents, selectedId, accentFor, actionsFo
   );
 }
 
-export function WeekGrid({ anchor, eventsByDay, selectedId, accentFor, actionsFor = () => null, onChipClick, onSlotClick, loading }) {
+export function WeekGrid({ anchor, eventsByDay, selectedId, accentFor, actionsFor = () => null, onChipClick, onChipContextMenu = null, onSlotClick, loading }) {
   const days = useMemo(() => workWeekDays(anchor), [anchor]);
   const scrollRef = useRef(null);
   const today = new Date();
@@ -133,6 +134,7 @@ export function WeekGrid({ anchor, eventsByDay, selectedId, accentFor, actionsFo
             accentFor={accentFor}
             actionsFor={actionsFor}
             onChipClick={onChipClick}
+            onChipContextMenu={onChipContextMenu}
             onSlotClick={onSlotClick}
           />
         ))}

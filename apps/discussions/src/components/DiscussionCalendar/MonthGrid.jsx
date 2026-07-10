@@ -17,7 +17,7 @@ const CHIP_PX = 21;
    chip buttons, and nested buttons are invalid HTML. Clicking the cell (number
    or empty area) navigates to the WEEK view of that day; chips stop
    propagation and open the discussion. */
-function DayCell({ day, inMonth, isToday, events, maxChips, selectedId, accentFor, actionsFor, onDayClick, onChipClick, loading, showSkeleton }) {
+function DayCell({ day, inMonth, isToday, events, maxChips, selectedId, accentFor, actionsFor, onDayClick, onChipClick, onChipContextMenu, loading, showSkeleton }) {
   const visible = events.slice(0, maxChips);
   const overflow = events.length - visible.length;
   const label = `יום ${WEEKDAYS_HE_LONG[day.getDay()]}, ${day.getDate()} ב${MONTHS_HE[day.getMonth()]} — מעבר לשבוע עבודה`;
@@ -50,6 +50,7 @@ function DayCell({ day, inMonth, isToday, events, maxChips, selectedId, accentFo
                 accent={accentFor(item)}
                 selected={selectedId === item.id}
                 onClick={onChipClick}
+                onContextMenu={onChipContextMenu}
                 variant="month"
                 actions={actionsFor(item)}
               />
@@ -62,7 +63,7 @@ function DayCell({ day, inMonth, isToday, events, maxChips, selectedId, accentFo
   );
 }
 
-export function MonthGrid({ anchor, eventsByDay, selectedId, accentFor, actionsFor = () => null, onDayClick, onChipClick, loading }) {
+export function MonthGrid({ anchor, eventsByDay, selectedId, accentFor, actionsFor = () => null, onDayClick, onChipClick, onChipContextMenu = null, loading }) {
   const weeks = useMemo(() => monthGridDays(anchor), [anchor]);
   const gridRef = useRef(null);
   const [maxChips, setMaxChips] = useState(3);
@@ -102,6 +103,7 @@ export function MonthGrid({ anchor, eventsByDay, selectedId, accentFor, actionsF
             actionsFor={actionsFor}
             onDayClick={onDayClick}
             onChipClick={onChipClick}
+            onChipContextMenu={onChipContextMenu}
             loading={loading}
             showSkeleton={i % 3 === 0}
           />

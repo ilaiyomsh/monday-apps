@@ -228,7 +228,7 @@ export const CAPABILITIES = [
   { id: 'viewDiscussion', tier: 'disc', group: 'discussion', label: 'צפייה בדיון' },
   { id: 'editDiscussionFields', tier: 'disc', group: 'discussion', label: 'עריכת פרטי הדיון' },
   { id: 'editSummary', tier: 'disc', group: 'discussion', label: 'עריכת סיכום' },
-  { id: 'exportDocs', tier: 'disc', group: 'discussion', label: 'ייצוא ל-DOCS' },
+  { id: 'exportDocs', tier: 'disc', group: 'discussion', label: 'ייצוא' },
   { id: 'addTopicOrPoint', tier: 'disc', group: 'topics', label: 'הוספת נושא/נקודה' },
   { id: 'editTopicOrPoint', tier: 'disc', group: 'topics', label: 'עריכת נושא/נקודה' },
   { id: 'deleteTopicOrPoint', tier: 'disc', group: 'topics', label: 'מחיקת נושא/נקודה' },
