@@ -262,10 +262,23 @@
 
 /* Points table — continuous monday-grid look (no rounded card border): the row
    separators run edge-to-edge and the only vertical line closing the grid is the
-   last column's own border. The name column is a FILL track (minmax) so the table
-   always spans the full width, so it effectively never scrolls horizontally; the
-   overflow-x:auto stays only for the rare case where dragged minimums outgrow the
-   width, and it hosts the frozen lead/name columns' sticky origin. */
+   last column's own border. The scroll container is the .sectionScroll wrapper
+   (below); .sectionBody is the max-content grid that scrolls inside it. */
+/* Horizontal scroll OWNER for a topic's points table (mirrors TasksTab's
+   `.board` > `.groupScrollInner`). It stays at the pane width (width:100%) and
+   scrolls its max-content child (.sectionBody) INTERNALLY, so a narrowed iframe
+   never pushes the table wider than the pane and no app/view-level horizontal
+   scrollbar appears. The frozen lead/name cells (sticky left:0) pin to THIS
+   scrollport. Previously .sectionBody was BOTH the max-content table AND the
+   overflow-x:auto container, so it sized to its content and grew past the pane
+   (the scroll never engaged) — that was the stray horizontal-scrollbar source. */
+.sectionScroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  direction: ltr;
+}
+
 .sectionBody {
   display: flex;
   flex-direction: column;
@@ -274,7 +287,7 @@
      track), this keeps the grid spanning the full width (row separators run to
      the right edge) while letting name shrink/expand freely on drag. When the
      dragged tracks sum wider than the board, the box grows past 100% and scrolls
-     under this element's own overflow-x. */
+     under the parent .sectionScroll's overflow-x. */
   width: max-content;
   min-width: 100%;
   background: var(--primary-background-color, #fff);
@@ -288,8 +301,6 @@
   border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
   border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
   direction: ltr;
-  overflow-x: auto;
-  overflow-y: hidden;
 }
 /* The table's own bottom border is the single closing line: the last child must
    not draw its own border-bottom on top of it (a straight row-border would also

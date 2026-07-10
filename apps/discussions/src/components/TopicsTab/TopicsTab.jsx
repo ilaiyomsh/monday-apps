@@ -380,6 +380,7 @@ function SortableTopicSection({
       </div>
 
       {effectiveOpen && (
+        <div className={styles.sectionScroll}>
         <div className={styles.sectionBody}>
           {/* Column header — SAME grid template as the point rows (shared via
               rowStyle). Owners get a ResizeHandle on each column's trailing edge
@@ -495,6 +496,7 @@ function SortableTopicSection({
               </button>
             )
           )}
+        </div>
         </div>
       )}
     </div>
