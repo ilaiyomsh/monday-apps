@@ -227,7 +227,7 @@ export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, on
           <div className={styles.cellCenter}>
             <DatePickerPopover value={deadline} onChange={(d) => onDeadlineChange(task.id, d)} />
           </div>
-        ) : deadline ? (
+        ) : (deadline instanceof Date) ? (
           <span className={styles.muted}>{deadline.toLocaleDateString('en-GB')}</span>
         ) : (
           <span className={styles.muted}>—</span>

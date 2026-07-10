@@ -28,6 +28,18 @@ export function DatePickerPopover({ value, onChange, variant = 'cell', placehold
   const triggerRef = useRef(null);
   const isField = variant === 'field';
   const isInline = variant === 'inline';
+  // Defense-in-depth: tolerate a non-Date `value`. A real Date passes through
+  // UNTOUCHED (its `hasTime` flag stays intact for other consumers); a string /
+  // number (e.g. a date that reached us as an ISO string) is revived; anything
+  // unparseable becomes null and renders as empty. The primary fix reconstructs
+  // Dates in the view cache — this just guarantees the SHARED picker (used by
+  // every date cell + modal) can never throw ".toLocaleDateString is not a
+  // function" on a stray value.
+  const safeValue = value == null
+    ? null
+    : value instanceof Date
+      ? value
+      : (() => { const d = new Date(value); return Number.isNaN(d.getTime()) ? null : d; })();
   const fmt = formatDate || ((d) => d.toLocaleDateString('en-GB') /* DD/MM/YYYY */);
 
   const updatePosition = () => {
@@ -56,12 +68,12 @@ export function DatePickerPopover({ value, onChange, variant = 'cell', placehold
     setOpen(false);
   };
 
-  const isOverdue = value && value < new Date();
+  const isOverdue = safeValue && safeValue < new Date();
   const triggerClass = isInline
     ? `${styles.trigger} ${styles.inlineTrigger} ${triggerClassName}`
     : isField
-      ? `${styles.trigger} ${styles.fieldTrigger} ${value ? styles.set : styles.empty} ${triggerClassName}`
-      : `${styles.trigger} ${value ? (isOverdue ? styles.overdue : styles.set) : styles.empty} ${triggerClassName}`;
+      ? `${styles.trigger} ${styles.fieldTrigger} ${safeValue ? styles.set : styles.empty} ${triggerClassName}`
+      : `${styles.trigger} ${safeValue ? (isOverdue ? styles.overdue : styles.set) : styles.empty} ${triggerClassName}`;
 
   return (
     <Dialog
@@ -86,7 +98,7 @@ export function DatePickerPopover({ value, onChange, variant = 'cell', placehold
       zIndex={zIndex}
       content={() => (
         <DialogContentContainer>
-          <DatePicker mode="single" date={value || undefined} onDateChange={handleSelect} />
+          <DatePicker mode="single" date={safeValue || undefined} onDateChange={handleSelect} />
           <div className={styles.actions}>
             <Button kind="tertiary" size="small" onClick={selectToday}>היום</Button>
             {allowClear && <Button kind="tertiary" size="small" onClick={clear}>ניקוי</Button>}
@@ -98,20 +110,20 @@ export function DatePickerPopover({ value, onChange, variant = 'cell', placehold
         ref={triggerRef}
         type="button"
         className={triggerClass}
-        aria-label={value ? undefined : placeholder}
+        aria-label={safeValue ? undefined : placeholder}
         onMouseDown={updatePosition}
       >
         {isField ? (
           <>
             <span className={styles.fieldText}>
-              {value ? fmt(value) : placeholder}
+              {safeValue ? fmt(safeValue) : placeholder}
             </span>
             <Calendar size={16} />
           </>
         ) : isInline ? (
-          <span>{value ? fmt(value) : placeholder}</span>
-        ) : value ? (
-          <span>{fmt(value)}</span>
+          <span>{safeValue ? fmt(safeValue) : placeholder}</span>
+        ) : safeValue ? (
+          <span>{fmt(safeValue)}</span>
         ) : (
           <Calendar size={16} />
         )}

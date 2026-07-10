@@ -272,7 +272,7 @@ export function MyDecisionsRow({
           <div className={styles.cellCenter}>
             <DatePickerPopover value={date} onChange={(d) => onDateChange(decision.id, d)} />
           </div>
-        ) : date ? (
+        ) : (date instanceof Date) ? (
           <span className={styles.muted}>{date.toLocaleDateString('en-GB')}</span>
         ) : (
           <span className={styles.muted}>—</span>
