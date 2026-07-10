@@ -531,13 +531,29 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {/* Single toolbar row (round 35): "משימה חדשה" + English pills, left-
-          grouped (LTR), with the "לתצוגת הדיונים" back button pushed to the FAR
-          RIGHT of the same row (its slot uses margin-inline-start:auto). */}
-      <div className={styles.toolbar} dir="ltr">
+      {/* View title (round 40) — styled like the discussion-detail title
+          (DiscussionCard's .title: font-size-h2 / bold / line-height 1.2). */}
+      <h1 className={styles.viewTitle}>המשימות שלי</h1>
+
+      {/* Single toolbar row (round 35 + round 40): RTL and right-anchored, so it
+          reads (right→left) [משימה חדשה][בחזרה לתצוגת הדיונים][Search][Filter]
+          [Sort][Group by][collapse]. Round 40 moves the back button to sit
+          immediately after "משימה חדשה" (superseding round 35's far-right pin). */}
+      <div className={styles.toolbar} dir="rtl">
         <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
           משימה חדשה
         </Button>
+
+        {/* Back to discussions — immediately to the LEFT (RTL: right after) of
+            "משימה חדשה" (round 40 reposition). */}
+        {onBackToDiscussions && (
+          <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
+            <span className={styles.backBtnInner}>
+              <ArrowLeft size={16} aria-hidden="true" />
+              בחזרה לתצוגת הדיונים
+            </span>
+          </Button>
+        )}
 
         {showSearch ? (
           <div className={styles.searchPill}>
@@ -583,20 +599,6 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         />
 
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
-
-        {/* Back to discussions — pinned to the FAR RIGHT (RTL start) of the one
-            toolbar row; its slot's margin-inline-start:auto pushes it there while
-            the controls above stay left-grouped. */}
-        {onBackToDiscussions && (
-          <div className={styles.backSlot}>
-            <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
-              <span className={styles.backBtnInner}>
-                <ArrowLeft size={16} aria-hidden="true" />
-                לתצוגת הדיונים
-              </span>
-            </Button>
-          </div>
-        )}
       </div>
 
       {selectedIds.size > 0 && (

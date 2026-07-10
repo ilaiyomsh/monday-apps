@@ -472,14 +472,14 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   const showSearch = searchOpen || search.length > 0;
   const needDiscDates = group.col === 'discussion' && (group.order === 'dateAsc' || group.order === 'dateDesc');
 
-  // Back button element (no wrapper). The mapped view renders it in a slot at
-  // the FAR RIGHT of the single toolbar row (round 35, pushed via
-  // margin-inline-start:auto); the unmapped view wraps it alone in a .topBar row.
+  // Back button element (no wrapper). The mapped view renders it inline in the
+  // single toolbar row, immediately after the sub-tabs toggle (round 40); the
+  // unmapped view wraps it alone in a .topBar row.
   const backButton = onBackToDiscussions ? (
     <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
       <span className={styles.backBtnInner}>
         <ArrowLeft size={16} aria-hidden="true" />
-        לתצוגת הדיונים
+        בחזרה לתצוגת הדיונים
       </span>
     </Button>
   ) : null;
@@ -502,11 +502,17 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {/* Single toolbar row (round 35): English pills left-grouped (LTR) with the
-          sub-tabs toggle at the LEFT (RTL end) of the control group, and the
-          "לתצוגת הדיונים" back button pushed to the FAR RIGHT of the SAME row
-          (its slot uses margin-inline-start:auto). */}
-      <div className={styles.toolbar} dir="ltr">
+      {/* View title (round 40) — styled like the discussion-detail title
+          (DiscussionCard's .title: font-size-h2 / bold / line-height 1.2). */}
+      <h1 className={styles.viewTitle}>ההחלטות שלי</h1>
+
+      {/* Single toolbar row (round 35 + round 40): RTL and right-anchored, so it
+          reads (right→left) [toggle שקיבלתי|שמשפיעות עליי][בחזרה לתצוגת הדיונים]
+          [Search][Filter][Sort][Group by][collapse]. Round 40 moves the back
+          button to sit immediately after the sub-tabs toggle (superseding round
+          35's far-right pin). The toggle keeps its OWN dir="rtl" track, so
+          "החלטות שקיבלתי" still renders on its left and stays the default. */}
+      <div className={styles.toolbar} dir="rtl">
         {/* Sub-tabs: which people column scopes the server-side query. Default
             'decider' ("החלטות שקיבלתי") renders on the LEFT of the track (its own
             rtl direction + SUB_TABS order) — round-27 behavior preserved. */}
@@ -524,6 +530,11 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
             </button>
           ))}
         </div>
+
+        {/* Back to discussions — immediately to the LEFT (RTL: right after) of
+            the sub-tabs toggle (round 40 reposition). */}
+        {backButton}
+
         {showSearch ? (
           <div className={styles.searchPill}>
             <Search className={styles.pillIcon} aria-hidden="true" />
@@ -568,11 +579,6 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
         />
 
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
-
-        {/* Back to discussions — pinned to the FAR RIGHT (RTL start) of the one
-            toolbar row; its slot's margin-inline-start:auto pushes it there while
-            the sub-tabs + controls stay left-grouped. */}
-        {backButton && <div className={styles.backSlot}>{backButton}</div>}
       </div>
 
       {/* Floating bulk-action bar — count + delete + close (mirrors the
