@@ -676,7 +676,10 @@ export function DiscussionCard({
           On the "החלטות" tab it opens in decision mode, elsewhere in task mode
           (the modal clamps to an allowed side via allowTask/allowDecision). */}
       {(createTask || canCreateDecision) && !newTaskOpen && !quickCreate && (
-        <QuickCreateFab onClick={() => openQuickCreate(activeTab === 'decisions' ? 'decision' : 'task', null, 'fab')} />
+        <QuickCreateFab
+          compact={activeTab === 'previous' || activeTab === 'topics'}
+          onClick={() => openQuickCreate(activeTab === 'decisions' ? 'decision' : 'task', null, 'fab')}
+        />
       )}
       <QuickCreateModal
         open={!!quickCreate}
