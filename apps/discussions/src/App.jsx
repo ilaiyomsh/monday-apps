@@ -187,13 +187,6 @@ export default function App() {
   // gates desktop chrome on `.is-desktop` and mobile-only rules on `.mobile-app`.
   const layoutClass = isMobile ? 'mobile-app' : 'is-desktop';
 
-  // Initial app boot: `context` is null until the monday SDK resolves it (a 4s
-  // watchdog in MondayContext installs an empty context fallback so we never
-  // hang). While it is null — and for a short min window after — the branded
-  // splash covers the app so the animation is seen on a cold start. Purely a
-  // display gate; it changes nothing about how context/settings load.
-  const bootSplash = useMinSplash(context == null);
-
   // Toast queue + the single UI error-display path (logger ERROR records -> toast).
   const {
     toasts,
@@ -230,6 +223,17 @@ export default function App() {
   // the view simply follows the persisted appView — no opt-in gate, no top toggle.
   const { settings } = useSettings();
   const effectiveView = appView;
+
+  // Branded splash gate. Shows the fullscreen BrandLoader (a) on cold boot until
+  // `context` resolves AND a ~900ms min window elapses, and (b) for a ~900ms min
+  // window on EVERY top-level view switch — the window re-arms on each change of
+  // `effectiveView` (the armKey). The per-view arm is essential because round-37's
+  // stale-while-revalidate cache makes a warm view load instantly (its `loading`
+  // never flips true), so a boot-only gate would skip the splash on cached
+  // transitions. `context == null` is the only real loading the app observes here;
+  // each view still runs its own internal loading/skeleton AFTER the splash reveals
+  // it (per-view behavior unchanged). ~900ms keeps every transition snappy.
+  const splash = useMinSplash(context == null, 900, effectiveView);
   const openMyTasks = useCallback(() => handleAppViewChange('myTasks'), [handleAppViewChange]);
   const openMyDecisions = useCallback(() => handleAppViewChange('myDecisions'), [handleAppViewChange]);
   const backToDiscussions = useCallback(() => handleAppViewChange('discussions'), [handleAppViewChange]);
@@ -603,10 +607,12 @@ export default function App() {
     </>
   );
 
-  // Boot splash: hold the fullscreen branded loader until the context is ready
-  // AND the min window has elapsed, so the animation is seen on a cold start
-  // before the first view renders.
-  if (context == null || bootSplash) {
+  // Splash gate: hold the fullscreen branded loader until context is ready AND
+  // the min window has elapsed (cold boot), and re-show it for the min window on
+  // EVERY top-level view transition (discussions ↔ myTasks ↔ myDecisions) before
+  // revealing the destination view — see `splash`/useMinSplash. Independent of
+  // whether the view's data is cached/instant.
+  if (context == null || splash) {
     return (
       <div className={`${styles.appShell} ${layoutClass}`}>
         <BrandLoader fullscreen />

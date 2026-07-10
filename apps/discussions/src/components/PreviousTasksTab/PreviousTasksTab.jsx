@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Skeleton, Button, Text, Dropdown } from '@vibe/core';
+import { Button, Text, Dropdown } from '@vibe/core';
 import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
@@ -19,6 +19,7 @@ import { api, parseValue, cvSelection, monday } from '../../utils/mondayApi/mond
 import { getColumns } from '../../utils/mondayApi/board-config-store.js';
 import { משימות1Board, דיונים1Board } from '@api/BoardSDK.js';
 import { TaskTable } from '@generated/components/TaskTable';
+import { PreviousTasksSkeleton } from '@generated/components/PreviousTasksSkeleton';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
@@ -865,9 +866,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   if (resolving || typeMapsLoading) {
     return (
       <div className={styles.root}>
-        <div className={styles.skeletonStack}>
-          {[1, 2, 3].map((i) => <Skeleton key={i} type={"rectangle"} height={36} fullWidth />)}
-        </div>
+        <PreviousTasksSkeleton />
       </div>
     );
   }
@@ -990,9 +989,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       )}
 
       {tasksLoading ? (
-        <div className={styles.skeletonStack}>
-          {[1,2,3].map(i => <Skeleton key={i} type={"rectangle"} height={36} fullWidth />)}
-        </div>
+        <PreviousTasksSkeleton showToolbar={false} />
       ) : tasks.length === 0 ? (
         <div className={styles.emptyState}>
           <Text type={"text2"} color={"secondary"}>

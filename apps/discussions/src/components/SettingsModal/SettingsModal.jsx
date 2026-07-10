@@ -317,9 +317,14 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
   const DECISIONS_SETTINGS_FIELDS = [
     'decisionCreatorID', // 'יוצר החלטה' — people column; decision-tier creator role
     'deciderID', // 'מחליט' — people column; decision-tier decider role
-    'affectedID', // 'מושפעים' — people column
+    'affectedID', // 'מושפעים' — people column; decision-tier "affected" role
     'decisionStatusID', // 'סטאטוס החלטה' — status column (labels come from the column)
-    'decisionPriorityID', // 'עדיפות' — second status column
+    // 'decisionPriorityID' ('עדיפות') intentionally NOT listed — the decisions
+    // priority column was dropped from the UI (DecisionsTab hid it visually in an
+    // earlier round), so it is excluded from the MAPPING screen too. The alias
+    // stays in COLUMN_SCHEMA (and any previously-stored id is preserved on save)
+    // so useDecisions/useMyDecisions references never break; it is simply no
+    // longer a mappable row for the decisions board.
     'decisionDateID', // 'תאריך' — date column
     'discussionLinkID', // 'דיון' — two-way pair of the discussions board's decisionsBoardLinkID
   ];

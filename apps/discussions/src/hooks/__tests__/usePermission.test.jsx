@@ -33,9 +33,9 @@ function task({ creator = [], responsible = [] } = {}) {
   return { id: 'T1', taskCreatorID: creator, responsibilityID: responsible };
 }
 
-// A DECISION item whose role people columns (creator/decider) have loaded.
-function decision({ creator = [], decider = [] } = {}) {
-  return { id: 'DC1', decisionCreatorID: creator, deciderID: decider };
+// A DECISION item whose role people columns (creator/decider/affected) have loaded.
+function decision({ creator = [], decider = [], affected = [] } = {}) {
+  return { id: 'DC1', decisionCreatorID: creator, deciderID: decider, affectedID: affected };
 }
 
 // permissions blob with the feature ON and the LOCKED seed pre-filled.
@@ -726,5 +726,37 @@ describe('resolveCan — decision tier', () => {
     for (const cap of [...DECISION_EDIT_CAPS, 'deleteDecision']) {
       expect(resolveCan(cap, ctx, opts)).toBe(true);
     }
+  });
+});
+
+// ===========================================================================
+// resolveCan — decision "מושפעים" (affected) role. affectedID is a role source
+// (PERMISSION_ROLE_SOURCES.decisions), so a user in the affected people column
+// is recognized as the least-privileged decision role: STATUS edit only.
+// ===========================================================================
+describe('resolveCan — decision "affected" (מושפעים) role', () => {
+  const on = { permissions: ENABLED_SEEDED, canManageSettings: false };
+
+  it('feature on + seed: an affected user may edit STATUS only (not priority/date/affected/name/delete)', () => {
+    const ctx = { item: decision({ affected: [person(ME)] }), currentUserId: ME };
+    expect(resolveCan('editDecisionStatus', ctx, on)).toBe(true);
+    for (const cap of ['editDecisionPriority', 'editDecisionDate', 'editDecisionAffected', 'editDecisionName', 'deleteDecision']) {
+      expect(resolveCan(cap, ctx, on)).toBe(false);
+    }
+  });
+
+  it('an affected user is recognized as a role (grants status); a stranger to the decision is not', () => {
+    const affectedCtx = { item: decision({ affected: [person(ME)] }), currentUserId: ME };
+    const strangerCtx = { item: decision({ affected: [person(OTHER)] }), currentUserId: ME };
+    expect(resolveCan('editDecisionStatus', affectedCtx, on)).toBe(true);
+    expect(resolveCan('editDecisionStatus', strangerCtx, on)).toBe(false);
+  });
+
+  it('deny-wins: affected (editDecisionName:false) vetoes the decider grant when a user holds BOTH', () => {
+    const ctx = { item: decision({ decider: [person(ME)], affected: [person(ME)] }), currentUserId: ME };
+    // decider grants editDecisionName but affected revokes it → deny-wins veto.
+    expect(resolveCan('editDecisionName', ctx, on)).toBe(false);
+    // status is granted by BOTH roles → allowed (no veto).
+    expect(resolveCan('editDecisionStatus', ctx, on)).toBe(true);
   });
 });

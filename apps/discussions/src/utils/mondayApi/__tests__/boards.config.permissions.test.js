@@ -114,7 +114,8 @@ describe('PERMISSION_ROLE_SOURCES', () => {
     expect(PERMISSION_ROLE_SOURCES).toEqual({
       discussions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID', 'participantsID'],
       tasks: ['taskCreatorID', 'responsibilityID'],
-      decisions: ['decisionCreatorID', 'deciderID'],
+      // decisions now includes affectedID ("מושפעים") as a first-class role source.
+      decisions: ['decisionCreatorID', 'deciderID', 'affectedID'],
     });
   });
 
@@ -195,6 +196,16 @@ describe('DEFAULT_PERMISSION_SEED (LOCKED defaults)', () => {
     expect(caps.editDecisionDate).toBe(true);
     expect(caps.editDecisionAffected).toBe(true);
     expect(caps.editDecisionName).toBe(true);
+    expect(caps.deleteDecision).toBe(false);
+  });
+
+  it('affected (מושפעים): the least-privileged decision role — status edit on; priority/date/affected/name/delete off', () => {
+    const caps = DEFAULT_PERMISSION_SEED['decisions:affectedID'].capabilities;
+    expect(caps.editDecisionStatus).toBe(true);
+    expect(caps.editDecisionPriority).toBe(false);
+    expect(caps.editDecisionDate).toBe(false);
+    expect(caps.editDecisionAffected).toBe(false);
+    expect(caps.editDecisionName).toBe(false);
     expect(caps.deleteDecision).toBe(false);
   });
 
