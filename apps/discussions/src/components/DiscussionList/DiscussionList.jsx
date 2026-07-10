@@ -565,8 +565,10 @@ export function DiscussionList({
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
-              {/* monday-style filter chips at the RTL end (left): סוג הדיון on
-                  the right, the month filter to its left. Both carry a funnel icon. */}
+              {/* Full-width filter chips (round 38): each stretches to fill half
+                  the row so together they span the search-input width above. Order
+                  (DOM = RTL): סוג הדיון on the right (start), month on the left
+                  (end). Both carry a funnel icon. */}
               <div className={styles.filterRow}>
                 <div className={styles.filterCell}>
                   <FilterSelect
