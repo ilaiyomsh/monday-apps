@@ -1,10 +1,10 @@
 import React from 'react';
 import styles from './BrandLoader.module.css';
 
-// App mark, matching the monday app icon: a central hub with 3 connected nodes.
-// Colorized with the Twyst gradient; the 3 nodes step clockwise in discrete
-// jumps (steps), landing on the next spoke end each beat. viewBox 96, center
-// (48,48), nodes at radius 34 (top, bottom-right, bottom-left).
+// App mark — an exact recreation of the monday app icon: a central ring with
+// three "person" figures (head + shoulders) arranged at 120° around it, each
+// facing the center. Colorized with the Twyst palette; the three people step
+// CLOCKWISE in discrete jumps around the ring. viewBox 100, center (50,50).
 export function BrandLoader({ fullscreen = false }) {
   return (
     <div
@@ -14,7 +14,7 @@ export function BrandLoader({ fullscreen = false }) {
       aria-label="טוען"
     >
       <div className={styles.inner}>
-        <svg className={styles.mark} viewBox="0 0 96 96" width="104" height="104" aria-hidden="true">
+        <svg className={styles.mark} viewBox="0 0 100 100" width="112" height="112" aria-hidden="true">
           <defs>
             <linearGradient id="twystLoaderGrad" x1="0" y1="0" x2="1" y2="1">
               <stop offset="0%" stopColor="#6161FF" />
@@ -22,16 +22,20 @@ export function BrandLoader({ fullscreen = false }) {
               <stop offset="100%" stopColor="#FFA88D" />
             </linearGradient>
           </defs>
-          <g className={styles.spokes}>
-            <line x1="48" y1="48" x2="48" y2="14" />
-            <line x1="48" y1="48" x2="77.4" y2="65" />
-            <line x1="48" y1="48" x2="18.6" y2="65" />
-          </g>
-          <circle className={styles.hub} cx="48" cy="48" r="10" />
-          <g className={styles.nodeGroup}>
-            <circle className={styles.node} cx="48" cy="14" r="9" style={{ fill: '#6161FF' }} />
-            <circle className={styles.node} cx="77.4" cy="65" r="9" style={{ fill: '#E271FF' }} />
-            <circle className={styles.node} cx="18.6" cy="65" r="9" style={{ fill: '#FFA88D' }} />
+          <circle className={styles.ring} cx="50" cy="50" r="13" />
+          <g className={styles.people}>
+            <g>
+              <circle cx="50" cy="15" r="7" fill="#6161FF" />
+              <path d="M39 34 A12 12 0 0 0 61 34" fill="none" stroke="#6161FF" strokeWidth="6.5" strokeLinecap="round" />
+            </g>
+            <g transform="rotate(120 50 50)">
+              <circle cx="50" cy="15" r="7" fill="#E271FF" />
+              <path d="M39 34 A12 12 0 0 0 61 34" fill="none" stroke="#E271FF" strokeWidth="6.5" strokeLinecap="round" />
+            </g>
+            <g transform="rotate(240 50 50)">
+              <circle cx="50" cy="15" r="7" fill="#FFA88D" />
+              <path d="M39 34 A12 12 0 0 0 61 34" fill="none" stroke="#FFA88D" strokeWidth="6.5" strokeLinecap="round" />
+            </g>
           </g>
         </svg>
 

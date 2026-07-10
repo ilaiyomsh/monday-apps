@@ -1,8 +1,8 @@
-/* "Meetings" loading splash on a WHITE background. Mark = the monday app icon
-   (central hub + 3 connected nodes) in the Twyst gradient; the 3 colored nodes
-   step CLOCKWISE in discrete jumps around the hub. "Meetings" wordmark colors
-   flow as a continuous left-to-right wave, over "Powered by twyst".
-   Non-scoped module → literal class names. */
+/* "Meetings" loading splash on a WHITE background. Mark = exact recreation of
+   the monday app icon (central ring + 3 person figures) in the Twyst gradient;
+   the 3 colored people step CLOCKWISE in discrete jumps around the ring. The
+   "Meetings" wordmark colors flow as a continuous left-to-right wave, over
+   "Powered by twyst". Non-scoped module → literal class names. */
 .brandLoader,
 .brandLoaderFull {
   display: flex;
@@ -34,30 +34,23 @@
   overflow: visible;
   filter: drop-shadow(0 8px 24px rgba(97, 97, 255, 0.22));
 }
-.spokes line {
+.ring {
+  fill: none;
   stroke: url(#twystLoaderGrad);
-  stroke-width: 4;
-  stroke-linecap: round;
-  opacity: 0.35;
-}
-.hub {
-  fill: url(#twystLoaderGrad);
+  stroke-width: 8;
   transform-box: fill-box;
   transform-origin: center;
   animation: bl-breathe 2.6s ease-in-out infinite;
 }
-.nodeGroup {
+.people {
   transform-box: view-box;
-  transform-origin: 48px 48px;
-  animation: bl-step 1.8s steps(3, end) infinite;
-}
-.node {
-  filter: drop-shadow(0 1px 3px rgba(15, 17, 35, 0.18));
+  transform-origin: 50px 50px;
+  animation: bl-step 1.9s steps(3, end) infinite;
 }
 @keyframes bl-step { to { transform: rotate(360deg); } }
 @keyframes bl-breathe {
   0%, 100% { transform: scale(1); opacity: 0.95; }
-  50% { transform: scale(1.08); opacity: 1; }
+  50% { transform: scale(1.06); opacity: 1; }
 }
 
 .textBlock {
@@ -103,7 +96,7 @@
 @keyframes bl-fade { from { opacity: 0; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .hub, .nodeGroup, .wordmark, .poweredBy, .inner {
+  .ring, .people, .wordmark, .poweredBy, .inner {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }
