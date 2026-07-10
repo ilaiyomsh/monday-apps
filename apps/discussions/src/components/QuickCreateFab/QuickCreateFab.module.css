@@ -30,3 +30,18 @@
   width: 28px;
   height: 28px;
 }
+
+/* Compact variant — used via the `compact` prop ONLY on the Previous-tasks and
+   Topics tabs: ~33% smaller (37px vs 56px) and pinned lower (bottom 12px vs
+   24px). Same color / shadow / centering as .fab; declared AFTER .fab so these
+   equal-specificity single-class rules win by source order. */
+.fabCompact {
+  width: 37px;
+  height: 37px;
+  bottom: 12px;
+}
+
+.fabCompact :global(svg) {
+  width: 19px;
+  height: 19px;
+}
