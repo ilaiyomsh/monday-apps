@@ -10,11 +10,11 @@
   box-sizing: border-box;
 }
 
-/* monday-style toolbar (round 40): an RTL, right-anchored row of pill buttons
-   (justify-content:flex-start + dir="rtl" ⇒ the cluster hugs the RIGHT edge, so
-   "משימה חדשה" is rightmost and the back button tucks immediately after it). Sits
-   below the view title, above the scrolling board (not sticky — the board
-   scrolls, not the root). */
+/* monday-style toolbar (round 41): an LTR, flush-LEFT row of pill buttons
+   (justify-content:flex-start + dir="ltr" ⇒ the cluster hugs the LEFT edge, so
+   the back button is leftmost and "משימה חדשה" sits immediately to its right).
+   Round 41 reverts round 40's dir="rtl" right-shift. Sits below the view title,
+   above the scrolling board (not sticky — the board scrolls, not the root). */
 .toolbar {
   display: flex;
   align-items: center;
@@ -26,9 +26,11 @@
   padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
 }
 
-/* View title (round 40) — matches the discussion-detail title (DiscussionCard's
-   .title: font-size-h2 / bold / line-height 1.2). Sits above the toolbar row;
-   RTL + right-aligned Hebrew, with horizontal padding matching the toolbar. */
+/* View title (round 40 typography; round 41 left-aligned) — matches the
+   discussion-detail title (DiscussionCard's .title: font-size-h2 / bold /
+   line-height 1.2). Sits above the toolbar row; round 41 flushes it LEFT
+   (text-align:left) so it lines up with the flush-left toolbar, at the same
+   16px horizontal padding. Keeps direction:rtl for natural Hebrew shaping. */
 .viewTitle {
   flex: none;
   margin: 0;
@@ -38,7 +40,7 @@
   line-height: 1.2;
   color: var(--text-color, #323338);
   direction: rtl;
-  text-align: right;
+  text-align: left;
 }
 /* Scale the title down on phones, like the discussion header does. */
 :global(.mobile-app) .viewTitle {

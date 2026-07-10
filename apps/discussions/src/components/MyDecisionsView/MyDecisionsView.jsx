@@ -502,17 +502,23 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {/* View title (round 40) — styled like the discussion-detail title
-          (DiscussionCard's .title: font-size-h2 / bold / line-height 1.2). */}
+      {/* View title (round 40 typography; round 41 left-aligned) — styled like
+          the discussion-detail title (DiscussionCard's .title: font-size-h2 /
+          bold / line-height 1.2), now flush to the toolbar's left padding. */}
       <h1 className={styles.viewTitle}>ההחלטות שלי</h1>
 
-      {/* Single toolbar row (round 35 + round 40): RTL and right-anchored, so it
-          reads (right→left) [toggle שקיבלתי|שמשפיעות עליי][בחזרה לתצוגת הדיונים]
-          [Search][Filter][Sort][Group by][collapse]. Round 40 moves the back
-          button to sit immediately after the sub-tabs toggle (superseding round
-          35's far-right pin). The toggle keeps its OWN dir="rtl" track, so
-          "החלטות שקיבלתי" still renders on its left and stays the default. */}
-      <div className={styles.toolbar} dir="rtl">
+      {/* Single toolbar row (round 35 baseline restored in round 41): dir="ltr"
+          and flush-LEFT, reading (left→right) [בחזרה לתצוגת הדיונים]
+          [toggle שקיבלתי|שמשפיעות עליי][Search][Filter][Sort][Group by][collapse].
+          Round 41 reverts round 40's dir="rtl" right-shift and makes the back
+          button the LEFTMOST control, immediately left of the sub-tabs toggle.
+          The toggle keeps its OWN dir="rtl" track, so "החלטות שקיבלתי" still
+          renders on its left and stays the default. */}
+      <div className={styles.toolbar} dir="ltr">
+        {/* Back to discussions — the LEFTMOST control, immediately to the LEFT
+            of the sub-tabs toggle (round 41 reposition). */}
+        {backButton}
+
         {/* Sub-tabs: which people column scopes the server-side query. Default
             'decider' ("החלטות שקיבלתי") renders on the LEFT of the track (its own
             rtl direction + SUB_TABS order) — round-27 behavior preserved. */}
@@ -530,10 +536,6 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
             </button>
           ))}
         </div>
-
-        {/* Back to discussions — immediately to the LEFT (RTL: right after) of
-            the sub-tabs toggle (round 40 reposition). */}
-        {backButton}
 
         {showSearch ? (
           <div className={styles.searchPill}>

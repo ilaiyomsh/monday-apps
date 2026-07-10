@@ -531,21 +531,19 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {/* View title (round 40) — styled like the discussion-detail title
-          (DiscussionCard's .title: font-size-h2 / bold / line-height 1.2). */}
+      {/* View title (round 40 typography; round 41 left-aligned) — styled like
+          the discussion-detail title (DiscussionCard's .title: font-size-h2 /
+          bold / line-height 1.2), now flush to the toolbar's left padding. */}
       <h1 className={styles.viewTitle}>המשימות שלי</h1>
 
-      {/* Single toolbar row (round 35 + round 40): RTL and right-anchored, so it
-          reads (right→left) [משימה חדשה][בחזרה לתצוגת הדיונים][Search][Filter]
-          [Sort][Group by][collapse]. Round 40 moves the back button to sit
-          immediately after "משימה חדשה" (superseding round 35's far-right pin). */}
-      <div className={styles.toolbar} dir="rtl">
-        <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
-          משימה חדשה
-        </Button>
-
-        {/* Back to discussions — immediately to the LEFT (RTL: right after) of
-            "משימה חדשה" (round 40 reposition). */}
+      {/* Single toolbar row (round 35 baseline restored in round 41): dir="ltr"
+          and flush-LEFT, reading (left→right)
+          [בחזרה לתצוגת הדיונים][משימה חדשה][Search][Filter][Sort][Group by][collapse].
+          Round 41 reverts round 40's dir="rtl" right-shift and makes the back
+          button the LEFTMOST control, immediately left of "משימה חדשה". */}
+      <div className={styles.toolbar} dir="ltr">
+        {/* Back to discussions — the LEFTMOST control, immediately to the LEFT
+            of "משימה חדשה" (round 41 reposition). */}
         {onBackToDiscussions && (
           <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
             <span className={styles.backBtnInner}>
@@ -554,6 +552,10 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
             </span>
           </Button>
         )}
+
+        <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
+          משימה חדשה
+        </Button>
 
         {showSearch ? (
           <div className={styles.searchPill}>
