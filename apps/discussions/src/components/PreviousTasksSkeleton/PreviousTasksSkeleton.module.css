@@ -1,7 +1,7 @@
 /* Skeleton table loader for the "הנחיות קודמות" (PreviousTasksTab) tab —
    monday-style light-gray rounded placeholder bars on white with a subtle
    left-to-right shimmer sweep. Shown while the tab's initial data is loading,
-   instead of a blank/generic state. Class names are prefixed (pt*/ptSkel*) to
+   instead of a blank/generic state. Class names are prefixed (pt / ptSkel) to
    stay unique under the app's non-scoped CSS-module setup (literal class names). */
 
 .ptSkeleton {
