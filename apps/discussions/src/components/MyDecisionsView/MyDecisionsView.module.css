@@ -28,9 +28,11 @@
   padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
 }
 
-/* View title (round 40) — matches the discussion-detail title (DiscussionCard's
-   .title: font-size-h2 / bold / line-height 1.2). Sits above the toolbar row;
-   RTL + right-aligned Hebrew, horizontal padding matching the toolbar. */
+/* View title (round 40 typography; round 41 left-aligned) — matches the
+   discussion-detail title (DiscussionCard's .title: font-size-h2 / bold /
+   line-height 1.2). Sits above the toolbar row; round 41 flushes it LEFT
+   (text-align:left) so it lines up with the flush-left toolbar, at the same
+   16px horizontal padding. Keeps direction:rtl for natural Hebrew shaping. */
 .viewTitle {
   flex: none;
   margin: 0;
@@ -40,7 +42,7 @@
   line-height: 1.2;
   color: var(--text-color, #323338);
   direction: rtl;
-  text-align: right;
+  text-align: left;
 }
 :global(.mobile-app) .viewTitle {
   font-size: 22px;
@@ -63,12 +65,13 @@
   align-items: stretch;
   gap: 4px;
   width: fit-content;
-  /* Round 33/40: the toggle is the FIRST toolbar child; on the RTL toolbar that
-     puts it at the RIGHT (start) of the row, with the back button + controls to
-     its left — no own margin; the .toolbar flex gap spaces it from its neighbor.
-     It stays EXACTLY as tall as the @vibe small pills (32px) so the row aligns;
-     box-sizing keeps the 4px track padding inside the 32px. Its OWN dir:rtl
-     (below) keeps "החלטות שקיבלתי" on the toggle's left + default (round 27/33). */
+  /* Round 41: the toggle is the SECOND toolbar child (after the back button) on
+     the flush-LEFT dir="ltr" toolbar, so it sits immediately to the RIGHT of the
+     back button — no own margin; the .toolbar flex gap spaces it from its
+     neighbors. It stays EXACTLY as tall as the @vibe small pills (32px) so the
+     row aligns; box-sizing keeps the 4px track padding inside the 32px. Its OWN
+     dir:rtl (below) keeps "החלטות שקיבלתי" on the toggle's left + default
+     (round 27/33) regardless of the toolbar's now-LTR direction. */
   margin: 0;
   height: 32px;
   box-sizing: border-box;
@@ -105,10 +108,11 @@
   color: var(--decisions-accent, #6b4ee6);
 }
 
-/* monday-style toolbar (round 40): an RTL, right-anchored row of pill buttons
-   (justify-content:flex-start + dir="rtl" ⇒ the cluster hugs the RIGHT edge, so
-   the sub-tabs toggle is rightmost and the back button tucks after it). Sits
-   below the view title, above the scrolling board as a fixed flex row. */
+/* monday-style toolbar (round 41): an LTR, flush-LEFT row of pill buttons
+   (justify-content:flex-start + dir="ltr" ⇒ the cluster hugs the LEFT edge, so
+   the back button is leftmost and the sub-tabs toggle sits immediately to its
+   right). Round 41 reverts round 40's dir="rtl" right-shift. Sits below the
+   view title, above the scrolling board as a fixed flex row. */
 .toolbar {
   display: flex;
   align-items: center;
