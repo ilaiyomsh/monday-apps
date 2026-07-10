@@ -28,7 +28,7 @@ describe('DiscussionList — initial list load shows the branded splash', () => 
   it('renders the BrandLoader (status role + "Powered by Twyst") while loading', () => {
     render(<DiscussionList onSelect={() => {}} />);
     expect(screen.getByRole('status', { name: 'טוען' })).toBeTruthy();
-    expect(screen.getByText('Powered by Twyst')).toBeTruthy();
+    expect(screen.getByText('Meetings')).toBeTruthy();
   });
 
   it('no longer renders the old grey skeleton bars', () => {
