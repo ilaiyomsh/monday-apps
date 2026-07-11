@@ -1,10 +1,12 @@
 import React from 'react';
 import styles from './BrandLoader.module.css';
 
-// App mark — recreation of the monday app icon: a central "pizza" (a disc cut
-// into 8 slices by 8 radial lines) with three "person" figures (head + shoulder
-// arc curving around the disc) at 120°. Colorized with the Twyst palette; the
-// three people SLIDE clockwise to the next seat in a cool eased hop. viewBox 100.
+// App mark — recreation of the monday app icon: a central "pizza" — a
+// gradient-filled disc cut into 8 CLEAR, equal slices by 8 WHITE radial lines
+// (every 45°) with a gradient outline ring — plus three "person" figures (head
+// + shoulder arc curving around the disc) at 120°. Colorized with the Twyst
+// palette; the three people SLIDE clockwise to the next seat in a cool eased
+// hop. viewBox 100.
 export function BrandLoader({ fullscreen = false }) {
   return (
     <div
@@ -23,8 +25,11 @@ export function BrandLoader({ fullscreen = false }) {
             </linearGradient>
           </defs>
           <g className={styles.pizza}>
-            <circle cx="50" cy="50" r="16" fill="url(#twystLoaderGrad)" fillOpacity="0.12" stroke="url(#twystLoaderGrad)" strokeWidth="2.5" />
-            <g stroke="url(#twystLoaderGrad)" strokeWidth="2" strokeLinecap="round">
+            {/* Gradient-filled disc at a readable opacity so the WHITE cuts pop. */}
+            <circle cx="50" cy="50" r="16" fill="url(#twystLoaderGrad)" fillOpacity="0.92" />
+            {/* 8 WHITE radial cuts to the edge, one every 45deg -> 8 unmistakable
+                equal wedges. Crisp + high-contrast against the gradient fill. */}
+            <g stroke="#ffffff" strokeWidth="2" strokeLinecap="round">
               <line x1="50" y1="50" x2="66" y2="50" />
               <line x1="50" y1="50" x2="61.3" y2="61.3" />
               <line x1="50" y1="50" x2="50" y2="66" />
@@ -34,6 +39,8 @@ export function BrandLoader({ fullscreen = false }) {
               <line x1="50" y1="50" x2="50" y2="34" />
               <line x1="50" y1="50" x2="61.3" y2="38.7" />
             </g>
+            {/* Gradient outline ring on TOP — a clean edge over the white cut tips. */}
+            <circle cx="50" cy="50" r="16" fill="none" stroke="url(#twystLoaderGrad)" strokeWidth="2.5" />
           </g>
           <g className={styles.people}>
             <g>

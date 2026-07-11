@@ -22,6 +22,7 @@ import { ensurePeopleColumns } from './utils/mondayApi/peopleColumns.js';
 import { usePermission } from './hooks/usePermission.js';
 import { prefetchMyTasks } from './hooks/useMyTasks.js';
 import { prefetchMyDecisions } from './hooks/useMyDecisions.js';
+import { prefetchDiscussions } from './hooks/useDiscussions.js';
 import logger from './utils/logger.js';
 import { ToastContainer } from './components/Toast';
 import { ErrorDetailsModal } from './components/ErrorDetailsModal';
@@ -43,6 +44,11 @@ const VIEW_MODE_KEY = 'discussions_view_mode';
 // Top-level app view: the discussions workspace vs the personal "My Tasks" list.
 // Persisted like viewMode so a reload restores the last tab.
 const APP_VIEW_KEY = 'discussions_app_view';
+
+// Round 45 — hard cap on the INITIAL boot loader: if any of the three boot
+// datasets stalls, reveal the app anyway after this window so the user is never
+// stuck on the white loading screen.
+const BOOT_MAX_WAIT_MS = 8000;
 
 function readSavedAppView() {
   try {
@@ -221,7 +227,7 @@ export default function App() {
   // "המשימות שלי" is always reachable now (a dedicated button in the discussions
   // header + a "דיונים" back-button in the My Tasks toolbar drive `appView`), so
   // the view simply follows the persisted appView — no opt-in gate, no top toggle.
-  const { settings } = useSettings();
+  const { settings, isLoading: settingsLoading } = useSettings();
   const effectiveView = appView;
 
   // Branded splash gate. Shows the fullscreen BrandLoader (a) on cold boot until
@@ -354,6 +360,49 @@ export default function App() {
     if (settings?.permissions?.enabled) ensurePeopleColumns();
   }, [settings?.permissions?.enabled]);
 
+  // Round 45 — BOOT GATE: on INITIAL app entry hold the fullscreen white
+  // BrandLoader (see the render gate below) until the monday context + settings
+  // are resolved AND all three datasets have loaded — the discussions list
+  // (prefetchDiscussions, which ALSO warms the list's first paint) + the two
+  // personal-view caches (prefetchMyTasks / prefetchMyDecisions) — then reveal
+  // the discussions view already populated. Completion is tracked by Promise.all
+  // over the three loads, each wrapped so a rejection still counts as settled
+  // (reveal on success OR error — never hang), plus a hard BOOT_MAX_WAIT_MS
+  // timeout that reveals even if a fetch stalls. `bootDataReady` latches true
+  // once and never blocks a later view transition (the round-44 per-view splash
+  // is untouched — see `splash`). Runs a single time per session.
+  const [bootDataReady, setBootDataReady] = useState(false);
+  const bootStartedRef = useRef(false);
+  const prefetchedRef = useRef(false);
+  useEffect(() => {
+    if (context == null) return undefined;         // monday context not resolved yet
+    if (settingsLoading) return undefined;         // settings mapping still resolving (config not published)
+    if (bootStartedRef.current) return undefined;  // kick the boot load off once per session
+    bootStartedRef.current = true;
+    // The boot gate owns this session's initial warm of the personal-view
+    // caches, so the round-37 idle prefetch below becomes a no-op (no double-fetch).
+    prefetchedRef.current = true;
+
+    let settled = false;
+    const reveal = () => {
+      if (settled) return;
+      settled = true;
+      setBootDataReady(true);
+    };
+    // Load all three in parallel; `settle` maps success OR error to a resolved
+    // void so one failed fetch never blocks the reveal.
+    const settle = (p) => Promise.resolve(p).then(() => {}, () => {});
+    Promise.all([
+      settle(prefetchDiscussions()),
+      settle(prefetchMyTasks({ currentUser, context })),
+      settle(prefetchMyDecisions('decider', { currentUser, context })),
+    ]).then(reveal);
+    // SAFETY: never leave the user stuck on the loader — reveal after the hard
+    // timeout regardless of the fetches.
+    const timer = setTimeout(reveal, BOOT_MAX_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [context, settingsLoading, currentUser]);
+
   // Round 37 — BACKGROUND PREFETCH: once booted and sitting on the discussions
   // view, warm the "המשימות שלי" / "ההחלטות שלי" caches ONCE per session during
   // idle time, so first entry into those views paints instantly from cache.
@@ -361,7 +410,8 @@ export default function App() {
   // a single time; skipped when already on those views (their own fetch is the
   // source of truth). The prefetch helpers only WRITE the view cache and swallow
   // their own errors — they never touch a mounted view's React state or crash UI.
-  const prefetchedRef = useRef(false);
+  // (The round-45 boot gate above already sets prefetchedRef this session, so on
+  // the normal path this idle prefetch is a no-op fallback — no double-fetch.)
   useEffect(() => {
     if (context == null || !settings) return undefined;    // not booted / config not published yet
     if (effectiveView !== 'discussions') return undefined; // don't compete with a live view's own fetch
@@ -607,12 +657,16 @@ export default function App() {
     </>
   );
 
-  // Splash gate: hold the fullscreen branded loader until context is ready AND
-  // the min window has elapsed (cold boot), and re-show it for the min window on
-  // EVERY top-level view transition (discussions ↔ myTasks ↔ myDecisions) before
-  // revealing the destination view — see `splash`/useMinSplash. Independent of
-  // whether the view's data is cached/instant.
-  if (context == null || splash) {
+  // Splash / boot gate: hold the fullscreen branded loader until
+  //   (a) `context` is ready, AND
+  //   (b) the INITIAL boot data is ready (`bootDataReady` — all three datasets
+  //       loaded or the safety timeout fired; see the round-45 boot gate), AND
+  //   (c) the min-splash window has elapsed.
+  // The min window also re-arms on EVERY top-level view transition (discussions
+  // ↔ myTasks ↔ myDecisions) so the splash replays before the destination view
+  // — see `splash`/useMinSplash. `bootDataReady` latches true after the first
+  // boot, so it only gates the INITIAL entry and never a later transition.
+  if (context == null || !bootDataReady || splash) {
     return (
       <div className={`${styles.appShell} ${layoutClass}`}>
         <BrandLoader fullscreen />
