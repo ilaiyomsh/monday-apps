@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Dir, Language, MondaySdk, MondaySdkContext, UserPermissions } from '../types';
 import type { Logger } from '../logger';
+import { setAxiomContext } from '../errors/axiomSink';
 
 const LANGUAGE_TO_LOCALE: Record<Language, string> = { he: 'he-IL', en: 'en-US' };
 const SUPPORTED: Language[] = ['he', 'en'];
@@ -44,6 +45,8 @@ export function MondayProvider(props: MondayProviderProps) {
     const apply = (ctx: MondaySdkContext) => {
       realLoaded.current = true;
       setContext(ctx);
+      // Enrich every Axiom envelope with iframe identity (no-op when the sink is inert).
+      setAxiomContext({ userId: ctx.user?.id, boardId: ctx.boardId, instanceId: ctx.instanceId });
       logger.info('MondayContext', 'context received', { instanceId: ctx.instanceId, boardId: ctx.boardId });
     };
     monday.get('context').then((res) => apply(res.data ?? {})).catch((e) => logger.error('MondayContext', 'get(context) failed', e));

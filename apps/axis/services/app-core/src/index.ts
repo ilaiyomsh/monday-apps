@@ -36,6 +36,14 @@ export {
 export { ErrorBoundary } from './errors/ErrorBoundary';
 export { setupGlobalErrorHandlers } from './errors/globalErrorHandler';
 export { useErrorHandler } from './errors/useErrorHandler';
+export {
+  attachAxiomSink,
+  setAxiomContext,
+  setRemoteLevel,
+  shouldShip,
+  mapRecordToEvent,
+  type AxiomSinkOptions,
+} from './errors/axiomSink';
 
 // api queue + storage
 export { createApiQueue } from './apiQueue';

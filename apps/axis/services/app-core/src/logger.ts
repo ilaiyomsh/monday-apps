@@ -1,7 +1,10 @@
 /**
- * Leveled logger with a ring buffer, log-once dedup, pluggable sinks, and an
- * optional Axiom transport. Generalized from tracker's logger + the Axis logging
- * standard (#5). The UI error sink (see errors/) subscribes via addSink.
+ * Leveled logger with a ring buffer, log-once dedup, and pluggable sinks.
+ * Generalized from tracker's logger + the Axis logging standard (#5).
+ *
+ * Remote shipping is NOT built in: attach the shared hardened Axiom transport via
+ * `attachAxiomSink(logger, { app, dataset, token })` (see errors/axiomSink.ts).
+ * The UI error sink (see errors/) subscribes the same way, via addSink.
  */
 export type LogLevelName = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR' | 'NONE';
 
@@ -25,8 +28,6 @@ export interface LoggerOptions {
   appVersion?: string;
   environment?: string;
   ringBufferSize?: number;
-  /** Axiom transport — when both set, ERROR/WARN+ records are shipped via fetch. */
-  axiom?: { dataset: string; token: string };
 }
 
 const LEVELS: Record<Exclude<LogLevelName, 'NONE'>, number> = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
@@ -34,30 +35,13 @@ const LEVELS: Record<Exclude<LogLevelName, 'NONE'>, number> = { DEBUG: 0, INFO: 
 export function createLogger(options: LoggerOptions) {
   const isProd = typeof import.meta !== 'undefined' && (import.meta as { env?: { PROD?: boolean } }).env?.PROD;
   const ringSize = options.ringBufferSize ?? 150;
-  const sessionId = Math.random().toString(36).slice(2);
-  const enrich = {
-    app: options.app,
-    appVersion: options.appVersion ?? '0.0.0',
-    environment: options.environment ?? (isProd ? 'production' : 'development'),
-    sessionId,
-  };
 
   let currentLevel = isProd ? LEVELS.ERROR : LEVELS.DEBUG;
   let loggedIdCounter = 0;
   const ring: LogRecord[] = [];
   const sinks = new Set<LogSink>();
 
-  const shipAxiom = (record: LogRecord) => {
-    if (!options.axiom) return;
-    fetch(`https://api.axiom.co/v1/datasets/${options.axiom.dataset}/ingest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${options.axiom.token}` },
-      body: JSON.stringify([{ _time: record.timestampISO, ...record, ...enrich }]),
-      keepalive: true,
-    }).catch(() => { /* never let logging break the app */ });
-  };
-
-  const emit = (level: LogRecord['level'], module: string, message: string, payload?: unknown, context?: Record<string, unknown>) => {
+  const emit =(level: LogRecord['level'], module: string, message: string, payload?: unknown, context?: Record<string, unknown>) => {
     const isError = payload instanceof Error || (payload && typeof payload === 'object' && 'stack' in (payload as object));
     const record: LogRecord = {
       level, module, message, timestamp: Date.now(), timestampISO: new Date().toISOString(), context,
@@ -80,7 +64,6 @@ export function createLogger(options: LoggerOptions) {
     if (ring.length > ringSize) ring.shift();
 
     if (!record.duplicate) {
-      shipAxiom(record);
       sinks.forEach((s) => { try { s(record); } catch { /* sink failure must not recurse */ } });
     }
   };
