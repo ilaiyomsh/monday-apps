@@ -8,6 +8,7 @@ import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from 
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
+import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
 import {
   filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
@@ -150,6 +151,38 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   const clearSort = () => setSort({ col: null, dir: null, active: false });
   // Show the read-only priority column only when the owner mapped priorityID.
   const showPriority = !!getColumns('tasks').priorityID?.id;
+
+  // --- Hide columns (round 47) ------------------------------------------------
+  // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
+  // site, persisted to the SHARED saved view
+  // (settings.preferences.savedViews.tasksTab.hiddenColumns) so an owner's "Save
+  // to this view" applies for everyone. The primary name column is never
+  // hideable. The list mirrors the TaskTable columns actually shown for this tab
+  // (priority only when mapped; no 'source' here). Applied live via the
+  // hiddenColumns prop on every TaskTable below.
+  const columnList = [
+    { key: 'name', label: 'שם', icon: 'text', locked: true },
+    showPriority && { key: 'priority', label: 'עדיפות', icon: 'status' },
+    { key: 'assignee', label: 'אחראי', icon: 'person' },
+    { key: 'deadline', label: 'דד ליין', icon: 'date' },
+    { key: 'status', label: 'סטאטוס', icon: 'status' },
+  ].filter(Boolean);
+  const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
+  const [hiddenColumns, setHiddenColumns] = useState(
+    () => new Set(Array.isArray(savedView?.hiddenColumns) ? savedView.hiddenColumns : [])
+  );
+  const toggleColumn = useCallback((key) => setHiddenColumns((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  }), []);
+  const showAllColumns = useCallback((show) => {
+    setHiddenColumns(show ? new Set() : new Set(hideableKeys));
+  }, [hideableKeys]);
+  const saveHiddenColumns = useCallback(() => {
+    saveView({ hiddenColumns: [...hiddenColumns] });
+    onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
+  }, [saveView, hiddenColumns, onNotify]);
 
   // Each group is { key, label, color, status, items }:
   //   key    — stable react/collapse key (status id as string, person name, or sentinel)
@@ -481,6 +514,17 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
               onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
             } : null}
           />
+          {/* Hide columns (round 47) — owners only. Non-owners never see it and
+              always get the saved config applied to the tables below. */}
+          {canManageSettings && (
+            <HideColumnsControl
+              columns={columnList}
+              hidden={hiddenColumns}
+              onToggle={toggleColumn}
+              onToggleAll={showAllColumns}
+              onSave={canSaveView ? saveHiddenColumns : null}
+            />
+          )}
           {groupBy !== 'none' && (
             <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
           )}
@@ -512,7 +556,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
           <TaskTable tasks={[]}
             onInlineCreate={canCreateTask && onInlineCreateTask ? (name, opts) => onInlineCreateTask(name, opts) : undefined}
             onOpenNewTask={canCreateTask && !onInlineCreateTask ? () => onNewTask?.({}) : undefined}
-            {...editHandlers} canTask={canTask} showPriority={showPriority} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+            {...editHandlers} canTask={canTask} showPriority={showPriority} hiddenColumns={hiddenColumns} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
             selectable={canSelect} selectedIds={selectedIds} onToggleSelect={toggleSelect}
             selectAllChecked={false}
             selectAllIndeterminate={false}
@@ -541,7 +585,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
             )}
             {!collapsed[grp.key] && (
               <TaskTable tasks={grp.items} color={groupColor}
-                {...editHandlers} canTask={canTask} showPriority={showPriority} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+                {...editHandlers} canTask={canTask} showPriority={showPriority} hiddenColumns={hiddenColumns} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
                 reorderScope={discussionId ? `tasks_${discussionId}_${groupBy}_${grp.key}` : null}
                 canReorderRows={canCreateTask}
                 selectable={canSelect} selectedIds={selectedIds} onToggleSelect={toggleSelect}

@@ -8,6 +8,7 @@ import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
+import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
 import {
   filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
@@ -124,6 +125,38 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const byType =
     mode === PREVIOUS_TASKS_MODES.DISCUSSION_TYPE
     || (mode === PREVIOUS_TASKS_MODES.AUTO && !!discussion?.discussionTypeID);
+
+  // --- Hide columns (round 47) ------------------------------------------------
+  // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
+  // site, persisted to the SHARED saved view
+  // (settings.preferences.savedViews.previousTasks.hiddenColumns) so an owner's
+  // "Save to this view" applies for everyone. The primary name column is never
+  // hideable. The list mirrors the TaskTable columns actually shown here
+  // (priority only when mapped; "דיון מקור"/source only in by-type mode).
+  const columnList = [
+    { key: 'name', label: 'שם', icon: 'text', locked: true },
+    showPriority && { key: 'priority', label: 'עדיפות', icon: 'status' },
+    { key: 'assignee', label: 'אחראי', icon: 'person' },
+    { key: 'deadline', label: 'דד ליין', icon: 'date' },
+    { key: 'status', label: 'סטאטוס', icon: 'status' },
+    byType && { key: 'source', label: 'דיון מקור', icon: 'relation' },
+  ].filter(Boolean);
+  const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
+  const [hiddenColumns, setHiddenColumns] = useState(
+    () => new Set(Array.isArray(savedView?.hiddenColumns) ? savedView.hiddenColumns : [])
+  );
+  const toggleColumn = useCallback((key) => setHiddenColumns((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  }), []);
+  const showAllColumns = useCallback((show) => {
+    setHiddenColumns(show ? new Set() : new Set(hideableKeys));
+  }, [hideableKeys]);
+  const saveHiddenColumns = useCallback(() => {
+    saveView({ hiddenColumns: [...hiddenColumns] });
+    onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
+  }, [saveView, hiddenColumns, onNotify]);
   // The discussion's "סוג" is a DROPDOWN value = the label TEXT directly. taskTypeID
   // is ALSO a dropdown on the tasks board; bridge the text -> its label id and
   // filter server-side (any_of by id — exact match, same as task creation writes).
@@ -956,6 +989,17 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
               onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
             } : null}
           />
+          {/* Hide columns (round 47) — owners only. Non-owners never see it and
+              always get the saved config applied to the table below. */}
+          {canManageSettings && (
+            <HideColumnsControl
+              columns={columnList}
+              hidden={hiddenColumns}
+              onToggle={toggleColumn}
+              onToggleAll={showAllColumns}
+              onSave={canSaveView ? saveHiddenColumns : null}
+            />
+          )}
           {groupBy !== 'none' && filteredTasks.length > 0 && (
             <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
           )}
@@ -1021,6 +1065,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
                 <TaskTable tasks={grp.items} color={groupColor}
                   showSourceDiscussion={byType}
                   showPriority={showPriority}
+                  hiddenColumns={hiddenColumns}
                   canReorderColumns={canReorderColumns}
                   canManageSettings={canManageSettings}
                   reorderScope={discussion?.id ? `previous_${discussion.id}_${byType ? `type:${typeFilter.taskTypeId}` : `prev:${previousDiscussionId}`}_${groupBy}_${grp.key}` : null}

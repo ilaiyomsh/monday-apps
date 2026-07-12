@@ -87,3 +87,28 @@
   border-radius: 1px;
   background: var(--primary-color, #0073ea);
 }
+
+/* Manual date-entry row (round 47) — a typeable DD/MM/YYYY field at the TOP of
+   the popover, above the calendar. The app is RTL, but the field itself is LTR
+   so the numeric date reads naturally. */
+.typeRow {
+  margin-bottom: 8px;
+}
+.typeInput {
+  width: 100%;
+  height: 34px;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  padding: 0 10px;
+  font-size: 14px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  background: var(--primary-background-color, #fff);
+  text-align: center;
+}
+.typeInput::placeholder { color: var(--secondary-text-color, #676879); }
+.typeInput:focus { outline: none; border-color: var(--primary-color, #0073ea); }
+/* Subtle invalid state — just a red border, no jarring fill (monday-style). */
+.typeInvalid,
+.typeInvalid:focus { border-color: var(--negative-color, #d83a52); }
