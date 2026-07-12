@@ -1,0 +1,182 @@
+/* ColumnSettings — placement=settings pane. RTL-first (root sets dir="rtl").
+   Selects use the shared body-portal Popover (not Vibe Dropdown) so the option
+   list never clips inside the small settings iframe — same pattern as
+   PersonPicker. */
+
+.root {
+  padding: 16px;
+  direction: rtl;
+  text-align: start;
+  font-size: 14px;
+}
+
+.header {
+  margin-bottom: 16px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+  margin: 0;
+}
+
+.field {
+  margin-bottom: 16px;
+}
+
+.fieldLabel {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+/* Select trigger — looks like a form control, opens the Popover option list. */
+.select {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: start;
+  padding: 8px 12px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 8px;
+  background: var(--primary-background-color, #fff);
+  color: inherit;
+  cursor: pointer;
+  min-height: 40px;
+}
+
+.select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.select:not(:disabled):hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.selectValue {
+  color: inherit;
+}
+
+.selectPlaceholder {
+  color: var(--secondary-text-color, #9699a6);
+}
+
+.caret {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+/* Option list inside the portaled Popover. */
+.listbox {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.option {
+  display: block;
+  width: 100%;
+  text-align: start;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.option:hover,
+.optionSelected {
+  background: var(--primary-selected-color, #e6e9ef);
+}
+
+.emptyOption {
+  padding: 12px;
+  color: var(--secondary-text-color, #9699a6);
+  font-size: 13px;
+}
+
+.policyGroup {
+  margin-bottom: 16px;
+}
+
+.policyLegend {
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.radios {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.caption {
+  font-size: 12px;
+  color: var(--secondary-text-color, #9699a6);
+  margin-top: 6px;
+}
+
+.driftCaption {
+  font-size: 12px;
+  color: var(--negative-color, #d83a52);
+  margin-top: 6px;
+}
+
+.inlineWarn {
+  margin-top: 8px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+/* Native buttons (Vibe Button exposes only aria-disabled, which jsdom's
+   toBeDisabled cannot see — settings needs a real native disabled state). */
+.btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.btnPrimary {
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+}
+
+.btnPrimary:not(:disabled):hover {
+  background: var(--primary-hover-color, #0060b9);
+}
+
+.btnSecondary {
+  background: transparent;
+  border-color: var(--ui-border-color, #c3c6d4);
+  color: inherit;
+}
+
+.btnSecondary:not(:disabled):hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}

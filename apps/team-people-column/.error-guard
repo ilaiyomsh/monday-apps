@@ -1,0 +1,13 @@
+# This app was born error-guard-compliant.
+# It ships the standard error-catching infrastructure from the start:
+#   src/utils/logger.js            — single logging choke-point (emit + sinks + ring buffer)
+#   src/utils/globalErrorHandler.js — window.onerror + unhandledrejection + resource errors
+#   src/components/ErrorBoundary/AppErrorBoundary.jsx — render-phase catch + Hebrew fallback
+#   src/hooks/useUiErrorSink.js    — one logged ERROR = one toast (wire your showToast)
+#   package.json eslintConfig      — no-console, no-empty, catch-must-log, promise/catch-or-return
+#
+# The presence of this marker enables the error-guard full-tree ship gate
+# (ship.sh runs the rule kit over the ENTIRE tree, not just changed files).
+# Standard: /Users/ilaish/monday_app/apps/.claude/skills/error-guard
+standard: error-guard
+generated-by: monday-scaffold

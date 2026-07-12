@@ -1,0 +1,25 @@
+{
+  "data": {
+    "users": [
+      {
+        "id": "37022703",
+        "name": "עידו פיוטרקובסקי",
+        "photo_thumb": "https://files.monday.com/use1/photos/37022703/thumb/37022703-user_photo_2022_12_02_12_00_15.png?1669982415"
+      },
+      {
+        "id": "48274917",
+        "name": "עילי שלם",
+        "photo_thumb": "https://files.monday.com/use1/photos/48274917/thumb/48274917-user_photo_initials_2026_06_08_11_53_40.png?1780919621"
+      },
+      {
+        "id": "96863017",
+        "name": "רוני ארגמן",
+        "photo_thumb": "https://files.monday.com/use1/photos/96863017/thumb/96863017-user_photo_2025_11_30_16_39_20.png?1764520761"
+      }
+    ]
+  },
+  "extensions": {
+    "request_id": "a89c16b8-69b8-97e6-8d4a-ecbba549bf96"
+  }
+}
+
