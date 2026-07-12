@@ -84,7 +84,6 @@ export const PROVISION_SPEC = {
       { alias: 'discussionCreatorID', type: 'people', title: 'יוצר' },
       { alias: 'discussionLeadID', type: 'people', title: 'מוביל דיון' },
       { alias: 'participantsID', type: 'people', title: 'משתתפים' },
-      { alias: 'discussionTypeID', type: 'status', title: 'סוג' },
       { alias: 'creationDateID', type: 'date', title: 'תאריך יצירה' },
       { alias: 'discussionDateID', type: 'date', title: 'תאריך הדיון' },
       { alias: 'summaryFileID', type: 'file', title: 'קובץ סיכום (DOCS)' },
@@ -170,6 +169,7 @@ function countSteps(tasks) {
     n += (spec.relations || []).length;
     if (spec.subitems) n += 1 + spec.subitems.length; // enable subitems + its columns
   }
+  n += 1; // discussions managed type column ("סוג דיון" — account-level managed dropdown)
   return n;
 }
 
@@ -214,6 +214,38 @@ async function ensureColumn(boardId, existing, title, columnType, defaults) {
   if (!id) throw new Error(`create_column לא החזיר מזהה עבור "${title}"`);
   if (existing) existing.push({ id, title, type: columnType }); // keep cache fresh
   return String(id);
+}
+
+/*
+ * "סוג דיון" (discussion type) is provisioned as an ACCOUNT-LEVEL MANAGED
+ * DROPDOWN column: create_dropdown_managed_column (account) → its UUID, then
+ * attach_dropdown_managed_column (board) → the board column instance. Created
+ * EMPTY (no preset labels — each account defines its own types); labels are
+ * added later via update_dropdown_managed_column using the persisted UUID.
+ * Retry-safe: if a dropdown titled "סוג דיון"/"סוג" already exists on the board,
+ * reuse it (managedColumnId unknown → null; the app can detect/persist it later).
+ */
+async function ensureManagedTypeColumn(boardId, existing) {
+  const hit = (existing || []).find(
+    (c) => c.type === 'dropdown' && (c.title === 'סוג דיון' || c.title === 'סוג')
+  );
+  if (hit) return { id: String(hit.id), managedColumnId: null };
+  const created = await api(
+    `mutation ($t: String!) { create_dropdown_managed_column(title: $t) { id } }`,
+    { t: 'סוג דיון' },
+    'create_dropdown_managed_column'
+  );
+  const managedColumnId = created?.create_dropdown_managed_column?.id;
+  if (!managedColumnId) throw new Error('create_dropdown_managed_column לא החזיר מזהה');
+  const attached = await api(
+    `mutation ($b: ID!, $mc: ID!) { attach_dropdown_managed_column(board_id: $b, managed_column_id: $mc) { id } }`,
+    { b: String(boardId), mc: String(managedColumnId) },
+    'attach_dropdown_managed_column'
+  );
+  const colId = attached?.attach_dropdown_managed_column?.id;
+  if (!colId) throw new Error('attach_dropdown_managed_column לא החזיר מזהה עמודה');
+  if (existing) existing.push({ id: colId, title: 'סוג דיון', type: 'dropdown' });
+  return { id: String(colId), managedColumnId: String(managedColumnId) };
 }
 
 /*
@@ -381,6 +413,15 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       columns[key][col.alias] = { id, type: col.type, title: col.title, verified: true };
       tick(`עמודה: ${col.title}`);
     }
+  }
+
+  // "סוג דיון" — account-level managed dropdown attached to the discussions board.
+  {
+    const t = await ensureManagedTypeColumn(boardIds.discussions, existingByBoard.discussions);
+    columns.discussions.discussionTypeID = {
+      id: t.id, type: 'dropdown', title: 'סוג דיון', verified: true, managedColumnId: t.managedColumnId,
+    };
+    tick('עמודת סוג דיון (managed dropdown)');
   }
 
   // 3) subitems (topics): enable + add its checkbox columns
