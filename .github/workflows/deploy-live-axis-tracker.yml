@@ -50,6 +50,13 @@ jobs:
 
       - name: Build axis-tracker
         run: pnpm --filter "./apps/axis/tracker" build
+        # Bake the Axiom activation gate into the bundle (error-guard remote-monitoring
+        # standard). Only the ingest token is a secret; dataset/app are literals. When
+        # the secret is unset the gate stays inert (fail-soft) — nothing ships.
+        env:
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: tracker
 
       - name: Install monday.com apps CLI
         run: npm install -g @mondaycom/apps-cli

@@ -36,3 +36,10 @@ Full model + onboarding procedures: the `monday-cicd` skill in
 Team skills live in `.claude/skills/` (portable — no machine-specific paths).
 See `.claude/skills/README.md` for the catalog and one-time developer setup.
 `monday-cicd` is the authority on this repo's pipeline; `mapps` owns deploys/CLI.
+
+## Error handling & observability
+
+One unified standard, from catching an error to shipping it to Axiom:
+**`docs/ERROR-AXIOM-STANDARD.md`** (authority: the `error-guard` skill). Client apps
+ship through the single hardened transport in `@axis/app-core` via `attachAxiomSink` —
+never a raw fetch. Shared dataset `app-errors`, discriminated by `app`.
