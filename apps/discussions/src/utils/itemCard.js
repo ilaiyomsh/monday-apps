@@ -1,74 +1,33 @@
 /*
- * Shared tracking + control for monday's native ITEM CARD — the panel opened
- * via monday.execute('openItemCard', …) (the row "Updates" bubble across the
- * app: TaskTableRow, MyTasksRow, MyDecisionsRow, DecisionsTab, TopicPointRow,
- * PreviousTasksTab, …).
+ * Shared helper for opening monday's native ITEM CARD — the panel opened via
+ * monday.execute('openItemCard', …). Every row "Updates" bubble / name / source
+ * chip across the app routes through here (TaskTableRow, MyTasksRow,
+ * MyDecisionsRow, DecisionsTab, TopicPointRow, PreviousTasksTab), so no component
+ * needs its own `monday` import.
  *
- * WHY A MODULE SINGLETON: only ONE monday item card can be open at a time (it is
- * a platform-level overlay docked beside the board-view iframe) and it is opened
- * from MANY unrelated rows. A single module-level "open id" is therefore the
- * natural model — no prop/context threading through every table — and it lets a
- * view/screen transition close whatever is open from ONE place (an App effect).
- *
- * CLOSE CAPABILITY — VERIFIED LIMITATION: the monday client SDK (monday-sdk-js
- * 0.5.9) does NOT expose a close command for the item card. Its typed execute()
- * surface covers openItemCard but only closeAppFeatureModal / closeDialog /
- * closeDocModal — there is NO closeItemCard (see
- * node_modules/.pnpm/monday-sdk-js@0.5.9/…/types/client-execute.interface.ts).
- * execute() forwards ANY type string to the parent monday window, so we make a
- * BEST-EFFORT execute('closeItemCard') for forward-compatibility, but it may be
- * a no-op on the current platform. We never FAKE success: the tracked open-id is
- * always cleared and the attempt's rejection is swallowed, so the toggle /
- * close-on-transition INTENT is honored regardless of whether the panel visually
- * closes.
+ * OPEN-ONLY — VERIFIED PLATFORM LIMITATION: monday's client SDK (monday-sdk-js
+ * 0.5.9) exposes NO programmatic way to CLOSE the item card. Its execute()
+ * surface has openItemCard but only closeAppFeatureModal / closeDialog /
+ * closeDocModal — there is NO closeItemCard. A prior round tried to TOGGLE the
+ * panel closed on a second click, and to close it on view/discussion
+ * transitions, via a best-effort execute('closeItemCard') plus module-level
+ * open-id tracking. But that command is a no-op on the platform, so the tracked
+ * open/closed state only DESYNCED (after a no-op "close" a later click wouldn't
+ * re-open as expected). We therefore do NOT track state and never attempt a
+ * close: every click reliably (re)OPENS the card, and clicking a different row
+ * just re-points monday's panel to that item. This is intentionally open-only
+ * until monday ships a programmatic close.
  */
 import { monday } from './mondayApi/monday-client.js';
 
-// Id (string) of the item whose card is currently open, or null when none.
-let openItemCardId = null;
-
-// Current open item-card id (string) or null. Exported for tests / callers that
-// want to reflect the open state.
-export function getOpenItemCardId() {
-  return openItemCardId;
-}
-
-// Best-effort close of the native item card. See the file header: this SDK
-// version has no guaranteed closeItemCard, so the command is forwarded to the
-// monday parent and any rejection is swallowed — it must never surface an error.
-function attemptCloseItemCard() {
+// Open the item card for `itemId` (Updates pane by default). Called on every
+// updates-bubble / name / source-chip click. Always opens — monday has no
+// programmatic close (see the file header), so this is intentionally open-only.
+export function openOrToggleItemCard(itemId, kind = 'updates') {
+  if (itemId == null) return;
   try {
-    const res = monday.execute('closeItemCard');
-    if (res && typeof res.catch === 'function') res.catch(() => {});
+    monday.execute('openItemCard', { itemId: Number(itemId), kind });
   } catch {
     /* execute unavailable (e.g. outside the monday iframe) — ignore */
   }
-}
-
-// Open the item card for `itemId` (Updates pane by default) OR — when that same
-// item's card is already the tracked-open one — TOGGLE it closed. Every row's
-// updates bubble / name / source chip routes through this, so a second click on
-// the SAME item closes the panel; clicking a DIFFERENT item just switches to it.
-export function openOrToggleItemCard(itemId, kind = 'updates') {
-  if (itemId == null) return;
-  const id = String(itemId);
-  if (openItemCardId === id) {
-    attemptCloseItemCard();
-    openItemCardId = null;
-    return;
-  }
-  try {
-    monday.execute('openItemCard', { itemId: Number(itemId), kind });
-    openItemCardId = id;
-  } catch {
-    /* execute unavailable — ignore */
-  }
-}
-
-// Close whatever item card is open (if any). Called on ANY view/screen
-// transition so a lingering Updates panel doesn't survive a context change.
-export function closeOpenItemCard() {
-  if (openItemCardId == null) return;
-  attemptCloseItemCard();
-  openItemCardId = null;
 }

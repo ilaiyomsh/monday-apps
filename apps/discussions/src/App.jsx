@@ -24,7 +24,6 @@ import { prefetchMyTasks } from './hooks/useMyTasks.js';
 import { prefetchMyDecisions } from './hooks/useMyDecisions.js';
 import { prefetchDiscussions } from './hooks/useDiscussions.js';
 import logger from './utils/logger.js';
-import { closeOpenItemCard } from './utils/itemCard.js';
 import { ToastContainer } from './components/Toast';
 import { ErrorDetailsModal } from './components/ErrorDetailsModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -488,15 +487,6 @@ export default function App() {
   const handleBack = () => {
     setShowList(true);
   };
-
-  // Round 50 — close any open monday item card (Updates panel) on ANY view or
-  // screen transition: a top-level appView switch OR navigating between
-  // discussions (selectedDiscussion id change). The client SDK has no guaranteed
-  // closeItemCard, so this is best-effort (see utils/itemCard.js) — the tracked
-  // open-id is always cleared so a stale panel never lingers across a transition.
-  useEffect(() => {
-    closeOpenItemCard();
-  }, [effectiveView, selectedDiscussion?.id]);
 
   useEffect(() => {
     if (!launchParams.discussionId) return;

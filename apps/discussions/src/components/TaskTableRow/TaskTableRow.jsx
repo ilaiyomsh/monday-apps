@@ -19,9 +19,8 @@ const NEUTRAL = 'hsl(var(--status-default))';
 // same presentation as the task card from My Tasks. Without a kind (default
 // 'columns') the same call opened as a centered modal; the kind, not the item's
 // board, is what drives panel-vs-modal here.
-// Toggle the item card: 1st click opens, a 2nd click on the SAME item closes it.
-// Shared open-id tracking + best-effort close live in utils/itemCard.js (the SDK
-// has no guaranteed closeItemCard — see that file).
+// Open the item card via the shared helper. monday's SDK has no programmatic
+// close (see utils/itemCard.js), so every click reliably (re)opens — open-only.
 function openItemCard(itemId) {
   if (!itemId) return;
   openOrToggleItemCard(itemId);
