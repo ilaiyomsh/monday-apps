@@ -569,28 +569,31 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {/* View title (round 40 typography; round 41 left-aligned) — styled like
-          the discussion-detail title (DiscussionCard's .title: font-size-h2 /
-          bold / line-height 1.2), now flush to the toolbar's left padding. */}
-      <h1 className={styles.viewTitle}>המשימות שלי</h1>
-
-      {/* Single toolbar row (round 35 baseline restored in round 41): dir="ltr"
-          and flush-LEFT, reading (left→right)
-          [בחזרה לתצוגת הדיונים][משימה חדשה][Search][Filter][Sort][Group by][collapse].
-          Round 41 reverts round 40's dir="rtl" right-shift and makes the back
-          button the LEFTMOST control, immediately left of "משימה חדשה". */}
-      <div className={styles.toolbar} dir="ltr">
-        {/* Back to discussions — the LEFTMOST control, immediately to the LEFT
-            of "משימה חדשה" (round 41 reposition). */}
+      {/* View title (round 40 typography; round 41 left-aligned) with a compact
+          left-arrow "back to discussions" icon button to its LEFT (round 53a,
+          replacing the old text button that lived in the toolbar). The header is
+          direction:ltr so the arrow sits on the left, the title to its right. */}
+      <div className={styles.viewHeader}>
         {onBackToDiscussions && (
-          <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
-            <span className={styles.backBtnInner}>
-              <ArrowLeft size={16} aria-hidden="true" />
-              בחזרה לתצוגת הדיונים
-            </span>
-          </Button>
+          <button
+            type="button"
+            className={styles.backArrowBtn}
+            onClick={onBackToDiscussions}
+            aria-label="בחזרה לתצוגת הדיונים"
+            title="בחזרה לתצוגת הדיונים"
+          >
+            <ArrowLeft size={20} aria-hidden="true" />
+          </button>
         )}
+        <h1 className={styles.viewTitle}>המשימות שלי</h1>
+      </div>
 
+      {/* Single toolbar row (round 35 baseline; round 41 flush-LEFT): dir="ltr"
+          and flush-LEFT, reading (left→right)
+          [משימה חדשה][Search][Filter][Sort][Group by][collapse]. Round 53a moved
+          the back control out of the toolbar to a left-arrow icon button beside
+          the view title, so "משימה חדשה" is now the leftmost toolbar control. */}
+      <div className={styles.toolbar} dir="ltr">
         <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
           משימה חדשה
         </Button>
