@@ -68,6 +68,18 @@ later switched the same bad query to **empty success**, masking the bug entirely
 app in this workspace with the same query shape, (3) only treat as transient AFTER the query
 is proven valid. Resilience on a malformed query hides the bug.
 
+Seamless-iframe variant (observed 2026-07-12, discussions app): an in-iframe
+`monday.api()` `create_item` rejected with `"Graphql validation errors"` and ALL detail
+fields null (`statusCode`/`responseErrors`/`requestId` null — the seamless parent strips
+the errors array), while the byte-identical document + variables succeeded via token probe,
+and the signature validated at every version incl. `dev`. Context of the failing call: the
+board's permission mode was `assignee` and `create_labels_if_missing` had to CREATE a
+missing dropdown label (a board-structure change non-owners can't make). Suspected (not yet
+proven): the seamless parent wraps permission-mode / structure-permission denials in the
+generic validation-errors message. Diagnosis order for this shape: prove the document valid
+(schema + probe) → check board `permissions` mode, whether `clim` must create a label, and
+whether the failing user is a board owner — before calling it transient.
+
 ## Playbook: `UNAUTHORIZED_FIELD_OR_TYPE` on a newly-scoped mutation = stale OAuth token
 
 OAuth tokens **freeze their scopes at grant time**. If a scope was added to the app AFTER a
