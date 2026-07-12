@@ -390,6 +390,9 @@
   gap: 8px;
   padding: 0 8px;
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  /* Positioning context for the in-flight CreateProgressBar overlay (round 52),
+     which fills the cell while a create-from-point is pending / just done. */
+  position: relative;
 }
 .createBtn {
   width: 26px;

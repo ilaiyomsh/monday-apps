@@ -5,6 +5,7 @@ import { Trash2, EyeOff, Eye, MoreHorizontal, Check } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
+import { CreateProgressBar } from '@generated/components/CreateProgressBar';
 import styles from './TopicPointRow.module.css';
 
 function initialsOf(name) {
@@ -164,6 +165,11 @@ export function TopicPointRow({
   columns,
   // Multi-select (Round 7) — the leading checkbox cell when selectable.
   selectable = false, selected = false, onToggleSelect,
+  // Round 52 — per-point create-from-point progress. Each is
+  // 'pending' | 'success' | 'error' | undefined and drives the inline
+  // CreateProgressBar overlay on the matching link cell (threaded from
+  // DiscussionCard's handleQuickCreate through TopicsTab).
+  decisionCreateStatus, taskCreateStatus,
 }) {
   const discussed = point.discussed === true;
   const excluded = point.notForDiscussion === true;
@@ -341,6 +347,7 @@ export function TopicPointRow({
           >
             {decisionCount}
           </button>
+          <CreateProgressBar status={decisionCreateStatus} variant="decision" />
         </div>
       )}
 
@@ -367,6 +374,7 @@ export function TopicPointRow({
           >
             {taskCount}
           </button>
+          <CreateProgressBar status={taskCreateStatus} variant="task" />
         </div>
       )}
     </div>

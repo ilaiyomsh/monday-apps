@@ -1,7 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
 import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
 import { MoveArrowLeft, Link, Info } from '@vibe/icons';
-import { Check } from 'lucide-react';
 import { דיונים1Board } from '@api/BoardSDK.js';
 import { useTasks } from '@generated/hooks/useTasks';
 import { useDecisions } from '@generated/hooks/useDecisions';
@@ -74,24 +73,39 @@ export function DiscussionCard({
   // point (with topicId/decisionIds/taskIds) is kept so onCreate can link the
   // new item to the point's subitem relation columns.
   const [quickCreate, setQuickCreate] = useState(null);
-  // Brief success ✓ flash — shown ONLY when a task/decision is created FROM A
-  // TOPIC POINT (the per-point "+" quick-create in the Topics tab). Every other
-  // create path (the "משימה חדשה" NewTaskModal, the Tasks-tab inline add row, the
-  // Decisions add row, and the FAB / quick-create when NOT scoped to a point)
-  // creates SILENTLY — no ✓. successKey bumps on each success so the CSS pop
-  // animation restarts on rapid consecutive creates; the effect below auto-clears
-  // it ~1.2s later, so it's non-blocking and needs no dismissal.
-  const [successKey, setSuccessKey] = useState(0);
-  const [successVisible, setSuccessVisible] = useState(false);
-  const flashCreateSuccess = useCallback(() => {
-    setSuccessKey((k) => k + 1);
-    setSuccessVisible(true);
+  // Round 52 — per-point create-from-point progress, shown INLINE on the point's
+  // decisions/tasks cell (CreateProgressBar) so the ~few-seconds create (the
+  // quick-create modal closes immediately, fire-and-forget) is legible right
+  // where the "+" was clicked. Map keyed `${kind}:${pointId}` → 'pending' |
+  // 'success' | 'error'. This REPLACES the old centered ✓ flash: feedback now
+  // lives on the row that started the create, and ONLY for the per-point "+"
+  // quick-create — every other create path (NewTaskModal, the Tasks/Decisions
+  // inline add rows, the FAB when NOT scoped to a point) stays silent.
+  const [pointCreateStatus, setPointCreateStatus] = useState({});
+  const createStatusTimersRef = useRef({});
+  const setPointCreateState = useCallback((key, state) => {
+    if (!key) return;
+    setPointCreateStatus((m) => ({ ...m, [key]: state }));
+    if (createStatusTimersRef.current[key]) {
+      clearTimeout(createStatusTimersRef.current[key]);
+      delete createStatusTimersRef.current[key];
+    }
+    // 'pending' persists until success/error replaces it; the terminal states
+    // linger briefly — success ~1.3s (the ✓ pops, then the row settles as the
+    // counter bumps), error a bit longer so it's noticed — then clear, revealing
+    // the "+"/counter again.
+    if (state === 'success' || state === 'error') {
+      const ms = state === 'success' ? 1300 : 4200;
+      createStatusTimersRef.current[key] = setTimeout(() => {
+        setPointCreateStatus((m) => { const n = { ...m }; delete n[key]; return n; });
+        delete createStatusTimersRef.current[key];
+      }, ms);
+    }
   }, []);
-  useEffect(() => {
-    if (!successVisible) return undefined;
-    const timer = setTimeout(() => setSuccessVisible(false), 1200);
-    return () => clearTimeout(timer);
-  }, [successVisible, successKey]);
+  useEffect(() => () => {
+    Object.values(createStatusTimersRef.current).forEach((t) => clearTimeout(t));
+    createStatusTimersRef.current = {};
+  }, []);
   const { isMobile } = useViewport();
   const [infoOpen, setInfoOpen] = useState(false);
   const [timeMenuOpen, setTimeMenuOpen] = useState(false);
@@ -441,12 +455,17 @@ export function DiscussionCard({
   // topic via createTask's topicId option, and BOTH kinds record the created item
   // under the point in the pointItems store (the source of truth for the per-point
   // counter — the subitems board has no relation column for this).
-  const handleQuickCreate = async (kind, { text, person, status, deadline }) => {
+  const handleQuickCreate = async (kind, { text, person, deadline }) => {
     const point = quickCreate?.point || null;
-    // The success ✓ flash fires ONLY when the create ORIGINATES FROM A POINT (the
-    // per-point "+" opens the modal WITH a point). The top decisions button opens
-    // it with source:'topButton' → PREPEND the new item to the topmost group.
+    // The inline progress bar + success ✓ live on the point row, so they fire
+    // ONLY when the create ORIGINATES FROM A POINT (the per-point "+" opens the
+    // modal WITH a point). The top decisions button opens it with
+    // source:'topButton' → PREPEND the new item to the topmost group.
     const fromPoint = !!point;
+    // Round 52 — key the inline CreateProgressBar for THIS point + kind, using the
+    // SAME id the point row renders under (point.id, shared with this scoped
+    // point). null for non-point (FAB) creates → no inline progress.
+    const statusKey = fromPoint ? `${kind}:${point.id}` : null;
     const prepend = quickCreate?.source === 'topButton';
     // A session-created point keeps its TEMP id in `point.id` (its REAL subitem
     // id lives in `point._realId` until a topics refetch swaps it). The point→item
@@ -463,8 +482,10 @@ export function DiscussionCard({
       setPointItemsByPoint((prev) => mergePointItemIn(prev, pointRealId, kind, itemId));
       addPointItem(discussion.id, pointRealId, kind, itemId).catch(() => {});
     };
+    // In-flight the instant we submit (before the awaited create resolves).
+    if (statusKey) setPointCreateState(statusKey, 'pending');
     if (kind === 'task') {
-      if (!createTask) return; // capability guard (same as handleCreateTask)
+      if (!createTask) { if (statusKey) setPointCreateState(statusKey, 'error'); return; } // capability guard (same as handleCreateTask)
       const created = await tasksData.createTask(text, {
         status: null,
         assignee: person || [],
@@ -472,20 +493,21 @@ export function DiscussionCard({
         topicId: point?.topicId || null,
         prepend,
       });
-      if (created) { recordPointItem(created.id); if (fromPoint) flashCreateSuccess(); }
+      if (created) { recordPointItem(created.id); if (statusKey) setPointCreateState(statusKey, 'success'); }
+      else if (statusKey) setPointCreateState(statusKey, 'error');
       return;
     }
-    if (!canCreateDecision) return;
+    if (!canCreateDecision) { if (statusKey) setPointCreateState(statusKey, 'error'); return; }
     const created = await decisionsData.createDecision(text, {
-      status, // decision-status label id (null when unset/unmapped)
-      // Defaults per product spec: affected = the discussion's participants;
-      // decider defaults inside the hook to the current user when omitted;
-      // date omitted → today (the hook's default).
+      // Round 52: the quick-create decision form no longer collects a status or a
+      // decider — they're set later from the Decisions view. Defaults per product
+      // spec: affected = the discussion's participants; the decider defaults
+      // inside the hook to the current user; date omitted → today (hook default).
       affected: Array.isArray(data.participantsID) ? data.participantsID : [],
-      ...(person?.length ? { decider: person[0] } : {}),
       prepend,
     });
-    if (created) { recordPointItem(created.id); if (fromPoint) flashCreateSuccess(); }
+    if (created) { recordPointItem(created.id); if (statusKey) setPointCreateState(statusKey, 'success'); }
+    else if (statusKey) setPointCreateState(statusKey, 'error');
   };
 
   return (
@@ -699,7 +721,7 @@ export function DiscussionCard({
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast}
             addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
-            decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} />
+            decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus} />
         </div>
         {activeTab === 'tasks' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
@@ -752,22 +774,6 @@ export function DiscussionCard({
         onCreate={handleCreateTask}
         defaults={newTaskDefaults}
       />
-      {/* Short, non-blocking success ✓ shown centered right after a task/decision
-          is created FROM A TOPIC POINT (the per-point "+" quick-create). Other
-          create paths (the top blue buttons, the inline add rows, the FAB) are
-          SILENT. Keyed by successKey so a rapid second create restarts the
-          animation; auto-fades in ~1.2s (see the effect + .createSuccess CSS). */}
-      {successVisible && (
-        <div
-          key={successKey}
-          className={styles.createSuccess}
-          role="status"
-          aria-live="polite"
-          aria-label="נוצר בהצלחה"
-        >
-          <Check size={30} strokeWidth={3} aria-hidden="true" />
-        </div>
-      )}
     </div>
   );
 }

@@ -191,6 +191,10 @@ function SortableTopicSection({
   // Per-point decision/task associations (pointItems store, keyed by the point's
   // REAL id) — the source of the per-point counters + names popup.
   pointItemsByPoint,
+  // Round 52 — per-point create-from-point progress, keyed `${kind}:${pointId}`
+  // ('decision:<id>' / 'task:<id>' → 'pending' | 'success' | 'error'). Drives the
+  // inline CreateProgressBar on the matching link cell.
+  createStatusByPoint,
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(topic.id) });
   const accentTri = `var(${accent})`;
@@ -425,7 +429,9 @@ function SortableTopicSection({
                   </span>
                 );
               }
-              const headLabel = k === 'check' ? 'נידונה' : k === 'decisions' ? 'החלטות' : 'משימות';
+              // Round 52 — the "discussed" checkbox column's header shows "#"
+              // (display/label only; the column id/alias 'check' is unchanged).
+              const headLabel = k === 'check' ? '#' : k === 'decisions' ? 'החלטות' : 'משימות';
               return (
                 <span
                   key={k}
@@ -466,6 +472,8 @@ function SortableTopicSection({
                   selectable={selectable}
                   selected={selectable ? !!selectedPointIds?.has(String(point.id)) : false}
                   onToggleSelect={(p, checked) => onTogglePointSelect?.(p, checked)}
+                  decisionCreateStatus={createStatusByPoint?.[`decision:${point.id}`]}
+                  taskCreateStatus={createStatusByPoint?.[`task:${point.id}`]}
                 />
               ))}
             </SortableContext>
@@ -544,6 +552,10 @@ export function TopicsTab({
   // loaded decisions/tasks. Replaces the old (never-populated) subitems
   // board_relation read — see utils/pointItems.js.
   pointItemsByPoint = {},
+  // Round 52 — per-point create-from-point progress map, keyed `${kind}:${pointId}`
+  // ('pending' | 'success' | 'error'). Owned by DiscussionCard's handleQuickCreate;
+  // drives the inline CreateProgressBar on each point's decisions/tasks cell.
+  createStatusByPoint = {},
 }) {
   const {
     items, loading, addTopic, addPoint, retryCreate, togglePoint, refetch,
@@ -676,7 +688,7 @@ export function TopicsTab({
   const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('topics', { canManageSettings });
   const columnList = [
     { key: 'name', label: 'נקודה לדיון', icon: 'text', locked: true },
-    { key: 'check', label: 'נידונה', icon: 'check' },
+    { key: 'check', label: '#', icon: 'check' }, // round 52: displayed title "#" (was "נידונה")
     { key: 'decisions', label: 'החלטות', icon: 'relation' },
     { key: 'tasks', label: 'משימות', icon: 'relation' },
   ];
@@ -960,6 +972,7 @@ export function TopicsTab({
               decisionIdSet={decisionIdSet}
               taskIdSet={taskIdSet}
               pointItemsByPoint={pointItemsByPoint}
+              createStatusByPoint={createStatusByPoint}
             />
           ))}
         </SortableContext>
