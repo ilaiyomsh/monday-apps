@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
+import { addManagedDropdownLabel } from '../utils/mondayApi/managedColumns.js';
+import logger from '../utils/logger.js';
 
 /*
  * Loads the available labels of a DROPDOWN column (by board key + alias), so a
@@ -18,6 +20,24 @@ import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js
  */
 const cache = new Map();
 const inflight = new Map();
+
+// ---- change-notification (so a newly added label propagates without reload) ----
+// Mirrors useStatusOptions: `addDropdownLabel` refreshes this column's cache
+// entry, bumps `version`, and every mounted hook re-reads its entry via the
+// subscription below.
+let version = 0;
+const listeners = new Set();
+function notify() {
+  version += 1;
+  listeners.forEach((l) => l());
+}
+export function subscribe(cb) {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+export function getVersion() {
+  return version;
+}
 
 const EMPTY = { options: [], labels: [] };
 
@@ -82,7 +102,57 @@ export function useDropdownOptions(boardKey, alias) {
     return () => { cancelled = true; };
   }, [key, boardId, colId]);
 
+  // Re-read the cache when a label is added elsewhere (addDropdownLabel → notify).
+  useEffect(() => {
+    if (!key) return undefined;
+    return subscribe(() => {
+      if (cache.has(key)) setState({ ...cache.get(key), loading: false });
+    });
+  }, [key]);
+
   return state;
+}
+
+/**
+ * Add a NEW label to a DROPDOWN column, then re-load the column, refresh the
+ * module cache, notify subscribers (so the live picker updates), and return the
+ * new label's server-assigned id (or null if it couldn't be resolved).
+ *
+ * The label is created on the account-level MANAGED DROPDOWN backing the column
+ * (`update_dropdown_managed_column` via addManagedDropdownLabel); the change
+ * propagates to the board column instancing it. `managedColumnId` is REQUIRED —
+ * a plain/locked dropdown has no managed backing, so the caller
+ * (CreateDiscussionModal) keeps its app-side-only fallback for that case instead
+ * of calling here. Mirrors useStatusOptions.addStatusLabel's reload+notify shape.
+ *
+ * @param {{ boardKey: string, alias: string, title: string, managedColumnId?: string|null }} args
+ */
+export async function addDropdownLabel({ boardKey, alias, title, managedColumnId = null }) {
+  const name = String(title || '').trim();
+  const boardId = getBoardId(boardKey) || null;
+  const colId = getColumns(boardKey)?.[alias]?.id || null;
+  if (!name || !boardId || !colId) {
+    throw new Error('addDropdownLabel: missing name/board/column');
+  }
+  if (!managedColumnId) {
+    throw new Error('addDropdownLabel: missing managedColumnId (no managed dropdown backing)');
+  }
+
+  await addManagedDropdownLabel({ managedColumnId, title: name });
+
+  // Re-load the board column so we pick up the server-assigned id (the managed
+  // change propagates to the board column), then refresh cache + notify.
+  const key = `${boardId}:${colId}`;
+  const prevIds = new Set((cache.get(key)?.options || []).map((o) => o.id));
+  const fresh = await load(boardId, colId);
+  cache.set(key, fresh);
+  notify();
+
+  logger.info('useDropdownOptions', 'added dropdown label', { boardKey, alias, name, managed: !!managedColumnId });
+  const added = fresh.options.find(
+    (o) => (o.label ?? '').trim().toLowerCase() === name.toLowerCase() && !prevIds.has(o.id)
+  ) || fresh.options.find((o) => (o.label ?? '').trim().toLowerCase() === name.toLowerCase());
+  return added ? added.id : null;
 }
 
 export default useDropdownOptions;

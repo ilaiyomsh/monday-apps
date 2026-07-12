@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Text, Button, Flex, Avatar } from '@vibe/core';
 import { CloseSmall, Search } from '@vibe/icons';
 import { דיונים1Board } from '@api/BoardSDK.js';
-import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
+import { useDropdownOptions, addDropdownLabel } from '@generated/hooks/useDropdownOptions.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
 import { api, parseValue, cvSelection } from '@generated/utils/mondayApi/monday-client.js';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
@@ -339,16 +339,28 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     if (partTpl) applyParticipantTemplate(partTpl);
   };
 
-  // Add a new discussion type from the field, then select it. "סוג" is a dropdown
-  // column, so the label is created on the board when the discussion is SAVED
-  // (create_labels_if_missing on the write). Here we just assign the type a random
-  // palette color in app storage and select the name. Errors surface via the
-  // logger/toast funnel.
+  // Add a new discussion type from the field, then select it. "סוג" is a DROPDOWN
+  // column. When it's backed by an account-level MANAGED DROPDOWN (the persisted
+  // `managedColumnId`, which new installs get), we add the label there via
+  // update_dropdown_managed_column — the change propagates to the board column and
+  // refreshes typeOptions live (addDropdownLabel → notify → useDropdownOptions), so
+  // the submit guard (which only writes labels present in typeOptions) now
+  // recognizes it and the discussion persists with the new type. When there is NO
+  // managedColumnId (a plain/locked dropdown), we keep the prior app-side-only
+  // behavior so nothing regresses. Either way we assign the per-type palette color
+  // in app storage and select the name. Errors surface via the logger/toast funnel;
+  // on a managed failure the type is NOT selected (it wasn't persisted).
   const handleAddType = async () => {
     const nm = newTypeName.trim();
     if (!nm || addingType) return;
+    const managedTypeColId = getColumns('discussions')?.discussionTypeID?.managedColumnId || null;
     try {
       setAddingType(true);
+      if (managedTypeColId) {
+        await addDropdownLabel({
+          boardKey: 'discussions', alias: 'discussionTypeID', title: nm, managedColumnId: managedTypeColId,
+        });
+      }
       await assignRandomTypeColor(nm);
       setIsAddingType(false);
       setNewTypeName('');
