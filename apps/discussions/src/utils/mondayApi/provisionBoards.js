@@ -8,7 +8,9 @@
  *  SetupWizard offers to build everything automatically:
  *    1. ADD the discussions columns to the CURRENT board (context.boardId) —
  *       we do NOT create a discussions board.
- *    2. CREATE the topics + tasks boards (in the same workspace).
+ *    2. CREATE the topics + decisions boards (in the same workspace), and for the
+ *       tasks board either CREATE a new one or CONNECT an existing board the owner
+ *       chose (tasks.mode 'create' | 'connect').
  *    3. Enable subitems on the topics board (the `subtasks` COLUMN TYPE is not
  *       supported by the API, so we trigger it via create_subitem on a throwaway
  *       item, read the auto-created subitems board id from the subtasks column's
@@ -45,6 +47,23 @@ const STATUS_DEFAULTS = JSON.stringify({
     2: { color: '#df2f4a', border: '#ce3048', var_name: 'red-shadow' },
     3: { color: '#007eb5', border: '#3db0df', var_name: 'blue-links' },
     5: { color: '#c4c4c4', border: '#b0b0b0', var_name: 'grey' },
+  },
+  done_colors: [1],
+});
+
+/*
+ * Decision status column (decisions.decisionStatusID) — matches the live
+ * decisions board: הוקפאה=0 (blue), בתוקף=1 (green, is_done), בוטלה=2 (red).
+ * Display order: הוקפאה, בוטלה, בתוקף. "בתוקף" must exist — it's the default
+ * status a new decision gets (see useDecisions).
+ */
+const DECISION_STATUS_DEFAULTS = JSON.stringify({
+  labels: { 0: 'הוקפאה', 1: 'בתוקף', 2: 'בוטלה' },
+  labels_positions_v2: { 0: 0, 1: 2, 2: 1 },
+  labels_colors: {
+    0: { color: '#579bfc', border: '#4387e8', var_name: 'bright-blue' },
+    1: { color: '#00c875', border: '#00b461', var_name: 'green-shadow' },
+    2: { color: '#df2f4a', border: '#ce3048', var_name: 'red-shadow' },
   },
   done_colors: [1],
 });
@@ -89,6 +108,12 @@ export const PROVISION_SPEC = {
         title: 'משימות',
         reflection: { board: 'tasks', alias: 'discussionLinkID', title: 'דיונים' },
       },
+      {
+        alias: 'decisionsBoardLinkID',
+        target: 'decisions',
+        title: 'החלטות',
+        reflection: { board: 'decisions', alias: 'discussionLinkID', title: 'דיון' },
+      },
       { alias: 'previousDiscussionID', target: 'discussions', title: 'דיון קודם' },
     ],
   },
@@ -116,16 +141,31 @@ export const PROVISION_SPEC = {
     // discussions.tasksBoardLinkID — see above.
     relations: [],
   },
+  decisions: {
+    name: 'החלטות',
+    columns: [
+      { alias: 'decisionCreatorID', type: 'people', title: 'יוצר' },
+      { alias: 'deciderID', type: 'people', title: 'מקבל ההחלטה' },
+      { alias: 'affectedID', type: 'people', title: 'מושפעים' },
+      { alias: 'decisionStatusID', type: 'status', title: 'סטאטוס', defaults: DECISION_STATUS_DEFAULTS },
+      { alias: 'decisionDateID', type: 'date', title: 'תאריך' },
+    ],
+    // discussionLinkID (back-link to discussions) is the reflection of
+    // discussions.decisionsBoardLinkID — created automatically, mapped by mapReflection.
+    relations: [],
+  },
 };
 
-const BOARD_ORDER = ['discussions', 'topics', 'tasks'];
+const BOARD_ORDER = ['discussions', 'topics', 'tasks', 'decisions'];
 
 // Count every unit of work so the wizard can show a real progress bar.
-function countSteps() {
+function countSteps(tasks) {
   let n = 0;
   for (const key of BOARD_ORDER) {
     const spec = PROVISION_SPEC[key];
-    if (!spec.isCurrentBoard) n += 1; // create_board (discussions is the current board)
+    // create_board — skipped for the current board (discussions), and for tasks
+    // when connecting an existing board instead of creating a new one.
+    if (!spec.isCurrentBoard && !(key === 'tasks' && tasks?.mode === 'connect')) n += 1;
     n += spec.columns.length;
     n += (spec.relations || []).length;
     if (spec.subitems) n += 1 + spec.subitems.length; // enable subitems + its columns
@@ -292,12 +332,15 @@ async function mapReflection(sourceBoardId, targetBoardId, title) {
  * for SettingsContext.updateSettings(). Throws (after logging) on a fatal
  * failure; the wizard surfaces the error and lets the user retry / map manually.
  */
-export async function provisionAllBoards({ discussionsBoardId, workspaceId, onProgress } = {}) {
+export async function provisionAllBoards({ discussionsBoardId, workspaceId, onProgress, tasks = { mode: 'create' } } = {}) {
   if (!discussionsBoardId) {
     throw new Error('לא זוהה הלוח הנוכחי — יש לפתוח את האפליקציה מתוך לוח דיונים');
   }
+  if (tasks?.mode === 'connect' && !tasks?.boardId) {
+    throw new Error('לא נבחר לוח משימות קיים לחיבור');
+  }
 
-  const total = countSteps();
+  const total = countSteps(tasks);
   let step = 0;
   const tick = (label) => {
     step += 1;
@@ -310,13 +353,21 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
 
   logger.info(MODULE, 'התחלת הקמת לוחות אוטומטית', { total, discussionsBoardId });
 
-  // discussions = the current board; only topics + tasks are created.
+  // discussions = the current board; topics + decisions are always created, and
+  // tasks is either created (mode 'create') or an existing board is connected
+  // (mode 'connect'), in which case its columns are still ensured/reused below.
   const boardIds = { discussions: String(discussionsBoardId) };
-  const columns = { discussions: {}, topics: {}, tasks: {} };
+  const columns = { discussions: {}, topics: {}, tasks: {}, decisions: {} };
 
-  // 1) create the missing boards
+  // 1) create the missing boards. topics + decisions are always created; tasks is
+  // created only in 'create' mode — in 'connect' mode we reuse the chosen board id
+  // (its columns are still ensured/reused by title+type in step 2).
   for (const key of BOARD_ORDER) {
     if (PROVISION_SPEC[key].isCurrentBoard) continue;
+    if (key === 'tasks' && tasks?.mode === 'connect') {
+      boardIds.tasks = String(tasks.boardId);
+      continue;
+    }
     boardIds[key] = await createBoard(PROVISION_SPEC[key].name, workspaceId);
     tick(`נוצר לוח: ${PROVISION_SPEC[key].name}`);
   }
@@ -372,6 +423,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       discussions: { id: boardIds.discussions },
       topics: { id: boardIds.topics },
       tasks: { id: boardIds.tasks },
+      decisions: { id: boardIds.decisions },
     },
     columns,
   };
