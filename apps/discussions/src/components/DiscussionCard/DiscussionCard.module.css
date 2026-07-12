@@ -295,20 +295,24 @@
      that isn't the title is flush right). Physical — not inline — so the block's
      own dir="rtl" (which orders תאריך→שעה→people right-to-left) doesn't flip it. */
   margin-left: auto;
-  /* Round 48: yield WITHOUT wrapping. When the pane narrows (e.g. monday docks the
-     Updates panel) the meta shares the title's SAME row and gives way — flex-shrink
-     :1 + min-width:0 let it be allotted less than its content width — then CLIPS the
-     overflow instead of dropping to its own line (the round-42 wrap) or pushing the
-     layout wider (which used to spawn an app-level horizontal scrollbar and crush
-     the title). It stays on ONE line (flex-wrap:nowrap here; the inner date/time/
-     label/avatar items are each already nowrap), so the header is always exactly
-     two rows and the table never jumps. overflow-x:clip does the horizontal clip;
-     overflow-y stays visible so the inline half-hour time menu can still drop BELOW
-     the row (a plain overflow:hidden/auto would clip it — the date popover is
-     portaled by Vibe, so it is unaffected either way). At wide widths it still sits
-     on one line, flush right, unchanged. */
-  flex-shrink: 1;
-  min-width: 0;
+  /* Round 51: the meta does NOT shrink (flex-shrink:0), so it keeps its natural
+     width flush-right on ONE line and it is the TITLE that yields first — the title
+     ellipsizes to give the meta room (see .title / .titleBlock min-width). When the
+     pane narrows past the point where [title min-width + the full meta] fit, the
+     meta would be pushed past the row's right edge and clipped; DiscussionCard.jsx
+     measures exactly that overflow and toggles .participantsNarrow to hide the
+     PEOPLE groups (keeping date + time), so the crowded state is transient and the
+     header stays one row (flex-wrap:nowrap here; the inner date/time/label/avatar
+     items are each already nowrap) and the table below never jumps. overflow-x:clip
+     does the horizontal clip in the brief crowded frame; overflow-y stays visible
+     so the inline half-hour time menu can still drop BELOW the row (a plain
+     overflow:hidden/auto would clip it — the date popover is portaled by Vibe, so
+     it is unaffected either way). At wide widths it sits on one line, flush right,
+     with every group shown. Round 48 established this one-row/no-wrap contract;
+     round 50 hid the people by a fixed 600px width (which never fired because the
+     docked Updates panel keeps the header wider than that); round 51 hides them by
+     REAL overflow instead, so it triggers whenever the panel docks, at any size. */
+  flex-shrink: 0;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -422,13 +426,13 @@
   margin-inline-end: 48px;
 }
 
-/* Round 50 — NARROW header (monday docked its Updates/item-card panel beside the
-   board view and squeezed the app iframe; toggled by the ResizeObserver in
-   DiscussionCard.jsx via .participantsNarrow). Hide the PEOPLE meta groups
-   (מנהל / מרכז / משתתפים) and keep ONLY the date + time, so the one-row header
-   never crowds or overflows when space is tight. The people groups use
-   .peopleGroupAvatars; the date/time groups use .dateGroup and stay visible.
-   display:none also drops each hidden group's leading vertical divider (its
+/* Round 51 — CROWDED header (typically monday docked its Updates/item-card panel
+   beside the board view and narrowed the app iframe; toggled by DiscussionCard.jsx
+   when the header row would OVERFLOW — measured geometrically, not by a fixed px).
+   Hide the PEOPLE meta groups (מנהל / מרכז / משתתפים) and keep ONLY the date + time,
+   so the one-row header never crowds or overflows when space is tight. The people
+   groups use .peopleGroupAvatars; the date/time groups use .dateGroup and stay
+   visible. display:none also drops each hidden group's leading vertical divider (its
    ::before is not rendered), so no stray separators remain. Desktop-only in
    effect: the mobile phone layout renders the info popover, not this row. */
 .participantsNarrow .peopleGroupAvatars {

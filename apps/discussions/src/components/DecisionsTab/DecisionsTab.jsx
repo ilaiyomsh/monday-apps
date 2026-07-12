@@ -41,9 +41,8 @@ import styles from './DecisionsTab.module.css';
 // Tasks name cell (kind:'updates' renders monday's side panel). A decision is a
 // board item, so decision.id is a real monday item id; guard the temp id of an
 // optimistic (not-yet-saved) decision so it never targets a bogus id.
-// Toggle a decision's item card: 1st click opens, a 2nd click on the SAME
-// decision closes it. Shared open-id tracking + best-effort close live in
-// utils/itemCard.js (the SDK has no guaranteed closeItemCard — see that file).
+// Open a decision's item card via the shared helper. monday's SDK has no
+// programmatic close (see utils/itemCard.js), so every click reliably (re)opens.
 // A decision is a board item, so guard the temp id of an optimistic decision.
 function openItemCard(itemId) {
   if (!itemId || String(itemId).startsWith('temp-')) return;

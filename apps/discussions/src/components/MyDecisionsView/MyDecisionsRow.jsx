@@ -16,9 +16,8 @@ const NEUTRAL = 'hsl(var(--status-default))';
 
 // Open the monday item card on the "updates" pane — clicking the decision text
 // (only) opens the card; inline-edit controls stop propagation.
-// Toggle the monday item card for this item: 1st click opens, a 2nd click on the
-// SAME item closes it. Shared open-id tracking + best-effort close live in
-// utils/itemCard.js (the SDK has no guaranteed closeItemCard — see that file).
+// Open the monday item card via the shared helper. monday's SDK has no
+// programmatic close (see utils/itemCard.js), so every click reliably (re)opens.
 function openItemCard(itemId) {
   if (!itemId) return;
   openOrToggleItemCard(itemId);

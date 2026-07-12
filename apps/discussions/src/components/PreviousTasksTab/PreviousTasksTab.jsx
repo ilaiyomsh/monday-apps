@@ -504,9 +504,8 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // Clicking a task's name opens ITS item card on the Updates pane — same
   // affordance as the My Tasks tab (kind: 'updates'). Opens the task, not the
   // source discussion (that's the separate "דיון מקור" chip).
-  // Toggle the task's item card: 1st click opens, a 2nd click on the SAME task
-  // closes it. Shared open-id tracking + best-effort close live in
-  // utils/itemCard.js (the SDK has no guaranteed closeItemCard — see that file).
+  // Open the task's item card via the shared helper. monday's SDK has no
+  // programmatic close (see utils/itemCard.js), so every click reliably (re)opens.
   const openTaskCard = (taskId) => {
     if (!taskId) return;
     openOrToggleItemCard(taskId);

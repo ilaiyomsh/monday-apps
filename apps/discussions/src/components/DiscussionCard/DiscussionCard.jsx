@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
 import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
 import { MoveArrowLeft, Link, Info } from '@vibe/icons';
 import { Check } from 'lucide-react';
@@ -45,12 +45,6 @@ const HEADER_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
 });
 
 const HEADER_DATE_FMT = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
-
-// Round 50 — width (px) at/below which the header is treated as NARROW (monday
-// has docked its Updates/item-card panel beside the board view and squeezed the
-// iframe). Below it the header hides the PEOPLE meta (מנהל / מרכז / משתתפים) and
-// keeps only the date + time, so the crowded one-row header never overflows.
-const HEADER_NARROW_MAX = 600;
 
 function normalizeTabName(tabName) {
   if (!tabName) return null;
@@ -101,27 +95,59 @@ export function DiscussionCard({
   const { isMobile } = useViewport();
   const [infoOpen, setInfoOpen] = useState(false);
   const [timeMenuOpen, setTimeMenuOpen] = useState(false);
-  // Round 50 — hide the header PEOPLE meta when the app iframe is NARROW (monday
-  // has docked its Updates/item-card panel beside the board view). A
-  // ResizeObserver measures the header; at/below HEADER_NARROW_MAX we toggle
-  // .participantsNarrow, which keeps date+time and hides the role groups (see the
-  // CSS). Desktop-only in effect — the mobile layout renders the info popover,
-  // not the .participants row. Keyed on discussion id so it (re)attaches once the
-  // header mounts; guarded for environments without ResizeObserver (tests/SSR).
-  const headerRef = useRef(null);
-  const [headerNarrow, setHeaderNarrow] = useState(false);
-  useEffect(() => {
-    const el = headerRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return undefined;
-    const apply = (w) => setHeaderNarrow(w > 0 && w <= HEADER_NARROW_MAX);
-    apply(el.getBoundingClientRect().width);
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      apply(entry?.contentRect?.width ?? el.getBoundingClientRect().width);
-    });
-    ro.observe(el);
+  // Round 51 — hide the header PEOPLE meta (מנהל / מרכז / משתתפים) when the header
+  // row is too crowded to fit everything on ONE line, keeping the date + time.
+  // This replaces round-50's fixed 600px width threshold, which never fired: when
+  // monday docks its Updates/item-card panel the app iframe narrows but the header
+  // width often stays well ABOVE 600px, so the people groups were never hidden.
+  // Instead we detect ACTUAL crowding by geometry, so it triggers at ANY monitor
+  // size: the meta row is flush-right and does NOT shrink (CSS flex-shrink:0), so
+  // once the title's minimum width + the meta no longer fit, the meta is pushed
+  // past the row's right content edge and clipped — we measure that overflow.
+  // HYSTERESIS: after hiding we only reveal the people again once the row has
+  // grown back to comfortably fit the FULL meta (remembered needed width + a 24px
+  // buffer), so a width hovering at the threshold can't flip-flop. Desktop-only in
+  // effect — the mobile layout renders the info popover, not this row; and guarded
+  // for environments without ResizeObserver (tests/SSR).
+  const titleRowRef = useRef(null);
+  const participantsRef = useRef(null);
+  const [hideMeta, setHideMeta] = useState(false);
+  const hideMetaRef = useRef(false);
+  const metaNeededWidthRef = useRef(0);
+  useLayoutEffect(() => {
+    const row = titleRowRef.current;
+    if (!row || typeof ResizeObserver === 'undefined') return undefined;
+    const HYSTERESIS_BUFFER = 24;
+    // Physical px reserved at the row's inline-end for the owner-only settings
+    // gear (mirrors .participantsReserve { margin-inline-end: 48px } in the CSS).
+    const reservePx = reserveSettingsSpace ? 48 : 0;
+    const setHide = (v) => { hideMetaRef.current = v; setHideMeta(v); };
+    // Re-evaluate from scratch for a freshly selected discussion.
+    setHide(false);
+    metaNeededWidthRef.current = 0;
+    const measure = () => {
+      const meta = participantsRef.current;
+      const avail = row.clientWidth;
+      if (!meta || avail <= 0) return;
+      if (hideMetaRef.current) {
+        // People hidden: reveal only once the row is comfortably wide again.
+        if (avail >= metaNeededWidthRef.current) setHide(false);
+      } else {
+        // People visible: is the non-shrinking, flush-right meta pushed past the
+        // row's right content edge? That is exactly "title + date + time + people
+        // don't fit on one line".
+        const overflow = meta.getBoundingClientRect().right - (row.getBoundingClientRect().right - reservePx);
+        if (overflow > 1) {
+          metaNeededWidthRef.current = avail + overflow + HYSTERESIS_BUFFER;
+          setHide(true);
+        }
+      }
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(row);
     return () => ro.disconnect();
-  }, [discussion?.id]);
+  }, [discussion?.id, reserveSettingsSpace]);
   // The list is lean (id/name/date); pull the rest of the discussion's columns
   // on click and merge them over the list item. `overrides` holds optimistic
   // inline edits (title / description) until the next select.
@@ -464,8 +490,8 @@ export function DiscussionCard({
 
   return (
     <div className={styles.root}>
-      <div className={styles.header} ref={headerRef}>
-        <div className={styles.titleRow}>
+      <div className={styles.header}>
+        <div className={styles.titleRow} ref={titleRowRef}>
           <span className={styles.backButton}>
             <IconButton
               kind={"tertiary"}
@@ -558,7 +584,7 @@ export function DiscussionCard({
                  vertical separator between fields. Date/time are BOLD and, for
                  editors, clickable — date opens the shared calendar popover, time
                  opens a half-hour menu; both persist to the discussion item. */
-              <div dir="rtl" className={`${styles.participants} ${reserveSettingsSpace ? styles.participantsReserve : ''} ${headerNarrow ? styles.participantsNarrow : ''}`}>
+              <div ref={participantsRef} dir="rtl" className={`${styles.participants} ${reserveSettingsSpace ? styles.participantsReserve : ''} ${hideMeta ? styles.participantsNarrow : ''}`}>
                 {data.discussionDateID && (
                   <div className={`${styles.peopleGroup} ${styles.dateGroup}`}>
                     {editDiscussionFields ? (
