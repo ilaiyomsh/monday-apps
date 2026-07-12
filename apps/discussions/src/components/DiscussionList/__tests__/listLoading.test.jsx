@@ -13,6 +13,7 @@ vi.mock('@generated/hooks/useDiscussions', () => ({
     loadMore: () => {},
     softDeleteDiscussion: () => {},
   }),
+  useDiscussionMonths: () => ({ months: [], loading: false }),
 }));
 
 vi.mock('@generated/hooks/useStatusOptions.js', () => ({
