@@ -70,11 +70,12 @@ describe('TopicPointRow — fixed decisions/tasks table structure (smoke)', () =
   it('shows the create-progress overlay (pending) then the success ✓ (round 52)', () => {
     // Query the CreateProgressBar by its unique data-variant — dnd-kit injects
     // its OWN role="status" live region into the row, so matching on role alone
-    // is ambiguous. Pending on the decisions cell → an in-flight bar ("יוצר…").
+    // is ambiguous. Pending on the decisions cell → an in-flight bar
+    // ("יוצר החלטה" — round 54: kind-specific pending label, no ellipsis).
     const { unmount } = renderRow({ decisionCreateStatus: 'pending' });
     const pending = document.querySelector('[data-variant="decision"]');
     expect(pending).toBeTruthy();
-    expect(pending.getAttribute('aria-label')).toBe('יוצר…');
+    expect(pending.getAttribute('aria-label')).toBe('יוצר החלטה');
     unmount();
 
     // Success on the tasks cell → a green ✓ with the "נוצרה" caption.
