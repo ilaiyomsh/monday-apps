@@ -154,7 +154,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const [newTypeName, setNewTypeName] = useState('');
   const [addingType, setAddingType] = useState(false); // mutation in-flight
   const [typeSearch, setTypeSearch] = useState(''); // filters the type dropdown list
-  const { options: typeOptions } = useDropdownOptions('discussions', 'discussionTypeID');
+  const { options: typeOptions, loading: typeOptionsLoading } = useDropdownOptions('discussions', 'discussionTypeID');
   const titleRef = useRef(null);
   const timeMenuRef = useRef(null);
 
@@ -377,11 +377,23 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       if (lead.length) payload.discussionLeadID = lead;
       if (coordinator.length) payload.discussionCoordinatorID = coordinator;
       if (participants.length) payload.participantsID = participants;
-      // "סוג" dropdown: write the selected label TEXT. When the type is CLEARED
-      // in edit mode we must WRITE an empty value (formatValue('dropdown', null)
-      // => {}) so the original label doesn't persist — mirrors the
-      // previousDiscussionID clear-on-edit below. On create we simply omit it.
-      if (discussionType !== null && discussionType !== undefined && discussionType !== '') {
+      // "סוג" dropdown: only ever WRITE a label that ACTUALLY EXISTS on the
+      // column. Options come from useDropdownOptions (the board's real labels),
+      // so this blocks the inline "add new type" free-text affordance from
+      // submitting a NON-existent label (e.g. "טוויסט") — which monday rejects
+      // with a ColumnValueException on a locked/fixed dropdown even with
+      // create_labels_if_missing. (Creatable types are out of scope for now.)
+      // While options are still loading we can't validate, so we keep the
+      // selected value rather than risk dropping a valid one. When the type is
+      // CLEARED (or is an unknown label we won't submit) in edit mode we WRITE an
+      // empty value (formatValue('dropdown', null) => {}) so the original label
+      // doesn't persist — mirrors the previousDiscussionID clear-on-edit below.
+      // On create we simply omit it.
+      const knownTypeLabels = (typeOptions || []).map((o) => o.label);
+      const typeIsSubmittable =
+        discussionType !== null && discussionType !== undefined && discussionType !== ''
+        && (typeOptionsLoading || knownTypeLabels.includes(discussionType));
+      if (typeIsSubmittable) {
         payload.discussionTypeID = discussionType;
       } else if (isEdit) {
         payload.discussionTypeID = null;
