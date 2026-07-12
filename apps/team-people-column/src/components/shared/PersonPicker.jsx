@@ -58,10 +58,15 @@ async function loadRoster() {
  * ancestors, and renders exactly once.
  *
  * Props: { selected: [{id, name, kind}], onChange, users?, bordered?,
- * closeOnSelect?, single? }.
+ * closeOnSelect?, single?, inline?, listHeading? }.
  * `users`: optionally pass a pre-fetched roster instead of the built-in fetch.
  * `single`: cap the selection at one person (assignee fields). A second pick is
  * blocked with a notice; deselecting the existing person is still allowed.
+ * `inline`: render the menu (chips + search + list) directly in the flow —
+ * no trigger button, no portal — for surfaces that ARE the picker (the
+ * on-click column dialog, matching monday's native people picker which opens
+ * straight into the list).
+ * `listHeading`: heading text above the list (defaults to "אנשים מוצעים").
  */
 export function PersonPicker({
   selected = [],
@@ -70,6 +75,8 @@ export function PersonPicker({
   bordered = false,
   closeOnSelect = false,
   single = false,
+  inline = false,
+  listHeading = 'אנשים מוצעים',
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -204,6 +211,86 @@ export function PersonPicker({
     ? roster.filter((u) => (u.name || '').toLowerCase().includes(q))
     : roster;
 
+  // The menu body (chips + search + list) — shared between the popover
+  // rendering and the inline rendering.
+  const menu = (
+    <div className={`${styles.menu} ${inline ? styles.menuInline : ''}`}>
+      {selected.length > 0 && (
+        <div className={styles.chips}>
+          {selected.map((p) => {
+            const u = getUser(p.id);
+            const photo = u?.photo_thumb;
+            const name = p.name || u?.name || '';
+            return (
+              <span key={p.id} className={styles.chip}>
+                <Avatar size="small" src={photo} text={initialsOf(name)} type={photo ? 'img' : 'text'} ariaLabel={name} />
+                <span className={styles.chipName}>{name}</span>
+                <button
+                  type="button"
+                  className={styles.chipRemove}
+                  onClick={() => removeUser(p.id)}
+                  aria-label={`הסר ${name}`}
+                >
+                  <CloseSmall size={12} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      <div className={styles.searchWrap}>
+        <Search className={styles.searchIcon} aria-hidden="true" />
+        <input
+          type="text"
+          className={styles.search}
+          aria-label="חיפוש שם"
+          placeholder="חיפוש שמות"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          autoFocus
+        />
+      </div>
+
+      <div className={styles.heading}>{listHeading}</div>
+      <div className={styles.list}>
+        {loading ? (
+          <div className={styles.empty}>טוען...</div>
+        ) : filtered.length === 0 ? (
+          <div className={styles.empty}>לא נמצאו אנשים</div>
+        ) : (
+          filtered.map((user) => {
+            const isSel = selectedIds.includes(String(user.id));
+            return (
+              <button
+                key={user.id}
+                type="button"
+                className={`${styles.row} ${isSel ? styles.rowSelected : ''}`}
+                onClick={() => toggleUser(user)}
+              >
+                <Avatar
+                  size="small"
+                  src={user.photo_thumb}
+                  text={initialsOf(user.name)}
+                  type={user.photo_thumb ? 'img' : 'text'}
+                  ariaLabel={user.name}
+                />
+                <span className={styles.name}>{user.name}</span>
+                <span className={styles.check}>{isSel && <Check size={16} />}</span>
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
+  // Inline mode: the surface IS the picker (matches monday's native people
+  // picker which opens straight into search + list, no extra click).
+  if (inline) {
+    return menu;
+  }
+
   return (
     <>
       <button
@@ -258,74 +345,7 @@ export function PersonPicker({
           className={styles.popover}
           style={{ position: 'fixed', top: pos.top, left: pos.left, minWidth: pos.minWidth, zIndex: 10000 }}
         >
-          <div className={styles.menu}>
-            {selected.length > 0 && (
-              <div className={styles.chips}>
-                {selected.map((p) => {
-                  const u = getUser(p.id);
-                  const photo = u?.photo_thumb;
-                  const name = p.name || u?.name || '';
-                  return (
-                    <span key={p.id} className={styles.chip}>
-                      <Avatar size="small" src={photo} text={initialsOf(name)} type={photo ? 'img' : 'text'} ariaLabel={name} />
-                      <span className={styles.chipName}>{name}</span>
-                      <button
-                        type="button"
-                        className={styles.chipRemove}
-                        onClick={() => removeUser(p.id)}
-                        aria-label={`הסר ${name}`}
-                      >
-                        <CloseSmall size={12} />
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-
-            <div className={styles.searchWrap}>
-              <Search className={styles.searchIcon} aria-hidden="true" />
-              <input
-                type="text"
-                className={styles.search}
-                aria-label="חיפוש שם"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                autoFocus
-              />
-            </div>
-
-            <div className={styles.heading}>אנשים מוצעים</div>
-            <div className={styles.list}>
-              {loading ? (
-                <div className={styles.empty}>טוען...</div>
-              ) : filtered.length === 0 ? (
-                <div className={styles.empty}>לא נמצאו אנשים</div>
-              ) : (
-                filtered.map((user) => {
-                  const isSel = selectedIds.includes(String(user.id));
-                  return (
-                    <button
-                      key={user.id}
-                      type="button"
-                      className={`${styles.row} ${isSel ? styles.rowSelected : ''}`}
-                      onClick={() => toggleUser(user)}
-                    >
-                      <span className={styles.check}>{isSel && <Check size={16} />}</span>
-                      <Avatar
-                        size="small"
-                        src={user.photo_thumb}
-                        text={initialsOf(user.name)}
-                        type={user.photo_thumb ? 'img' : 'text'}
-                        ariaLabel={user.name}
-                      />
-                      <span className={styles.name}>{user.name}</span>
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>
+          {menu}
         </div>,
         document.body
       )}

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Loader } from '@vibe/core';
 
-function LoadingState({ message = 'Loading...' }) {
+function LoadingState({ message = 'טוען...' }) {
   return (
     <div className="flex flex-col items-center justify-center py-12">
       <Loader size="medium" />

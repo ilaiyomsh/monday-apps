@@ -22,6 +22,21 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        // Stable vendor chunks: the dialog iframe reloads on every cell click,
+        // so splitting react/vibe/sdk into content-hashed chunks lets the
+        // browser HTTP-cache them across opens — only the (small) app chunk
+        // re-parses. Also keeps any app-code change from invalidating the
+        // (much larger) vendor bytes on the CDN.
+        // react/react-dom ride inside vendor-vibe (vibe re-exports them, so a
+        // separate react chunk comes out empty).
+        manualChunks: {
+          'vendor-vibe': ['react', 'react-dom', '@vibe/core', '@vibe/icons'],
+          'vendor-monday': ['monday-sdk-js'],
+        },
+      },
+    },
   },
   define: {
     global: 'globalThis',
