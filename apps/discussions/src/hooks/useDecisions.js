@@ -5,6 +5,7 @@ import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js
 import { MondayContext } from '@generated/contexts/MondayContext.jsx';
 import logger from '../utils/logger';
 import { useOptimisticRows, isTempId, isRealId, nextTempId } from './useOptimisticRows.js';
+import { useStatusOptions } from './useStatusOptions.js';
 
 // Undo window for deferred decision deletion — must match the delete toast's
 // auto-hide duration so the real delete fires exactly when "בטל" disappears.
@@ -527,6 +528,16 @@ export function useDecisions(discussionId) {
     }
   }, [discussionId, refresh, currentUserId, drainEdits, forgetRow]);
 
+  // Default a NEW decision to the "בתוקף" (in-effect) status. Resolved from the
+  // decisions status column's OWN labels at runtime (NOT a hardcoded index) so it
+  // tracks the column; null when the label isn't found / options aren't loaded
+  // yet (then no default is applied). Mounting useStatusOptions here also warms
+  // that column's option cache as soon as the discussion opens, so the id is
+  // ready by the time the user creates a decision.
+  const { options: decisionStatusOptions } = useStatusOptions('decisions', 'decisionStatusID');
+  const defaultDecisionStatusId =
+    decisionStatusOptions.find((o) => (o.label || '').trim() === 'בתוקף')?.id ?? null;
+
   // Create a decision linked to this discussion, inserting an OPTIMISTIC row that
   // shows immediately AND is fully editable right away. `text` is the wording
   // (= the item NAME). See the header comment for the `opts` shape.
@@ -551,7 +562,9 @@ export function useDecisions(discussionId) {
     // Default the decision date to today; explicit null means "no date".
     const effectiveDate = date === undefined ? new Date() : date;
     const deciderId = decider != null ? (decider?.id ?? decider) : currentUserId;
-    const norm = { status, priority, affected, effectiveDate, deciderId, pointId, existingLinkedIds };
+    // Default status → "בתוקף" unless the caller passed an explicit status.
+    const effectiveStatus = status != null ? status : defaultDecisionStatusId;
+    const norm = { status: effectiveStatus, priority, affected, effectiveDate, deciderId, pointId, existingLinkedIds };
 
     const tempId = nextTempId();
     stashCreateArgs(tempId, { trimmed, norm });
@@ -562,14 +575,14 @@ export function useDecisions(discussionId) {
     const optimisticRow = {
       id: tempId,
       name: trimmed,
-      decisionStatusID: status,
+      decisionStatusID: effectiveStatus,
       decisionPriorityID: priority,
       affectedID: affected,
       decisionDateID: effectiveDate,
     };
     setItems((prev) => (prepend ? [optimisticRow, ...prev] : [...prev, optimisticRow]));
     return runCreateDecision(tempId, trimmed, norm);
-  }, [discussionId, currentUserId, runCreateDecision, stashCreateArgs]);
+  }, [discussionId, currentUserId, runCreateDecision, stashCreateArgs, defaultDecisionStatusId]);
 
   // Retry a failed create against the same optimistic row (row error affordance).
   const retryCreate = useCallback((tempId) => {
