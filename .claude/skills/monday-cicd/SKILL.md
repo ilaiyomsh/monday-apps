@@ -43,6 +43,14 @@ non-developer to pick a git strategy.
   ללקוחות, לפרודקשן, release, ship, deploy to live, "שהתיקון יגיע", "תעדכן
   את האפליקציה אצל הלקוח" → **release** (Mode 5). This includes partial asks
   ("רק את X", "בלי השינוי של Y") — Mode 5 handles the split itself.
+- **Migration-on-touch (standing rule, owner decision 2026-07-12):** ANY
+  request to work on a monday app — feature, bugfix, anything — first checks
+  whether the app lives in the monorepo. Not there → run **onboard-existing**
+  BEFORE the requested work, then continue from the monorepo copy. Already
+  there → work only on the monorepo copy; a pre-migration standalone folder is
+  a frozen archive (newer changes in it are ported into the monorepo first,
+  then it is archived). Apps deliberately excluded from the monorepo (e.g.
+  `sync-calender-status`, own repo) are exempt — but note the exemption aloud.
 
 If unclear which mode applies, run `scripts/verify-pipeline.sh` first — its
 output ("no monorepo found" / "app not registered" / "app OK") disambiguates.

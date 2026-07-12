@@ -33,6 +33,13 @@ it points to — link-following is expected, duplication is not.
 5. **Quality standards bind every change:** a test never seen failing does not
    count (`test-guard`); every catch logs, rethrows, or displays (`error-guard`).
    Never silence a rule — the hook message IS the fix.
+6. **Migration-on-touch (owner decision 2026-07-12):** every piece of app work
+   starts by checking that the app lives in this monorepo. Not here yet →
+   onboard it FIRST (`monday-cicd` onboard-existing), then do the work here.
+   Already here → work ONLY on the monorepo copy; a pre-migration standalone
+   folder is a frozen archive — if it holds changes newer than the monorepo
+   copy, port them here first, then archive it. No app work ever happens in a
+   standalone copy of a pipeline app.
 
 ## Branch rules
 
