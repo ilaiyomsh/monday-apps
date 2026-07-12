@@ -22,8 +22,13 @@ export function CreateProgressBar({ status, variant = 'decision', className = ''
   if (!status) return null;
   const isSuccess = status === 'success';
   const isError = status === 'error';
-  const label = isSuccess ? 'נוצרה' : isError ? 'נכשל' : 'יוצר…';
-  const ariaLabel = isSuccess ? 'נוצרה בהצלחה' : isError ? 'שמירה נכשלה' : 'יוצר…';
+  // Round 54 — kind-specific PENDING wording, no ellipsis: the variant already
+  // says whether a decision or a task is being created (TopicPointRow passes
+  // variant="decision" / "task"), so the in-flight label reads "יוצר החלטה" or
+  // "יוצר משימה" instead of the old generic "יוצר…". Success/error are unchanged.
+  const pendingLabel = variant === 'task' ? 'יוצר משימה' : 'יוצר החלטה';
+  const label = isSuccess ? 'נוצרה' : isError ? 'נכשל' : pendingLabel;
+  const ariaLabel = isSuccess ? 'נוצרה בהצלחה' : isError ? 'שמירה נכשלה' : pendingLabel;
   return (
     <span
       className={`${styles.wrap} ${styles[status] || ''} ${className}`}

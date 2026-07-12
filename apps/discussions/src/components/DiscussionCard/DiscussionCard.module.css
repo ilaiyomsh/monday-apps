@@ -71,7 +71,20 @@
 
 .titleRow {
   display: flex;
-  align-items: flex-start;
+  /* Round 54 — CONSTANT-height header row: vertically center the title, date/
+     time and people, and pin a fixed min-height, so the header occupies the exact
+     same vertical space whether the people role groups are shown or hidden (round
+     51 hides them when monday docks the Updates panel). Without this the row
+     shrank a few px on hide — the tallest people field is an editable role
+     PersonPicker whose 30px empty-state placeholder sits inside 3px top/bottom
+     trigger padding = 36px, taller than the 28px x 1.2 = 33.6px title — so the
+     view nudged down on open and up on close. */
+  align-items: center;
+  /* 36px = that max people-SHOWN field height; it also clears the 33.6px title,
+     the 32px filled picker, the ~24px read-only avatars and the ~16px date/time
+     text, so nothing clips in either state and hiding the people can no longer
+     reduce the row height (people-shown height == people-hidden height == 36px). */
+  min-height: 36px;
   gap: var(--spacing-small, 8px);
   margin-bottom: var(--spacing-small, 8px);
   /* Round 48: keep the TITLE and the date/people META on ONE row at EVERY width —
