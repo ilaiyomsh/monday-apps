@@ -10,8 +10,6 @@
     "test": "vitest",
     "test:run": "vitest run",
     "tunnel": "mapps tunnel:create -p 5180 -a 11457413",
-    "deploy": "npm run build && mapps code:push -a 11457413 --client-side -d build",
-    "deploy:force": "mapps code:push -a 11457413 --client-side -d build --force",
     "app:versions": "mapps app-version:list -i 11457413",
     "app:features": "mapps app-features:list -a 11457413 -i 15112863",
     "lint": "echo no-lint-configured",

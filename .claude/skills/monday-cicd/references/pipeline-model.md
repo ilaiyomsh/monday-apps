@@ -71,7 +71,8 @@ Manual/emergency fallback only, **not** part of the pipeline: `mapps app:promote
 - `pnpm -r type-check` (`tsc --noEmit`, only where the app has TypeScript)
 - `pnpm -r lint` (eslint)
 - `pnpm -r build`
-- Steps: checkout → `pnpm/action-setup@v4` (9) → `setup-node@v4` (node 20, pnpm cache) → `pnpm install --frozen-lockfile` → the three checks above.
+- Steps: checkout → `pnpm/action-setup@v4` (pnpm 10, matching §4) → `setup-node@v4` (node 20, pnpm cache) → `pnpm install --frozen-lockfile` → the three checks above.
+- A second, NON-BLOCKING `tests` job runs `pnpm -r --if-present run test` for visibility only (owner decision 2026-07-12); it never fails the check while the tracker known-red baseline (FOLLOW-UPS F1) stands.
 
 **Gate 2 — branch protection on `main`** (5 rules, GitHub → Settings → Branches):
 1. Require a pull request before merging (no direct push, incl. admins)
