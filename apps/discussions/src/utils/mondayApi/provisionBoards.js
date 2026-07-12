@@ -363,8 +363,16 @@ async function mapReflection(sourceBoardId, targetBoardId, title) {
  * board (required — this is a board-view app). Returns { boards, columns } ready
  * for SettingsContext.updateSettings(). Throws (after logging) on a fatal
  * failure; the wizard surfaces the error and lets the user retry / map manually.
+ *
+ * TOP-UP MODE — pass `existingConfig` ({ boards, columns }) to run AFTER install
+ * from Settings: roles already mapped to a board id are REUSED (never recreated),
+ * only missing boards are created, and only MISSING columns/relations/subitem
+ * columns (and the managed "סוג דיון") are completed on the involved boards. The
+ * result is the existing config DEEP-MERGED with the new ids, so nothing is
+ * clobbered. When `existingConfig` is null/undefined the behavior is identical to
+ * first-run (every skip below is guarded behind its presence).
  */
-export async function provisionAllBoards({ discussionsBoardId, workspaceId, onProgress, tasks = { mode: 'create' } } = {}) {
+export async function provisionAllBoards({ discussionsBoardId, workspaceId, onProgress, tasks = { mode: 'create' }, existingConfig = null } = {}) {
   if (!discussionsBoardId) {
     throw new Error('לא זוהה הלוח הנוכחי — יש לפתוח את האפליקציה מתוך לוח דיונים');
   }
@@ -389,13 +397,33 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // tasks is either created (mode 'create') or an existing board is connected
   // (mode 'connect'), in which case its columns are still ensured/reused below.
   const boardIds = { discussions: String(discussionsBoardId) };
-  const columns = { discussions: {}, topics: {}, tasks: {}, decisions: {} };
+  // TOP-UP MODE (existingConfig provided): start the column accumulator from a
+  // DEEP CLONE of the existing mapping so untouched roles/columns/aliases —
+  // including ones this wizard never provisions (formula/mirror, priority, notes,
+  // taskType, …) — survive into the returned MERGED config. First-run
+  // (existingConfig null) keeps the exact empty scaffold as before.
+  const columns = existingConfig?.columns
+    ? JSON.parse(JSON.stringify(existingConfig.columns))
+    : { discussions: {}, topics: {}, tasks: {}, decisions: {} };
+  if (existingConfig) {
+    for (const key of BOARD_ORDER) {
+      if (!columns[key] || typeof columns[key] !== 'object') columns[key] = {};
+    }
+  }
+  // Is a role/alias already mapped in the INCOMING config? Only ever true in
+  // top-up mode; always false on first-run, so every skip below is inert then.
+  const hasId = (v) => Boolean(v && v.id && String(v.id).trim());
 
   // 1) create the missing boards. topics + decisions are always created; tasks is
   // created only in 'create' mode — in 'connect' mode we reuse the chosen board id
   // (its columns are still ensured/reused by title+type in step 2).
   for (const key of BOARD_ORDER) {
     if (PROVISION_SPEC[key].isCurrentBoard) continue;
+    // TOP-UP: a role already mapped to a board id is REUSED — never recreated.
+    if (existingConfig && hasId(existingConfig.boards?.[key])) {
+      boardIds[key] = String(existingConfig.boards[key].id);
+      continue;
+    }
     if (key === 'tasks' && tasks?.mode === 'connect') {
       boardIds.tasks = String(tasks.boardId);
       continue;
@@ -417,6 +445,9 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
     const taskColumnMap =
       key === 'tasks' && tasks?.mode === 'connect' && tasks?.columnMap ? tasks.columnMap : null;
     for (const col of PROVISION_SPEC[key].columns) {
+      // TOP-UP: keep an alias already mapped (cloned above) — do NOT recreate or
+      // attach it; only MISSING columns are completed.
+      if (existingConfig && hasId(existingConfig.columns?.[key]?.[col.alias])) continue;
       const mapped = taskColumnMap ? taskColumnMap[col.alias] : undefined;
       if (mapped && mapped !== '__create__') {
         columns[key][col.alias] = { id: String(mapped), type: col.type, title: col.title, verified: true };
@@ -430,7 +461,9 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   }
 
   // "סוג דיון" — account-level managed dropdown attached to the discussions board.
-  {
+  // TOP-UP: if it's already mapped, keep it — do NOT create/attach a new managed
+  // column (that would mint a duplicate account-level column).
+  if (!(existingConfig && hasId(existingConfig.columns?.discussions?.discussionTypeID))) {
     const t = await ensureManagedTypeColumn(boardIds.discussions, existingByBoard.discussions);
     columns.discussions.discussionTypeID = {
       id: t.id, type: 'dropdown', title: 'סוג דיון', verified: true, managedColumnId: t.managedColumnId,
@@ -442,10 +475,16 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   for (const key of BOARD_ORDER) {
     const subSpec = PROVISION_SPEC[key].subitems;
     if (!subSpec) continue;
+    // TOP-UP: only the subitem columns not already mapped need work; if every one
+    // is already mapped, skip enabling/reading the subitems board entirely.
+    const subMissing = existingConfig
+      ? subSpec.filter((col) => !hasId(existingConfig.columns?.[key]?.[col.alias]))
+      : subSpec;
+    if (!subMissing.length) continue;
     const subBoardId = await ensureSubitemsBoard(boardIds[key]);
     tick('הופעלו תת-פריטים');
     const subExisting = await readColumns(subBoardId);
-    for (const col of subSpec) {
+    for (const col of subMissing) {
       const id = await ensureColumn(subBoardId, subExisting, col.title, col.type, col.defaults);
       columns[key][col.alias] = { id, type: col.type, title: col.title, verified: true, subitems: true };
       tick(`עמודת תת-פריט: ${col.title}`);
@@ -456,17 +495,25 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // reflection auto-created on the target board is mapped as the back-link.
   for (const key of BOARD_ORDER) {
     for (const rel of PROVISION_SPEC[key].relations || []) {
-      const id = await ensureRelationColumn(boardIds[key], existingByBoard[key], rel.title, boardIds[rel.target]);
-      columns[key][rel.alias] = { id, type: 'board_relation', title: rel.title, verified: true };
+      // TOP-UP: keep an already-mapped relation column; otherwise create it.
+      if (!(existingConfig && hasId(existingConfig.columns?.[key]?.[rel.alias]))) {
+        const id = await ensureRelationColumn(boardIds[key], existingByBoard[key], rel.title, boardIds[rel.target]);
+        columns[key][rel.alias] = { id, type: 'board_relation', title: rel.title, verified: true };
+      }
       if (rel.reflection) {
-        const reflId = await mapReflection(boardIds[key], boardIds[rel.target], rel.reflection.title);
-        if (reflId) {
-          columns[rel.reflection.board][rel.reflection.alias] = {
-            id: reflId,
-            type: 'board_relation',
-            title: rel.reflection.title,
-            verified: true,
-          };
+        // TOP-UP: keep an already-mapped reflection; otherwise locate + map it.
+        const reflMapped =
+          existingConfig && hasId(existingConfig.columns?.[rel.reflection.board]?.[rel.reflection.alias]);
+        if (!reflMapped) {
+          const reflId = await mapReflection(boardIds[key], boardIds[rel.target], rel.reflection.title);
+          if (reflId) {
+            columns[rel.reflection.board][rel.reflection.alias] = {
+              id: reflId,
+              type: 'board_relation',
+              title: rel.reflection.title,
+              verified: true,
+            };
+          }
         }
       }
       tick(`קישור: ${rel.title}`);

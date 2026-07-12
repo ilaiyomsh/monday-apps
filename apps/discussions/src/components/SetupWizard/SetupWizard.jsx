@@ -21,6 +21,16 @@ const TASK_FIELD_SPECS = [
 // Sentinel map value meaning "create this column fresh" (nothing existing chosen).
 const CREATE_NEW_VALUE = '__create__';
 
+// Board roles shown (read-only) in TOP-UP mode — the order + Hebrew labels for
+// the "already connected / will be added" status list. Unused on first-run.
+const SETUP_ROLE_ORDER = ['discussions', 'topics', 'tasks', 'decisions'];
+const SETUP_ROLE_LABELS = {
+  discussions: 'דיונים',
+  topics: 'נושאים לדיון',
+  tasks: 'משימות',
+  decisions: 'החלטות',
+};
+
 // Whether a board column of `colType` can back a required field of `fieldType`.
 // long_text fields also accept a plain `text` column; everything else is exact.
 function isColumnCompatible(fieldType, colType) {
@@ -47,10 +57,30 @@ function optionsForField(field, boardColumns) {
  *
  * Errors are logged through the standard funnel (→ toast) AND shown inline so
  * the owner can retry or fall back to manual mapping.
+ *
+ * TOP-UP MODE — passing `existingConfig` ({ boards, columns }) reuses this same
+ * wizard AFTER install (from Settings): already-mapped roles are shown read-only
+ * (never recreated), the tasks create/connect section shows only when tasks is
+ * NOT yet mapped, and on submit provisioning runs config-aware + merges. After a
+ * successful run it calls `onDone()` (the caller closes the panel) instead of
+ * relying on the SettingsGate unmount. `title` overrides the heading. With
+ * `existingConfig` null the behavior is byte-for-byte the first-run flow.
  */
-export function SetupWizard({ onManual }) {
+export function SetupWizard({ onManual, existingConfig = null, onDone = null, title }) {
   const { updateSettings } = useSettings();
   const { context } = useMondayContext();
+
+  // TOP-UP derivations (all inert on first-run, where existingConfig is null).
+  const isTopUp = Boolean(existingConfig);
+  const roleMapped = (key) =>
+    Boolean(existingConfig?.boards?.[key]?.id && String(existingConfig.boards[key].id).trim());
+  const tasksMapped = isTopUp && roleMapped('tasks');
+  const allRolesMapped = isTopUp && SETUP_ROLE_ORDER.every(roleMapped);
+  // The tasks create/connect section is offered on first-run always, and in
+  // top-up only when the tasks board isn't already mapped.
+  const showTasksSection = !isTopUp || !tasksMapped;
+  const secondaryLabel = isTopUp ? 'חזרה' : 'מיפוי ידני';
+  const handleSecondary = isTopUp ? (onDone || onManual || (() => {})) : onManual;
   const [phase, setPhase] = useState('idle'); // idle | running | error
   const [progress, setProgress] = useState({ step: 0, total: 0, label: '' });
   const [errorMsg, setErrorMsg] = useState('');
@@ -161,24 +191,29 @@ export function SetupWizard({ onManual }) {
         discussionsBoardId: context?.boardId,
         workspaceId: context?.workspaceId,
         tasks: { mode: tasksMode, boardId: tasksBoardId, columnMap },
+        // null on first-run (behaves exactly as before); the current mapping in
+        // top-up so provisioning reuses mapped boards + completes only what's missing.
+        existingConfig,
         onProgress: (step, total, label) => setProgress({ step, total, label }),
       });
       await updateSettings(config);
+      // TOP-UP: the caller closes the panel (settings already refreshed). FIRST-RUN:
       // isConfigured now true → SettingsGate re-renders children, unmounting us.
+      if (onDone) onDone();
     } catch (err) {
       if (!err?.__loggedId) logger.error('SetupWizard', 'הקמת הלוחות נכשלה', err);
       setErrorMsg(err?.message || 'אירעה שגיאה בהקמת הלוחות');
       setPhase('error');
     }
-  }, [context, updateSettings, tasksMode, tasksBoardId, columnMap]);
+  }, [context, updateSettings, tasksMode, tasksBoardId, columnMap, existingConfig, onDone]);
 
   const pct =
     progress.total > 0 ? Math.round((progress.step / progress.total) * 100) : 0;
 
   return (
-    <div dir="rtl" className={styles.root}>
+    <div dir="rtl" className={isTopUp ? styles.rootEmbedded : styles.root}>
       <Flex direction="column" align="center" gap={16} className={styles.card}>
-        <Heading type="h2">הגדרת האפליקציה</Heading>
+        <Heading type="h2">{title || 'הגדרת האפליקציה'}</Heading>
 
         {phase === 'running' ? (
           <Flex direction="column" align="center" gap={12} className={styles.section}>
@@ -191,12 +226,32 @@ export function SetupWizard({ onManual }) {
           </Flex>
         ) : (
           <Flex direction="column" align="center" gap={16} className={styles.section}>
-            <Text type="text1" align="center">
-              נראה שזו ההפעלה הראשונה. לחיצה על "צור לוחות אוטומטית" תוסיף את עמודות
-              הדיונים <b>ללוח הנוכחי</b> (לוח הדיונים), ותיצור את לוחות הנושאים
-              וההחלטות עם כל העמודות והקישורים. עבור <b>המשימות</b> אפשר ליצור לוח
-              חדש או לחבר לוח קיים שתבחרו. לחלופין אפשר למפות לוחות קיימים ידנית.
-            </Text>
+            {isTopUp ? (
+              <>
+                <Text type="text1" align="center">
+                  {allRolesMapped
+                    ? 'כל הלוחות כבר קיימים ומחוברים. אפשר להשלים עמודות שחסרות בלוחות — המיפוי הקיים לא ייפגע.'
+                    : 'אפשר להוסיף לוחות שחסרים ולהשלים עמודות חסרות. לוחות שכבר מחוברים יישארו כפי שהם — רק מה שחסר יתווסף.'}
+                </Text>
+                <div className={styles.rolesStatus}>
+                  {SETUP_ROLE_ORDER.map((key) => (
+                    <div key={key} className={styles.roleRow}>
+                      <Text type="text2">{SETUP_ROLE_LABELS[key]}</Text>
+                      <Text type="text2" color={roleMapped(key) ? 'positive' : 'secondary'}>
+                        {roleMapped(key) ? 'כבר מחובר' : 'יתווסף'}
+                      </Text>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <Text type="text1" align="center">
+                נראה שזו ההפעלה הראשונה. לחיצה על "צור לוחות אוטומטית" תוסיף את עמודות
+                הדיונים <b>ללוח הנוכחי</b> (לוח הדיונים), ותיצור את לוחות הנושאים
+                וההחלטות עם כל העמודות והקישורים. עבור <b>המשימות</b> אפשר ליצור לוח
+                חדש או לחבר לוח קיים שתבחרו. לחלופין אפשר למפות לוחות קיימים ידנית.
+              </Text>
+            )}
 
             {phase === 'error' && (
               <Text type="text2" className={styles.error}>
@@ -204,6 +259,7 @@ export function SetupWizard({ onManual }) {
               </Text>
             )}
 
+            {showTasksSection && (
             <div className={styles.tasksChoice}>
               <Text type="text2" weight="bold" align="center">לוח המשימות:</Text>
               <Flex gap={16} align="center" justify="center" className={styles.choiceRow}>
@@ -268,18 +324,23 @@ export function SetupWizard({ onManual }) {
                 </div>
               )}
             </div>
+            )}
 
             <Flex gap={12} align="center" justify="center" className={styles.actions}>
               <Button
                 kind="primary"
                 size="medium"
                 onClick={handleCreate}
-                disabled={tasksMode === 'connect' && (!tasksBoardId || taskColumnsLoading)}
+                disabled={showTasksSection && tasksMode === 'connect' && (!tasksBoardId || taskColumnsLoading)}
               >
-                {phase === 'error' ? 'נסה שוב' : 'צור לוחות אוטומטית'}
+                {phase === 'error'
+                  ? 'נסה שוב'
+                  : isTopUp
+                    ? (allRolesMapped ? 'השלם עמודות חסרות' : 'הוסף והשלם לוחות')
+                    : 'צור לוחות אוטומטית'}
               </Button>
-              <Button kind="secondary" size="medium" onClick={onManual}>
-                מיפוי ידני
+              <Button kind="secondary" size="medium" onClick={handleSecondary}>
+                {secondaryLabel}
               </Button>
             </Flex>
           </Flex>

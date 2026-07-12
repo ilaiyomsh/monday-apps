@@ -11,6 +11,7 @@ import SearchablePicker from './SearchablePicker';
 import PermissionsTab from './PermissionsTab.jsx';
 import ExportTemplateTab from './ExportTemplateTab.jsx';
 import { TemplateManagerModal as TemplatesPanel } from '@generated/components/TemplateManagerModal';
+import { SetupWizard } from '../SetupWizard';
 import styles from './SettingsModal.module.css';
 
 // Seed the editable export-template draft from stored settings, back-filling any
@@ -105,7 +106,7 @@ const PREVIOUS_TASKS_MODE_OPTIONS = [
  * SettingsContext.updateSettings (monday.storage, per instance).
  */
 export function SettingsModal({ isOpen, onClose, onNotify }) {
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, isConfigured } = useSettings();
   const { context } = useMondayContext();
   // settings is null until a mapping is stored; seed the editable draft from an
   // empty scaffold (alias/type/title with blank ids) so first-time config works.
@@ -135,6 +136,11 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
   const [loadingColumnsByBoardId, setLoadingColumnsByBoardId] = useState({});
   const [subitemsBoardByBoard, setSubitemsBoardByBoard] = useState({});
   const [importMsg, setImportMsg] = useState(null);
+  // TOP-UP wizard (post-install "add/complete boards & columns"): when true the
+  // reusable SetupWizard replaces the tabbed mapping UI until the owner finishes
+  // (onDone) or backs out (onManual). Offered only once the instance is already
+  // configured — never during the first-run forced modal.
+  const [showTopUp, setShowTopUp] = useState(false);
   const fileInputRef = useRef(null);
 
   // re-seed local draft from the live settings whenever the modal opens
@@ -151,6 +157,13 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
       setOpenBoardKey(null);
     }
   }, [isOpen, settings, context]);
+
+  // Reset the top-up view whenever the modal closes, so reopening always lands on
+  // the normal Settings view (and it never lingers after first-run config). Keyed
+  // on isOpen ONLY, so a settings change mid-top-up doesn't dismiss the wizard.
+  useEffect(() => {
+    if (!isOpen) setShowTopUp(false);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -487,6 +500,42 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
 
   if (!isOpen) return null;
 
+  // TOP-UP: replace the whole Settings surface with the reusable SetupWizard in
+  // config-aware mode — reusing mapped boards, creating only missing ones, and
+  // completing only missing columns, merged into the existing settings. Both
+  // onDone and onManual return here; updateSettings already ran inside the wizard,
+  // so the re-seed effect refreshes the mapping view with the fresh config.
+  if (showTopUp) {
+    return (
+      <div className={styles.overlay} onClick={(e) => {
+        if (e.target === e.currentTarget) setShowTopUp(false);
+      }}>
+        <div
+          className={`${styles.modal} ${styles.modalFixed}`}
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label="הוספת לוחות ועמודות"
+        >
+          <div className={styles.header}>
+            <button type="button" className={styles.closeButton} onClick={() => setShowTopUp(false)} aria-label="חזרה">
+              ×
+            </button>
+            <Heading type="h4">הוספת / השלמת לוחות ועמודות</Heading>
+          </div>
+          <div className={styles.content}>
+            <SetupWizard
+              existingConfig={{ boards, columns }}
+              title="הוספת / השלמת לוחות ועמודות"
+              onManual={() => setShowTopUp(false)}
+              onDone={() => setShowTopUp(false)}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.overlay} onClick={(e) => {
       if (e.target === e.currentTarget) onClose();
@@ -516,6 +565,22 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
             <TabPanels className={styles.tabPanels}>
               <TabPanel className={styles.tabPanelFill}>
           <div className={styles.body}>
+            {/* Post-install entry to the config-aware SetupWizard. Shown only when
+                the instance is already configured (never in the first-run forced
+                modal, which has the wizard as its landing screen). */}
+            {isConfigured && (
+              <div className={styles.topupEntry}>
+                <div className={styles.topupText}>
+                  <Text type={"text2"} weight={"medium"}>הוספת / השלמת לוחות ועמודות</Text>
+                  <Text type={"text3"} color={"secondary"}>
+                    יצירת לוחות שחסרים והשלמת עמודות חסרות — בלי לפגוע במיפוי הקיים.
+                  </Text>
+                </div>
+                <Button kind={"secondary"} size={"small"} onClick={() => setShowTopUp(true)}>
+                  פתיחת האשף
+                </Button>
+              </div>
+            )}
             {Object.keys(boards || {}).map((boardKey) => (
               <div key={boardKey} className={styles.board}>
                 <button

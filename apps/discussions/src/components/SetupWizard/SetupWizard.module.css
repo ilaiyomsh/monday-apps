@@ -7,6 +7,39 @@
   padding: 24px;
 }
 
+/* Embedded variant for TOP-UP mode (rendered inside the Settings modal, not
+   full-screen): drop the viewport-height min and scroll inside the host panel. */
+.rootEmbedded {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 8px 4px 4px;
+}
+
+/* Read-only board-role status list shown in top-up mode (role name + state). */
+.rolesStatus {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+}
+
+.roleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
 .card {
   max-width: 520px;
   width: 100%;
