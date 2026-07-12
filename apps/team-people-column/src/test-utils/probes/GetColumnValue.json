@@ -1,0 +1,32 @@
+{
+  "data": {
+    "items": [
+      {
+        "id": "12511436134",
+        "name": "משימה 1",
+        "column_values": [
+          {
+            "id": "multiple_person_mm562c71",
+            "type": "people",
+            "text": "",
+            "value": null,
+            "persons_and_teams": []
+          },
+          {
+            "id": "board_relation_mm56dy57",
+            "type": "board_relation",
+            "text": null,
+            "value": null,
+            "linked_item_ids": [
+              "12511510366"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "extensions": {
+    "request_id": "925662d0-fa35-9396-baae-35ffdcb21ac2"
+  }
+}
+

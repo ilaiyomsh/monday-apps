@@ -1,0 +1,27 @@
+{
+  "data": {
+    "items": [
+      {
+        "id": "12511436134",
+        "name": "משימה 1",
+        "column_values": [
+          {
+            "id": "multiple_person_mm562c71",
+            "type": "people",
+            "persons_and_teams": [
+              {
+                "id": "48274917",
+                "kind": "person"
+              }
+            ],
+            "text": "עילי שלם"
+          }
+        ]
+      }
+    ]
+  },
+  "extensions": {
+    "request_id": "db106742-8475-923f-ae1a-990e09cf7d0a"
+  }
+}
+

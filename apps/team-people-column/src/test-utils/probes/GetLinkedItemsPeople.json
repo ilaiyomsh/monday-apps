@@ -1,0 +1,27 @@
+{
+  "data": {
+    "items": [
+      {
+        "id": "12511510366",
+        "name": "פרויקט אלפא",
+        "column_values": [
+          {
+            "id": "multiple_person_mm5694pg",
+            "type": "people",
+            "persons_and_teams": [
+              {
+                "id": "1348990",
+                "kind": "team"
+              }
+            ],
+            "text": "test ilai"
+          }
+        ]
+      }
+    ]
+  },
+  "extensions": {
+    "request_id": "a9e6f12b-f93c-9da2-a5c2-9ed35c3debb8"
+  }
+}
+
