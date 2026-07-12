@@ -7,8 +7,18 @@
   z-index: 4000; /* same layer as NewTaskModal — above tab content + FAB (900) */
   display: flex;
   align-items: flex-start;
-  justify-content: center;
+  /* Round 57 — the quick-create modal used to open dead-center. It's launched
+     from the per-point "+" on the right side of the Topics rows, so it should
+     open toward the RIGHT of the view (between the middle and the right edge),
+     not flush to the edge. In this RTL overlay the inline-start edge IS the
+     right edge, so we pin the modal to the start (right) and add an inline-start
+     gap so it lands between center and the right edge. The gap is viewport-
+     relative + clamped so it never pushes the 520px shell off-screen on narrower
+     widths; the mobile bottom-sheet block below (padding shorthand) resets it. */
+  justify-content: flex-start;
+  direction: rtl;
   padding: 12vh 16px 16px;
+  padding-inline-start: clamp(24px, 18vw, 340px);
   background: rgba(0, 0, 0, 0.32);
 }
 
