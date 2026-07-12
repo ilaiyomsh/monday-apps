@@ -24,6 +24,9 @@ vi.mock('@generated/hooks/useDiscussions', () => ({
     loadMore: () => {},
     softDeleteDiscussion: () => ({ undo: () => {} }),
   }),
+  // The list now also derives its month-filter options from this hook; the gate
+  // tests don't exercise the dropdown, so a stable empty set is enough.
+  useDiscussionMonths: () => ({ months: [], loading: false }),
 }));
 
 vi.mock('@generated/hooks/useStatusOptions.js', () => ({

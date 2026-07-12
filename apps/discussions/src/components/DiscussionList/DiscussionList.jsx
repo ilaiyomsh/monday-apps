@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useDiscussions } from '@generated/hooks/useDiscussions';
+import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscussions';
 import { Button, Text, IconButton } from '@vibe/core';
 import { Calendar, Search, Settings } from '@vibe/icons';
 import { Copy, FileDown, Filter, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
-import { MONTHS_HE, fmtTimeLabel } from '@generated/utils/dateTime.js';
+import { fmtTimeLabel, buildMonthOptions } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
 import { discussionAccentColor } from '@generated/constants/discussionColors.js';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
@@ -440,17 +440,17 @@ export function DiscussionList({
     setCtxMenu({ item, x: e.clientX, y: e.clientY });
   };
 
-  const monthOptions = useMemo(() => {
-    const now = new Date();
-    const options = [];
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = `${MONTHS_HE[d.getMonth()]} ${d.getFullYear()}`;
-      options.push({ value: val, label });
-    }
-    return options;
-  }, []);
+  // Month-filter options: offer EVERY month that actually has a discussion — past,
+  // present OR FUTURE (a discussion dated next month is selectable before that
+  // month arrives) — always including the current month. Built from the distinct
+  // months-with-discussions (one lean date-only fetch) ∪ {current}, newest-first.
+  // The current month stays the DEFAULT selection (see monthFilter above), so the
+  // initial load is unchanged; options just expand once the month set resolves.
+  const { months: monthsWithDiscussions } = useDiscussionMonths();
+  const monthOptions = useMemo(
+    () => buildMonthOptions(monthsWithDiscussions),
+    [monthsWithDiscussions]
+  );
 
   const monthDropdownOptions = useMemo(
     () => [{ value: 'all', label: 'כל החודשים' }, ...monthOptions],

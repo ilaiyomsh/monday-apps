@@ -25,6 +25,10 @@ const PAGE_SIZE = 500;
 // the creator/lead people columns (drive the per-row edit-permission gate in the
 // list — only the discussion creator/lead, or a board owner, may edit/delete).
 const LIST_COLUMNS = ['discussionDateID', 'discussionTypeID', 'discussionCreatorID', 'discussionLeadID'];
+// Date-only column set for the month-filter option fetch (useDiscussionMonths):
+// only each discussion's date is needed to derive the distinct months that have
+// discussions — no need to pull type/people.
+const MONTH_COLUMNS = ['discussionDateID'];
 
 // Boot warm cache (in-memory, session-scoped). App.jsx's boot gate calls
 // prefetchDiscussions() BEFORE it reveals the app and stores the first default
@@ -192,6 +196,55 @@ export function useDiscussions(filters = {}) {
   }, [fetchDiscussions]);
 
   return { items, loading, refetching, loadingMore, cursor, error, loadMore, softDeleteDiscussion, refetch: () => fetchDiscussions(true) };
+}
+
+/**
+ * Distinct 'YYYY-MM' months that have at least one discussion — powers the list's
+ * month filter so ANY month that holds a discussion is offered (past, present OR
+ * future), instead of a fixed trailing window that hid future-dated discussions.
+ *
+ * useDiscussions() fetches only the SELECTED month's discussions (for perf), so
+ * the full month set can't be derived from its items; this runs ONE lean,
+ * date-only query independently — a single page up to PAGE_SIZE, ordered by date
+ * desc so future-dated discussions are always captured — and reduces the dates
+ * to the sorted (newest-first) distinct month set. Never throws: on error it
+ * logs + returns []; buildMonthOptions always re-adds the current month, so the
+ * dropdown is never empty.
+ */
+export function useDiscussionMonths() {
+  const [months, setMonths] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const board = new דיונים1Board();
+        const result = await board
+          .items()
+          .withColumns(MONTH_COLUMNS)
+          .orderBy({ column: 'discussionDateID', direction: 'desc' })
+          .withPagination({ limit: PAGE_SIZE })
+          .execute();
+        const set = new Set();
+        for (const it of result.items || []) {
+          const d = it.discussionDateID;
+          if (d instanceof Date && !Number.isNaN(d.getTime())) {
+            set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+          }
+        }
+        // Newest-first (descending) — 'YYYY-MM' sorts chronologically (zero-padded).
+        if (!cancelled) setMonths([...set].sort().reverse());
+      } catch (err) {
+        if (!cancelled && !err?.__loggedId) logger.warn('useDiscussionMonths', 'טעינת חודשי הדיונים נכשלה', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  return { months, loading };
 }
 
 /**
