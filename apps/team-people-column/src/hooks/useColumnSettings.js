@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 import mondayService from '../services/mondayService.js';
 import logger from '../utils/logger.js';
 import { migrateSettings } from '../domain/settingsSchema.js';
+import { cacheGet, cacheSet, cacheRemove } from '../utils/swrCache.js';
 
 // monday.storage transiently answers success:true + value:null for a key that
 // IS populated (the "false-empty" first-read race that shipped a blank
@@ -10,6 +11,12 @@ import { migrateSettings } from '../domain/settingsSchema.js';
 // trusted as "unconfigured": read once, and if null, retry ONCE after this
 // delay before deciding.
 const RETRY_DELAY_MS = 350;
+
+// Settings change rarely; a long TTL keeps re-opens instant. The background
+// revalidation still corrects a stale entry within one open.
+const SETTINGS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+const settingsCacheKey = (boardId, columnId) => `settings:${boardId}:${columnId}`;
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -29,12 +36,24 @@ export default function useColumnSettings(context) {
   const boardId = context?.boardId;
   const columnId = context?.columnId;
 
-  const [settings, setSettings] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Stale-while-revalidate: paint instantly from the local cache (the dialog
+  // iframe reloads on every open, so monday.storage's round-trip + the 350ms
+  // false-empty retry otherwise gate EVERY open), then let the real storage
+  // read below confirm or correct it.
+  const cached = boardId && columnId
+    ? cacheGet(settingsCacheKey(boardId, columnId), { maxAgeMs: SETTINGS_CACHE_MAX_AGE_MS })
+    : null;
+
+  const [settings, setSettings] = useState(cached);
+  const [loading, setLoading] = useState(cached == null);
+  const hadCacheRef = useRef(cached != null);
+
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // With a warm cache the picker is already interactive — revalidate quietly
+    // instead of flashing the loading state.
+    if (!hadCacheRef.current) setLoading(true);
     setError(null);
     try {
       let raw = await mondayService.getColumnConfig(boardId, columnId);
@@ -44,11 +63,20 @@ export default function useColumnSettings(context) {
         await wait(RETRY_DELAY_MS);
         raw = await mondayService.getColumnConfig(boardId, columnId);
       }
-      setSettings(migrateSettings(raw));
+      const migrated = migrateSettings(raw);
+      setSettings(migrated);
+      if (migrated) {
+        cacheSet(settingsCacheKey(boardId, columnId), migrated);
+      } else {
+        cacheRemove(settingsCacheKey(boardId, columnId));
+      }
     } catch (err) {
       logger.error('useColumnSettings', 'Failed to load column settings from storage', err);
-      setError(err);
-      setSettings(null);
+      // A failed revalidation must not blank an already-painted cached UI.
+      if (!hadCacheRef.current) {
+        setError(err);
+        setSettings(null);
+      }
     } finally {
       setLoading(false);
     }
