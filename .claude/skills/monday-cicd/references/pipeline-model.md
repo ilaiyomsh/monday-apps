@@ -65,6 +65,8 @@ Build-dir flag (`-d`) must match the app's actual build output dir (e.g. Vite's 
 
 Manual/emergency fallback only, **not** part of the pipeline: `mapps app:promote -a <APP_ID> -i <VERSION_ID>` (used e.g. when GitHub is down).
 
+**Red deploy run ≠ failed deploy (server-side apps, incident-verified 2026-07-12):** on monday-code pushes the CLI's wait-loop can exit 1 with "Deployment in progress: building-app [FAILED: Unexpected error occurred while communicating with the remote server]" while the remote build keeps running and SUCCEEDS (~10 min end-to-end). Before rerunning the workflow or fixing forward, check the truth: `mapps app-version:list -i <APP_ID>` → `mapps code:status -i <VERSION_ID>` (`building-app` → `deploying-app` → `successful`). A rerun while the build is in flight fails fast with the same generic error. (Seen on axis-sync-calender draft after the gateway-PR merge.)
+
 ## 5. Gate Definitions
 
 **Gate 1 — CI** (`ci.yml`, `pull_request: branches: [develop, main]`, blocks merge on failure):
