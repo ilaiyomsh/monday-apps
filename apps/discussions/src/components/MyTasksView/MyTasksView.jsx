@@ -19,7 +19,9 @@ import { groupMyTasks, NO_DISCUSSION } from './grouping.js';
 import { BuilderControl } from './controls/BuilderControl.jsx';
 import { Segment } from './controls/Segment.jsx';
 import { BuilderIcon } from './controls/BuilderIcon.jsx';
+import { HideColumnsControl } from './controls/HideColumnsControl.jsx';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import { getColumns } from '@api/board-config-store.js';
 import {
   SORT_COLUMNS, GROUP_COLUMNS, FILTER_COLUMNS, OP_LABEL, DEADLINE_RANGES,
   sortTasks, filterTasks, filterCount, emptyFilter, DEFAULT_SORT, DEFAULT_GROUP,
@@ -90,6 +92,42 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       ? savedView.filterRows.filter((k) => FILTER_COLUMNS.some((c) => c.key === k))
       : [];
   });
+
+  // --- Hide columns (round 46) ------------------------------------------------
+  // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
+  // site, persisted to the SHARED saved view
+  // (settings.preferences.savedViews.myTasks.hiddenColumns) so an owner's "Save
+  // to this view" applies for everyone. The primary name column is never
+  // hideable. The saved set is LOAD-TIME state (like the other saved-view
+  // controls) and is applied live to every table below.
+  // Available columns for the Hide panel (plain per-render list, mirroring the
+  // table's own getColumns-derived defs — see MyTasksTable.baseDefs).
+  const taskCols = getColumns('tasks') || {};
+  const columnList = [
+    { key: 'name', label: t('myTasks.colName'), icon: 'text', locked: true },
+    taskCols.deadlineID?.id && { key: 'deadline', label: t('myTasks.colDeadline'), icon: 'date' },
+    taskCols.priorityID?.id && { key: 'priority', label: t('myTasks.colPriority'), icon: 'status' },
+    { key: 'status', label: t('myTasks.colStatus'), icon: 'status' },
+    taskCols.taskNotesID?.id && { key: 'notes', label: t('myTasks.colNotes'), icon: 'text' },
+    { key: 'discussion', label: t('myTasks.colDiscussion'), icon: 'relation' },
+  ].filter(Boolean);
+  const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
+  const [hiddenColumns, setHiddenColumns] = useState(
+    () => new Set(Array.isArray(savedView?.hiddenColumns) ? savedView.hiddenColumns : [])
+  );
+  const toggleColumn = useCallback((key) => setHiddenColumns((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  }), []);
+  const showAllColumns = useCallback((show) => {
+    setHiddenColumns(show ? new Set() : new Set(hideableKeys));
+  }, [hideableKeys]);
+  const saveHiddenColumns = useCallback(() => {
+    saveView({ hiddenColumns: [...hiddenColumns] });
+    onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
+  }, [saveView, hiddenColumns, onNotify]);
+
   const [collapsed, setCollapsed] = useState({});
   const [discDateMap, setDiscDateMap] = useState({});
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -600,6 +638,18 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
           renderBody={renderGroupBody}
         />
 
+        {/* Hide columns (round 46) — owners only. Non-owners never see it and
+            always get the saved config applied. */}
+        {canManageSettings && (
+          <HideColumnsControl
+            columns={columnList}
+            hidden={hiddenColumns}
+            onToggle={toggleColumn}
+            onToggleAll={showAllColumns}
+            onSave={canSaveView ? saveHiddenColumns : null}
+          />
+        )}
+
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
       </div>
 
@@ -656,6 +706,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                     tasks={grp.items}
                     color={grp.color}
                     canManageSettings={canManageSettings}
+                    hiddenColumns={hiddenColumns}
                     canTask={canTask}
                     onStatusChange={applyStatus}
                     onPriorityChange={applyPriority}

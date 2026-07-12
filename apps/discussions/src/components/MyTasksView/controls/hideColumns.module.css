@@ -1,0 +1,100 @@
+/*
+ * "Display columns" (Hide) popover — portal panel (z-index 10000) for the
+ * My Tasks / My Decisions toolbars. CSS Modules here use
+ * classNameStrategy:'non-scoped' (see vite.config), so every class name is
+ * GLOBAL — all classes are prefixed `hc` to avoid colliding with other modules.
+ * The pill itself reuses builder.module.css (bPill), so only the panel is here.
+ */
+.hcPanel {
+  direction: ltr;
+  box-sizing: border-box;
+  max-width: calc(100vw - 16px);
+  background: var(--primary-background-color, #fff);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--ui-border-color, #e6e9ef);
+  padding: 12px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+}
+
+.hcHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.hcTitle { font-size: 15px; font-weight: 700; }
+.hcSave {
+  background: none;
+  border: none;
+  color: var(--primary-color, #0073ea);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-family);
+  padding: 4px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.hcSave:hover { background: var(--primary-selected-color, #e6f1ff); }
+
+.hcSearchRow { margin-bottom: 8px; }
+.hcSearch {
+  width: 100%;
+  height: 34px;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 13.5px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  background: var(--primary-background-color, #fff);
+}
+.hcSearch:focus { outline: none; border-color: var(--primary-color, #0073ea); }
+
+.hcList { max-height: 280px; overflow-y: auto; margin-top: 4px; }
+.hcRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-radius: 6px;
+}
+.hcRow:hover { background: var(--primary-background-hover-color, #f0f1f3); }
+.hcMasterRow {
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+}
+.hcMasterRow:hover { background: none; }
+.hcMasterLabel { font-size: 13px; font-weight: 600; color: var(--secondary-text-color, #676879); }
+
+.hcRowMain {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  text-align: start;
+}
+.hcRowMain:disabled { cursor: default; }
+.hcIcon { flex: none; width: 18px; height: 18px; color: var(--secondary-text-color, #676879); }
+.hcLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+}
+.hcRowLocked .hcLabel { color: var(--secondary-text-color, #676879); }
+.hcEmpty { color: var(--secondary-text-color, #676879); font-size: 13px; padding: 8px 4px; }
