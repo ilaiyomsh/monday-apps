@@ -104,6 +104,38 @@ describe('decisions feature render smoke', () => {
     const [kind, payload] = onCreate.mock.calls[0];
     expect(kind).toBe('decision');
     expect(payload.text).toBe('החלטה חדשה לבדיקה');
+    // Round 52 — the quick-create decision form no longer collects status/decider.
+    expect(payload).not.toHaveProperty('status');
+  });
+
+  it('QuickCreateModal decision mode omits the status + decider fields (round 52)', () => {
+    render(
+      <QuickCreateModal
+        open initialMode="decision" scopedPoint={{ id: 'p1', name: 'נקודה' }}
+        discussion={{ name: 'ישיבת הנהלה' }} onClose={vi.fn()} onCreate={vi.fn()}
+      />
+    );
+    // The decision wording input is present…
+    expect(screen.getByPlaceholderText('מה ההחלטה? *')).toBeInTheDocument();
+    // …but NOT the status ("סטאטוס") or decider ("הגורם המחליט") fields, and
+    // neither picker is mounted in decision mode.
+    expect(screen.queryByText(/סטאטוס/)).toBeNull();
+    expect(screen.queryByText(/הגורם המחליט/)).toBeNull();
+    expect(screen.queryByTestId('person-picker')).toBeNull();
+    expect(screen.queryByTestId('date-picker')).toBeNull();
+  });
+
+  it('QuickCreateModal task mode still shows אחראי + דד ליין (round 52)', () => {
+    render(
+      <QuickCreateModal
+        open initialMode="task" scopedPoint={{ id: 'p1', name: 'נקודה' }}
+        discussion={{ name: 'ישיבת הנהלה' }} onClose={vi.fn()} onCreate={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/אחראי/)).toBeInTheDocument();
+    expect(screen.getByText(/דד ליין/)).toBeInTheDocument();
+    expect(screen.getByTestId('person-picker')).toBeInTheDocument();
+    expect(screen.getByTestId('date-picker')).toBeInTheDocument();
   });
 
   it('MyDecisionsView shows the unmapped-board empty state', () => {

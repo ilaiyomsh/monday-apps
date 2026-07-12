@@ -66,4 +66,27 @@ describe('TopicPointRow — fixed decisions/tasks table structure (smoke)', () =
     fireEvent.click(taskCounter);
     expect(onOpenTasks).toHaveBeenCalledWith(POINT);
   });
+
+  it('shows the create-progress overlay (pending) then the success ✓ (round 52)', () => {
+    // Query the CreateProgressBar by its unique data-variant — dnd-kit injects
+    // its OWN role="status" live region into the row, so matching on role alone
+    // is ambiguous. Pending on the decisions cell → an in-flight bar ("יוצר…").
+    const { unmount } = renderRow({ decisionCreateStatus: 'pending' });
+    const pending = document.querySelector('[data-variant="decision"]');
+    expect(pending).toBeTruthy();
+    expect(pending.getAttribute('aria-label')).toBe('יוצר…');
+    unmount();
+
+    // Success on the tasks cell → a green ✓ with the "נוצרה" caption.
+    renderRow({ taskCreateStatus: 'success' });
+    const done = document.querySelector('[data-variant="task"]');
+    expect(done).toBeTruthy();
+    expect(done.getAttribute('aria-label')).toBe('נוצרה בהצלחה');
+    expect(done.textContent).toContain('נוצרה');
+  });
+
+  it('renders NO progress overlay when no create is in flight', () => {
+    renderRow({});
+    expect(document.querySelector('[data-variant]')).toBeNull();
+  });
 });

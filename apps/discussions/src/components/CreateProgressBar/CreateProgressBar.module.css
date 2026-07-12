@@ -1,0 +1,103 @@
+/* Slim create-progress overlay for a Topics point row's החלטות / משימות cell.
+   The host cell (.linkCell in TopicPointRow) is position:relative, so this
+   fills it (inset:0), covering the "+" / counter while a create is in flight
+   and until the brief success / error state clears. Colors use app tokens; the
+   pending sweep reuses the Twyst brand gradient (indigo → magenta → peach). */
+.wrap {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 8px;
+  background: var(--primary-background-color, #ffffff);
+  animation: cpb-fade 0.16s ease both;
+}
+
+/* The bar track + fill. */
+.track {
+  position: relative;
+  width: 80%;
+  max-width: 120px;
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--ui-border-color, #e6e9ef);
+}
+.fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  border-radius: 999px;
+  transform-origin: left center;
+}
+
+/* PENDING — an indeterminate segment sweeping across in the Twyst gradient. */
+.pending .fill {
+  width: 42%;
+  background: linear-gradient(90deg, #6161FF 0%, #E271FF 52%, #FFA88D 100%);
+  animation: cpb-sweep 1.05s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+/* SUCCESS — solid green, grows to full from the start edge. */
+.success .fill {
+  background: var(--positive-color, #00c875);
+  animation: cpb-grow 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ERROR — solid red, full width. */
+.error .fill {
+  background: var(--negative-color, #d83a52);
+  animation: cpb-grow 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Tiny status caption + icon under the bar. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.pending .badge { color: var(--secondary-text-color, #676879); }
+.success .badge {
+  color: var(--positive-color, #00c875);
+  animation: cpb-pop 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.error .badge { color: var(--negative-color, #d83a52); }
+.badgeText { display: inline-block; }
+
+@keyframes cpb-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes cpb-sweep {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+@keyframes cpb-grow {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes cpb-pop {
+  0% { opacity: 0; transform: scale(0.6); }
+  60% { opacity: 1; transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Respect reduced-motion: keep the states, drop the motion. */
+@media (prefers-reduced-motion: reduce) {
+  .wrap, .fill, .badge {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .pending .fill { width: 100%; }
+}

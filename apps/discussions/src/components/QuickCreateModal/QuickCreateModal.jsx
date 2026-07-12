@@ -2,104 +2,18 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Text, Button, Flex } from '@vibe/core';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
-import { useStatusOptions } from '@generated/hooks/useStatusOptions.js';
 import styles from './QuickCreateModal.module.css';
 
 /**
- * Small inline status select (decision-status field). Options come from the
- * MAPPED decisions status column via useStatusOptions — never hardcoded.
- * Renders a bordered trigger ("בחר" + caret per the approved mockup) and an
- * absolutely-positioned menu inside the field (the modal shell keeps
- * `overflow: visible`, mirroring NewTaskModal, so the menu escapes cleanly).
- */
-function StatusSelect({ options, colorById, labelById, value, onChange, loading }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef(null);
-
-  // Close on click-outside / Escape (stopPropagation so Escape doesn't also
-  // close the whole modal while the menu is the active layer).
-  useEffect(() => {
-    if (!open) return undefined;
-    const onDown = (e) => {
-      if (rootRef.current?.contains(e.target)) return;
-      setOpen(false);
-    };
-    const onEsc = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        setOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onEsc, true);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onEsc, true);
-    };
-  }, [open]);
-
-  const hasOptions = options.length > 0;
-  const selectedLabel = value != null ? labelById[value] : null;
-  const selectedColor = value != null ? colorById[value] : null;
-
-  return (
-    <div className={styles.selectRoot} ref={rootRef}>
-      <button
-        type="button"
-        className={styles.selectTrigger}
-        onClick={() => hasOptions && setOpen((o) => !o)}
-        disabled={!hasOptions}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        title={!hasOptions && !loading ? 'עמודת הסטאטוס של ההחלטות טרם מופתה בהגדרות' : undefined}
-      >
-        {selectedLabel ? (
-          <span className={styles.selectValue}>
-            <span className={styles.dot} style={{ background: selectedColor || 'var(--ui-border-color, #c3c6d4)' }} />
-            <span className={styles.selectText}>{selectedLabel}</span>
-          </span>
-        ) : (
-          <span className={styles.selectPlaceholder}>{loading ? 'טוען…' : 'בחר'}</span>
-        )}
-        <span className={styles.caret} aria-hidden="true">▾</span>
-      </button>
-      {open && (
-        <div className={styles.selectMenu} role="listbox">
-          {value != null && (
-            <button
-              type="button"
-              role="option"
-              aria-selected={false}
-              className={styles.selectItem}
-              onClick={() => { onChange(null); setOpen(false); }}
-            >
-              <span className={`${styles.dot} ${styles.dotEmpty}`} />
-              <span className={styles.selectItemText}>ללא סטאטוס</span>
-            </button>
-          )}
-          {options.map((opt) => (
-            <button
-              key={opt.id}
-              type="button"
-              role="option"
-              aria-selected={opt.id === value}
-              className={`${styles.selectItem} ${opt.id === value ? styles.selectItemActive : ''}`}
-              onClick={() => { onChange(opt.id); setOpen(false); }}
-            >
-              <span className={styles.dot} style={{ background: opt.color || 'var(--ui-border-color, #c3c6d4)' }} />
-              <span className={styles.selectItemText}>{opt.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
  * Quick-create modal opened by the global FAB (and by per-point "+" actions):
- * one big underlined text field + two optional side-by-side fields, with a
- * החלטה/משימה segmented toggle when NOT point-scoped (mockup: fabShowToggle).
+ * one big underlined text field with a החלטה/משימה segmented toggle when NOT
+ * point-scoped (mockup: fabShowToggle).
+ *
+ * The DECISION form is intentionally minimal — just the wording. Its status
+ * ("סטאטוס") and decider ("הגורם המחליט") are NOT collected here (round 52): a
+ * decision is created quickly from a topic point and those two fields are filled
+ * in later from the Decisions view. The TASK form keeps its two optional fields:
+ * אחראי (assignee) + דד ליין (deadline).
  *
  * PRESENTATION-ONLY: on submit it fires `onCreate(kind, payload)` and closes —
  * the PARENT applies defaults (affected=participants etc.) and performs the
@@ -115,7 +29,7 @@ function StatusSelect({ options, colorById, labelById, value, onChange, loading 
  *                   modal itself doesn't consume it (kept for the contract)
  *   currentUser   — same: parent-side defaults only
  *   onClose()     — close without creating
- *   onCreate(kind, { text, person: people[]|null, status: labelId|null, deadline: Date|null })
+ *   onCreate(kind, { text, person: people[]|null, deadline: Date|null })
  *   allowTask / allowDecision — disable that side of the toggle (default true)
  */
 export function QuickCreateModal({
@@ -133,18 +47,8 @@ export function QuickCreateModal({
   const [mode, setMode] = useState('task');
   const [text, setText] = useState('');
   const [person, setPerson] = useState([]);
-  const [statusId, setStatusId] = useState(null);
   const [deadline, setDeadline] = useState(null);
   const inputRef = useRef(null);
-
-  // useStatusOptions self-guards when the decisions board/column is unmapped
-  // (no boardId+colId → no query, empty options), so this is degradation-safe.
-  const {
-    options: statusOptions,
-    labelById: statusLabelById,
-    colorById: statusColorById,
-    loading: statusLoading,
-  } = useStatusOptions('decisions', 'decisionStatusID');
 
   // Reset per open; clamp the initial mode to an allowed side.
   useEffect(() => {
@@ -155,7 +59,6 @@ export function QuickCreateModal({
     setMode(next);
     setText('');
     setPerson([]);
-    setStatusId(null);
     setDeadline(null);
   }, [open, initialMode, allowDecision, allowTask]);
 
@@ -187,12 +90,12 @@ export function QuickCreateModal({
   const submit = () => {
     const trimmed = text.trim();
     if (!trimmed) return;
-    // Only the field relevant to the created kind is emitted; the sibling
-    // field (kept across toggle flips for convenience) goes out as null.
+    // DECISION: wording only (no status/decider — set later in the Decisions
+    // view). TASK: optional assignee + deadline. The sibling field that doesn't
+    // apply to the created kind goes out as null.
     onCreate(isDecision ? 'decision' : 'task', {
       text: trimmed,
-      person: person.length ? person : null,
-      status: isDecision ? statusId : null,
+      person: !isDecision && person.length ? person : null,
       deadline: isDecision ? null : deadline,
     });
     onClose();
@@ -200,8 +103,8 @@ export function QuickCreateModal({
 
   // Enter ANYWHERE in the form submits — same as clicking "צור החלטה"/"צור משימה"
   // — while RESPECTING the button's disabled state (canSubmit). Skipped for
-  // textareas, buttons (native activation; incl. the StatusSelect trigger), and
-  // any control inside the open status listbox, so choosing a status with Enter
+  // textareas and buttons (native activation), and for any control inside an
+  // open listbox/menu (a portaled picker), so choosing a value with Enter
   // doesn't also submit. PersonPicker / date popovers are portaled, so their
   // Enter never bubbles here.
   const onFormKeyDown = (e) => {
@@ -268,45 +171,37 @@ export function QuickCreateModal({
           />
           {scopeLabel && <div className={styles.scopeCaption}>{scopeLabel}</div>}
 
-          <div className={styles.row}>
-            <div className={styles.field}>
-              <Text type="text2" className={styles.label}>
-                {isDecision ? 'הגורם המחליט' : 'אחראי'}{' '}
-                <span className={styles.optional}>(אופציונלי)</span>
-              </Text>
-              <PersonPicker
-                selected={person}
-                onChange={setPerson}
-                bordered
-                closeOnSelect
-                single
-                boardKey={isDecision ? 'decisions' : 'tasks'}
-              />
-            </div>
-            <div className={styles.field}>
-              <Text type="text2" className={styles.label}>
-                {isDecision ? 'סטאטוס' : 'דד ליין'}{' '}
-                <span className={styles.optional}>(אופציונלי)</span>
-              </Text>
-              {isDecision ? (
-                <StatusSelect
-                  options={statusOptions}
-                  colorById={statusColorById}
-                  labelById={statusLabelById}
-                  value={statusId}
-                  onChange={setStatusId}
-                  loading={statusLoading}
+          {/* TASK-only optional fields (אחראי + דד ליין). The DECISION form is
+              intentionally just the wording — its status + decider are set later
+              from the Decisions view (round 52). */}
+          {!isDecision && (
+            <div className={styles.row}>
+              <div className={styles.field}>
+                <Text type="text2" className={styles.label}>
+                  אחראי <span className={styles.optional}>(אופציונלי)</span>
+                </Text>
+                <PersonPicker
+                  selected={person}
+                  onChange={setPerson}
+                  bordered
+                  closeOnSelect
+                  single
+                  boardKey="tasks"
                 />
-              ) : (
+              </div>
+              <div className={styles.field}>
+                <Text type="text2" className={styles.label}>
+                  דד ליין <span className={styles.optional}>(אופציונלי)</span>
+                </Text>
                 <DatePickerPopover
                   variant="field"
                   zIndex={4200}
                   value={deadline}
                   onChange={(d) => setDeadline(d || null)}
                 />
-              )}
+              </div>
             </div>
-          </div>
+          )}
 
           <Flex gap={8} justify="end" className={styles.footer}>
             <Button kind="tertiary" onClick={onClose}>

@@ -74,4 +74,12 @@ describe('TopicsTab — toolbar collapse-all alignment', () => {
     expect(screen.queryByLabelText('קפל הכל')).toBeNull();
     expect(screen.queryByLabelText('פתח הכל')).toBeNull();
   });
+
+  it('renders the discussed column header as "#" (round 52 rename of נידונה)', () => {
+    render(<TopicsTab discussion={discussion} canEdit />);
+    // The open topic's column-header row shows the check column's title as "#",
+    // and the old "נידונה" label is gone from the header.
+    expect(screen.getByText('#')).toBeTruthy();
+    expect(screen.queryByText('נידונה')).toBeNull();
+  });
 });
