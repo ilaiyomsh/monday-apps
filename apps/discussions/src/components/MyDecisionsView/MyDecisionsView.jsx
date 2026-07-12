@@ -510,16 +510,20 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   const showSearch = searchOpen || search.length > 0;
   const needDiscDates = group.col === 'discussion' && (group.order === 'dateAsc' || group.order === 'dateDesc');
 
-  // Back button element (no wrapper). The mapped view renders it inline in the
-  // single toolbar row, immediately after the sub-tabs toggle (round 40); the
-  // unmapped view wraps it alone in a .topBar row.
-  const backButton = onBackToDiscussions ? (
-    <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
-      <span className={styles.backBtnInner}>
-        <ArrowLeft size={16} aria-hidden="true" />
-        בחזרה לתצוגת הדיונים
-      </span>
-    </Button>
+  // Back-to-discussions control (round 53a) — a compact, icon-only LEFT-arrow
+  // button that replaces the old text button. The mapped view renders it inline
+  // to the LEFT of the view title; the unmapped fallback (which has no title)
+  // keeps it in its own .topBar row so there is still a way back.
+  const backArrow = onBackToDiscussions ? (
+    <button
+      type="button"
+      className={styles.backArrowBtn}
+      onClick={onBackToDiscussions}
+      aria-label="בחזרה לתצוגת הדיונים"
+      title="בחזרה לתצוגת הדיונים"
+    >
+      <ArrowLeft size={20} aria-hidden="true" />
+    </button>
   ) : null;
 
   // ---- unmapped decisions BOARD: the whole surface is inert (hook fired no
@@ -527,7 +531,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   if (!boardMapped) {
     return (
       <div className={styles.root}>
-        {backButton && <div className={styles.topBar} dir="ltr">{backButton}</div>}
+        {backArrow && <div className={styles.topBar} dir="ltr">{backArrow}</div>}
         <div className={styles.empty}>
           <div className={styles.emptyTitle}>לוח ההחלטות טרם הוגדר</div>
           <div className={styles.emptyHint}>מפו אותו בהגדרות</div>
@@ -540,23 +544,23 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {/* View title (round 40 typography; round 41 left-aligned) — styled like
-          the discussion-detail title (DiscussionCard's .title: font-size-h2 /
-          bold / line-height 1.2), now flush to the toolbar's left padding. */}
-      <h1 className={styles.viewTitle}>ההחלטות שלי</h1>
+      {/* View title (round 40 typography; round 41 left-aligned) with a compact
+          left-arrow "back to discussions" icon button to its LEFT (round 53a,
+          replacing the old text button that lived in the toolbar). The header is
+          direction:ltr so the arrow sits on the left, the title to its right. */}
+      <div className={styles.viewHeader}>
+        {backArrow}
+        <h1 className={styles.viewTitle}>ההחלטות שלי</h1>
+      </div>
 
-      {/* Single toolbar row (round 35 baseline restored in round 41): dir="ltr"
-          and flush-LEFT, reading (left→right) [בחזרה לתצוגת הדיונים]
+      {/* Single toolbar row (round 35 baseline; round 41 flush-LEFT): dir="ltr"
+          and flush-LEFT, reading (left→right)
           [toggle שקיבלתי|שמשפיעות עליי][Search][Filter][Sort][Group by][collapse].
-          Round 41 reverts round 40's dir="rtl" right-shift and makes the back
-          button the LEFTMOST control, immediately left of the sub-tabs toggle.
-          The toggle keeps its OWN dir="rtl" track, so "החלטות שקיבלתי" still
-          renders on its left and stays the default. */}
+          Round 53a moved the back control out of the toolbar to a left-arrow
+          icon button beside the view title, so the sub-tabs toggle is now the
+          leftmost toolbar control. The toggle keeps its OWN dir="rtl" track, so
+          "החלטות שקיבלתי" still renders on its left and stays the default. */}
       <div className={styles.toolbar} dir="ltr">
-        {/* Back to discussions — the LEFTMOST control, immediately to the LEFT
-            of the sub-tabs toggle (round 41 reposition). */}
-        {backButton}
-
         {/* Sub-tabs: which people column scopes the server-side query. Default
             'decider' ("החלטות שקיבלתי") renders on the LEFT of the track (its own
             rtl direction + SUB_TABS order) — round-27 behavior preserved. */}

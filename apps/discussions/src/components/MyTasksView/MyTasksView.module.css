@@ -34,7 +34,6 @@
 .viewTitle {
   flex: none;
   margin: 0;
-  padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
   font-size: var(--font-size-h2, 28px);
   font-weight: var(--font-weight-bold, 700);
   line-height: 1.2;
@@ -47,11 +46,38 @@
   font-size: 22px;
 }
 
-/* Back-button content: left-pointing arrow + label, inline (matches MyDecisionsView). */
-.backBtnInner {
+/* View header (round 53a): the view title with a compact, icon-only left-arrow
+   "back to discussions" button to its LEFT (replaces the old text button that
+   lived in the toolbar). direction:ltr so the arrow (first child) sits on the
+   LEFT and the RTL title reads to its right; the 16px inline padding — moved off
+   .viewTitle — keeps the arrow lined up with the toolbar below. */
+.viewHeader {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+  direction: ltr;
+  padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+}
+
+/* Compact, borderless back-arrow icon button — monday-style subtle hover,
+   vertically centered with the title. */
+.backArrowBtn {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  cursor: pointer;
+}
+.backArrowBtn:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
 }
 
 /* THE single scroll container — both axes. All group tables live inside one
