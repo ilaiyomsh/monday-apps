@@ -295,9 +295,19 @@ export function TopicPointRow({
             {excluded ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
         )}
-        {/* monday "updates" speech-bubble icon at the trailing edge of the name
-            cell — identical affordance to the Tasks name cell (opens the point's
-            item card on the Updates pane). */}
+        {/* Creator avatar (round 60) — the point creator's avatar, revealed only
+            on row hover, placed just BEFORE the updates bubble so the bubble stays
+            the TRAILING (right-most) element of the name cell and the avatar sits
+            directly to its LEFT. Rendered only when the point has a recorded
+            creator (point.creatorId); points without one show nothing. */}
+        {point.creatorId && (
+          <span className={styles.creatorAvatar}>
+            <CreatorAvatar userId={point.creatorId} usersById={usersById} size="small" />
+          </span>
+        )}
+        {/* monday "updates" speech-bubble icon — kept LAST so it is the trailing
+            (right-most) element of the name cell (opens the point's item card on
+            the Updates pane). */}
         <button
           type="button"
           className={styles.updatesBtn}
@@ -307,16 +317,6 @@ export function TopicPointRow({
         >
           <Update size={18} />
         </button>
-        {/* Creator avatar (round 58) — the point creator's avatar, revealed only
-            on row hover and pinned just LEFT of the updates bubble (it's the last
-            child, so leftmost in this RTL name cell). Rendered only when the point
-            has a recorded creator (point.creatorId); points without one show
-            nothing, at rest or on hover. */}
-        {point.creatorId && (
-          <span className={styles.creatorAvatar}>
-            <CreatorAvatar userId={point.creatorId} usersById={usersById} size="small" />
-          </span>
-        )}
       </div>
 
       {/* האם נידונה — checkbox (round 47: hideable via the columns set) */}
