@@ -1,0 +1,75 @@
+{
+  "data": {
+    "boards": [
+      {
+        "id": "18421604809",
+        "name": "WZ-TeamPeople-source",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {},
+            "settings_str": "{}"
+          },
+          {
+            "id": "multiple_person_mm562c71",
+            "title": "אחראי",
+            "type": "people",
+            "settings": {},
+            "settings_str": "{}"
+          },
+          {
+            "id": "board_relation_mm56dy57",
+            "title": "פרויקט",
+            "type": "board_relation",
+            "settings": {
+              "boardIds": [
+                18421604791
+              ],
+              "allowMultipleItems": false,
+              "allowCreateReflectionColumn": true
+            },
+            "settings_str": "{\"boardIds\":[18421604791],\"allowMultipleItems\":false,\"allowCreateReflectionColumn\":true}"
+          }
+        ]
+      },
+      {
+        "id": "18421604791",
+        "name": "WZ-TeamPeople-target",
+        "columns": [
+          {
+            "id": "name",
+            "title": "Name",
+            "type": "name",
+            "settings": {},
+            "settings_str": "{}"
+          },
+          {
+            "id": "multiple_person_mm5694pg",
+            "title": "צוות אחראי",
+            "type": "people",
+            "settings": {},
+            "settings_str": "{}"
+          },
+          {
+            "id": "board_relation_mm56pg3w",
+            "title": "link to WZ-TeamPeople-source",
+            "type": "board_relation",
+            "settings": {
+              "allowCreateReflectionColumn": true,
+              "boardIds": [
+                18421604809
+              ]
+            },
+            "settings_str": "{\"allowCreateReflectionColumn\":true,\"boardIds\":[18421604809]}"
+          }
+        ]
+      }
+    ]
+  },
+  "extensions": {
+    "request_id": "e3b33120-f025-954a-b37c-3dc03f97be42"
+  }
+}
+
