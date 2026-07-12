@@ -56,6 +56,27 @@ Write rules that apply to every column type:
   {id settings_json}`; titles are unreliable. `create_labels_if_missing` does NOT work on
   managed columns. A new label's `index` must exceed the max of ALL existing
   `labels_positions_v2` positions (including orphaned ones).
+  Verified 2026-07-12 for managed DROPDOWN columns (scratch `create_dropdown_managed_column`
+  + `attach_dropdown_managed_column` repro): `create_item` with `create_labels_if_missing:
+  true` and a label missing from the managed column fails with `ColumnValueException:
+  "The dropdown label 'X' does not exist, possible labels are: {...}"` — the item is NOT
+  created. The identical call on a regular dropdown column succeeds and creates the label.
+  Through the seamless iframe SDK this surfaces as detail-stripped `"Graphql validation
+  errors"` (errors-and-auth.md). The board-level column query shows NO managed indicator
+  (`settings`/`settings_str` are byte-shape identical to a regular dropdown) — detection
+  only via the account-level `managed_column` query, matching by exact label set.
+  `update_dropdown_managed_column` semantics (verified 2026-07-12): `settings.labels` is a
+  FULL-REPLACE set — an omitted existing label is a DELETE attempt (blocked with
+  `INVALID_INPUT` / "can't delete labels from column model, labels are in use" when in use;
+  otherwise it deletes silently) — ALWAYS resend every existing label `{id, label}` plus the
+  new one WITHOUT an id (the server assigns max+1). `revision` (Int, starts at 0) must be
+  read fresh from `managed_column(id:[uuid]){revision}`; a stale value fails with
+  `REVISION_MISMATCH` (409, "Stale item, reload and try again") → re-read and retry.
+  A successful update propagates to attached board columns IMMEDIATELY, after which
+  `create_item` with the new label works without `create_labels_if_missing`. Only the
+  managed column's owners/managers may update it (docs: "select users… that other members
+  can't edit"); the required OAuth scope is NOT documented — an app on `boards:write` alone
+  should treat a seamless `UNAUTHORIZED_FIELD_OR_TYPE` here as a possible scope gap.
 
 ## Option-type columns — id, not text (dropdown / people / relation)
 

@@ -3,7 +3,6 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "packageManager": "pnpm@9.15.4",
   "scripts": {
     "start": "pnpm stop && concurrently -k \"vite --port 8301\" \"mapps tunnel:create -p 8301\"",
     "server": "vite --port 8301",

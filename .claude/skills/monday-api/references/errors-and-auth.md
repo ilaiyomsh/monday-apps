@@ -68,6 +68,16 @@ later switched the same bad query to **empty success**, masking the bug entirely
 app in this workspace with the same query shape, (3) only treat as transient AFTER the query
 is proven valid. Resilience on a malformed query hides the bug.
 
+Seamless-iframe variant (PROVEN 2026-07-12, discussions incident): an in-iframe
+`monday.api()` rejection can surface as `"Graphql validation errors"` with ALL detail
+fields null (`statusCode`/`responseErrors`/`requestId` null — the seamless parent strips
+the errors array) even when the underlying error is an ordinary SOFT error. In the incident
+the real error (reproduced via token probe on a scratch managed column) was
+`ColumnValueException: "The dropdown label 'X' does not exist"` — see the managed-column
+rule in column-formats.md. Diagnosis order for a detail-stripped seamless failure: prove
+the document valid (schema check) → probe the byte-identical payload via token on scratch
+data — the token path returns the REAL `extensions.code` the seamless path hid.
+
 ## Playbook: `UNAUTHORIZED_FIELD_OR_TYPE` on a newly-scoped mutation = stale OAuth token
 
 OAuth tokens **freeze their scopes at grant time**. If a scope was added to the app AFTER a
