@@ -1,0 +1,6 @@
+{
+  "app": "team-people-column",
+  "description": "Team People — column-view app: team-scoped people picker driven by a connected item (board_relation → linked item's team → team members)",
+  "path": "/Users/ilaish/monday_app/apps/team-people-column",
+  "autonomy": "none"
+}

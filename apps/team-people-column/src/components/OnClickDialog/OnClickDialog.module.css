@@ -1,0 +1,39 @@
+/* OnClickDialog — the on-click people picker dialog for the team-people column.
+   RTL-first: the dialog container sets dir="rtl"; spacing is logical so it reads
+   correctly in the small monday cell iframe. */
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px;
+  min-width: 240px;
+}
+
+/* Multi-select hint ("edit applies to the current item only") + generic notes. */
+.hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--secondary-text-color, #676879);
+}
+
+.pickerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pickerLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--primary-text-color, #323338);
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-start;
+  gap: 8px;
+  margin-top: 4px;
+}

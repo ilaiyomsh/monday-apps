@@ -1,0 +1,127 @@
+{
+  "name": "team-people-column",
+  "version": "1.0.0",
+  "description": "Monday.com column_view App",
+  "type": "module",
+  "scripts": {
+    "start": "pnpm stop && concurrently -k \"vite --port 8302\" \"mapps tunnel:create -p 8302\"",
+    "server": "vite --port 8302",
+    "dev:mock": "VITE_MONDAY_MOCK=1 vite --port 8302",
+    "expose": "mapps tunnel:create -p 8302 -a 11689948",
+    "build": "vite build",
+    "deploy:build": "vite build",
+    "deploy:push": "mapps code:push --client-side -d \"dist\" -a 11689948",
+    "deploy": "pnpm deploy:build && pnpm deploy:push",
+    "lint": "eslint . --ext .js,.jsx",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "preview": "vite preview",
+    "stop": "kill-port 8302 && kill-port 4049 && kill-port 4040",
+    "logs": "mapps code:logs -i 11689948 -s live -t console",
+    "logs:http": "mapps code:logs -i 11689948 -s live -t http",
+    "status": "mapps code:status -i 11689948",
+    "type-check": "echo no-typescript"
+  },
+  "dependencies": {
+    "@vibe/core": "^3.81.1",
+    "@vibe/icons": "^1.16.0",
+    "monday-sdk-js": "^0.5.7",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-error-boundary": "^4.1.2"
+  },
+  "devDependencies": {
+    "@mondaycom/apps-cli": "^4.7.4",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^14.3.1",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.57.1",
+    "eslint-plugin-promise": "^6.6.0",
+    "jsdom": "^25.0.0",
+    "kill-port": "^2.0.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.18",
+    "vite": "^6.2.2",
+    "vitest": "^2.1.8"
+  },
+  "eslintConfig": {
+    "ignorePatterns": [
+      "dist",
+      "build",
+      "coverage"
+    ],
+    "parserOptions": {
+      "ecmaVersion": "latest",
+      "sourceType": "module",
+      "ecmaFeatures": {
+        "jsx": true
+      }
+    },
+    "env": {
+      "browser": true,
+      "es2022": true
+    },
+    "plugins": [
+      "promise"
+    ],
+    "rules": {
+      "no-console": "error",
+      "no-empty": [
+        "error",
+        {
+          "allowEmptyCatch": false
+        }
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          "selector": "CatchClause > BlockStatement:not(:has(CallExpression[callee.object.name='logger'])):not(:has(ThrowStatement)):not(:has(CallExpression[callee.name='showErrorWithDetails']))",
+          "message": "This catch block swallows the error silently. Do exactly one of: (1) call logger.error/logger.apiError(...) to record it, (2) re-throw it with `throw` so a boundary or an upstream catch handles it, or (3) call showErrorWithDetails(error, { functionName }) to record AND display it to the user. The only allowed silent path is an intentional AbortController cancel: `if (e.name === 'AbortError') return;`."
+        }
+      ],
+      "promise/catch-or-return": "error"
+    },
+    "overrides": [
+      {
+        "files": [
+          "src/utils/logger.js"
+        ],
+        "rules": {
+          "no-console": "off",
+          "no-restricted-syntax": "off"
+        }
+      },
+      {
+        "files": [
+          "**/__tests__/**",
+          "**/*.test.js",
+          "**/*.test.jsx",
+          "**/*.test.ts",
+          "**/*.test.tsx",
+          "src/test-utils/**",
+          "src/setupTests.js",
+          "src/dev-harness/**"
+        ],
+        "rules": {
+          "no-console": "off",
+          "no-restricted-syntax": "off",
+          "promise/catch-or-return": "off"
+        }
+      },
+      {
+        "files": [
+          "src/hooks/useUiErrorSink.js",
+          "src/utils/axiomErrorSink.js",
+          "src/utils/axiomBrowserTransport.js",
+          "vite.config.js"
+        ],
+        "rules": {
+          "no-console": "off",
+          "no-restricted-syntax": "off"
+        }
+      }
+    ]
+  }
+}

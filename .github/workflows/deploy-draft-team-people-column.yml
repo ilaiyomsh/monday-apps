@@ -1,0 +1,65 @@
+name: Deploy Draft - team-people-column
+
+# Spec section 7.1: merges into develop auto-deploy to the app's LATEST
+# DRAFT version. No version IDs are stored anywhere — only the App ID
+# secret; the CLI resolves the latest draft itself.
+#
+# When instantiating this template for a real app, rename the file to:
+#   deploy-draft-team-people-column.yml
+# and replace all team-people-column / dist / APP_TEAM_PEOPLE_COLUMN_ID placeholders.
+
+on:
+  workflow_dispatch: {}   # manual re-deploy of the draft (e.g. dev-live detach); draft only — live stays merge-triggered
+  push:
+    branches:
+      - develop
+    paths:
+      - "apps/team-people-column/**"
+      - "packages/shared/**"
+
+jobs:
+  deploy-draft:
+    name: Build and push team-people-column to draft
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-draft-team-people-column
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build team-people-column
+        run: pnpm --filter "./apps/team-people-column" build
+
+      - name: Install monday.com apps CLI
+        run: npm install -g @mondaycom/apps-cli
+
+      - name: Authenticate mapps CLI (non-interactive)
+        run: mapps init -t "$MONDAY_TOKEN"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+
+      # -c is "-c" for client-side (CDN) apps, empty for
+      # server-side (monday-code) apps — the only difference between the two.
+      - name: Push to latest DRAFT version
+        run: >
+          mapps code:push -c
+          -d apps/team-people-column/dist
+          -a "$APP_ID"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          APP_ID: ${{ secrets.APP_TEAM_PEOPLE_COLUMN_ID }}
