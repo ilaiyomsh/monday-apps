@@ -7,6 +7,36 @@ import { api } from '../../utils/mondayApi/monday-client.js';
 import logger from '../../utils/logger.js';
 import styles from './SetupWizard.module.css';
 
+// The required task fields (mirrors PROVISION_SPEC.tasks.columns in
+// provisionBoards.js). When an EXISTING tasks board is connected, each field is
+// either mapped onto one of the board's existing columns or created new.
+const TASK_FIELD_SPECS = [
+  { alias: 'taskCreatorID', title: 'יוצר', type: 'people' },
+  { alias: 'responsibilityID', title: 'אחריות', type: 'people' },
+  { alias: 'deadlineID', title: 'דד ליין', type: 'date' },
+  { alias: 'statusID', title: 'סטאטוס', type: 'status' },
+  { alias: 'detailsID', title: 'מקור המשימה', type: 'long_text' },
+];
+
+// Sentinel map value meaning "create this column fresh" (nothing existing chosen).
+const CREATE_NEW_VALUE = '__create__';
+
+// Whether a board column of `colType` can back a required field of `fieldType`.
+// long_text fields also accept a plain `text` column; everything else is exact.
+function isColumnCompatible(fieldType, colType) {
+  if (fieldType === 'long_text') return colType === 'long_text' || colType === 'text';
+  return colType === fieldType;
+}
+
+// Dropdown options for one required field: "create new" first, then the board's
+// columns whose type is compatible with the field type.
+function optionsForField(field, boardColumns) {
+  const compatible = (boardColumns || [])
+    .filter((c) => isColumnCompatible(field.type, c.type))
+    .map((c) => ({ value: String(c.id), label: c.title }));
+  return [{ value: CREATE_NEW_VALUE, label: 'צור עמודה חדשה' }, ...compatible];
+}
+
 /*
  * First-run setup wizard. Shown by SettingsGate when settings are empty
  * (isConfigured === false). Offers two paths:
@@ -33,6 +63,14 @@ export function SetupWizard({ onManual }) {
   const [boardOptions, setBoardOptions] = useState([]);
   const [boardsLoading, setBoardsLoading] = useState(false);
   const [boardsLoaded, setBoardsLoaded] = useState(false);
+
+  // When connecting an EXISTING tasks board, the owner maps its columns onto the
+  // required task fields BEFORE any columns are created; only unmapped fields are
+  // created new. taskBoardColumns = the chosen board's columns (id/title/type);
+  // columnMap = { [alias]: columnId | '__create__' }.
+  const [taskBoardColumns, setTaskBoardColumns] = useState([]);
+  const [taskColumnsLoading, setTaskColumnsLoading] = useState(false);
+  const [columnMap, setColumnMap] = useState({});
 
   // Lazy-load the account's active boards the first time the owner chooses to
   // connect an existing tasks board. Loaded once; the current board is dropped
@@ -67,6 +105,53 @@ export function SetupWizard({ onManual }) {
     };
   }, [tasksMode, boardsLoaded, context]);
 
+  // When an existing tasks board is chosen (connect mode), load THAT board's
+  // columns so the owner can map them onto the required task fields. Reloads when
+  // the chosen board changes. Defaults each field to a same-titled compatible
+  // column when one exists, otherwise "create new". Errors are logged (never
+  // crash the wizard); when not applicable the mapping state is cleared.
+  useEffect(() => {
+    if (tasksMode !== 'connect' || !tasksBoardId) {
+      setTaskBoardColumns([]);
+      setColumnMap({});
+      return undefined;
+    }
+    let cancelled = false;
+    setTaskColumnsLoading(true);
+    (async () => {
+      try {
+        const data = await api(
+          `query ($b: [ID!]) { boards(ids: $b) { columns { id title type } } }`,
+          { b: [String(tasksBoardId)] },
+          'SetupWizard.loadTaskBoardColumns'
+        );
+        const cols = (data?.boards?.[0]?.columns || []).filter((c) => c && c.id != null);
+        if (cancelled) return;
+        setTaskBoardColumns(cols);
+        // Default the mapping: reuse a same-titled compatible column, else create.
+        const map = {};
+        for (const field of TASK_FIELD_SPECS) {
+          const match = cols.find(
+            (c) => c.title === field.title && isColumnCompatible(field.type, c.type)
+          );
+          map[field.alias] = match ? String(match.id) : CREATE_NEW_VALUE;
+        }
+        setColumnMap(map);
+      } catch (err) {
+        if (!err?.__loggedId) logger.error('SetupWizard', 'טעינת עמודות לוח המשימות נכשלה', err);
+        if (!cancelled) {
+          setTaskBoardColumns([]);
+          setColumnMap({});
+        }
+      } finally {
+        if (!cancelled) setTaskColumnsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tasksMode, tasksBoardId]);
+
   const handleCreate = useCallback(async () => {
     setPhase('running');
     setErrorMsg('');
@@ -75,7 +160,7 @@ export function SetupWizard({ onManual }) {
       const config = await provisionAllBoards({
         discussionsBoardId: context?.boardId,
         workspaceId: context?.workspaceId,
-        tasks: { mode: tasksMode, boardId: tasksBoardId },
+        tasks: { mode: tasksMode, boardId: tasksBoardId, columnMap },
         onProgress: (step, total, label) => setProgress({ step, total, label }),
       });
       await updateSettings(config);
@@ -85,7 +170,7 @@ export function SetupWizard({ onManual }) {
       setErrorMsg(err?.message || 'אירעה שגיאה בהקמת הלוחות');
       setPhase('error');
     }
-  }, [context, updateSettings, tasksMode, tasksBoardId]);
+  }, [context, updateSettings, tasksMode, tasksBoardId, columnMap]);
 
   const pct =
     progress.total > 0 ? Math.round((progress.step / progress.total) * 100) : 0;
@@ -150,6 +235,38 @@ export function SetupWizard({ onManual }) {
                   />
                 </div>
               )}
+              {tasksMode === 'connect' && tasksBoardId && (
+                <div className={styles.columnMap}>
+                  <Text type="text2" weight="bold" align="center">מיפוי עמודות לוח המשימות:</Text>
+                  {taskColumnsLoading ? (
+                    <Loader size={20} />
+                  ) : (
+                    TASK_FIELD_SPECS.map((field) => {
+                      const options = optionsForField(field, taskBoardColumns);
+                      const selected = columnMap[field.alias] || CREATE_NEW_VALUE;
+                      return (
+                        <div key={field.alias} className={styles.mapRow}>
+                          <Text type="text2" className={styles.mapLabel}>{field.title}</Text>
+                          <div className={styles.mapDropdown}>
+                            <Dropdown
+                              dir="rtl"
+                              size="small"
+                              options={options}
+                              value={options.find((o) => o.value === selected) || null}
+                              onChange={(opt) =>
+                                setColumnMap((prev) => ({
+                                  ...prev,
+                                  [field.alias]: opt ? String(opt.value) : CREATE_NEW_VALUE,
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
 
             <Flex gap={12} align="center" justify="center" className={styles.actions}>
@@ -157,7 +274,7 @@ export function SetupWizard({ onManual }) {
                 kind="primary"
                 size="medium"
                 onClick={handleCreate}
-                disabled={tasksMode === 'connect' && !tasksBoardId}
+                disabled={tasksMode === 'connect' && (!tasksBoardId || taskColumnsLoading)}
               >
                 {phase === 'error' ? 'נסה שוב' : 'צור לוחות אוטומטית'}
               </Button>

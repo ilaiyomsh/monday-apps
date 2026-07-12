@@ -404,11 +404,25 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
     tick(`נוצר לוח: ${PROVISION_SPEC[key].name}`);
   }
 
-  // 2) simple columns (reusing any already present on each board)
+  // 2) simple columns (reusing any already present on each board). For an
+  // EXISTING tasks board (mode 'connect') the wizard may pass a columnMap that
+  // maps each required task field onto one of the board's existing columns:
+  //   - a real column id  → map it directly (do NOT create a new column);
+  //   - '__create__'/absent → create it via ensureColumn (reuse-by-title-or-create).
+  // Without a columnMap (older callers) every column goes through ensureColumn —
+  // today's behavior. Either way we tick() once per field so progress stays right.
   const existingByBoard = {};
   for (const key of BOARD_ORDER) {
     existingByBoard[key] = await readColumns(boardIds[key]);
+    const taskColumnMap =
+      key === 'tasks' && tasks?.mode === 'connect' && tasks?.columnMap ? tasks.columnMap : null;
     for (const col of PROVISION_SPEC[key].columns) {
+      const mapped = taskColumnMap ? taskColumnMap[col.alias] : undefined;
+      if (mapped && mapped !== '__create__') {
+        columns[key][col.alias] = { id: String(mapped), type: col.type, title: col.title, verified: true };
+        tick(`עמודה ממופה: ${col.title}`);
+        continue;
+      }
       const id = await ensureColumn(boardIds[key], existingByBoard[key], col.title, col.type, col.defaults);
       columns[key][col.alias] = { id, type: col.type, title: col.title, verified: true };
       tick(`עמודה: ${col.title}`);

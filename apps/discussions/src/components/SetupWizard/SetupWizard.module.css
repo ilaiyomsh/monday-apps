@@ -64,3 +64,31 @@
   max-width: 320px;
   text-align: right;
 }
+
+.columnMap {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.mapRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.mapLabel {
+  flex: 0 0 38%;
+  text-align: right;
+}
+
+.mapDropdown {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: right;
+}
