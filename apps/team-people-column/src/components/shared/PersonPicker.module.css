@@ -65,6 +65,11 @@
   gap: 8px;
 }
 
+/* Inline mode: the dialog itself is the picker — fill the dialog width. */
+.menuInline {
+  width: 100%;
+}
+
 /* Selected people as removable chips above the search list. */
 .chips {
   display: flex;
@@ -193,6 +198,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* Push the check mark to the row's far end (logical — RTL-safe). */
+  flex: 1;
+  text-align: start;
 }
 
 .empty {
