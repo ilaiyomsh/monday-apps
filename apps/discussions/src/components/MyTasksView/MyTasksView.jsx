@@ -100,16 +100,18 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   // to this view" applies for everyone. The primary name column is never
   // hideable. The saved set is LOAD-TIME state (like the other saved-view
   // controls) and is applied live to every table below.
+  // Available columns for the Hide panel (plain per-render list, mirroring the
+  // table's own getColumns-derived defs — see MyTasksTable.baseDefs).
   const taskCols = getColumns('tasks') || {};
-  const columnList = useMemo(() => [
+  const columnList = [
     { key: 'name', label: t('myTasks.colName'), icon: 'text', locked: true },
     taskCols.deadlineID?.id && { key: 'deadline', label: t('myTasks.colDeadline'), icon: 'date' },
     taskCols.priorityID?.id && { key: 'priority', label: t('myTasks.colPriority'), icon: 'status' },
     { key: 'status', label: t('myTasks.colStatus'), icon: 'status' },
     taskCols.taskNotesID?.id && { key: 'notes', label: t('myTasks.colNotes'), icon: 'text' },
     { key: 'discussion', label: t('myTasks.colDiscussion'), icon: 'relation' },
-  ].filter(Boolean), [taskCols.deadlineID?.id, taskCols.priorityID?.id, taskCols.taskNotesID?.id, t]);
-  const hideableKeys = useMemo(() => columnList.filter((c) => !c.locked).map((c) => c.key), [columnList]);
+  ].filter(Boolean);
+  const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
   const [hiddenColumns, setHiddenColumns] = useState(
     () => new Set(Array.isArray(savedView?.hiddenColumns) ? savedView.hiddenColumns : [])
   );

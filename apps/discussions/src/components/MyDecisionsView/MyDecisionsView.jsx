@@ -150,8 +150,10 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   // "Save to this view" applies for everyone. The primary name (החלטה) column is
   // never hideable. LOAD-TIME state (like the other saved-view controls), applied
   // live to every table below. Labels mirror the MyDecisionsTable TITLE map.
+  // Available columns for the Hide panel (plain per-render list, mirroring the
+  // table's own getColumns-derived defs — see MyDecisionsTable.baseDefs).
   const decCols = getColumns('decisions') || {};
-  const columnList = useMemo(() => [
+  const columnList = [
     { key: 'name', label: 'החלטה', icon: 'text', locked: true },
     decCols.deciderID?.id && { key: 'decider', label: 'מחליט', icon: 'person' },
     decCols.affectedID?.id && { key: 'affected', label: 'מושפעים', icon: 'person' },
@@ -159,8 +161,8 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     { key: 'status', label: 'סטאטוס', icon: 'status' },
     decCols.decisionDateID?.id && { key: 'date', label: 'תאריך', icon: 'date' },
     decCols.discussionLinkID?.id && { key: 'discussion', label: 'דיון מקור', icon: 'relation' },
-  ].filter(Boolean), [decCols.deciderID?.id, decCols.affectedID?.id, decCols.decisionPriorityID?.id, decCols.decisionDateID?.id, decCols.discussionLinkID?.id]);
-  const hideableKeys = useMemo(() => columnList.filter((c) => !c.locked).map((c) => c.key), [columnList]);
+  ].filter(Boolean);
+  const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
   const [hiddenColumns, setHiddenColumns] = useState(
     () => new Set(Array.isArray(savedView?.hiddenColumns) ? savedView.hiddenColumns : [])
   );
