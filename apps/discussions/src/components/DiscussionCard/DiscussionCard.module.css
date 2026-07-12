@@ -422,6 +422,19 @@
   margin-inline-end: 48px;
 }
 
+/* Round 50 — NARROW header (monday docked its Updates/item-card panel beside the
+   board view and squeezed the app iframe; toggled by the ResizeObserver in
+   DiscussionCard.jsx via .participantsNarrow). Hide the PEOPLE meta groups
+   (מנהל / מרכז / משתתפים) and keep ONLY the date + time, so the one-row header
+   never crowds or overflows when space is tight. The people groups use
+   .peopleGroupAvatars; the date/time groups use .dateGroup and stay visible.
+   display:none also drops each hidden group's leading vertical divider (its
+   ::before is not rendered), so no stray separators remain. Desktop-only in
+   effect: the mobile phone layout renders the info popover, not this row. */
+.participantsNarrow .peopleGroupAvatars {
+  display: none;
+}
+
 /* Mobile info button + popover (replaces the inline date/participants). */
 .infoWrap {
   position: relative;

@@ -8,7 +8,7 @@ import { PersonList } from '@generated/components/PersonAvatar';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { monday } from '@api/monday-client.js';
+import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import grid from '../TaskTable/TaskTable.module.css';
 import styles from './TaskTableRow.module.css';
 
@@ -19,9 +19,12 @@ const NEUTRAL = 'hsl(var(--status-default))';
 // same presentation as the task card from My Tasks. Without a kind (default
 // 'columns') the same call opened as a centered modal; the kind, not the item's
 // board, is what drives panel-vs-modal here.
+// Toggle the item card: 1st click opens, a 2nd click on the SAME item closes it.
+// Shared open-id tracking + best-effort close live in utils/itemCard.js (the SDK
+// has no guaranteed closeItemCard — see that file).
 function openItemCard(itemId) {
   if (!itemId) return;
-  monday.execute('openItemCard', { itemId: Number(itemId), kind: 'updates' });
+  openOrToggleItemCard(itemId);
 }
 
 // Show the task's creation date from monday's built-in created_at — an ISO

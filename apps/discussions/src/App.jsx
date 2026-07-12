@@ -24,6 +24,7 @@ import { prefetchMyTasks } from './hooks/useMyTasks.js';
 import { prefetchMyDecisions } from './hooks/useMyDecisions.js';
 import { prefetchDiscussions } from './hooks/useDiscussions.js';
 import logger from './utils/logger.js';
+import { closeOpenItemCard } from './utils/itemCard.js';
 import { ToastContainer } from './components/Toast';
 import { ErrorDetailsModal } from './components/ErrorDetailsModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -49,6 +50,12 @@ const APP_VIEW_KEY = 'discussions_app_view';
 // datasets stalls, reveal the app anyway after this window so the user is never
 // stuck on the white loading screen.
 const BOOT_MAX_WAIT_MS = 8000;
+
+// Round 50 — MINIMUM branded-splash window (ms). The loader runs at least this
+// long on boot AND on every view transition, so the animation is clearly
+// experienced rather than flashing when data is warm/cached; data that is ready
+// early simply waits it out, then the (already-loaded) content appears in one shot.
+const MIN_SPLASH_MS = 2000;
 
 function readSavedAppView() {
   try {
@@ -231,15 +238,16 @@ export default function App() {
   const effectiveView = appView;
 
   // Branded splash gate. Shows the fullscreen BrandLoader (a) on cold boot until
-  // `context` resolves AND a ~900ms min window elapses, and (b) for a ~900ms min
+  // `context` resolves AND a ~2s min window elapses, and (b) for a ~2s min
   // window on EVERY top-level view switch — the window re-arms on each change of
   // `effectiveView` (the armKey). The per-view arm is essential because round-37's
   // stale-while-revalidate cache makes a warm view load instantly (its `loading`
   // never flips true), so a boot-only gate would skip the splash on cached
   // transitions. `context == null` is the only real loading the app observes here;
   // each view still runs its own internal loading/skeleton AFTER the splash reveals
-  // it (per-view behavior unchanged). ~900ms keeps every transition snappy.
-  const splash = useMinSplash(context == null, 900, effectiveView);
+  // it (per-view behavior unchanged). Round 50: the min window is now ~2s
+  // (MIN_SPLASH_MS) so the branded loader is clearly experienced on each switch.
+  const splash = useMinSplash(context == null, MIN_SPLASH_MS, effectiveView);
   const openMyTasks = useCallback(() => handleAppViewChange('myTasks'), [handleAppViewChange]);
   const openMyDecisions = useCallback(() => handleAppViewChange('myDecisions'), [handleAppViewChange]);
   const backToDiscussions = useCallback(() => handleAppViewChange('discussions'), [handleAppViewChange]);
@@ -264,7 +272,7 @@ export default function App() {
   }, [effectiveView]);
   // active=false: this is a pure TRANSITION replay armed by the token — never a
   // real loading flag. The card pane runs its own data loading after it reveals.
-  const discussionsRightSplash = useMinSplash(false, 900, discReturnArm);
+  const discussionsRightSplash = useMinSplash(false, MIN_SPLASH_MS, discReturnArm);
 
   const [selectedDiscussion, setSelectedDiscussion] = useState(null);
   const [showList, setShowList] = useState(true);
@@ -406,10 +414,20 @@ export default function App() {
     prefetchedRef.current = true;
 
     let settled = false;
+    let minTimer = null;
+    const bootStart = Date.now();
+    // Round 50 — reveal once BOTH the boot data has settled AND the ~2s minimum
+    // splash window (MIN_SPLASH_MS, measured from context-resolution when this
+    // effect first runs) has elapsed. Data ready early simply waits out the
+    // remainder, so the branded loader is always clearly seen and the populated
+    // content then appears in one shot. NEVER hangs: the hard BOOT_MAX_WAIT_MS
+    // timeout also calls reveal, and by then the min window has long passed.
     const reveal = () => {
       if (settled) return;
       settled = true;
-      setBootDataReady(true);
+      const wait = Math.max(0, MIN_SPLASH_MS - (Date.now() - bootStart));
+      if (wait === 0) setBootDataReady(true);
+      else minTimer = setTimeout(() => setBootDataReady(true), wait);
     };
     // Load all three in parallel; `settle` maps success OR error to a resolved
     // void so one failed fetch never blocks the reveal.
@@ -422,7 +440,7 @@ export default function App() {
     // SAFETY: never leave the user stuck on the loader — reveal after the hard
     // timeout regardless of the fetches.
     const timer = setTimeout(reveal, BOOT_MAX_WAIT_MS);
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); if (minTimer) clearTimeout(minTimer); };
   }, [context, settingsLoading, currentUser]);
 
   // Round 37 — BACKGROUND PREFETCH: once booted and sitting on the discussions
@@ -470,6 +488,15 @@ export default function App() {
   const handleBack = () => {
     setShowList(true);
   };
+
+  // Round 50 — close any open monday item card (Updates panel) on ANY view or
+  // screen transition: a top-level appView switch OR navigating between
+  // discussions (selectedDiscussion id change). The client SDK has no guaranteed
+  // closeItemCard, so this is best-effort (see utils/itemCard.js) — the tracked
+  // open-id is always cleared so a stale panel never lingers across a transition.
+  useEffect(() => {
+    closeOpenItemCard();
+  }, [effectiveView, selectedDiscussion?.id]);
 
   useEffect(() => {
     if (!launchParams.discussionId) return;

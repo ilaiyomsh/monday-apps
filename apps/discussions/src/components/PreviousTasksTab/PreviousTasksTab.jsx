@@ -16,7 +16,8 @@ import {
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
 import { useViewport } from '@generated/hooks/useViewport.js';
-import { api, parseValue, cvSelection, monday } from '../../utils/mondayApi/monday-client.js';
+import { api, parseValue, cvSelection } from '../../utils/mondayApi/monday-client.js';
+import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { getColumns } from '../../utils/mondayApi/board-config-store.js';
 import { משימות1Board, דיונים1Board } from '@api/BoardSDK.js';
 import { TaskTable } from '@generated/components/TaskTable';
@@ -503,9 +504,12 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // Clicking a task's name opens ITS item card on the Updates pane — same
   // affordance as the My Tasks tab (kind: 'updates'). Opens the task, not the
   // source discussion (that's the separate "דיון מקור" chip).
+  // Toggle the task's item card: 1st click opens, a 2nd click on the SAME task
+  // closes it. Shared open-id tracking + best-effort close live in
+  // utils/itemCard.js (the SDK has no guaranteed closeItemCard — see that file).
   const openTaskCard = (taskId) => {
     if (!taskId) return;
-    monday.execute('openItemCard', { itemId: Number(taskId), kind: 'updates' });
+    openOrToggleItemCard(taskId);
   };
 
   // ---- multi-select + carry-forward to the current ("next") discussion ----

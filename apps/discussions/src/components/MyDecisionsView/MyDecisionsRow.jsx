@@ -6,7 +6,7 @@ import { PersonList } from '@generated/components/PersonAvatar';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { monday } from '@api/monday-client.js';
+import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { getDecisionDiscussion, getEffectiveDecider } from './decisionPipeline.js';
 import grid from './MyDecisionsTable.module.css';
 import row from '../TaskTableRow/TaskTableRow.module.css';
@@ -16,9 +16,12 @@ const NEUTRAL = 'hsl(var(--status-default))';
 
 // Open the monday item card on the "updates" pane — clicking the decision text
 // (only) opens the card; inline-edit controls stop propagation.
+// Toggle the monday item card for this item: 1st click opens, a 2nd click on the
+// SAME item closes it. Shared open-id tracking + best-effort close live in
+// utils/itemCard.js (the SDK has no guaranteed closeItemCard — see that file).
 function openItemCard(itemId) {
   if (!itemId) return;
-  monday.execute('openItemCard', { itemId: Number(itemId), kind: 'updates' });
+  openOrToggleItemCard(itemId);
 }
 
 const stop = (e) => e.stopPropagation();

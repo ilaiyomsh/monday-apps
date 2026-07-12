@@ -33,7 +33,7 @@ import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { DECISIONS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { getBoardId } from '@api/board-config-store.js';
-import { monday } from '@api/monday-client.js';
+import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import styles from './DecisionsTab.module.css';
 
@@ -41,9 +41,13 @@ import styles from './DecisionsTab.module.css';
 // Tasks name cell (kind:'updates' renders monday's side panel). A decision is a
 // board item, so decision.id is a real monday item id; guard the temp id of an
 // optimistic (not-yet-saved) decision so it never targets a bogus id.
+// Toggle a decision's item card: 1st click opens, a 2nd click on the SAME
+// decision closes it. Shared open-id tracking + best-effort close live in
+// utils/itemCard.js (the SDK has no guaranteed closeItemCard — see that file).
+// A decision is a board item, so guard the temp id of an optimistic decision.
 function openItemCard(itemId) {
   if (!itemId || String(itemId).startsWith('temp-')) return;
-  monday.execute('openItemCard', { itemId: Number(itemId), kind: 'updates' });
+  openOrToggleItemCard(itemId);
 }
 
 // DEFAULT column order for the decisions table (עדיפות removed — product

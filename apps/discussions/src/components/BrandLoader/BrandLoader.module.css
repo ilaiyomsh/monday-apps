@@ -12,6 +12,14 @@
 }
 .brandLoader {
   width: 100%;
+  /* Round 50 — fill the FULL height of the content pane (not just a fixed 260px)
+     so the mark + wordmark center on BOTH axes in the area where the content will
+     render. Every inline host resolves a definite height — App's .main (a
+     stretched flex item) and the views' .board (flex:1 + min-height:0) — so
+     height:100% resolves; min-height keeps a floor for any shorter container, and
+     flex:1 1 auto keeps it filling inside a flex-column host too. Centering comes
+     from the shared rule above (display:flex + center on both axes). */
+  height: 100%;
   min-height: 260px;
   flex: 1 1 auto;
 }
