@@ -14,7 +14,7 @@ import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { BrandLoader } from '@generated/components/BrandLoader';
-import { getBoardId } from '@api/board-config-store.js';
+import { getBoardId, getColumns } from '@api/board-config-store.js';
 import { MyDecisionsTable } from './MyDecisionsTable.jsx';
 import { toPipelineRows } from './decisionPipeline.js';
 // Shared My-Tasks machinery, imported (NOT duplicated): the grouping/pipeline
@@ -24,6 +24,7 @@ import { groupMyTasks } from '../MyTasksView/grouping.js';
 import { BuilderControl } from '../MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '../MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '../MyTasksView/controls/BuilderIcon.jsx';
+import { HideColumnsControl } from '../MyTasksView/controls/HideColumnsControl.jsx';
 import {
   SORT_COLUMNS, GROUP_COLUMNS, FILTER_COLUMNS, OP_LABEL, DEADLINE_RANGES,
   sortTasks, filterTasks, filterCount, emptyFilter, DEFAULT_SORT,
@@ -141,6 +142,41 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
       ? savedView.filterRows.filter((k) => FILTER_COLUMNS.some((c) => c.key === k))
       : []
   ));
+
+  // --- Hide columns (round 46) ------------------------------------------------
+  // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
+  // site, persisted to the SHARED saved view
+  // (settings.preferences.savedViews.myDecisions.hiddenColumns) so an owner's
+  // "Save to this view" applies for everyone. The primary name (החלטה) column is
+  // never hideable. LOAD-TIME state (like the other saved-view controls), applied
+  // live to every table below. Labels mirror the MyDecisionsTable TITLE map.
+  const decCols = getColumns('decisions') || {};
+  const columnList = useMemo(() => [
+    { key: 'name', label: 'החלטה', icon: 'text', locked: true },
+    decCols.deciderID?.id && { key: 'decider', label: 'מחליט', icon: 'person' },
+    decCols.affectedID?.id && { key: 'affected', label: 'מושפעים', icon: 'person' },
+    decCols.decisionPriorityID?.id && { key: 'priority', label: 'עדיפות', icon: 'status' },
+    { key: 'status', label: 'סטאטוס', icon: 'status' },
+    decCols.decisionDateID?.id && { key: 'date', label: 'תאריך', icon: 'date' },
+    decCols.discussionLinkID?.id && { key: 'discussion', label: 'דיון מקור', icon: 'relation' },
+  ].filter(Boolean), [decCols.deciderID?.id, decCols.affectedID?.id, decCols.decisionPriorityID?.id, decCols.decisionDateID?.id, decCols.discussionLinkID?.id]);
+  const hideableKeys = useMemo(() => columnList.filter((c) => !c.locked).map((c) => c.key), [columnList]);
+  const [hiddenColumns, setHiddenColumns] = useState(
+    () => new Set(Array.isArray(savedView?.hiddenColumns) ? savedView.hiddenColumns : [])
+  );
+  const toggleColumn = useCallback((key) => setHiddenColumns((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  }), []);
+  const showAllColumns = useCallback((show) => {
+    setHiddenColumns(show ? new Set() : new Set(hideableKeys));
+  }, [hideableKeys]);
+  const saveHiddenColumns = useCallback(() => {
+    saveView({ hiddenColumns: [...hiddenColumns] });
+    onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
+  }, [saveView, hiddenColumns, onNotify]);
+
   const [collapsed, setCollapsed] = useState({});
   const [discDateMap, setDiscDateMap] = useState({});
   // Multi-select (round 27) — a leading checkbox column + a floating action bar,
@@ -580,6 +616,18 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
           renderBody={renderGroupBody}
         />
 
+        {/* Hide columns (round 46) — owners only. Non-owners never see it and
+            always get the saved config applied. */}
+        {canManageSettings && (
+          <HideColumnsControl
+            columns={columnList}
+            hidden={hiddenColumns}
+            onToggle={toggleColumn}
+            onToggleAll={showAllColumns}
+            onSave={canSaveView ? saveHiddenColumns : null}
+          />
+        )}
+
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
       </div>
 
@@ -652,6 +700,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
                     decisions={grp.items}
                     color={grp.color}
                     canManageSettings={canManageSettings}
+                    hiddenColumns={hiddenColumns}
                     canDecision={canDecision}
                     onStatusChange={applyStatus}
                     onPriorityChange={applyPriority}

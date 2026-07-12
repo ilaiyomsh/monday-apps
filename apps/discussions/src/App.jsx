@@ -244,6 +244,28 @@ export default function App() {
   const openMyDecisions = useCallback(() => handleAppViewChange('myDecisions'), [handleAppViewChange]);
   const backToDiscussions = useCallback(() => handleAppViewChange('discussions'), [handleAppViewChange]);
 
+  // Round 46 — RIGHT-PANE discussions splash. The branded loader must show in the
+  // discussions view ONLY when RETURNING to it FROM a personal view (My Tasks /
+  // My Decisions): NOT on cold boot (the boot gate above covers entry), NOT when
+  // clicking between discussions in the list, and NEVER in the LEFT list. We track
+  // the previous top-level view; when it flips to 'discussions' from 'myTasks' or
+  // 'myDecisions' we bump an arm token, and useMinSplash then holds the loader in
+  // the RIGHT (card) pane alone for the brief min window before revealing it (the
+  // fullscreen `splash` gate below is disarmed for the discussions view, so it can
+  // no longer cover the left list on this transition).
+  const prevViewRef = useRef(effectiveView);
+  const [discReturnArm, setDiscReturnArm] = useState(0);
+  useEffect(() => {
+    const prev = prevViewRef.current;
+    prevViewRef.current = effectiveView;
+    if (effectiveView === 'discussions' && (prev === 'myTasks' || prev === 'myDecisions')) {
+      setDiscReturnArm((n) => n + 1);
+    }
+  }, [effectiveView]);
+  // active=false: this is a pure TRANSITION replay armed by the token — never a
+  // real loading flag. The card pane runs its own data loading after it reveals.
+  const discussionsRightSplash = useMinSplash(false, 900, discReturnArm);
+
   const [selectedDiscussion, setSelectedDiscussion] = useState(null);
   const [showList, setShowList] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
@@ -661,12 +683,16 @@ export default function App() {
   //   (a) `context` is ready, AND
   //   (b) the INITIAL boot data is ready (`bootDataReady` — all three datasets
   //       loaded or the safety timeout fired; see the round-45 boot gate), AND
-  //   (c) the min-splash window has elapsed.
-  // The min window also re-arms on EVERY top-level view transition (discussions
-  // ↔ myTasks ↔ myDecisions) so the splash replays before the destination view
-  // — see `splash`/useMinSplash. `bootDataReady` latches true after the first
-  // boot, so it only gates the INITIAL entry and never a later transition.
-  if (context == null || !bootDataReady || splash) {
+  //   (c) the min-splash window has elapsed — but ONLY for the personal views.
+  // Round 46: the fullscreen min-splash still replays when switching INTO
+  // 'myTasks' / 'myDecisions' (those are single-pane views, so fullscreen == that
+  // view), but is DISARMED for the discussions view (`effectiveView !==
+  // 'discussions'`). A return to discussions is instead handled by the
+  // right-pane `discussionsRightSplash` (loader in the card pane only, never the
+  // left list); cold boot into discussions is already covered by the boot gate,
+  // so it needs no extra splash window. `bootDataReady` latches true after the
+  // first boot, so it only gates INITIAL entry and never a later transition.
+  if (context == null || !bootDataReady || (splash && effectiveView !== 'discussions')) {
     return (
       <div className={`${styles.appShell} ${layoutClass}`}>
         <BrandLoader fullscreen />
@@ -758,18 +784,25 @@ export default function App() {
       </div>
 
       <div className={`${styles.main} ${showList ? styles.hiddenMobile : ''} ${collapsed ? styles.mainFull : ''}`}>
-        <DiscussionCard
-          discussion={selectedDiscussion}
-          onBack={handleBack}
-          onNotify={notify}
-          onShowLoading={notifyLoading}
-          onDismissToast={dismissNotice}
-          onUpdated={handleSaved}
-          onCopyDiscussionLink={handleCopyDiscussionLink}
-          initialTab={launchParams.tab}
-          initialTabDiscussionId={launchParams.discussionId}
-          canManageSettings={canManageSettings}
-        />
+        {discussionsRightSplash ? (
+          // Return to discussions from My Tasks / My Decisions: the branded loader
+          // shows HERE, in the card pane only, for the brief min window — the left
+          // list keeps rendering independently (no splash there).
+          <BrandLoader />
+        ) : (
+          <DiscussionCard
+            discussion={selectedDiscussion}
+            onBack={handleBack}
+            onNotify={notify}
+            onShowLoading={notifyLoading}
+            onDismissToast={dismissNotice}
+            onUpdated={handleSaved}
+            onCopyDiscussionLink={handleCopyDiscussionLink}
+            initialTab={launchParams.tab}
+            initialTabDiscussionId={launchParams.discussionId}
+            canManageSettings={canManageSettings}
+          />
+        )}
       </div>
 
       <CreateDiscussionModal

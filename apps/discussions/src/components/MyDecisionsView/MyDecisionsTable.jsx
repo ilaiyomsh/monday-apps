@@ -57,6 +57,10 @@ export function MyDecisionsTable({
   decisions,
   color,
   canManageSettings = false,
+  // Hidden columns (round 46): a Set (or array) of column keys to hide, applied
+  // at the final render layer only so persisted column order + widths are kept
+  // (a hidden column returns in place when re-shown). Name is never hideable.
+  hiddenColumns,
   // Per-decision capability check (board-permissions matrix).
   // `canDecision(cap, decision)` gates each inline editor PER ROW — a false
   // verdict withholds the handler so the cell renders read-only.
@@ -100,13 +104,18 @@ export function MyDecisionsTable({
   // cell render order from the SAME ordered list so they can never drift.
   const defsByKey = Object.fromEntries(baseDefs.map((d) => [d.key, d]));
   const { order, reorder } = useColumnOrder('myDecisions', baseDefs.map((d) => d.key));
-  const defs = order.map((k) => defsByKey[k]).filter(Boolean);
+
+  // Drop hidden columns from the render list (name is never hideable). Kept OUT
+  // of useColumnOrder/useColumnWidths so persisted order + widths are preserved.
+  const hidden = hiddenColumns instanceof Set ? hiddenColumns : new Set(hiddenColumns || []);
+  const visibleOrder = order.filter((k) => k === 'name' || !hidden.has(k));
+  const defs = visibleOrder.map((k) => defsByKey[k]).filter(Boolean);
 
   // 'sel' is a fixed leading track, prepended ONLY for rendering + width
   // measurement — never fed to useColumnOrder (so it can't be persisted or
   // reordered) and skipped by startResize (fixed defs are non-resizable).
   const selDef = selectable ? [{ key: 'sel', fixed: 36 }] : [];
-  const renderKeys = selectable ? ['sel', ...order] : order;
+  const renderKeys = selectable ? ['sel', ...visibleOrder] : visibleOrder;
 
   const { gridTemplate, startResize } = useColumnWidths('myDecisions', [...selDef, ...defs]);
   // On phones use a compact fixed template (shared board-level horizontal
@@ -127,9 +136,10 @@ export function MyDecisionsTable({
   const handle = (key) =>
     canResize ? <ResizeHandle onMouseDown={(e) => startResize(key, e)} /> : null;
 
-  // Movable column ids = everything except the frozen, pinned-first name column
-  // ('sel' is never part of `order`, so it's already excluded).
-  const movableIds = order.filter((k) => k !== 'name');
+  // Movable column ids = every VISIBLE column except the frozen, pinned-first
+  // name column (hidden columns aren't rendered, so they can't be dragged;
+  // 'sel' is never part of `order`, so it's already excluded).
+  const movableIds = visibleOrder.filter((k) => k !== 'name');
 
   const renderHeaderCell = (key) => {
     if (key === 'sel') {

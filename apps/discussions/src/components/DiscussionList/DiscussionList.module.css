@@ -254,6 +254,13 @@
   padding: var(--spacing-xs, 4px);
 }
 
+/* Plain, empty initial-load placeholder for the LEFT list (round 46). The list
+   is preloaded at boot so this is normally skipped; it deliberately shows NO
+   branded animation — just reserves a little height while it settles. */
+.listLoading {
+  min-height: 160px;
+}
+
 .empty {
   display: flex;
   flex-direction: column;

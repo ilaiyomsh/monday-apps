@@ -26,6 +26,11 @@ export function MyTasksTable({
   tasks,
   color,
   canManageSettings = false,
+  // Hidden columns (round 46): a Set (or array) of column keys to hide. Applied
+  // at the final render layer only — column order/width persistence is untouched,
+  // so a hidden column keeps its stored position/width and returns in place when
+  // re-shown. The primary name column is never hideable.
+  hiddenColumns,
   onStatusChange,
   onPriorityChange,
   onNotesChange,
@@ -76,13 +81,18 @@ export function MyTasksTable({
   // cell render order from the SAME ordered list so they can never drift.
   const defsByKey = Object.fromEntries(baseDefs.map((d) => [d.key, d]));
   const { order, reorder } = useColumnOrder('myTasks', baseDefs.map((d) => d.key));
-  const defs = order.map((k) => defsByKey[k]).filter(Boolean);
+
+  // Drop hidden columns from the render list (name is never hideable). Kept OUT
+  // of useColumnOrder/useColumnWidths so persisted order + widths are preserved.
+  const hidden = hiddenColumns instanceof Set ? hiddenColumns : new Set(hiddenColumns || []);
+  const visibleOrder = order.filter((k) => k === 'name' || !hidden.has(k));
+  const defs = visibleOrder.map((k) => defsByKey[k]).filter(Boolean);
 
   // 'sel' is a fixed leading track, prepended ONLY for rendering + width
   // measurement — never fed to useColumnOrder (so it can't be persisted or
   // reordered) and skipped by startResize (fixed defs are non-resizable).
   const selDef = selectable ? [{ key: 'sel', fixed: 36 }] : [];
-  const renderKeys = selectable ? ['sel', ...order] : order;
+  const renderKeys = selectable ? ['sel', ...visibleOrder] : visibleOrder;
 
   const { gridTemplate, startResize } = useColumnWidths('myTasks', [...selDef, ...defs]);
   // On phones, ignore the (desktop) resizable px widths and use a compact fixed
@@ -115,8 +125,9 @@ export function MyTasksTable({
     notes: t('myTasks.colNotes'),
     discussion: t('myTasks.colDiscussion'),
   };
-  // Movable column ids = everything except the frozen, pinned-first name column.
-  const movableIds = order.filter((k) => k !== 'name');
+  // Movable column ids = every VISIBLE column except the frozen, pinned-first
+  // name column (hidden columns aren't rendered, so they can't be dragged).
+  const movableIds = visibleOrder.filter((k) => k !== 'name');
   const renderHeaderCell = (key) => {
     if (key === 'sel') {
       return (

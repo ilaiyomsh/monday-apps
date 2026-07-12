@@ -5,14 +5,12 @@ import { Button, Text, IconButton } from '@vibe/core';
 import { Calendar, Search, Settings } from '@vibe/icons';
 import { Copy, FileDown, Filter, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
-import { BrandLoader } from '@generated/components/BrandLoader';
 import { MONTHS_HE, fmtTimeLabel } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
 import { discussionAccentColor } from '@generated/constants/discussionColors.js';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { usePermission } from '@generated/hooks/usePermission.js';
-import { useMinSplash } from '@generated/hooks/useMinSplash.js';
 import styles from './DiscussionList.module.css';
 
 /* List-row subtitle: short weekday + "DD/MM", plus " · HH:MM" when the date
@@ -379,12 +377,12 @@ export function DiscussionList({
 
   const { items, loading, refetching, loadingMore, cursor, loadMore, softDeleteDiscussion } = useDiscussions(filters);
 
-  // Branded splash for the initial list load. useMinSplash keeps it up for a
-  // short min window on each entry (it arms when `loading` rises, which happens
-  // on mount as the first page fetches), so the animation is seen even when the
-  // page resolves instantly from cache. Only the list branch consumes it — the
-  // calendar keeps its own loading UI. Purely presentational; no data change.
-  const splash = useMinSplash(loading);
+  // NOTE (round 46): the LEFT discussions list intentionally shows NO branded
+  // Meetings splash. The list is preloaded at boot (prefetchDiscussions), so its
+  // initial-load window is normally skipped entirely; when it does briefly load
+  // we render a plain empty area and let it settle. The branded loader now lives
+  // ONLY in the boot gate (App) and the RIGHT-hand card pane on a return to the
+  // discussions view from My Tasks / My Decisions.
 
   // Per-discussion edit gate (mirrors DiscussionCard) resolved through the
   // advisory permission hook. The list rows carry discussionCreatorID/
@@ -612,8 +610,10 @@ export function DiscussionList({
         />
       ) : (
       <div className={`${styles.scroll} ${refetching ? styles.refetching : ''}`}>
-        {(loading || splash) ? (
-          <BrandLoader />
+        {loading ? (
+          // Preloaded at boot → this window is normally skipped. Render a plain
+          // empty area (NO branded splash) while it settles — never the animation.
+          <div className={styles.listLoading} aria-hidden="true" />
         ) : items.length === 0 ? (
           <div className={styles.empty}>
             <Text color={"secondary"}>לא נמצאו דיונים</Text>
