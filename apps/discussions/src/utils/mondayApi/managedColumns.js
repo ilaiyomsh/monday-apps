@@ -174,3 +174,50 @@ export async function addManagedStatusLabel({ managedColumnId, title }) {
   logger.info('managedColumns', 'added label to managed column', { managedColumnId, name });
   return { ok: true };
 }
+
+/**
+ * Add a label to an account MANAGED DROPDOWN column via
+ * update_dropdown_managed_column. Reads the current labels + integer revision,
+ * echoes them back (id + label + is_deactivated) plus the new one (no id → the
+ * server assigns it), and bumps the revision. Duplicate active label → no-op
+ * (returns its id). Change propagates to every board column instancing it.
+ * Returns the new (or duplicate) label id, or null if it couldn't be resolved.
+ */
+export async function addManagedDropdownLabel({ managedColumnId, title }) {
+  const name = String(title || '').trim();
+  if (!managedColumnId || !name) throw new Error('addManagedDropdownLabel: missing managedColumnId/title');
+  const read = await api(
+    `query ($id: [String!]) { managed_column(id: $id) { id revision settings_json } }`,
+    { id: [String(managedColumnId)] },
+    'addManagedDropdownLabel.read'
+  );
+  const mc = read?.managed_column?.[0];
+  if (!mc) throw new Error('addManagedDropdownLabel: managed column not found');
+  const revision = Number(mc.revision);
+  const labels = Array.isArray(mc.settings_json?.labels) ? mc.settings_json.labels : [];
+  const existing = labels.find(
+    (l) => !l.is_deactivated && (l.label ?? '').trim().toLowerCase() === name.toLowerCase()
+  );
+  if (existing) return Number(existing.id);
+  const labelsInput = labels
+    .map((l) => ({ id: Number(l.id), label: l.label ?? '', is_deactivated: l.is_deactivated === true }))
+    .concat([{ label: name }]);
+  const res = await api(
+    `mutation ($id: String!, $rev: Int!, $s: UpdateDropdownColumnSettingsInput!) {
+       update_dropdown_managed_column(id: $id, revision: $rev, settings: $s) { id revision }
+     }`,
+    { id: String(managedColumnId), rev: revision, s: { labels: labelsInput } },
+    'addManagedDropdownLabel'
+  );
+  assertNoGraphQLErrors(res, { functionName: 'addManagedDropdownLabel' });
+  // Re-read to resolve the server-assigned id.
+  const after = await api(
+    `query ($id: [String!]) { managed_column(id: $id) { settings_json } }`,
+    { id: [String(managedColumnId)] },
+    'addManagedDropdownLabel.after'
+  );
+  const added = (after?.managed_column?.[0]?.settings_json?.labels || []).find(
+    (l) => (l.label ?? '').trim().toLowerCase() === name.toLowerCase() && !l.is_deactivated
+  );
+  return added ? Number(added.id) : null;
+}
