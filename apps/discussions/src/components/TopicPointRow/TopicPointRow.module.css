@@ -463,3 +463,18 @@
   border-radius: 50%;
   background: var(--disabled-background-color, #eceef2);
 }
+
+/* Per-point creator avatar (round 58) — hidden at rest, revealed on row hover,
+   pinned just left of the updates bubble. Mirrors the hover reveal of .hideBtn /
+   .renameBtn (opacity fade; keeps its box so nothing else shifts on hover). */
+.creatorAvatar {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.row:hover .creatorAvatar,
+.creatorAvatar:focus-within {
+  opacity: 1;
+}

@@ -142,9 +142,10 @@ export function RowKebabMenu({ excluded, onToggleHide, onDelete, kind = 'נקו�
  */
 export function TopicPointRow({
   point, rowStyle,
-  // Kept for signature compatibility (the per-point creator avatar column was
-  // removed from the table; the read/write path in useTopics stays intact).
-  usersById, // eslint-disable-line no-unused-vars
+  // Per-point creator avatar (round 58): the creator's avatar is revealed on row
+  // hover just left of the updates bubble. Resolved from usersById (threaded by
+  // TopicsTab, which collects topic + point creator ids) via point.creatorId.
+  usersById,
   onToggle, onToggleNotForDiscussion, onRename,
   // Optimistic-create error affordance: retry re-runs a failed point create.
   // (Deletion is via the נושאים tab's multi-select bulk delete — the per-row
@@ -306,6 +307,16 @@ export function TopicPointRow({
         >
           <Update size={18} />
         </button>
+        {/* Creator avatar (round 58) — the point creator's avatar, revealed only
+            on row hover and pinned just LEFT of the updates bubble (it's the last
+            child, so leftmost in this RTL name cell). Rendered only when the point
+            has a recorded creator (point.creatorId); points without one show
+            nothing, at rest or on hover. */}
+        {point.creatorId && (
+          <span className={styles.creatorAvatar}>
+            <CreatorAvatar userId={point.creatorId} usersById={usersById} size="small" />
+          </span>
+        )}
       </div>
 
       {/* האם נידונה — checkbox (round 47: hideable via the columns set) */}

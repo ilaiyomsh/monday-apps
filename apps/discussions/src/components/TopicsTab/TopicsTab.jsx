@@ -452,6 +452,7 @@ function SortableTopicSection({
                   key={point.id}
                   point={point}
                   rowStyle={rowStyle}
+                  usersById={usersById}
                   columns={columns}
                   onToggle={togglePoint}
                   onToggleNotForDiscussion={togglePointNotForDiscussion}
