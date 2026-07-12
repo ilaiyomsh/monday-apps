@@ -74,23 +74,33 @@
   align-items: flex-start;
   gap: var(--spacing-small, 8px);
   margin-bottom: var(--spacing-small, 8px);
-  /* Wrap when the pane narrows (e.g. monday docks an item-card panel beside the
-     board view): the title keeps the first line at full size and the date/people
-     meta drops to its OWN line beneath it — instead of the meta squeezing the
-     title into a crushed sliver. The `gap` above doubles as the row-gap between
-     the wrapped lines. At normal (wide) widths both fit on one line, unchanged. */
-  flex-wrap: wrap;
+  /* Round 48: keep the TITLE and the date/people META on ONE row at EVERY width —
+     including when monday docks the Updates panel and narrows the iframe — so the
+     header is always exactly two rows (title+meta, then the tab row) and the table
+     below never jumps down by a row. nowrap forbids the meta from dropping to its
+     own line (the round-42 wrap did exactly that); instead the meta shrinks and
+     clips (see .participants) while the title ellipsizes (see .title), both staying
+     inline. overflow-x:clip guarantees the row can never spawn an app-level
+     horizontal scrollbar even in the extreme case; overflow-y stays visible so the
+     inline half-hour time menu can still drop BELOW the row (a plain overflow
+     :hidden would clip that dropdown). At wide widths both fit on one line as
+     before, so nothing visibly changes there. */
+  flex-wrap: nowrap;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 .titleBlock {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  /* Reserve a readable width for the title so the meta wraps to the next line
-     before the title is ever squeezed. Capped at 100% (min()) so on an extremely
-     narrow pane the block simply takes the full width and never overflows. The
-     `.mobile-app` rule below resets this to 0 (the phone layout wraps the title
-     internally next to an info button instead). */
+  /* Reserve a readable width for the title (round-42 min, kept intact) so the meta
+     gives way — shrinking/clipping in its share of the SAME row — before the title
+     is ever squeezed. Capped at 100% (min()) so on an extremely narrow pane the
+     block simply takes the full width and never overflows; the title itself then
+     stays on one line and ellipsizes (see .title) rather than wrapping to a second
+     line. The `.mobile-app` rule below resets this to 0 (the phone layout wraps the
+     title internally next to an info button instead). */
   min-width: min(100%, 18rem);
   flex: 1 1 auto;
 }
@@ -162,6 +172,15 @@
 :global(.mobile-app) .titleInput {
   font-size: 22px;
 }
+/* Mobile keeps the round-approved INTERNAL title wrap: the phone header collapses
+   the date/people meta behind an info button, so the title has the room to wrap
+   over two lines and shouldn't truncate. Undo the desktop one-line/ellipsis rule
+   (base .title above) here so the mobile layout is byte-for-byte unchanged. */
+:global(.mobile-app) .title {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
 /* Keep back-arrow + title + info button on ONE row; the title wraps INTERNALLY
    (titleBlock min-width:0) rather than pushing the info button to a new line. */
 :global(.mobile-app) .titleRow {
@@ -177,6 +196,11 @@
   width: 100%;
   margin-inline-start: 0;
   align-items: flex-start;
+  /* On its own full-width line the mobile meta has room, so undo the desktop
+     one-line clip: let it wrap and keep overflow visible (base .participants is
+     nowrap + overflow-x:clip for the desktop single-row constraint). */
+  flex-wrap: wrap;
+  overflow: visible;
 }
 
 .title {
@@ -186,6 +210,15 @@
   color: var(--text-color, #323338);
   margin: 0;
   cursor: text;
+  /* Round 48: keep the title on ONE line and ellipsize when the pane narrows,
+     instead of wrapping to a second line — that keeps the title+meta row a single
+     line tall so the header never grows a third row (the table stays put). The
+     min-width:0 lets the h1 shrink inside .titleMainRow (a flex row) so the
+     ellipsis actually engages. The mobile layout restores wrapping just below. */
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .copyLinkButton {
@@ -262,21 +295,29 @@
      that isn't the title is flush right). Physical — not inline — so the block's
      own dir="rtl" (which orders תאריך→שעה→people right-to-left) doesn't flip it. */
   margin-left: auto;
-  /* Yield instead of forcing width: when the pane narrows the block first wraps
-     to its own line beneath the title (see .titleRow flex-wrap), and — only on an
-     extremely narrow pane — shrinks and wraps its own fields rather than pushing
-     the layout wider (which used to spawn an app-level horizontal scrollbar and
-     crush the title). flex-shrink:1 + min-width:0 let it give way; at wide widths
-     it still sits on one line, flush right, unchanged. */
+  /* Round 48: yield WITHOUT wrapping. When the pane narrows (e.g. monday docks the
+     Updates panel) the meta shares the title's SAME row and gives way — flex-shrink
+     :1 + min-width:0 let it be allotted less than its content width — then CLIPS the
+     overflow instead of dropping to its own line (the round-42 wrap) or pushing the
+     layout wider (which used to spawn an app-level horizontal scrollbar and crush
+     the title). It stays on ONE line (flex-wrap:nowrap here; the inner date/time/
+     label/avatar items are each already nowrap), so the header is always exactly
+     two rows and the table never jumps. overflow-x:clip does the horizontal clip;
+     overflow-y stays visible so the inline half-hour time menu can still drop BELOW
+     the row (a plain overflow:hidden/auto would clip it — the date popover is
+     portaled by Vibe, so it is unaffected either way). At wide widths it still sits
+     on one line, flush right, unchanged. */
   flex-shrink: 1;
   min-width: 0;
   display: flex;
   flex-direction: row;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: clip;
+  overflow-y: visible;
   /* Column spacing between groups comes from each group's padding (see
-     .peopleGroup), so the vertical separators sit centered between fields; a
-     small row-gap spaces the fields only if they wrap onto multiple lines. */
+     .peopleGroup), so the vertical separators sit centered between fields. With the
+     fields on a single non-wrapping line the row-gap is now moot but kept harmless. */
   row-gap: 4px;
   column-gap: 0;
 }
