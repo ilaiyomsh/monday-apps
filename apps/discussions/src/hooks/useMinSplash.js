@@ -29,7 +29,7 @@ import { useEffect, useRef, useState } from 'react';
  * Reduced-motion is handled by the component's own CSS. No storage, no
  * artificial delays beyond the short `ms` window.
  */
-export function useMinSplash(active, ms = 900, armKey) {
+export function useMinSplash(active, ms = 2000, armKey) {
   const [windowDone, setWindowDone] = useState(true); // closed until armed
   const [armToken, setArmToken] = useState(0);
   const prevActive = useRef(false);

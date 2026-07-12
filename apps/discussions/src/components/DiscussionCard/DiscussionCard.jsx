@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
 import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
 import { MoveArrowLeft, Link, Info } from '@vibe/icons';
 import { Check } from 'lucide-react';
@@ -45,6 +45,12 @@ const HEADER_TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
 });
 
 const HEADER_DATE_FMT = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+
+// Round 50 — width (px) at/below which the header is treated as NARROW (monday
+// has docked its Updates/item-card panel beside the board view and squeezed the
+// iframe). Below it the header hides the PEOPLE meta (מנהל / מרכז / משתתפים) and
+// keeps only the date + time, so the crowded one-row header never overflows.
+const HEADER_NARROW_MAX = 600;
 
 function normalizeTabName(tabName) {
   if (!tabName) return null;
@@ -95,6 +101,27 @@ export function DiscussionCard({
   const { isMobile } = useViewport();
   const [infoOpen, setInfoOpen] = useState(false);
   const [timeMenuOpen, setTimeMenuOpen] = useState(false);
+  // Round 50 — hide the header PEOPLE meta when the app iframe is NARROW (monday
+  // has docked its Updates/item-card panel beside the board view). A
+  // ResizeObserver measures the header; at/below HEADER_NARROW_MAX we toggle
+  // .participantsNarrow, which keeps date+time and hides the role groups (see the
+  // CSS). Desktop-only in effect — the mobile layout renders the info popover,
+  // not the .participants row. Keyed on discussion id so it (re)attaches once the
+  // header mounts; guarded for environments without ResizeObserver (tests/SSR).
+  const headerRef = useRef(null);
+  const [headerNarrow, setHeaderNarrow] = useState(false);
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const apply = (w) => setHeaderNarrow(w > 0 && w <= HEADER_NARROW_MAX);
+    apply(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      apply(entry?.contentRect?.width ?? el.getBoundingClientRect().width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [discussion?.id]);
   // The list is lean (id/name/date); pull the rest of the discussion's columns
   // on click and merge them over the list item. `overrides` holds optimistic
   // inline edits (title / description) until the next select.
@@ -437,7 +464,7 @@ export function DiscussionCard({
 
   return (
     <div className={styles.root}>
-      <div className={styles.header}>
+      <div className={styles.header} ref={headerRef}>
         <div className={styles.titleRow}>
           <span className={styles.backButton}>
             <IconButton
@@ -531,7 +558,7 @@ export function DiscussionCard({
                  vertical separator between fields. Date/time are BOLD and, for
                  editors, clickable — date opens the shared calendar popover, time
                  opens a half-hour menu; both persist to the discussion item. */
-              <div dir="rtl" className={`${styles.participants} ${reserveSettingsSpace ? styles.participantsReserve : ''}`}>
+              <div dir="rtl" className={`${styles.participants} ${reserveSettingsSpace ? styles.participantsReserve : ''} ${headerNarrow ? styles.participantsNarrow : ''}`}>
                 {data.discussionDateID && (
                   <div className={`${styles.peopleGroup} ${styles.dateGroup}`}>
                     {editDiscussionFields ? (

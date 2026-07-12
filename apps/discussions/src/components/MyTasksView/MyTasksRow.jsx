@@ -7,7 +7,7 @@ import { NotesEditor } from '@generated/components/NotesEditor';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { monday } from '@api/monday-client.js';
+import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { getTaskDiscussion } from './grouping.js';
 import grid from './MyTasksTable.module.css';
 import row from '../TaskTableRow/TaskTableRow.module.css';
@@ -18,9 +18,12 @@ const NEUTRAL = 'hsl(var(--status-default))';
 // Open the monday item card on the "updates" pane — the My Tasks row's primary
 // affordance (the row body is the click target; inline-edit controls stop
 // propagation so editing a field doesn't pop the card).
+// Toggle the monday item card for this item: 1st click opens, a 2nd click on the
+// SAME item closes it. Shared open-id tracking + best-effort close live in
+// utils/itemCard.js (the SDK has no guaranteed closeItemCard — see that file).
 function openItemCard(itemId) {
   if (!itemId) return;
-  monday.execute('openItemCard', { itemId: Number(itemId), kind: 'updates' });
+  openOrToggleItemCard(itemId);
 }
 
 const stop = (e) => e.stopPropagation();

@@ -4,7 +4,7 @@ import { Update, Edit } from '@vibe/icons';
 import { Trash2, EyeOff, Eye, MoreHorizontal, Check } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { monday } from '@api/monday-client.js';
+import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import styles from './TopicPointRow.module.css';
 
 function initialsOf(name) {
@@ -15,9 +15,13 @@ function initialsOf(name) {
 // cell's updates affordance (kind:'updates' renders monday's side panel). A
 // POINT is a subitem, so point.id is a real monday item id; guard the temp id
 // of an optimistic (not-yet-saved) point so it never targets a bogus id.
+// Toggle the point's item card: 1st click opens, a 2nd click on the SAME point
+// closes it. Shared open-id tracking + best-effort close live in utils/itemCard.js
+// (the SDK has no guaranteed closeItemCard — see that file). A POINT is a subitem,
+// so guard the temp id of an optimistic (not-yet-saved) point.
 function openItemCard(itemId) {
   if (!itemId || String(itemId).startsWith('temp-')) return;
-  monday.execute('openItemCard', { itemId: Number(itemId), kind: 'updates' });
+  openOrToggleItemCard(itemId);
 }
 
 /* Creator avatar (who created the topic / point). Resolves the user from the
