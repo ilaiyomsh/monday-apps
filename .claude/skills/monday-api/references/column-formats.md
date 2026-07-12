@@ -56,6 +56,15 @@ Write rules that apply to every column type:
   {id settings_json}`; titles are unreliable. `create_labels_if_missing` does NOT work on
   managed columns. A new label's `index` must exceed the max of ALL existing
   `labels_positions_v2` positions (including orphaned ones).
+  Verified 2026-07-12 for managed DROPDOWN columns (scratch `create_dropdown_managed_column`
+  + `attach_dropdown_managed_column` repro): `create_item` with `create_labels_if_missing:
+  true` and a label missing from the managed column fails with `ColumnValueException:
+  "The dropdown label 'X' does not exist, possible labels are: {...}"` — the item is NOT
+  created. The identical call on a regular dropdown column succeeds and creates the label.
+  Through the seamless iframe SDK this surfaces as detail-stripped `"Graphql validation
+  errors"` (errors-and-auth.md). The board-level column query shows NO managed indicator
+  (`settings`/`settings_str` are byte-shape identical to a regular dropdown) — detection
+  only via the account-level `managed_column` query, matching by exact label set.
 
 ## Option-type columns — id, not text (dropdown / people / relation)
 
