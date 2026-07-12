@@ -155,6 +155,10 @@ export function TopicPointRow({
   decisionCount = 0, taskCount = 0,
   // Create-from-point + open-counter-popup callbacks (threaded by TopicsTab).
   onCreateDecision, onCreateTask, onOpenDecisions, onOpenTasks,
+  // Visible column keys (round 47 Hide) from TopicsTab — 'name' is always shown;
+  // check/decisions/tasks render only when present, matching the shared grid
+  // template (rowStyle). Undefined ⇒ every column shows (back-compat default).
+  columns,
   // Multi-select (Round 7) — the leading checkbox cell when selectable.
   selectable = false, selected = false, onToggleSelect,
 }) {
@@ -179,6 +183,9 @@ export function TopicPointRow({
     setEditingName(false);
   };
   const stop = (e) => e.stopPropagation();
+  // Round 47 Hide: a data column renders only when it's in the visible set (the
+  // name cell + leading track are never hideable). Undefined ⇒ show everything.
+  const showCol = (k) => !columns || columns.includes(k);
 
   // Whole-row drag (native monday feel): the sortable listeners/attributes ride
   // on the ROW itself when the point is editable — no six-dot grip. The
@@ -292,67 +299,73 @@ export function TopicPointRow({
         </button>
       </div>
 
-      {/* האם נידונה — checkbox */}
-      <div className={styles.checkCell} onClick={stop}>
-        <button
-          type="button"
-          className={`${styles.check} ${discussed ? styles.checkOn : ''}`}
-          onClick={canCheck ? () => onToggle?.(point, !discussed) : undefined}
-          aria-label={discussed ? 'נידונה' : 'לא נידונה'}
-          aria-disabled={!canCheck}
-          title={discussed ? 'נידונה' : 'סמן כנידונה'}
-        >
-          {discussed && <Check size={13} className={styles.checkMark} />}
-        </button>
-      </div>
-
-      {/* החלטות — dashed create + counter pill (opens the popup) */}
-      <div className={`${styles.linkCell} ${styles.decisionsCell}`} onClick={stop}>
-        {onCreateDecision && (
+      {/* האם נידונה — checkbox (round 47: hideable via the columns set) */}
+      {showCol('check') && (
+        <div className={styles.checkCell} onClick={stop}>
           <button
             type="button"
-            className={`${styles.createBtn} ${styles.createDecision}`}
-            title="החלטה חדשה"
-            aria-label="החלטה חדשה מהנקודה"
-            onClick={() => onCreateDecision(point)}
+            className={`${styles.check} ${discussed ? styles.checkOn : ''}`}
+            onClick={canCheck ? () => onToggle?.(point, !discussed) : undefined}
+            aria-label={discussed ? 'נידונה' : 'לא נידונה'}
+            aria-disabled={!canCheck}
+            title={discussed ? 'נידונה' : 'סמן כנידונה'}
           >
-            +
+            {discussed && <Check size={13} className={styles.checkMark} />}
           </button>
-        )}
-        <button
-          type="button"
-          className={`${styles.counter} ${decisionCount > 0 ? styles.counterDecisionOn : ''}`}
-          title="הצג החלטות"
-          aria-label="הצג החלטות מהנקודה"
-          onClick={() => onOpenDecisions?.(point)}
-        >
-          {decisionCount}
-        </button>
-      </div>
+        </div>
+      )}
 
-      {/* משימות — dashed create + counter pill (opens the popup) */}
-      <div className={`${styles.linkCell} ${styles.tasksCell}`} onClick={stop}>
-        {onCreateTask && (
+      {/* החלטות — dashed create + counter pill (round 47: hideable) */}
+      {showCol('decisions') && (
+        <div className={`${styles.linkCell} ${styles.decisionsCell}`} onClick={stop}>
+          {onCreateDecision && (
+            <button
+              type="button"
+              className={`${styles.createBtn} ${styles.createDecision}`}
+              title="החלטה חדשה"
+              aria-label="החלטה חדשה מהנקודה"
+              onClick={() => onCreateDecision(point)}
+            >
+              +
+            </button>
+          )}
           <button
             type="button"
-            className={`${styles.createBtn} ${styles.createTask}`}
-            title="משימה חדשה"
-            aria-label="משימה חדשה מהנקודה"
-            onClick={() => onCreateTask(point)}
+            className={`${styles.counter} ${decisionCount > 0 ? styles.counterDecisionOn : ''}`}
+            title="הצג החלטות"
+            aria-label="הצג החלטות מהנקודה"
+            onClick={() => onOpenDecisions?.(point)}
           >
-            +
+            {decisionCount}
           </button>
-        )}
-        <button
-          type="button"
-          className={`${styles.counter} ${taskCount > 0 ? styles.counterTaskOn : ''}`}
-          title="הצג משימות"
-          aria-label="הצג משימות מהנקודה"
-          onClick={() => onOpenTasks?.(point)}
-        >
-          {taskCount}
-        </button>
-      </div>
+        </div>
+      )}
+
+      {/* משימות — dashed create + counter pill (round 47: hideable) */}
+      {showCol('tasks') && (
+        <div className={`${styles.linkCell} ${styles.tasksCell}`} onClick={stop}>
+          {onCreateTask && (
+            <button
+              type="button"
+              className={`${styles.createBtn} ${styles.createTask}`}
+              title="משימה חדשה"
+              aria-label="משימה חדשה מהנקודה"
+              onClick={() => onCreateTask(point)}
+            >
+              +
+            </button>
+          )}
+          <button
+            type="button"
+            className={`${styles.counter} ${taskCount > 0 ? styles.counterTaskOn : ''}`}
+            title="הצג משימות"
+            aria-label="הצג משימות מהנקודה"
+            onClick={() => onOpenTasks?.(point)}
+          >
+            {taskCount}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

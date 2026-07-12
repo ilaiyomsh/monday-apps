@@ -84,6 +84,11 @@ export function TaskTable({
   // is a display concern only — it never changes a task's status/group.
   reorderScope = null,
   canReorderRows = false,
+  // Hidden columns (round 47): a Set (or array) of column keys to hide, applied
+  // at the render layer ONLY (order/width persistence untouched). The pinned name
+  // (+ sel) columns are never hideable. Empty/undefined ⇒ every column shows, so
+  // callers that don't pass it (EffectivenessTab) are unaffected.
+  hiddenColumns,
 }) {
   const { isMobile } = useViewport();
 
@@ -102,11 +107,18 @@ export function TaskTable({
   const pinned = selectable ? ['sel', 'name'] : ['name'];
   const { order, reorder } = useColumnOrder('tasks', baseKeys, pinned);
 
-  // Width defs follow the live column ORDER; 'sel' is a fixed (non-resizable)
+  // Hidden columns (round 47) applied at the render layer only: drop hidden keys
+  // from the ORDER used to render, keeping the pinned name (+ sel) always. The
+  // useColumnOrder/useColumnWidths inputs stay on the full set, so a hidden
+  // column keeps its stored order + width and returns in place when re-shown.
+  const hidden = hiddenColumns instanceof Set ? hiddenColumns : new Set(hiddenColumns || []);
+  const visibleOrder = order.filter((k) => k === 'name' || k === 'sel' || !hidden.has(k));
+
+  // Width defs follow the live VISIBLE order; 'sel' is a fixed (non-resizable)
   // leading track, everything else resizes within the constants' clamps.
-  const defs = order.map((k) => (k === 'sel' ? { key: 'sel', fixed: 36 } : { key: k, ...W[k] }));
+  const defs = visibleOrder.map((k) => (k === 'sel' ? { key: 'sel', fixed: 36 } : { key: k, ...W[k] }));
   const { gridTemplate, startResize } = useColumnWidths('tasks', defs);
-  const mobileTemplate = order.map((k) => MOBILE_TRACK[k]).filter(Boolean).join(' ');
+  const mobileTemplate = visibleOrder.map((k) => MOBILE_TRACK[k]).filter(Boolean).join(' ');
   const rowStyle = { gridTemplateColumns: isMobile ? mobileTemplate : gridTemplate };
 
   // Whole-row drag-reorder (Round 7): enabled only when a scope is passed, the
@@ -123,7 +135,7 @@ export function TaskTable({
   // Prefer the explicit board-permissions gate when supplied; else legacy owner.
   const canReorder = (canReorderColumns ?? canManageSettings) && !isMobile;
   const canResize = canReorder;
-  const movableIds = order.filter((k) => k !== 'name' && k !== 'sel');
+  const movableIds = visibleOrder.filter((k) => k !== 'name' && k !== 'sel');
   // Non-first header cells need a positioning context for the absolute handle;
   // the frozen .taskFirst is already sticky (a containing block), so it doesn't.
   const relStyle = canResize ? { position: 'relative' } : undefined;
@@ -166,7 +178,7 @@ export function TaskTable({
         {/* header */}
         <div className={`${styles.taskRow} ${styles.taskHead}`} style={rowStyle}>
           <ColumnHeaderDnd enabled={canReorder} ids={movableIds} labels={TITLE} onReorder={reorder}>
-            {order.map(renderHeaderCell)}
+            {visibleOrder.map(renderHeaderCell)}
           </ColumnHeaderDnd>
         </div>
 
@@ -176,7 +188,7 @@ export function TaskTable({
             <TaskTableRow
               key={task.id}
               task={task}
-              columns={order}
+              columns={visibleOrder}
               rowStyle={rowStyle}
               onStatusChange={onStatusChange && canTask('editTaskStatus', task) ? onStatusChange : undefined}
               onPriorityChange={onPriorityChange && canTask('editTaskPriority', task) ? onPriorityChange : undefined}

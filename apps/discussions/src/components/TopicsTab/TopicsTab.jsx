@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton, Button, TextField, Dialog, DialogContentContainer, Text, Checkbox } from '@vibe/core';
 import { CloseSmall, DropdownChevronDown } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
@@ -24,6 +24,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { useTopics } from '@generated/hooks/useTopics';
 import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
+import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { TOPICS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
@@ -164,6 +166,10 @@ function SortableTopicSection({
   renamePoint, reorderPoints,
   // Shared fixed grid template (same object for header + rows).
   rowStyle,
+  // Visible column keys (round 47 Hide) — 'name' is always present; check/
+  // decisions/tasks appear only when not hidden. Drives BOTH the column-header
+  // cells and each point row's cells so they stay aligned to the grid template.
+  columns,
   // Granular discussion-tier caps (each equals the legacy canEdit while the
   // feature is off). add → add topic/point; edit → rename/priority/drag-reorder;
   // del → delete/hide; check → "נידונה" toggle.
@@ -406,25 +412,31 @@ function SortableTopicSection({
                 </span>
               )}
             </span>
-            {/* Frozen name header — sticky (its own positioning context) so it
-                pins during horizontal scroll AND hosts the resize handle, exactly
-                like TaskTable's frozen `.taskFirst`. No inline `relative` here:
-                the sticky class provides the absolute handle's containing block. */}
-            <span className={`${styles.colHeadCell} ${styles.colHeadName}`}>
-              {canResize && <ResizeHandle onMouseDown={(e) => startResize('name', e)} />}
-            </span>
-            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`} style={canResize ? { position: 'relative' } : undefined}>
-              נידונה
-              {canResize && <ResizeHandle onMouseDown={(e) => startResize('check', e)} />}
-            </span>
-            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`} style={canResize ? { position: 'relative' } : undefined}>
-              החלטות
-              {canResize && <ResizeHandle onMouseDown={(e) => startResize('decisions', e)} />}
-            </span>
-            <span className={`${styles.colHeadCell} ${styles.colHeadCenter}`} style={canResize ? { position: 'relative' } : undefined}>
-              משימות
-              {canResize && <ResizeHandle onMouseDown={(e) => startResize('tasks', e)} />}
-            </span>
+            {/* Data column headers — driven by the VISIBLE columns (round 47 Hide)
+                so a hidden column drops both its header cell and its grid track.
+                'name' is the frozen header (sticky positioning context hosts the
+                resize handle, like TaskTable's `.taskFirst`); the rest are
+                centered headers with a relative handle. */}
+            {(columns || TOPIC_COLUMN_KEYS).map((k) => {
+              if (k === 'name') {
+                return (
+                  <span key="name" className={`${styles.colHeadCell} ${styles.colHeadName}`}>
+                    {canResize && <ResizeHandle onMouseDown={(e) => startResize('name', e)} />}
+                  </span>
+                );
+              }
+              const headLabel = k === 'check' ? 'נידונה' : k === 'decisions' ? 'החלטות' : 'משימות';
+              return (
+                <span
+                  key={k}
+                  className={`${styles.colHeadCell} ${styles.colHeadCenter}`}
+                  style={canResize ? { position: 'relative' } : undefined}
+                >
+                  {headLabel}
+                  {canResize && <ResizeHandle onMouseDown={(e) => startResize(k, e)} />}
+                </span>
+              );
+            })}
           </div>
 
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handlePointDragEnd}>
@@ -434,6 +446,7 @@ function SortableTopicSection({
                   key={point.id}
                   point={point}
                   rowStyle={rowStyle}
+                  columns={columns}
                   onToggle={togglePoint}
                   onToggleNotForDiscussion={togglePointNotForDiscussion}
                   onRename={renamePoint}
@@ -513,6 +526,9 @@ export function TopicsTab({
   // Owners (can('reorderColumns')) may drag-resize the topics columns; the
   // widths persist per-instance under the shared 'topics' tableId (all users).
   canReorderColumns = false,
+  // Board owner (round 47): gates the Hide-columns pill + its "Save to this view"
+  // (mirrors the other tabs). Non-owners never see it and get the saved config.
+  canManageSettings = false,
   // Decisions redesign wiring (per the approved mockup):
   //   onCreateFromPoint(kind, point) — kind: 'decision' | 'task'; opens the
   //     parent's quick-create flow scoped to the point. The dashed "+" buttons
@@ -648,9 +664,47 @@ export function TopicsTab({
   // for those four; we prepend the fixed lead track. Owners on a non-touch
   // viewport get the drag handles (canResize); everyone gets the stored widths.
   const { isMobile } = useViewport();
+
+  // --- Hide columns (round 47) ------------------------------------------------
+  // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
+  // site, persisted to the SHARED saved view
+  // (settings.preferences.savedViews.topics.hiddenColumns) so an owner's "Save to
+  // this view" applies for everyone. The primary "נקודה לדיון" (name) column is
+  // never hideable. Applied at the render layer — a hidden column drops its
+  // header cell, its per-row cell, AND its grid track (via columnDefs below);
+  // widths persist per key, so a re-shown column returns at its stored width.
+  const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('topics', { canManageSettings });
+  const columnList = [
+    { key: 'name', label: 'נקודה לדיון', icon: 'text', locked: true },
+    { key: 'check', label: 'נידונה', icon: 'check' },
+    { key: 'decisions', label: 'החלטות', icon: 'relation' },
+    { key: 'tasks', label: 'משימות', icon: 'relation' },
+  ];
+  const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
+  const [hiddenColumns, setHiddenColumns] = useState(
+    () => new Set(Array.isArray(savedView?.hiddenColumns) ? savedView.hiddenColumns : [])
+  );
+  const toggleColumn = useCallback((key) => setHiddenColumns((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  }), []);
+  const showAllColumns = useCallback((show) => {
+    setHiddenColumns(show ? new Set() : new Set(hideableKeys));
+  }, [hideableKeys]);
+  const saveHiddenColumns = useCallback(() => {
+    saveView({ hiddenColumns: [...hiddenColumns] });
+    onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
+  }, [saveView, hiddenColumns, onNotify]);
+  // Visible column keys — 'name' always kept; the other three drop when hidden.
+  const visibleKeys = useMemo(
+    () => TOPIC_COLUMN_KEYS.filter((k) => k === 'name' || !hiddenColumns.has(k)),
+    [hiddenColumns]
+  );
+
   const columnDefs = useMemo(
-    () => TOPIC_COLUMN_KEYS.map((k) => ({ key: k, ...W[k] })),
-    []
+    () => visibleKeys.map((k) => ({ key: k, ...W[k] })),
+    [visibleKeys]
   );
   const { gridTemplate, startResize } = useColumnWidths('topics', columnDefs);
   const canResize = !!canReorderColumns && !isMobile;
@@ -825,6 +879,17 @@ export function TopicsTab({
             />
           )}
         </div>
+        {/* Hide columns (round 47) — owners only. Non-owners never see it and
+            always get the saved config applied to every topic's points table. */}
+        {canManageSettings && (
+          <HideColumnsControl
+            columns={columnList}
+            hidden={hiddenColumns}
+            onToggle={toggleColumn}
+            onToggleAll={showAllColumns}
+            onSave={canSaveView ? saveHiddenColumns : null}
+          />
+        )}
         {items.length > 0 && (
           <CollapseAllButton collapsed={!anyOpen} onClick={toggleAll} />
         )}
@@ -873,6 +938,7 @@ export function TopicsTab({
               renamePoint={renamePoint}
               reorderPoints={reorderPoints}
               rowStyle={rowStyle}
+              columns={visibleKeys}
               canAdd={addTopicOrPoint}
               canEditTopic={editTopicOrPoint}
               canDelete={deleteTopicOrPoint}

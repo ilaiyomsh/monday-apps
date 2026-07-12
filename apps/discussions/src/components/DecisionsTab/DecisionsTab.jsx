@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton, Button, Dialog, DialogContentContainer, Checkbox, Text } from '@vibe/core';
 import { DropdownChevronDown, Filter, CloseSmall, Update, Edit } from '@vibe/icons';
 import {
@@ -19,6 +19,7 @@ import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from 
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
+import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
 import {
   filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
@@ -453,9 +454,52 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   );
   const pinned = useMemo(() => (canSelect ? ['sel', 'name'] : ['name']), [canSelect]);
   const { order, reorder } = useColumnOrder('decisions', baseKeys, pinned);
+
+  // Shared saved view (moved up so the round-47 Hide-columns state can read its
+  // hiddenColumns at init; the group/sort/filter state below still reads it too).
+  const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('decisionsTab', { canManageSettings });
+
+  // --- Hide columns (round 47) ------------------------------------------------
+  // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
+  // site, persisted to the SHARED saved view
+  // (settings.preferences.savedViews.decisionsTab.hiddenColumns) so an owner's
+  // "Save to this view" applies for everyone. The primary name (החלטה) column is
+  // never hideable; the leading selection track is not a listed column. Applied
+  // at the render layer only — column order/width persistence is untouched.
+  const columnList = [
+    { key: 'name', label: 'החלטה', icon: 'text', locked: true },
+    { key: 'decider', label: 'מחליט', icon: 'person' },
+    { key: 'affected', label: 'מושפעים', icon: 'person' },
+    { key: 'status', label: 'סטאטוס', icon: 'status' },
+    { key: 'date', label: 'תאריך', icon: 'date' },
+  ];
+  const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
+  const [hiddenColumns, setHiddenColumns] = useState(
+    () => new Set(Array.isArray(savedView?.hiddenColumns) ? savedView.hiddenColumns : [])
+  );
+  const toggleColumn = useCallback((key) => setHiddenColumns((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  }), []);
+  const showAllColumns = useCallback((show) => {
+    setHiddenColumns(show ? new Set() : new Set(hideableKeys));
+  }, [hideableKeys]);
+  const saveHiddenColumns = useCallback(() => {
+    saveView({ hiddenColumns: [...hiddenColumns] });
+    onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
+  }, [saveView, hiddenColumns, onNotify]);
+
+  // Drop hidden keys from the ORDER used to render (name + sel always kept). The
+  // useColumnOrder input above stays on the full set, so a hidden column keeps
+  // its stored order/width and returns in place when re-shown.
+  const visibleOrder = useMemo(
+    () => order.filter((k) => k === 'name' || k === 'sel' || !hiddenColumns.has(k)),
+    [order, hiddenColumns]
+  );
   const columnDefs = useMemo(
-    () => order.map((k) => (k === 'sel' ? { key: 'sel', fixed: 40 } : { key: k, ...W[k] })),
-    [order]
+    () => visibleOrder.map((k) => (k === 'sel' ? { key: 'sel', fixed: 40 } : { key: k, ...W[k] })),
+    [visibleOrder]
   );
   const { gridTemplate, startResize } = useColumnWidths('decisions', columnDefs);
   const canReorderCols = !!canReorderColumns && !isMobile;
@@ -464,11 +508,6 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   // Row-drag gate (same as selection: editors/creators; off on mobile). Reorder
   // is scoped per group, so it's fine in every group mode (within-group only).
   const canReorderRows = canSelect && !isMobile;
-
-  // ---- Filter + Group by (client-side, over the loaded decisions; same
-  // builder UI as the Tasks / Previous tabs). Load-time state = the shared saved
-  // view; in-session changes are local until someone with permission hits Save. ----
-  const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('decisionsTab', { canManageSettings });
   const savedGroup = GROUP_OPTIONS.some((o) => o.value === savedView?.group?.col) ? savedView.group : null;
   const [groupBy, setGroupBy] = useState(savedGroup ? savedGroup.col : 'none');
   const [groupOrder, setGroupOrder] = useState(savedGroup?.order || 'labelAsc');
@@ -796,8 +835,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   const DEC_TITLE = { name: 'החלטה', decider: 'מחליט', affected: 'מושפעים', status: 'סטאטוס', date: 'תאריך' };
   const decRelStyle = canResize ? { position: 'relative' } : undefined;
   const decHandle = (key) => (canResize && key !== 'sel' ? <ResizeHandle onMouseDown={(e) => startResize(key, e)} /> : null);
-  // Movable header cells = everything except the pinned name (+ sel).
-  const movableColIds = order.filter((k) => k !== 'name' && k !== 'sel');
+  // Movable header cells = every VISIBLE column except the pinned name (+ sel).
+  const movableColIds = visibleOrder.filter((k) => k !== 'name' && k !== 'sel');
 
   // Select-all checkbox state for ONE group's decisions.
   const groupSelectState = (list) => {
@@ -850,7 +889,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     <div className={`${styles.decTable} ${canSelect ? styles.decSelectable : ''}`}>
       <div className={`${styles.decRow} ${styles.decHead}`} style={rowStyle}>
         <ColumnHeaderDnd enabled={canReorderCols} ids={movableColIds} labels={DEC_TITLE} onReorder={reorder}>
-          {order.map((k) => renderHeadCell(k, list))}
+          {visibleOrder.map((k) => renderHeadCell(k, list))}
         </ColumnHeaderDnd>
       </div>
 
@@ -858,7 +897,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         list={list}
         scope={discussionId && scopeKey ? `decisions_${discussionId}_${scopeKey}` : null}
         canReorderRows={canReorderRows}
-        columns={order}
+        columns={visibleOrder}
         selectable={canSelect}
         selectedIds={selectedIds}
         onToggleSelect={toggleSelect}
@@ -929,6 +968,17 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
               onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
             } : null}
           />
+          {/* Hide columns (round 47) — owners only. Non-owners never see it and
+              always get the saved config applied to the decisions table. */}
+          {canManageSettings && (
+            <HideColumnsControl
+              columns={columnList}
+              hidden={hiddenColumns}
+              onToggle={toggleColumn}
+              onToggleAll={showAllColumns}
+              onSave={canSaveView ? saveHiddenColumns : null}
+            />
+          )}
           {isGrouped && filteredDecisions.length > 0 && (
             <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
           )}
