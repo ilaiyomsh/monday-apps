@@ -78,6 +78,21 @@ Write rules that apply to every column type:
   can't edit"); the required OAuth scope is NOT documented — an app on `boards:write` alone
   should treat a seamless `UNAUTHORIZED_FIELD_OR_TYPE` here as a possible scope gap.
 
+## User photos — root `users(ids:)` photo_url quirk (verified live 2026-07-12)
+
+On the ROOT `users(ids:[...])` query, `photo_url { thumb }` resolves **null** for every
+user other than the caller (`me { photo_url }` returns a real URL) — while a NESTED
+selection like `teams { users { photo_url { thumb } } }` returns real URLs for the same
+users in the same request (verified on 2026-07 and 2026-10). The deprecated flat
+`photo_thumb` DOES return URLs on root users through 2026-07 but is **removed from the
+schema in 2026-10** — selecting it hard-errors there. Practical rule: when user details
+can come from both a team nesting and a root users lookup, prefer the team-resolved
+photo; treat root-users `photo_url` as name-only for non-self users.
+
+Also verified 2026-07-12: `@include(if:$b)` on root fields (`teams`, `users`) works —
+a gated-off field is entirely absent from `data`; bogus ids in `users(ids:)` are silently
+omitted (same as `teams(ids:)`).
+
 ## Option-type columns — id, not text (dropdown / people / relation)
 
 Match and filter by the id field, never `text`: dropdown → `ids`; people →
