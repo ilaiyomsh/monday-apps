@@ -74,6 +74,13 @@ related data") — unbounded round-trips are worse than one measured nested quer
 
 Measured end-to-end: 12,296 → ~3,130 complexity; API-layer latency 7,575ms → 3,151ms (~2.4x).
 
+Counter-case (measured 2026-07-12, team-people-column): when the fan-out is a SINGLE
+source item, nesting `linked_items { column_values(ids:[...]) }` inside the relation value
+is the RIGHT move — it collapsed two serial iframe calls into one at complexity 34 total.
+Merging `teams(ids:)` + `users(ids:)` root fields into one document (gated by
+`@include(if:)` booleans so an empty side is skipped) measured 46. The "replace nesting
+with ids+batch" rule is for per-row fan-out, not for one-item chains.
+
 ## Batching writes
 
 Batch create/update via aliased mutations, **chunked per board at ~10–15 mutations per
