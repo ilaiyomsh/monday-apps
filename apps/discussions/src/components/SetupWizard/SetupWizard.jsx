@@ -213,7 +213,10 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
   return (
     <div dir="rtl" className={isTopUp ? styles.rootEmbedded : styles.root}>
       <Flex direction="column" align="center" gap={16} className={styles.card}>
-        <Heading type="h2">{title || 'הגדרת האפליקציה'}</Heading>
+        {/* TOP-UP embeds inside the Settings modal, which already renders the
+            panel header ("הוספת / השלמת לוחות ועמודות"). Skip the wizard's own
+            heading there so the title isn't shown twice; first-run keeps it. */}
+        {!isTopUp && <Heading type="h2">{title || 'הגדרת האפליקציה'}</Heading>}
 
         {phase === 'running' ? (
           <Flex direction="column" align="center" gap={12} className={styles.section}>
@@ -227,23 +230,26 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
         ) : (
           <Flex direction="column" align="center" gap={16} className={styles.section}>
             {isTopUp ? (
-              <>
-                <Text type="text1" align="center">
+              <div className={styles.topUp}>
+                <Text type="text1" align="start" className={styles.topUpLead}>
                   {allRolesMapped
                     ? 'כל הלוחות כבר קיימים ומחוברים. אפשר להשלים עמודות שחסרות בלוחות — המיפוי הקיים לא ייפגע.'
                     : 'אפשר להוסיף לוחות שחסרים ולהשלים עמודות חסרות. לוחות שכבר מחוברים יישארו כפי שהם — רק מה שחסר יתווסף.'}
                 </Text>
                 <div className={styles.rolesStatus}>
-                  {SETUP_ROLE_ORDER.map((key) => (
-                    <div key={key} className={styles.roleRow}>
-                      <Text type="text2">{SETUP_ROLE_LABELS[key]}</Text>
-                      <Text type="text2" color={roleMapped(key) ? 'positive' : 'secondary'}>
-                        {roleMapped(key) ? 'כבר מחובר' : 'יתווסף'}
-                      </Text>
-                    </div>
-                  ))}
+                  {SETUP_ROLE_ORDER.map((key) => {
+                    const mapped = roleMapped(key);
+                    return (
+                      <div key={key} className={styles.roleRow}>
+                        <span className={styles.roleName}>{SETUP_ROLE_LABELS[key]}</span>
+                        <span className={`${styles.roleState} ${mapped ? styles.roleStateOn : styles.roleStateOff}`}>
+                          {mapped ? 'כבר מחובר' : 'יתווסף'}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
-              </>
+              </div>
             ) : (
               <Text type="text1" align="center">
                 נראה שזו ההפעלה הראשונה. לחיצה על "צור לוחות אוטומטית" תוסיף את עמודות

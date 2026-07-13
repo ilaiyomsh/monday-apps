@@ -268,7 +268,9 @@ export function TemplateManagerModal() {
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [typeSearch, setTypeSearch] = useState(''); // filters the "סוג דיון" list (also the typed source for the inline "create" affordance)
   const [addingType, setAddingType] = useState(false); // add-type mutation in-flight
-  const typeSearchRef = useRef(null); // focus target for the "הוסף סוג דיון חדש" button when the box is empty
+  const [addOpen, setAddOpen] = useState(false); // "סוג דיון חדש" popup open state
+  const [addName, setAddName] = useState(''); // typed name inside the add-type popup
+  const typeSearchRef = useRef(null); // ref for the "סוג דיון" search box input
   // Color popover (opened by the color circle in the type-editor header).
   const [colorOpen, setColorOpen] = useState(false);
   const [colorPos, setColorPos] = useState(null);
@@ -484,6 +486,18 @@ export function TemplateManagerModal() {
     }
   };
 
+  // "צור" inside the add-type popup: create via the SAME managed-dropdown add
+  // handler, then close. An exact-name match short-circuits (mirrors the search's
+  // "already exists" behavior — no duplicate label is created).
+  const handleAddFromPopup = async () => {
+    const nm = addName.trim();
+    if (!nm || addingType) return;
+    const exists = typeOptions.some((opt) => (opt.label || '').trim().toLowerCase() === nm.toLowerCase());
+    if (exists) return;
+    await handleAddType(nm);
+    setAddOpen(false);
+  };
+
   const topicsTitle = view === 'list' ? 'תבניות דיון' : isNew ? 'תבנית חדשה' : 'עריכת תבנית';
   const participantsTitle = view === 'list' ? 'תבניות משתתפים' : isNew ? 'תבנית משתתפים חדשה' : 'עריכת תבנית משתתפים';
   const typesTitle = view === 'list' ? 'תבניות סוג דיון' : (draft?.discussionType || 'תבנית סוג דיון');
@@ -493,6 +507,10 @@ export function TemplateManagerModal() {
   // row (monday-dropdown behavior: a search that matches no existing type — and
   // isn't an exact existing label — offers to create it from the typed text).
   const trimmedTypeSearch = typeSearch.trim();
+  // Add-type popup: the trimmed typed name + whether that exact name already
+  // exists (case-insensitive) — drives the "already exists" hint + disables "צור".
+  const addTrimmed = addName.trim();
+  const addExists = !!addTrimmed && typeOptions.some((opt) => (opt.label || '').trim().toLowerCase() === addTrimmed.toLowerCase());
   const filteredTypeOptions = typeOptions.filter(
     (opt) => !trimmedTypeSearch || (opt.label || '').toLowerCase().includes(trimmedTypeSearch.toLowerCase())
   );
@@ -598,15 +616,14 @@ export function TemplateManagerModal() {
             <>
               {/* Add a NEW discussion type — above the search AND reachable in the
                   empty state, so a fresh account with no types can seed the first
-                  one. Creates a label on the account MANAGED "סוג דיון" dropdown;
-                  the list refreshes live (addDropdownLabel notify -> typeOptions).
-                  With text in the box it creates that type; empty, it focuses the
-                  box so the user types a name first. */}
+                  one. Opens a small popup to type the name; creating it adds a label
+                  on the account MANAGED "סוג דיון" dropdown and the list refreshes
+                  live (addDropdownLabel notify -> typeOptions). */}
               <button
                 type="button"
                 className={styles.addTypeBtn}
                 disabled={addingType}
-                onClick={() => { if (trimmedTypeSearch) handleAddType(typeSearch); else typeSearchRef.current?.focus(); }}
+                onClick={() => { setAddName(''); setAddOpen(true); }}
               >
                 {addingType ? <Loader size={16} /> : <Plus size={16} />}
                 <span>הוסף סוג דיון חדש</span>
@@ -900,6 +917,54 @@ export function TemplateManagerModal() {
           </div>
         )}
       </div>
+
+      {/* "סוג דיון חדש" popup — opened by the addTypeBtn. Portaled to body so it
+          floats above the Settings modal (not clipped by the panel's scroll).
+          Enter submits · Esc / ביטול closes · an existing exact-name match shows
+          a hint + disables "צור" (mirrors the search's "already exists"). */}
+      {addOpen && createPortal(
+        <div
+          className={styles.addOverlay}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setAddOpen(false); }}
+        >
+          <div className={styles.addCard} dir="rtl" role="dialog" aria-modal="true" aria-label="סוג דיון חדש">
+            <h3 className={styles.addTitle}>סוג דיון חדש</h3>
+            <input
+              type="text"
+              className={styles.addInput}
+              autoFocus
+              value={addName}
+              placeholder="שם הסוג"
+              aria-label="שם סוג הדיון"
+              onChange={(e) => setAddName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); handleAddFromPopup(); }
+                else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAddOpen(false); }
+              }}
+            />
+            <div className={styles.addHint}>
+              {addExists && (
+                <Text type="text2" color="secondary">סוג בשם "{addTrimmed}" כבר קיים</Text>
+              )}
+            </div>
+            <div className={styles.addActions}>
+              <Button kind="tertiary" size="small" onClick={() => setAddOpen(false)} disabled={addingType}>
+                ביטול
+              </Button>
+              <Button
+                kind="primary"
+                size="small"
+                onClick={handleAddFromPopup}
+                loading={addingType}
+                disabled={!addTrimmed || addExists || addingType}
+              >
+                צור
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
