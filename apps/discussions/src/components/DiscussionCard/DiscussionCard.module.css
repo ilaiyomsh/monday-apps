@@ -61,12 +61,46 @@
   position: relative;
   z-index: 1;
   margin-inline-start: 12px;
+  /* Round 70 — keep the tab strip a FIXED-HEIGHT SINGLE ROW that scrolls
+     horizontally, so it never grows taller when monday docks its native Updates
+     panel and narrows the app iframe. Before this the vibe tab labels (e.g.
+     "הנחיות קודמות") wrapped to two lines and the tabs wrapped to a second row
+     when the strip got tight, so the bar grew taller and the whole view jumped
+     up and down as Updates opened and closed. overflow-y:hidden is the required
+     pairing for overflow-x:auto (a visible y-axis would compute to auto and could
+     spawn a vertical bar); it clips nothing here because the height is content-
+     driven (no fixed height) and the vibe active-tab underline sits inside the
+     tab box. Mirrors the already-shipped .mobile-app .tabsRow behaviour below,
+     now applied at every width. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Thin on Firefox, fully hidden on WebKit (rule just below): the horizontal
+     scrollbar must not reserve vertical space, or the strip would grow taller. */
+  scrollbar-width: thin;
+}
+.tabsRow::-webkit-scrollbar {
+  height: 0;
 }
 .tabsRow :global([class*="tabWrapper"]) {
   border-bottom-color: transparent;
 }
 .tabsRow :global([class*="tabWrapper"][class*="active_"]::after) {
   z-index: 2;
+}
+/* vibe TabList renders role="tablist"; keep it ONE row, never wrapping to a 2nd row. */
+.tabsRow :global([role="tablist"]) {
+  flex-wrap: nowrap;
+}
+/* vibe Tab renders role="tab"; never let a tab shrink or its label wrap to a
+   second line (that wrapping is what grew the bar height when the iframe
+   narrowed). No shrink plus no wrap keeps each tab at its natural width, so the
+   strip scrolls horizontally instead of getting taller. */
+.tabsRow :global([role="tab"]) {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.tabsRow :global([role="tab"]) * {
+  white-space: nowrap;
 }
 
 .titleRow {
