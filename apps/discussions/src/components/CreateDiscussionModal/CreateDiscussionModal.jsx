@@ -99,7 +99,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const can = usePermission({ canManageSettings, currentUser });
   const canAddType = can('addDiscussionTypes');
   const { templates, participantTemplates, typeTemplates, typeColor, assignRandomTypeColor } = useTemplates();
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const previousTasksMode =
     settings?.preferences?.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION;
   const [name, setName] = useState('');
@@ -339,34 +339,50 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     if (partTpl) applyParticipantTemplate(partTpl);
   };
 
-  // Add a new discussion type from the field, then select it. "סוג" is a DROPDOWN
-  // column. When it's backed by an account-level MANAGED DROPDOWN (the persisted
-  // `managedColumnId`, which new installs get), we add the label there via
-  // update_dropdown_managed_column — the change propagates to the board column and
-  // refreshes typeOptions live (addDropdownLabel → notify → useDropdownOptions), so
-  // the submit guard (which only writes labels present in typeOptions) now
-  // recognizes it and the discussion persists with the new type. When there is NO
-  // managedColumnId (a plain/locked dropdown), we keep the prior app-side-only
-  // behavior so nothing regresses. Either way we assign the per-type palette color
-  // in app storage and select the name. Errors surface via the logger/toast funnel;
-  // on a managed failure the type is NOT selected (it wasn't persisted).
+  // Add a new discussion type: create the label on the "סוג" dropdown column
+  // DIRECTLY, right now — never deferred to save-time create_labels_if_missing,
+  // which silently cannot create labels on MANAGED columns (2026-07-12 incident:
+  // the UI showed the type as created, then the save failed). addDropdownLabel
+  // handles BOTH regular and managed columns: the persisted managedColumnId hint
+  // (detected on Settings save, published via the config store) skips the account
+  // scan, a regular column goes through update_dropdown_column, and a stale hint
+  // self-heals — the corrected uuid is persisted back to settings. Only after the
+  // label EXISTS on the board do we store its color and select it (typeOptions
+  // refreshes live via addDropdownLabel → notify). Failures surface via the
+  // logger/toast funnel and the input stays open with the typed text.
   const handleAddType = async () => {
     const nm = newTypeName.trim();
     if (!nm || addingType) return;
-    const managedTypeColId = getColumns('discussions')?.discussionTypeID?.managedColumnId || null;
+    const hint = getColumns('discussions')?.discussionTypeID?.managedColumnId || null;
     try {
       setAddingType(true);
-      if (managedTypeColId) {
-        await addDropdownLabel({
-          boardKey: 'discussions', alias: 'discussionTypeID', title: nm, managedColumnId: managedTypeColId,
-        });
+      const { managedColumnId } = await addDropdownLabel({
+        boardKey: 'discussions', alias: 'discussionTypeID', title: nm, managedColumnId: hint,
+      });
+      const typeEntry = settings?.columns?.discussions?.discussionTypeID;
+      if (managedColumnId !== hint && typeEntry) {
+        // Self-heal resolved the truth — persist it so the next add skips the scan.
+        // Best-effort: a failed persist only costs a re-detection next time.
+        try {
+          await updateSettings({
+            columns: {
+              ...settings.columns,
+              discussions: {
+                ...settings.columns.discussions,
+                discussionTypeID: { ...typeEntry, managed: !!managedColumnId, managedColumnId },
+              },
+            },
+          });
+        } catch (persistErr) {
+          logger.warn('CreateDiscussionModal', 'עדכון רמז עמודה מנוהלת נכשל (לא חוסם)', persistErr);
+        }
       }
       await assignRandomTypeColor(nm);
       setIsAddingType(false);
       setNewTypeName('');
       selectType(nm);
     } catch (err) {
-      logger.error('CreateDiscussionModal', 'שגיאה בהוספת סוג דיון', err);
+      logger.error('CreateDiscussionModal', 'שגיאה בהוספת סוג דיון — הסוג לא נוצר בלוח', err);
     } finally {
       setAddingType(false);
     }
@@ -429,14 +445,16 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         },
       });
 
-      // create_labels_if_missing so a freshly-added "סוג" (dropdown) label is
-      // minted on the board here rather than silently dropped.
+      // NO create_labels_if_missing here: a freshly-added "סוג" label was
+      // already created on the column by handleAddType (addDropdownLabel) — and
+      // on a MANAGED column the flag can't create labels anyway (it fails the
+      // whole save with ColumnValueException; 2026-07-12 incident).
       let savedId;
       if (isEdit) {
-        await board.item(editDiscussion.id).update(payload, { createLabelsIfMissing: true }).execute();
+        await board.item(editDiscussion.id).update(payload).execute();
         savedId = editDiscussion.id;
       } else {
-        const created = await board.item().create(payload, { createLabelsIfMissing: true }).execute();
+        const created = await board.item().create(payload).execute();
         savedId = created.id;
       }
 

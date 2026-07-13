@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '../utils/mondayApi/monday-client.js';
+import { assertNoGraphQLErrors } from '../utils/mondayApi/assertGraphQL.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
-import { addManagedDropdownLabel } from '../utils/mondayApi/managedColumns.js';
+import {
+  addManagedDropdownLabel,
+  detectManagedColumnId,
+} from '../utils/mondayApi/managedColumns.js';
 import logger from '../utils/logger.js';
 
 /*
@@ -55,7 +59,14 @@ function parseTypedSettings(settings) {
 
 function parseSettingsStr(settingsStr) {
   let s;
-  try { s = JSON.parse(settingsStr || '{}'); } catch { return []; }
+  try {
+    s = JSON.parse(settingsStr || '{}');
+  } catch (err) {
+    // Malformed legacy settings_str → empty options; recorded so a broken
+    // column config is visible in the funnel instead of a silently empty picker.
+    logger.error('useDropdownOptions', 'settings_str parse failed', err);
+    return [];
+  }
   const labels = s.labels || [];
   const entries = Array.isArray(labels) ? labels : Object.entries(labels).map(([id, v]) => ({ id, name: typeof v === 'string' ? v : v?.name }));
   return entries
@@ -74,6 +85,123 @@ async function load(boardId, colId) {
   const col = data?.boards?.[0]?.columns?.[0];
   const options = parseTypedSettings(col?.settings) ?? parseSettingsStr(col?.settings_str);
   return { options, labels: options.map((o) => o.label) };
+}
+
+/**
+ * Add a NEW label to a dropdown column (by board key + alias) DIRECTLY — the
+ * replacement for relying on create_labels_if_missing at save time (which
+ * silently cannot create labels on managed columns; 2026-07-12 incident).
+ * Dual-path like useStatusOptions.addStatusLabel:
+ *
+ * - Empty/blank title, or an unresolved board/column mapping, throws
+ *   Error('addDropdownLabel: missing name/board/column').
+ * - When `managedColumnId` is given (settings-persisted hint), the label is
+ *   added via addManagedDropdownLabel (account-level mutation) — the regular
+ *   board-level mutation is NOT attempted.
+ * - Otherwise the REGULAR path runs: read the column's settings + string
+ *   revision, short-circuit if an ACTIVE label already matches the trimmed
+ *   title case-insensitively (returns its id, no write), else send
+ *   update_dropdown_column with the FULL label set (every existing label as
+ *   { id, label, is_deactivated } — a partial set DELETES omitted labels) plus
+ *   the new label without an id, at the fresh revision.
+ * - SELF-HEALING FALLBACK: if the regular mutation is rejected with the
+ *   managed-column discriminator — errorCode 'INVALID_ARGUMENT_EXCEPTION' and
+ *   message containing 'notices.column.settings.update.error.structure' — the
+ *   column is actually managed: resolve it via
+ *   detectManagedColumnId(boardId, colId, { type: 'dropdown' }) and add via
+ *   addManagedDropdownLabel. When detection finds nothing, the ORIGINAL error
+ *   is rethrown. Any other error rethrows unchanged (funnel logs upstream).
+ * - On success the module cache for this column is REFRESHED from the API and
+ *   hook subscribers re-render, so open pickers see the new option.
+ *
+ * @param {{ boardKey: string, alias: string, title: string,
+ *           managedColumnId?: string|null }} args
+ * @returns {Promise<{ id: number|string|null, managedColumnId: string|null }>}
+ *   `id` — the label's server-assigned id (or the existing one on duplicate;
+ *   null only if it could not be resolved after a successful write).
+ *   `managedColumnId` — the RESOLVED truth: the given hint, the UUID found by
+ *   the self-heal fallback, or null for a regular column. Callers persist it
+ *   when it differs from their stored hint.
+ */
+export async function addDropdownLabel({ boardKey, alias, title, managedColumnId = null }) {
+  const name = String(title || '').trim();
+  const boardId = getBoardId(boardKey) || null;
+  const colId = getColumns(boardKey)?.[alias]?.id || null;
+  if (!name || !boardId || !colId) throw new Error('addDropdownLabel: missing name/board/column');
+
+  let resolvedManagedId = managedColumnId || null;
+
+  if (resolvedManagedId) {
+    const r = await addManagedDropdownLabel({ managedColumnId: resolvedManagedId, title: name });
+    if (r?.duplicateId != null) return { id: r.duplicateId, managedColumnId: resolvedManagedId };
+  } else {
+    const { revision, labels } = await loadRawDropdown(boardId, colId);
+    const existing = labels.find(
+      (l) => !l.is_deactivated && (l.label ?? '').trim().toLowerCase() === name.toLowerCase()
+    );
+    if (existing) return { id: existing.id, managedColumnId: null };
+
+    // Full-set resend: every existing label (incl. deactivated, flag preserved)
+    // + the id-less new one — a partial set DELETES the omitted labels.
+    const labelsInput = labels
+      .map((l) => ({ id: l.id, label: l.label ?? '', is_deactivated: l.is_deactivated === true }))
+      .concat([{ label: name, is_deactivated: false }]);
+
+    try {
+      const res = await api(
+        `mutation ($boardId: ID!, $columnId: String!, $revision: String!, $s: UpdateDropdownColumnSettingsInput!) {
+           update_dropdown_column(board_id: $boardId, id: $columnId, revision: $revision, settings: $s) { id }
+         }`,
+        { boardId: String(boardId), columnId: String(colId), revision: String(revision ?? ''), s: { labels: labelsInput } },
+        'addDropdownLabel'
+      );
+      assertNoGraphQLErrors(res, { functionName: 'addDropdownLabel' });
+    } catch (err) {
+      // Self-heal: monday rejects board-level label edits on a column that is a
+      // MANAGED-column instance with exactly this structure error. Resolve the
+      // account-level column and add there instead; anything else rethrows.
+      const isManagedStructure =
+        err?.errorCode === 'INVALID_ARGUMENT_EXCEPTION' &&
+        String(err?.message || '').includes('notices.column.settings.update.error.structure');
+      if (!isManagedStructure) throw err;
+      const uuid = await detectManagedColumnId(boardId, colId, { type: 'dropdown' });
+      if (!uuid) throw err;
+      logger.warn('useDropdownOptions', 'dropdown column is managed — self-healed to the managed path', {
+        boardKey, alias, colId, managedColumnId: uuid,
+      });
+      const r = await addManagedDropdownLabel({ managedColumnId: uuid, title: name });
+      resolvedManagedId = uuid;
+      if (r?.duplicateId != null) return { id: r.duplicateId, managedColumnId: uuid };
+    }
+  }
+
+  // Post-write re-read (managed changes propagate to the board column): resolve
+  // the server-assigned id, refresh the module cache, and notify mounted hooks.
+  const fresh = await load(boardId, colId);
+  cache.set(`${boardId}:${colId}`, fresh);
+  notify();
+  logger.info('useDropdownOptions', 'added dropdown label', { boardKey, alias, name, managed: !!resolvedManagedId });
+  const added = fresh.options.find(
+    (o) => (o.label ?? '').trim().toLowerCase() === name.toLowerCase()
+  );
+  return { id: added ? added.id : null, managedColumnId: resolvedManagedId };
+}
+
+// Raw column read for the WRITE path: unlike load(), keeps deactivated labels
+// (they must be re-sent on update) and fetches the column's string revision.
+async function loadRawDropdown(boardId, colId) {
+  const data = await api(
+    `query ($boardId: [ID!], $colIds: [String!]) {
+       boards(ids: $boardId) { columns(ids: $colIds) { id settings revision } }
+     }`,
+    { boardId: [String(boardId)], colIds: [String(colId)] },
+    'addDropdownLabel.read'
+  );
+  const col = data?.boards?.[0]?.columns?.[0];
+  return {
+    revision: col?.revision,
+    labels: Array.isArray(col?.settings?.labels) ? col.settings.labels : [],
+  };
 }
 
 export function useDropdownOptions(boardKey, alias) {
@@ -98,11 +226,15 @@ export function useDropdownOptions(boardKey, alias) {
       cache.set(key, res);
       inflight.delete(key);
       if (!cancelled) setState({ ...res, loading: false });
+    }).catch((err) => {
+      // p already resolves EMPTY on load failure; this guards the then-callback.
+      logger.error('useDropdownOptions', 'options state update failed', err);
     });
     return () => { cancelled = true; };
   }, [key, boardId, colId]);
 
-  // Re-read the cache when a label is added elsewhere (addDropdownLabel → notify).
+  // Re-read the cache when a label is added elsewhere (addDropdownLabel → notify),
+  // so an open picker shows the new option without a remount.
   useEffect(() => {
     if (!key) return undefined;
     return subscribe(() => {
@@ -111,48 +243,6 @@ export function useDropdownOptions(boardKey, alias) {
   }, [key]);
 
   return state;
-}
-
-/**
- * Add a NEW label to a DROPDOWN column, then re-load the column, refresh the
- * module cache, notify subscribers (so the live picker updates), and return the
- * new label's server-assigned id (or null if it couldn't be resolved).
- *
- * The label is created on the account-level MANAGED DROPDOWN backing the column
- * (`update_dropdown_managed_column` via addManagedDropdownLabel); the change
- * propagates to the board column instancing it. `managedColumnId` is REQUIRED —
- * a plain/locked dropdown has no managed backing, so the caller
- * (CreateDiscussionModal) keeps its app-side-only fallback for that case instead
- * of calling here. Mirrors useStatusOptions.addStatusLabel's reload+notify shape.
- *
- * @param {{ boardKey: string, alias: string, title: string, managedColumnId?: string|null }} args
- */
-export async function addDropdownLabel({ boardKey, alias, title, managedColumnId = null }) {
-  const name = String(title || '').trim();
-  const boardId = getBoardId(boardKey) || null;
-  const colId = getColumns(boardKey)?.[alias]?.id || null;
-  if (!name || !boardId || !colId) {
-    throw new Error('addDropdownLabel: missing name/board/column');
-  }
-  if (!managedColumnId) {
-    throw new Error('addDropdownLabel: missing managedColumnId (no managed dropdown backing)');
-  }
-
-  await addManagedDropdownLabel({ managedColumnId, title: name });
-
-  // Re-load the board column so we pick up the server-assigned id (the managed
-  // change propagates to the board column), then refresh cache + notify.
-  const key = `${boardId}:${colId}`;
-  const prevIds = new Set((cache.get(key)?.options || []).map((o) => o.id));
-  const fresh = await load(boardId, colId);
-  cache.set(key, fresh);
-  notify();
-
-  logger.info('useDropdownOptions', 'added dropdown label', { boardKey, alias, name, managed: !!managedColumnId });
-  const added = fresh.options.find(
-    (o) => (o.label ?? '').trim().toLowerCase() === name.toLowerCase() && !prevIds.has(o.id)
-  ) || fresh.options.find((o) => (o.label ?? '').trim().toLowerCase() === name.toLowerCase());
-  return added ? added.id : null;
 }
 
 export default useDropdownOptions;
