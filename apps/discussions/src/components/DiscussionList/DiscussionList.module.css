@@ -272,21 +272,23 @@
 .list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--spacing-xs, 4px);
+  gap: 8px;
+  padding: 8px;
 }
 
-/* Row wrapper holds the selectable item button + the hover edit affordance. */
+/* Row wrapper — full width, anchors the absolutely-positioned kebab over the card. */
 .itemWrap {
   position: relative;
+  width: 100%;
 }
 
-/* Row action affordances (duplicate + edit) — appear on row hover/focus at the
-   trailing edge. */
+/* Row kebab affordance — appears on row hover/focus at the card's far-right
+   (trailing, in the LTR row) corner. The date sits in that same slot, so it
+   fades on hover (see .itemWrap:hover .itemDate) to avoid a visual collision. */
 .itemActions {
   position: absolute;
   top: 50%;
-  inset-inline-end: 8px;
+  right: 8px;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
@@ -420,84 +422,70 @@
   to { transform: rotate(360deg); }
 }
 
-/* Discussion item button — mockup row: accent dot + two stacked lines
-   (name over a "date · time" subtitle), RTL-start aligned. */
+/* Discussion row card (round 67) — a soft white card laid out LEFT-TO-RIGHT
+   (dir="ltr" on the button): a color rail, the name (flex), then the date and
+   time pushed to the far end, all on ONE line. */
 .item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  /* Pin the rendered height so the loading Skeleton (ROW_SKELETON_H in
-     DiscussionList.jsx) matches exactly and rows never jump on load: 20px name
-     line + 2px gap + 16px subtitle + 8px top/bottom padding = 54px. Both lines
-     are single-line (nowrap + ellipsis) so this can't clip. */
-  min-height: 54px;
-  text-align: start;
-  padding: var(--spacing-small, 8px) var(--spacing-small, 12px);
-  /* Just enough trailing room for the kebab (⋯, 28px @ inset 8px); the name
-     and subtitle truncate before ever colliding with it. */
-  padding-inline-end: 42px;
-  border: none;
-  border-left: 3px solid transparent;
-  border-radius: var(--border-radius-medium, 8px);
-  background: transparent;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: var(--primary-background-color, #fff);
+  border: 0.5px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 10px;
   cursor: pointer;
+  text-align: start;
   transition: background-color var(--motion-productive-medium, 0.2s) ease,
     border-color var(--motion-productive-medium, 0.2s) ease;
 }
 
 .item:hover {
-  background-color: var(--primary-background-hover-color, rgba(41, 47, 76, 0.06));
+  background-color: var(--primary-background-hover-color, #f5f6f8);
 }
 
-/* Mockup selected row: soft blue fill; the accent-colored side border is set
-   inline (borderLeftColor = the row's accent) on top of .item's 3px border. */
+/* Selected card: accent-tinted fill + accent border. The type-color rail stays;
+   the old inline borderLeftColor is gone — this class owns the selected look. */
 .itemSelected {
-  background-color: #f0f4ff;
+  background: var(--primary-selected-color, #e5f4ff);
+  border-color: var(--primary-color, #0073ea);
 }
 
-.itemContent {
-  display: flex;
-  /* Dot rides the first (name) line, mockup-style. */
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
+/* Left color rail — the discussion's type accent, full card height. */
+.rail {
+  width: 4px;
+  align-self: stretch;
+  min-height: 30px;
+  border-radius: 4px;
   flex-shrink: 0;
-  /* Optically center on the 20px name line. */
-  margin-top: 6px;
-}
-
-/* Two stacked lines: name on top, "date · time" subtitle below. */
-.itemBody {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .itemName {
+  flex: 1;
   min-width: 0;
   margin: 0;
-  text-align: start;
-  font-size: var(--font-size-general-label, 14px);
-  line-height: 20px;
-  font-weight: var(--font-weight-medium, 500);
-  color: var(--text-color, #323338);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--primary-text-color, #323338);
 }
 
 .itemDate {
+  flex-shrink: 0;
+  margin-inline-start: auto;
   font-size: 12px;
-  line-height: 16px;
   color: var(--secondary-text-color, #676879);
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  transition: opacity var(--motion-productive-short, 0.15s) ease;
+}
+
+/* Hand the trailing corner to the kebab on hover: fade the date so it and the
+   kebab never overlap in the shared far-right slot. */
+.itemWrap:hover .itemDate {
+  opacity: 0;
 }
 
 .loadMoreRow {

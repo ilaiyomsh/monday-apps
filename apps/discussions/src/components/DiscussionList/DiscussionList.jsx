@@ -25,6 +25,17 @@ function fmtListDate(d) {
   return time ? `${weekday} ${dd}/${mm} · ${time}` : `${weekday} ${dd}/${mm}`;
 }
 
+/* Compact list-row date (round 67): "DD/MM · HH:MM", or just "DD/MM" when the
+   date column has no real time part. Drops the weekday so the name + date fit on
+   ONE line in the new LTR soft-card row. Reuses fmtTimeLabel for the has-time
+   check (same ORIGINAL-Date requirement as fmtListDate above). */
+function fmtListDateCompact(d) {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const time = fmtTimeLabel(d);
+  return time ? `${dd}/${mm} · ${time}` : `${dd}/${mm}`;
+}
+
 /* Custom single-select filter — matches the app's other working dropdowns
    (PersonPicker / CreateDiscussionModal): the menu is rendered position:fixed
    with a high z-index so it is never clipped or covered, which the Vibe
@@ -629,21 +640,14 @@ export function DiscussionList({
                     onClick={() => onSelect(item)}
                     onContextMenu={(e) => openItemContextMenu(item, e)}
                     aria-label={item.name}
+                    dir="ltr"
                     className={`${styles.item} ${isSelected ? styles.itemSelected : ''}`}
-                    style={isSelected ? { borderLeftColor: accent } : undefined}
                   >
-                    <div className={styles.itemContent}>
-                      <span
-                        className={styles.dot}
-                        style={{ backgroundColor: accent }}
-                      />
-                      <div className={styles.itemBody}>
-                        <p className={styles.itemName}>{item.name}</p>
-                        {item.discussionDateID && (
-                          <span className={styles.itemDate}>{fmtListDate(item.discussionDateID)}</span>
-                        )}
-                      </div>
-                    </div>
+                    <span className={styles.rail} style={{ backgroundColor: accent }} />
+                    <p className={styles.itemName}>{item.name}</p>
+                    {item.discussionDateID && (
+                      <span className={styles.itemDate}>{fmtListDateCompact(item.discussionDateID)}</span>
+                    )}
                   </button>
                   {(onDuplicate || onEdit || onExport || onDelete) && (
                     <div className={styles.itemActions}>
