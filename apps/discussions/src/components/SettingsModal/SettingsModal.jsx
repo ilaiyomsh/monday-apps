@@ -418,17 +418,22 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
       // throws, and we abort WITHOUT saving settings so config and assets can't
       // drift out of sync. The friendly quota message is shown in the tab.
       await saveExportAssets(context, exportAssets);
-      // Detect whether the discussion-type status column is backed by an account
-      // MANAGED column and persist its UUID, so addStatusLabel (create-modal) uses
-      // update_status_managed_column instead of the board-level mutation (which a
-      // managed column rejects). Best-effort — a failed detection just leaves the
-      // column marked regular; the create-modal re-detects lazily as a fallback.
+      // Detect whether the discussion-type DROPDOWN column is backed by an
+      // account MANAGED column and persist its UUID, so addDropdownLabel
+      // (create-modal "הוסף סוג דיון חדש") goes straight to
+      // update_dropdown_managed_column instead of the board-level mutation
+      // (which a managed column rejects). Best-effort — a failed detection just
+      // leaves the column marked regular; addDropdownLabel self-heals lazily on
+      // the managed-structure rejection and the modal persists the corrected hint.
       let columnsToSave = columns;
       const typeEntry = columns?.discussions?.discussionTypeID;
       const typeBoardId = boards?.discussions?.id;
       if (typeEntry?.id && typeBoardId) {
         try {
-          const uuid = await detectManagedColumnId(typeBoardId, typeEntry.id);
+          // Type filter matters: the account has managed columns of BOTH types
+          // named "סוג דיון" — only a dropdown-type one is updatable via
+          // update_dropdown_managed_column (the column itself is a dropdown).
+          const uuid = await detectManagedColumnId(typeBoardId, typeEntry.id, { type: 'dropdown' });
           columnsToSave = {
             ...columns,
             discussions: {
