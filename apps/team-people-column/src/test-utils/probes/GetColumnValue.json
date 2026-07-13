@@ -1,12 +1,17 @@
 {
   "data": {
+    "complexity": {
+      "query": 34,
+      "before": 10000000,
+      "after": 9999966
+    },
     "items": [
       {
         "id": "12511436134",
         "name": "משימה 1",
         "column_values": [
           {
-            "id": "multiple_person_mm562c71",
+            "id": "multiple_person_mm563xsw",
             "type": "people",
             "text": "",
             "value": null,
@@ -19,6 +24,25 @@
             "value": null,
             "linked_item_ids": [
               "12511510366"
+            ],
+            "linked_items": [
+              {
+                "id": "12511510366",
+                "name": "פרויקט אלפא",
+                "column_values": [
+                  {
+                    "id": "multiple_person_mm5694pg",
+                    "type": "people",
+                    "persons_and_teams": [
+                      {
+                        "id": "1348990",
+                        "kind": "team"
+                      }
+                    ],
+                    "text": "test ilai"
+                  }
+                ]
+              }
             ]
           }
         ]
@@ -26,7 +50,6 @@
     ]
   },
   "extensions": {
-    "request_id": "925662d0-fa35-9396-baae-35ffdcb21ac2"
+    "request_id": "0e8cc18a-119e-97d2-ae08-ea6e4a31df98"
   }
 }
-

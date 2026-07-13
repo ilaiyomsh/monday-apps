@@ -12,22 +12,18 @@
 //
 // Matching is by operation-name SUBSTRING against the outgoing query text
 // (dev-harness stub's `resolveApi`), matching the exact operation names used
-// in src/services/graphqlQueries.js (GetColumnValue, GetLinkedItemsPeople,
-// GetTeamsMembers, GetUsersDetails, GetBoardColumns, UpdateColumnValue).
+// in src/services/graphqlQueries.js (GetColumnValue, GetTeamsAndUsers,
+// GetBoardColumns, UpdateColumnValue).
 
 import getColumnValueCapture from './probes/GetColumnValue.json';
-import getLinkedItemsPeopleCapture from './probes/GetLinkedItemsPeople.json';
-import getTeamsMembersCapture from './probes/GetTeamsMembers.json';
-import getUsersDetailsCapture from './probes/GetUsersDetails.json';
+import getTeamsAndUsersCapture from './probes/GetTeamsAndUsers.json';
 import getBoardColumnsCapture from './probes/GetBoardColumns.json';
 import updateColumnValueCapture from './probes/UpdateColumnValue.json';
 
 // operation name -> captured envelope (as read from probes/*.json).
 const DEFAULT_CAPTURES = {
   GetColumnValue: getColumnValueCapture,
-  GetLinkedItemsPeople: getLinkedItemsPeopleCapture,
-  GetTeamsMembers: getTeamsMembersCapture,
-  GetUsersDetails: getUsersDetailsCapture,
+  GetTeamsAndUsers: getTeamsAndUsersCapture,
   GetBoardColumns: getBoardColumnsCapture,
   UpdateColumnValue: updateColumnValueCapture,
 };
@@ -42,7 +38,7 @@ const DEFAULT_CAPTURES = {
  *   `monday-sdk-js` import resolves to when VITE_MONDAY_MOCK is set / under
  *   vitest.
  * @param {Object} [overrides] - per-operation-name override, e.g.
- *   `{ GetTeamsMembers: { errors: [...] } }` or
+ *   `{ GetTeamsAndUsers: { errors: [...] } }` or
  *   `{ GetColumnValue: { data: customPayload } }` or `{ GetX: { fn } }`.
  *   A provided override REPLACES that single handler entirely (data/errors/fn
  *   shape — see the stub's apiHandlers contract) instead of merging with the

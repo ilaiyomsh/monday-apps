@@ -12,7 +12,7 @@ import OnClickDialog from './OnClickDialog.jsx';
 // (matching the context() fixture below); the stub scopes global storage under
 // `global:<key>` and harness.seedStorage does NOT re-scope, so we seed under the
 // already-scoped key (same as the hook tests).
-const STORAGE_KEY = 'global:teamPeople:18421604809:multiple_person_mm562c71';
+const STORAGE_KEY = 'global:teamPeople:18421604809:multiple_person_mm563xsw';
 
 // A complete, valid v1 settings object referencing the REAL seeded ids
 // (probes/MANIFEST.md): relation board_relation_mm56dy57 -> target board
@@ -26,12 +26,12 @@ const validV1 = () => ({
 });
 
 // Context for the columnPickers (on-click) placement. columnId is the column's
-// OWN people column (multiple_person_mm562c71 on WZ-TeamPeople-source); itemId /
+// OWN people column (multiple_person_mm563xsw on WZ-TeamPeople-source); itemId /
 // boardId are that source item / board — all matching the captured probes.
 const context = () => ({
   boardId: '18421604809',
   itemId: '12511436134',
-  columnId: 'multiple_person_mm562c71',
+  columnId: 'multiple_person_mm563xsw',
   selectedItemIds: ['12511436134'],
 });
 
@@ -135,7 +135,7 @@ describe('OnClickDialog — save', () => {
     // integer id, kind "person" (ids become integers ONLY at this seam).
     expect(captured.boardId).toBe('18421604809');
     expect(captured.itemId).toBe('12511436134');
-    expect(captured.columnId).toBe('multiple_person_mm562c71');
+    expect(captured.columnId).toBe('multiple_person_mm563xsw');
     expect(JSON.parse(captured.value)).toEqual({
       personsAndTeams: [{ id: 48274917, kind: 'person' }],
     });

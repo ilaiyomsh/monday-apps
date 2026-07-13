@@ -16,24 +16,25 @@ const settingsSignature = (settings) => JSON.stringify(settings ?? null);
 /**
  * Resolve the allowed-user set for a team-people column instance, reactively.
  *
- * Wraps the q1..q4 chain in `fetchAllowedUsers` and exposes it as a small state
- * machine. The effect is keyed on [context.itemId, context.columnId, settings]
- * so it re-resolves when the item, the column, or the persisted settings change.
+ * Wraps the two-call chain in `fetchAllowedUsers` and exposes it as a small
+ * state machine. The effect is keyed on [context.itemId, context.columnId,
+ * settings] so it re-resolves when the item, the column, or the persisted
+ * settings change.
  *
  * @param {{ itemId:string, columnId:string }} context - monday SDK context.
  * @param {object|null} settings - migrated v1 settings (see settingsSchema).
  * @param {{ enabled?: boolean }} [opts] - when `enabled` is false the hook does
  *   not fetch and stays `idle` (e.g. while settings are still loading).
- * @returns {{ status:'idle'|'loading'|'ready'|'error', step:'relation'|'linkedPeople'|'teams'|'ready', result: object|null, error: Error|null, retry: () => void }}
+ * @returns {{ status:'idle'|'loading'|'ready'|'error', step:'relation'|'teams'|'ready', result: object|null, error: Error|null, retry: () => void }}
  */
 export default function useAllowedUsers(context, settings, { enabled = true } = {}) {
   const itemId = context?.itemId;
   const columnId = context?.columnId;
 
   // Stale-while-revalidate: the dialog iframe is recreated on every cell click,
-  // so the 2-4 sequential API round-trips of the chain otherwise gate EVERY
-  // open. A cached result (same item+column+settings) paints the picker
-  // immediately; the fresh chain below still runs and corrects it.
+  // so the chain's sequential API round-trips otherwise gate EVERY open. A
+  // cached result (same item+column+settings) paints the picker immediately;
+  // the fresh chain below still runs and corrects it.
   const cachedResult = enabled && itemId && columnId
     ? cacheGet(resultCacheKey(itemId, columnId), {
         maxAgeMs: RESULT_CACHE_MAX_AGE_MS,
