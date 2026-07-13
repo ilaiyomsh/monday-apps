@@ -93,6 +93,61 @@
   box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
 }
 
+/* "הוסף סוג דיון חדש" button above the types search — a full-width dashed
+   affordance in the primary color, matching the app's other add-affordances. */
+.addTypeBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 34px;
+  margin-bottom: 10px;
+  border: 1px dashed var(--primary-color, #0073ea);
+  border-radius: var(--border-radius-small, 4px);
+  background: transparent;
+  color: var(--primary-color, #0073ea);
+  font-size: var(--font-size-general-label, 14px);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+}
+.addTypeBtn:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+.addTypeBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Inline "create from the typed text" suggestion row (monday-dropdown behavior:
+   a search that matches nothing offers to create that value). Sits in the list. */
+.createTypeRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px dashed var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-medium, 8px);
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-color, #0073ea);
+  font-size: var(--font-size-general-label, 14px);
+  font-weight: var(--font-weight-medium, 500);
+  cursor: pointer;
+  text-align: start;
+}
+.createTypeRow:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f3ff);
+}
+.createTypeRow:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+.createTypePlus {
+  font-size: 14px;
+  line-height: 1;
+}
+
 /* Popover card holding the Vibe ColorPicker (portaled to body). */
 .colorPopover {
   background: var(--primary-background-color, #fff);

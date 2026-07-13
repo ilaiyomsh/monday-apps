@@ -4,7 +4,7 @@ import { assertNoGraphQLErrors } from '../utils/mondayApi/assertGraphQL.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
 import {
   addManagedDropdownLabel,
-  detectManagedColumnId,
+  detectManagedDropdownColumnId,
 } from '../utils/mondayApi/managedColumns.js';
 import logger from '../utils/logger.js';
 
@@ -95,9 +95,10 @@ async function load(boardId, colId) {
  *
  * - Empty/blank title, or an unresolved board/column mapping, throws
  *   Error('addDropdownLabel: missing name/board/column').
- * - When `managedColumnId` is given (settings-persisted hint), the label is
- *   added via addManagedDropdownLabel (account-level mutation) — the regular
- *   board-level mutation is NOT attempted.
+ * - When `managedColumnId` resolves (the given hint, else the config-store
+ *   `getColumns(boardKey)[alias].managedColumnId`), the label is added via
+ *   addManagedDropdownLabel (account-level mutation) — the regular board-level
+ *   mutation is NOT attempted.
  * - Otherwise the REGULAR path runs: read the column's settings + string
  *   revision, short-circuit if an ACTIVE label already matches the trimmed
  *   title case-insensitively (returns its id, no write), else send
@@ -108,7 +109,8 @@ async function load(boardId, colId) {
  *   managed-column discriminator — errorCode 'INVALID_ARGUMENT_EXCEPTION' and
  *   message containing 'notices.column.settings.update.error.structure' — the
  *   column is actually managed: resolve it via
- *   detectManagedColumnId(boardId, colId, { type: 'dropdown' }) and add via
+ *   detectManagedDropdownColumnId(boardId, colId) — which reads the board
+ *   column's labels from BOTH the typed settings and settings_str — and add via
  *   addManagedDropdownLabel. When detection finds nothing, the ORIGINAL error
  *   is rethrown. Any other error rethrows unchanged (funnel logs upstream).
  * - On success the module cache for this column is REFRESHED from the API and
@@ -129,7 +131,11 @@ export async function addDropdownLabel({ boardKey, alias, title, managedColumnId
   const colId = getColumns(boardKey)?.[alias]?.id || null;
   if (!name || !boardId || !colId) throw new Error('addDropdownLabel: missing name/board/column');
 
-  let resolvedManagedId = managedColumnId || null;
+  // Resolve the managed-column id up front from the settings-persisted hint when
+  // the caller didn't pass one (new installs store it). If still unresolved the
+  // regular board path runs below and, on a managed instance, self-heals via
+  // DETECTION — so add-type also works where the hint was never persisted.
+  let resolvedManagedId = managedColumnId || getColumns(boardKey)?.[alias]?.managedColumnId || null;
 
   if (resolvedManagedId) {
     const r = await addManagedDropdownLabel({ managedColumnId: resolvedManagedId, title: name });
@@ -164,7 +170,7 @@ export async function addDropdownLabel({ boardKey, alias, title, managedColumnId
         err?.errorCode === 'INVALID_ARGUMENT_EXCEPTION' &&
         String(err?.message || '').includes('notices.column.settings.update.error.structure');
       if (!isManagedStructure) throw err;
-      const uuid = await detectManagedColumnId(boardId, colId, { type: 'dropdown' });
+      const uuid = await detectManagedDropdownColumnId(boardId, colId);
       if (!uuid) throw err;
       logger.warn('useDropdownOptions', 'dropdown column is managed — self-healed to the managed path', {
         boardKey, alias, colId, managedColumnId: uuid,

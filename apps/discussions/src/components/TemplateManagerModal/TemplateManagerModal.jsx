@@ -14,7 +14,7 @@ import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } 
 import { CSS } from '@dnd-kit/utilities';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { countPoints } from '@generated/utils/templates.js';
-import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
+import { useDropdownOptions, addDropdownLabel } from '@generated/hooks/useDropdownOptions.js';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { MONDAY_COLOR_NAMES, colorNameToCss } from '@generated/constants/mondayPalette.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
@@ -231,6 +231,7 @@ export function TemplateManagerModal() {
     typeColor,
     typeColorName,
     setTypeColor,
+    assignRandomTypeColor,
   } = useTemplates();
   // "סוג דיון" is a DROPDOWN column — its labels are the assignable types.
   const { options: typeOptions } = useDropdownOptions('discussions', 'discussionTypeID');
@@ -265,7 +266,9 @@ export function TemplateManagerModal() {
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
-  const [typeSearch, setTypeSearch] = useState(''); // filters the "סוג דיון" list
+  const [typeSearch, setTypeSearch] = useState(''); // filters the "סוג דיון" list (also the typed source for the inline "create" affordance)
+  const [addingType, setAddingType] = useState(false); // add-type mutation in-flight
+  const typeSearchRef = useRef(null); // focus target for the "הוסף סוג דיון חדש" button when the box is empty
   // Color popover (opened by the color circle in the type-editor header).
   const [colorOpen, setColorOpen] = useState(false);
   const [colorPos, setColorPos] = useState(null);
@@ -457,10 +460,46 @@ export function TemplateManagerModal() {
     setConfirmDeleteId(null);
   };
 
+  // Add a NEW discussion type = a new label on the account-level MANAGED
+  // "סוג דיון" dropdown, created right here in the Templates tab (mirrors
+  // CreateDiscussionModal.handleAddType). addDropdownLabel self-resolves the
+  // managed column (persisted hint, else DETECTION via the managed-structure
+  // self-heal), so this works on new installs AND on the current install (whose
+  // type dropdown is a managed instance whose managedColumnId was never
+  // persisted). Its notify() refreshes typeOptions so the new type shows in the
+  // list without a reload; on failure the logger surfaces a toast and the typed
+  // text is kept so the user can retry.
+  const handleAddType = async (rawName) => {
+    const nm = (rawName || '').trim();
+    if (!nm || addingType) return;
+    try {
+      setAddingType(true);
+      await addDropdownLabel({ boardKey: 'discussions', alias: 'discussionTypeID', title: nm });
+      await assignRandomTypeColor(nm);
+      setTypeSearch('');
+    } catch (err) {
+      logger.error('TemplateManagerModal', 'הוספת סוג דיון נכשלה', err);
+    } finally {
+      setAddingType(false);
+    }
+  };
+
   const topicsTitle = view === 'list' ? 'תבניות דיון' : isNew ? 'תבנית חדשה' : 'עריכת תבנית';
   const participantsTitle = view === 'list' ? 'תבניות משתתפים' : isNew ? 'תבנית משתתפים חדשה' : 'עריכת תבנית משתתפים';
   const typesTitle = view === 'list' ? 'תבניות סוג דיון' : (draft?.discussionType || 'תבנית סוג דיון');
   const title = kind === 'topics' ? topicsTitle : kind === 'participants' ? participantsTitle : typesTitle;
+
+  // Types tab: filtered options + whether to offer an inline "create <typed>"
+  // row (monday-dropdown behavior: a search that matches no existing type — and
+  // isn't an exact existing label — offers to create it from the typed text).
+  const trimmedTypeSearch = typeSearch.trim();
+  const filteredTypeOptions = typeOptions.filter(
+    (opt) => !trimmedTypeSearch || (opt.label || '').toLowerCase().includes(trimmedTypeSearch.toLowerCase())
+  );
+  const showCreateType =
+    !!trimmedTypeSearch
+    && filteredTypeOptions.length === 0
+    && !typeOptions.some((opt) => (opt.label || '').trim().toLowerCase() === trimmedTypeSearch.toLowerCase());
 
   return (
     <div className={styles.panel} dir="ltr">
@@ -528,7 +567,7 @@ export function TemplateManagerModal() {
             className={`${styles.tab} ${kind === 'types' ? styles.tabActive : ''}`}
             onClick={() => switchKind('types')}
           >
-            סוג דיון
+            תבנית לפי סוג דיון
           </button>
           <button
             type="button"
@@ -555,28 +594,47 @@ export function TemplateManagerModal() {
         {view === 'list' && kind === 'types' ? (
           loading ? (
             <div className={styles.empty}><Loader size={24} /></div>
-          ) : typeOptions.length === 0 ? (
-            <div className={styles.empty}>
-              <Text type="text2" color="secondary">
-                לא הוגדרו סוגי דיון בעמודת ה"סוג". הוסיפו סוגים (ביצירת דיון) כדי ליצור תבנית לכל סוג.
-              </Text>
-            </div>
           ) : (
             <>
+              {/* Add a NEW discussion type — above the search AND reachable in the
+                  empty state, so a fresh account with no types can seed the first
+                  one. Creates a label on the account MANAGED "סוג דיון" dropdown;
+                  the list refreshes live (addDropdownLabel notify -> typeOptions).
+                  With text in the box it creates that type; empty, it focuses the
+                  box so the user types a name first. */}
+              <button
+                type="button"
+                className={styles.addTypeBtn}
+                disabled={addingType}
+                onClick={() => { if (trimmedTypeSearch) handleAddType(typeSearch); else typeSearchRef.current?.focus(); }}
+              >
+                {addingType ? <Loader size={16} /> : <Plus size={16} />}
+                <span>הוסף סוג דיון חדש</span>
+              </button>
+
               <div className={styles.searchWrap}>
                 <Search className={styles.searchIcon} aria-hidden="true" />
                 <input
+                  ref={typeSearchRef}
                   type="text"
                   className={styles.search}
-                  aria-label="חיפוש סוג דיון"
+                  aria-label="חיפוש או הוספת סוג דיון"
+                  placeholder="חיפוש סוג דיון…"
                   value={typeSearch}
                   onChange={(e) => setTypeSearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && showCreateType) { e.preventDefault(); handleAddType(typeSearch); } }}
                 />
               </div>
-            <div className={styles.list}>
-              {typeOptions
-                .filter((opt) => !typeSearch.trim() || (opt.label || '').toLowerCase().includes(typeSearch.trim().toLowerCase()))
-                .map((opt) => {
+
+              {typeOptions.length === 0 && !trimmedTypeSearch ? (
+                <div className={styles.empty}>
+                  <Text type="text2" color="secondary">
+                    עדיין אין סוגי דיון. הקלידו שם למעלה כדי ליצור סוג ראשון (או הוסיפו סוג ביצירת דיון), ואז תוכלו להגדיר תבנית לכל סוג.
+                  </Text>
+                </div>
+              ) : (
+                <div className={styles.list}>
+                  {filteredTypeOptions.map((opt) => {
                 const tpl = typeTemplates.find((t) => t.discussionType === opt.label);
                 const hasTpl = !!tpl;
                 return (
@@ -618,8 +676,22 @@ export function TemplateManagerModal() {
                     )}
                   </div>
                 );
-              })}
-            </div>
+                  })}
+                  {showCreateType && (
+                    <button
+                      type="button"
+                      className={styles.createTypeRow}
+                      disabled={addingType}
+                      onClick={() => handleAddType(typeSearch)}
+                    >
+                      {addingType
+                        ? <Loader size={16} />
+                        : <span className={styles.createTypePlus} aria-hidden="true">➕</span>}
+                      <span>צור סוג דיון "{trimmedTypeSearch}"</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </>
           )
         ) : view === 'list' ? (
