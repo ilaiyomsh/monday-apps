@@ -280,6 +280,11 @@
 .itemWrap {
   position: relative;
   width: 100%;
+  transition: transform var(--motion-productive-medium, 0.2s) ease;
+}
+/* Hover lift — the whole card (with its kebab) rises a touch. */
+.itemWrap:hover {
+  transform: translateY(-2px);
 }
 
 /* Row kebab affordance — appears on row hover/focus at the card's far-right
@@ -288,7 +293,7 @@
 .itemActions {
   position: absolute;
   top: 50%;
-  right: 8px;
+  right: 6px;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
@@ -431,18 +436,28 @@
   gap: 10px;
   width: 100%;
   box-sizing: border-box;
-  padding: 10px 12px;
+  /* extra right padding reserves the far-right slot for the hover kebab so it
+     never overlaps the (now always-visible) date/time */
+  padding: 10px 34px 10px 12px;
   background: var(--primary-background-color, #fff);
   border: 0.5px solid var(--ui-border-color, #d0d4e4);
   border-radius: 10px;
   cursor: pointer;
   text-align: start;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
   transition: background-color var(--motion-productive-medium, 0.2s) ease,
-    border-color var(--motion-productive-medium, 0.2s) ease;
+    border-color var(--motion-productive-medium, 0.2s) ease,
+    box-shadow var(--motion-productive-medium, 0.2s) ease,
+    transform var(--motion-productive-medium, 0.2s) ease;
 }
 
 .item:hover {
   background-color: var(--primary-background-hover-color, #f5f6f8);
+}
+
+/* Slightly deeper shadow on hover, complementing the lift. */
+.itemWrap:hover .item {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
 /* Selected card: accent-tinted fill + accent border. The type-color rail stays;
@@ -482,11 +497,8 @@
   transition: opacity var(--motion-productive-short, 0.15s) ease;
 }
 
-/* Hand the trailing corner to the kebab on hover: fade the date so it and the
-   kebab never overlap in the shared far-right slot. */
-.itemWrap:hover .itemDate {
-  opacity: 0;
-}
+/* The date/time stays visible on hover; the card reserves a right slot (see
+   .item padding) so the hover kebab and the date never overlap. */
 
 .loadMoreRow {
   display: flex;
