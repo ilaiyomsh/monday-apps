@@ -112,7 +112,7 @@ Match and filter by the id field, never `text`: dropdown → `ids`; people →
 | week | `{ "startDate": "...", "endDate": "..." }` | |
 | hour | `{ "hour": N, "minute": N }` | |
 | world_clock | `{ "timezone": "Area/City" }` | |
-| people | `{ "personsAndTeams": [{ "id": 12345, "kind": "person" }] }` | `kind: "team"` for teams; assignee must be a board member (errors-and-auth.md) |
+| people | `{ "personsAndTeams": [{ "id": 12345, "kind": "person" }] }` | `kind: "team"` for teams; assignee must be a board member (errors-and-auth.md). **Team assignment needs the TEAM itself subscribed to the board** — `kind:"team"` fails with `ColumnValueException`/`invalidPersonAssignment` ("unable to assign team with id: N") until `add_teams_to_board(board_id, team_ids:[N], kind: subscriber)` is run first (verified live 2026-07-12, sandbox workspace) |
 | dropdown | `{ "labels": [".."] }` OR `{ "ids": [".."] }` | never mix labels and ids |
 | email | `{ "email": "...", "text": "..." }` | |
 | phone | `{ "phone": "+972...", "countryShortName": "IL" }` | |
