@@ -12,7 +12,7 @@ import OnClickDialog from './OnClickDialog.jsx';
 // (matching the context() fixture below); the stub scopes global storage under
 // `global:<key>` and harness.seedStorage does NOT re-scope, so we seed under the
 // already-scoped key (same as the hook tests).
-const STORAGE_KEY = 'global:teamPeople:18421604809:multiple_person_mm562c71';
+const STORAGE_KEY = 'global:teamPeople:18421604809:multiple_person_mm563xsw';
 
 // A complete, valid v1 settings object referencing the REAL seeded ids
 // (probes/MANIFEST.md): relation board_relation_mm56dy57 -> target board
@@ -26,12 +26,12 @@ const validV1 = () => ({
 });
 
 // Context for the columnPickers (on-click) placement. columnId is the column's
-// OWN people column (multiple_person_mm562c71 on WZ-TeamPeople-source); itemId /
+// OWN people column (multiple_person_mm563xsw on WZ-TeamPeople-source); itemId /
 // boardId are that source item / board — all matching the captured probes.
 const context = () => ({
   boardId: '18421604809',
   itemId: '12511436134',
-  columnId: 'multiple_person_mm562c71',
+  columnId: 'multiple_person_mm563xsw',
   selectedItemIds: ['12511436134'],
 });
 
@@ -42,7 +42,8 @@ const MEMBER_NAMES = ['עידו פיוטרקובסקי', 'עילי שלם', 'ר�
 const UNCONFIGURED_TITLE = 'העמודה לא הוגדרה';
 const API_ERROR_MSG = 'אירעה שגיאה בטעינת הנתונים מ-monday. נסו שוב מאוחר יותר.';
 const NO_TEAM_MSG = 'לא נמצא צוות בפריט המקושר. ודאו שקיים פריט מקושר ושהוגדר בו צוות.';
-const SAVE_SUCCESS_NOTICE = 'הבחירה נשמרה';
+// The dialog title must carry the resolved team's name (seeded team 1348990).
+const TEAM_TITLE = 'צוות test ilai';
 
 beforeEach(() => {
   harness.reset();
@@ -60,15 +61,14 @@ afterEach(() => {
 });
 
 describe('OnClickDialog — configured & ready', () => {
-  it('offers EXACTLY the 3 members of team "test ilai" in the picker and no foreign users', async () => {
+  it('opens straight into the list (native-picker structure) with EXACTLY the 3 members of team "test ilai" and no foreign users', async () => {
     installAppApiHandlers(harness);
     harness.seedStorage(STORAGE_KEY, validV1());
 
     render(<OnClickDialog context={context()} />);
 
-    // Ready = the picker trigger (empty selection -> "לא הוקצה" placeholder) is shown.
-    const trigger = await screen.findByLabelText('לא הוקצה');
-    fireEvent.click(trigger.closest('button'));
+    // Native-like: NO extra trigger click — the list renders immediately.
+    expect(await screen.findByText(MEMBER_NAMES[0])).toBeInTheDocument();
 
     // All three allowed members are offered...
     MEMBER_NAMES.forEach((name) => {
@@ -81,6 +81,17 @@ describe('OnClickDialog — configured & ready', () => {
       .filter((b) => /פיוטרקובסקי|עילי שלם|ארגמן/.test(b.textContent || ''));
     expect(memberRows).toHaveLength(3);
   });
+
+  it('shows the resolved team name in the dialog title', async () => {
+    installAppApiHandlers(harness);
+    harness.seedStorage(STORAGE_KEY, validV1());
+
+    render(<OnClickDialog context={context()} />);
+
+    expect(
+      await screen.findByRole('heading', { name: TEAM_TITLE })
+    ).toBeInTheDocument();
+  });
 });
 
 describe('OnClickDialog — unconfigured', () => {
@@ -91,13 +102,13 @@ describe('OnClickDialog — unconfigured', () => {
     render(<OnClickDialog context={context()} />);
 
     expect(await screen.findByText(UNCONFIGURED_TITLE)).toBeInTheDocument();
-    // No picker trigger is rendered in the unconfigured state.
-    expect(screen.queryByLabelText('לא הוקצה')).toBeNull();
+    // No picker list is rendered in the unconfigured state.
+    expect(screen.queryByText('עילי שלם')).toBeNull();
   });
 });
 
 describe('OnClickDialog — save', () => {
-  it('writes JSON.stringify(formatCellValue(selection)) via change_column_value and closes the dialog on success', async () => {
+  it('saves immediately on person click: writes JSON.stringify(formatCellValue(selection)) via change_column_value and keeps the dialog open', async () => {
     let captured = null;
     installAppApiHandlers(harness, {
       // Capture the mutation variables the dialog sends; still answer with the
@@ -113,13 +124,10 @@ describe('OnClickDialog — save', () => {
 
     render(<OnClickDialog context={context()} />);
 
-    // Open the picker and choose עילי שלם (id 48274917).
-    const trigger = await screen.findByLabelText('לא הוקצה');
-    fireEvent.click(trigger.closest('button'));
-    fireEvent.click(screen.getByText('עילי שלם').closest('button'));
-
-    // Save.
-    fireEvent.click(screen.getByRole('button', { name: 'שמירה' }));
+    // Native-like: click a person in the immediately-rendered list — that IS
+    // the save (no separate Save button exists anymore).
+    const row = (await screen.findByText('עילי שלם')).closest('button');
+    fireEvent.click(row);
 
     await waitFor(() => expect(captured).not.toBeNull());
 
@@ -127,16 +135,36 @@ describe('OnClickDialog — save', () => {
     // integer id, kind "person" (ids become integers ONLY at this seam).
     expect(captured.boardId).toBe('18421604809');
     expect(captured.itemId).toBe('12511436134');
-    expect(captured.columnId).toBe('multiple_person_mm562c71');
+    expect(captured.columnId).toBe('multiple_person_mm563xsw');
     expect(JSON.parse(captured.value)).toEqual({
       personsAndTeams: [{ id: 48274917, kind: 'person' }],
     });
 
-    // A success notice was shown and the dialog was closed (via monday.execute).
-    await waitFor(() => expect(harness.calls.some((c) => c.type === 'closeDialog')).toBe(true));
-    const notice = harness.calls.find((c) => c.type === 'notice');
-    expect(notice?.args?.message).toBe(SAVE_SUCCESS_NOTICE);
-    expect(notice?.args?.type).toBe('success');
+    // Native-picker behavior: the dialog STAYS OPEN (user may pick more people
+    // or close by clicking outside) — closeDialog must NOT have been executed.
+    expect(harness.calls.some((c) => c.type === 'closeDialog')).toBe(false);
+    // The pick is reflected as a selected chip (optimistic).
+    expect(screen.getByLabelText('הסר עילי שלם')).toBeInTheDocument();
+  });
+
+  it('reverts the optimistic pick and shows the inline error strip when the write fails', async () => {
+    installAppApiHandlers(harness, {
+      UpdateColumnValue: {
+        fn: () => {
+          throw new Error('write refused');
+        },
+      },
+    });
+    harness.seedStorage(STORAGE_KEY, validV1());
+
+    render(<OnClickDialog context={context()} />);
+
+    const row = (await screen.findByText('עילי שלם')).closest('button');
+    fireEvent.click(row);
+
+    // The failed write reverts the selection (chip gone) and shows the strip.
+    expect(await screen.findByText('שמירת הבחירה נכשלה. נסו שוב.')).toBeInTheDocument();
+    expect(screen.queryByLabelText('הסר עילי שלם')).toBeNull();
   });
 });
 
@@ -177,8 +205,7 @@ describe('OnClickDialog — locked empty state', () => {
     render(<OnClickDialog context={context()} />);
 
     expect(await screen.findByText(NO_TEAM_MSG)).toBeInTheDocument();
-    // Locked: no allowed users, so no picker rows / trigger at all.
+    // Locked: no allowed users, so no picker rows at all.
     expect(screen.queryByText('עידו פיוטרקובסקי')).toBeNull();
-    expect(screen.queryByLabelText('לא הוקצה')).toBeNull();
   });
 });

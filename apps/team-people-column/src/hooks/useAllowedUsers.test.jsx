@@ -9,7 +9,7 @@ import useAllowedUsers from './useAllowedUsers.js';
 
 // Settings + context that match the captured probes exactly (probes/MANIFEST.md):
 // source item 12511436134 on WZ-TeamPeople-source, its own people column
-// multiple_person_mm562c71, relation board_relation_mm56dy57 -> target board
+// multiple_person_mm563xsw, relation board_relation_mm56dy57 -> target board
 // 18421604791 people column multiple_person_mm5694pg -> team 1348990 ("test ilai").
 const SETTINGS = {
   version: 1,
@@ -18,7 +18,7 @@ const SETTINGS = {
   peopleColumnId: 'multiple_person_mm5694pg',
   policy: { selectionMode: 'multi', aggregation: 'union', includeListedPersons: true },
 };
-const context = { itemId: '12511436134', columnId: 'multiple_person_mm562c71' };
+const context = { itemId: '12511436134', columnId: 'multiple_person_mm563xsw' };
 
 // The exactly-3 seeded members of team "test ilai", he-name sorted (the shape
 // buildAllowedList produces and the service returns).

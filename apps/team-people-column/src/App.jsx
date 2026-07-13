@@ -1,11 +1,16 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, Suspense, lazy } from 'react';
 import { useMondayContext } from './hooks/useMondayContext';
 import { useUiErrorSink } from './hooks/useUiErrorSink';
 import mondayService from './services/mondayService';
 import OnClickDialog from './components/OnClickDialog/OnClickDialog';
-import ColumnSettings from './components/ColumnSettings/ColumnSettings';
 import LoadingState from './components/shared/LoadingState';
 import ErrorState from './components/shared/ErrorState';
+
+// The settings pane is opened rarely (column setup) while the on-click picker
+// opens on EVERY cell click — and the dialog iframe reloads from scratch each
+// time. Splitting settings out keeps its code (RadioButton/Checkbox/Popover +
+// board-columns logic) off the picker's critical path.
+const ColumnSettings = lazy(() => import('./components/ColumnSettings/ColumnSettings'));
 
 // Modules that already display their own errors inline (ErrorState /
 // validation UI) — a toast on top would be a duplicate, lower-value signal
@@ -74,7 +79,9 @@ function App() {
         <OnClickDialog context={context} />
       )}
       {placement === 'settings' && (
-        <ColumnSettings context={context} />
+        <Suspense fallback={<LoadingState message="טוען הגדרות..." />}>
+          <ColumnSettings context={context} />
+        </Suspense>
       )}
       {!placement && (
         <div className="text-center py-8">

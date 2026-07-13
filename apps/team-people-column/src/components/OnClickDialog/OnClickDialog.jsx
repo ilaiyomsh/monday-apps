@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Button, AttentionBox } from '@vibe/core';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { AttentionBox } from '@vibe/core';
 
 import mondayService from '../../services/mondayService';
 import logger from '../../utils/logger';
@@ -29,7 +29,6 @@ const MODULE = 'OnClickDialog';
 // Step-labeled Hebrew loading messages for the resolve chain.
 const STEP_MESSAGES = {
   relation: 'טוען את הפריט המקושר...',
-  linkedPeople: 'טוען את הצוות מהפריט המקושר...',
   teams: 'טוען את חברי הצוות...',
   ready: 'טוען...',
 };
@@ -70,6 +69,17 @@ function UnconfiguredState() {
   );
 }
 
+/**
+ * Dialog title carrying the team name(s), so the user always sees WHICH team
+ * they are picking from. Falls back to a generic title while unresolved.
+ */
+function teamTitle(result) {
+  const names = (result?.teams || []).map((t) => t.name).filter(Boolean);
+  if (names.length === 0) return 'בחירת אנשי צוות';
+  if (names.length === 1) return `צוות ${names[0]}`;
+  return `צוותים: ${names.join(', ')}`;
+}
+
 function OnClickDialog({ context }) {
   const { boardId, itemId, columnId, selectedItemIds } = context || {};
 
@@ -95,7 +105,6 @@ function OnClickDialog({ context }) {
   const single = policy.selectionMode === 'single';
 
   const [selection, setSelection] = useState([]);
-  const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
   // Seed the picker selection from the resolved chain whenever a fresh result
@@ -122,33 +131,34 @@ function OnClickDialog({ context }) {
     setSaveError(null);
   }, [status, result]);
 
-  const handleSave = useCallback(async () => {
-    setSaving(true);
+  // Native-picker behavior: every selection change saves immediately
+  // (optimistic — the UI reflects the pick at once; a failed write reverts the
+  // selection and shows an inline strip). Serialized via a ref so a fast
+  // second click saves the LATEST selection after the in-flight write settles.
+  const savingRef = useRef(Promise.resolve());
+  const handleChange = useCallback((next) => {
+    const prev = selection;
+    setSelection(next);
     setSaveError(null);
-    try {
-      await mondayService.query(UPDATE_COLUMN_VALUE, {
-        boardId: String(boardId),
-        itemId: String(itemId),
-        columnId,
-        value: JSON.stringify(formatCellValue(selection)),
-      });
-      mondayService.showNotice('הבחירה נשמרה', 'success');
-      mondayService.closeDialog();
-    } catch (err) {
-      // error-guard: never swallow. Log, then keep the dialog OPEN with an inline
-      // strip and the selection preserved so the user can retry. No toast on top —
-      // the inline danger AttentionBox is the single, stronger display for this
-      // failure (avoids the double-signal INLINE_ERROR_MODULES exists to prevent).
-      logger.error(MODULE, 'Failed to save the people-column selection', err);
-      setSaveError('שמירת הבחירה נכשלה. נסו שוב.');
-    } finally {
-      setSaving(false);
-    }
+    savingRef.current = savingRef.current.then(async () => {
+      try {
+        await mondayService.query(UPDATE_COLUMN_VALUE, {
+          boardId: String(boardId),
+          itemId: String(itemId),
+          columnId,
+          value: JSON.stringify(formatCellValue(next)),
+        });
+      } catch (err) {
+        // error-guard: never swallow. Log, revert the optimistic pick, and show
+        // an inline strip. No toast on top — the inline danger AttentionBox is
+        // the single, stronger display for this failure (avoids the
+        // double-signal INLINE_ERROR_MODULES exists to prevent).
+        logger.error(MODULE, 'Failed to save the people-column selection', err);
+        setSelection(prev);
+        setSaveError('שמירת הבחירה נכשלה. נסו שוב.');
+      }
+    });
   }, [boardId, itemId, columnId, selection]);
-
-  const handleCancel = useCallback(() => {
-    mondayService.closeDialog();
-  }, []);
 
   // --- render branches ----------------------------------------------------
 
@@ -193,11 +203,15 @@ function OnClickDialog({ context }) {
     );
   }
 
-  // Ready with a non-empty allowed set — the restricted picker.
+  // Ready with a non-empty allowed set — the restricted picker, structured
+  // like monday's native people picker: team-name title, then search + list
+  // immediately (no extra click), selection saves on toggle.
   const multiSelected = Array.isArray(selectedItemIds) && selectedItemIds.length > 1;
 
   return (
     <div className={styles.dialog} dir="rtl">
+      <h2 className={styles.title}>{teamTitle(result)}</h2>
+
       {multiSelected && (
         <p className={styles.hint}>העריכה חלה על הפריט הנוכחי בלבד.</p>
       )}
@@ -210,27 +224,16 @@ function OnClickDialog({ context }) {
         />
       )}
 
-      <div className={styles.pickerRow}>
-        <span className={styles.pickerLabel}>אחראי מהצוות</span>
-        <PersonPicker
-          selected={selection}
-          onChange={setSelection}
-          users={result.users}
-          single={single}
-          bordered
-        />
-      </div>
-
       {saveError && <AttentionBox compact type="danger" text={saveError} />}
 
-      <div className={styles.actions}>
-        <Button onClick={handleSave} loading={saving}>
-          שמירה
-        </Button>
-        <Button kind="secondary" onClick={handleCancel} disabled={saving}>
-          ביטול
-        </Button>
-      </div>
+      <PersonPicker
+        inline
+        selected={selection}
+        onChange={handleChange}
+        users={result.users}
+        single={single}
+        listHeading="אנשי הצוות"
+      />
     </div>
   );
 }

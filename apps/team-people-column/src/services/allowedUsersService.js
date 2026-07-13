@@ -1,13 +1,14 @@
 // allowedUsersService — resolves the set of users a team-people column is
-// allowed to select, by walking the q1..q4 chain against the monday API:
+// allowed to select, in a TWO-call chain against the monday API (the iframe
+// SDK bridge serializes api() calls, so round-trips — not complexity — set the
+// dialog's load time; this chain used to be four serial calls):
 //
-//   q1 GetColumnValue        source item's board_relation link + its own people
-//                            column selection.
-//   q2 GetLinkedItemsPeople  the linked (target) items' people column — the
-//                            teams/persons that define the allowed set.
-//   q3 GetTeamsMembers       members of every referenced team.
-//   q4 GetUsersDetails       details for listed persons + stale-selection ids
-//                            not covered by any resolved team.
+//   q1 GetColumnValue     source item's board_relation link + the linked
+//                         (target) items' people column (nested via
+//                         linked_items) + the item's own selection.
+//   q2 GetTeamsAndUsers   members of every referenced team + details for
+//                         listed persons / stale-selection ids, in ONE
+//                         document (@include skips an empty side).
 //
 // All monday reads go through mondayService.query, which RESOLVES GraphQL soft
 // errors into a thrown Error (200-with-errors). Every such throw is wrapped into
@@ -18,12 +19,7 @@ import mondayService from './mondayService.js';
 import { parseCellValue } from '../domain/cellValue.js';
 import { buildAllowedList } from '../domain/buildAllowedList.js';
 import { policyFromSettings } from '../domain/settingsSchema.js';
-import {
-  GET_COLUMN_VALUE,
-  GET_LINKED_ITEMS_PEOPLE,
-  GET_TEAMS_MEMBERS,
-  GET_USERS_DETAILS,
-} from './graphqlQueries.js';
+import { GET_COLUMN_VALUE, GET_TEAMS_AND_USERS } from './graphqlQueries.js';
 
 /**
  * A typed application error carrying a stable `code` and a user-facing Hebrew
@@ -69,11 +65,11 @@ const uniq = (arr) => [...new Set(arr)];
  *
  * @param {{ itemId:string, columnId:string, settings:object, onStep?:(step:string)=>void }} args
  *   `onStep` (optional) is invoked with the chain phase about to run
- *   ('linkedPeople' before q2, 'teams' before q3) so the UI can show a
- *   step-labeled loading state.
+ *   ('teams' before q2) so the UI can show a step-labeled loading state.
  * @returns {Promise<{ users, teams, selection, partial, emptyChain, missingTeamIds, hadLinkedItems }>}
  *   `selection` entries carry the resolved { name, photo_thumb } when known
- *   (team members ∪ q4 lookup) so a stale selection still renders a named chip.
+ *   (team members ∪ user-details lookup) so a stale selection still renders a
+ *   named chip.
  * @throws {AppError} NOT_CONFIGURED | RELATION_COLUMN_MISSING |
  *   RELATION_COLUMN_TYPE_CHANGED | PEOPLE_COLUMN_DRIFT | PERMISSION_BLOCKED | API_ERROR
  */
@@ -93,10 +89,11 @@ export async function fetchAllowedUsers({ itemId, columnId, settings, onStep } =
   const { relationColumnId, peopleColumnId } = settings;
   const policy = policyFromSettings(settings);
 
-  // --- q1: source item's relation link + own-column selection -------------
+  // --- q1: relation link + nested linked-items people + own selection -----
   const q1 = await runQuery(GET_COLUMN_VALUE, {
     itemIds: [String(itemId)],
     columnIds: [relationColumnId, columnId],
+    peopleColumnIds: [peopleColumnId],
   });
   const sourceItem = q1?.items?.[0];
   const sourceCols = Array.isArray(sourceItem?.column_values) ? sourceItem.column_values : [];
@@ -111,21 +108,19 @@ export async function fetchAllowedUsers({ itemId, columnId, settings, onStep } =
   const ownCv = sourceCols.find((c) => c && c.id === columnId);
   const selection = parseCellValue(ownCv?.value ?? null);
 
-  // --- q2: linked items' people column ------------------------------------
+  // --- linked items' people column (nested in q1 via linked_items) --------
   let perItemEntries = [];
   let partial = false;
   const hadLinkedItems = linkedItemIds.length > 0;
 
   if (linkedItemIds.length > 0) {
-    step('linkedPeople');
-    const q2 = await runQuery(GET_LINKED_ITEMS_PEOPLE, {
-      itemIds: linkedItemIds,
-      columnIds: [peopleColumnId],
-    });
-    const returnedItems = Array.isArray(q2?.items) ? q2.items : [];
+    // linked_items resolves like items(ids:) — items the caller cannot read
+    // are silently omitted, so the requested-vs-returned comparison below
+    // still detects blocked/partial visibility.
+    const returnedItems = Array.isArray(relCv.linked_items) ? relCv.linked_items : [];
 
     if (returnedItems.length === 0) {
-      // None of the requested linked items came back -> caller can't read any.
+      // None of the linked items came back -> caller can't read any.
       throw appError('PERMISSION_BLOCKED');
     }
     if (returnedItems.length < linkedItemIds.length) {
@@ -150,28 +145,44 @@ export async function fetchAllowedUsers({ itemId, columnId, settings, onStep } =
     }
   }
 
-  // --- q3: team members ---------------------------------------------------
+  // --- q2: team members + user details in ONE call -------------------------
   const teamIds = uniq(
     perItemEntries.flatMap((pi) => pi.entries.filter((e) => e.kind === 'team').map((e) => e.id)),
   );
-  const teamsMap = {};
-  if (teamIds.length > 0) {
+  // User-details ids are requested UNFILTERED by team membership (membership is
+  // unknown until this same call returns) — the redundancy is a few cheap ids,
+  // and it buys merging the former q3+q4 into one round-trip.
+  const listedPersonIds = policy.includeListedPersons
+    ? perItemEntries.flatMap((pi) => pi.entries.filter((e) => e.kind === 'person').map((e) => e.id))
+    : [];
+  const staleSelectionIds = selection.map((s) => String(s.id));
+  const detailUserIds = uniq([...listedPersonIds, ...staleSelectionIds]);
+
+  let q2 = null;
+  if (teamIds.length > 0 || detailUserIds.length > 0) {
     step('teams');
-    const q3 = await runQuery(GET_TEAMS_MEMBERS, { teamIds });
-    for (const team of Array.isArray(q3?.teams) ? q3.teams : []) {
-      teamsMap[String(team.id)] = {
-        id: String(team.id),
-        name: team.name,
-        users: (Array.isArray(team.users) ? team.users : []).map((u) => ({
-          id: String(u.id),
-          name: u.name,
-          // API boundary: GET_TEAMS_MEMBERS now selects photo_url { thumb }; map it
-          // back to the internal photo_thumb key. `?? u.photo_thumb` keeps the
-          // captured-fixture (old flat field) path working (see MANIFEST.md).
-          photo_thumb: u.photo_url?.thumb ?? u.photo_thumb,
-        })),
-      };
-    }
+    q2 = await runQuery(GET_TEAMS_AND_USERS, {
+      teamIds,
+      userIds: detailUserIds,
+      includeTeams: teamIds.length > 0,
+      includeUsers: detailUserIds.length > 0,
+    });
+  }
+
+  const teamsMap = {};
+  for (const team of Array.isArray(q2?.teams) ? q2.teams : []) {
+    teamsMap[String(team.id)] = {
+      id: String(team.id),
+      name: team.name,
+      users: (Array.isArray(team.users) ? team.users : []).map((u) => ({
+        id: String(u.id),
+        name: u.name,
+        // API boundary: the query selects photo_url { thumb }; map it back to
+        // the internal photo_thumb key. `?? u.photo_thumb` keeps the
+        // captured-fixture (old flat field) path working (see MANIFEST.md).
+        photo_thumb: u.photo_url?.thumb ?? u.photo_thumb,
+      })),
+    };
   }
 
   // ids already covered by a resolved team's membership.
@@ -180,28 +191,19 @@ export async function fetchAllowedUsers({ itemId, columnId, settings, onStep } =
     for (const u of team.users) teamMemberIds.add(String(u.id));
   }
 
-  // --- q4: user details for listed persons + stale-selection ids ----------
-  // Only ids NOT already covered by a team need a details lookup.
-  const listedPersonIds = policy.includeListedPersons
-    ? perItemEntries.flatMap((pi) => pi.entries.filter((e) => e.kind === 'person').map((e) => e.id))
-    : [];
-  const staleSelectionIds = selection.map((s) => String(s.id));
-  const needUserIds = uniq([...listedPersonIds, ...staleSelectionIds]).filter(
-    (id) => !teamMemberIds.has(id),
-  );
-
+  // User details for listed persons + stale-selection ids. Ids also covered by
+  // a team are dropped here: the nested teams selection returns real photo
+  // URLs while the ROOT users field resolves photo_url null for anyone but the
+  // caller (live-probed quirk, 2026-07) — team-resolved details must win.
   const usersById = {};
-  if (needUserIds.length > 0) {
-    const q4 = await runQuery(GET_USERS_DETAILS, { userIds: needUserIds });
-    for (const u of Array.isArray(q4?.users) ? q4.users : []) {
-      usersById[String(u.id)] = {
-        id: String(u.id),
-        name: u.name,
-        // API boundary: GET_USERS_DETAILS now selects photo_url { thumb }; map it
-        // back to the internal photo_thumb key (`?? u.photo_thumb` keeps captures working).
-        photo_thumb: u.photo_url?.thumb ?? u.photo_thumb,
-      };
-    }
+  for (const u of Array.isArray(q2?.users) ? q2.users : []) {
+    const uid = String(u.id);
+    if (teamMemberIds.has(uid)) continue;
+    usersById[uid] = {
+      id: uid,
+      name: u.name,
+      photo_thumb: u.photo_url?.thumb ?? u.photo_thumb,
+    };
   }
 
   // --- aggregate ----------------------------------------------------------
@@ -212,7 +214,7 @@ export async function fetchAllowedUsers({ itemId, columnId, settings, onStep } =
     usersById,
   );
 
-  // Resolved user details across every source: q4 lookups ∪ team memberships.
+  // Resolved user details across every source: user-details lookups ∪ team memberships.
   // A stale selection whose id is NOT in the allowed set still resolves its
   // name/photo here, so the picker renders a named chip instead of a "?" one.
   const resolvedUsersById = { ...usersById };
