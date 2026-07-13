@@ -26,9 +26,22 @@ column-formats.md — see report for the suggested reference update.
 
 ## File → operation → query → variables
 
+**2026-07 consolidation:** the app's resolve chain was reduced from four operations to two
+(round-trips dominate iframe latency — the SDK bridge serializes api() calls). `GetColumnValue.json`
+was RE-CAPTURED with the nested `linked_items` selection, and `GetTeamsAndUsers.json` was captured
+for the merged teams+users document. The retired `GetLinkedItemsPeople.json` / `GetTeamsMembers.json`
+/ `GetUsersDetails.json` captures remain as real-data inputs for the pure-domain tests
+(`buildAllowedList.test.js`).
+
+**Column drift note (2026-07):** the source board's original people column
+`multiple_person_mm562c71` no longer exists on the live board; the current own-column is
+`multiple_person_mm563xsw` ("אחראי - Team People"). New captures and the service/dialog/hook
+tests use the live id; older captures still carry the retired id.
+
 | File | Operation | Query | Variables |
 |---|---|---|---|
-| `GetColumnValue.json` | Read source item's relation + own people column | `query GetColumnValue($itemIds:[ID!],$columnIds:[String!]){ items(ids:$itemIds){ id name column_values(ids:$columnIds){ id type text value ... on BoardRelationValue { linked_item_ids } ... on PeopleValue { persons_and_teams { id kind } } } } }` | `{"itemIds":["12511436134"],"columnIds":["board_relation_mm56dy57","multiple_person_mm562c71"]}` |
+| `GetColumnValue.json` | Read source item's relation + NESTED linked-items people column + own people column (probed 2026-07, API 2026-07, complexity 34) | `query GetColumnValue($itemIds:[ID!],$columnIds:[String!],$peopleColumnIds:[String!]){ complexity { query before after } items(ids:$itemIds){ id name column_values(ids:$columnIds){ id type text value ... on BoardRelationValue { linked_item_ids linked_items { id name column_values(ids:$peopleColumnIds){ id type ... on PeopleValue { persons_and_teams { id kind } text } } } } ... on PeopleValue { persons_and_teams { id kind } } } } }` | `{"itemIds":["12511436134"],"columnIds":["board_relation_mm56dy57","multiple_person_mm563xsw"],"peopleColumnIds":["multiple_person_mm5694pg"]}` |
+| `GetTeamsAndUsers.json` | Merged team members + user details behind @include gates (probed 2026-07, API 2026-07, complexity 46) | `query GetTeamsAndUsers($teamIds:[ID!],$userIds:[ID!],$includeTeams:Boolean!,$includeUsers:Boolean!){ complexity { query before after } teams(ids:$teamIds) @include(if:$includeTeams) { id name users { id name photo_url { thumb } } } users(ids:$userIds) @include(if:$includeUsers) { id name photo_url { thumb } } }` | `{"teamIds":["1348990"],"userIds":["48274917"],"includeTeams":true,"includeUsers":true}` |
 | `GetLinkedItemsPeople.json` | Read target item's people (team) column | `query GetLinkedItemsPeople($itemIds:[ID!],$columnIds:[String!]){ items(ids:$itemIds){ id name column_values(ids:$columnIds){ id type ... on PeopleValue { persons_and_teams { id kind } text } } } }` | `{"itemIds":["12511510366"],"columnIds":["multiple_person_mm5694pg"]}` |
 | `GetTeamsMembers.json` | Read team + members + complexity | `query GetTeamsMembers($teamIds:[ID!]){ complexity { query before after } teams(ids:$teamIds){ id name users { id name photo_thumb } } }` | `{"teamIds":["1348990"]}` |
 | `GetTeamsMembersWithBogus.json` | Same, with one bogus team id mixed in | same query as above | `{"teamIds":["1348990","999999999"]}` |
@@ -51,6 +64,21 @@ added **no extra complexity** and did not error.
 `teams(ids:[1348990, 999999999])` **silently omits** the bogus id — the `teams` array contains
 only the one valid team (`test ilai`), no `null` placeholder, no error/warning surfaced in
 `errors` or `extensions`. Same silent-omit pattern to watch for as other id-array lookups.
+
+## Root `users(ids:)` photo_url quirk (probed 2026-07 + 2026-10)
+
+On the ROOT `users(ids:[...])` field, `photo_url` resolves **null** for every user other
+than the caller (`me` returns a real URL) — while the NESTED `teams { users { photo_url
+{ thumb } } }` selection returns real URLs for the same users in the same request. The
+deprecated flat `photo_thumb` DOES return URLs on root users in 2026-07 but the field is
+**removed in 2026-10**, so it must not be selected. Consequence: the service prefers
+team-resolved user details over root-users details whenever an id appears in both.
+
+## @include on root fields (probed 2026-07)
+
+`teams(ids:) @include(if:$b)` / `users(ids:) @include(if:$b)` work as expected: a field
+gated off is entirely absent from the response `data`. Bogus ids in `users(ids:)` are
+silently omitted (same pattern as `teams`).
 
 ## GetBoardColumns — settings vs settings_str for board_relation
 

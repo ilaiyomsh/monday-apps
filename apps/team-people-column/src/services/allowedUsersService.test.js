@@ -1,7 +1,7 @@
-// Characterization of the q1..q4 chain in fetchAllowedUsers, driven against the
-// dev-harness monday-sdk stub with the REAL captured probe responses registered
-// via installAppApiHandlers (see src/test-utils/probes/MANIFEST.md). vitest
-// aliases monday-sdk-js -> the stub (vite.config.js test.alias), so the
+// Characterization of the two-call chain in fetchAllowedUsers, driven against
+// the dev-harness monday-sdk stub with the REAL captured probe responses
+// registered via installAppApiHandlers (see src/test-utils/probes/MANIFEST.md).
+// vitest aliases monday-sdk-js -> the stub (vite.config.js test.alias), so the
 // mondayService the service imports resolves to the SAME shared harness the
 // test drives here.
 //
@@ -27,7 +27,7 @@ const SETTINGS = {
   policy: { selectionMode: 'multi', aggregation: 'union', includeListedPersons: true },
 };
 const SOURCE_ITEM_ID = '12511436134';
-const OWN_COLUMN_ID = 'multiple_person_mm562c71';
+const OWN_COLUMN_ID = 'multiple_person_mm563xsw';
 
 const call = (overrides) =>
   fetchAllowedUsers({ itemId: SOURCE_ITEM_ID, columnId: OWN_COLUMN_ID, settings: SETTINGS, ...overrides });
@@ -69,13 +69,15 @@ describe('fetchAllowedUsers — selection enrichment + linked-item flag', () => 
   it('enriches a stale own-column selection with the resolved name/photo from team membership', async () => {
     // Real capture with the own people column carrying a prior selection (person
     // 48274917 "עילי שלם"), who is also a member of the allowed team — so the
-    // resolved details come from team membership, not a q4 lookup. Before the
-    // fix, `selection` carried only bare {id, kind} and the chip rendered nameless.
+    // resolved details come from team membership, not the root-users lookup
+    // (whose photo_url resolves null for anyone but the caller — probed quirk).
+    // Before the fix, `selection` carried only bare {id, kind} and the chip
+    // rendered nameless.
     const withSelection = {
       items: getColumnValueCapture.data.items.map((it) => ({
         ...it,
         column_values: it.column_values.map((cv) =>
-          cv.id === 'multiple_person_mm562c71'
+          cv.id === 'multiple_person_mm563xsw'
             ? { ...cv, value: JSON.stringify({ personsAndTeams: [{ id: 48274917, kind: 'person' }] }) }
             : cv,
         ),
@@ -98,13 +100,13 @@ describe('fetchAllowedUsers — selection enrichment + linked-item flag', () => 
   });
 
   it('leaves an unresolvable stale selection id as a bare {id, kind} entry (no name invented)', async () => {
-    // Selection id 99999999 is neither a team member nor returned by the q4
+    // Selection id 99999999 is neither a team member nor returned by the
     // user-details lookup, so no name/photo can be resolved — the entry stays bare.
     const withUnknownSelection = {
       items: getColumnValueCapture.data.items.map((it) => ({
         ...it,
         column_values: it.column_values.map((cv) =>
-          cv.id === 'multiple_person_mm562c71'
+          cv.id === 'multiple_person_mm563xsw'
             ? { ...cv, value: JSON.stringify({ personsAndTeams: [{ id: 99999999, kind: 'person' }] }) }
             : cv,
         ),
@@ -117,15 +119,15 @@ describe('fetchAllowedUsers — selection enrichment + linked-item flag', () => 
     expect(result.selection).toEqual([{ id: '99999999', kind: 'person' }]);
   });
 
-  it('invokes onStep with "linkedPeople" then "teams" in order as the chain advances', async () => {
+  it('invokes onStep with "teams" once as the chain advances to the second call', async () => {
     installAppApiHandlers(harness);
     const steps = [];
 
     await call({ onStep: (phase) => steps.push(phase) });
 
-    // q2 (linked people) reported before q3 (teams); no 'relation'/'ready' here —
-    // those are the hook's own bookends, not chain phases.
-    expect(steps).toEqual(['linkedPeople', 'teams']);
+    // The merged teams+users call is the only chain phase after q1; no
+    // 'relation'/'ready' here — those are the hook's own bookends.
+    expect(steps).toEqual(['teams']);
   });
 
   it('reports hadLinkedItems:false when the relation column links no items', async () => {
@@ -177,9 +179,10 @@ describe('fetchAllowedUsers — monday API soft error', () => {
 });
 
 describe('fetchAllowedUsers — partial linked-item visibility', () => {
-  it('sets partial:true when the linked-people query returns a strict subset of the requested items', async () => {
-    // q1 links TWO items (real target + one the caller cannot read); q2 (default
-    // capture) returns only the one readable item -> strict subset -> partial.
+  it('sets partial:true when nested linked_items returns a strict subset of linked_item_ids', async () => {
+    // The relation lists TWO linked ids (real target + one the caller cannot
+    // read) while the nested linked_items (real capture) carries only the one
+    // readable item -> strict subset -> partial.
     const twoLinks = {
       items: getColumnValueCapture.data.items.map((it) => ({
         ...it,
