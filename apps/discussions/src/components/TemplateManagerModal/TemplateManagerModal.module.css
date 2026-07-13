@@ -119,6 +119,63 @@
   cursor: default;
 }
 
+/* "סוג דיון חדש" popup — a small centered dialog opened by the addTypeBtn and
+   portaled to document.body so it floats above the Settings modal (not clipped
+   by the panel's own scroll). Standard fixed overlay + compact card. */
+.addOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.35);
+}
+.addCard {
+  width: min(360px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border-radius: var(--border-radius-big, 12px);
+  background: var(--primary-background-color, #fff);
+  box-shadow: var(--box-shadow-medium, 0 10px 30px rgba(0, 0, 0, 0.2));
+}
+.addTitle {
+  margin: 0;
+  font-size: 16px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-color, #323338);
+}
+.addInput {
+  width: 100%;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-family: var(--font-family);
+  font-size: var(--font-size-general-label, 14px);
+  box-sizing: border-box;
+}
+.addInput:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+.addHint {
+  min-height: 18px;
+  line-height: 18px;
+}
+.addActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 /* Inline "create from the typed text" suggestion row (monday-dropdown behavior:
    a search that matches nothing offers to create that value). Sits in the list. */
 .createTypeRow {
