@@ -29,7 +29,6 @@ const MODULE = 'OnClickDialog';
 // Step-labeled Hebrew loading messages for the resolve chain.
 const STEP_MESSAGES = {
   relation: 'טוען את הפריט המקושר...',
-  linkedPeople: 'טוען את הצוות מהפריט המקושר...',
   teams: 'טוען את חברי הצוות...',
   ready: 'טוען...',
 };
