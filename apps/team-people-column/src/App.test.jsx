@@ -31,8 +31,9 @@ describe('App routing by monday context placement', () => {
   });
 
   // Child-component identity markers (Hebrew — the app is RTL-only): the settings
-  // pane's header vs the on-click dialog's unconfigured-state title.
-  const SETTINGS_HEADING = 'הגדרות עמודת אנשי צוות';
+  // pane's Save button (unique to ColumnSettings — the on-click dialog auto-saves
+  // and has no Save button) vs the on-click dialog's unconfigured-state title.
+  const SETTINGS_SAVE_BTN = 'שמירה';
   const ONCLICK_UNCONFIGURED = 'העמודה לא הוגדרה';
 
   it('mounts ColumnSettings (not OnClickDialog) for the column_view_settings placement', async () => {
@@ -41,7 +42,7 @@ describe('App routing by monday context placement', () => {
     render(<App />);
 
     expect(
-      await screen.findByRole('heading', { name: SETTINGS_HEADING })
+      await screen.findByRole('button', { name: SETTINGS_SAVE_BTN })
     ).toBeInTheDocument();
     // The on-click dialog's unconfigured title must NOT be mounted.
     expect(screen.queryByText(ONCLICK_UNCONFIGURED)).not.toBeInTheDocument();
@@ -56,7 +57,7 @@ describe('App routing by monday context placement', () => {
     // unconfigured state — that Hebrew title proves OnClickDialog, not the
     // settings pane, is the mounted child.
     expect(await screen.findByText(ONCLICK_UNCONFIGURED)).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: SETTINGS_HEADING })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: SETTINGS_SAVE_BTN })).not.toBeInTheDocument();
   });
 
   it('shows the "not opened from a column" fallback when placement is absent', async () => {
@@ -67,7 +68,7 @@ describe('App routing by monday context placement', () => {
     expect(
       await screen.findByText('יש לפתוח רכיב זה מתוך עמודה ב-monday.com.')
     ).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: SETTINGS_HEADING })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: SETTINGS_SAVE_BTN })).not.toBeInTheDocument();
     expect(screen.queryByText(ONCLICK_UNCONFIGURED)).not.toBeInTheDocument();
   });
 });
