@@ -41,7 +41,8 @@
   font-size: 14px;
   line-height: 36px; /* match native row height */
   font-family: var(--font-family);
-  text-align: start;
+  direction: rtl;
+  text-align: left;
   /* reset button chrome — it's a clickable text label */
   border: none;
   background: transparent;
@@ -81,6 +82,8 @@
   font-size: 14px;
   font-family: var(--font-family);
   background: var(--primary-background-color, #fff);
+  direction: rtl;
+  text-align: right;
 }
 .nameInput:focus-visible {
   outline: none;

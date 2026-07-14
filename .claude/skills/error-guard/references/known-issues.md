@@ -39,3 +39,17 @@ is allowed ONLY for shapes listed here, with a comment naming the entry.
 - **Trigger:** pilot agent reported the runbook/SKILL still described
   `check.sh`/`audit.sh` as not yet existing while using them as the acceptance gate.
 - **Fix:** wording removed from SKILL.md + retrofit-runbook.md same session.
+
+### 2026-07-14 — check.sh false positive on foreign inline eslint-disable (FIXED)
+- **Trigger:** editing `DatePickerPopover.jsx`, which carries an
+  `eslint-disable-next-line react-hooks/exhaustive-deps` comment, tripped the
+  PostToolUse hook with `[react-hooks/exhaustive-deps] Definition for rule ...
+  was not found` — a rule the error-guard config never defines.
+- **Defect:** ESLint treats an inline disable that references an unknown rule as
+  a ruleId-bearing message, so the gate counted it as a violation. Any file with
+  an inline disable for a rule outside the error-guard kit false-failed on every
+  edit.
+- **Fix:** `check.sh` now runs ESLint with `--no-inline-config`. Side benefit:
+  inline comments can no longer silence the error-guard rules themselves
+  (aligns with "never silence a rule"). Verified on the trigger file (clean) and
+  the rule kit still fires (violations still reported on a crafted bad catch).

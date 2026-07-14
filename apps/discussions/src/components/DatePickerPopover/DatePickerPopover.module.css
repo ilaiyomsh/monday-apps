@@ -109,6 +109,41 @@
 }
 .typeInput::placeholder { color: var(--secondary-text-color, #676879); }
 .typeInput:focus { outline: none; border-color: var(--primary-color, #0073ea); }
+/* Segmented DD/MM/YY mask (round 71) — the box that used to be one free-text
+   input is now a bordered GROUP of three digit boxes with static slashes
+   between them, so the mask's separators are always visible. */
+.segGroup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 34px;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  padding: 0 6px;
+}
+.segGroup:focus-within { border-color: var(--primary-color, #0073ea); }
+.segInput {
+  width: 2.4ch;
+  border: none;
+  background: transparent;
+  padding: 2px 1px;
+  font-size: 14px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  text-align: center;
+}
+.segInput:focus { outline: none; }
+.segInput::placeholder { color: var(--secondary-text-color, #676879); }
+.segSlash {
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+  user-select: none;
+}
+
 /* Subtle invalid state — just a red border, no jarring fill (monday-style). */
 .typeInvalid,
-.typeInvalid:focus { border-color: var(--negative-color, #d83a52); }
+.typeInvalid:focus,
+.typeInvalid:focus-within { border-color: var(--negative-color, #d83a52); }

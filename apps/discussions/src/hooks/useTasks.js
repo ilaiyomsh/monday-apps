@@ -368,7 +368,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
   // Extracted from createTask so a failed create can be retried against the SAME
   // temp row (same id → same React key → no flicker/dup/disappear).
   const runCreate = useCallback(async (tempId, name, o) => {
-    const { status = null, assignee = [], deadline = null, topicId = null } = o || {};
+    const { status = null, assignee = [], deadline = null, topicId = null, viewers = [], editors = [] } = o || {};
     // Clear any prior error flag (retry path).
     setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, _createFailed: false } : i)));
     try {
@@ -394,6 +394,15 @@ export function useTasks(discussionId, discussionTypeId = null) {
         data.taskCreatorID = [Number(currentUserId)];
       }
       if (assignee.length) data.responsibilityID = assignee.map(p => Number(p.id));
+      // Item 19 — access columns, auto-filled from the parent discussion:
+      // participants → יכולת צפייה (viewers), single-person discussion roles →
+      // יכולת עריכה (editors). Written only when the owner mapped the columns.
+      if (viewers.length && getColumns('tasks')?.taskViewersID?.id) {
+        data.taskViewersID = viewers.map((p) => Number(p?.id ?? p)).filter((n) => Number.isFinite(n));
+      }
+      if (editors.length && getColumns('tasks')?.taskEditorsID?.id) {
+        data.taskEditorsID = editors.map((p) => Number(p?.id ?? p)).filter((n) => Number.isFinite(n));
+      }
       if (deadline) data.deadlineID = `${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`;
       const created = await b.item().create(data, { createLabelsIfMissing: true }).execute();
       const realId = created.id;

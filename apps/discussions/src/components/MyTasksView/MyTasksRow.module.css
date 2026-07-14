@@ -66,8 +66,8 @@
   font-size: 14px;
   line-height: 36px; /* match native row height */
   font-family: var(--font-family);
-  text-align: right;
   direction: rtl;
+  text-align: left;
   /* reset button chrome — it's a clickable text label */
   border: none;
   background: transparent;
@@ -154,21 +154,22 @@
    Previous-tasks tab (TaskTableRow.module.css): white rounded chip with a colored
    leading bar, clickable to open the discussion item card. */
 .sourceCell {
-  justify-content: stretch;
+  justify-content: center;
   gap: 6px;
   overflow: hidden;
 }
 .sourceChips {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   width: 100%;
   min-width: 0;
 }
 .sourceChip {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
-  text-align: start;
+  text-align: center;
   padding: 4px 8px;
   border: 1px solid var(--ui-border-color, #d0d4e4);
   border-inline-start: 3px solid var(--primary-color, #0073ea);

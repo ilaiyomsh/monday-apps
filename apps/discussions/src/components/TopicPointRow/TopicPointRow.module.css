@@ -35,6 +35,16 @@
 .excluded .nameCell {
   opacity: 0.45;
 }
+/* Item 11 — a hidden point is fully INERT: every disabled control loses its
+   pointer affordance (the eye + selection checkbox stay live to re-show it). */
+.excluded .createBtn:disabled,
+.excluded .counter:disabled,
+.excluded .updatesBtn:disabled,
+.excluded .check:disabled {
+  cursor: default;
+  pointer-events: none;
+  opacity: 0.45;
+}
 
 /* Failed optimistic create: the point stays EDITABLE (no lock) but is marked
    with a red row tint + a red leading accent strip; the red "שמירה נכשלה" label
@@ -221,6 +231,8 @@
   font-size: 14px;
   line-height: 36px; /* match the native monday row height (TaskTableRow .nameText) */
   font-family: var(--font-family);
+  direction: rtl;
+  text-align: left;
 }
 
 /* monday "updates" speech-bubble icon at the trailing edge of the name cell —
@@ -254,6 +266,8 @@
   font-family: var(--font-family);
   color: var(--text-color, #323338);
   background: var(--primary-background-color, #fff);
+  direction: rtl;
+  text-align: right;
 }
 .nameEditInput:focus-visible { outline: none; }
 

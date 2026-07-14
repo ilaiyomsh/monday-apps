@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContentContainer, DatePicker, Button } from '@vibe/core';
 import { Calendar } from '@vibe/icons';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
+import { acceptSegmentInput, segmentsToTyped, dateToSegments } from './dateSegments.js';
 import styles from './DatePickerPopover.module.css';
 
 // Parse a manually-typed date (round 47 top-of-popover input). Primary format is
@@ -54,11 +55,15 @@ export function parseTypedDate(str) {
 export function DatePickerPopover({ value, onChange, variant = 'cell', placeholder = 'בחר תאריך', zIndex = 10000, formatDate, triggerClassName = '', allowClear = true }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState('bottom-start');
-  // Manual date-entry field at the TOP of the popover (round 47): `typed` is its
-  // controlled text; `invalid` flags an unparseable commit (subtle red border).
-  const [typed, setTyped] = useState('');
+  // Manual date-entry (round 47, segmented since round 71): three DD/MM/YY
+  // digit boxes with the slashes ALWAYS visible between them; `invalid` flags
+  // an unparseable commit (subtle red border on the group).
+  const [segs, setSegs] = useState({ dd: '', mm: '', yy: '' });
   const [invalid, setInvalid] = useState(false);
   const triggerRef = useRef(null);
+  const ddRef = useRef(null);
+  const mmRef = useRef(null);
+  const yyRef = useRef(null);
   const isField = variant === 'field';
   const isInline = variant === 'inline';
   // Defense-in-depth: tolerate a non-Date `value`. A real Date passes through
@@ -103,29 +108,30 @@ export function DatePickerPopover({ value, onChange, variant = 'cell', placehold
     setOpen(false);
   };
 
-  // Keep the manual-entry field in sync with the committed value: reset it to the
-  // canonical DD/MM/YYYY whenever the popover OPENS or the committed date changes
+  // Keep the segment boxes in sync with the committed value: reset them to the
+  // canonical DD/MM/YY whenever the popover OPENS or the committed date changes
   // (e.g. after a calendar pick), and clear any stale invalid flag. Keyed on the
   // value's TIME (not the Date object) so ordinary re-renders never clobber what
   // the user is typing.
   const valueTime = safeValue ? safeValue.getTime() : null;
   useEffect(() => {
     if (!open) return;
-    setTyped(safeValue ? safeValue.toLocaleDateString('en-GB') : '');
+    setSegs(dateToSegments(safeValue));
     setInvalid(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, valueTime]);
 
-  // Commit the typed text. Enter commits via the calendar's OWN path (handleSelect
-  // → set + close); blur commits WITHOUT closing (focus may be moving into the
-  // calendar) and only when the value actually changed, so it never fires a
-  // redundant write. An empty field is a no-op (normalized back to the current
-  // value); unparseable input flags the subtle invalid state and never commits.
-  // Esc is handled by the Dialog (hideTrigger 'esc'), which cancels + closes.
-  const commitTyped = ({ close }) => {
-    const raw = typed.trim();
+  // Commit the segment values. Enter commits via the calendar's OWN path
+  // (handleSelect → set + close); blur/auto-fill commit WITHOUT closing (focus
+  // may be moving into the calendar) and only when the value actually changed,
+  // so it never fires a redundant write. Empty day+month is a no-op (normalized
+  // back to the current value); an unparseable combination flags the subtle
+  // invalid state and never commits. A missing year defaults to the current
+  // year (parseTypedDate). Esc is handled by the Dialog (hideTrigger 'esc').
+  const commitSegs = (s, { close }) => {
+    const raw = segmentsToTyped(s);
     if (!raw) {
-      setTyped(safeValue ? safeValue.toLocaleDateString('en-GB') : '');
+      setSegs(dateToSegments(safeValue));
       setInvalid(false);
       return;
     }
@@ -137,6 +143,51 @@ export function DatePickerPopover({ value, onChange, variant = 'cell', placehold
     } else if (!safeValue || parsed.getTime() !== safeValue.getTime()) {
       onChange(parsed);
     }
+  };
+
+  // Segment plumbing: typing digits fills the focused box; a full (or
+  // unambiguous zero-padded) box auto-advances to the next; filling the year
+  // commits immediately (without closing, so the calendar reflects it).
+  // Backspace on an empty box hops back; '/' skips forward (the slashes are
+  // static text — typing one just moves to the next box, monday-style).
+  const SEG_ORDER = ['dd', 'mm', 'yy'];
+  const segRefs = { dd: ddRef, mm: mmRef, yy: yyRef };
+  const focusSeg = (kind) => {
+    const el = segRefs[kind]?.current;
+    if (el) { el.focus(); el.select(); }
+  };
+  const handleSegChange = (kind) => (e) => {
+    const { value, advance } = acceptSegmentInput(kind, e.target.value);
+    const next = { ...segs, [kind]: value };
+    setSegs(next);
+    if (invalid) setInvalid(false);
+    if (!advance) return;
+    const ni = SEG_ORDER.indexOf(kind) + 1;
+    if (ni < SEG_ORDER.length) focusSeg(SEG_ORDER[ni]);
+    else commitSegs(next, { close: false });
+  };
+  const handleSegKeyDown = (kind) => (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      commitSegs(segs, { close: true });
+      return;
+    }
+    if (e.key === '/') {
+      e.preventDefault();
+      const ni = SEG_ORDER.indexOf(kind) + 1;
+      if (ni < SEG_ORDER.length) focusSeg(SEG_ORDER[ni]);
+      return;
+    }
+    if (e.key === 'Backspace' && !segs[kind]) {
+      const pi = SEG_ORDER.indexOf(kind) - 1;
+      if (pi >= 0) { e.preventDefault(); focusSeg(SEG_ORDER[pi]); }
+    }
+  };
+  // Commit only when focus leaves the WHOLE group (moving between boxes or to
+  // the static slashes is still "editing").
+  const handleGroupBlur = (e) => {
+    if (e.currentTarget.contains(e.relatedTarget)) return;
+    commitSegs(segs, { close: false });
   };
 
   const isOverdue = safeValue && safeValue < new Date();
@@ -169,24 +220,60 @@ export function DatePickerPopover({ value, onChange, variant = 'cell', placehold
       zIndex={zIndex}
       content={() => (
         <DialogContentContainer>
-          {/* Manual date entry (round 47) — a typeable DD/MM/YYYY field at the TOP
-              of the popover (monday-style), above the calendar. LTR so the numeric
-              date reads naturally in the RTL app. Enter/blur commit a valid parse
-              (the calendar below reflects it); Esc cancels via the Dialog. */}
+          {/* Manual date entry (round 47; segmented round 71) — a DD/MM/YY mask
+              at the TOP of the popover: the two slashes are ALWAYS visible and
+              each digit pair lives in its own box, so typed digits land straight
+              in the right segment. LTR so the numeric date reads naturally in
+              the RTL app. Enter commits+closes; leaving the group commits;
+              filling the year auto-commits; Esc cancels via the Dialog. */}
           <div className={styles.typeRow}>
-            <input
-              type="text"
-              inputMode="numeric"
+            <div
+              role="group"
               dir="ltr"
-              className={`${styles.typeInput}${invalid ? ` ${styles.typeInvalid}` : ''}`}
-              value={typed}
-              placeholder="DD/MM/YYYY"
+              className={`${styles.segGroup}${invalid ? ` ${styles.typeInvalid}` : ''}`}
               aria-label="הקלדת תאריך"
               aria-invalid={invalid || undefined}
-              onChange={(e) => { setTyped(e.target.value); if (invalid) setInvalid(false); }}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitTyped({ close: true }); } }}
-              onBlur={() => commitTyped({ close: false })}
-            />
+              onBlur={handleGroupBlur}
+            >
+              <input
+                ref={ddRef}
+                type="text"
+                inputMode="numeric"
+                className={styles.segInput}
+                value={segs.dd}
+                placeholder="DD"
+                aria-label="יום"
+                onFocus={(e) => e.target.select()}
+                onChange={handleSegChange('dd')}
+                onKeyDown={handleSegKeyDown('dd')}
+              />
+              <span className={styles.segSlash} aria-hidden="true">/</span>
+              <input
+                ref={mmRef}
+                type="text"
+                inputMode="numeric"
+                className={styles.segInput}
+                value={segs.mm}
+                placeholder="MM"
+                aria-label="חודש"
+                onFocus={(e) => e.target.select()}
+                onChange={handleSegChange('mm')}
+                onKeyDown={handleSegKeyDown('mm')}
+              />
+              <span className={styles.segSlash} aria-hidden="true">/</span>
+              <input
+                ref={yyRef}
+                type="text"
+                inputMode="numeric"
+                className={styles.segInput}
+                value={segs.yy}
+                placeholder="YY"
+                aria-label="שנה"
+                onFocus={(e) => e.target.select()}
+                onChange={handleSegChange('yy')}
+                onKeyDown={handleSegKeyDown('yy')}
+              />
+            </div>
           </div>
           <DatePicker mode="single" date={safeValue || undefined} onDateChange={handleSelect} />
           <div className={styles.actions}>

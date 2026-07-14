@@ -96,8 +96,13 @@ run_tests() {
   STATUS=$?
 }
 
-# Per-test failure lines → bare test names (marker + trailing duration stripped)
-fail_names()   { grep -E '^[[:space:]]*(✗|×|✕|✖)' "$OUT" | sed -E 's/^[[:space:]]*[✗×✕✖][[:space:]]*//; s/[[:space:]]*\(?[0-9]+[[:space:]]?ms\)?[[:space:]]*$//'; }
+# Per-test failure lines → bare test names (marker + trailing duration stripped).
+# Amendment 8: the marker is stripped as an ALTERNATION of full glyphs (not a
+# bracket class) and any leftover non-ASCII marker bytes are removed under
+# LC_ALL=C — in a C/POSIX locale a bracket class matches single BYTES of the
+# multi-byte ✗, leaving a residual byte (0x97) glued to every recorded name,
+# which then never matches the green run (false "ABSENT from this run").
+fail_names()   { grep -E '^[[:space:]]*(✗|×|✕|✖)' "$OUT" | LC_ALL=C sed -E 's/^[[:space:]]*(✗|×|✕|✖)?[[:space:]]*//; s/^[^ -~]+[[:space:]]*//; s/[[:space:]]*\(?[0-9]+[[:space:]]?ms\)?[[:space:]]*$//'; }
 passed_count() { grep -E '^[[:space:]]*Tests[: ]' "$OUT" | grep -Eo '[0-9]+ passed' | head -n 1 | grep -Eo '[0-9]+' || echo 0; }
 skipped_count(){ grep -E '^[[:space:]]*Tests[: ]' "$OUT" | grep -Eo '[0-9]+ (skipped|todo)' | awk '{s+=$1} END {print s+0}'; }
 test_hash()    { shasum -a 256 "$ABS_TEST" | cut -d' ' -f1; }

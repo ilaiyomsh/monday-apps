@@ -88,6 +88,7 @@
   font-variation-settings: 'wght' 500;
   color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
+  direction: rtl;
 }
 
 /* Unmapped decisions board — expected state, not an error. */
@@ -105,6 +106,7 @@
   font-family: var(--font-family);
   text-align: center;
   padding: 16px;
+  direction: rtl;
 }
 
 /* Shared horizontal scroll owner (mirrors TasksTab .board): LTR so the table
@@ -287,7 +289,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-family);
-  text-align: start;
+  direction: rtl;
+  text-align: left;
 }
 .decNameBtn {
   display: block;
@@ -308,6 +311,8 @@
   color: var(--primary-text-color, #323338);
   box-sizing: border-box;
   font-family: var(--font-family);
+  direction: rtl;
+  text-align: right;
 }
 .decNameInput:focus-visible {
   outline: none;
@@ -474,6 +479,8 @@
   font-size: 14px;
   font-family: var(--font-family);
   border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  direction: rtl;
+  text-align: right;
 }
 .decEmptyRow:last-child {
   border-bottom: none;
@@ -523,6 +530,8 @@
   font-family: var(--font-family);
   color: var(--primary-text-color, #323338);
   padding: 0;
+  direction: rtl;
+  text-align: right;
 }
 .decAddInput::placeholder {
   color: var(--placeholder-color, #9699a6);

@@ -65,6 +65,8 @@ export function MyDecisionsTable({
   // `canDecision(cap, decision)` gates each inline editor PER ROW — a false
   // verdict withholds the handler so the cell renders read-only.
   canDecision = () => true,
+  // Active name-search term — rows highlight where it matched inside the name.
+  searchTerm = '',
   onStatusChange,
   onPriorityChange,
   onDateChange,
@@ -193,6 +195,7 @@ export function MyDecisionsTable({
             decision={decision}
             columns={renderKeys}
             rowStyle={rowStyle}
+            searchTerm={searchTerm}
             showDecider={showDecider}
             showAffected={showAffected}
             showPriority={showPriority}

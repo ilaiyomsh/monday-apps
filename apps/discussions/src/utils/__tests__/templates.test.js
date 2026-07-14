@@ -67,6 +67,7 @@ describe('sanitizeTypeTemplate', () => {
       lead: [{ id: 10, kind: 'person', name: 'מובילה' }],
       coordinator: [{ id: 12, kind: 'person', name: 'מרכז' }],
       participants: [{ id: 11, kind: 'person', name: 'א' }],
+      deciderIsLead: false, // item 18 — defaults off unless explicitly true
     });
   });
 

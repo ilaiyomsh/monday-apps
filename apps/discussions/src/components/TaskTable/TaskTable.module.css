@@ -234,6 +234,8 @@
   font-family: var(--font-family);
   color: var(--primary-text-color, #323338);
   padding: 0;
+  direction: rtl;
+  text-align: right;
 }
 .addInput::placeholder {
   color: var(--placeholder-color, #9699a6);

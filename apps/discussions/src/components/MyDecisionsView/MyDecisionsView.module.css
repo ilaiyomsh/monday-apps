@@ -223,6 +223,27 @@
   outline: none;
 }
 
+/* Clear-X inside the search pill — first flex child, so it sits on the pill's
+   LEFT edge in this dir="ltr" toolbar. Shown only while a value exists. */
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.searchClear:hover {
+  background: var(--primary-background-color, #ffffff);
+  color: var(--primary-text-color, #323338);
+}
+
 /* Mobile app: icon-only pills on one row (gated on the .mobile-app root class,
    not viewport width — same as MyTasksView). */
 :global(.mobile-app) .pill {
@@ -285,6 +306,7 @@
   font-variation-settings: 'wght' 500;
   color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
+  direction: rtl;
 }
 .groupCount {
   margin-inline-start: 8px;
