@@ -9,3 +9,6 @@ build/
 .vite/
 coverage/
 .dev-live/
+
+# Agent-session git worktrees (never committed)
+.claude/worktrees/

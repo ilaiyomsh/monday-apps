@@ -166,3 +166,16 @@ Verified live (richer than the docs imply): `<h1>-<h3>`, `<p>`, `<strong>`, `<em
 silently dropped to an empty `data-checklist-holder` — that markup only works when built in
 the in-app editor. API-authored workaround: plain `<ul><li><p>` with a ✔/☐ glyph. Treat
 "renders in UI" and "API-writable" as different claims.
+
+## Empty-value READ shapes (probe-verified 2026-07-14, API 2026-07)
+
+An item with never-set columns returns per-type distinct "empty" markers — do not
+assume `null` uniformly (probe: deadline-confirm fixtures, WZ- board):
+
+- status (`StatusValue`): `text: null`, `index: null`
+- people (`PeopleValue`): `text: ""` (empty STRING, not null)
+- date (`DateValue`): `text: ""`, `date: ""` (empty STRING, not null)
+
+So "no deadline" checks must treat `date === ""` as unset, and "no assignee" is
+`text === ""`. Also re-verified: `StatusValue.index` carries the label **id**
+(write `{"index": <labelId>}` round-trips to the same number).

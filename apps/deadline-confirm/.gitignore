@@ -1,0 +1,7 @@
+node_modules/
+public/admin/
+.env
+.env.*
+.dev/
+*.log
+coverage/

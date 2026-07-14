@@ -1,0 +1,94 @@
+// monday-sdk-js singleton + the two seamless-auth reads the admin view needs
+// (spec §9: board/column/label pickers do NOT go through our server).
+// Seamless calls ride the parent-negotiated API version; `settings` (typed
+// JSON) replaced the deprecated legacy string form in 2025-10.
+
+import mondaySdk from 'monday-sdk-js';
+import type { Board, BoardColumn, StatusLabel } from '../types';
+
+const monday = mondaySdk();
+
+let sessionTokenPromise: Promise<string> | null = null;
+
+export function getSessionToken(): Promise<string> {
+  if (!sessionTokenPromise) {
+    sessionTokenPromise = monday
+      .get('sessionToken')
+      .then((res: { data?: string }) => {
+        if (!res?.data) throw new Error('sessionToken unavailable');
+        return res.data;
+      })
+      .catch((err: unknown) => {
+        sessionTokenPromise = null; // allow retry on next call
+        throw err;
+      });
+  }
+  return sessionTokenPromise;
+}
+
+interface GraphQLResponse<T> {
+  data?: T;
+  errors?: Array<{ message: string }>;
+}
+
+async function seamlessApi<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
+  const res = (await monday.api(query, variables ? { variables } : undefined)) as GraphQLResponse<T>;
+  // GraphQL soft errors arrive inside a resolved promise — throw at the funnel.
+  if (res.errors?.length) {
+    throw new Error(`monday.api error: ${res.errors.map((e) => e.message).join('; ')}`);
+  }
+  if (!res.data) throw new Error('monday.api returned no data');
+  return res.data;
+}
+
+export async function fetchBoards(): Promise<Board[]> {
+  const data = await seamlessApi<{ boards: Array<{ id: string; name: string } | null> }>(
+    `query AdminBoards { boards(limit: 200, order_by: used_at) { id name } }`
+  );
+  return (data.boards ?? []).filter((b): b is Board => Boolean(b));
+}
+
+interface RawSettingsLabel {
+  id: number;
+  label: string;
+  index: number;
+  is_deactivated?: boolean;
+}
+
+export function parseStatusLabels(settings: unknown): StatusLabel[] {
+  const labels = (settings as { labels?: RawSettingsLabel[] } | null)?.labels;
+  if (!Array.isArray(labels)) return [];
+  return labels
+    .filter((l) => l && typeof l.id === 'number' && !l.is_deactivated)
+    .map((l) => ({ id: l.id, label: l.label, index: l.index, isDeactivated: false }))
+    .sort((a, b) => a.index - b.index);
+}
+
+export async function fetchBoardColumns(boardId: string): Promise<BoardColumn[]> {
+  const data = await seamlessApi<{
+    boards: Array<{
+      columns: Array<{ id: string; title: string; type: string; settings: unknown } | null>;
+    } | null>;
+  }>(
+    `query AdminColumns($boardIds: [ID!]) {
+      boards(ids: $boardIds) {
+        columns(types: [status, people, date]) { id title type settings }
+      }
+    }`,
+    { boardIds: [boardId] }
+  );
+  const columns = data.boards?.[0]?.columns ?? [];
+  return columns
+    .filter((c): c is NonNullable<typeof c> => Boolean(c))
+    .map((c) => ({
+      id: c.id,
+      title: c.title,
+      type: c.type as BoardColumn['type'],
+      labels: c.type === 'status' ? parseStatusLabels(c.settings) : [],
+    }));
+}
+
+export function openOauthTab(): void {
+  // auth.monday.com may refuse to render inside the iframe (spec §8) — new tab.
+  window.open('/oauth/start', '_blank', 'noopener');
+}
