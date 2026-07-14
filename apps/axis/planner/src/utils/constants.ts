@@ -86,6 +86,15 @@ export const SUMMARY_TRACKS_GAP = 10;
 export const FOCUS_BLOCK_GAP = 8;
 export const DIMMED_OPACITY = 0.5;
 
+// Gap FILL colors. Gaps must NOT read as a separator stripe — they blend with
+// the surface around them and rely on a shadow for the actual separation:
+// • summary↔tracks gap → the color-A summary surface (accent-bg-soft), so header,
+//   gap, and card are one continuous band; the header's drop shadow does the split.
+// • focus block gap → the page background, so the focused block floats above the
+//   page like a lifted card (shadow supplied by the focus edges).
+export const GAP_COLOR_SUMMARY = 'var(--color-accent-bg-soft)';
+export const GAP_COLOR_FOCUS = 'var(--color-bg-app)';
+
 // Legacy exports for backwards compatibility
 export const ROW_HEIGHT = CONFIG.rowHeight;
 export const HEADER_HEIGHT = CONFIG.headerHeight;

@@ -43,11 +43,15 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({ items, groupId, trackIn
   const snapDays = SNAP_DAYS[zoomLevel];
   const pixelsPerSnapUnit = pixelsPerDay * snapDays;
 
-  // Background: the allocation band is white (color B). In projects view EVERY
-  // track — including the empty padding rows under the summary card — is white,
-  // so the tracks read as one white band distinct from the tinted summary
-  // surface (color A) above. Employees view keeps empty rows gray.
-  const rowBg = items.length === 0 && viewMode !== 'projects' ? 'bg-bg-app' : 'bg-bg-surface';
+  // Projects view is a two-tone split WITHIN each track row:
+  //   • sidebar  → color A (accent-bg-soft), continuing the project's summary
+  //     card downward so the whole sidebar column reads as one card surface
+  //     (incl. the area below the card).
+  //   • timeline → white (color B), the allocation band.
+  // Employees view keeps the original single background (empty rows gray).
+  const isProjects = viewMode === 'projects';
+  const rowBg = items.length === 0 && !isProjects ? 'bg-bg-app' : 'bg-bg-surface';
+  const sidebarBg = isProjects ? 'bg-accent-bg-soft' : rowBg;
 
   // Helper to snap X coordinate to the start of the cell at that position
   const snapToCellStart = useCallback((x: number) => {
@@ -194,9 +198,9 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({ items, groupId, trackIn
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
-      {/* Sidebar Part */}
-      <div 
-        className={`sticky left-0 z-30 ${rowBg} border-r border-border-subtle h-full`}
+      {/* Sidebar Part — color A in projects view (continues the summary card). */}
+      <div
+        className={`sticky left-0 z-30 ${sidebarBg} border-r border-border-subtle h-full`}
         style={{ width: sidebarWidth, minWidth: sidebarWidth }}
         dir={locale.dir}
       >

@@ -275,10 +275,11 @@ export const VirtualRowList: React.FC = () => {
 
             // Allow overflow for GROUP rows to show floating ProjectSummaryCard
             const isGroupRow = row.type === 'GROUP';
-            // Neutral separator space reserved on this row (already part of
-            // virtualRow.size). Rendered as an opaque gutter via inner padding so
-            // the STICKY sidebar never becomes translucent — reducing opacity on
-            // the row itself reintroduces the timeline-bleed-through bug.
+            // Separator space reserved on this row (already part of virtualRow.size).
+            // Rendered as SOLID spacers (not row-level opacity, which would make the
+            // sticky sidebar translucent and bleed the timeline through). Each spacer
+            // is filled to BLEND with its neighbour surface — never a contrasting
+            // stripe — so separation reads from the shadow, not a colour band.
             const gapTop = row.gapTop ?? 0;
             const gapBottom = row.gapBottom ?? 0;
             const focusShadow =
@@ -298,6 +299,8 @@ export const VirtualRowList: React.FC = () => {
                   width: '100%',
                   height: virtualRow.size,
                   overflow: isGroupRow ? 'visible' : undefined,
+                  display: 'flex',
+                  flexDirection: 'column',
                   // Lift the focused block above its neighbours so its shadow
                   // reads correctly. The GROUP row must stay ABOVE its own track
                   // rows — it hosts the floating ProjectSummaryCard (z-60 within
@@ -310,25 +313,17 @@ export const VirtualRowList: React.FC = () => {
                   transition: 'opacity 150ms ease, transform 150ms ease, box-shadow 150ms ease',
                 }}
               >
-                {/* Gutter wrapper: opaque separator background revealed by the
-                    top/bottom padding; the real row content sits in the content
-                    box on top of it. Skipped (no padding/bg) when the row has no
-                    gap, so ordinary rows are visually untouched. */}
-                <div
-                  style={{
-                    height: '100%',
-                    boxSizing: 'border-box',
-                    paddingTop: gapTop || undefined,
-                    paddingBottom: gapBottom || undefined,
-                    background: gapTop || gapBottom ? 'var(--color-bg-emphasis)' : undefined,
-                  }}
-                >
-                  {/* Content box — the soft focus shadow hugs THIS edge (the real
-                      block boundary), not the outer gutter. */}
-                  <div style={{ height: '100%', boxShadow: focusShadow }}>
-                    <RowRenderer row={row} />
-                  </div>
+                {gapTop > 0 && (
+                  <div style={{ height: gapTop, flexShrink: 0, background: row.gapTopColor }} />
+                )}
+                {/* Content box — the soft focus shadow hugs THIS edge (the real
+                    block boundary), not the blended spacer. */}
+                <div style={{ flex: '1 1 auto', minHeight: 0, boxShadow: focusShadow }}>
+                  <RowRenderer row={row} />
                 </div>
+                {gapBottom > 0 && (
+                  <div style={{ height: gapBottom, flexShrink: 0, background: row.gapBottomColor }} />
+                )}
               </div>
             );
           })}

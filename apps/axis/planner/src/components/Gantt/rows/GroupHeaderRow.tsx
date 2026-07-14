@@ -9,7 +9,7 @@ import { LoadCell } from './LoadCell';
 import { isWorkingDay } from '../../../utils/workDaysUtils';
 import { ProjectSummaryCard } from '../ProjectSummaryCard';
 import { ProjectSummaryBar } from '../ProjectSummaryBar';
-import { DIMMED_OPACITY } from '../../../utils/constants';
+import { DIMMED_OPACITY, SUMMARY_TRACKS_GAP } from '../../../utils/constants';
 
 interface GroupHeaderRowProps {
   group: Group;
@@ -213,10 +213,17 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
 
   return (
     <div
-      className={`gantt-group-row flex h-full border-b border-border-subtle transition-colors ${
+      className={`gantt-group-row flex h-full transition-colors ${
+        showProjectCard ? '' : 'border-b border-border-subtle'
+      } ${
         isPlaceholder ? 'bg-accent-bg-soft hover:bg-accent-bg-badge' : 'bg-bg-surface hover:bg-bg-hover'
       }`}
-      style={{ overflow: showProjectCard ? 'visible' : undefined }}
+      style={{
+        overflow: showProjectCard ? 'visible' : undefined,
+        // Summary↔tracks separation: a downward shadow under the summary row (no
+        // border line) so the color-A band above reads as raised over the tracks.
+        boxShadow: showProjectCard ? '0 5px 7px -4px rgba(0,0,0,0.13)' : undefined,
+      }}
     >
       {/* Sidebar - sticky on left, relative for absolute PM bar positioning */}
       <div
@@ -280,15 +287,16 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
         )}
 
 
-        {/* PM + Project Type bar - sidebar only. The card carries the color-A
-            summary surface (accent-bg-soft), continuous with the header above it,
-            so header + card read as one tinted band distinct from the white
-            allocation tracks. The block is padded to ≥ PROJECT_CARD_HEIGHT so the
-            card never overhangs into the next project. */}
+        {/* PM + Project Type bar - sidebar only. The card is the color-A summary
+            surface (accent-bg-soft), same as the header. It is pushed down by the
+            header's color-A summary gap (marginTop = SUMMARY_TRACKS_GAP) so its two
+            48px rows line up 1:1 with the allocation tracks to its right (which
+            start below that same gap). The block is padded to ≥ PROJECT_CARD_HEIGHT
+            so the card never overhangs into the next project. */}
         {showProjectCard && (
           <div
             className={`absolute left-0 top-full w-full px-3 flex flex-col bg-accent-bg-soft ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
-            style={{ zIndex: 60 }}
+            style={{ zIndex: 60, marginTop: SUMMARY_TRACKS_GAP }}
             onClick={(e) => e.stopPropagation()}
           >
             <ProjectSummaryCard
