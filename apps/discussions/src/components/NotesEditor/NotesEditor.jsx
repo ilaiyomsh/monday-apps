@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Dialog, DialogContentContainer, Button } from '@vibe/core';
+import { Dialog, DialogContentContainer } from '@vibe/core';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import styles from './NotesEditor.module.css';
 
@@ -97,9 +97,8 @@ export function NotesEditor({ value, placeholder = '', onCommit, ariaLabel }) {
                 if (e.key === 'Escape') { e.stopPropagation(); finish(false); }
               }}
             />
-            <div className={styles.notesEditorActions}>
-              <Button kind="primary" size="small" onClick={() => finish(true)}>שמור</Button>
-            </div>
+            {/* No explicit save button (owner request 2026-07-14): blur /
+                click-outside already commit the draft — typing simply persists. */}
           </div>
         </DialogContentContainer>
       )}

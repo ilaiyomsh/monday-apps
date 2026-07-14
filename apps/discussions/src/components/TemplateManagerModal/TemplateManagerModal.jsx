@@ -880,14 +880,17 @@ export function TemplateManagerModal() {
               )}
             </div>
 
-            {/* Item 18 — per-type default decider toggle. */}
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer', margin: '8px 0' }}>
+            {/* Item 18 — per-type default decider toggle. Prominent (owner
+                request 2026-07-14): RTL row between the role pickers and the
+                topics template, bold label + a bigger accent checkbox. */}
+            <label className={styles.deciderDefaultRow}>
               <input
                 type="checkbox"
+                className={styles.deciderDefaultCheckbox}
                 checked={typeDeciderIsLead}
                 onChange={(e) => setTypeDeciderIsLead(e.target.checked)}
               />
-              <Text type="text2">בהחלטה חדשה, המחליט כברירת מחדל הוא מנהל הדיון</Text>
+              <span className={styles.deciderDefaultLabel}>בהחלטה חדשה, המחליט כברירת מחדל הוא מנהל הדיון</span>
             </label>
 
             <Text type="text2" className={styles.sectionLabel}>נושאים קבועים</Text>
