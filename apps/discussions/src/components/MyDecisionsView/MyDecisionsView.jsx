@@ -20,7 +20,8 @@ import { toPipelineRows } from './decisionPipeline.js';
 // Shared My-Tasks machinery, imported (NOT duplicated): the grouping/pipeline
 // helpers are alias-generic (decisionPipeline derives statusID/priorityID/
 // deadlineID onto each row) and the builder controls are pure chrome.
-import { groupMyTasks } from '../MyTasksView/grouping.js';
+import { groupMyTasks, ensureGroupColors } from '../MyTasksView/grouping.js';
+import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { BuilderControl } from '../MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '../MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '../MyTasksView/controls/BuilderIcon.jsx';
@@ -301,8 +302,10 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     () => sortTasks(filteredItems, sort, { orderById, labelById, priorityOrderById, priorityLabelById }),
     [filteredItems, sort, orderById, labelById, priorityOrderById, priorityLabelById]
   );
+  // Right-click a group header → shared color palette (round 77).
+  const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
   const grouped = useMemo(
-    () => groupMyTasks(sortedItems, group.col, {
+    () => ensureGroupColors(groupMyTasks(sortedItems, group.col, {
       labelById, colorById, orderById,
       priorityLabelById, priorityColorById, priorityOrderById,
       isValidStatus,
@@ -313,8 +316,8 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
       noDiscussionLabel: 'ללא דיון',
       noDateLabel: 'ללא תאריך',
       allTasksLabel: 'החלטות',
-    }),
-    [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById]
+    }), colorsByKey),
+    [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, colorsByKey]
   );
 
   // ---- sort handlers ----
@@ -546,6 +549,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
 
   return (
     <div className={styles.root} ref={rootRef}>
+      {groupColorMenu}
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
       {/* View title (round 40 typography; round 41 left-aligned) with a compact
@@ -705,6 +709,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
                 <button
                   type="button"
                   onClick={() => setCollapsed((p) => ({ ...p, [grp.key]: !p[grp.key] }))}
+                  onContextMenu={(e) => openMenuFor(grp.key, e)}
                   className={styles.groupHeader}
                 >
                   <DropdownChevronDown

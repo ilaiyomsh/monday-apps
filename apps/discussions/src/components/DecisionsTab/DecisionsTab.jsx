@@ -17,6 +17,7 @@ import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
 // Varied stable group-title colors (owner request 2026-07-14) — shared engine.
 import { ensureGroupColors } from '@generated/components/MyTasksView/grouping.js';
+import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
@@ -579,7 +580,9 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   // Groups carry { key, label, color, items } — status groups key by the stable
   // label id and resolve label/color via useStatusOptions; decider groups key by
   // the sorted person-id set. (Same shape as the Tasks / Previous tabs.)
-  const grouped = useMemo(() => {
+  // Right-click a group header → shared color palette (round 77).
+  const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
+  const groupedRaw = useMemo(() => {
     if (groupBy === 'status') {
       const groups = new Map();
       filteredDecisions.forEach((d) => {
@@ -610,6 +613,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     }
     return [{ key: '__all__', label: '', color: null, items: filteredDecisions }];
   }, [filteredDecisions, groupBy, groupOrder, statusOpts.labelById, statusOpts.colorById, statusOpts.orderById]);
+  // Apply the shared per-header color overrides as a final pass.
+  const grouped = useMemo(() => ensureGroupColors(groupedRaw, colorsByKey), [groupedRaw, colorsByKey]);
 
   const allCollapsed = grouped.length > 0 && grouped.every((g) => collapsed[g.key]);
   const toggleAll = () => {
@@ -934,6 +939,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
 
   return (
     <div ref={rootRef} className={styles.decisionsRoot}>
+      {groupColorMenu}
       <div className={styles.decToolbar}>
         <div className={styles.decToolbarLeft}>
           {canCreateDecision && (
@@ -1020,6 +1026,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
             <div key={grp.key} className={styles.decGroup}>
               {grp.label && (
                 <button type="button" onClick={() => setCollapsed((p) => ({ ...p, [grp.key]: !p[grp.key] }))}
+                  onContextMenu={(e) => openMenuFor(grp.key, e)}
                   className={styles.decGroupHeader}>
                   <DropdownChevronDown
                     className={`${styles.decGroupChevron} ${collapsed[grp.key] ? styles.decGroupChevronCollapsed : ''}`}
