@@ -172,6 +172,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-family);
+  direction: rtl;
+  text-align: left;
 }
 .nameBtn {
   display: block;
@@ -181,7 +183,7 @@
   background: transparent;
   padding: 0;
   cursor: pointer;
-  text-align: start;
+  text-align: left;
 }
 .nameInput {
   width: 100%;
@@ -194,6 +196,8 @@
   color: var(--primary-text-color, #323338);
   box-sizing: border-box;
   font-family: var(--font-family);
+  direction: rtl;
+  text-align: right;
 }
 .nameInput:focus-visible {
   outline: none;

@@ -418,6 +418,7 @@
   font-variation-settings: 'wght' 500; /* native monday group-title medium weight */
   color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
+  direction: rtl;
 }
 .groupCount {
   margin-inline-start: 8px;

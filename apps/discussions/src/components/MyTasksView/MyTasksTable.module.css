@@ -199,6 +199,8 @@
   font-size: 14px;
   font-family: var(--font-family);
   background: var(--primary-background-color, #fff);
+  direction: rtl;
+  text-align: right;
 }
 .newNameInput:focus-visible {
   outline: none;

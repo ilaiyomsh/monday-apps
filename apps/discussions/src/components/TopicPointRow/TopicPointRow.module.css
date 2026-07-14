@@ -221,6 +221,8 @@
   font-size: 14px;
   line-height: 36px; /* match the native monday row height (TaskTableRow .nameText) */
   font-family: var(--font-family);
+  direction: rtl;
+  text-align: left;
 }
 
 /* monday "updates" speech-bubble icon at the trailing edge of the name cell —
@@ -254,6 +256,8 @@
   font-family: var(--font-family);
   color: var(--text-color, #323338);
   background: var(--primary-background-color, #fff);
+  direction: rtl;
+  text-align: right;
 }
 .nameEditInput:focus-visible { outline: none; }
 

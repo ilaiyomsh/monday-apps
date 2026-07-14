@@ -66,8 +66,8 @@
   font-size: 14px;
   line-height: 36px; /* match native row height */
   font-family: var(--font-family);
-  text-align: right;
   direction: rtl;
+  text-align: left;
   /* reset button chrome — it's a clickable text label */
   border: none;
   background: transparent;

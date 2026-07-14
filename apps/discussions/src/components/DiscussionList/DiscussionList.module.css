@@ -486,6 +486,8 @@
   font-size: 14px;
   font-weight: 500;
   color: var(--primary-text-color, #323338);
+  direction: rtl;
+  text-align: left;
 }
 
 .itemDate {

@@ -121,6 +121,8 @@
   border-radius: var(--border-radius-small, 4px);
   background: var(--primary-background-color, #fff);
   color: var(--text-color, #323338);
+  direction: rtl;
+  text-align: right;
 }
 .titleInput:focus-visible {
   outline: none;
@@ -145,6 +147,7 @@
   text-overflow: ellipsis;
   max-width: 420px;
   cursor: default;
+  direction: rtl;
 }
 
 .headerSpacer {
@@ -357,6 +360,8 @@
   font-family: var(--font-family);
   color: var(--text-color, #323338);
   padding: 0;
+  direction: rtl;
+  text-align: right;
 }
 .addPointInput::placeholder {
   color: var(--placeholder-color, #9699a6);
@@ -370,6 +375,7 @@
   padding: 48px 0;
   color: var(--secondary-text-color, #676879);
   font-size: 14px;
+  direction: rtl;
 }
 
 /* Hover kebab (3-dot) at the visual-left of the group header — revealed on
@@ -426,6 +432,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  direction: rtl;
 }
 .colHeadCenter {
   justify-content: center;
