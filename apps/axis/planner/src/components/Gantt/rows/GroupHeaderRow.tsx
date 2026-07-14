@@ -9,10 +9,14 @@ import { LoadCell } from './LoadCell';
 import { isWorkingDay } from '../../../utils/workDaysUtils';
 import { ProjectSummaryCard } from '../ProjectSummaryCard';
 import { ProjectSummaryBar } from '../ProjectSummaryBar';
+import { DIMMED_OPACITY } from '../../../utils/constants';
 
 interface GroupHeaderRowProps {
   group: Group;
   isExpanded?: boolean;
+  // Projects focus mode: a project other than the focused one. Its CONTENT is
+  // faded (never the sticky-sidebar container — that bleeds the timeline through).
+  dimmed?: boolean;
 }
 
 const getPeriodKey = (date: Date, zoom: ZoomLevel): string => {
@@ -76,7 +80,7 @@ const aggregateLoad = (
  * GroupHeaderRow - Displays group name and toggle expansion
  * RTL support with sticky sidebar
  */
-export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isExpanded }) => {
+export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isExpanded, dimmed }) => {
   const {
     toggleGroup,
     totalWidth,
@@ -200,6 +204,13 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
   // Check if we should show the project summary card
   const showProjectCard = viewMode === 'projects' && !isPlaceholder && group.projectSummary && isExpanded;
 
+  // Color-A "summary surface": the header row + floating card read as one tinted
+  // band, visually distinct from the white allocation tracks (color B) below.
+  // Applied whenever the card shows (also the always-expanded focused project).
+  const summarySurface = !!showProjectCard || isSelectedProject;
+  // Fade non-focused projects' CONTENT (not the sticky sidebar container).
+  const dimContent: React.CSSProperties | undefined = dimmed ? { opacity: DIMMED_OPACITY } : undefined;
+
   return (
     <div
       className={`gantt-group-row flex h-full border-b border-border-subtle transition-colors ${
@@ -210,7 +221,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
       {/* Sidebar - sticky on left, relative for absolute PM bar positioning */}
       <div
         className={`sticky left-0 z-50 border-r border-border-subtle h-full flex items-center px-4 gap-2 transition-colors relative shadow-[var(--shadow-sticky-col)] ${
-          isPlaceholder ? 'bg-accent-bg-tint text-accent font-bold' : isSelectedProject ? 'bg-accent-bg-soft hover:bg-accent-bg-soft cursor-pointer' : 'bg-bg-app hover:bg-bg-hover cursor-pointer'
+          isPlaceholder ? 'bg-accent-bg-tint text-accent font-bold' : summarySurface ? 'bg-accent-bg-soft hover:bg-accent-bg-soft cursor-pointer' : 'bg-bg-app hover:bg-bg-hover cursor-pointer'
         }`}
         style={{ width: sidebarWidth, minWidth: sidebarWidth, overflow: showProjectCard ? 'visible' : undefined, cursor: isPlaceholder ? 'default' : 'pointer' }}
         dir="ltr"
@@ -220,13 +231,13 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
         {!isEmployeeView && !isPlaceholder && group.color && (
           <div
             className="absolute left-0 top-0 bottom-0 w-1 rounded-l"
-            style={{ backgroundColor: group.color }}
+            style={{ backgroundColor: group.color, ...dimContent }}
           />
         )}
 
         {/* Group name — left-aligned, fills the row. Inner dir restored
             so Hebrew/Arabic content still renders with correct word order. */}
-        <div className="flex-1 flex flex-col overflow-hidden text-left" dir={locale.dir}>
+        <div className="flex-1 flex flex-col overflow-hidden text-left" dir={locale.dir} style={dimContent}>
           <span
             className={`overflow-hidden text-sm ${isPlaceholder ? 'text-accent' : isSelectedProject ? 'font-bold text-accent-text-strong' : 'font-bold text-text-secondary'}`}
             style={{
@@ -255,6 +266,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
         {!isPlaceholder && (
           <div
             className={`w-4 h-4 flex items-center justify-center transition-transform duration-200 flex-shrink-0 ${isExpanded ? 'rotate-90' : ''} ${isProjectView && !isProjectFocusMode ? 'cursor-pointer hover:bg-bg-hover rounded' : ''}`}
+            style={dimContent}
             onClick={(e) => {
               if (!isProjectView || isProjectFocusMode) return;
               e.stopPropagation();
@@ -268,14 +280,14 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
         )}
 
 
-        {/* PM + Project Type bar - sidebar only. The card hugs its content (gray
-            bg, no bottom shadow/border) and the empty padding track beneath it is
-            also gray (see useDataFlattener), so the two read as one continuous gray
-            surface. The block is padded to ≥ PROJECT_CARD_HEIGHT so the card never
-            overhangs into the next project. */}
+        {/* PM + Project Type bar - sidebar only. The card carries the color-A
+            summary surface (accent-bg-soft), continuous with the header above it,
+            so header + card read as one tinted band distinct from the white
+            allocation tracks. The block is padded to ≥ PROJECT_CARD_HEIGHT so the
+            card never overhangs into the next project. */}
         {showProjectCard && (
           <div
-            className={`absolute left-0 top-full w-full px-3 py-2 flex flex-col bg-bg-app ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
+            className={`absolute left-0 top-full w-full px-3 flex flex-col bg-accent-bg-soft ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
             style={{ zIndex: 60 }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -293,14 +305,21 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
         )}
       </div>
 
-      {/* Timeline area - only opens modal for placeholder */}
+      {/* Timeline area - only opens modal for placeholder. Its background matches
+          the sidebar/card (color A) whenever the summary surface is active, so the
+          whole summary row reads as one band across sidebar + timeline. */}
       <div
-        className={`flex-1 h-full flex items-center relative ${isPlaceholder ? 'bg-accent-bg-soft cursor-pointer' : 'bg-bg-app'}`}
+        className={`flex-1 h-full flex items-center relative ${isPlaceholder ? 'bg-accent-bg-soft cursor-pointer' : summarySurface ? 'bg-accent-bg-soft' : 'bg-bg-app'}`}
         style={{ minWidth: totalWidth }}
         onClick={handleTimelineClick}
       >
-        {/* Projects view: roll-up bar summarising the project's active allocations. */}
-        {viewMode === 'projects' && !isPlaceholder && <ProjectSummaryBar group={group} />}
+        {/* Projects view: roll-up bar summarising the project's active allocations.
+            Faded (content-only) for non-focused projects in focus mode. */}
+        {viewMode === 'projects' && !isPlaceholder && (
+          <div style={dimContent}>
+            <ProjectSummaryBar group={group} />
+          </div>
+        )}
 
         {isEmployeeView && !isPlaceholder && columns.map((col) => {
           const load = aggregateLoad(dailyLoadsMap, col.periodStart, col.periodEnd, dailyCapacity, workDays);

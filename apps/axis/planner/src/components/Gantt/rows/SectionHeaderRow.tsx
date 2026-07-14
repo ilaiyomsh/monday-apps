@@ -3,6 +3,7 @@ import type { ProjectClassification } from '../../../types/gantt.types';
 import { useGantt } from '../../../hooks/useGantt';
 import { useLocale } from '../../../hooks/useLocale';
 import { getToken } from '../../../styles/tokenAccess';
+import { DIMMED_OPACITY } from '../../../utils/constants';
 
 interface SectionHeaderRowProps {
   classification: ProjectClassification;
@@ -10,6 +11,10 @@ interface SectionHeaderRowProps {
   isExpanded: boolean;
   count: number;
   accentColor?: string;
+  // Projects focus mode: faded because the focused project is in another section.
+  // Safe to fade the whole row here — a section header has no timeline bars that
+  // could bleed through a translucent sticky sidebar (see VirtualRowList/GroupHeaderRow).
+  dimmed?: boolean;
 }
 
 // was: '#94a3b8' (slate-400) — now resolved from --color-neutral-650
@@ -22,7 +27,7 @@ const fallbackAccent = (): string =>
  * SectionHeaderRow — collapsible header that buckets project groups by
  * internal/external classification. Click anywhere on the row to toggle.
  */
-export const SectionHeaderRow: React.FC<SectionHeaderRowProps> = memo(({ classification, label, isExpanded, count, accentColor }) => {
+export const SectionHeaderRow: React.FC<SectionHeaderRowProps> = memo(({ classification, label, isExpanded, count, accentColor, dimmed }) => {
   const { toggleSection, sidebarWidth, totalWidth, selectedProjectId, setSelectedProjectId } = useGantt();
   const locale = useLocale();
 
@@ -43,6 +48,7 @@ export const SectionHeaderRow: React.FC<SectionHeaderRowProps> = memo(({ classif
   return (
     <div
       className="flex h-full border-b-2 border-border-default bg-bg-section cursor-pointer hover:bg-bg-hover transition-colors"
+      style={dimmed ? { opacity: DIMMED_OPACITY } : undefined}
       onClick={handleClick}
     >
       {/* Sidebar */}
