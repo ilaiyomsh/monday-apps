@@ -184,8 +184,13 @@ jq \
   "$TEMPLATE" > "$CONFIG"
 
 # --- run ESLint (never let its exit code abort us) --------------------------
+# --no-inline-config: (a) an app file's own eslint-disable/enable comments can
+# reference rules this minimal config doesn't define — ESLint then emits
+# "Definition for rule ... was not found" as a ruleId-bearing message, which
+# false-failed the gate on every edit to such a file (2026-07-14); (b) it also
+# means inline comments can never silence the error-guard rules themselves.
 OUT="$TMPDIR_EG/out.json"
-"$ESLINT_BIN" --no-eslintrc --config "$CONFIG" \
+"$ESLINT_BIN" --no-eslintrc --no-inline-config --config "$CONFIG" \
   --resolve-plugins-relative-to "$RESOLVE_DIR" \
   --format json "${SURVIVORS[@]}" > "$OUT" 2>"$TMPDIR_EG/err.txt" || true
 
