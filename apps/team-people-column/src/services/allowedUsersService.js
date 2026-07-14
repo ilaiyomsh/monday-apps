@@ -174,6 +174,8 @@ export async function fetchAllowedUsers({ itemId, columnId, settings, onStep } =
     teamsMap[String(team.id)] = {
       id: String(team.id),
       name: team.name,
+      // Team avatar for the dialog title (Team.picture_url; null when unset).
+      picture: team.picture_url ?? null,
       users: (Array.isArray(team.users) ? team.users : []).map((u) => ({
         id: String(u.id),
         name: u.name,

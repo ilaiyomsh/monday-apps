@@ -56,7 +56,12 @@ describe('fetchAllowedUsers — happy chain (relation -> linked people -> team m
     expect(result.users).toHaveLength(3);
 
     // The one referenced team is listed; nothing missing; full (not partial) chain.
-    expect(result.teams).toEqual([{ id: '1348990', name: 'test ilai' }]);
+    // The team picture (live-probed 2026-07-14) rides along for the title avatar.
+    expect(result.teams).toEqual([{
+      id: '1348990',
+      name: 'test ilai',
+      picture: 'https://files.monday.com/use1/pictures/teams/1348990/thumb/icon___________.png?1766320506',
+    }]);
     expect(result.missingTeamIds).toEqual([]);
     expect(result.partial).toBe(false);
     expect(result.emptyChain).toBe(false);

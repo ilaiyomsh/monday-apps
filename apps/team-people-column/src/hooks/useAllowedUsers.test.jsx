@@ -46,7 +46,12 @@ describe('useAllowedUsers — happy chain', () => {
     expect(result.current.error).toBe(null);
     expect(result.current.result.users.map((u) => u.id)).toEqual(MEMBER_IDS);
     expect(result.current.result.users.map((u) => u.name)).toEqual(MEMBER_NAMES);
-    expect(result.current.result.teams).toEqual([{ id: '1348990', name: 'test ilai' }]);
+    expect(result.current.result.teams).toEqual([{
+      id: '1348990',
+      name: 'test ilai',
+      // Team picture (live-probed 2026-07-14) rides along for the title avatar.
+      picture: 'https://files.monday.com/use1/pictures/teams/1348990/thumb/icon___________.png?1766320506',
+    }]);
     expect(result.current.result.emptyChain).toBe(false);
   });
 });
