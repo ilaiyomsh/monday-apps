@@ -1,18 +1,23 @@
 name: Deploy LIVE - discussions
 
-# Spec section 7.2: merges into main auto-deploy to the app's LATEST LIVE
-# version via --force. This rebuilds from main and pushes straight to
-# production — there is no promote-the-tested-draft step. Correctness is
-# guaranteed only by the release-freeze rule (nothing merges into develop
-# while a develop->main PR is open), not by artifact identity.
+# Release model (owner decision 2026-07-14, incident-verified — see
+# .claude/skills/monday-cicd/references/pipeline-model.md §4b + known-issues):
+# every app keeps TWO standing versions with stable ids — the latest draft
+# (develop → deploy-draft) and the LIVE version (this workflow). Version
+# promotes are BANNED as a release mechanism (id churn needs maintenance and
+# lands badly in customer accounts); a promote is a rare, deliberate,
+# documented event (e.g. new scopes), never a routine release.
 #
-# main is protected (Gate 2: PR + 1 approval + required status checks +
-# no bypass, including admins) so this workflow only ever runs after a
-# reviewed, approved merge — never on a direct push.
+# `code:push --force -a <app>` is NOT reliable for live: despite the CLI help
+# text, it resolves the app's LATEST version (usually the draft) — verified
+# from the only two live runs ever executed. So this workflow resolves the
+# LIVE version id at run time and pushes pinned with -i.
 #
-# When instantiating this template for a real app, rename the file to:
-#   deploy-live-discussions.yml
-# and replace all discussions / build / APP_DISCUSSIONS_ID placeholders.
+# main's protection is process-only (private repo on GitHub Free plan):
+# release freeze + immediate main-back-merge keep main == source of truth
+# for live. If the app has no live version yet, the resolve step fails
+# loudly — first-ever go-live is a deliberate one-time promote, not this
+# workflow.
 
 on:
   push:
@@ -58,11 +63,26 @@ jobs:
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
 
-      - name: "🚨 FORCE push to latest LIVE version 🚨"
-        run: >
-          mapps code:push -c --force
-          -d apps/discussions/build
-          -a "$APP_ID"
+      - name: Resolve LIVE version id (pin the target)
+        id: live
+        run: |
+          set -euo pipefail
+          LIVE_ID="$(mapps app-version:list -i "$APP_ID" 2>/dev/null \
+            | awk -F'│' '$7 ~ /live/ { gsub(/[^0-9]/, "", $3); print $3; exit }')"
+          if [ -z "$LIVE_ID" ]; then
+            echo "::error::app $APP_ID has no LIVE version — first go-live is a deliberate promote (see pipeline-model.md §4b); this workflow only refreshes an existing live version."
+            exit 1
+          fi
+          echo "Resolved LIVE version id: $LIVE_ID"
+          echo "live_id=$LIVE_ID" >> "$GITHUB_OUTPUT"
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
           APP_ID: ${{ secrets.APP_DISCUSSIONS_ID }}
+
+      - name: "🚨 FORCE push to LIVE version (pinned id) 🚨"
+        run: >
+          mapps code:push -c --force
+          -d apps/discussions/build
+          -i "${{ steps.live.outputs.live_id }}"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
