@@ -1,0 +1,15 @@
+{
+  "data": {
+    "change_column_value": {
+      "id": "12532634009"
+    },
+    "complexity": {
+      "query": 30000,
+      "before": 9999977,
+      "after": 9969977
+    }
+  },
+  "extensions": {
+    "request_id": "afeb9d08-d90d-9874-8b3a-ce027daba2b1"
+  }
+}
