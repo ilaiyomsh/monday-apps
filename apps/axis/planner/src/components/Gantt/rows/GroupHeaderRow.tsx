@@ -204,11 +204,13 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
   // Check if we should show the project summary card
   const showProjectCard = viewMode === 'projects' && !isPlaceholder && group.projectSummary && isExpanded;
 
-  // "Summary surface" = an expanded/focused project. Its header row is DARK across
-  // the full width (sidebar + timeline) with white text; everything below it —
-  // card + allocation rows — is white. That dark→white contrast is the PRIMARY
-  // separation (owner: header↔body matters more than card↔allocations), and makes
-  // the focused project pop against the dimmed neighbours.
+  // "Summary surface" = an expanded/focused project. Its header row is a mid-dark
+  // slate (neutral-700) across the full width (sidebar + timeline) with white
+  // text; everything below it — card + allocation rows — is white. That dark→white
+  // contrast is the PRIMARY separation (owner: header↔body matters more than
+  // card↔allocations), and makes the focused project pop against the dimmed
+  // neighbours. (bg-inverted/near-black read too heavy — tune the neutral step
+  // here if you want it lighter/darker.)
   // Applied whenever the card shows (also the always-expanded focused project).
   const summarySurface = !!showProjectCard || isSelectedProject;
   // Fade non-focused projects' CONTENT (not the sticky sidebar container).
@@ -231,7 +233,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
       {/* Sidebar - sticky on left, relative for absolute PM bar positioning */}
       <div
         className={`sticky left-0 z-50 border-r border-border-subtle h-full flex items-center px-4 gap-2 transition-colors relative shadow-[var(--shadow-sticky-col)] ${
-          isPlaceholder ? 'bg-accent-bg-tint text-accent font-bold' : summarySurface ? 'bg-bg-inverted hover:bg-bg-inverted cursor-pointer' : 'bg-bg-app hover:bg-bg-hover cursor-pointer'
+          isPlaceholder ? 'bg-accent-bg-tint text-accent font-bold' : summarySurface ? 'bg-neutral-700 hover:bg-neutral-700 cursor-pointer' : 'bg-bg-app hover:bg-bg-hover cursor-pointer'
         }`}
         style={{ width: sidebarWidth, minWidth: sidebarWidth, overflow: showProjectCard ? 'visible' : undefined, cursor: isPlaceholder ? 'default' : 'pointer' }}
         dir="ltr"
@@ -320,7 +322,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
           the sidebar/card (color A) whenever the summary surface is active, so the
           whole summary row reads as one band across sidebar + timeline. */}
       <div
-        className={`flex-1 h-full flex items-center relative ${isPlaceholder ? 'bg-accent-bg-soft cursor-pointer' : summarySurface ? 'bg-bg-inverted' : 'bg-bg-app'}`}
+        className={`flex-1 h-full flex items-center relative ${isPlaceholder ? 'bg-accent-bg-soft cursor-pointer' : summarySurface ? 'bg-neutral-700' : 'bg-bg-app'}`}
         style={{ minWidth: totalWidth }}
         onClick={handleTimelineClick}
       >
