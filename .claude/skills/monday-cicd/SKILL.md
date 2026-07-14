@@ -8,10 +8,10 @@ allowed-tools: Bash, Read, Glob, Grep, Write, Edit, WebFetch, AskUserQuestion
 # monday-cicd — connect apps to the monday.com CI/CD pipeline
 
 Source spec (authoritative, read when any fact here is unclear or disputed):
-`references/pipeline-model.md` inside this skill — it mirrors the full spec.
-(An extended copy, `monday-cicd-spec-en.md`, exists only in the private
-workspace this skill originated from; it is NOT in this monorepo. Never depend
-on it from a clone.)
+`docs/monday-cicd-spec.md` at the repo root — the unified spec v2.1
+(2026-07-14), checked into this monorepo so every clone (including cloud
+sessions) carries it. `references/pipeline-model.md` inside this skill is the
+condensed agent model derived from it; on conflict, the spec wins.
 
 Full pipeline model (branch flow, gates, secrets, deploy mechanism, version
 mechanisms): `references/pipeline-model.md`.
