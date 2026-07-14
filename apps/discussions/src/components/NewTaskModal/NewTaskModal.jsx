@@ -97,7 +97,9 @@ export function NewTaskModal({ open, onClose, onCreate, defaults = {} }) {
         role="dialog"
         aria-modal="true"
         aria-label="יצירת משימה חדשה"
-        dir="ltr"
+        // RTL like CreateDiscussionModal (owner request 2026-07-14): titles and
+        // content anchor to the RIGHT, matching the new-discussion form.
+        dir="rtl"
       >
         <div className={styles.header}>
           <input

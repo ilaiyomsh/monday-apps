@@ -829,6 +829,10 @@ export function DiscussionCard({
         open={!!quickCreate}
         initialMode={quickCreate?.mode || 'task'}
         anchor={quickCreate?.anchor || null}
+        // Opened from the Decisions tab (top button / add-row) → dead-center of
+        // the screen (owner request 2026-07-14); point-anchored opens keep the
+        // under-the-+ placement, the FAB keeps the round-57 spot.
+        centered={quickCreate?.source === 'topButton'}
         scopedPoint={quickCreate?.point || null}
         discussion={data}
         participants={Array.isArray(data.participantsID) ? data.participantsID : []}
