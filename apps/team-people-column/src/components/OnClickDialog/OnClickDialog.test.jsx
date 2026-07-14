@@ -77,23 +77,26 @@ afterEach(() => {
 });
 
 describe('OnClickDialog — search-first shell', () => {
-  it('renders the search input IMMEDIATELY on open, before the resolve chain settles', async () => {
+  it('shows a SKELETON on open — no search box, no title, no interim text — until the team details are fully loaded', async () => {
     installAppApiHandlers(harness);
     harness.seedStorage(STORAGE_KEY, validV1());
 
     render(<OnClickDialog context={context()} />);
 
-    // Synchronous assertions — no await: the shell must not wait for storage
-    // or the API chain. This is the whole point of the search-first UX.
+    // Synchronous assertions — no await: while loading the dialog is a
+    // skeleton ONLY. The search box must not exist yet (user feedback: a live
+    // search box next to missing team details reads as incomplete UI).
+    expect(screen.getByTestId('dialog-skeleton')).toBeInTheDocument();
+    expect(screen.queryByLabelText('חיפוש שם')).toBeNull();
+    expect(screen.queryByRole('heading')).toBeNull();
+    MEMBER_NAMES.forEach((name) => expect(screen.queryByText(name)).toBeNull());
+
+    // Loaded: the title (avatar + name) and the search box appear TOGETHER,
+    // and the skeleton is gone — a single reveal, no progressive loading.
+    await screen.findByRole('heading', { name: TEAM_TITLE });
     expect(searchInput()).toBeInTheDocument();
     expect(screen.getByPlaceholderText(SEARCH_PLACEHOLDER)).toBeInTheDocument();
-    MEMBER_NAMES.forEach((name) => expect(screen.queryByText(name)).toBeNull());
-    // NO interim title text while loading — the title row stays empty and the
-    // real title appears at once when the chain lands (no progressive swap).
-    expect(screen.queryByRole('heading')).toBeNull();
-
-    // Let the background chain settle so the test ends in a stable state.
-    await screen.findByRole('heading', { name: TEAM_TITLE });
+    expect(screen.queryByTestId('dialog-skeleton')).toBeNull();
   });
 
   it('keeps the box clean: NO member list until the user types, even after the chain is ready', async () => {
@@ -120,21 +123,6 @@ describe('OnClickDialog — search-first shell', () => {
     expect(screen.getByText('עילי שלם')).toBeInTheDocument();
     // "רוני ארגמן" contains no ע — must not be offered.
     expect(screen.queryByText('רוני ארגמן')).toBeNull();
-  });
-
-  it('typing while the chain is still loading shows the loading hint, then the matches (typing masks load)', async () => {
-    installAppApiHandlers(harness);
-    harness.seedStorage(STORAGE_KEY, validV1());
-    harness.failures.latencyMs = 60;
-
-    render(<OnClickDialog context={context()} />);
-
-    // Type before the chain settles — the shell is already interactive.
-    typeSearch('עילי');
-    expect(screen.getByText('טוען...')).toBeInTheDocument();
-
-    // When the background chain lands, the typed query resolves to its match.
-    expect(await screen.findByText('עילי שלם')).toBeInTheDocument();
   });
 
   it('shows the team AVATAR + bare team name in the title once resolved — never the old "צוות" prefix', async () => {
