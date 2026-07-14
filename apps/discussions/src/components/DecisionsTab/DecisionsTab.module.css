@@ -312,7 +312,7 @@
   box-sizing: border-box;
   font-family: var(--font-family);
   direction: rtl;
-  text-align: right;
+  text-align: left;
 }
 .decNameInput:focus-visible {
   outline: none;
@@ -531,7 +531,7 @@
   color: var(--primary-text-color, #323338);
   padding: 0;
   direction: rtl;
-  text-align: right;
+  text-align: left;
 }
 .decAddInput::placeholder {
   color: var(--placeholder-color, #9699a6);

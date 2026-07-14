@@ -197,7 +197,7 @@
   box-sizing: border-box;
   font-family: var(--font-family);
   direction: rtl;
-  text-align: right;
+  text-align: left;
 }
 .nameInput:focus-visible {
   outline: none;

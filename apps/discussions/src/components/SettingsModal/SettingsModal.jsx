@@ -246,6 +246,36 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
       },
     }));
 
+  // Multi-column people mapping (owner request 2026-07-14): an alias in
+  // MULTI_PEOPLE_ALIASES (e.g. tasks.taskViewersID — יכולת צפייה) can map
+  // SEVERAL people columns. Stored as { id: <primary>, ids: [...] } — `id`
+  // stays the FIRST pick (the auto-fill/write target), so every single-id
+  // consumer keeps working; reads/permissions union all of them.
+  const currentMultiIds = (cur) => {
+    if (Array.isArray(cur?.ids) && cur.ids.length) return cur.ids.map(String);
+    return cur?.id ? [String(cur.id)] : [];
+  };
+  const addMultiColId = (boardKey, alias, id) => {
+    if (!String(id || '').trim()) return;
+    setColumns((c) => {
+      const cur = c[boardKey][alias] || {};
+      const ids = [...new Set([...currentMultiIds(cur), String(id)])];
+      return {
+        ...c,
+        [boardKey]: { ...c[boardKey], [alias]: { ...cur, id: ids[0] || '', ids, verified: ids.length > 0 } },
+      };
+    });
+  };
+  const removeMultiColId = (boardKey, alias, id) =>
+    setColumns((c) => {
+      const cur = c[boardKey][alias] || {};
+      const ids = currentMultiIds(cur).filter((x) => x !== String(id));
+      return {
+        ...c,
+        [boardKey]: { ...c[boardKey], [alias]: { ...cur, id: ids[0] || '', ids, verified: ids.length > 0 } },
+      };
+    });
+
   const normalizeType = (type) =>
     String(type || '')
       .toLowerCase()
@@ -355,6 +385,11 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
     'pointDecisionsLinkID',
     'pointTasksLinkID',
   ]);
+
+  // Aliases that may map SEVERAL people columns (owner request 2026-07-14):
+  // stored as { id: <primary>, ids: [...] }. The FIRST column is the auto-fill
+  // target at task creation; permissions/reads union people across all of them.
+  const MULTI_PEOPLE_ALIASES = new Set(['taskViewersID']);
 
   const loadBoardColumns = async (boardId) => {
     const id = String(boardId || '');
@@ -648,6 +683,55 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
                             ? String(subitemsBoardByBoard[ownBoardId] || '')
                             : ownBoardId;
                           const typedOptions = getTypedColumnOptions(boardId, col.type);
+                          // Multi-column people mapping (יכולת צפייה): chips of
+                          // the picked columns (first = the auto-fill target) +
+                          // a picker that ADDS another column on select.
+                          if (MULTI_PEOPLE_ALIASES.has(alias)) {
+                            const selectedIds = (Array.isArray(col.ids) && col.ids.length
+                              ? col.ids
+                              : (col.id ? [col.id] : [])).map(String);
+                            const labelByVal = Object.fromEntries(typedOptions.map((o) => [String(o.value), o.label]));
+                            const remaining = typedOptions.filter((o) => !selectedIds.includes(String(o.value)));
+                            return (
+                              <div key={alias} className={styles.colRow}>
+                                <div className={styles.colLabel}>
+                                  <Text type={"text2"}>{col.title || alias}</Text>
+                                </div>
+                                <div className={styles.multiColPick}>
+                                  {selectedIds.map((cid, idx) => (
+                                    <div key={cid} className={styles.multiColChip} title={idx === 0 ? 'העמודה הראשית — מתמלאת אוטומטית ביצירת משימה' : undefined}>
+                                      <span className={styles.multiColName}>
+                                        {labelByVal[cid] || cid}
+                                        {idx === 0 && selectedIds.length > 1 ? ' (ראשית)' : ''}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className={styles.multiColRemove}
+                                        aria-label={`הסר עמודה ${labelByVal[cid] || cid}`}
+                                        onClick={() => removeMultiColId(boardKey, alias, cid)}
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <SearchablePicker
+                                    options={remaining}
+                                    value=""
+                                    onChange={(id) => addMultiColId(boardKey, alias, id || '')}
+                                    placeholder={
+                                      loadingColumnsByBoardId[boardId]
+                                        ? 'טוען עמודות'
+                                        : remaining.length === 0
+                                          ? (selectedIds.length ? 'אין עמודות נוספות' : 'אין עמודות תואמות')
+                                          : (selectedIds.length ? 'הוסף עמודה נוספת' : 'בחר עמודה')
+                                    }
+                                    isLoading={loadingColumnsByBoardId[boardId]}
+                                    disabled={loadingColumnsByBoardId[boardId] || remaining.length === 0}
+                                  />
+                                </div>
+                              </div>
+                            );
+                          }
                           return (
                             <div key={alias} className={styles.colRow}>
                               <div className={styles.colLabel}>

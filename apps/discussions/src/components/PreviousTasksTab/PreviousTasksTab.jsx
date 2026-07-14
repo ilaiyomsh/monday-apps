@@ -3,6 +3,8 @@ import { Button, Text, Dropdown } from '@vibe/core';
 import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+// Varied stable group-title colors (owner request 2026-07-14) — shared engine.
+import { ensureGroupColors } from '@generated/components/MyTasksView/grouping.js';
 import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
@@ -771,7 +773,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         color: g.statusId == null ? null : (colorById[g.statusId] || null),
         items: g.items,
       }));
-      return sortGroupsByOrder(list, { order: groupOrder, orderById, noKey: NO_STATUS });
+      return ensureGroupColors(sortGroupsByOrder(list, { order: groupOrder, orderById, noKey: NO_STATUS }));
     }
     if (groupBy === 'person') {
       const groups = new Map();
@@ -782,7 +784,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         groups.get(key).label = label;
         groups.get(key).items.push(t);
       });
-      return sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_ASSIGNEE });
+      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_ASSIGNEE }));
     }
     if (groupBy === 'discussion') {
       // Group by the task's source discussion(s) (discussionLinkID). A task can
@@ -796,7 +798,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         groups.get(key).label = label;
         groups.get(key).items.push(t);
       });
-      return sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_DISCUSSION });
+      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_DISCUSSION }));
     }
     return [{ key: '__all__', label: '', color: null, items: filteredTasks }];
   }, [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById]);

@@ -21,12 +21,14 @@ function colMap(boardKey) {
   return getColumns(boardKey);
 }
 function realColumnIds(boardKey) {
+  // An alias may map SEVERAL columns via `ids` (multi-column people mapping,
+  // e.g. tasks.taskViewersID) — fetch every one of them, not just the primary.
   return Object.values(colMap(boardKey))
-    .map((c) => c?.id)
+    .flatMap((c) => (Array.isArray(c?.ids) && c.ids.length ? c.ids : [c?.id]))
     .filter((id) => Boolean(id));
 }
 
-function mapItem(boardKey, it) {
+export function mapItem(boardKey, it) {
   const cfg = colMap(boardKey);
   const byId = {};
   (it.column_values || []).forEach((cv) => { byId[cv.id] = cv; });
@@ -35,12 +37,34 @@ function mapItem(boardKey, it) {
   for (const alias in cfg) {
     const c = cfg[alias];
     if (!c?.id) continue;
-    out[alias] = parseValue(c.type, byId[c.id]);
+    // Multi-column people alias (`ids`, e.g. tasks.taskViewersID — יכולת
+    // צפייה): the alias value is the UNION of people across all mapped
+    // columns, deduped by user id, primary column first. A user in ANY of
+    // them holds the alias role.
+    const extraIds = Array.isArray(c.ids) ? c.ids.filter((x) => x && x !== c.id) : [];
+    if (c.type === 'people' && extraIds.length) {
+      const merged = [];
+      const seen = new Set();
+      for (const cid of [c.id, ...extraIds]) {
+        const people = parseValue('people', byId[cid]);
+        (Array.isArray(people) ? people : []).forEach((p) => {
+          const k = String(p?.id);
+          if (!seen.has(k)) { seen.add(k); merged.push(p); }
+        });
+      }
+      out[alias] = merged;
+    } else {
+      out[alias] = parseValue(c.type, byId[c.id]);
+    }
   }
   // Also expose LIVE people columns NOT covered by a mapped alias, keyed by raw
   // column id — permission roles for unmapped people columns (e.g. "רשם דיון")
   // read these. No-op until peopleColumns has loaded / for boards without any.
-  const mappedIds = new Set(Object.values(cfg).map((c) => c?.id).filter(Boolean));
+  const mappedIds = new Set(
+    Object.values(cfg)
+      .flatMap((c) => (Array.isArray(c?.ids) && c.ids.length ? c.ids : [c?.id]))
+      .filter(Boolean)
+  );
   for (const pid of getPeopleColumnIds(boardKey)) {
     if (mappedIds.has(pid)) continue;      // already exposed under its alias
     if (byId[pid] === undefined) continue; // not fetched on this item
