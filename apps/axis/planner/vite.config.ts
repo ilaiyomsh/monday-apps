@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -16,6 +19,11 @@ export default defineConfig({
   },
   define: {
     global: 'globalThis',
+    // Version layer (docs/monday-cicd-spec.md): package.json is the source of
+    // truth; CI injects the commit SHA (draft) and the release flag (live).
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_SHA__: JSON.stringify(process.env.VITE_BUILD_SHA ?? 'local'),
+    __IS_RELEASE__: JSON.stringify(process.env.VITE_IS_RELEASE === 'true'),
   },
   build: {
     outDir: 'dist',

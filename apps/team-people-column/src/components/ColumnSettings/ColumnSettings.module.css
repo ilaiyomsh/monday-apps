@@ -180,3 +180,12 @@
 .btnSecondary:not(:disabled):hover {
   background: var(--primary-background-hover-color, #f5f6f8);
 }
+
+/* Version caption — Latin build label (dir="ltr" on the wrapper in JSX);
+   centered so it reads as a quiet footer stamp regardless of the RTL layout. */
+.versionCaption {
+  margin-top: 16px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--secondary-text-color, #9699a6);
+}

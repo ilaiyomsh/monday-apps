@@ -25,12 +25,18 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { setupGlobalErrorHandlers, handleGlobalError } from './utils/globalErrorHandler';
 import { attachAxiomSink } from './utils/axiomErrorSink';
+import { getVersionLabel } from './utils/versionLabel.js';
 import { AppErrorBoundary } from './components/ErrorBoundary/AppErrorBoundary';
 import App from './App';
 import './index.css';
 
 // 1. Global handlers FIRST — before any React render can throw.
 setupGlobalErrorHandlers();
+
+// Version layer (docs/monday-cicd-spec.md): one build-identity breadcrumb per
+// load — see error-guard/references/known-issues.md FP-4 for why this stays a
+// raw console.info (logger.info would be muted outside debug mode).
+console.info('[team-people-column] ' + getVersionLabel());
 
 // 1b. Remote error monitoring — synchronous, before render (ring-buffer replay
 //     contract). Structurally inert unless VITE_AXIOM_DATASET/TOKEN/APP are baked
