@@ -282,11 +282,14 @@ export const VirtualRowList: React.FC = () => {
             // stripe — so separation reads from the shadow, not a colour band.
             const gapTop = row.gapTop ?? 0;
             const gapBottom = row.gapBottom ?? 0;
+            // The focused block floats above its (dimmed) neighbours like a hovered
+            // allocation bar: a strong drop shadow on its top (header) and bottom
+            // (last track) edges, plus the uniform translateY lift below.
             const focusShadow =
               row.focusEdge === 'top'
-                ? '0 -6px 14px -5px rgba(0,0,0,0.22)'
+                ? '0 -11px 26px -6px rgba(0,0,0,0.30)'
                 : row.focusEdge === 'bottom'
-                ? '0 6px 14px -5px rgba(0,0,0,0.22)'
+                ? '0 11px 26px -6px rgba(0,0,0,0.30)'
                 : undefined;
             return (
               <div
@@ -309,7 +312,7 @@ export const VirtualRowList: React.FC = () => {
                   //   focused track rows: 36  (above neighbours, below the card)
                   //   normal group row  : 35
                   zIndex: isGroupRow ? (row.focusBlock ? 37 : 35) : row.focusBlock ? 36 : undefined,
-                  transform: row.focusBlock ? 'translateY(-2px)' : undefined,
+                  transform: row.focusBlock ? 'translateY(-3px)' : undefined,
                   transition: 'opacity 150ms ease, transform 150ms ease, box-shadow 150ms ease',
                 }}
               >
