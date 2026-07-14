@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { AttentionBox, Avatar } from '@vibe/core';
+import { AttentionBox, Avatar, Skeleton } from '@vibe/core';
 
 import mondayService from '../../services/mondayService';
 import logger from '../../utils/logger';
@@ -19,12 +19,15 @@ const MODULE = 'OnClickDialog';
  *
  * Placement: columnPickers. Context: { boardId, itemId, columnId, selectedItemIds }.
  *
- * Search-first UX: the dialog opens INSTANTLY as a clean box — team title +
- * search input only. The settings read (useColumnSettings) and the allowed-set
- * resolve chain (useAllowedUsers) run in the background while the user types;
- * the member list renders from the first typed letter. In single-assignee mode
- * a pick saves and closes the dialog; the write-back uses the native
- * people-column format so monday automations/notifications keep working.
+ * Loading UX: the dialog opens as a SKELETON (title row + search-box shapes)
+ * and holds it until the settings read (useColumnSettings) and the allowed-set
+ * resolve chain (useAllowedUsers) are fully resolved — then the real title
+ * (avatar + name) and the search input appear TOGETHER in a single reveal (user
+ * feedback: a live search box next to missing team details reads as incomplete
+ * UI). Once ready it is search-first: the member list renders from the first
+ * typed letter. In single-assignee mode a pick saves and closes the dialog; the
+ * write-back uses the native people-column format so monday
+ * automations/notifications keep working.
  */
 
 // Search-first: the placeholder IS the instruction the user sees on open.
@@ -222,21 +225,35 @@ function OnClickDialog({ context }) {
     );
   }
 
-  // Search-first shell — rendered IMMEDIATELY, even while settings / the
-  // resolve chain are still loading in the background: team title (generic
-  // until resolved) + search input. The member list appears only once the
-  // user types; typing time masks the background load.
+  // Loading — a SKELETON from the very first paint until the team details are
+  // fully resolved (user feedback: a live search box next to missing team
+  // details reads as incomplete UI). The real title (avatar + name) and the
+  // search box then appear TOGETHER at once — a single reveal.
+  if (!ready) {
+    return (
+      <div className={styles.dialog} dir="rtl" data-testid="dialog-skeleton">
+        <div className={styles.titleRow}>
+          <Skeleton type="circle" width={24} height={24} />
+          <Skeleton type="rectangle" width={120} height={14} />
+        </div>
+        <Skeleton type="rectangle" fullWidth height={32} />
+      </div>
+    );
+  }
+
+  // Ready — the search-first shell: title + search input; the member list
+  // appears only once the user types (from the first letter).
   const multiSelected = Array.isArray(selectedItemIds) && selectedItemIds.length > 1;
 
   return (
     <div className={styles.dialog} dir="rtl">
-      <TeamTitleRow result={ready ? result : null} />
+      <TeamTitleRow result={result} />
 
       {multiSelected && (
         <p className={styles.hint}>העריכה חלה על הפריט הנוכחי בלבד.</p>
       )}
 
-      {ready && result.partial && (
+      {result.partial && (
         <AttentionBox
           compact
           type="warning"
@@ -254,8 +271,7 @@ function OnClickDialog({ context }) {
         listHeading={null}
         selected={selection}
         onChange={handleChange}
-        users={ready ? result.users : []}
-        usersLoading={!ready}
+        users={result.users}
         single={single}
       />
     </div>
