@@ -9,7 +9,7 @@ import { LoadCell } from './LoadCell';
 import { isWorkingDay } from '../../../utils/workDaysUtils';
 import { ProjectSummaryCard } from '../ProjectSummaryCard';
 import { ProjectSummaryBar } from '../ProjectSummaryBar';
-import { DIMMED_OPACITY, SUMMARY_TRACKS_GAP } from '../../../utils/constants';
+import { DIMMED_OPACITY, SUMMARY_TRACKS_GAP, PROJECT_CARD_HEIGHT } from '../../../utils/constants';
 
 interface GroupHeaderRowProps {
   group: Group;
@@ -299,8 +299,8 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
             never overhangs into the next project. */}
         {showProjectCard && (
           <div
-            className={`absolute left-0 top-full w-full px-3 flex flex-col bg-bg-surface ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
-            style={{ zIndex: 60, marginTop: SUMMARY_TRACKS_GAP }}
+            className={`absolute left-0 top-full w-full px-3 flex flex-col overflow-hidden bg-bg-surface ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
+            style={{ zIndex: 60, marginTop: SUMMARY_TRACKS_GAP, height: PROJECT_CARD_HEIGHT }}
             onClick={(e) => e.stopPropagation()}
           >
             <ProjectSummaryCard
