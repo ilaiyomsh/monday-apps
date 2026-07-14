@@ -6,7 +6,7 @@ import { CLASSIFICATION_LABEL_KEYS, CLASSIFICATION_ORDER, isClassificationEnable
 import type { TimeframeFilter, UtilizationFilter, PMFilter, ProjectTypeFilter } from '../components/Gantt/GanttContext';
 import type { PlannerSettings } from '../types/settings.types';
 import type { AvailabilityData } from './useAvailability';
-import { CONFIG, PROJECT_CARD_HEIGHT, SUMMARY_TRACKS_GAP, FOCUS_BLOCK_GAP } from '../utils/constants';
+import { CONFIG, PROJECT_CARD_HEIGHT, SUMMARY_TRACKS_GAP, FOCUS_BLOCK_GAP, GAP_COLOR_SUMMARY, GAP_COLOR_FOCUS } from '../utils/constants';
 
 interface CompanyLoadData {
   capacities: RoleCapacity[];
@@ -376,6 +376,20 @@ export const useDataFlattener = (
           ? isSelectedProject
           : expandedGroups.has(group.id);
 
+      // Projects-view summary card (PM/type + hours metrics) shows for an expanded
+      // project that carries a projectSummary.
+      const hasProjectSummary = viewMode === 'projects' && !!group.projectSummary;
+      const summaryCardShown = hasProjectSummary && isExpanded;
+      // Gaps (all folded into row height; rendered as blended spacers + shadow):
+      // • header gapBottom — the summary↔tracks gap, filled color-A so header +
+      //   gap + card are one band. Card + allocations start together BELOW it, so
+      //   they stay row-aligned (the gap lives on the header, not the first track).
+      // • focus gaps — page-bg space above the header / below the last track,
+      //   detaching the focused block.
+      const headerGapTop = isSelectedProject ? FOCUS_BLOCK_GAP : 0;
+      const headerGapBottom = summaryCardShown ? SUMMARY_TRACKS_GAP : 0;
+      const focusBottomGap = isSelectedProject ? FOCUS_BLOCK_GAP : 0;
+
       // Employees view: render the single per-employee header row — its circles
       // show the employee's PLANNED LOAD (allocated ÷ availability), and the
       // chevron toggles the project allocation tracks below.
@@ -410,19 +424,22 @@ export const useDataFlattener = (
           rows.push(groupRow);
         }
       } else {
-        const headerGapTop = isSelectedProject ? FOCUS_BLOCK_GAP : 0;
         const groupRow: GroupHeaderRow = {
           id: `group-${group.id}`,
           type: 'GROUP',
-          height: CONFIG.groupHeaderHeight + headerGapTop,
+          height: CONFIG.groupHeaderHeight + headerGapTop + headerGapBottom,
           data: group,
           isExpanded,
           dimmed: rowDimmed,
           // Top edge of the focused block (its last track gets the bottom edge).
           focusEdge: isSelectedProject ? 'top' : undefined,
           focusBlock: isSelectedProject || undefined,
-          // Neutral gap ABOVE the focused block, detaching it from the row above.
+          // Page-bg gap ABOVE the focused block; color-A gap BELOW the summary
+          // (the summary↔tracks separation — see GroupHeaderRow for its shadow).
           gapTop: headerGapTop || undefined,
+          gapTopColor: headerGapTop ? GAP_COLOR_FOCUS : undefined,
+          gapBottom: headerGapBottom || undefined,
+          gapBottomColor: headerGapBottom ? GAP_COLOR_SUMMARY : undefined,
         };
         rows.push(groupRow);
       }
@@ -438,36 +455,20 @@ export const useDataFlattener = (
         activeProjectIds.size > 0 &&
         !activeProjectIds.has(group.id.toString());
 
-      // Projects-view summary card (and thus the summary↔tracks gap) shows only
-      // for an expanded project that carries a projectSummary.
-      const hasProjectSummary = viewMode === 'projects' && !!group.projectSummary;
-      // The summary↔tracks gap attaches ONCE, to the first track row below the
-      // header, so the summary band separates from the allocation band.
-      const summaryGap = hasProjectSummary ? SUMMARY_TRACKS_GAP : 0;
-      // Neutral gap BELOW the focused block (the gap above lives on the header).
-      const focusBottomGap = isSelectedProject ? FOCUS_BLOCK_GAP : 0;
-
       if (isExpanded) {
         const tracks = packTasksIntoTracks(group.tasks);
-        // Hand out the summary gap to the first track only, whichever it is
-        // (real track, filler empty track, or the final track for a bare project).
-        let firstTrack = true;
-        const nextGapTop = (): number | undefined =>
-          firstTrack ? ((firstTrack = false), summaryGap || undefined) : undefined;
 
         tracks.forEach((trackItems, trackIndex) => {
-          const gapTop = nextGapTop();
           const trackRow: TrackRow = {
             id: `track-${group.id}-${trackIndex}`,
             type: 'TRACK',
-            height: CONFIG.rowHeight + (gapTop ?? 0),
+            height: CONFIG.rowHeight,
             groupId: group.id,
             items: trackItems,
             trackIndex,
             isInactiveProject,
             dimmed: rowDimmed,
             focusBlock: isSelectedProject || undefined,
-            gapTop,
           };
           rows.push(trackRow);
         });
@@ -480,34 +481,31 @@ export const useDataFlattener = (
 
         // Add empty tracks to meet minimum
         for (let i = 0; i < emptyTracksNeeded; i++) {
-          const gapTop = nextGapTop();
           const emptyTrack: TrackRow = {
             id: `track-${group.id}-empty-${i}`,
             type: 'TRACK',
-            height: CONFIG.rowHeight + (gapTop ?? 0),
+            height: CONFIG.rowHeight,
             groupId: group.id,
             items: [],
             trackIndex: tracks.length + i,
             focusBlock: isSelectedProject || undefined,
-            gapTop,
           };
           rows.push(emptyTrack);
         }
 
-        // Add final empty track for new allocations. When the project card is
-        // shown, pad this last track by the deficit so the whole block reaches
-        // PROJECT_CARD_HEIGHT — for a sparse project (≤1 track) the block would
-        // otherwise be shorter than the card, leaving it cramped/overhanging.
-        // Gaps (summaryGap / focusBottomGap) are added ON TOP of that minimum.
+        // Final empty track for new allocations. When the card shows, pad it so
+        // the whole track region reaches PROJECT_CARD_HEIGHT — the card floats
+        // over exactly this region (starting at the header's bottom, past its
+        // color-A gap), so it must be tall enough not to overhang the next
+        // project. focusBottomGap adds the page-bg gap closing the focused block.
         const naturalBlockHeight = (tracks.length + emptyTracksNeeded + 1) * CONFIG.rowHeight;
         const finalTrackHeight = hasProjectSummary
           ? CONFIG.rowHeight + Math.max(0, PROJECT_CARD_HEIGHT - naturalBlockHeight)
           : CONFIG.rowHeight;
-        const finalGapTop = nextGapTop();
         const finalEmptyTrackRow: TrackRow = {
           id: `track-${group.id}-empty-final`,
           type: 'TRACK',
-          height: finalTrackHeight + (finalGapTop ?? 0) + focusBottomGap,
+          height: finalTrackHeight + focusBottomGap,
           groupId: group.id,
           items: [],
           trackIndex: tracks.length + emptyTracksNeeded,
@@ -515,8 +513,8 @@ export const useDataFlattener = (
           // the focused project's header row).
           focusEdge: isSelectedProject ? 'bottom' : undefined,
           focusBlock: isSelectedProject || undefined,
-          gapTop: finalGapTop,
           gapBottom: focusBottomGap || undefined,
+          gapBottomColor: focusBottomGap ? GAP_COLOR_FOCUS : undefined,
         };
         rows.push(finalEmptyTrackRow);
       }
