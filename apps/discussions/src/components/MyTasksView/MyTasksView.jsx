@@ -1,21 +1,27 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Skeleton, Button } from '@vibe/core';
-import { DropdownChevronDown, Search, Filter, Sort, Group, Collapse, Expand, CloseSmall } from '@vibe/icons';
+import { Button } from '@vibe/core';
+import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
+import { ArrowLeft } from 'lucide-react';
 import { useMyTasks } from '@generated/hooks/useMyTasks.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDiscussions } from '@generated/hooks/useDiscussions.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
+import { useMinSplash } from '@generated/hooks/useMinSplash.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { CollapseAllButton } from '@generated/components/CollapseAllButton';
+import { BrandLoader } from '@generated/components/BrandLoader';
 import { MyTasksTable } from './MyTasksTable.jsx';
-import { groupMyTasks } from './grouping.js';
+import { groupMyTasks, NO_DISCUSSION } from './grouping.js';
 import { BuilderControl } from './controls/BuilderControl.jsx';
 import { Segment } from './controls/Segment.jsx';
 import { BuilderIcon } from './controls/BuilderIcon.jsx';
+import { HideColumnsControl } from './controls/HideColumnsControl.jsx';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import { getColumns } from '@api/board-config-store.js';
 import {
   SORT_COLUMNS, GROUP_COLUMNS, FILTER_COLUMNS, OP_LABEL, DEADLINE_RANGES,
   sortTasks, filterTasks, filterCount, emptyFilter, DEFAULT_SORT, DEFAULT_GROUP,
@@ -86,9 +92,54 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       ? savedView.filterRows.filter((k) => FILTER_COLUMNS.some((c) => c.key === k))
       : [];
   });
+
+  // --- Hide columns (round 46) ------------------------------------------------
+  // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
+  // site, persisted to the SHARED saved view
+  // (settings.preferences.savedViews.myTasks.hiddenColumns) so an owner's "Save
+  // to this view" applies for everyone. The primary name column is never
+  // hideable. The saved set is LOAD-TIME state (like the other saved-view
+  // controls) and is applied live to every table below.
+  // Available columns for the Hide panel (plain per-render list, mirroring the
+  // table's own getColumns-derived defs — see MyTasksTable.baseDefs).
+  const taskCols = getColumns('tasks') || {};
+  const columnList = [
+    { key: 'name', label: t('myTasks.colName'), icon: 'text', locked: true },
+    taskCols.deadlineID?.id && { key: 'deadline', label: t('myTasks.colDeadline'), icon: 'date' },
+    taskCols.priorityID?.id && { key: 'priority', label: t('myTasks.colPriority'), icon: 'status' },
+    { key: 'status', label: t('myTasks.colStatus'), icon: 'status' },
+    taskCols.taskNotesID?.id && { key: 'notes', label: t('myTasks.colNotes'), icon: 'text' },
+    { key: 'discussion', label: t('myTasks.colDiscussion'), icon: 'relation' },
+  ].filter(Boolean);
+  const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
+  const [hiddenColumns, setHiddenColumns] = useState(
+    () => new Set(Array.isArray(savedView?.hiddenColumns) ? savedView.hiddenColumns : [])
+  );
+  const toggleColumn = useCallback((key) => setHiddenColumns((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  }), []);
+  const showAllColumns = useCallback((show) => {
+    setHiddenColumns(show ? new Set() : new Set(hideableKeys));
+  }, [hideableKeys]);
+  const saveHiddenColumns = useCallback(() => {
+    saveView({ hiddenColumns: [...hiddenColumns] });
+    onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
+  }, [saveView, hiddenColumns, onNotify]);
+
   const [collapsed, setCollapsed] = useState({});
   const [discDateMap, setDiscDateMap] = useState({});
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  // Inline "new task" (blue toolbar button): `creatingNew` shows a focused,
+  // pre-selected name input as the FIRST row of the topmost group; `newSeed` is
+  // the topmost group's seed captured when creation starts; `newRowId` is the
+  // just-created row (temp id, then real id) kept PINNED to the very top of the
+  // first group so the user always sees it there, whatever the active Group by.
+  const [creatingNew, setCreatingNew] = useState(false);
+  const [newSeed, setNewSeed] = useState(null);
+  const [newRowId, setNewRowId] = useState(null);
+  const rootRef = useRef(null);
   const toggleSelect = (id, checked) =>
     setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
   const clearSelection = () => setSelectedIds(new Set());
@@ -110,7 +161,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     clearSelection();
     const { undo } = softDeleteTasks(ids);
     const msg = ids.length === 1 ? 'המשימה נמחקה' : `${ids.length} משימות נמחקו`;
-    onNotify?.(msg, 'info', 6000, { label: 'בטל', onClick: undo });
+    onNotify?.(msg, 'success', 6000, { label: 'בטל', onClick: undo });
   };
 
   useEffect(() => {
@@ -118,11 +169,25 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     return () => clearTimeout(timer);
   }, [search]);
 
+  // Status options (for the fills + the staged phase-1 "not done" filter). Loaded
+  // once (cached); notDoneStatusIds is [] until ready, so the staged phase-1 then
+  // degrades gracefully to the last-month trim alone in that brief window.
+  const { options: statusOptions, labelById, colorById, orderById } = useStatusOptions('tasks', 'statusID');
+  const notDoneStatusIds = useMemo(
+    () => (statusOptions || []).filter((o) => !o.isDone).map((o) => Number(o.id)),
+    [statusOptions]
+  );
   const {
     items, loading, loadingMore, hasMore, error, loadMore,
     updateTaskStatus, updateTaskPriority, updateTaskNotes, updateTaskDeadline, updateTaskName,
     softDeleteTasks, createTask,
-  } = useMyTasks({ currentUser, context, search: debouncedSearch });
+  } = useMyTasks({ currentUser, context, search: debouncedSearch, notDoneStatusIds });
+
+  // Branded splash for the initial tasks load. useMinSplash arms when `loading`
+  // rises (on mount, as the first page fetches) and holds a short min window so
+  // the animation is seen on every entry — even when the page is instant. Purely
+  // presentational; it reads `loading` and changes no data/hook logic.
+  const splash = useMinSplash(loading);
 
   // Per-task permission gate. Task-tier caps resolve from the TASK's own people
   // columns (creator/responsible) — there is no parent discussion in this
@@ -133,7 +198,6 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const itemById = useMemo(() => new Map(items.map((t) => [String(t.id), t])), [items]);
   const allow = useCallback((cap, taskId) => canTask(cap, itemById.get(String(taskId))), [canTask, itemById]);
 
-  const { options: statusOptions, labelById, colorById, orderById } = useStatusOptions('tasks', 'statusID');
   const {
     options: priorityOptions,
     labelById: priorityLabelById,
@@ -161,6 +225,91 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     }),
     [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t]
   );
+
+  // Surface the just-created task at the VERY TOP of the view. Under GROUP BY
+  // DISCUSSION the new (unlinked) task lives in "ללא דיון", so that group is
+  // pinned to the top; under every other Group by the row is lifted to the top
+  // of the first group. The pin releases when the grouped view's inputs change
+  // (see the effect below).
+  const displayGroups = useMemo(() => {
+    if (!newRowId || grouped.length === 0) return grouped;
+    // Under GROUP BY DISCUSSION a newly created task is UNLINKED, so it lives in
+    // the "ללא דיון" bucket. Pin THAT group to the TOP (rather than lifting the
+    // row under an unrelated discussion), with the new row first inside it.
+    if (group.col === 'discussion') {
+      const idx = grouped.findIndex((g) => g.key === NO_DISCUSSION);
+      if (idx === -1) return grouped; // no unlinked bucket (row filtered out) — nothing to pin
+      const noDisc = grouped[idx];
+      const rowIdx = noDisc.items.findIndex((tk) => String(tk.id) === String(newRowId));
+      const items = rowIdx === -1
+        ? noDisc.items
+        : [noDisc.items[rowIdx], ...noDisc.items.filter((_, i) => i !== rowIdx)];
+      return [{ ...noDisc, items }, ...grouped.filter((_, i) => i !== idx)];
+    }
+    // Every other grouping: lift the new row out of its natural bucket to the
+    // very top of the FIRST group (surfaces it at the top of the view, as today).
+    let pinnedRow = null;
+    const stripped = grouped.map((g) => {
+      const idx = g.items.findIndex((tk) => String(tk.id) === String(newRowId));
+      if (idx === -1) return g;
+      pinnedRow = g.items[idx];
+      return { ...g, items: g.items.filter((_, i) => i !== idx) };
+    });
+    if (!pinnedRow) return grouped; // not loaded (filtered out) — nothing to pin
+    const [first, ...rest] = stripped;
+    return [
+      { ...first, items: [pinnedRow, ...first.items] },
+      ...rest.filter((g) => g.items.length > 0),
+    ];
+  }, [grouped, newRowId, group.col]);
+
+  // While drafting a new task inline, it must render in the group that will HOST
+  // it: the "ללא דיון" bucket under discussion grouping (pinned to the TOP), or
+  // the topmost group otherwise. Synthesize an empty host group when none exists.
+  const groupsForRender = useMemo(() => {
+    if (!creatingNew) return displayGroups;
+    if (group.col === 'discussion') {
+      const idx = displayGroups.findIndex((g) => g.key === NO_DISCUSSION);
+      if (idx === -1) {
+        return [
+          { key: NO_DISCUSSION, label: t('myTasks.noDiscussion'), color: null, status: undefined, items: [] },
+          ...displayGroups,
+        ];
+      }
+      return [displayGroups[idx], ...displayGroups.filter((_, i) => i !== idx)];
+    }
+    if (displayGroups.length === 0) {
+      return [{ key: '__creating__', label: t('myTasks.allTasks'), color: null, status: undefined, items: [] }];
+    }
+    return displayGroups;
+  }, [creatingNew, displayGroups, group.col, t]);
+
+  // Release the top-of-view pin whenever the grouped view's inputs change — once
+  // the user re-sorts / re-groups / filters / searches, the new row settles into
+  // its natural position like any other task.
+  useEffect(() => { setNewRowId(null); }, [group, sort, filter, debouncedSearch]);
+
+  // ESC clears the multi-selection. Live only while something is selected, and a
+  // no-op unless THIS view is actually visible (offsetParent) — it also yields to
+  // an open editor/overlay (typing field, or a dialog/listbox/menu open). Mirrors
+  // the in-discussion Tasks/Decisions tabs and MyDecisionsView.
+  const hasSelection = selectedIds.size > 0;
+  useEffect(() => {
+    if (!hasSelection) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (!rootRef.current || rootRef.current.offsetParent === null) return;
+      const el = e.target;
+      const tag = el && el.tagName;
+      const typing = tag === 'TEXTAREA' || (el && el.isContentEditable)
+        || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset)$/.test(el.type || ''));
+      if (typing) return;
+      if (document.querySelector('[role="dialog"],[role="listbox"],[role="menu"]')) return;
+      setSelectedIds(new Set());
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [hasSelection]);
 
   // Prune selected ids that are no longer loaded (filter/search/pagination churn).
   useEffect(() => {
@@ -224,13 +373,42 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     else { const c = {}; grouped.forEach((g) => { c[g.key] = true; }); setCollapsed(c); }
   };
 
-  // Blue toolbar button: create at the BOTTOM of the TOPMOST group, seeded with
-  // that group's value; expand it if collapsed so the new row is visible.
-  const addTaskToTopGroup = () => {
-    const top = grouped[0] || null;
-    if (top && collapsed[top.key]) setCollapsed((p) => ({ ...p, [top.key]: false }));
-    return addTask(top ? seedForGroup(top) : null);
+  // Blue toolbar button ("משימה חדשה"): open an inline draft row at the VERY TOP
+  // of the view (first row of the topmost group) with its name in edit mode —
+  // instead of creating a fixed-named task at the bottom. Expand the topmost
+  // group if collapsed so the draft row is visible, and capture that group's
+  // seed (status/priority) so the committed task inherits it.
+  const startCreateNew = () => {
+    // The draft's host group: "ללא דיון" under discussion grouping (a new task is
+    // unlinked), else the topmost group. Expand it if collapsed so the draft row
+    // is visible, and capture its seed (status/priority) for the committed task.
+    const host = group.col === 'discussion'
+      ? (grouped.find((g) => g.key === NO_DISCUSSION) || null)
+      : (grouped[0] || null);
+    if (host && collapsed[host.key]) setCollapsed((p) => ({ ...p, [host.key]: false }));
+    setNewSeed(host ? seedForGroup(host) : null);
+    setCreatingNew(true);
   };
+  // Commit the draft: create the task with `prepend` so its optimistic row lands
+  // at the FRONT of the list, seeded with the topmost group's value, and pin it
+  // to the top of the first group (newRowId) across the optimistic→real swap so
+  // it stays put. An empty name discards (nothing created) — consistent with the
+  // in-discussion inline add-row. The name is committed AS the task's name, so we
+  // never create a fixed "משימה חדשה" the user then has to rename.
+  const commitNewTask = (name) => {
+    setCreatingNew(false);
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    createTask({
+      name: trimmed,
+      status: newSeed?.status ?? null,
+      priority: newSeed?.priority ?? null,
+      prepend: true,
+      onOptimistic: (tempId) => setNewRowId(tempId),
+      onReconcile: (tempId, realId) => setNewRowId((cur) => (String(cur) === String(tempId) ? realId : cur)),
+    });
+  };
+  const cancelNewTask = () => setCreatingNew(false);
 
   const COL_NAME = {
     priority: t('myTasks.colPriority'),
@@ -388,21 +566,35 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const needDiscDates = group.col === 'discussion' && (group.order === 'dateAsc' || group.order === 'dateDesc');
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} ref={rootRef}>
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
-      {/* Top row: back to discussions (its own row, above the toolbar). */}
-      {onBackToDiscussions && (
-        <div className={styles.topBar} dir="ltr">
-          <Button kind={"secondary"} size={"small"} onClick={onBackToDiscussions}>
-            דיונים
-          </Button>
-        </div>
-      )}
+      {/* View title (round 40 typography; round 41 left-aligned) with a compact
+          left-arrow "back to discussions" icon button to its LEFT (round 53a,
+          replacing the old text button that lived in the toolbar). The header is
+          direction:ltr so the arrow sits on the left, the title to its right. */}
+      <div className={styles.viewHeader}>
+        {onBackToDiscussions && (
+          <button
+            type="button"
+            className={styles.backArrowBtn}
+            onClick={onBackToDiscussions}
+            aria-label="בחזרה לתצוגת הדיונים"
+            title="בחזרה לתצוגת הדיונים"
+          >
+            <ArrowLeft size={20} aria-hidden="true" />
+          </button>
+        )}
+        <h1 className={styles.viewTitle}>המשימות שלי</h1>
+      </div>
 
-      {/* monday-style toolbar: "משימה חדשה" + English pills, left-aligned (LTR) */}
+      {/* Single toolbar row (round 35 baseline; round 41 flush-LEFT): dir="ltr"
+          and flush-LEFT, reading (left→right)
+          [משימה חדשה][Search][Filter][Sort][Group by][collapse]. Round 53a moved
+          the back control out of the toolbar to a left-arrow icon button beside
+          the view title, so "משימה חדשה" is now the leftmost toolbar control. */}
       <div className={styles.toolbar} dir="ltr">
-        <Button kind={"primary"} size={"small"} onClick={addTaskToTopGroup}>
+        <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
           משימה חדשה
         </Button>
 
@@ -449,10 +641,19 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
           renderBody={renderGroupBody}
         />
 
-        <button type="button" className={styles.pill} onClick={toggleAll}>
-          {allCollapsed ? <Expand className={styles.pillIcon} /> : <Collapse className={styles.pillIcon} />}
-          <span>{allCollapsed ? 'Expand all' : 'Collapse all'}</span>
-        </button>
+        {/* Hide columns (round 46) — owners only. Non-owners never see it and
+            always get the saved config applied. */}
+        {canManageSettings && (
+          <HideColumnsControl
+            columns={columnList}
+            hidden={hiddenColumns}
+            onToggle={toggleColumn}
+            onToggleAll={showAllColumns}
+            onSave={canSaveView ? saveHiddenColumns : null}
+          />
+        )}
+
+        <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
       </div>
 
       {selectedIds.size > 0 && (
@@ -472,13 +673,11 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       )}
 
       <div className={styles.board}>
-      {loading ? (
-        <div className={styles.skeletonStack}>
-          {[1, 2, 3, 4].map((i) => <Skeleton key={i} type="rectangle" height={36} fullWidth />)}
-        </div>
+      {(loading || splash) ? (
+        <BrandLoader />
       ) : error ? (
         <div className={styles.empty}>{t('myTasks.error')}</div>
-      ) : items.length === 0 ? (
+      ) : (items.length === 0 && !creatingNew) ? (
         <div className={styles.empty}>
           <div className={styles.emptyTitle}>{t('myTasks.empty')}</div>
           <div className={styles.emptyHint}>{t('myTasks.emptyHint')}</div>
@@ -486,7 +685,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       ) : (
         <div className={styles.groupScrollInner}>
           <div className={styles.groupStack}>
-            {grouped.map((grp) => (
+            {groupsForRender.map((grp, gi) => (
               <div key={grp.key}>
                 <button
                   type="button"
@@ -510,6 +709,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                     tasks={grp.items}
                     color={grp.color}
                     canManageSettings={canManageSettings}
+                    hiddenColumns={hiddenColumns}
                     canTask={canTask}
                     onStatusChange={applyStatus}
                     onPriorityChange={applyPriority}
@@ -527,6 +727,11 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                       return n;
                     })}
                     onAddTask={() => addTask(seedForGroup(grp))}
+                    newTaskRow={creatingNew && gi === 0 ? {
+                      defaultName: 'משימה חדשה',
+                      onCommit: commitNewTask,
+                      onCancel: cancelNewTask,
+                    } : null}
                   />
                 )}
               </div>

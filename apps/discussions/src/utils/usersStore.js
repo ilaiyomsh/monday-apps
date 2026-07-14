@@ -53,6 +53,16 @@ export function hasRoster() {
   return rosterLoaded;
 }
 
+// Merge externally-sourced users (e.g. a board's subscribers, from
+// useBoardSubscribers) into the shared cache so their names/avatars resolve
+// everywhere the app shows a person. Persists opportunistically (survives
+// reload). Returns whether anything changed. Shape: [{ id, name, photo_thumb }].
+export function ingestUsers(list) {
+  const changed = mergeUsers(list);
+  if (changed) persist();
+  return changed;
+}
+
 // Merge a list of {id, name, photo_thumb} into the map; emit only on a real change.
 function mergeUsers(list) {
   let changed = false;

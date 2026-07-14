@@ -290,4 +290,106 @@ export function formatValue(type, input) {
   }
 }
 
+/* --------------------------------------------------- column-value sanitizer */
+// Central guard applied to the assembled column_values map RIGHT BEFORE it is
+// serialized for a write (create_item / change_multiple_column_values via the
+// BoardSDK). It strips INVALID / EMPTY entries that monday rejects with a
+// ColumnValueException — the class of write failures that surfaced as the
+// generic "Graphql validation errors" toast — WITHOUT changing any valid
+// payload.
+//
+// Per monday value SHAPE (the shapes formatValue produces above):
+//   board_relation  { item_ids: [...] }        — drop null/undefined/''/non-numeric
+//                                                 entries (a stray null here is the
+//                                                 `{"item_ids":[null]}` bug, born from
+//                                                 Number(<bad id>) -> NaN); coerce to Number.
+//   people          { personsAndTeams: [...] }  — drop entries with no valid id.
+//   dropdown        { labels: [...] }           — drop null/empty labels.
+//   status/dropdown { index: N }               — drop when N is not a finite number
+//                                                 (a NaN index serializes to null).
+//   status          { label: '<text>' }        — drop when the label text is empty.
+//
+// OMIT-vs-CLEAR: a column is OMITTED only when sanitizing REMOVED junk AND
+// nothing valid remains — i.e. the caller tried to write real data but every
+// entry was invalid, so we skip the column rather than send junk or accidentally
+// clear it. An ALREADY-empty array (e.g. `{item_ids:[]}` a caller built to CLEAR
+// a relation, like the create-modal's "no previous discussion" on edit) is
+// PRESERVED untouched. `{}` (date/status clear) and `null` (checkbox uncheck)
+// are intentional and pass through unchanged.
+function sanitizeArrayField(value, key, mapEntry, keepEntry) {
+  const raw = Array.isArray(value[key]) ? value[key] : [];
+  const cleaned = raw.map(mapEntry).filter(keepEntry);
+  // Junk-only array (had entries, none valid) ⇒ omit the whole column.
+  if (raw.length > 0 && cleaned.length === 0) return undefined;
+  return { ...value, [key]: cleaned };
+}
+
+// Sanitize ONE monday column value. Returns the (possibly cleaned) value, or
+// `undefined` to signal "omit this column from the payload". Pure.
+export function sanitizeColumnValue(value) {
+  // Preserve intentional non-object values: null (checkbox uncheck) and
+  // strings/numbers (text/simple columns).
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+
+  // board_relation — { item_ids: [Number] }
+  if ('item_ids' in value) {
+    return sanitizeArrayField(
+      value,
+      'item_ids',
+      (v) => (v === null || v === undefined || v === '' ? NaN : Number(v)),
+      (n) => Number.isFinite(n),
+    );
+  }
+
+  // people — { personsAndTeams: [{ id, kind }] }. A null id becomes 0 upstream
+  // (Number(null)), so 0 is treated as "no id" and dropped.
+  if ('personsAndTeams' in value) {
+    return sanitizeArrayField(
+      value,
+      'personsAndTeams',
+      (p) => p,
+      (p) => p != null && p.id !== null && p.id !== undefined && p.id !== ''
+        && Number.isFinite(Number(p.id)) && Number(p.id) !== 0,
+    );
+  }
+
+  // dropdown — { labels: [String] }
+  if ('labels' in value) {
+    return sanitizeArrayField(
+      value,
+      'labels',
+      (l) => l,
+      (l) => l !== null && l !== undefined && String(l).trim() !== '',
+    );
+  }
+
+  // status/dropdown by id — { index: Number }. A NaN index serializes to null
+  // and monday rejects it; drop the column then (0 is a valid label id, kept).
+  if ('index' in value) {
+    return Number.isFinite(Number(value.index)) ? value : undefined;
+  }
+
+  // status by text — { label: '<text>' }. Empty text ⇒ nothing to set.
+  if ('label' in value) {
+    return value.label === null || value.label === undefined || String(value.label).trim() === ''
+      ? undefined
+      : value;
+  }
+
+  // Everything else (date { date[, time] }, checkbox { checked }, the empty {}
+  // used to clear/no-op, ...) passes through unchanged.
+  return value;
+}
+
+// Sanitize a whole column_values map (columnId -> monday value). Columns whose
+// value sanitizes to `undefined` are omitted entirely. Pure — returns a new map.
+export function sanitizeColumnValues(cols) {
+  const out = {};
+  for (const [id, value] of Object.entries(cols || {})) {
+    const cleaned = sanitizeColumnValue(value);
+    if (cleaned !== undefined) out[id] = cleaned;
+  }
+  return out;
+}
+
 export { monday };

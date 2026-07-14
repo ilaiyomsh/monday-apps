@@ -190,6 +190,29 @@ const ERROR_MESSAGES = {
         canRetry: false,
         actionRequired: 'הזמן את המשתמש ללוח המשימות'
     },
+    // הקצאת אדם שאינו חבר בלוח — monday מחזיר ColumnValueException שמסתיר את הסיבה
+    // האמיתית מאחורי "בדוק את הקלט". מזוהה ומועדף ב-parseMondayError (ראה מטה).
+    'invalidPersonAssignment': {
+        userMessage: 'לא ניתן להקצות את המשתמש — הוא אינו חבר בלוח. יש להוסיף אותו ללוח לפני ההקצאה.',
+        canRetry: false,
+        actionRequired: 'הוסף את המשתמש כחבר בלוח לפני ההקצאה'
+    },
+    // תווית dropdown/status שאינה קיימת ברשימת העמודה — monday מחזיר
+    // ColumnValueException ("The dropdown label '…' does not exist ...") ומסתיר
+    // זאת מאחורי "בדוק את הקלט". מזוהה ומועדף ב-parseMondayError (ראה מטה).
+    'dropdownLabelNotFound': {
+        userMessage: 'הערך שנבחר אינו קיים ברשימת האפשרויות של העמודה. בחר ערך קיים מהרשימה, או הוסף אותו בהגדרות הלוח.',
+        canRetry: false,
+        actionRequired: 'בחר ערך קיים מרשימת העמודה'
+    },
+    // פריט מקושר (board_relation) שאינו נמצא בלוחות המחוברים — monday מחזיר
+    // ColumnValueException עם itemsNotInConnectedBoards (למשל item_ids עם מזהה לא
+    // תקין / פריט אופטימי שעדיין אין לו מזהה אמיתי). מזוהה ומועדף ב-parseMondayError.
+    'itemsNotInConnectedBoards': {
+        userMessage: 'אחד הפריטים המקושרים אינו נמצא בלוחות המחוברים. רענן את הדף ונסה שוב, או בחר פריט תקין.',
+        canRetry: false,
+        actionRequired: 'בחר פריט תקין מהלוח המחובר ונסה שוב'
+    },
     'ItemNameTooLongException': {
         userMessage: 'שם הפריט ארוך מדי (מקסימום 255 תווים).',
         canRetry: false,
@@ -279,6 +302,23 @@ export const extractOperationName = (query) => {
     if (firstOperationMatch) return firstOperationMatch[1];
     
     return null;
+};
+
+/**
+ * חילוץ שם/מזהה העמודה מתוך error_data של monday (כשקיים). ב-ColumnValueException
+ * monday מצרף את פרטי העמודה תחת error_data; שמות המפתחות משתנים בין גרסאות, לכן
+ * מנסים כמה שמות נפוצים. מחזיר null כשאין מידע.
+ */
+export const extractColumnName = (errorData) => {
+    if (!errorData || typeof errorData !== 'object') return null;
+    return (
+        errorData.column_title ||
+        errorData.column_name ||
+        errorData.columnName ||
+        errorData.column_id ||
+        errorData.columnId ||
+        null
+    );
 };
 
 /**
@@ -375,6 +415,44 @@ export const parseMondayError = (error, response = null, apiRequest = null) => {
         }
     }
     
+    // הקצאת אדם שאינו חבר בלוח: monday מחזיר ColumnValueException שה-error_data/
+    // ההודעה שלו נוקבים באדם ("invalidPersonAssignment" / "unable to assign person
+    // with id …" / "not a subscriber of the board"). קוד ה-ColumnValueException
+    // הגנרי מסתיר זאת כ"בדוק את הקלט", לכן נזהה ונעדיף את הסיבה האמיתית (אי-חברות
+    // בלוח). רץ אחרי קביעת errorCode כדי לגבור על הקוד הגנרי.
+    const personAssignHaystack = [
+        errorMessage,
+        errorData ? JSON.stringify(errorData) : null
+    ].filter(Boolean).join(' ').toLowerCase();
+    if (/invalidpersonassignment|unable to assign person|not a subscriber|not subscribed|not a member/.test(personAssignHaystack)) {
+        errorCode = 'invalidPersonAssignment';
+    }
+
+    // ColumnValueException מסתיר את הסיבה האמיתית מאחורי הודעה גנרית ("בדוק את
+    // הקלט"). בדומה ל-invalidPersonAssignment — נזהה מה-error_data/ההודעה את הסיבה
+    // הספציפית ונעדיף אותה. רץ אחרי זיהוי ההקצאה (מקרה ColumnValueException ספציפי
+    // יותר) כדי לא לגבור עליו.
+    const columnValueHaystack = [
+        errorMessage,
+        errorData ? JSON.stringify(errorData) : null
+    ].filter(Boolean).join(' ').toLowerCase();
+    const isColumnValueException =
+        errorCode === 'ColumnValueException' || /columnvalueexception/.test(columnValueHaystack);
+    if (errorCode !== 'invalidPersonAssignment' && isColumnValueException) {
+        if (/itemsnotinconnectedboards|not in the connected boards/.test(columnValueHaystack)) {
+            errorCode = 'itemsNotInConnectedBoards';
+        } else if (
+            /(dropdown|status|label|option)/.test(columnValueHaystack)
+            && /(doesn't exist|does not exist|not exist|not found|no such|not a valid|invalid label|unknown label)/.test(columnValueHaystack)
+        ) {
+            errorCode = 'dropdownLabelNotFound';
+        } else {
+            // נשאר ColumnValueException גנרי — ה-userMessage יצרף את הודעת monday
+            // הגולמית (ראה בניית userMessage מטה) כדי לא להסתיר את הסיבה.
+            errorCode = 'ColumnValueException';
+        }
+    }
+
     // Fallback - אם אין קוד שגיאה, נשתמש בהודעה
     if (!errorCode) {
         errorCode = 'UNKNOWN_ERROR';
@@ -386,6 +464,17 @@ export const parseMondayError = (error, response = null, apiRequest = null) => {
         canRetry: true,
         actionRequired: null
     };
+
+    // הודעת המשתמש הסופית. ל-ColumnValueException הגנרי (ללא סיבה ספציפית שזוהתה)
+    // נצרף את הודעת monday הגולמית + שם העמודה (כשקיים) כדי לא להסתיר את הסיבה
+    // האמיתית מאחורי טקסט גנרי.
+    let userMessage = errorConfig.userMessage;
+    if (errorCode === 'ColumnValueException' && errorMessage) {
+        const columnName = extractColumnName(errorData);
+        userMessage = columnName
+            ? `הערך שהוזן אינו תקין עבור העמודה "${columnName}": ${errorMessage}`
+            : `הערך שהוזן אינו תקין עבור אחת מעמודות הלוח: ${errorMessage}`;
+    }
     
     // חילוץ operationName מ-apiRequest אם לא קיים
     let operationName = null;
@@ -410,7 +499,7 @@ export const parseMondayError = (error, response = null, apiRequest = null) => {
     
     // בניית אובייקט התוצאה המלא
     const result = {
-        userMessage: errorConfig.userMessage,
+        userMessage,
         errorCode,
         fullDetails,
         canRetry: errorConfig.canRetry,
@@ -467,6 +556,7 @@ export const createFullErrorObject = (parsedError, functionName = null, timestam
 const errorHandlerExports = {
     parseMondayError,
     createFullErrorObject,
+    extractColumnName,
     ERROR_MESSAGES,
     HTTP_STATUS_TO_ERROR_CODE
 };

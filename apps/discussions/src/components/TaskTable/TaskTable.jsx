@@ -1,8 +1,15 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import { Checkbox } from '@vibe/core';
+import { Plus } from 'lucide-react';
+import {
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors,
+} from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { TaskTableRow } from '@generated/components/TaskTableRow';
+import { SortableRow } from '@generated/components/SortableRow';
 import { useColumnOrder } from '@generated/hooks/useColumnOrder.js';
 import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
+import { useRowOrder } from '@generated/hooks/useRowOrder.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
@@ -25,8 +32,21 @@ export function TaskTable({
   onAssigneeChange,
   onDeadlineChange,
   onOpenNewTask,
+  // Inline add (native monday "add item"): when provided, the footer add-row
+  // becomes an inline text input — click reveals it, name + Enter creates the
+  // task IMMEDIATELY (no modal), and focus stays for rapid entry. Takes the
+  // group's seed defaults (status/assignee) so a task added inside a grouped
+  // section inherits that group. This is the DEFAULT add path for the Tasks tab;
+  // onOpenNewTask (the modal) is kept only as an optional fallback.
+  onInlineCreate,
+  // Seed values applied to an inline-created task (group status/assignee).
+  inlineCreateDefaults,
   onRenameTask,
   onDeleteTask,
+  // Optimistic-create error affordance, threaded to each row (see TaskTableRow):
+  // retry re-runs a failed create; dismiss removes the failed temp row locally.
+  onRetryCreate,
+  onDismissRow,
   selectable = false,
   selectedIds,
   onToggleSelect,
@@ -56,6 +76,19 @@ export function TaskTable({
   // allow-all so callers that don't gate (none today besides the task tabs) are
   // unaffected.
   canTask = () => true,
+  // Whole-row drag-reorder (Round 7). When `reorderScope` is provided AND
+  // reorder is allowed (owner/editor, non-mobile), the rows in THIS table become
+  // draggable up/down; the order persists per-scope in monday.storage (monday has
+  // no item-position API — see useRowOrder/rowOrder). `reorderScope` must be
+  // stable + unique per orderable list (per group / per discussion). Reordering
+  // is a display concern only — it never changes a task's status/group.
+  reorderScope = null,
+  canReorderRows = false,
+  // Hidden columns (round 47): a Set (or array) of column keys to hide, applied
+  // at the render layer ONLY (order/width persistence untouched). The pinned name
+  // (+ sel) columns are never hideable. Empty/undefined ⇒ every column shows, so
+  // callers that don't pass it (EffectivenessTab) are unaffected.
+  hiddenColumns,
 }) {
   const { isMobile } = useViewport();
 
@@ -74,18 +107,35 @@ export function TaskTable({
   const pinned = selectable ? ['sel', 'name'] : ['name'];
   const { order, reorder } = useColumnOrder('tasks', baseKeys, pinned);
 
-  // Width defs follow the live column ORDER; 'sel' is a fixed (non-resizable)
+  // Hidden columns (round 47) applied at the render layer only: drop hidden keys
+  // from the ORDER used to render, keeping the pinned name (+ sel) always. The
+  // useColumnOrder/useColumnWidths inputs stay on the full set, so a hidden
+  // column keeps its stored order + width and returns in place when re-shown.
+  const hidden = hiddenColumns instanceof Set ? hiddenColumns : new Set(hiddenColumns || []);
+  const visibleOrder = order.filter((k) => k === 'name' || k === 'sel' || !hidden.has(k));
+
+  // Width defs follow the live VISIBLE order; 'sel' is a fixed (non-resizable)
   // leading track, everything else resizes within the constants' clamps.
-  const defs = order.map((k) => (k === 'sel' ? { key: 'sel', fixed: 36 } : { key: k, ...W[k] }));
+  const defs = visibleOrder.map((k) => (k === 'sel' ? { key: 'sel', fixed: 36 } : { key: k, ...W[k] }));
   const { gridTemplate, startResize } = useColumnWidths('tasks', defs);
-  const mobileTemplate = order.map((k) => MOBILE_TRACK[k]).filter(Boolean).join(' ');
+  const mobileTemplate = visibleOrder.map((k) => MOBILE_TRACK[k]).filter(Boolean).join(' ');
   const rowStyle = { gridTemplateColumns: isMobile ? mobileTemplate : gridTemplate };
+
+  // Whole-row drag-reorder (Round 7): enabled only when a scope is passed, the
+  // caller allows it, and we're not on touch (drag + inline-edit coexist via the
+  // pointer sensor's activation distance, like the Topics table). useRowOrder
+  // applies the persisted order to `tasks` and returns the display order.
+  const rowsReorderable = !!reorderScope && !!canReorderRows && !isMobile;
+  const { order: rowOrderIds, orderList: orderedTasks, onDragEnd: onRowDragEnd } =
+    useRowOrder(reorderScope, tasks, { enabled: rowsReorderable });
+  const rowSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const displayTasks = rowsReorderable ? orderedTasks : tasks;
 
   // Owner-only, non-touch reorder + resize (matches the My Tasks table).
   // Prefer the explicit board-permissions gate when supplied; else legacy owner.
   const canReorder = (canReorderColumns ?? canManageSettings) && !isMobile;
   const canResize = canReorder;
-  const movableIds = order.filter((k) => k !== 'name' && k !== 'sel');
+  const movableIds = visibleOrder.filter((k) => k !== 'name' && k !== 'sel');
   // Non-first header cells need a positioning context for the absolute handle;
   // the frozen .taskFirst is already sticky (a containing block), so it doesn't.
   const relStyle = canResize ? { position: 'relative' } : undefined;
@@ -128,39 +178,121 @@ export function TaskTable({
         {/* header */}
         <div className={`${styles.taskRow} ${styles.taskHead}`} style={rowStyle}>
           <ColumnHeaderDnd enabled={canReorder} ids={movableIds} labels={TITLE} onReorder={reorder}>
-            {order.map(renderHeaderCell)}
+            {visibleOrder.map(renderHeaderCell)}
           </ColumnHeaderDnd>
         </div>
 
         {/* rows */}
-        {tasks.map((task) => (
-          <TaskTableRow
-            key={task.id}
-            task={task}
-            columns={order}
-            rowStyle={rowStyle}
-            onStatusChange={onStatusChange && canTask('editTaskStatus', task) ? onStatusChange : undefined}
-            onPriorityChange={onPriorityChange && canTask('editTaskPriority', task) ? onPriorityChange : undefined}
-            onAssigneeChange={onAssigneeChange && canTask('editTaskAssignee', task) ? onAssigneeChange : undefined}
-            onDeadlineChange={onDeadlineChange && canTask('editTaskDeadline', task) ? onDeadlineChange : undefined}
-            onRenameTask={onRenameTask && canTask('editTaskName', task) ? onRenameTask : undefined}
-            onDeleteTask={onDeleteTask}
-            selectable={selectable}
-            selected={selectable ? !!selectedIds?.has(task.id) : false}
-            onToggleSelect={onToggleSelect}
-            showSourceDiscussion={showSourceDiscussion}
-            showPriority={showPriority}
-            onOpenCard={onOpenCard}
-          />
-        ))}
+        {(() => {
+          const renderRow = (task, drag) => (
+            <TaskTableRow
+              key={task.id}
+              task={task}
+              columns={visibleOrder}
+              rowStyle={rowStyle}
+              onStatusChange={onStatusChange && canTask('editTaskStatus', task) ? onStatusChange : undefined}
+              onPriorityChange={onPriorityChange && canTask('editTaskPriority', task) ? onPriorityChange : undefined}
+              onAssigneeChange={onAssigneeChange && canTask('editTaskAssignee', task) ? onAssigneeChange : undefined}
+              onDeadlineChange={onDeadlineChange && canTask('editTaskDeadline', task) ? onDeadlineChange : undefined}
+              onRenameTask={onRenameTask && canTask('editTaskName', task) ? onRenameTask : undefined}
+              onDeleteTask={onDeleteTask}
+              onRetryCreate={onRetryCreate}
+              onDismissRow={onDismissRow}
+              selectable={selectable}
+              selected={selectable ? !!selectedIds?.has(task.id) : false}
+              onToggleSelect={onToggleSelect}
+              showSourceDiscussion={showSourceDiscussion}
+              showPriority={showPriority}
+              onOpenCard={onOpenCard}
+              dragRef={drag?.setNodeRef}
+              dragStyle={drag?.style}
+              dragProps={drag ? { ...drag.attributes, ...drag.listeners } : undefined}
+            />
+          );
+          if (!rowsReorderable) return displayTasks.map((task) => renderRow(task, null));
+          return (
+            <DndContext sensors={rowSensors} collisionDetection={closestCenter} onDragEnd={onRowDragEnd}>
+              <SortableContext items={rowOrderIds} strategy={verticalListSortingStrategy}>
+                {displayTasks.map((task) => (
+                  // A still-saving optimistic row (temp- id) has no board id yet,
+                  // so it can't be persisted in an order — leave it non-draggable.
+                  <SortableRow key={task.id} id={task.id} disabled={String(task.id).startsWith('temp-')}>
+                    {(drag) => renderRow(task, drag)}
+                  </SortableRow>
+                ))}
+              </SortableContext>
+            </DndContext>
+          );
+        })()}
 
-        {/* add-task footer row — lives inside the rounded table */}
-        {onOpenNewTask && (
+        {/* add-task footer row — lives inside the rounded table. Inline add is
+            the default (native monday "add item"); the modal button is a fallback
+            only used when no inline handler is wired. */}
+        {onInlineCreate ? (
+          <InlineAddTaskRow onCreate={onInlineCreate} defaults={inlineCreateDefaults} />
+        ) : onOpenNewTask ? (
           <button type="button" className={styles.addRow} onClick={onOpenNewTask} aria-label="הוסף משימה">
             <span className={styles.addLabel}>+ הוסף משימה</span>
           </button>
-        )}
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+// Inline add-row for the Tasks tab: at rest it's the same "+ הוסף משימה" affordance;
+// clicking swaps in a borderless text input (mirrors the Topics add-point row).
+// Name + Enter creates the task with only a name (+ the group's seed defaults) —
+// deadline/assignee are filled inline afterward, so NOTHING is required. The
+// input stays focused after each create for rapid entry; Escape / empty-blur
+// collapses back to the label.
+function InlineAddTaskRow({ onCreate, defaults }) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState('');
+  const inputRef = useRef(null);
+
+  const commit = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    // Only a name (plus any group seed defaults) — no required deadline/assignee.
+    onCreate(trimmed, { ...(defaults || {}) });
+    setText('');
+    // Keep focus so the user can add another straight away (monday behavior).
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className={styles.addRow}
+        onClick={() => { setEditing(true); requestAnimationFrame(() => inputRef.current?.focus()); }}
+        aria-label="הוסף משימה"
+      >
+        <span className={styles.addLabel}>+ הוסף משימה</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className={styles.addRow}>
+      <span className={styles.addLabel}>
+        <Plus size={16} className={styles.addIcon} />
+        <input
+          ref={inputRef}
+          className={styles.addInput}
+          autoFocus
+          value={text}
+          placeholder="שם משימה…"
+          aria-label="שם משימה חדשה"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+            if (e.key === 'Escape') { setText(''); setEditing(false); e.currentTarget.blur(); }
+          }}
+          onBlur={() => { if (!text.trim()) setEditing(false); }}
+        />
+      </span>
     </div>
   );
 }

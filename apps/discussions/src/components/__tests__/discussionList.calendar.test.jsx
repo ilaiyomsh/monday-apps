@@ -20,6 +20,7 @@ vi.mock('@generated/hooks/useDiscussions', () => ({
     loadMore: vi.fn(),
     softDeleteDiscussion: vi.fn(() => ({ undo: vi.fn() })),
   }),
+  useDiscussionMonths: () => ({ months: [], loading: false }),
 }));
 
 vi.mock('@api/BoardSDK.js', () => ({

@@ -171,6 +171,16 @@ describe('removeBoardMembers', () => {
     const removed = await removeBoardMembers(BOARD_ID, ['45678901', '52345678']);
     expect(removed).toEqual([{ id: '45678901' }]);
   });
+
+  it('logs the no-op diagnostic when monday returns NO removed users (null response)', async () => {
+    apiMock.mockResolvedValueOnce({ delete_subscribers_from_board: null });
+    await expect(removeBoardMembers(BOARD_ID, ['45678901'])).resolves.toBeNull();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'subscribers',
+      expect.stringContaining('removed fewer than requested'),
+      expect.objectContaining({ requested: [45678901], removed: null })
+    );
+  });
 });
 
 describe('addEveryoneTeam / removeTeamFromBoard', () => {
@@ -249,5 +259,21 @@ describe('getAccountSlug', () => {
     await expect(getAccountSlug()).resolves.toBe('yomsheni-il');
     await expect(getAccountSlug()).resolves.toBe('yomsheni-il');
     expect(apiMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('resolves null and logs a warning when the slug query fails', async () => {
+    // Fresh module instance — the memo from the test above would otherwise
+    // short-circuit before the api call. vi.mock factories re-apply on re-import.
+    vi.resetModules();
+    const { getAccountSlug: freshGetAccountSlug } = await import('../subscribers.js');
+    const freshLogger = (await import('../../logger.js')).default;
+    apiMock.mockRejectedValueOnce(new Error('UNAUTHORIZED'));
+
+    await expect(freshGetAccountSlug()).resolves.toBeNull();
+    expect(freshLogger.warn).toHaveBeenCalledWith(
+      'subscribers',
+      expect.stringContaining('getAccountSlug'),
+      expect.objectContaining({ error: 'UNAUTHORIZED' })
+    );
   });
 });

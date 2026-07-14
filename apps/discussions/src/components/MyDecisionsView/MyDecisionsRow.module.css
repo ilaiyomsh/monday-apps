@@ -1,0 +1,204 @@
+/* Body-row + cell styles for MyDecisionsRow. Own-module copies of the
+   MyTasksRow patterns (frozen-cell opaque hover compositing, source chip, date
+   clear-X) — cross-module bare-class selectors break in the scoped prod build.
+   The "דיון מקור" chip carries the decisions PURPLE inline-start border. */
+
+.bodyRow {
+  background: #ffffff;
+  transition: background 0.1s ease;
+}
+.bodyRow:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+/* The frozen name cell is opaque (sticky), so its hover background is set
+   explicitly: composite the (often semi-transparent) hover token OVER solid
+   white so scrolled cells can't bleed through the frozen column. */
+.bodyRow:hover .name {
+  background-color: #ffffff;
+  background-image: linear-gradient(
+    var(--primary-background-hover-color, #f5f6f8),
+    var(--primary-background-hover-color, #f5f6f8)
+  );
+}
+
+.muted {
+  color: var(--secondary-text-color, #676879);
+}
+
+/* Frozen leading cell: explicit own-module opaque background at REST. */
+.name {
+  background: #ffffff;
+  justify-content: flex-start;
+}
+.nameText {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  line-height: 36px; /* match native row height */
+  font-family: var(--font-family);
+  text-align: start;
+  /* reset button chrome — it's a clickable text label */
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* monday "updates" speech-bubble icon at the trailing edge of the name cell. */
+.updatesBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.updatesBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+
+/* Inline rename input — swaps in for the name while editing (mirrors MyTasksRow). */
+.nameInput {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 4px;
+  padding: 0 6px;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  background: var(--primary-background-color, #fff);
+}
+.nameInput:focus-visible {
+  outline: none;
+}
+/* Rename pencil — hover-revealed near the name (mirrors MyTasksRow's .renameBtn).
+   Shown only when onRenameDecision is wired. */
+.renameBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  opacity: 0;
+  transition: background-color 0.1s ease, color 0.1s ease, opacity 0.1s ease;
+}
+.bodyRow:hover .renameBtn,
+.renameBtn:focus-visible {
+  opacity: 1;
+}
+.renameBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+
+/* people cells (decider / affected) — centered compact avatar groups */
+.peopleCell {
+  justify-content: center;
+}
+
+/* date cell — relative so the hover clear-X can sit in the corner */
+.dateCell {
+  justify-content: center;
+  position: relative;
+}
+.dateCell .muted {
+  color: rgb(102, 102, 102);
+}
+/* editable variant: the picker trigger fills the whole cell */
+.cellCenter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+/* hover X that clears the date (editable variant only) */
+.clearX {
+  position: absolute;
+  inset-inline-start: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--primary-background-color, #fff);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.dateCell:hover .clearX {
+  opacity: 1;
+}
+.clearX:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-text-color, #323338);
+}
+
+/* status / priority cells: kill the grid cell's padding so the colored fill
+   bleeds edge-to-edge. Scoped under .bodyRow for specificity (0,2,0) over the
+   grid module's .taskCell padding regardless of bundle order. */
+.bodyRow .statusCellBleed {
+  padding: 0;
+}
+
+/* "דיון מקור" connected-board chip — white rounded chip with the decisions
+   PURPLE leading bar, clickable to open the discussion item card. */
+.sourceCell {
+  justify-content: stretch;
+  gap: 6px;
+  overflow: hidden;
+}
+.sourceChips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+.sourceChip {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: start;
+  padding: 4px 8px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-inline-start: 3px solid var(--decisions-accent, #6b4ee6);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--primary-text-color, #323338);
+  font-family: var(--font-family);
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.sourceChip:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}

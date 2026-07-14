@@ -7,6 +7,13 @@
   white-space: nowrap;
 }
 
+/* Inline wrapper that carries the native `title` name tooltip for an avatar
+   (round 33) without disturbing its layout. */
+.avatarTip {
+  display: inline-flex;
+  align-items: center;
+}
+
 .muted {
   color: var(--secondary-text-color, #676879);
   font-size: var(--font-size-subtext, 14px);

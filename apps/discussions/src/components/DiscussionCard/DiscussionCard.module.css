@@ -2,6 +2,10 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* min-height:0 keeps the flex column honest so .body (the single scroll
+     region) stays bounded to the card height and scrolls internally — the
+     shell never grows a second/outer scrollbar when the iframe narrows. */
+  min-height: 0;
   background-color: var(--primary-background-color, #ffffff);
 }
 
@@ -57,6 +61,25 @@
   position: relative;
   z-index: 1;
   margin-inline-start: 12px;
+  /* Round 70 — keep the tab strip a FIXED-HEIGHT SINGLE ROW that scrolls
+     horizontally, so it never grows taller when monday docks its native Updates
+     panel and narrows the app iframe. Before this the vibe tab labels (e.g.
+     "הנחיות קודמות") wrapped to two lines and the tabs wrapped to a second row
+     when the strip got tight, so the bar grew taller and the whole view jumped
+     up and down as Updates opened and closed. overflow-y:hidden is the required
+     pairing for overflow-x:auto (a visible y-axis would compute to auto and could
+     spawn a vertical bar); it clips nothing here because the height is content-
+     driven (no fixed height) and the vibe active-tab underline sits inside the
+     tab box. Mirrors the already-shipped .mobile-app .tabsRow behaviour below,
+     now applied at every width. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Thin on Firefox, fully hidden on WebKit (rule just below): the horizontal
+     scrollbar must not reserve vertical space, or the strip would grow taller. */
+  scrollbar-width: thin;
+}
+.tabsRow::-webkit-scrollbar {
+  height: 0;
 }
 .tabsRow :global([class*="tabWrapper"]) {
   border-bottom-color: transparent;
@@ -64,19 +87,69 @@
 .tabsRow :global([class*="tabWrapper"][class*="active_"]::after) {
   z-index: 2;
 }
+/* vibe TabList renders role="tablist"; keep it ONE row, never wrapping to a 2nd row. */
+.tabsRow :global([role="tablist"]) {
+  flex-wrap: nowrap;
+}
+/* vibe Tab renders role="tab"; never let a tab shrink or its label wrap to a
+   second line (that wrapping is what grew the bar height when the iframe
+   narrowed). No shrink plus no wrap keeps each tab at its natural width, so the
+   strip scrolls horizontally instead of getting taller. */
+.tabsRow :global([role="tab"]) {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.tabsRow :global([role="tab"]) * {
+  white-space: nowrap;
+}
 
 .titleRow {
   display: flex;
-  align-items: flex-start;
+  /* Round 54 — CONSTANT-height header row: vertically center the title, date/
+     time and people, and pin a fixed min-height, so the header occupies the exact
+     same vertical space whether the people role groups are shown or hidden (round
+     51 hides them when monday docks the Updates panel). Without this the row
+     shrank a few px on hide — the tallest people field is an editable role
+     PersonPicker whose 30px empty-state placeholder sits inside 3px top/bottom
+     trigger padding = 36px, taller than the 28px x 1.2 = 33.6px title — so the
+     view nudged down on open and up on close. */
+  align-items: center;
+  /* 36px = that max people-SHOWN field height; it also clears the 33.6px title,
+     the 32px filled picker, the ~24px read-only avatars and the ~16px date/time
+     text, so nothing clips in either state and hiding the people can no longer
+     reduce the row height (people-shown height == people-hidden height == 36px). */
+  min-height: 36px;
   gap: var(--spacing-small, 8px);
   margin-bottom: var(--spacing-small, 8px);
+  /* Round 48: keep the TITLE and the date/people META on ONE row at EVERY width —
+     including when monday docks the Updates panel and narrows the iframe — so the
+     header is always exactly two rows (title+meta, then the tab row) and the table
+     below never jumps down by a row. nowrap forbids the meta from dropping to its
+     own line (the round-42 wrap did exactly that); instead the meta shrinks and
+     clips (see .participants) while the title ellipsizes (see .title), both staying
+     inline. overflow-x:clip guarantees the row can never spawn an app-level
+     horizontal scrollbar even in the extreme case; overflow-y stays visible so the
+     inline half-hour time menu can still drop BELOW the row (a plain overflow
+     :hidden would clip that dropdown). At wide widths both fit on one line as
+     before, so nothing visibly changes there. */
+  flex-wrap: nowrap;
+  overflow-x: clip;
+  overflow-y: visible;
 }
 
 .titleBlock {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 0;
+  /* Reserve a readable width for the title (round-42 min, kept intact) so the meta
+     gives way — shrinking/clipping in its share of the SAME row — before the title
+     is ever squeezed. Capped at 100% (min()) so on an extremely narrow pane the
+     block simply takes the full width and never overflows; the title itself then
+     stays on one line and ellipsizes (see .title) rather than wrapping to a second
+     line. The `.mobile-app` rule below resets this to 0 (the phone layout wraps the
+     title internally next to an info button instead). */
+  min-width: min(100%, 18rem);
+  flex: 1 1 auto;
 }
 
 .titleMainRow {
@@ -146,6 +219,15 @@
 :global(.mobile-app) .titleInput {
   font-size: 22px;
 }
+/* Mobile keeps the round-approved INTERNAL title wrap: the phone header collapses
+   the date/people meta behind an info button, so the title has the room to wrap
+   over two lines and shouldn't truncate. Undo the desktop one-line/ellipsis rule
+   (base .title above) here so the mobile layout is byte-for-byte unchanged. */
+:global(.mobile-app) .title {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
 /* Keep back-arrow + title + info button on ONE row; the title wraps INTERNALLY
    (titleBlock min-width:0) rather than pushing the info button to a new line. */
 :global(.mobile-app) .titleRow {
@@ -161,6 +243,11 @@
   width: 100%;
   margin-inline-start: 0;
   align-items: flex-start;
+  /* On its own full-width line the mobile meta has room, so undo the desktop
+     one-line clip: let it wrap and keep overflow visible (base .participants is
+     nowrap + overflow-x:clip for the desktop single-row constraint). */
+  flex-wrap: wrap;
+  overflow: visible;
 }
 
 .title {
@@ -170,6 +257,15 @@
   color: var(--text-color, #323338);
   margin: 0;
   cursor: text;
+  /* Round 48: keep the title on ONE line and ellipsize when the pane narrows,
+     instead of wrapping to a second line — that keeps the title+meta row a single
+     line tall so the header never grows a third row (the table stays put). The
+     min-width:0 lets the h1 shrink inside .titleMainRow (a flex row) so the
+     ellipsis actually engages. The mobile layout restores wrapping just below. */
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .copyLinkButton {
@@ -246,14 +342,35 @@
      that isn't the title is flush right). Physical — not inline — so the block's
      own dir="rtl" (which orders תאריך→שעה→people right-to-left) doesn't flip it. */
   margin-left: auto;
+  /* Round 51: the meta does NOT shrink (flex-shrink:0), so it keeps its natural
+     width flush-right on ONE line and it is the TITLE that yields first — the title
+     ellipsizes to give the meta room (see .title / .titleBlock min-width). When the
+     pane narrows past the point where [title min-width + the full meta] fit, the
+     meta would be pushed past the row's right edge and clipped; DiscussionCard.jsx
+     measures exactly that overflow and toggles .participantsNarrow to hide the
+     PEOPLE groups (keeping date + time), so the crowded state is transient and the
+     header stays one row (flex-wrap:nowrap here; the inner date/time/label/avatar
+     items are each already nowrap) and the table below never jumps. overflow-x:clip
+     does the horizontal clip in the brief crowded frame; overflow-y stays visible
+     so the inline half-hour time menu can still drop BELOW the row (a plain
+     overflow:hidden/auto would clip it — the date popover is portaled by Vibe, so
+     it is unaffected either way). At wide widths it sits on one line, flush right,
+     with every group shown. Round 48 established this one-row/no-wrap contract;
+     round 50 hid the people by a fixed 600px width (which never fired because the
+     docked Updates panel keeps the header wider than that); round 51 hides them by
+     REAL overflow instead, so it triggers whenever the panel docks, at any size. */
   flex-shrink: 0;
   display: flex;
   flex-direction: row;
   align-items: center;
   flex-wrap: nowrap;
-  /* Spacing between groups comes from each group's padding (see .peopleGroup),
-     so the vertical separators sit centered between fields. */
-  gap: 0;
+  overflow-x: clip;
+  overflow-y: visible;
+  /* Column spacing between groups comes from each group's padding (see
+     .peopleGroup), so the vertical separators sit centered between fields. With the
+     fields on a single non-wrapping line the row-gap is now moot but kept harmless. */
+  row-gap: 4px;
+  column-gap: 0;
 }
 
 /* One labeled group: BOLD label to the RIGHT (dir=rtl → label is the first child)
@@ -264,18 +381,76 @@
   align-items: center;
   align-self: stretch;
   gap: 6px;
+  /* Symmetric horizontal gap: an EQUAL 12px on both the inline-start and
+     inline-end of every field, applied uniformly to ALL groups (including the
+     first and last — no edge overrides). Each field is therefore equidistant
+     from its neighbouring divider(s), and the divider sits centered in the 24px
+     trough between two adjacent fields — date, time and every people column
+     share the exact same left/right gap. */
   padding-inline: 12px;
+  /* Anchor for the short, centered vertical separator (::before) below. */
+  position: relative;
 }
-.peopleGroup:first-child { padding-inline-start: 0; }
-.peopleGroup:last-child { padding-inline-end: 0; }
-/* Vertical separator between fields. */
-.peopleGroup + .peopleGroup {
-  border-inline-start: 1px solid var(--ui-border-color, #d0d4e4);
+/* Vertical separator between fields: a SHORT, vertically-centered bar (not a
+   full-height line). A centered ::before instead of a stretched border, so it
+   reads as a short divider between fields. Same 1px thickness + color; only the
+   height is reduced and it's centered in the header row. */
+.peopleGroup + .peopleGroup::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 18px;
+  background: var(--ui-border-color, #d0d4e4);
 }
 
 /* People-column groups get a wider label→avatars gap than the date/time groups. */
 .peopleGroupAvatars {
   gap: 12px;
+}
+
+/* Header people fields ONLY: neutralize the shared PersonPicker trigger's own
+   horizontal padding + full-width centering (its base is padding: 3px 8px;
+   width: 100%; min-width: 56px; justify-content: center) so its avatar /
+   placeholder sits the SAME 12px from the divider as the plain-text תאריך/שעה
+   values — whose inline triggers already hug their content (padding:0). Scoped
+   via .peopleGroupAvatars so the shared picker stays untouched inside the
+   tables / modals. With the padding gone and the trigger hugging its content,
+   EVERY field — text and people alike — is an equal 12px from each divider, so
+   the row reads evenly: תאריך | שעה | מנהל | רשם דיון | משתתפים. Vertical size
+   (min-height) is left as-is, so the click target and the short centered divider
+   are unchanged. Read-only people fields already use PersonList's .expandTrigger
+   (padding:0), so read-only and edit modes now align identically. */
+.peopleGroupAvatars :global(.trigger) {
+  width: auto;
+  min-width: 0;
+  padding-inline: 0;
+  justify-content: flex-start;
+  /* Drop the trigger's 1px (transparent) border in the header too: it added ~1px
+     on each side, so the edit-mode avatar sat ~13px from its divider while the
+     read-only avatar and the plain-text תאריך/שעה values sit at exactly 12px.
+     Zeroing it makes the edit avatar's visible circle an exact 12px from the
+     divider — identical to a text glyph. (The bordered modal variant is a
+     separate class, untouched.) */
+  border-width: 0;
+}
+
+/* Vibe's AvatarGroup — used by the read-only PersonList and by the edit picker
+   whenever MORE than one person is selected — gives EVERY avatar, including the
+   FIRST, an inline-start negative margin (margin-inline-start: -8px) to build the
+   overlap stack. On the LEADING avatar that margin is pure residual whitespace:
+   it pulls the group's box off the visible circle, so the avatar's leading edge
+   no longer sits flush at the group's 12px padding (and it flips to the divider
+   side under LTR). Zero it on the FIRST avatar ONLY — later avatars keep their
+   overlap — so the visible circle's leading edge is an exact 12px from its
+   divider in BOTH read-only and edit modes, matching the label/text ends and
+   giving the group an even internal label↔avatars gap. Targeted via the stable
+   data-vibe attributes because the Vibe class names are content-hashed. Scoped
+   to .peopleGroupAvatars so the shared Avatar/AvatarGroup are untouched elsewhere. */
+.peopleGroupAvatars :global([data-vibe="AvatarGroup"]) > :global([data-vibe="Avatar"]):first-child {
+  margin-inline-start: 0;
 }
 
 /* Bold column-title label next to a group's avatars (title comes from the live
@@ -296,6 +471,19 @@
    reserve space so the avatars don't sit under it. */
 .participantsReserve {
   margin-inline-end: 48px;
+}
+
+/* Round 51 — CROWDED header (typically monday docked its Updates/item-card panel
+   beside the board view and narrowed the app iframe; toggled by DiscussionCard.jsx
+   when the header row would OVERFLOW — measured geometrically, not by a fixed px).
+   Hide the PEOPLE meta groups (מנהל / מרכז / משתתפים) and keep ONLY the date + time,
+   so the one-row header never crowds or overflows when space is tight. The people
+   groups use .peopleGroupAvatars; the date/time groups use .dateGroup and stay
+   visible. display:none also drops each hidden group's leading vertical divider (its
+   ::before is not rendered), so no stray separators remain. Desktop-only in
+   effect: the mobile phone layout renders the info popover, not this row. */
+.participantsNarrow .peopleGroupAvatars {
+  display: none;
 }
 
 /* Mobile info button + popover (replaces the inline date/participants). */
@@ -409,7 +597,17 @@
 
 .body {
   flex: 1;
-  overflow-y: auto;
+  /* min-height:0 lets this flex child shrink below its content so it becomes the
+     ONE bounded vertical scroll region inside the fixed card height (rather than
+     growing the card and spawning a second/outer scrollbar). */
+  min-height: 0;
+  /* Vertical scroll here is the single intended scroll region; overflow-x:hidden
+     guarantees NO app/view-level horizontal scrollbar — each data table owns its
+     OWN inner horizontal scroll (TasksTab .board, DecisionsTab .decBoard,
+     TopicsTab .sectionScroll, EffectivenessTab .taskStack), so nothing legitimately
+     needs to scroll horizontally at this level. (overflow-y:auto alone computes
+     overflow-x to auto, which is exactly the stray horizontal bar we must avoid.) */
+  overflow: hidden auto;
   /* Uniform top/bottom gap; horizontal spacing comes from the centered 90%
      content below, so the main frame is identical across every tab. */
   padding-block: var(--spacing-large, 24px);
@@ -445,4 +643,51 @@
   .tabPane {
     opacity: 0;
   }
+}
+
+
+/* Brief, non-blocking success ✓ shown centered (where the quick-create modal
+   was) right after a task/decision is created via QuickCreateModal. It fades in,
+   pops, then fades out on its own in ~1.2s — it never blocks the UI
+   (pointer-events: none) and needs no dismissal. Keyed by successKey in the JSX
+   so a rapid second create restarts this animation. Green uses the app's
+   --status-done token (same green as the "done" status fill). */
+.createSuccess {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 4300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: hsl(var(--status-done, 145 63% 42%));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  animation: createSuccessPop 1200ms ease forwards;
+}
+
+@keyframes createSuccessPop {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+  32%  { transform: translate(-50%, -50%) scale(1); }
+  72%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Respect reduced-motion: keep the same timing/fade but drop the scale pop. */
+@media (prefers-reduced-motion: reduce) {
+  .createSuccess {
+    animation: createSuccessFade 1200ms ease forwards;
+  }
+}
+@keyframes createSuccessFade {
+  0%   { opacity: 0; }
+  15%  { opacity: 1; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
 }

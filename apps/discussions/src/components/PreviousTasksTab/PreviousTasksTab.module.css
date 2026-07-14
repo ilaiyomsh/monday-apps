@@ -140,12 +140,6 @@
   width: 144px;
 }
 
-.skeletonStack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-small, 8px);
-}
-
 /* Single shared horizontal scroll for ALL groups (one scrollbar, they move
    together like a monday board) — see TasksTab for the rationale. */
 .board {

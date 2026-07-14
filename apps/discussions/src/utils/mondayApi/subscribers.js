@@ -34,7 +34,10 @@ export async function getAccountSlug() {
   try {
     const data = await api(`query { me { account { slug } } }`, {}, 'getAccountSlug');
     _accountSlug = data?.me?.account?.slug || null;
-  } catch {
+  } catch (err) {
+    logger.warn('subscribers', 'getAccountSlug failed — deep-links will fall back', {
+      error: err?.message,
+    });
     _accountSlug = null;
   }
   return _accountSlug;

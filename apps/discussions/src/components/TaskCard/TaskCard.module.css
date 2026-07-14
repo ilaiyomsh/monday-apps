@@ -56,27 +56,42 @@
   outline: none;
 }
 
+/* monday-native status picker: full-width rounded color pills (filled with each
+   label's real hex, white centered text), 6px gaps, 4px card padding, ~36px
+   option height — matches the Tasks/Decisions status pickers. */
 .statusMenu {
   display: flex;
   flex-direction: column;
-  min-width: 120px;
+  gap: 6px;
+  padding: 4px;
+  min-width: 160px;
 }
 
 .statusItem {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 10px;
   cursor: pointer;
   user-select: none;
   border-radius: var(--border-radius-small, 4px);
-  padding: var(--spacing-xs, 4px) var(--spacing-small, 8px);
-  font-size: var(--font-size-general-label, 14px);
-  color: var(--text-color, #323338);
+  font-size: 14px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-color-on-primary, #fff);
+  font-family: var(--font-family);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: filter 0.1s ease;
 }
 
 .statusItem:hover {
-  background-color: var(--primary-background-hover-color, #f5f6f8);
+  filter: brightness(0.95);
 }
 
 .statusItemSelected {
-  background-color: var(--primary-selected-color, #e6e9ef);
+  box-shadow: 0 0 0 2px var(--primary-color, #0073ea);
 }
 
 

@@ -1,10 +1,11 @@
 import React, { useMemo, useState, useEffect, useSyncExternalStore } from 'react';
 import { Checkbox, Text } from '@vibe/core';
-import { Comment, Note, Status, Settings, DropdownChevronDown } from '@vibe/icons';
+import { Comment, Note, Status, Completed, Settings, DropdownChevronDown } from '@vibe/icons';
 import {
   CAPABILITIES,
   DEFAULT_PERMISSION_SEED,
   DEFAULT_PERMISSIONS,
+  PERMISSION_ROLE_SOURCES,
 } from '../../utils/mondayApi/boards.config.js';
 import {
   getPeopleColumns,
@@ -55,7 +56,10 @@ function EyeOffIcon() {
 // `boardLabel` names the SOURCE board each role group's people-columns come from
 // (rendered as the group header in the sidebar). disc → the discussions board's
 // people columns (creator/lead/participants); task → the tasks board's people
-// columns (creator/responsible); system → global pseudo-roles (no board).
+// columns (creator/responsible); decision → the decisions board's role columns
+// (creator/decider/מושפעים — PERMISSION_ROLE_SOURCES.decisions, where the
+// "מושפעים"/affected people column is now a first-class role); system → global
+// pseudo-roles (no board).
 // "כללי" (system) is FIRST — it's the global pseudo-role, shown at the top with
 // no board-source header. Then the per-board tiers, whose roles are ALL the
 // board's mapped people columns (derived dynamically, see buildRoleGroups).
@@ -63,7 +67,11 @@ const TIERS = [
   { id: 'system', label: 'כללי', boardLabel: null },
   { id: 'disc', label: 'דיון', boardLabel: 'לוח דיונים' },
   { id: 'task', label: 'משימה', boardLabel: 'לוח משימות' },
+  { id: 'decision', label: 'החלטה', boardLabel: 'לוח החלטות' },
 ];
+
+// Which board's columns back each people-column tier (system is synthetic).
+const TIER_BOARD_KEY = { disc: 'discussions', task: 'tasks', decision: 'decisions' };
 
 // The system tier is NOT a people-column role; it is a single global pseudo-role
 // stored under this fixed key so its grants persist alongside the people roles.
@@ -77,10 +85,15 @@ const TIER_CARDS = {
     { group: 'discussion', title: 'דיון', Icon: Comment },
     { group: 'topics', title: 'נושאים ונקודות', Icon: Note },
     { group: 'tasks', title: 'משימות', Icon: Status },
+    { group: 'decisions', title: 'החלטות', Icon: Completed },
   ],
   task: [
     // ONE "שדות משימה" card; delete is just another row inside it.
     { group: 'taskFields', title: 'שדות משימה', Icon: Status },
+  ],
+  decision: [
+    // ONE "שדות החלטה" card, mirroring the task tier; delete is a row inside it.
+    { group: 'decisionFields', title: 'שדות החלטה', Icon: Completed },
   ],
   system: [
     { group: 'system', title: 'כללי', Icon: Settings },
@@ -110,11 +123,18 @@ function buildRoleGroups(columns) {
         roles: [{ key: SYSTEM_ROLE_KEY, boardKey: 'system', alias: 'system', title: SYSTEM_ROLE_TITLE }],
       };
     }
-    const boardKey = tier.id === 'disc' ? 'discussions' : 'tasks';
+    const boardKey = TIER_BOARD_KEY[tier.id];
     const cfg = columns?.[boardKey] || {};
-    // alias-by-columnId, to preserve alias keys for already-mapped columns.
+    // Only PERMISSION_ROLE_SOURCES aliases keep their alias key — that's what
+    // the resolver reads for mapped roles. Any OTHER live people column the owner
+    // added that isn't a designated role source is NOT an alias-role: the
+    // resolver treats it as an EXTRA live column keyed by raw column id, so the
+    // UI must too. (decisions' affectedID "מושפעים" is now a role source, so it
+    // keeps its alias key like creator/decider.)
+    const roleSources = PERMISSION_ROLE_SOURCES[boardKey] || [];
+    // alias-by-columnId, to preserve alias keys for already-mapped role columns.
     const aliasByColId = {};
-    for (const alias in cfg) if (cfg[alias]?.id) aliasByColId[cfg[alias].id] = alias;
+    for (const alias of roleSources) if (cfg[alias]?.id) aliasByColId[cfg[alias].id] = alias;
 
     const live = getPeopleColumns(boardKey);
     let roles;
@@ -126,8 +146,8 @@ function buildRoleGroups(columns) {
           : { key: `${boardKey}:${col.id}`, boardKey, alias: col.id, columnId: col.id, title: col.title || col.id };
       });
     } else {
-      // Pre-load fallback: mapped people columns from the settings schema.
-      roles = Object.keys(cfg)
+      // Pre-load fallback: mapped people ROLE columns from the settings schema.
+      roles = roleSources
         .filter((alias) => isPeopleType(cfg[alias]?.type))
         .map((alias) => ({ key: `${boardKey}:${alias}`, boardKey, alias, columnId: cfg[alias]?.id, title: cfg[alias]?.title || alias }));
     }
@@ -157,9 +177,23 @@ export default function PermissionsTab({ permissions, setPermissions, columns, s
   useEffect(() => {
     setPermissions((prev) => {
       const needsSeed = !prev?.roles || Object.keys(prev.roles).length === 0;
-      if (prev?.enabled === true && !needsSeed) return prev;
+      // Backfill: seed role keys that didn't exist when this instance first
+      // stored its roles (e.g. the decision tier's decisions:* roles, added
+      // after launch). Only WHOLLY-ABSENT keys are added — a role the owner
+      // ever touched (even to revoke everything) is never overwritten.
+      const missingSeedKeys = needsSeed
+        ? []
+        : Object.keys(DEFAULT_PERMISSION_SEED).filter((k) => !prev.roles[k]);
+      if (prev?.enabled === true && !needsSeed && !missingSeedKeys.length) return prev;
       const next = { ...DEFAULT_PERMISSIONS, ...prev, enabled: true };
-      if (needsSeed) next.roles = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED));
+      if (needsSeed) {
+        next.roles = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED));
+      } else if (missingSeedKeys.length) {
+        next.roles = { ...prev.roles };
+        for (const k of missingSeedKeys) {
+          next.roles[k] = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED[k]));
+        }
+      }
       return next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -195,7 +195,7 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
     clearSelection();
     const { undo } = softDeleteTasks(ids);
     const msg = ids.length === 1 ? 'המשימה נמחקה' : `${ids.length} משימות נמחקו`;
-    onNotify?.(msg, 'info', 6000, { label: 'בטל', onClick: undo });
+    onNotify?.(msg, 'success', 6000, { label: 'בטל', onClick: undo });
   };
 
   const switchMode = (mode) => {

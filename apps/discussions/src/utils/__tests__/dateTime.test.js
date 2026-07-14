@@ -1,7 +1,7 @@
 process.env.TZ = 'Asia/Jerusalem';
 
 import { describe, it, expect } from 'vitest';
-import { localYmd, composeLocalDate, toDateInput, toTimeInput } from '../dateTime.js';
+import { localYmd, composeLocalDate, toDateInput, toTimeInput, buildMonthOptions } from '../dateTime.js';
 
 describe('localYmd', () => {
   it('pads month and day', () => {
@@ -51,5 +51,30 @@ describe('toTimeInput', () => {
     // A clone loses the flag — must yield '' rather than a fake 00:00.
     expect(toTimeInput(new Date(timed))).toBe('');
     expect(toTimeInput(null)).toBe('');
+  });
+});
+
+
+describe('buildMonthOptions', () => {
+  // Fixed "now" = 15 July 2026 (month index 6) so the test never depends on the
+  // real current date.
+  const now = new Date(2026, 6, 15);
+
+  it('offers a FUTURE month that has a discussion (selectable before it arrives)', () => {
+    const opts = buildMonthOptions(['2026-08', '2026-07', '2026-05'], now);
+    const values = opts.map((o) => o.value);
+    expect(values).toContain('2026-08'); // future month is offered
+    // Newest-first (descending), so the future month sits at the top.
+    expect(values).toEqual(['2026-08', '2026-07', '2026-05']);
+    expect(opts[0].label).toBe('אוגוסט 2026');
+  });
+
+  it('always includes the current month, even with no discussions', () => {
+    expect(buildMonthOptions([], now)).toEqual([{ value: '2026-07', label: 'יולי 2026' }]);
+  });
+
+  it('unions-in the current month (deduped) and keeps newest-first order', () => {
+    const opts = buildMonthOptions(['2026-05', '2026-09'], now);
+    expect(opts.map((o) => o.value)).toEqual(['2026-09', '2026-07', '2026-05']);
   });
 });

@@ -1,5 +1,12 @@
-import '@testing-library/jest-dom/vitest';
-import { vi } from 'vitest';
+// Register jest-dom matchers on THIS app's vitest expect explicitly.
+// The '@testing-library/jest-dom/vitest' entry imports 'vitest' from the
+// package's own resolution context; in the pnpm monorepo that resolves to a
+// hoisted vitest 4.x while these tests run vitest 3.x, so the matchers land
+// on the wrong expect instance ("Invalid Chai property: toBeInTheDocument").
+import * as jestDomMatchers from '@testing-library/jest-dom/matchers';
+import { expect, vi } from 'vitest';
+
+expect.extend(jestDomMatchers);
 import './i18n'; // init i18next before components that use useTranslation render
 
 // jsdom doesn't implement matchMedia; stub it for components that read it.

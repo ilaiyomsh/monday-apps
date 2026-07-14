@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
-import { CloseSmall, Update } from '@vibe/icons';
+import { CloseSmall, Update, Edit } from '@vibe/icons';
 import { Trash2, Check, X } from 'lucide-react';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -8,7 +8,7 @@ import { PersonList } from '@generated/components/PersonAvatar';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { monday } from '@api/monday-client.js';
+import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import grid from '../TaskTable/TaskTable.module.css';
 import styles from './TaskTableRow.module.css';
 
@@ -19,9 +19,11 @@ const NEUTRAL = 'hsl(var(--status-default))';
 // same presentation as the task card from My Tasks. Without a kind (default
 // 'columns') the same call opened as a centered modal; the kind, not the item's
 // board, is what drives panel-vs-modal here.
+// Open the item card via the shared helper. monday's SDK has no programmatic
+// close (see utils/itemCard.js), so every click reliably (re)opens — open-only.
 function openItemCard(itemId) {
   if (!itemId) return;
-  monday.execute('openItemCard', { itemId: Number(itemId), kind: 'updates' });
+  openOrToggleItemCard(itemId);
 }
 
 // Show the task's creation date from monday's built-in created_at — an ISO
@@ -44,6 +46,10 @@ export function TaskTableRow({
   onDeadlineChange,
   onRenameTask,
   onDeleteTask,
+  // Optimistic-create error affordance (a temp row whose create failed): retry
+  // re-runs the create; dismiss removes the row locally. Provided by TaskTable.
+  onRetryCreate,
+  onDismissRow,
   selectable = false,
   selected = false,
   onToggleSelect,
@@ -58,6 +64,12 @@ export function TaskTableRow({
   // When provided (and the row is read-only, i.e. no inline rename), clicking the
   // task name opens its item card via this callback (Previous-tasks tab → Updates).
   onOpenCard,
+  // Whole-row drag-reorder (native monday feel) — supplied by TaskTable when
+  // reordering is enabled. `dragRef`/`dragProps` ride on the row root; `dragStyle`
+  // merges the sortable transform into rowStyle. Omitted → the row isn't draggable.
+  dragRef,
+  dragStyle,
+  dragProps,
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
   // Label pickers open UPWARD by default (video feedback #4); computeFloatingPosition
@@ -70,11 +82,13 @@ export function TaskTableRow({
   const [editingName, setEditingName] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [nameDraft, setNameDraft] = useState(task.name || '');
-  // While a freshly-created task still carries its optimistic `temp-…` id, the
-  // real monday item doesn't exist yet — any column write would target a bogus
-  // id and fail. Lock the row (faded + non-interactive) until createTask swaps
-  // in the server id.
+  // A freshly-added task still carrying a `temp-…` id has no monday item yet, but
+  // it is FULLY EDITABLE right away — edits are queued in useTasks and flushed the
+  // moment the real id arrives. `pending` now only drives aria-busy (no locking).
   const pending = String(task.id).startsWith('temp-');
+  // The background create failed: keep the row (never silently drop it) and show
+  // a clear error + retry/dismiss affordance instead of a blocked/faded row.
+  const failed = task._createFailed === true;
   const deadline = task.deadlineID;
   const { options: statusOptions, colorById, labelById, doneId } = useStatusOptions();
   // Priority is a second status column (priorityID); read-only here. Its maps are
@@ -167,6 +181,20 @@ export function TaskTableRow({
               }}
               onBlur={saveName}
             />
+          ) : onOpenCard ? (
+            // When the row can open a card (Previous-tasks tab), the NAME opens
+            // the card and the hover pencil below does the rename (mirrors
+            // MyTasksRow). onRenameTask alone (Tasks tab, no onOpenCard) keeps the
+            // name-as-rename click too.
+            <button
+              type="button"
+              className={styles.nameBtn}
+              onClick={(e) => { e.stopPropagation(); onOpenCard(task.id); }}
+              title={nameTitle}
+              aria-label={`פתח כרטיס משימה: ${task.name}`}
+            >
+              {task.name}
+            </button>
           ) : onRenameTask ? (
             <button
               type="button"
@@ -177,18 +205,21 @@ export function TaskTableRow({
             >
               {task.name}
             </button>
-          ) : onOpenCard ? (
-            <button
-              type="button"
-              className={styles.nameBtn}
-              onClick={(e) => { e.stopPropagation(); onOpenCard(task.id); }}
-              title={nameTitle}
-              aria-label={`פתח כרטיס משימה: ${task.name}`}
-            >
-              {task.name}
-            </button>
           ) : (
             <span className={styles.nameText} title={nameTitle}>{task.name}</span>
+          )}
+          {/* Hover rename pencil — the same inline-rename affordance as clicking
+              the name, made explicit + discoverable on every row (like MyTasksRow). */}
+          {onRenameTask && !editingName && (
+            <button
+              type="button"
+              className={styles.renameBtn}
+              title="עריכת שם"
+              aria-label={`ערוך שם משימה: ${task.name}`}
+              onClick={(e) => { e.stopPropagation(); startEditName(); }}
+            >
+              <Edit size={16} />
+            </button>
           )}
           {onDeleteTask && (
             confirmDel ? (
@@ -225,6 +256,31 @@ export function TaskTableRow({
               </button>
             )
           )}
+          {failed && (
+            <span className={styles.createFailedActions} onClick={(e) => e.stopPropagation()}>
+              <span className={styles.createFailedText}>שמירה נכשלה</span>
+              {onRetryCreate && (
+                <button
+                  type="button"
+                  className={styles.retryBtn}
+                  onClick={(e) => { e.stopPropagation(); onRetryCreate(task.id); }}
+                >
+                  נסה שוב
+                </button>
+              )}
+              {onDismissRow && (
+                <button
+                  type="button"
+                  className={styles.dismissBtn}
+                  onClick={(e) => { e.stopPropagation(); onDismissRow(task.id); }}
+                  aria-label="הסר שורה"
+                  title="הסר"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </span>
+          )}
           {/* monday "updates" icon — opens the task's item card on the Updates pane */}
           <button
             type="button"
@@ -248,6 +304,7 @@ export function TaskTableRow({
               onChange={(p) => onAssigneeChange(task.id, p)}
               closeOnSelect
               single
+              boardKey="tasks"
             />
           ) : (
             <PersonList people={task.responsibilityID} size="sm" showNames max={2} />
@@ -293,7 +350,7 @@ export function TaskTableRow({
             onDialogDidShow={() => { updateStatusPosition(); setStatusOpen(true); }}
             onDialogDidHide={() => setStatusOpen(false)}
             position={statusPosition}
-            zIndex={1000}
+            zIndex={10000}
             content={() => (
               <DialogContentContainer>
                 <div className={styles.statusMenu}>
@@ -344,7 +401,7 @@ export function TaskTableRow({
               onDialogDidShow={() => { updatePriorityPosition(); setPriorityOpen(true); }}
               onDialogDidHide={() => setPriorityOpen(false)}
               position={priorityPosition}
-              zIndex={1000}
+              zIndex={10000}
               content={() => (
                 <DialogContentContainer>
                   <div className={styles.statusMenu}>
@@ -421,9 +478,11 @@ export function TaskTableRow({
 
   return (
     <div
-      className={`${grid.taskRow} ${styles.bodyRow} ${pending ? styles.pending : ''}`}
-      style={rowStyle}
-      aria-busy={pending || undefined}
+      ref={dragRef}
+      className={`${grid.taskRow} ${styles.bodyRow} ${failed ? styles.createFailed : ''} ${dragProps ? styles.draggableRow : ''}`}
+      style={dragStyle ? { ...rowStyle, ...dragStyle } : rowStyle}
+      aria-busy={(pending && !failed) || undefined}
+      {...(dragProps || {})}
     >
       {orderedKeys.map((k) => cellByKey[k]).filter(Boolean)}
     </div>

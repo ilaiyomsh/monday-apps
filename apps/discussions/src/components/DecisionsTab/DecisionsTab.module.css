@@ -1,0 +1,640 @@
+/* Decisions tab — monday board-style table (mirrors TaskTable/TasksTab chrome).
+   NOTE: class names are GLOBAL in tests (classNameStrategy: 'non-scoped') and
+   HASHED in prod, so everything here is dec-prefixed to avoid collisions and no
+   selector reaches into another module's classes.
+   The purple #6b4ee6 accent is the decisions CHROME color from the approved
+   mockup (accents only — status/priority DATA colors always come from the
+   mapped columns via useStatusOptions). */
+
+.decisionsRoot {
+  display: flex;
+  flex-direction: column;
+  /* Tightened inter-element gap (was 16px) — halved to match the Topics tab
+     and stay proportional to the 14px table text. */
+  gap: var(--spacing-small, 8px);
+  /* Same full-bleed layout as TasksTab: left inset keeps the toolbar off the
+     edge, the board bleeds right so row separators run to the right edge. */
+  width: 100%;
+  padding-inline-start: 28px;
+  padding-inline-end: 0;
+  box-sizing: border-box;
+}
+
+.decSkeletonStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 4px);
+}
+
+/* Toolbar layout mirrors the Tasks tab's .toolbar EXACTLY: a single flex-start
+   cluster so the primary button and the Filter + Group-by controls pack together
+   at the start (was space-between + width:100%, which pushed the controls to the
+   far end). */
+.decToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacing-small, 8px);
+}
+.decToolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+}
+/* Filter + Group by + collapse-all cluster (monday-style pills) — mirrors the
+   Tasks tab's .toolbarRight exactly (same classes/order/spacing; inherits the
+   page direction with no dir override, so both toolbars render identically). */
+.decToolbarRight {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+}
+
+/* Grouped view — one section per group: a sticky group title row above its
+   table box (same chrome as the Tasks / Previous tabs). */
+.decGroup {
+  display: flex;
+  flex-direction: column;
+}
+.decGroup + .decGroup {
+  margin-top: 20px;
+}
+.decGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: max-content;
+  margin-bottom: 10px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.decGroupChevron {
+  width: 24px;
+  height: 24px;
+  color: var(--secondary-text-color, #676879);
+  transition: transform var(--motion-productive-short, 0.15s) ease;
+}
+.decGroupChevronCollapsed {
+  transform: rotate(-90deg);
+}
+.decGroupTitle {
+  font-size: 18px;
+  font-weight: 500;
+  font-variation-settings: 'wght' 500;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+}
+
+/* Unmapped decisions board — expected state, not an error. */
+.decEmptyState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  margin-inline-end: 28px;
+  border: 1px dashed var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-medium, 8px);
+  background: var(--primary-background-color, #fff);
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+  font-family: var(--font-family);
+  text-align: center;
+  padding: 16px;
+}
+
+/* Shared horizontal scroll owner (mirrors TasksTab .board): LTR so the table
+   anchors LEFT (accent strip + name on the left) and separators run right. */
+.decBoard {
+  overflow: auto hidden;
+  width: 100%;
+  direction: ltr;
+}
+
+/* Bounded + rounded on the LEFT, OPEN on the right (no right border) so the
+   row separators run to the edge — same shape as TaskTable. */
+.decTable {
+  width: max-content;
+  min-width: 100%;
+  background: #ffffff;
+  border: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-inline-end: none;
+  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
+  font-family: var(--font-family);
+  direction: ltr;
+}
+
+/* Header + body share ONE grid template, supplied INLINE by useColumnWidths
+   (owner-resizable, 'decisions' tableId): החלטה | מחליט | מושפעים | סטאטוס | תאריך
+   (עדיפות removed). 36px rows to match the Tasks/Topics tables. No static
+   grid-template-columns here — the inline rowStyle is authoritative. */
+.decRow {
+  display: grid;
+  align-items: stretch;
+  min-height: 36px;
+  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  position: relative;
+}
+
+.decBodyRow {
+  transition: background-color var(--motion-productive-short, 0.1s) ease;
+}
+.decBodyRow:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+/* The frozen leading name cell is opaque, so its hover background must be set
+   explicitly — otherwise it stays white while the rest of the row highlights.
+   Composite the (possibly semi-transparent) hover token OVER solid white so the
+   frozen cell stays opaque (scrolled cells can't bleed through). Same technique
+   as TaskTableRow's `.bodyRow:hover .name`. */
+.decBodyRow:hover .decNameCell {
+  background-color: #ffffff;
+  background-image: linear-gradient(
+    var(--primary-background-hover-color, #f5f6f8),
+    var(--primary-background-hover-color, #f5f6f8)
+  );
+}
+
+/* Failed optimistic create: the row stays EDITABLE (no lock/fade) but is marked
+   clearly — a red name-cell accent + tint plus an inline retry/dismiss affordance
+   (the red label/buttons live in the name cell, so the error reads even where the
+   frozen cell is opaque). */
+.decCreateFailed {
+  background: var(--negative-color-selected, #fce9ec);
+}
+.decCreateFailed .decNameCell {
+  background: var(--negative-color-selected, #fce9ec);
+  box-shadow: inset 6px 0 0 var(--negative-color, #d83a52);
+}
+.decCreateFailedActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.decCreateFailedText {
+  font-size: 12px;
+  color: var(--negative-color, #d83a52);
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.decRetryBtn {
+  border: 1px solid var(--negative-color, #d83a52);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--negative-color, #d83a52);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.decRetryBtn:hover {
+  background: var(--negative-color, #d83a52);
+  color: #ffffff;
+}
+.decDismissBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.decDismissBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--negative-color, #d83a52);
+}
+
+/* Cell chrome mirrors TaskTable's .taskCell: centered, 0 8px padding, 14px text,
+   0.625px trailing column rule, 36px min-height. */
+.decCell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 8px;
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  font-size: 14px;
+  color: var(--primary-text-color, #323338);
+  overflow: hidden;
+  font-family: var(--font-family);
+}
+
+.decHeadCell {
+  font-size: 14px;
+  color: var(--primary-text-color, #323338);
+}
+
+.decNameHead {
+  justify-content: flex-start;
+  padding: 0 14px;
+  /* FROZEN name header — sticky/opaque so it pins during horizontal scroll and
+     hosts the resize handle (its own positioning context), mirroring
+     TaskTable's frozen `.taskFirst`. Header frozen cell stacks above the body
+     frozen cells (z-index 3 vs 2). Purple accent strip rounds at the TOP-left to
+     follow the table's rounded-left outer border (matches TaskTable's S2). */
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #ffffff;
+  box-shadow: inset 6px 0 0 #6b4ee6;
+  border-start-start-radius: var(--border-radius-medium, 8px);
+}
+
+/* החלטה cell — FROZEN leading name cell (sticky at left:0, opaque so scrolled
+   cells don't bleed through), inset purple accent bar (decisions chrome color).
+   Mirrors TaskTable's frozen `.taskFirst`: this is what makes a decision row
+   read like a real monday item (pinned name column with the group-color strip). */
+.decNameCell {
+  justify-content: flex-start;
+  gap: 6px;
+  padding-inline-start: 14px;
+  padding-inline-end: 8px;
+  box-shadow: inset 6px 0 0 #6b4ee6;
+  overflow: hidden;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #ffffff;
+}
+/* When a decision row is the LAST child (no add-row — read-only viewer), its
+   frozen name cell rounds the strip at the BOTTOM-left to follow the table's
+   rounded-left bottom border (mirrors TaskTable's `.taskRow:last-child
+   .taskFirst`). With an add-row present the last .decBodyRow isn't :last-child,
+   so this is inert and the add-row's own rounded strip closes the box. */
+.decRow:last-child .decNameCell {
+  border-end-start-radius: var(--border-radius-medium, 8px);
+}
+
+.decNameText,
+.decNameBtn {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 36px; /* match row height */
+  color: var(--primary-text-color, #323338);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family);
+  text-align: start;
+}
+.decNameBtn {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.decNameInput {
+  width: 100%;
+  min-width: 0;
+  font-size: 14px;
+  padding: 2px 6px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  box-sizing: border-box;
+  font-family: var(--font-family);
+}
+.decNameInput:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+/* monday "updates" speech-bubble icon at the trailing edge of the name cell —
+   same values as TaskTableRow's .updatesBtn (dec-prefixed per this module's
+   non-scoped naming) so the Decisions item name matches the Tasks item name.
+   Shown at rest (not hover-only), exactly like the Tasks affordance. */
+.decUpdatesBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.decUpdatesBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+
+/* Rename pencil — hover-revealed near the name (mirrors the tasks pencil).
+   Shown only when the row is renamable; triggers the same inline rename as
+   clicking the name. */
+.decRenameBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease, background-color 0.1s ease, color 0.1s ease;
+}
+.decBodyRow:hover .decRenameBtn,
+.decRenameBtn:focus-visible {
+  opacity: 1;
+}
+.decRenameBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+
+.decMuted {
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+}
+
+/* סטאטוס — full-fill cell (monday native): the trigger/fill spans the cell. */
+.decStatusCell {
+  padding: 0;
+  align-items: stretch;
+}
+.decFillTrigger {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.decFill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 36px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.decFillEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  color: var(--secondary-text-color, #676879);
+  font-size: 13px;
+  font-family: var(--font-family);
+}
+
+/* עדיפות — compact pill (mockup: 100×26, radius 4). */
+.decPillTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.decPill {
+  width: 100px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--ui-background-color, #eceef3);
+  color: var(--secondary-text-color, #676879);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.decPillFilled {
+  color: #ffffff;
+}
+
+/* Shared picker menu (status + priority) — RTL Hebrew labels. */
+.decMenu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px;
+  width: 160px;
+  direction: rtl;
+}
+.decMenuOption {
+  height: 36px;
+  border: none;
+  border-radius: 4px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: var(--font-family);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.decMenuOption:hover {
+  filter: brightness(0.92);
+}
+
+/* Read-only empty table hint (only when the user can't add decisions). */
+.decEmptyRow {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+  font-family: var(--font-family);
+  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+}
+.decEmptyRow:last-child {
+  border-bottom: none;
+}
+
+/* "+ הוסף החלטה" bottom row — half-opacity purple accent, rounded bottom-left. */
+.decAddRow {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 36px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #9699a6);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: start;
+  font-family: var(--font-family);
+}
+.decAddRow:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+.decAddRowInner {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  padding-inline-start: 18px;
+  box-shadow: inset 6px 0 0 rgba(107, 78, 230, 0.5);
+  align-self: stretch;
+  border-end-start-radius: var(--border-radius-medium, 8px);
+}
+/* Inline add-row: leading + icon and a borderless, transparent text input that
+   inherits the row font (native monday "add item" feel). */
+.decAddIcon {
+  flex-shrink: 0;
+  margin-inline-end: 6px;
+  color: var(--secondary-text-color, #9699a6);
+}
+.decAddInput {
+  flex: 1;
+  min-width: 200px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  padding: 0;
+}
+.decAddInput::placeholder {
+  color: var(--placeholder-color, #9699a6);
+}
+
+
+/* ---- Round 7: multi-select checkbox column + whole-row drag + action bar ---- */
+
+/* Selection checkbox cell (leading, pinned) — a 40px square against the 36px row,
+   frozen at left:0 so it pins during horizontal scroll (mirrors TaskTable's
+   .selectCell). Hosts the purple group strip so it travels with the frozen col. */
+.decSelectCell {
+  justify-content: center;
+  padding: 0;
+}
+.decSelectable .decSelectCell {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #ffffff;
+  box-shadow: inset 6px 0 0 #6b4ee6;
+}
+.decSelectable .decHead .decSelectCell {
+  z-index: 3; /* header frozen cell stacks above body frozen cells */
+}
+.decSelectable .decSelectCell > label {
+  margin: 0;
+  transform: translateX(2px);
+}
+.decSelectable .decSelectCell > label > :last-child {
+  margin-inline-start: 0;
+}
+/* With the checkbox present the name cell is no longer the leading column — pin
+   it right after the frozen 40px checkbox and drop its own strip (the checkbox
+   carries it). */
+.decSelectable .decNameCell,
+.decSelectable .decNameHead {
+  left: 40px;
+  box-shadow: none;
+}
+/* Round the table's top-leading corner (S2) — matches the Topics (.sectionBody)
+   and Tasks (.taskTable) tables. The non-selectable layout already rounds it via
+   .decNameHead's border-start-start-radius; in SELECT mode the frozen leading
+   cell is the checkbox, so round ITS top-inline-start corner too — otherwise its
+   square white/purple-strip corner fills the rounded table top and the Decisions
+   table top reads square (unlike Topics/Tasks). Mirrors TaskTable's
+   `.taskHead .taskFirst, .taskHead .selectCell { border-start-start-radius }`. */
+.decSelectable .decHead .decSelectCell {
+  border-start-start-radius: var(--border-radius-medium, 8px);
+}
+
+/* Whole-row drag-reorder — the entire body row is the grab handle when enabled
+   (see SortableRow + useRowOrder). A plain click still edits a cell (dnd-kit's
+   ~8px activation distance). */
+.decDraggable {
+  cursor: grab;
+  touch-action: none;
+}
+.decDraggable:active {
+  cursor: grabbing;
+}
+
+/* Floating bulk-action bar — appears when ≥1 decision is selected. Same chrome
+   as TasksTab's action bar (kept aligned per the app's multi-select convention). */
+.decActionBar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+.decActionBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding-inline-end: 2px;
+}
+.decActionBarCenter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 2px;
+}
+.decActionBarRight {
+  display: flex;
+  align-items: center;
+  padding-inline-start: 2px;
+}
+.decCloseSelectionBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.decCloseSelectionBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}

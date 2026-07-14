@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Checkbox } from '@vibe/core';
 import { MyTasksRow } from './MyTasksRow.jsx';
@@ -26,6 +26,11 @@ export function MyTasksTable({
   tasks,
   color,
   canManageSettings = false,
+  // Hidden columns (round 46): a Set (or array) of column keys to hide. Applied
+  // at the final render layer only — column order/width persistence is untouched,
+  // so a hidden column keeps its stored position/width and returns in place when
+  // re-shown. The primary name column is never hideable.
+  hiddenColumns,
   onStatusChange,
   onPriorityChange,
   onNotesChange,
@@ -38,6 +43,13 @@ export function MyTasksTable({
   // Inline "+ הוסף משימה" footer row (same as TasksTab). When provided, a click
   // creates a task IMMEDIATELY, seeded with this group's status/priority.
   onAddTask,
+  // Inline "new task" draft row pinned as the FIRST row of this table (top of
+  // the topmost group). When provided, its name cell is a focused, pre-selected
+  // text input: typing + Enter (or blur) commits via onCommit(name); Escape
+  // discards via onCancel(). Only the topmost group receives this (from the blue
+  // "משימה חדשה" toolbar button) — it is what makes a new task appear at the very
+  // top in edit mode, instead of being created with a fixed name at the bottom.
+  newTaskRow = null,
   // Selection (mirrors TaskTable). 'sel' is a FIXED 36px leading track pinned
   // first — deliberately kept OUT of useColumnOrder/useColumnWidths persistence
   // so it can never be reordered away or stored.
@@ -69,13 +81,18 @@ export function MyTasksTable({
   // cell render order from the SAME ordered list so they can never drift.
   const defsByKey = Object.fromEntries(baseDefs.map((d) => [d.key, d]));
   const { order, reorder } = useColumnOrder('myTasks', baseDefs.map((d) => d.key));
-  const defs = order.map((k) => defsByKey[k]).filter(Boolean);
+
+  // Drop hidden columns from the render list (name is never hideable). Kept OUT
+  // of useColumnOrder/useColumnWidths so persisted order + widths are preserved.
+  const hidden = hiddenColumns instanceof Set ? hiddenColumns : new Set(hiddenColumns || []);
+  const visibleOrder = order.filter((k) => k === 'name' || !hidden.has(k));
+  const defs = visibleOrder.map((k) => defsByKey[k]).filter(Boolean);
 
   // 'sel' is a fixed leading track, prepended ONLY for rendering + width
   // measurement — never fed to useColumnOrder (so it can't be persisted or
   // reordered) and skipped by startResize (fixed defs are non-resizable).
   const selDef = selectable ? [{ key: 'sel', fixed: 36 }] : [];
-  const renderKeys = selectable ? ['sel', ...order] : order;
+  const renderKeys = selectable ? ['sel', ...visibleOrder] : visibleOrder;
 
   const { gridTemplate, startResize } = useColumnWidths('myTasks', [...selDef, ...defs]);
   // On phones, ignore the (desktop) resizable px widths and use a compact fixed
@@ -108,8 +125,9 @@ export function MyTasksTable({
     notes: t('myTasks.colNotes'),
     discussion: t('myTasks.colDiscussion'),
   };
-  // Movable column ids = everything except the frozen, pinned-first name column.
-  const movableIds = order.filter((k) => k !== 'name');
+  // Movable column ids = every VISIBLE column except the frozen, pinned-first
+  // name column (hidden columns aren't rendered, so they can't be dragged).
+  const movableIds = visibleOrder.filter((k) => k !== 'name');
   const renderHeaderCell = (key) => {
     if (key === 'sel') {
       return (
@@ -154,6 +172,16 @@ export function MyTasksTable({
           </ColumnHeaderDnd>
         </div>
 
+        {newTaskRow ? (
+          <NewTaskDraftRow
+            columns={renderKeys}
+            rowStyle={rowStyle}
+            defaultName={newTaskRow.defaultName}
+            onCommit={newTaskRow.onCommit}
+            onCancel={newTaskRow.onCancel}
+          />
+        ) : null}
+
         {tasks.map((task) => (
           <MyTasksRow
             key={task.id}
@@ -181,6 +209,59 @@ export function MyTasksTable({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// Inline "new task" draft row (rendered as the FIRST row of the topmost group).
+// Mirrors a body row's grid: every cell is empty except NAME, which holds a text
+// input focused with its text pre-SELECTED on mount — so the user types the name
+// immediately (first keystroke replaces the default) and Enter commits, creating
+// the task. Blur commits too; Escape discards. The `done` guard makes the three
+// exits mutually exclusive so Enter/blur can't double-fire a create. Mirrors the
+// in-discussion TaskTable inline add-row + the MyTasksRow rename input.
+function NewTaskDraftRow({ columns, rowStyle, defaultName, onCommit, onCancel }) {
+  const inputRef = useRef(null);
+  const done = useRef(false);
+  useEffect(() => {
+    const el = inputRef.current;
+    if (el) { el.focus(); el.select(); }
+  }, []);
+  const commit = () => {
+    if (done.current) return;
+    done.current = true;
+    onCommit?.(inputRef.current ? inputRef.current.value : '');
+  };
+  const cancel = () => {
+    if (done.current) return;
+    done.current = true;
+    onCancel?.();
+  };
+  return (
+    <div className={`${styles.taskRow} ${styles.newRow}`} style={rowStyle}>
+      {columns.map((key) => {
+        if (key === 'name') {
+          return (
+            <div key="name" className={`${styles.taskCell} ${styles.taskFirst}`}>
+              <input
+                ref={inputRef}
+                className={styles.newNameInput}
+                defaultValue={defaultName}
+                aria-label="שם משימה חדשה"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                  if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+                }}
+                onBlur={commit}
+              />
+            </div>
+          );
+        }
+        if (key === 'sel') {
+          return <div key="sel" className={`${styles.taskCell} ${styles.selectCell}`} />;
+        }
+        return <div key={key} className={styles.taskCell} />;
+      })}
     </div>
   );
 }

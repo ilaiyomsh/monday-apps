@@ -77,13 +77,20 @@ function labelSignature(labels = []) {
 }
 
 /**
- * Detect whether a board status column is backed by an account managed column,
- * returning that managed column's UUID (or null if it's a regular column).
- * Matches by the exact ACTIVE label set (ids + texts) — strong enough to
- * disambiguate columns that merely share a title. Best-effort: returns null on
- * any API failure so the caller falls back to the regular board-level path.
+ * Detect whether a board status/dropdown column is backed by an account managed
+ * column, returning that managed column's UUID (or null if it's a regular
+ * column). Matches by the exact ACTIVE label set (ids + texts) — strong enough
+ * to disambiguate columns that merely share a title. Best-effort: returns null
+ * on any API failure so the caller falls back to the regular board-level path.
+ *
+ * @param {string|number} boardId
+ * @param {string} colId
+ * @param {{ type?: 'dropdown'|'color' }} [opts] when `type` is given, only
+ *   managed columns whose settings_json.type equals it are candidates — the
+ *   real account has managed columns of BOTH types named "סוג דיון", and the
+ *   dropdown/status update mutations are not interchangeable.
  */
-export async function detectManagedColumnId(boardId, colId) {
+export async function detectManagedColumnId(boardId, colId, opts = {}) {
   if (!boardId || !colId) return null;
   try {
     const colData = await api(
@@ -103,7 +110,10 @@ export async function detectManagedColumnId(boardId, colId) {
       'detectManagedColumnId.list'
     );
     const managed = mcData?.managed_column || [];
-    const matches = managed.filter(
+    const candidates = opts?.type
+      ? managed.filter((m) => m?.settings_json?.type === opts.type)
+      : managed;
+    const matches = candidates.filter(
       (m) => labelSignature(m?.settings_json?.labels || []) === boardSig
     );
     if (matches.length === 1) return String(matches[0].id);
@@ -117,6 +127,154 @@ export async function detectManagedColumnId(boardId, colId) {
     logger.warn('managedColumns', 'detectManagedColumnId failed — treating as regular', err);
     return null;
   }
+}
+
+/** Parse a dropdown column's `settings_str` labels into [{id,label,is_deactivated}].
+ *  `labels` may be an object map ({ "1":"כספים" }) or an array of {id,label|name}. */
+function labelsFromSettingsStr(settingsStr) {
+  let s;
+  try {
+    s = JSON.parse(settingsStr || '{}');
+  } catch {
+    return [];
+  }
+  const labels = s?.labels;
+  if (!labels) return [];
+  if (Array.isArray(labels)) {
+    return labels.map((l) => ({ id: l.id, label: l.label ?? l.name ?? '', is_deactivated: l.is_deactivated }));
+  }
+  return Object.entries(labels).map(([id, v]) => ({
+    id: Number.isNaN(Number(id)) ? id : Number(id),
+    label: typeof v === 'string' ? v : (v?.name ?? v?.label ?? ''),
+  }));
+}
+
+/** Board dropdown column → normalized ACTIVE labels [{id,label}] from the typed
+ *  `settings.labels` array if present, else from `settings_str`. Empty and
+ *  deactivated labels are dropped so the signature reflects only real options. */
+function dropdownBoardLabels(col) {
+  if (!col) return [];
+  const typed = Array.isArray(col.settings?.labels) ? col.settings.labels : null;
+  const raw = typed
+    ? typed.map((l) => ({ id: l.id, label: l.label ?? l.name ?? '', is_deactivated: l.is_deactivated }))
+    : labelsFromSettingsStr(col.settings_str);
+  return raw.filter((l) => !l.is_deactivated && (l.label ?? '').trim() !== '');
+}
+
+/**
+ * Detect the account managed DROPDOWN column backing a board dropdown column,
+ * returning its UUID (or null). The dropdown analog of detectManagedColumnId,
+ * but MORE ROBUST about reading the board column's labels: a board dropdown
+ * exposes them as a typed `settings.labels` array AND/OR inside `settings_str`
+ * (`{"labels":{"1":"כספים",...}}` — an object map, or an array), so we read
+ * whichever is populated (detection works even when the typed array is empty).
+ * Matches by the exact ACTIVE label signature against account managed columns of
+ * type 'dropdown'. Exactly one match → its id; 0 or >1 → null (warn on >1).
+ * Best-effort: returns null on any error so the caller falls back to regular.
+ *
+ * @param {string|number} boardId
+ * @param {string} colId
+ * @returns {Promise<string|null>}
+ */
+export async function detectManagedDropdownColumnId(boardId, colId) {
+  if (!boardId || !colId) return null;
+  try {
+    const colData = await api(
+      `query ($boardId: [ID!], $colIds: [String!]) {
+         boards(ids: $boardId) { columns(ids: $colIds) { id settings settings_str } }
+       }`,
+      { boardId: [String(boardId)], colIds: [String(colId)] },
+      'detectManagedDropdownColumnId.column'
+    );
+    const boardLabels = dropdownBoardLabels(colData?.boards?.[0]?.columns?.[0]);
+    if (!boardLabels.length) return null;
+    const boardSig = labelSignature(boardLabels);
+
+    const mcData = await api(
+      `query { managed_column(state: active) { id settings_json } }`,
+      {},
+      'detectManagedDropdownColumnId.list'
+    );
+    const managed = (mcData?.managed_column || []).filter((m) => m?.settings_json?.type === 'dropdown');
+    const matches = managed.filter((m) => labelSignature(m?.settings_json?.labels || []) === boardSig);
+    if (matches.length === 1) return String(matches[0].id);
+    if (matches.length > 1) {
+      logger.warn('managedColumns', 'ambiguous managed-dropdown label match — treating as regular', {
+        colId, count: matches.length,
+      });
+    }
+    return null;
+  } catch (err) {
+    logger.warn('managedColumns', 'detectManagedDropdownColumnId failed — treating as regular', err);
+    return null;
+  }
+}
+
+/**
+ * Add a new label to an account managed DROPDOWN column via
+ * update_dropdown_managed_column — the dropdown sibling of
+ * addManagedStatusLabel. Dropdown labels carry NO color/index/is_done — the
+ * update input is only { id?, label, is_deactivated? }.
+ *
+ * Behavior contract:
+ * - Throws Error('addManagedDropdownLabel: missing managedColumnId/title')
+ *   when managedColumnId is falsy or title trims to ''.
+ * - Reads the managed column (id, integer revision, settings_json). A missing
+ *   column throws Error('addManagedDropdownLabel: managed column not found').
+ * - If an ACTIVE label already matches the trimmed title case-insensitively,
+ *   returns { duplicateId: <number> } WITHOUT mutating.
+ * - Otherwise sends update_dropdown_managed_column with the FULL label set —
+ *   every existing label re-sent as { id: Number, label, is_deactivated }
+ *   (omitting one is a DELETE attempt; monday blocks it only when the label is
+ *   in use, otherwise it deletes silently) — plus the new label WITHOUT an id
+ *   (the server assigns it), using the freshly-read integer revision.
+ * - Returns { ok: true } on success; API soft errors (REVISION_MISMATCH 409,
+ *   INVALID_INPUT, permission failures) surface as thrown errors carrying
+ *   `errorCode` — the caller decides retry/fallback policy.
+ *
+ * @param {{ managedColumnId: string, title: string }} args
+ * @returns {Promise<{ ok: true } | { duplicateId: number }>}
+ */
+export async function addManagedDropdownLabel({ managedColumnId, title }) {
+  const name = String(title || '').trim();
+  if (!managedColumnId || !name) throw new Error('addManagedDropdownLabel: missing managedColumnId/title');
+
+  const read = await api(
+    `query ($id: [String!]) { managed_column(id: $id) { id revision settings_json } }`,
+    { id: [String(managedColumnId)] },
+    'addManagedDropdownLabel.read'
+  );
+  const mc = read?.managed_column?.[0];
+  if (!mc) throw new Error('addManagedDropdownLabel: managed column not found');
+  const revision = Number(mc.revision);
+  const labels = Array.isArray(mc.settings_json?.labels) ? mc.settings_json.labels : [];
+
+  // Duplicate name (active) → return the existing id, no write.
+  const existing = labels.find(
+    (l) => !l.is_deactivated && (l.label ?? '').trim().toLowerCase() === name.toLowerCase()
+  );
+  if (existing) return { duplicateId: Number(existing.id) };
+
+  // Faithfully echo every existing label (incl. deactivated) + the id-less new
+  // one — a partial set is a DELETE attempt on the omitted labels.
+  const labelsInput = labels
+    .map((l) => ({
+      id: Number(l.id),
+      label: l.label ?? '',
+      is_deactivated: l.is_deactivated === true,
+    }))
+    .concat([{ label: name, is_deactivated: false }]);
+
+  const res = await api(
+    `mutation ($id: String!, $rev: Int!, $s: UpdateDropdownColumnSettingsInput!) {
+       update_dropdown_managed_column(id: $id, revision: $rev, settings: $s) { id revision }
+     }`,
+    { id: String(managedColumnId), rev: revision, s: { labels: labelsInput } },
+    'addManagedDropdownLabel'
+  );
+  assertNoGraphQLErrors(res, { functionName: 'addManagedDropdownLabel' });
+  logger.info('managedColumns', 'added label to managed dropdown column', { managedColumnId, name });
+  return { ok: true };
 }
 
 /**
@@ -174,3 +332,4 @@ export async function addManagedStatusLabel({ managedColumnId, title }) {
   logger.info('managedColumns', 'added label to managed column', { managedColumnId, name });
   return { ok: true };
 }
+

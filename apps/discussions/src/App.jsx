@@ -5,8 +5,11 @@ import { DiscussionList } from '@generated/components/DiscussionList';
 import { DiscussionCard } from '@generated/components/DiscussionCard';
 import { CreateDiscussionModal } from '@generated/components/CreateDiscussionModal';
 import { MyTasksView } from '@generated/components/MyTasksView';
+import { MyDecisionsView } from '@generated/components/MyDecisionsView';
+import { BrandLoader } from '@generated/components/BrandLoader';
 import { useToast } from './hooks/useToast';
 import { useUiErrorSink } from './hooks/useUiErrorSink';
+import { useMinSplash } from './hooks/useMinSplash.js';
 import { useMondayContext } from './contexts/MondayContext.jsx';
 import { useSettings } from './contexts/SettingsContext.jsx';
 import { api } from './utils/mondayApi/monday-client.js';
@@ -17,6 +20,9 @@ import { DEFAULT_EXPORT_TEMPLATE } from './utils/mondayApi/boards.config.js';
 import { hydrateFromStorage, ensureRoster } from './utils/usersStore.js';
 import { ensurePeopleColumns } from './utils/mondayApi/peopleColumns.js';
 import { usePermission } from './hooks/usePermission.js';
+import { prefetchMyTasks } from './hooks/useMyTasks.js';
+import { prefetchMyDecisions } from './hooks/useMyDecisions.js';
+import { prefetchDiscussions } from './hooks/useDiscussions.js';
 import logger from './utils/logger.js';
 import { ToastContainer } from './components/Toast';
 import { ErrorDetailsModal } from './components/ErrorDetailsModal';
@@ -39,9 +45,21 @@ const VIEW_MODE_KEY = 'discussions_view_mode';
 // Persisted like viewMode so a reload restores the last tab.
 const APP_VIEW_KEY = 'discussions_app_view';
 
+// Round 45 — hard cap on the INITIAL boot loader: if any of the three boot
+// datasets stalls, reveal the app anyway after this window so the user is never
+// stuck on the white loading screen.
+const BOOT_MAX_WAIT_MS = 8000;
+
+// Round 50 — MINIMUM branded-splash window (ms). The loader runs at least this
+// long on boot AND on every view transition, so the animation is clearly
+// experienced rather than flashing when data is warm/cached; data that is ready
+// early simply waits it out, then the (already-loaded) content appears in one shot.
+const MIN_SPLASH_MS = 2000;
+
 function readSavedAppView() {
   try {
-    return window.localStorage.getItem(APP_VIEW_KEY) === 'myTasks' ? 'myTasks' : 'discussions';
+    const saved = window.localStorage.getItem(APP_VIEW_KEY);
+    return saved === 'myTasks' || saved === 'myDecisions' ? saved : 'discussions';
   } catch {
     return 'discussions';
   }
@@ -215,10 +233,45 @@ export default function App() {
   // "המשימות שלי" is always reachable now (a dedicated button in the discussions
   // header + a "דיונים" back-button in the My Tasks toolbar drive `appView`), so
   // the view simply follows the persisted appView — no opt-in gate, no top toggle.
-  const { settings } = useSettings();
+  const { settings, isLoading: settingsLoading } = useSettings();
   const effectiveView = appView;
+
+  // Branded splash gate. Shows the fullscreen BrandLoader (a) on cold boot until
+  // `context` resolves AND a ~2s min window elapses, and (b) for a ~2s min
+  // window on EVERY top-level view switch — the window re-arms on each change of
+  // `effectiveView` (the armKey). The per-view arm is essential because round-37's
+  // stale-while-revalidate cache makes a warm view load instantly (its `loading`
+  // never flips true), so a boot-only gate would skip the splash on cached
+  // transitions. `context == null` is the only real loading the app observes here;
+  // each view still runs its own internal loading/skeleton AFTER the splash reveals
+  // it (per-view behavior unchanged). Round 50: the min window is now ~2s
+  // (MIN_SPLASH_MS) so the branded loader is clearly experienced on each switch.
+  const splash = useMinSplash(context == null, MIN_SPLASH_MS, effectiveView);
   const openMyTasks = useCallback(() => handleAppViewChange('myTasks'), [handleAppViewChange]);
+  const openMyDecisions = useCallback(() => handleAppViewChange('myDecisions'), [handleAppViewChange]);
   const backToDiscussions = useCallback(() => handleAppViewChange('discussions'), [handleAppViewChange]);
+
+  // Round 46 — RIGHT-PANE discussions splash. The branded loader must show in the
+  // discussions view ONLY when RETURNING to it FROM a personal view (My Tasks /
+  // My Decisions): NOT on cold boot (the boot gate above covers entry), NOT when
+  // clicking between discussions in the list, and NEVER in the LEFT list. We track
+  // the previous top-level view; when it flips to 'discussions' from 'myTasks' or
+  // 'myDecisions' we bump an arm token, and useMinSplash then holds the loader in
+  // the RIGHT (card) pane alone for the brief min window before revealing it (the
+  // fullscreen `splash` gate below is disarmed for the discussions view, so it can
+  // no longer cover the left list on this transition).
+  const prevViewRef = useRef(effectiveView);
+  const [discReturnArm, setDiscReturnArm] = useState(0);
+  useEffect(() => {
+    const prev = prevViewRef.current;
+    prevViewRef.current = effectiveView;
+    if (effectiveView === 'discussions' && (prev === 'myTasks' || prev === 'myDecisions')) {
+      setDiscReturnArm((n) => n + 1);
+    }
+  }, [effectiveView]);
+  // active=false: this is a pure TRANSITION replay armed by the token — never a
+  // real loading flag. The card pane runs its own data loading after it reveals.
+  const discussionsRightSplash = useMinSplash(false, MIN_SPLASH_MS, discReturnArm);
 
   const [selectedDiscussion, setSelectedDiscussion] = useState(null);
   const [showList, setShowList] = useState(true);
@@ -336,6 +389,96 @@ export default function App() {
     if (settings?.permissions?.enabled) ensurePeopleColumns();
   }, [settings?.permissions?.enabled]);
 
+  // Round 45 — BOOT GATE: on INITIAL app entry hold the fullscreen white
+  // BrandLoader (see the render gate below) until the monday context + settings
+  // are resolved AND all three datasets have loaded — the discussions list
+  // (prefetchDiscussions, which ALSO warms the list's first paint) + the two
+  // personal-view caches (prefetchMyTasks / prefetchMyDecisions) — then reveal
+  // the discussions view already populated. Completion is tracked by Promise.all
+  // over the three loads, each wrapped so a rejection still counts as settled
+  // (reveal on success OR error — never hang), plus a hard BOOT_MAX_WAIT_MS
+  // timeout that reveals even if a fetch stalls. `bootDataReady` latches true
+  // once and never blocks a later view transition (the round-44 per-view splash
+  // is untouched — see `splash`). Runs a single time per session.
+  const [bootDataReady, setBootDataReady] = useState(false);
+  const bootStartedRef = useRef(false);
+  const prefetchedRef = useRef(false);
+  useEffect(() => {
+    if (context == null) return undefined;         // monday context not resolved yet
+    if (settingsLoading) return undefined;         // settings mapping still resolving (config not published)
+    if (bootStartedRef.current) return undefined;  // kick the boot load off once per session
+    bootStartedRef.current = true;
+    // The boot gate owns this session's initial warm of the personal-view
+    // caches, so the round-37 idle prefetch below becomes a no-op (no double-fetch).
+    prefetchedRef.current = true;
+
+    let settled = false;
+    let minTimer = null;
+    const bootStart = Date.now();
+    // Round 50 — reveal once BOTH the boot data has settled AND the ~2s minimum
+    // splash window (MIN_SPLASH_MS, measured from context-resolution when this
+    // effect first runs) has elapsed. Data ready early simply waits out the
+    // remainder, so the branded loader is always clearly seen and the populated
+    // content then appears in one shot. NEVER hangs: the hard BOOT_MAX_WAIT_MS
+    // timeout also calls reveal, and by then the min window has long passed.
+    const reveal = () => {
+      if (settled) return;
+      settled = true;
+      const wait = Math.max(0, MIN_SPLASH_MS - (Date.now() - bootStart));
+      if (wait === 0) setBootDataReady(true);
+      else minTimer = setTimeout(() => setBootDataReady(true), wait);
+    };
+    // Load all three in parallel; `settle` maps success OR error to a resolved
+    // void so one failed fetch never blocks the reveal.
+    const settle = (p) => Promise.resolve(p).then(() => {}, () => {});
+    Promise.all([
+      settle(prefetchDiscussions()),
+      settle(prefetchMyTasks({ currentUser, context })),
+      settle(prefetchMyDecisions('decider', { currentUser, context })),
+    ]).then(reveal);
+    // SAFETY: never leave the user stuck on the loader — reveal after the hard
+    // timeout regardless of the fetches.
+    const timer = setTimeout(reveal, BOOT_MAX_WAIT_MS);
+    return () => { clearTimeout(timer); if (minTimer) clearTimeout(minTimer); };
+  }, [context, settingsLoading, currentUser]);
+
+  // Round 37 — BACKGROUND PREFETCH: once booted and sitting on the discussions
+  // view, warm the "המשימות שלי" / "ההחלטות שלי" caches ONCE per session during
+  // idle time, so first entry into those views paints instantly from cache.
+  // Gated on `settings` (board config is published by then) + a ref so it fires
+  // a single time; skipped when already on those views (their own fetch is the
+  // source of truth). The prefetch helpers only WRITE the view cache and swallow
+  // their own errors — they never touch a mounted view's React state or crash UI.
+  // (The round-45 boot gate above already sets prefetchedRef this session, so on
+  // the normal path this idle prefetch is a no-op fallback — no double-fetch.)
+  useEffect(() => {
+    if (context == null || !settings) return undefined;    // not booted / config not published yet
+    if (effectiveView !== 'discussions') return undefined; // don't compete with a live view's own fetch
+    if (prefetchedRef.current) return undefined;           // once per session
+    prefetchedRef.current = true;
+
+    let cancelled = false;
+    const warm = () => {
+      if (cancelled) return;
+      prefetchMyTasks({ currentUser, context }).catch(() => {});
+      prefetchMyDecisions('decider', { currentUser, context }).catch(() => {});
+    };
+    let idleId = null;
+    let timerId = null;
+    if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') {
+      idleId = window.requestIdleCallback(warm, { timeout: 3000 });
+    } else {
+      timerId = setTimeout(warm, 1500);
+    }
+    return () => {
+      cancelled = true;
+      if (idleId != null && typeof window !== 'undefined' && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleId);
+      }
+      if (timerId != null) clearTimeout(timerId);
+    };
+  }, [context, settings, effectiveView, currentUser]);
+
   const handleSelect = (discussion) => {
     setSelectedDiscussion(discussion);
     setShowList(false);
@@ -441,7 +584,10 @@ export default function App() {
         setSelectedDiscussion(updated);
         setShowList(false);
       }
-      notify(meta.isDuplicate ? 'הדיון שוכפל בהצלחה' : 'הדיון נוצר בהצלחה');
+      // No success toast on a plain CREATE — opening the freshly created
+      // discussion card is itself the confirmation. Duplicate keeps its own
+      // notice (a distinct action), and edit keeps 'הדיון עודכן בהצלחה' above.
+      if (meta.isDuplicate) notify('הדיון שוכפל בהצלחה');
     }
   };
 
@@ -550,11 +696,43 @@ export default function App() {
     </>
   );
 
+  // Splash / boot gate: hold the fullscreen branded loader until
+  //   (a) `context` is ready, AND
+  //   (b) the INITIAL boot data is ready (`bootDataReady` — all three datasets
+  //       loaded or the safety timeout fired; see the round-45 boot gate), AND
+  //   (c) the min-splash window has elapsed — but ONLY for the personal views.
+  // Round 46: the fullscreen min-splash still replays when switching INTO
+  // 'myTasks' / 'myDecisions' (those are single-pane views, so fullscreen == that
+  // view), but is DISARMED for the discussions view (`effectiveView !==
+  // 'discussions'`). A return to discussions is instead handled by the
+  // right-pane `discussionsRightSplash` (loader in the card pane only, never the
+  // left list); cold boot into discussions is already covered by the boot gate,
+  // so it needs no extra splash window. `bootDataReady` latches true after the
+  // first boot, so it only gates INITIAL entry and never a later transition.
+  if (context == null || !bootDataReady || (splash && effectiveView !== 'discussions')) {
+    return (
+      <div className={`${styles.appShell} ${layoutClass}`}>
+        <BrandLoader fullscreen />
+      </div>
+    );
+  }
+
   if (effectiveView === 'myTasks') {
     return (
       <div className={`${styles.appShell} ${layoutClass}`}>
         <div className={styles.appShellBody} dir="rtl">
           <MyTasksView canManageSettings={canManageSettings} onBackToDiscussions={backToDiscussions} onNotify={notify} />
+        </div>
+        {overlays}
+      </div>
+    );
+  }
+
+  if (effectiveView === 'myDecisions') {
+    return (
+      <div className={`${styles.appShell} ${layoutClass}`}>
+        <div className={styles.appShellBody} dir="rtl">
+          <MyDecisionsView canManageSettings={canManageSettings} onBackToDiscussions={backToDiscussions} onNotify={notify} />
         </div>
         {overlays}
       </div>
@@ -612,6 +790,7 @@ export default function App() {
           currentUser={currentUser}
           onOpenSettings={() => setShowSettings(true)}
           onOpenMyTasks={openMyTasks}
+          onOpenMyDecisions={openMyDecisions}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           calendarAnchor={calNav.anchor}
@@ -622,18 +801,25 @@ export default function App() {
       </div>
 
       <div className={`${styles.main} ${showList ? styles.hiddenMobile : ''} ${collapsed ? styles.mainFull : ''}`}>
-        <DiscussionCard
-          discussion={selectedDiscussion}
-          onBack={handleBack}
-          onNotify={notify}
-          onShowLoading={notifyLoading}
-          onDismissToast={dismissNotice}
-          onUpdated={handleSaved}
-          onCopyDiscussionLink={handleCopyDiscussionLink}
-          initialTab={launchParams.tab}
-          initialTabDiscussionId={launchParams.discussionId}
-          canManageSettings={canManageSettings}
-        />
+        {discussionsRightSplash ? (
+          // Return to discussions from My Tasks / My Decisions: the branded loader
+          // shows HERE, in the card pane only, for the brief min window — the left
+          // list keeps rendering independently (no splash there).
+          <BrandLoader />
+        ) : (
+          <DiscussionCard
+            discussion={selectedDiscussion}
+            onBack={handleBack}
+            onNotify={notify}
+            onShowLoading={notifyLoading}
+            onDismissToast={dismissNotice}
+            onUpdated={handleSaved}
+            onCopyDiscussionLink={handleCopyDiscussionLink}
+            initialTab={launchParams.tab}
+            initialTabDiscussionId={launchParams.discussionId}
+            canManageSettings={canManageSettings}
+          />
+        )}
       </div>
 
       <CreateDiscussionModal
@@ -646,7 +832,7 @@ export default function App() {
         canManageSettings={canManageSettings}
       />
 
-      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} />
+      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} onNotify={notify} />
     </div>
       {overlays}
     </div>

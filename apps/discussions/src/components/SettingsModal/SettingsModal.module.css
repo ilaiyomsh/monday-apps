@@ -103,6 +103,27 @@
   padding: 8px 4px 0;
 }
 
+/* Entry banner (top of the mapping tab) that opens the post-install top-up
+   wizard. Row layout: explanatory text on one side, a button on the other. */
+.topupEntry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--primary-background-color, #fff);
+}
+
+.topupText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .board {
   display: flex;
   flex-direction: column;

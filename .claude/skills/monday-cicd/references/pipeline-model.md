@@ -1,15 +1,17 @@
 # CI/CD Pipeline Model — monday.com client-side apps
 
-Condensed operating model for agents. Source of truth: `monday-cicd-spec-en.md` at the project root (the root of the project the session runs in; dated 2026-07-07). Load this file when SKILL.md's summary is not enough depth.
+Condensed operating model for agents. Source of truth: `/Users/ilaish/monday_app/apps/monday-cicd-spec-en.md` (dated 2026-07-07). Load this file when SKILL.md's summary is not enough depth.
 
 ## Differences from the written spec
-None. This file mirrors the spec exactly.
+The 2026-07-13/14 incident forensics (see §4b below and `known-issues.md`) refuted two spec assumptions:
+1. `code:push -c --force` does NOT target the latest **live** version — it targets the latest version, period (`--force` only bypasses the "latest is live" guard). §3 below is corrected; the spec (dated 2026-07-07) still carries the wrong claim.
+2. Consequently "merge to `main` → force deploy to live" (§8 step 8) has never actually reached a live version while a newer draft existed — which is the normal state. Every customer-visible release to date happened via a manual Developer Center promote.
 
 ## 1. Decision Table
 
 | Topic | Decision |
 |---|---|
-| Repo | Single monorepo, all apps (`ilaiyomsh/monday-apps`; the local working copy is the repo root of the current clone — `git rev-parse --show-toplevel`) |
+| Repo | Single monorepo, all apps (`ilaiyomsh/monday-apps`, local `/Users/ilaish/monday_app/monday-apps`) |
 | monday env | One app per application, draft/live only — no separate dev app |
 | Version isolation | Two standing versions (live, draft); deploys always target **latest** of each — no version-ID bookkeeping |
 | Branching | `feature/*` → `develop` → `main` (Git Flow) |
@@ -24,7 +26,7 @@ None. This file mirrors the spec exactly.
 feature/* --(PR, Gate1)--> develop --(PR, Gate1+Gate2)--> main
    ^ branched from develop           |                        |
    |                                 v                        v
-   |                          auto-deploy DRAFT         auto-deploy LIVE (--force)
+   |                          auto-deploy DRAFT         auto-deploy LIVE (pinned -i --force)
    |                                                           |
    +------------------- main merged back into develop ---------+  (hotfix only)
 ```
@@ -40,8 +42,9 @@ Rules:
 
 Each app has exactly two live-in-monday version slots: **latest draft** and **latest live**. There is no third env, no per-feature version, no dev app.
 
-- `mapps code:push -c` (no `--force`) → overwrites/advances the **latest draft** version.
-- `mapps code:push -c --force` → pushes directly to the **latest live** version.
+- `mapps code:push -c` (no `--force`) → resolves the app's **latest version** and pushes to it; FAILS if that version is live ("The latest app version is live. Create a new draft version or use --force to override").
+- `mapps code:push -c --force` → same resolution — **latest version, regardless of status** — with the live-guard bypassed. **Incident-verified 2026-07-14:** it does NOT seek out the live version (the CLI's own help text "Force push to live version" is contradicted by observed behavior). Both "Deploy LIVE" runs ever executed pushed into what was then the latest version: discussions 2026-07-08 → 15886357 (v6), team-people-column 2026-07-13 → 16006370 (v3, a version that was never live while v2 was). While a draft exists on top of live — the normal state — a "live" force-push lands in the DRAFT and never touches customers.
+- **The reliable live push (the pipeline's mechanism since 2026-07-14):** resolve the live version id at run time (`mapps app-version:list -i <APP_ID>`, parse the `live` row) and push pinned: `mapps code:push [-c] --force -i <LIVE_VERSION_ID> -d <dist>`. `code:push` accepts `-i/--appVersionId`; a pinned push is deterministic under every version layout. Version ids stay stable forever — same two standing versions, no bookkeeping (ids are resolved, never stored).
 - **Client vs server apps:** `-c/--client-side` is used for client-side (CDN) apps only. Server-side (monday-code) apps use the exact same pipeline and commands **without** `-c` — that flag is the ONLY difference. `onboard-app.sh` auto-detects the type (deploy-script `--client-side` → client; `@mondaycom/apps-sdk` dep → server; default client), overridable with `--type`.
 - Consequence: **no version IDs are ever stored** anywhere (not in secrets, not in workflow YAML, not in code) — only the App ID. The CLI resolves "latest draft" / "latest live" itself from the App ID.
 - `--force` does **not** rebuild — the workflow must build first, then push the already-built dist dir.
@@ -57,13 +60,30 @@ mapps code:push -c -d apps/<app>/<dist> -a "$APP_ID"
 ```
 env: `MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}`, `APP_ID: ${{ secrets.APP_<NAME>_ID }}`
 
-**Live / release** (triggered on push to `main`, same per-app path filter): identical, plus `--force` on the push.
+**Live / release** (triggered on push to `main`, same per-app path filter): identical build, then resolve the live version id and push pinned (see §3 "reliable live push"):
+```
+LIVE_ID=$(mapps app-version:list -i "$APP_ID" | awk -F'│' '$7 ~ /live/ { gsub(/[^0-9]/, "", $3); print $3; exit }')
+mapps code:push -c --force -i "$LIVE_ID" -d apps/<app>/<dist>
+```
+Fails loudly when the app has no live version yet (first go-live = deliberate promote, §4b).
 
 Both workflows share: `checkout@v4` → `pnpm/action-setup@v4` (pnpm 10, must match the major that wrote the lockfile) → `setup-node@v4` (node 20, pnpm cache) → `pnpm install --frozen-lockfile` → `pnpm --filter ./apps/<app> build` (path-based filter — immune to package-name/dir-name mismatches) → deploy step above.
 
 Build-dir flag (`-d`) must match the app's actual build output dir (e.g. Vite's `build.outDir`) — do not assume `dist`; check per app.
 
 Manual/emergency fallback only, **not** part of the pipeline: `mapps app:promote -a <APP_ID> -i <VERSION_ID>` (used e.g. when GitHub is down).
+
+**Red deploy run ≠ failed deploy (server-side apps, incident-verified 2026-07-12):** on monday-code pushes the CLI's wait-loop can exit 1 with "Deployment in progress: building-app [FAILED: Unexpected error occurred while communicating with the remote server]" while the remote build keeps running and SUCCEEDS (~10 min end-to-end). Before rerunning the workflow or fixing forward, check the truth: `mapps app-version:list -i <APP_ID>` → `mapps code:status -i <VERSION_ID>` (`building-app` → `deploying-app` → `successful`). A rerun while the build is in flight fails fast with the same generic error. (Seen on axis-sync-calender draft after the gateway-PR merge.)
+
+## 4b. Incident 2026-07-13 — out-of-band promotes + the shared-paths clobber landmine
+
+Full forensics in the project memory (`discussions-live-bypass-incident-2026-07-13`). Operative lessons:
+
+- **Out-of-band releases happen via Developer Center promote**, invisible to git/Actions. Detect them by version-state forensics: `mapps app-version:list -a <APP_ID>` (a live version newer than the last pipeline live-run's target = someone promoted), plus the draft-deploy failure signature "The latest app version is live..." which brackets the promote time, plus `Using version - <id>` lines in run logs.
+- **Post-promote dead window:** after any promote the app has no draft, so every pipeline draft deploy FAILS until a new draft version is created (manifest round-trip, §3). Three such failures on 2026-07-13 13:42–13:50 UTC were the incident's fingerprint.
+- **Shared-paths clobber landmine:** every deploy-live workflow also triggers on `packages/shared/**` (axis apps: plus `apps/axis/services/**`). Any merge to `main` touching those paths rebuilds EVERY app from `main` and force-pushes into each app's **latest version**. Two failure modes: (a) direct — an app sitting in the post-promote window (latest==live) gets its LIVE overwritten with `main`'s stale build; (b) indirect — the app's draft gets silently rolled back to `main`'s stale build, and the next human promote ships that stale code to customers. When `develop` is far ahead of `main` (171 commits on 2026-07-14), both modes mean a silent multi-day rollback.
+- **Owner decision 2026-07-14 — promotes are BANNED as a release mechanism.** Rationale: every promote churns the live version id, which needs maintenance and lands badly in customer accounts. The release flow instead pushes INTO the standing live version, pinned by id (see §3 "reliable live push"). A promote remains a rare, deliberate, documented event (e.g. scope/manifest changes that require a new version): promote → immediately recreate a standing draft (manifest round-trip, §3) → expect draft deploys to fail in the window between. First-ever go-live of a new app is such an event (the deploy-live workflow refuses when no live version exists).
+- The deploy-live workflows implement this since 2026-07-14 (branch `feature/live-deploy-pinned-id-20260714`): resolve live id → pinned `--force -i` push. The landmine's clobber modes are gone with pinning ONLY if promotes actually stop — a stale `main` still overwrites live content on shared-touching merges, so the release-freeze + main-back-merge discipline remains load-bearing.
 
 ## 5. Gate Definitions
 
@@ -97,7 +117,7 @@ All secrets live in GitHub Secrets (Settings → Secrets and variables → Actio
 
 ## 7. Version Mechanisms (three, do not conflate)
 
-1. **Promote (draft→live)** — global, affects all customers. Has CLI/API/action but is **not used by the pipeline**; manual/emergency path only.
+1. **Promote (draft→live)** — global, affects all customers. Has CLI (`mapps app:promote -a <APP_ID> -i <VERSION_ID>`) but is **BANNED as a release mechanism** (owner decision 2026-07-14 — id churn; see §4b). Sanctioned only as a rare deliberate event: new-version cycles (scope changes) and first-ever go-live, always followed by recreating a standing draft.
 2. **Active Version ("Set as active for me")** — per-developer personal setting, no customer/collaborator impact. Manual click only (Manage → App versions → Actions "⋮" → "Set as active for me"). **Cannot be automated** — no CLI/API exists, tied to browser session/specific user; an agent cannot do this on the user's behalf.
 3. **Gradual Release** — exposes a version to a defined account group before full release; short preview cycles, not permanent; requires ≥1 existing live version.
 

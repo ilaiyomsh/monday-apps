@@ -15,6 +15,9 @@ const DISC_CAPS = [
   'editSummary',
   'exportDocs',
   'createTask',
+  // Creating a decision lives in the DISCUSSION (its "החלטות" card), so it is a
+  // disc-tier capability — like createTask.
+  'createDecision',
   'addTopicOrPoint',
   'editTopicOrPoint',
   'deleteTopicOrPoint',
@@ -29,8 +32,18 @@ const TASK_CAPS = [
   'editTaskName',
   'deleteTask',
 ];
+// Decision-tier caps resolve from the DECISION's own people columns
+// (decisionCreatorID / deciderID), mirroring the task tier.
+const DECISION_CAPS = [
+  'editDecisionStatus',
+  'editDecisionPriority',
+  'editDecisionDate',
+  'editDecisionAffected',
+  'editDecisionName',
+  'deleteDecision',
+];
 const SYSTEM_CAPS = ['createDiscussion', 'reorderColumns', 'manageTemplates', 'addDiscussionTypes', 'saveViewDefaults'];
-const ALL_CAPS = [...DISC_CAPS, ...TASK_CAPS, ...SYSTEM_CAPS];
+const ALL_CAPS = [...DISC_CAPS, ...TASK_CAPS, ...DECISION_CAPS, ...SYSTEM_CAPS];
 
 describe('DEFAULT_PERMISSIONS', () => {
   it('is the inert fail-open blob (enabled:false, version 1, empty roles)', () => {
@@ -48,7 +61,7 @@ describe('CAPABILITIES catalog', () => {
   it('every entry has id/tier/group/label of the right shape', () => {
     for (const c of CAPABILITIES) {
       expect(typeof c.id).toBe('string');
-      expect(['disc', 'task', 'system']).toContain(c.tier);
+      expect(['disc', 'task', 'decision', 'system']).toContain(c.tier);
       expect(typeof c.group).toBe('string');
       expect(c.group.length).toBeGreaterThan(0);
       expect(typeof c.label).toBe('string');
@@ -60,6 +73,7 @@ describe('CAPABILITIES catalog', () => {
     const tierOf = Object.fromEntries(CAPABILITIES.map((c) => [c.id, c.tier]));
     DISC_CAPS.forEach((id) => expect(tierOf[id]).toBe('disc'));
     TASK_CAPS.forEach((id) => expect(tierOf[id]).toBe('task'));
+    DECISION_CAPS.forEach((id) => expect(tierOf[id]).toBe('decision'));
     SYSTEM_CAPS.forEach((id) => expect(tierOf[id]).toBe('system'));
   });
 
@@ -88,8 +102,8 @@ describe('CAPABILITY_DEFAULTS', () => {
     expect(CAPABILITY_DEFAULTS.reorderColumns).toBe('owner');
     expect(CAPABILITY_DEFAULTS.addDiscussionTypes).toBe('owner');
     expect(CAPABILITY_DEFAULTS.saveViewDefaults).toBe('owner');
-    // all discussion-content edits + task edits = creatorLeadOwner
-    [...DISC_CAPS.filter((id) => id !== 'viewDiscussion'), ...TASK_CAPS].forEach((id) =>
+    // all discussion-content edits + task edits + decision edits = creatorLeadOwner
+    [...DISC_CAPS.filter((id) => id !== 'viewDiscussion'), ...TASK_CAPS, ...DECISION_CAPS].forEach((id) =>
       expect(CAPABILITY_DEFAULTS[id]).toBe('creatorLeadOwner')
     );
   });
@@ -100,6 +114,8 @@ describe('PERMISSION_ROLE_SOURCES', () => {
     expect(PERMISSION_ROLE_SOURCES).toEqual({
       discussions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID', 'participantsID'],
       tasks: ['taskCreatorID', 'responsibilityID'],
+      // decisions now includes affectedID ("מושפעים") as a first-class role source.
+      decisions: ['decisionCreatorID', 'deciderID', 'affectedID'],
     });
   });
 
@@ -127,11 +143,12 @@ describe('DEFAULT_PERMISSION_SEED (LOCKED defaults)', () => {
     }
   });
 
-  it('participants: view/export/createTask/addTopicOrPoint/checkPoint/editResponses on; field/summary/edit/delete off', () => {
+  it('participants: view/export/createTask/createDecision/addTopicOrPoint/checkPoint/editResponses on; field/summary/edit/delete off', () => {
     const caps = DEFAULT_PERMISSION_SEED['discussions:participantsID'].capabilities;
     expect(caps.viewDiscussion).toBe(true);
     expect(caps.exportDocs).toBe(true);
     expect(caps.createTask).toBe(true);
+    expect(caps.createDecision).toBe(true); // createDecision mirrors createTask per role
     expect(caps.addTopicOrPoint).toBe(true);
     expect(caps.checkPoint).toBe(true);
     expect(caps.editResponses).toBe(true);
@@ -154,6 +171,42 @@ describe('DEFAULT_PERMISSION_SEED (LOCKED defaults)', () => {
     expect(caps.editTaskAssignee).toBe(false);
     expect(caps.editTaskName).toBe(false);
     expect(caps.deleteTask).toBe(false);
+  });
+
+  it('discussion creator + lead + coordinator + participants may create decisions', () => {
+    for (const key of [
+      'discussions:discussionCreatorID',
+      'discussions:discussionLeadID',
+      'discussions:discussionCoordinatorID',
+      'discussions:participantsID',
+    ]) {
+      expect(DEFAULT_PERMISSION_SEED[key].capabilities.createDecision).toBe(true);
+    }
+  });
+
+  it('decision creator grants ALL decision caps (incl. deleteDecision)', () => {
+    const caps = DEFAULT_PERMISSION_SEED['decisions:decisionCreatorID'].capabilities;
+    DECISION_CAPS.forEach((id) => expect(caps[id]).toBe(true));
+  });
+
+  it('decider (מחליט): edits everything; NOT delete', () => {
+    const caps = DEFAULT_PERMISSION_SEED['decisions:deciderID'].capabilities;
+    expect(caps.editDecisionStatus).toBe(true);
+    expect(caps.editDecisionPriority).toBe(true);
+    expect(caps.editDecisionDate).toBe(true);
+    expect(caps.editDecisionAffected).toBe(true);
+    expect(caps.editDecisionName).toBe(true);
+    expect(caps.deleteDecision).toBe(false);
+  });
+
+  it('affected (מושפעים): the least-privileged decision role — status edit on; priority/date/affected/name/delete off', () => {
+    const caps = DEFAULT_PERMISSION_SEED['decisions:affectedID'].capabilities;
+    expect(caps.editDecisionStatus).toBe(true);
+    expect(caps.editDecisionPriority).toBe(false);
+    expect(caps.editDecisionDate).toBe(false);
+    expect(caps.editDecisionAffected).toBe(false);
+    expect(caps.editDecisionName).toBe(false);
+    expect(caps.deleteDecision).toBe(false);
   });
 
   it('seeded capability ids are all real catalog ids', () => {

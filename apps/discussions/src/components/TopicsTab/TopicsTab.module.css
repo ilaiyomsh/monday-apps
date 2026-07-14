@@ -1,6 +1,7 @@
 .wrap {
   display: flex;
   flex-direction: column;
+  /* Tightened inter-topic gap (was 24px) — proportional to the 14–18px text. */
   gap: 12px;
   /* Full width (broke out of the 90% frame) so the point tables run to the RIGHT
      edge; a left inset keeps content off the edge, the right stays flush. */
@@ -12,7 +13,7 @@
 .loading {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 8px;
 }
 .toolbar {
   display: flex;
@@ -42,7 +43,8 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  /* Tightened topic-header → table gap (was 14px). */
+  gap: 7px;
 }
 /* Hidden / "לא לדיון" topic — dim the table body; the eye control stays full. */
 .sectionExcluded .sectionBody {
@@ -57,6 +59,16 @@
   width: 100%;
   padding: 0 2px;
 }
+/* Whole-header drag (the six-dot grip was removed — the header itself drags the
+   group). grab cursor on the header; its buttons keep their own pointer cursor.
+   touch-action:none lets the PointerSensor claim vertical drags on touch. */
+.sectionHeaderDraggable {
+  cursor: grab;
+  touch-action: none;
+}
+.sectionHeaderDraggable:active {
+  cursor: grabbing;
+}
 
 /* Leading collapse caret — neutral grey. Open: points down; collapsed: points
    toward the leading (right) side in LTR. */
@@ -68,42 +80,24 @@
   height: 24px;
   border: none;
   background: transparent;
-  border-radius: var(--border-radius-small, 4px);
   color: var(--secondary-text-color, #676879);
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
 }
-.triangle:hover {
-  background: rgba(0, 0, 0, 0.06);
-}
+/* Collapse caret — matches a collapsed group in Tasks/Decisions EXACTLY: a 24px
+   vibe DropdownChevronDown that rotates -90deg when collapsed (same class names,
+   size and transition as TasksTab `.chevron`/`.chevronCollapsed`). No caret
+   hover chip — in Tasks/Decisions the whole header is the click target. */
 .chevron {
-  transition: transform var(--motion-productive-medium, 100ms) ease;
+  width: 24px;
+  height: 24px;
+  color: var(--secondary-text-color, #676879);
+  transition: transform var(--motion-productive-medium, 0.2s) ease;
+  flex-shrink: 0;
 }
 .chevronCollapsed {
   transform: rotate(-90deg);
-}
-
-/* Drag handle — subtle until header hover. */
-.grip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  padding: 2px;
-  color: var(--secondary-text-color, #676879);
-  cursor: grab;
-  opacity: 0;
-  flex-shrink: 0;
-  touch-action: none;
-  transition: opacity var(--motion-productive-short, 0.15s) ease;
-}
-.sectionHeader:hover .grip {
-  opacity: 0.7;
-}
-.grip:active {
-  cursor: grabbing;
 }
 
 /* Title toggle zone — the solid color label badge. */
@@ -141,7 +135,7 @@
   min-width: 0;
 }
 .title {
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 500;
   /* Pin the variable-font weight axis (Noto/Figtree default to light masters). */
   font-variation-settings: 'wght' 500;
@@ -151,24 +145,6 @@
   text-overflow: ellipsis;
   max-width: 420px;
   cursor: default;
-}
-
-/* Count = "remaining / total to discuss", numbers only, neutral pill. */
-.count {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 9px;
-  margin-inline-start: 10px;
-  border-radius: 10px;
-  background: var(--primary-background-color, #fff);
-  border: 1px solid var(--layout-border-color, #d0d4e4);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--secondary-text-color, #676879);
-  flex-shrink: 0;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
 
 .headerSpacer {
@@ -211,18 +187,25 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 2px;
+  padding: 4px;
   min-width: 160px;
 }
 .prioOption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 36px;
+  padding: 0 10px;
   border: none;
   border-radius: 4px;
   color: #fff;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   font-family: var(--font-family);
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .prioOption:hover {
   filter: brightness(0.95);
@@ -279,13 +262,34 @@
 
 /* Points table — continuous monday-grid look (no rounded card border): the row
    separators run edge-to-edge and the only vertical line closing the grid is the
-   last column's own border. The name column is a FILL track (minmax) so the table
-   always spans the full width, so it effectively never scrolls horizontally; the
-   overflow-x:auto stays only for the rare case where dragged minimums outgrow the
-   width, and it hosts the frozen lead/name columns' sticky origin. */
+   last column's own border. The scroll container is the .sectionScroll wrapper
+   (below); .sectionBody is the max-content grid that scrolls inside it. */
+/* Horizontal scroll OWNER for a topic's points table (mirrors TasksTab's
+   `.board` > `.groupScrollInner`). It stays at the pane width (width:100%) and
+   scrolls its max-content child (.sectionBody) INTERNALLY, so a narrowed iframe
+   never pushes the table wider than the pane and no app/view-level horizontal
+   scrollbar appears. The frozen lead/name cells (sticky left:0) pin to THIS
+   scrollport. Previously .sectionBody was BOTH the max-content table AND the
+   overflow-x:auto container, so it sized to its content and grew past the pane
+   (the scroll never engaged) — that was the stray horizontal-scrollbar source. */
+.sectionScroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  direction: ltr;
+}
+
 .sectionBody {
   display: flex;
   flex-direction: column;
+  /* Fill to the board width and hug the summed track widths — same as
+     TaskTable's `.taskTable`. With `name` now a fixed-px track (not a fill
+     track), this keeps the grid spanning the full width (row separators run to
+     the right edge) while letting name shrink/expand freely on drag. When the
+     dragged tracks sum wider than the board, the box grows past 100% and scrolls
+     under the parent .sectionScroll's overflow-x. */
+  width: max-content;
+  min-width: 100%;
   background: var(--primary-background-color, #fff);
   /* Bounded + rounded on the LEFT (top + left lines), OPEN on the right so the row
      separators run to the right edge. direction:ltr anchors the table left. */
@@ -297,8 +301,6 @@
   border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
   border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
   direction: ltr;
-  overflow-x: auto;
-  overflow-y: hidden;
 }
 /* The table's own bottom border is the single closing line: the last child must
    not draw its own border-bottom on top of it (a straight row-border would also
@@ -398,24 +400,26 @@
   pointer-events: auto;
 }
 
-/* Column header row for a topic's points. Uses the SAME grid as the point rows
-   (ROW_STYLE inline sets grid-template-columns) so each label sits directly above
-   its column — mirrors the MyTasks table pattern where the header reuses the row
-   grid. Plain text labels, no cell fill / no color strip; a thin bottom rule is
-   the only separator. Without `display: grid` the labels collapse into an inline
+/* Column header row for a topic's points. Uses the SAME FIXED grid as the point
+   rows (rowStyle inline sets grid-template-columns) so each label sits directly
+   above its column:
+     [accent 28px] | (empty name header) | נידונה | החלטות | משימות
+   Plain text labels, no cell fill / no color strip; a thin bottom rule is the
+   only separator. Without `display: grid` the labels collapse into an inline
    run jammed at the RTL edge. */
 .colHead {
   display: grid;
   align-items: stretch;
   min-height: 36px;
+  background: #ffffff;
   border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
 }
 .colHeadCell {
   display: flex;
   align-items: center;
-  padding: 0 10px;
+  padding: 0 8px;
   min-height: 36px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   color: var(--primary-text-color, #323338);
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
@@ -429,14 +433,155 @@
 /* Leading cell of the column header — hosts the accent color strip rounded at the
    TOP-left to match the table's rounded-left outer border (S2). */
 .colHeadLead {
+  /* Center the per-topic select-all checkbox in the 36px lead track (mirrors
+     TaskTable's `.selectCell`); the 6px inset strip is the topic accent color. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
   border-start-start-radius: var(--border-radius-medium, 8px);
+  /* Close the lead (checkbox/accent) column with a right rule, matching the
+     Tasks table's frozen `.selectCell` separator (TaskTable `.taskCell`). */
+  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+}
+/* Select-all-in-topic checkbox centered in the column-header lead cell (mirrors
+   TaskTable's `.selectCell > label`): reset the vibe Checkbox wrapper margins and
+   nudge the 16px box to sit visually centered just after the 6px color strip. */
+.colHeadSelect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.colHeadSelect > label {
+  margin: 0;
+  transform: translateX(2px);
+}
+.colHeadSelect > label > :last-child {
+  margin-inline-start: 0;
 }
 
-.noPoints {
-  padding: 10px 8px;
-  padding-inline-start: 16px;
+/* FROZEN leading column (accent bar) + FROZEN name header — pinned during the
+   rare horizontal scroll (dragged tracks wider than the board), mirroring
+   TaskTable's frozen `.taskFirst`. Both are opaque so scrolled cells don't bleed
+   through; the lead pins at 0, name right after it (the 36px LEAD_TRACK). Header
+   frozen cells stack above the body frozen cells (z-index 3 vs 2). */
+.frozenLead {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  background: #ffffff;
+}
+.colHeadName {
+  justify-content: flex-start;
+  position: sticky;
+  left: 36px;
+  z-index: 3;
+  background: #ffffff;
+}
+
+/* Eye toggle in the group header — hide/show a topic. Sits just to the right of
+   the name (right edge of the name); always visible but subtle, full on hover.
+   When the topic is hidden the eye brightens so the restore action is obvious. */
+.eyeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-inline-start: 4px;
+  border: none;
+  background: transparent;
   color: var(--secondary-text-color, #676879);
-  font-size: 13px;
-  box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0.55;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.eyeBtn:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.06);
+}
+.sectionExcluded .eyeBtn {
+  opacity: 1;
+  color: var(--primary-color, #0073ea);
+}
+
+/* Topic-header retry affordance when the topic's optimistic create failed. */
+.topicRetryBtn {
+  margin-inline-start: 6px;
+  border: 1px solid var(--negative-color, #d83a52);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--negative-color, #d83a52);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-family: var(--font-family);
+}
+.topicRetryBtn:hover {
+  background: var(--negative-color, #d83a52);
+  color: #ffffff;
+}
+
+
+/* ---- Round 7: point multi-select bulk-action bar ---- */
+/* (The per-topic select-all checkbox now lives in the points' column-header lead
+   cell — see .colHeadSelect above — so the group-title row has no checkbox.) */
+
+/* Floating bulk-action bar — appears when ≥1 point is selected. Same chrome as
+   the Tasks/Decisions action bars (kept aligned per the multi-select convention). */
+.actionBar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+.actionBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding-inline-end: 2px;
+}
+.actionBarCenter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 2px;
+}
+.actionBarRight {
+  display: flex;
+  align-items: center;
+  padding-inline-start: 2px;
+}
+.closeSelectionBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.closeSelectionBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
 }

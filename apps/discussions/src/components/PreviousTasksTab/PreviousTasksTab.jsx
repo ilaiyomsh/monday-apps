@@ -1,23 +1,27 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Skeleton, Button, Text, Dropdown } from '@vibe/core';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Button, Text, Dropdown } from '@vibe/core';
 import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
+import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
 import {
-  filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter,
+  filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
 } from '@generated/components/MyTasksView/controls/controls.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
 import { useViewport } from '@generated/hooks/useViewport.js';
-import { api, parseValue, cvSelection, monday } from '../../utils/mondayApi/monday-client.js';
+import { api, parseValue, cvSelection } from '../../utils/mondayApi/monday-client.js';
+import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { getColumns } from '../../utils/mondayApi/board-config-store.js';
 import { משימות1Board, דיונים1Board } from '@api/BoardSDK.js';
 import { TaskTable } from '@generated/components/TaskTable';
+import { PreviousTasksSkeleton } from '@generated/components/PreviousTasksSkeleton';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
@@ -34,6 +38,15 @@ const GROUP_OPTIONS = [
   { value: 'status', label: 'סטאטוס', icon: 'status', orders: GROUP_STATUS_ORDERS },
   { value: 'person', label: 'אחראי', icon: 'person', orders: GROUP_AZ_ORDERS },
 ];
+// Sort columns for this tab (mirrors the filter columns: status + deadline +
+// name). `value` is a sortTasks() column key; direction sets are the shared My
+// Tasks sort config so labels/icons/keys match everywhere.
+const SORT_OPTIONS = [
+  { value: 'status', label: 'סטטוס', icon: 'status', dirs: SORT_STATUS_DIRS },
+  { value: 'deadline', label: 'דד ליין', icon: 'date', dirs: SORT_DATE_DIRS, note: 'Tasks with no deadline always sort last' },
+  { value: 'name', label: 'שם', icon: 'text', dirs: SORT_TEXT_DIRS },
+];
+const firstSortDir = (col) => (SORT_OPTIONS.find((o) => o.value === col) || SORT_OPTIONS[0])?.dirs?.[0]?.key;
 // Group-by source discussion — only meaningful in the "by type" view (where
 // tasks span multiple discussions), so it's appended to the options there only.
 const GROUP_OPTION_DISCUSSION = { value: 'discussion', label: 'דיון מקור', icon: 'relation', orders: GROUP_AZ_ORDERS };
@@ -113,6 +126,38 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const byType =
     mode === PREVIOUS_TASKS_MODES.DISCUSSION_TYPE
     || (mode === PREVIOUS_TASKS_MODES.AUTO && !!discussion?.discussionTypeID);
+
+  // --- Hide columns (round 47) ------------------------------------------------
+  // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
+  // site, persisted to the SHARED saved view
+  // (settings.preferences.savedViews.previousTasks.hiddenColumns) so an owner's
+  // "Save to this view" applies for everyone. The primary name column is never
+  // hideable. The list mirrors the TaskTable columns actually shown here
+  // (priority only when mapped; "דיון מקור"/source only in by-type mode).
+  const columnList = [
+    { key: 'name', label: 'שם', icon: 'text', locked: true },
+    showPriority && { key: 'priority', label: 'עדיפות', icon: 'status' },
+    { key: 'assignee', label: 'אחראי', icon: 'person' },
+    { key: 'deadline', label: 'דד ליין', icon: 'date' },
+    { key: 'status', label: 'סטאטוס', icon: 'status' },
+    byType && { key: 'source', label: 'דיון מקור', icon: 'relation' },
+  ].filter(Boolean);
+  const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
+  const [hiddenColumns, setHiddenColumns] = useState(
+    () => new Set(Array.isArray(savedView?.hiddenColumns) ? savedView.hiddenColumns : [])
+  );
+  const toggleColumn = useCallback((key) => setHiddenColumns((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  }), []);
+  const showAllColumns = useCallback((show) => {
+    setHiddenColumns(show ? new Set() : new Set(hideableKeys));
+  }, [hideableKeys]);
+  const saveHiddenColumns = useCallback(() => {
+    saveView({ hiddenColumns: [...hiddenColumns] });
+    onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
+  }, [saveView, hiddenColumns, onNotify]);
   // The discussion's "סוג" is a DROPDOWN value = the label TEXT directly. taskTypeID
   // is ALSO a dropdown on the tasks board; bridge the text -> its label id and
   // filter server-side (any_of by id — exact match, same as task creation writes).
@@ -326,6 +371,21 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
 
   // Updates go through BoardSDK (same as useTasks) so board_id + the column-value
   // formatting are handled in one place — change_multiple_column_values requires board_id.
+  // Optimistic inline rename (mirrors updateStatus). Writes the item name via
+  // BoardSDK's { name } key; reverts on error. Per-task permission gating is
+  // applied by TaskTable (onRenameTask is withheld when canTask('editTaskName')
+  // is false for that row).
+  const updateName = async (id, name) => {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    let prev = [];
+    setTasks((current) => {
+      prev = current;
+      return current.map((t) => (t.id === id ? { ...t, name: trimmed } : t));
+    });
+    try { await new משימות1Board().item(id).update({ name: trimmed }).execute(); }
+    catch (err) { logger.error('PreviousTasksTab', 'שגיאה בעדכון משימה', err); setTasks(prev); }
+  };
   const updateStatus = async (id, s) => {
     let prev = [];
     setTasks((current) => {
@@ -444,15 +504,42 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // Clicking a task's name opens ITS item card on the Updates pane — same
   // affordance as the My Tasks tab (kind: 'updates'). Opens the task, not the
   // source discussion (that's the separate "דיון מקור" chip).
+  // Open the task's item card via the shared helper. monday's SDK has no
+  // programmatic close (see utils/itemCard.js), so every click reliably (re)opens.
   const openTaskCard = (taskId) => {
     if (!taskId) return;
-    monday.execute('openItemCard', { itemId: Number(taskId), kind: 'updates' });
+    openOrToggleItemCard(taskId);
   };
 
   // ---- multi-select + carry-forward to the current ("next") discussion ----
   const toggleSelect = (id, checked) =>
     setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
   const clearSelection = () => setSelectedIds(new Set());
+  // ESC clears this tab's multi-selection. The document-level listener is live
+  // ONLY while something is selected, and it no-ops unless THIS view is actually
+  // visible (offsetParent is null when a tab is hidden behind another) — so it
+  // never clears a different tab's selection. ESC still closes an open editor /
+  // overlay first: we bail when the event was already handled, when the user is
+  // typing in a text field (inline rename / people-picker search), or when a
+  // dialog / listbox / menu (status / date / person picker) is open.
+  const rootRef = useRef(null);
+  const hasSelection = selectedIds.size > 0;
+  useEffect(() => {
+    if (!hasSelection) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (!rootRef.current || rootRef.current.offsetParent === null) return;
+      const el = e.target;
+      const tag = el && el.tagName;
+      const typing = tag === 'TEXTAREA' || (el && el.isContentEditable)
+        || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset)$/.test(el.type || ''));
+      if (typing) return;
+      if (document.querySelector('[role="dialog"],[role="listbox"],[role="menu"]')) return;
+      setSelectedIds(new Set());
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [hasSelection]);
   const itemById = useMemo(() => {
     const m = new Map();
     tasks.forEach((t) => m.set(String(t.id), t));
@@ -602,16 +689,23 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     };
 
     const msg = ids.length === 1 ? 'המשימה נמחקה' : `${ids.length} משימות נמחקו`;
-    onNotify?.(msg, 'info', DELETE_GRACE_MS, { label: 'בטל', onClick: undo });
+    onNotify?.(msg, 'success', DELETE_GRACE_MS, { label: 'בטל', onClick: undo });
   };
 
-  // ---- Filter (client-side, over the loaded tasks; same engine as My Tasks) ----
+  // ---- Sort + Filter (client-side, over the loaded tasks; same engine + saved-
+  // view contract as My Tasks). Sort is empty/inactive by default; Filter opens
+  // with a default STATUS row (empty values ⇒ shows all) unless a saved view exists. ----
+  const [sort, setSort] = useState(() => {
+    const s = savedView?.sort;
+    if (!s || !s.active || !SORT_OPTIONS.some((o) => o.value === s.col)) return { col: null, dir: null, active: false };
+    return { col: s.col, dir: s.dir || firstSortDir(s.col), active: true };
+  });
   const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
   const [filterRows, setFilterRows] = useState(() => {
-    // Empty default: no pre-seeded "Where" row — the panel offers "+ New filter".
+    // Default STATUS row when nothing saved; a saved view's own rows win.
     return Array.isArray(savedView?.filterRows)
       ? savedView.filterRows.filter((k) => PREV_FILTER_COLUMNS.some((c) => c.key === k))
-      : [];
+      : ['status'];
   });
   const resetCol = (col) => (col === 'deadline' ? { op: 'within', range: null, date: null } : { op: 'is', values: new Set() });
   const setFilterOp = (col, op) => setFilter((f) => ({ ...f, [col]: { ...f[col], op } }));
@@ -635,8 +729,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     setFilterRows((rows) => rows.map((k) => (k === fromCol ? toCol : k)));
     setFilter((f) => ({ ...f, [fromCol]: resetCol(fromCol), [toCol]: resetCol(toCol) }));
   };
-  const clearFilter = () => { setFilter(emptyFilter()); setFilterRows([]); };
+  const clearFilter = () => { setFilter(emptyFilter()); setFilterRows(['status']); };
   const fc = filterCount(filter);
+  // Sort handlers (session-only until an owner hits Save, like the other builders).
+  const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstSortDir(col), active: true });
+  const clearSort = () => setSort({ col: null, dir: null, active: false });
 
   // Assignee options = the distinct people present across the loaded tasks.
   const personOptions = useMemo(() => {
@@ -649,7 +746,12 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
   }, [tasks]);
 
-  const filteredTasks = useMemo(() => filterTasks(tasks, filter), [tasks, filter]);
+  // Client pipeline: filter -> sort (both instant, over the loaded tasks). An
+  // inactive sort returns the list unchanged, so default order is untouched.
+  const filteredTasks = useMemo(
+    () => sortTasks(filterTasks(tasks, filter), sort, { orderById, labelById }),
+    [tasks, filter, sort, orderById, labelById]
+  );
 
   // Groups carry { key, label, color, items } — status groups key by the stable
   // label id (string) and resolve label/color via useStatusOptions; person groups
@@ -800,9 +902,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   if (resolving || typeMapsLoading) {
     return (
       <div className={styles.root}>
-        <div className={styles.skeletonStack}>
-          {[1, 2, 3].map((i) => <Skeleton key={i} type={"rectangle"} height={36} fullWidth />)}
-        </div>
+        <PreviousTasksSkeleton />
       </div>
     );
   }
@@ -852,7 +952,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   }
 
   return (
-    <div className={styles.root}>
+    <div ref={rootRef} className={styles.root}>
       <div className={styles.toolbar}>
         {/* One left-aligned cluster (like My Tasks): the discussion-type/source chip, then filter + group-by + collapse-all. */}
         <div className={styles.prevChip} dir="rtl">
@@ -870,6 +970,17 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
             } : null}
             renderBody={renderFilterBody}
           />
+          <SortByBuilder
+            options={SORT_OPTIONS}
+            value={sort}
+            mobile={isMobile}
+            onChange={onSortChange}
+            onClear={clearSort}
+            onSave={canSaveView ? () => {
+              saveView({ sort });
+              onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
+            } : null}
+          />
           <GroupByBuilder
             options={groupOptions}
             value={{ col: groupBy, order: groupOrder }}
@@ -881,6 +992,17 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
               onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
             } : null}
           />
+          {/* Hide columns (round 47) — owners only. Non-owners never see it and
+              always get the saved config applied to the table below. */}
+          {canManageSettings && (
+            <HideColumnsControl
+              columns={columnList}
+              hidden={hiddenColumns}
+              onToggle={toggleColumn}
+              onToggleAll={showAllColumns}
+              onSave={canSaveView ? saveHiddenColumns : null}
+            />
+          )}
           {groupBy !== 'none' && filteredTasks.length > 0 && (
             <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
           )}
@@ -914,9 +1036,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       )}
 
       {tasksLoading ? (
-        <div className={styles.skeletonStack}>
-          {[1,2,3].map(i => <Skeleton key={i} type={"rectangle"} height={36} fullWidth />)}
-        </div>
+        <PreviousTasksSkeleton showToolbar={false} />
       ) : tasks.length === 0 ? (
         <div className={styles.emptyState}>
           <Text type={"text2"} color={"secondary"}>
@@ -948,14 +1068,18 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
                 <TaskTable tasks={grp.items} color={groupColor}
                   showSourceDiscussion={byType}
                   showPriority={showPriority}
+                  hiddenColumns={hiddenColumns}
                   canReorderColumns={canReorderColumns}
                   canManageSettings={canManageSettings}
+                  reorderScope={discussion?.id ? `previous_${discussion.id}_${byType ? `type:${typeFilter.taskTypeId}` : `prev:${previousDiscussionId}`}_${groupBy}_${grp.key}` : null}
+                  canReorderRows={canCreateTask || canSelect}
                   onOpenCard={openTaskCard}
                   canTask={canTask}
                   onStatusChange={applyStatusChange}
                   onPriorityChange={applyPriorityChange}
                   onAssigneeChange={applyAssigneeChange}
                   onDeadlineChange={applyDeadlineChange}
+                  onRenameTask={updateName}
                   selectable={canSelect} selectedIds={selectedIds} onToggleSelect={toggleSelect}
                   selectAllChecked={groupAllSelected}
                   selectAllIndeterminate={groupSomeSelected}

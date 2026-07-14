@@ -3,8 +3,8 @@ import { createPortal } from 'react-dom';
 import { Avatar, AvatarGroup } from '@vibe/core';
 import { Check, CloseSmall, Search, Person } from '@vibe/icons';
 import { subscribe, getVersion, getAllUsers, getUser, hasRoster, ensureRoster } from '@generated/utils/usersStore.js';
+import { useBoardSubscribers } from '@generated/hooks/useBoardSubscribers.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { monday } from '@generated/utils/mondayApi/monday-client.js';
 import logger from '@generated/utils/logger.js';
 import styles from './PersonPicker.module.css';
 
@@ -24,24 +24,34 @@ function initialsOf(name) {
  * once (Vibe's Dialog double-rendered its content here). Same {selected,onChange}
  * API. ("Invite by email" isn't available to embedded apps; omitted.)
  *
- * `single`: cap the selection at one person (task-assignee fields). A second
- * pick is blocked and a notice tells the user to clear the current one first —
- * deselecting the existing person is still allowed.
+ * `single`: single-person fields (מנהל / מחליט / lead / recorder / task
+ * assignee, etc.). Picking a DIFFERENT person REPLACES the current selection —
+ * no need to clear the existing one first; clicking the already-selected person
+ * deselects it. Multi (משתתפים / מושפעים) is unaffected.
  */
-export function PersonPicker({ selected = [], onChange, bordered = false, closeOnSelect = false, single = false }) {
+export function PersonPicker({ selected = [], onChange, bordered = false, closeOnSelect = false, single = false, boardKey = null }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [pos, setPos] = useState(null);
   const triggerRef = useRef(null);
   const popoverRef = useRef(null);
 
-  // The picker reads the account roster from the shared usersStore (already
-  // pre-warmed for managers). ensureRoster() loads it once if it isn't yet — the
-  // picker needs the full list to pick from, regardless of admin status.
+  // Option source: when `boardKey` is given, restrict to that BOARD'S members
+  // (owners + subscribers) — the only people monday will let you assign to it
+  // (assigning a non-member throws invalidPersonAssignment). Falls back to the
+  // full account roster while board membership is loading or if it comes back
+  // empty, so the picker is never blank. Without a boardKey it uses the account
+  // roster as before (e.g. account-wide role defaults).
   useSyncExternalStore(subscribe, getVersion, getVersion);
-  const subscribers = getAllUsers();
-  const loading = !hasRoster() && subscribers.length === 0;
+  const board = useBoardSubscribers(boardKey);
+  const roster = getAllUsers();
+  const subscribers = boardKey && board.users.length ? board.users : roster;
+  const loading = boardKey
+    ? (board.loading && board.users.length === 0 && roster.length === 0)
+    : (!hasRoster() && roster.length === 0);
 
+  // Always warm the account roster: it's the fallback source, and selected-chip
+  // avatars for people who aren't board members still resolve from it.
   useEffect(() => { ensureRoster(); }, []);
 
   // Close on click-outside / Escape.
@@ -101,21 +111,10 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
     logger.info('PersonPicker', 'option clicked → toggle user', { id: user.id, name: user.name });
     if (selectedIds.includes(String(user.id))) {
       removeUser(user.id);
-    } else if (single && selected.length >= 1) {
-      // single-assignee mode: one person max. Block the extra pick (the popover
-      // stays open so the user can deselect the current person first) and surface
-      // a Hebrew notice. monday.execute is a no-op outside the iframe / in tests.
-      logger.info('PersonPicker', 'single mode → blocked extra selection', { id: user.id });
-      try {
-        monday.execute('notice', {
-          message: 'ניתן להקצות אחראי אחד בלבד',
-          type: 'error',
-          timeout: 4000,
-        });
-      } catch (err) {
-        logger.warn('PersonPicker', 'failed to show single-assignee notice', err);
-      }
-      return;
+    } else if (single) {
+      // single-person mode: picking a DIFFERENT person REPLACES the current
+      // selection (no "only one allowed" block, no need to clear it first).
+      onChange([{ id: user.id, kind: 'person', name: user.name }]);
     } else {
       onChange([...selected, { id: user.id, kind: 'person', name: user.name }]);
     }
@@ -173,13 +172,16 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
             const p = selected[0];
             const u = getUser(p.id);
             return (
-              <Avatar
-                size="small"
-                src={u?.photo_thumb}
-                text={initialsOf(p.name || u?.name)}
-                type={u?.photo_thumb ? 'img' : 'text'}
-                ariaLabel={p.name}
-              />
+              // Native-title name tooltip (round 33) — never clipped / always on top.
+              <span title={p.name || u?.name} style={{ display: 'inline-flex' }}>
+                <Avatar
+                  size="small"
+                  src={u?.photo_thumb}
+                  text={initialsOf(p.name || u?.name)}
+                  type={u?.photo_thumb ? 'img' : 'text'}
+                  ariaLabel={p.name}
+                />
+              </span>
             );
           })()
         ) : (
@@ -194,6 +196,10 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
                   text={initialsOf(p.name || u?.name)}
                   type={u?.photo_thumb ? 'img' : 'text'}
                   ariaLabel={p.name}
+                  // Overlapping group avatars keep the @vibe tooltip (a wrapper
+                  // span would break the stack) but pinned to z-index 10000 so
+                  // it's never hidden behind other UI (round 33).
+                  tooltipProps={{ content: p.name || u?.name, zIndex: 10000 }}
                 />
               );
             })}
