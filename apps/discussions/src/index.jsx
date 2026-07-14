@@ -16,9 +16,12 @@ import { SettingsModal } from './components/SettingsModal';
 import { SetupWizard } from './components/SetupWizard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { setupGlobalErrorHandlers } from './utils/globalErrorHandler';
+import { getVersionLabel } from './utils/versionLabel.js';
 
 // Layer 5: window.onerror / unhandledrejection -> logger, BEFORE React mounts.
 setupGlobalErrorHandlers();
+
+console.info('[discussions] ' + getVersionLabel());
 
 // Renders the app only after settings (boards/columns mapping) have been
 // loaded & published to the SDK store — so every SDK call has its mapping.

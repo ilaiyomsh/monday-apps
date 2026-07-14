@@ -13,6 +13,7 @@ import ExportTemplateTab from './ExportTemplateTab.jsx';
 import { TemplateManagerModal as TemplatesPanel } from '@generated/components/TemplateManagerModal';
 import { SetupWizard } from '../SetupWizard';
 import logger from '../../utils/logger.js';
+import { getVersionLabel } from '../../utils/versionLabel.js';
 import styles from './SettingsModal.module.css';
 
 // Seed the editable export-template draft from stored settings, back-filling any
@@ -932,6 +933,9 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
             <Button kind={"tertiary"} onClick={onClose}>ביטול</Button>
             <Button kind={"primary"} loading={saving} onClick={handleSave}>שמור</Button>
           </Flex>
+          <div className={styles.versionLabel} dir="ltr">
+            <Text type={"text3"} color={"secondary"}>{getVersionLabel()}</Text>
+          </div>
         </div>
       </div>
     </div>

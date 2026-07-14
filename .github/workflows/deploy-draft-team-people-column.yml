@@ -43,6 +43,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build team-people-column
+        # Version layer: stamp the exact commit into the bundle (__BUILD_SHA__).
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
         run: pnpm --filter "./apps/team-people-column" build
 
       - name: Install monday.com apps CLI

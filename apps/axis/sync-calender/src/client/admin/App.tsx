@@ -13,6 +13,7 @@ import { useOAuthPopup } from './hooks/useOAuthPopup';
 import { useUsersByIds } from './hooks/useUsersByIds';
 import { useObjectOwners } from './hooks/useObjectOwners';
 import { StatusIdMigrationDialog } from './components/feedback/StatusIdMigrationDialog';
+import { versionLabel } from './lib/versionLabel';
 
 export default function App() {
   return (
@@ -236,6 +237,9 @@ function Shell({ children, identity }: { children: React.ReactNode; identity?: R
     <div style={{ maxWidth: 1280, margin: '0 auto', padding: '20px 28px 60px' }}>
       {identity && <div className="page-head">{identity}</div>}
       {children}
+      <p style={{ textAlign: 'center', marginTop: 24, fontSize: 11, color: 'var(--secondary-text-color, #676879)' }}>
+        {versionLabel}
+      </p>
     </div>
   );
 }

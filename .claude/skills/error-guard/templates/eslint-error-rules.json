@@ -2,7 +2,7 @@
   "_install": "Add devDependency eslint-plugin-promise (pnpm add -D eslint-plugin-promise), then merge rules+overrides into package.json eslintConfig and add \"promise\" to its plugins. Generalize override paths to this app's real logger and sink files. Make sure build output is ignored (eslintConfig \"ignorePatterns\": [\"dist\", \"build\"] or an .eslintignore) — otherwise `eslint .` lints the bundles and reports false catch-must-log/no-console hits after the first build. TypeScript apps: also add @typescript-eslint/no-floating-promises with ignoreVoid:false (requires type-checked parser config).",
   "plugins": ["promise"],
   "rules": {
-    "no-console": "error",
+    "no-console": ["error", { "allow": ["info"] }],
     "no-empty": ["error", { "allowEmptyCatch": false }],
     "no-restricted-syntax": [
       "error",

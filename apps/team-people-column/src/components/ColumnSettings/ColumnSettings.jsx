@@ -15,6 +15,7 @@ import {
 } from '../../domain/columnClassifiers';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
+import { getVersionLabel } from '../../utils/versionLabel.js';
 import LoadingState from '../shared/LoadingState';
 import ErrorState from '../shared/ErrorState';
 import Popover from '../shared/Popover';
@@ -432,6 +433,11 @@ function ColumnSettings({ context }) {
         >
           ביטול
         </button>
+      </div>
+
+      {/* Version caption — Latin build label, forced LTR inside the RTL pane. */}
+      <div className={styles.versionCaption} dir="ltr">
+        {getVersionLabel()}
       </div>
     </div>
   );
