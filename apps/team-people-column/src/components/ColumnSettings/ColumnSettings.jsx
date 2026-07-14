@@ -303,10 +303,9 @@ function ColumnSettings({ context }) {
 
   return (
     <div className={styles.root} dir="rtl">
-      <div className={styles.header}>
-        <h2 className={styles.title}>הגדרות עמודת אנשי צוות</h2>
-      </div>
-
+      {/* No app-level title: monday already shows "<column> - … column settings"
+          as the popover header, so a second heading only wastes vertical space
+          and forced the pane to scroll. */}
       {noRelationColumns ? (
         <AttentionBox
           type="warning"

@@ -175,22 +175,8 @@
   text-align: start;
 }
 
-.row:hover {
-  background: var(--primary-background-hover-color, #f0f3ff);
-}
-
-.rowSelected {
-  background: var(--primary-selected-color, #e6f0ff);
-}
-
-.check {
-  width: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--primary-color, #0073ea);
-  flex-shrink: 0;
-}
+/* No hover highlight on the assignee rows (product decision 2026-07-14): the
+   list stays visually flat; clicking a row is the only feedback (it saves). */
 
 .name {
   font-size: 14px;
@@ -198,7 +184,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  /* Push the check mark to the row's far end (logical — RTL-safe). */
   flex: 1;
   text-align: start;
 }
