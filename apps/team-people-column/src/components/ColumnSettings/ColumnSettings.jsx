@@ -1,13 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { RadioButton, Checkbox, AttentionBox } from '@vibe/core';
+import { AttentionBox } from '@vibe/core';
 
 import mondayService from '../../services/mondayService';
 import { GET_BOARD_COLUMNS } from '../../services/graphqlQueries';
-import {
-  validateSettings,
-  policyFromSettings,
-  DEFAULT_POLICY,
-} from '../../domain/settingsSchema';
+import { validateSettings } from '../../domain/settingsSchema';
 import {
   isBoardRelationColumn,
   isPeopleColumn,
@@ -26,10 +22,15 @@ import styles from './ColumnSettings.module.css';
  *
  * Flow: load persisted settings (global storage keyed by boardId+columnId, via
  * useColumnSettings — carries the false-empty retry) → fetch the source board's
- * columns → pick a board_relation
- * column → resolve its linked board → fetch that board's columns → pick a people
- * column → choose policy (single/multi, union/strict, include-listed) → validate →
- * persist a v1 settings object → notice + closeDialog.
+ * columns → pick a board_relation column → resolve its linked board → fetch that
+ * board's columns → pick a people column → validate → persist a v1 settings
+ * object → notice + closeDialog.
+ *
+ * The dialog is intentionally MINIMAL (owner decision 2026-07-14): just the two
+ * column mappings and Save — no sub-headings, explanations, or policy controls,
+ * so it fits one small iframe with no scroll. The policy is fixed (FIXED_POLICY):
+ * single-assignee, union of all referenced teams, and directly-listed people
+ * always included.
  *
  * Reopening preselects the saved values and re-resolves the linked board live,
  * warning if the relation column now points at a different board than the one stored.
@@ -37,6 +38,11 @@ import styles from './ColumnSettings.module.css';
  * The two selects use the shared body-portal Popover (not Vibe Dropdown) so their
  * option lists never clip inside the small settings iframe.
  */
+
+// Fixed policy — the UI no longer exposes these choices (owner decision
+// 2026-07-14). Always single-assignee; always the UNION of every referenced
+// team plus any directly-listed people.
+const FIXED_POLICY = { selectionMode: 'single', aggregation: 'union', includeListedPersons: true };
 
 /** A single Popover-backed select. Trigger is a native <button> (real disabled). */
 function SelectField({ label, ariaLabel, placeholder, options, value, onChange, disabled }) {
@@ -120,9 +126,6 @@ function ColumnSettings({ context }) {
   const [peopleColumnId, setPeopleColumnId] = useState(null);
   const [pendingPeopleColumnId, setPendingPeopleColumnId] = useState(null);
   const [storedLinkedBoardId, setStoredLinkedBoardId] = useState(null);
-  const [selectionMode, setSelectionMode] = useState(DEFAULT_POLICY.selectionMode);
-  const [aggregation, setAggregation] = useState(DEFAULT_POLICY.aggregation);
-  const [includeListedPersons, setIncludeListedPersons] = useState(DEFAULT_POLICY.includeListedPersons);
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
@@ -162,10 +165,6 @@ function ColumnSettings({ context }) {
       setRelationColumnId(loadedSettings.relationColumnId ?? null);
       setPendingPeopleColumnId(loadedSettings.peopleColumnId ?? null);
       setStoredLinkedBoardId(loadedSettings.linkedBoardId ?? null);
-      const p = policyFromSettings(loadedSettings);
-      setSelectionMode(p.selectionMode);
-      setAggregation(p.aggregation);
-      setIncludeListedPersons(p.includeListedPersons);
     }
   }, [settingsLoading, sourceLoading, loadedSettings]);
 
@@ -257,7 +256,7 @@ function ColumnSettings({ context }) {
       relationColumnId,
       linkedBoardId,
       peopleColumnId,
-      policy: { selectionMode, aggregation, includeListedPersons },
+      policy: FIXED_POLICY,
     };
     try {
       const { ok, problems } = validateSettings(v1, [...sourceColumns, ...linkedColumns]);
@@ -306,9 +305,6 @@ function ColumnSettings({ context }) {
     <div className={styles.root} dir="rtl">
       <div className={styles.header}>
         <h2 className={styles.title}>הגדרות עמודת אנשי צוות</h2>
-        <p className={styles.subtitle}>
-          בחרו את עמודת חיבור הלוחות ואת עמודת האנשים שממנה יילקחו חברי הצוות המורשים.
-        </p>
       </div>
 
       {noRelationColumns ? (
@@ -359,54 +355,6 @@ function ColumnSettings({ context }) {
               />
             </div>
           )}
-
-          <div className={styles.policyGroup}>
-            <div className={styles.policyLegend}>אופן הבחירה</div>
-            <div className={styles.radios}>
-              <RadioButton
-                text="בחירה מרובה"
-                name="selectionMode"
-                value="multi"
-                checked={selectionMode === 'multi'}
-                onSelect={() => setSelectionMode('multi')}
-              />
-              <RadioButton
-                text="בחירה יחידה"
-                name="selectionMode"
-                value="single"
-                checked={selectionMode === 'single'}
-                onSelect={() => setSelectionMode('single')}
-              />
-            </div>
-          </div>
-
-          <div className={styles.policyGroup}>
-            <div className={styles.policyLegend}>שילוב בין מספר מקורות</div>
-            <div className={styles.radios}>
-              <RadioButton
-                text="איחוד"
-                name="aggregation"
-                value="union"
-                checked={aggregation === 'union'}
-                onSelect={() => setAggregation('union')}
-              />
-              <RadioButton
-                text="חיתוך"
-                name="aggregation"
-                value="strict"
-                checked={aggregation === 'strict'}
-                onSelect={() => setAggregation('strict')}
-              />
-            </div>
-          </div>
-
-          <div className={styles.policyGroup}>
-            <Checkbox
-              label="כלול אנשים שמוקצים ישירות"
-              checked={includeListedPersons}
-              onChange={(e) => setIncludeListedPersons(e.target.checked)}
-            />
-          </div>
         </>
       )}
 

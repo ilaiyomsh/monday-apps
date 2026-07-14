@@ -134,12 +134,13 @@ describe('ColumnSettings — save flow', () => {
     await waitFor(() => expect(harness.readStorage(STORAGE_KEY)).toBeTruthy());
 
     const stored = JSON.parse(harness.readStorage(STORAGE_KEY));
+    // Policy is FIXED now (no UI controls): always single / union / include-listed.
     expect(stored).toEqual({
       version: 1,
       relationColumnId: RELATION_COL_ID,
       linkedBoardId: LINKED_BOARD_ID,
       peopleColumnId: PEOPLE_COL_ID,
-      policy: { selectionMode: 'multi', aggregation: 'union', includeListedPersons: true },
+      policy: { selectionMode: 'single', aggregation: 'union', includeListedPersons: true },
     });
 
     await waitFor(() => expect(harness.calls.some((c) => c.type === 'closeDialog')).toBe(true));

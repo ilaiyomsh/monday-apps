@@ -42,9 +42,20 @@ jobs:
               fi
               git tag "$tag"
               git push origin "$tag"
+              # Release notes = the exact commits belonging to this jump
+              # (owner requirement 2026-07-14: every jump maps to its commits,
+              # with zero discipline needed). HEAD^..HEAD on the release merge
+              # = everything this release brought; filtered to the app's paths.
+              notes="$(mktemp)"
+              {
+                echo "## Commits in $old -> $new"
+                git log --format='- %h %s' "HEAD^..HEAD" -- "$path" "${SHARED_PATHS[@]}"
+                echo ""
+                echo "Story: [\`$path/CHANGELOG.md\`](../../blob/main/$path/CHANGELOG.md)"
+              } > "$notes"
               gh release create "$tag" \
                 --title "$slug v$new" \
-                --notes "See $path/CHANGELOG.md" || \
+                --notes-file "$notes" || \
                 echo "::warning::release record for $tag failed (tag itself was pushed)"
               echo "tagged $tag ($old -> $new)"
             fi
