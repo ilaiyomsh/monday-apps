@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AttentionBox, Avatar, Skeleton } from '@vibe/core';
 
 import mondayService from '../../services/mondayService';
 import logger from '../../utils/logger';
 import { UPDATE_COLUMN_VALUE } from '../../services/graphqlQueries';
 import { formatCellValue } from '../../domain/cellValue';
-import { policyFromSettings } from '../../domain/settingsSchema';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import useAllowedUsers from '../../hooks/useAllowedUsers';
 import PersonPicker from '../shared/PersonPicker';
@@ -25,8 +24,10 @@ const MODULE = 'OnClickDialog';
  * (avatar + name) and the search input appear TOGETHER in a single reveal (user
  * feedback: a live search box next to missing team details reads as incomplete
  * UI). Once ready it is search-first: the member list renders from the first
- * typed letter. In single-assignee mode a pick saves and closes the dialog; the
- * write-back uses the native people-column format so monday
+ * typed letter. Single-assignee is the ONLY mode: one person, picking another
+ * replaces them, and a pick saves and closes the dialog. The current assignee
+ * shows as a removable chip at the top (and is dropped from the suggestions
+ * list). The write-back uses the native people-column format so monday
  * automations/notifications keep working.
  */
 
@@ -127,8 +128,10 @@ function OnClickDialog({ context }) {
     retry,
   } = useAllowedUsers(context, settings, { enabled: configured });
 
-  const policy = useMemo(() => policyFromSettings(settings), [settings]);
-  const single = policy.selectionMode === 'single';
+  // Single-assignee is the ONLY mode (owner decision 2026-07-14): one person at
+  // a time, and picking another REPLACES the current one. The stored policy no
+  // longer toggles this — the picker is always single.
+  const single = true;
 
   const [selection, setSelection] = useState([]);
   const [saveError, setSaveError] = useState(null);
@@ -266,7 +269,7 @@ function OnClickDialog({ context }) {
       <PersonPicker
         inline
         searchFirst
-        hideChips
+        hideSelectedInList
         placeholder={SEARCH_PLACEHOLDER}
         listHeading={null}
         selected={selection}

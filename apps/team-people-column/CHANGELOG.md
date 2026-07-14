@@ -1,5 +1,18 @@
 # Changelog - team-people-column
 
+## 2.1.2 — 2026-07-14
+
+- Picker is now single-assignee only: one person at a time; picking another
+  replaces the current one (the stored multi/single policy is ignored).
+- The selected person shows as a removable chip at the top (with an ✕ to clear)
+  and is dropped from the suggestions list; the redundant ✓ indicator is gone.
+- Search matches any part of a name — first name OR last name ("עילי שלם"
+  surfaces for both "ע" and "ש").
+- Settings dialog stripped to one no-scroll box: just the two column mappings
+  (board-relation + people column) and Save. Removed the sub-heading/explanations
+  and the selection-mode, union/intersection, and include-listed controls — the
+  policy is now fixed (single / union / directly-listed people always included).
+
 ## 2.1.1 — 2026-07-14
 
 - On-click dialog: skeleton-first loading. The dialog holds a skeleton
