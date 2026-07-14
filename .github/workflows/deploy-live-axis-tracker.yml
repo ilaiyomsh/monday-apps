@@ -54,6 +54,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build axis-tracker
+        # Version layer: stamp the exact commit + release flag into the bundle.
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_IS_RELEASE: "true"
         run: pnpm --filter "./apps/axis/tracker" build
 
       - name: Install monday.com apps CLI

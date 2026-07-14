@@ -1,11 +1,13 @@
-# CI/CD Pipeline Model — monday.com client-side apps
+# CI/CD Pipeline Model — monday.com apps
 
-Condensed operating model for agents. Source of truth: `/Users/ilaish/monday_app/apps/monday-cicd-spec-en.md` (dated 2026-07-07). Load this file when SKILL.md's summary is not enough depth.
-
-## Differences from the written spec
-The 2026-07-13/14 incident forensics (see §4b below and `known-issues.md`) refuted two spec assumptions:
-1. `code:push -c --force` does NOT target the latest **live** version — it targets the latest version, period (`--force` only bypasses the "latest is live" guard). §3 below is corrected; the spec (dated 2026-07-07) still carries the wrong claim.
-2. Consequently "merge to `main` → force deploy to live" (§8 step 8) has never actually reached a live version while a newer draft existed — which is the normal state. Every customer-visible release to date happened via a manual Developer Center promote.
+Condensed operating model for agents. **Source of truth: the unified spec
+v2.1 — `docs/monday-cicd-spec.md` at the monorepo root** (local clone:
+`/Users/ilaish/monday_app/monday-apps/docs/monday-cicd-spec.md`; 2026-07-14).
+It supersedes the retired v2.0 pair (`monday-cicd-spec-en.md` +
+`version-management-en.md`) and already incorporates the 2026-07-13/14
+incident forensics (`--force` ≠ "push to live"; every pre-2026-07-14 release
+was actually a manual promote — see §4b and `known-issues.md`). Load this
+file when SKILL.md's summary is not enough depth; on conflict, the spec wins.
 
 ## 1. Decision Table
 
@@ -88,10 +90,12 @@ Full forensics in the project memory (`discussions-live-bypass-incident-2026-07-
 ## 5. Gate Definitions
 
 **Gate 1 — CI** (`ci.yml`, `pull_request: branches: [develop, main]`, blocks merge on failure):
+- `guards` job (fetch-depth 0): `scripts/corridor-guard.sh` on PRs→develop, `scripts/release-guard.sh` on PRs→main (version layer, §10)
 - `pnpm -r type-check` (`tsc --noEmit`, only where the app has TypeScript)
 - `pnpm -r lint` (eslint)
 - `pnpm -r build`
-- Steps: checkout → `pnpm/action-setup@v4` (9) → `setup-node@v4` (node 20, pnpm cache) → `pnpm install --frozen-lockfile` → the three checks above.
+- Steps: checkout → `pnpm/action-setup@v4` (10) → `setup-node@v4` (node 20, pnpm cache) → `pnpm install --frozen-lockfile` → the three checks above.
+- Plus a non-blocking `tests` visibility job (known-red baseline: tracker ×2).
 
 **Gate 2 — branch protection on `main`** (5 rules, GitHub → Settings → Branches):
 1. Require a pull request before merging (no direct push, incl. admins)
@@ -159,6 +163,16 @@ Verified facts (2026-07-07, probed on discussions draft v6):
 7. PR → `main`: Gate 2 (developer approval) required. **Release freeze begins** — no merges into `develop` until this PR is merged/closed.
 8. Merge to `main` → auto build + **force deploy** to live.
 9. Customers receive the new version.
+
+## 10. Version layer (implemented 2026-07-14 — spec §9; condensed)
+
+- **Baseline:** every app starts at **2.1.0** (owner decision 2026-07-14). Source of truth: `apps/<path>/package.json` "version". App list slug↔path: `scripts/apps.sh`.
+- **Bump at develop entry, burn on main:** bump inside the task branch via `scripts/bump.sh <slug> [patch|minor|major]` (default patch; ten-second rule → patch). A develop-only number is a candidate and survives fix iterations; once a number touches `main`, ANY change needs a new number (no quiet fixes). Changelog entry in the same PR.
+- **Guards (report-only on GitHub Free — agent enforces):** `corridor-guard.sh` on PRs→develop (one app per PR unless the `shared-change` label — which makes ALL apps targets; touched apps must bump strictly above main; never backwards vs develop; no bump without code changes; corridor occupancy lock exists behind `CORRIDOR_MODE`, default **off** — corridor-vs-accumulation deferred). `release-guard.sh` on PRs→main (changed⇒bumped, unchanged⇒untouched, versions only increase; hotfix passes it naturally).
+- **Accumulation backstop:** `scripts/release-debt.sh` — per-app count of develop commits not on main; >10 → friendly Hebrew nudge to release. Runs in CI (`release-debt.yml`, push to develop) AND as a checked-in Claude PostToolUse hook after commit/merge commands. Advisory, never blocks.
+- **Tags & releases:** `tag-release.yml` on push to main tags `<slug>@<version>` + GitHub release for every app whose version changed vs HEAD^ (first parent — relies on develop→main merge commits, hybrid decision 2026-07-14).
+- **Build embedding:** every vite config defines `__APP_VERSION__` (pkg version), `__BUILD_SHA__` (`VITE_BUILD_SHA` from CI; tracker falls back to local git hash `-dirty`), `__IS_RELEASE__`. Draft deploys inject the SHA; live deploys add `VITE_IS_RELEASE=true`.
+- **Display:** live `v2.1.0`, draft `v2.1.0 · draft · <sha7>` — muted caption at the bottom of each app's settings UI (dir="ltr" in RTL) + the same string `console.info`'d at load. The draft SHA is mandatory (same number ≠ same code under burn-on-main). Hybrid server app (sync-calender) logs at server startup + `/health` instead; Axiom-wired apps stamp `version+sha` into remote records.
 
 ## 9. Nested multi-app systems (added 2026-07-07, first consumer: Axis)
 

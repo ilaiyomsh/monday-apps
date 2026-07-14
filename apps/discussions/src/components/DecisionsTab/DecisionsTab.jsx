@@ -15,6 +15,8 @@ import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+// Varied stable group-title colors (owner request 2026-07-14) — shared engine.
+import { ensureGroupColors } from '@generated/components/MyTasksView/grouping.js';
 import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
@@ -592,7 +594,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         color: g.statusId == null ? null : (statusOpts.colorById[g.statusId] || null),
         items: g.items,
       }));
-      return sortGroupsByOrder(list, { order: groupOrder, orderById: statusOpts.orderById, noKey: NO_STATUS });
+      return ensureGroupColors(sortGroupsByOrder(list, { order: groupOrder, orderById: statusOpts.orderById, noKey: NO_STATUS }));
     }
     if (groupBy === 'decider') {
       const groups = new Map();
@@ -604,7 +606,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         groups.get(key).label = label;
         groups.get(key).items.push(d);
       });
-      return sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_DECIDER });
+      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_DECIDER }));
     }
     return [{ key: '__all__', label: '', color: null, items: filteredDecisions }];
   }, [filteredDecisions, groupBy, groupOrder, statusOpts.labelById, statusOpts.colorById, statusOpts.orderById]);

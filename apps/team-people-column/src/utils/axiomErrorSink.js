@@ -51,7 +51,11 @@ if (ACTIVE) {
             dataset: DATASET,
             token: TOKEN,
             app: APP,
-            appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0',
+            // Version layer: semver + build SHA (e.g. "2.1.0+a1b2c3f") for
+            // exact-commit traceability of remote error records.
+            appVersion:
+                (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0') +
+                (typeof __BUILD_SHA__ !== 'undefined' ? `+${__BUILD_SHA__.slice(0, 7)}` : ''),
             environment: import.meta.env.VITE_AXIOM_ENV ?? 'production',
         });
     } catch (e) {

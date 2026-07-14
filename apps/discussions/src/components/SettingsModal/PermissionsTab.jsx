@@ -133,18 +133,28 @@ function buildRoleGroups(columns) {
     // keeps its alias key like creator/decider.)
     const roleSources = PERMISSION_ROLE_SOURCES[boardKey] || [];
     // alias-by-columnId, to preserve alias keys for already-mapped role columns.
+    // A multi-column alias (`ids`, e.g. tasks.taskViewersID) claims EVERY one of
+    // its mapped columns — they are all the same role in the matrix.
     const aliasByColId = {};
-    for (const alias of roleSources) if (cfg[alias]?.id) aliasByColId[cfg[alias].id] = alias;
+    for (const alias of roleSources) {
+      const entry = cfg[alias];
+      const ids = [entry?.id, ...(Array.isArray(entry?.ids) ? entry.ids : [])].filter(Boolean);
+      for (const cid of ids) aliasByColId[cid] = alias;
+    }
 
     const live = getPeopleColumns(boardKey);
     let roles;
     if (live.length) {
-      roles = live.map((col) => {
-        const alias = aliasByColId[col.id];
-        return alias
-          ? { key: `${boardKey}:${alias}`, boardKey, alias, columnId: col.id, title: col.title || cfg[alias]?.title || alias }
-          : { key: `${boardKey}:${col.id}`, boardKey, alias: col.id, columnId: col.id, title: col.title || col.id };
-      });
+      const seenKeys = new Set();
+      roles = live
+        .map((col) => {
+          const alias = aliasByColId[col.id];
+          return alias
+            ? { key: `${boardKey}:${alias}`, boardKey, alias, columnId: col.id, title: col.title || cfg[alias]?.title || alias }
+            : { key: `${boardKey}:${col.id}`, boardKey, alias: col.id, columnId: col.id, title: col.title || col.id };
+        })
+        // several live columns can map to ONE multi-column alias — one matrix row
+        .filter((r) => (seenKeys.has(r.key) ? false : (seenKeys.add(r.key), true)));
     } else {
       // Pre-load fallback: mapped people ROLE columns from the settings schema.
       roles = roleSources

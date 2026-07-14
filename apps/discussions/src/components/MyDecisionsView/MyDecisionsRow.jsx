@@ -3,6 +3,7 @@ import { Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
 import { Update, CloseSmall, Edit } from '@vibe/icons';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { PersonList } from '@generated/components/PersonAvatar';
+import { PersonPicker } from '@generated/components/PersonPicker';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
@@ -134,6 +135,11 @@ export function MyDecisionsRow({
   onStatusChange,
   onPriorityChange,
   onDateChange,
+  // People edit handlers (round 74): when provided, the decider / affected
+  // cells render the SAME PersonPicker the in-discussion decisions tab uses
+  // (the table withholds them when the permission gate denies).
+  onDeciderChange,
+  onAffectedChange,
   // Inline rename handler (permission-gated by the table). When provided, a
   // hover pencil appears and inline name-editing is enabled.
   onRenameDecision,
@@ -234,13 +240,32 @@ export function MyDecisionsRow({
     // to the creator when no decider is set (creator-as-default-decider).
     decider: showDecider ? (
       <div key="decider" className={`${grid.taskCell} ${styles.peopleCell}`} onClick={stop}>
-        <PersonList people={effectiveDecider} size="sm" showNames={false} max={2} />
+        {onDeciderChange ? (
+          <PersonPicker
+            selected={decision.deciderID || []}
+            onChange={(people) => onDeciderChange(decision.id, people)}
+            single
+            closeOnSelect
+            boardKey="decisions"
+          />
+        ) : (
+          <PersonList people={effectiveDecider} size="sm" showNames={false} max={2} />
+        )}
       </div>
     ) : null,
-    // affected — 3 avatars + "+N" overflow counter (monday people-column idiom).
+    // affected — 3 avatars + "+N" overflow counter (monday people-column idiom);
+    // multi-person picker when the permission gate allows editing.
     affected: showAffected ? (
       <div key="affected" className={`${grid.taskCell} ${styles.peopleCell}`} onClick={stop}>
-        <PersonList people={decision.affectedID || []} size="sm" showNames={false} max={3} />
+        {onAffectedChange ? (
+          <PersonPicker
+            selected={decision.affectedID || []}
+            onChange={(people) => onAffectedChange(decision.id, people)}
+            boardKey="decisions"
+          />
+        ) : (
+          <PersonList people={decision.affectedID || []} size="sm" showNames={false} max={3} />
+        )}
       </div>
     ) : null,
     // priority — inline editable; hidden when the column isn't mapped.

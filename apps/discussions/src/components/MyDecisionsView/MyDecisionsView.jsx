@@ -197,7 +197,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
 
   const {
     items, loading, loadingMore, hasMore, error, configured, loadMore,
-    updateDecisionStatus, updateDecisionPriority, updateDecisionDate, updateDecisionName, softDeleteDecisions,
+    updateDecisionStatus, updateDecisionPriority, updateDecisionDate, updateDecisionDecider, updateDecisionAffected, updateDecisionName, softDeleteDecisions,
   } = useMyDecisions(subTab, { currentUser, context, search: debouncedSearch });
 
   // Branded splash for the initial decisions load. useMinSplash arms when
@@ -234,6 +234,10 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   const applyStatus = useCallback((id, status) => resolveTargetIds(id, 'editDecisionStatus').forEach((t) => updateDecisionStatus(t, status)), [resolveTargetIds, updateDecisionStatus]);
   const applyPriority = useCallback((id, value) => resolveTargetIds(id, 'editDecisionPriority').forEach((t) => updateDecisionPriority(t, value)), [resolveTargetIds, updateDecisionPriority]);
   const applyDate = useCallback((id, date) => resolveTargetIds(id, 'editDecisionDate').forEach((t) => updateDecisionDate(t, date)), [resolveTargetIds, updateDecisionDate]);
+  // מחליט + מושפעים share the single editDecisionAffected capability (same
+  // gate as the in-discussion DecisionsTab editors).
+  const applyDecider = useCallback((id, people) => resolveTargetIds(id, 'editDecisionAffected').forEach((t) => updateDecisionDecider(t, people)), [resolveTargetIds, updateDecisionDecider]);
+  const applyAffected = useCallback((id, people) => resolveTargetIds(id, 'editDecisionAffected').forEach((t) => updateDecisionAffected(t, people)), [resolveTargetIds, updateDecisionAffected]);
   // Only the selected decisions the user may delete (mixed selection → the
   // allowed subset). The action bar's delete is disabled when none qualify.
   const deletableSelectedIds = useMemo(
@@ -726,6 +730,8 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
                     onStatusChange={applyStatus}
                     onPriorityChange={applyPriority}
                     onDateChange={applyDate}
+                    onDeciderChange={applyDecider}
+                    onAffectedChange={applyAffected}
                     onRenameDecision={updateDecisionName}
                     selectable
                     selectedIds={selectedIds}

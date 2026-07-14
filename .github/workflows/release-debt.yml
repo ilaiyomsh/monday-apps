@@ -1,0 +1,25 @@
+name: Release debt check
+
+# The accumulation backstop (owner decision 2026-07-14): on every push to
+# develop, count per-app commits not yet released to main. Above the
+# threshold (10), emit a friendly nudge in the job summary + a yellow
+# warning annotation. Advisory only — never fails.
+#
+# The same script runs locally via the checked-in Claude hook
+# (.claude/settings.json), so agent sessions nudge the user too.
+
+on:
+  push:
+    branches: [develop]
+
+jobs:
+  debt:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history — compares develop vs main)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Count release debt per app
+        run: bash scripts/release-debt.sh

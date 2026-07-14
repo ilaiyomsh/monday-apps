@@ -682,3 +682,31 @@
     border-radius: 12px 12px 0 0;
   }
 }
+
+/* Item 18 checkbox row — prominent per owner request (2026-07-14): RTL,
+   bold readable label, larger accent-colored checkbox. Sits between the
+   role-holder pickers and the "נושאים קבועים" section. */
+.deciderDefaultRow {
+  display: flex;
+  direction: rtl;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  margin: 12px 0;
+}
+
+.deciderDefaultCheckbox {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--primary-color, #0073ea);
+  cursor: pointer;
+}
+
+.deciderDefaultLabel {
+  font-family: var(--font-family);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--primary-text-color, #323338);
+}

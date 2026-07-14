@@ -40,6 +40,10 @@ export function QuickCreateModal({
   // viewport); null keeps the default overlay placement. Ignored on mobile —
   // the bottom-sheet layout wins there.
   anchor = null,
+  // Owner request 2026-07-14: opened from the Tasks/Decisions TAB (top button /
+  // add-row) the box opens DEAD-CENTER of the screen; point-anchored opens from
+  // the Topics tab keep their round-57 placement (anchor wins over centered).
+  centered = false,
   scopedPoint = null,
   discussion = null,
   participants, // eslint-disable-line no-unused-vars -- parent-side defaults; part of the prop contract
@@ -137,8 +141,14 @@ export function QuickCreateModal({
       })()
     : undefined;
 
+  // Centered layout applies only when no anchor is in effect (an anchored
+  // per-point open always wins; mobile keeps the bottom sheet either way).
+  const overlayClass = (centered && !anchorStyle)
+    ? `${styles.overlay} ${styles.overlayCentered}`
+    : styles.overlay;
+
   return (
-    <div className={styles.overlay} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className={overlayClass} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div
         className={styles.modal}
         style={anchorStyle}

@@ -1,6 +1,6 @@
 {
   "name": "team-people-column",
-  "version": "1.0.0",
+  "version": "2.1.0",
   "description": "Monday.com column_view App",
   "type": "module",
   "scripts": {
@@ -67,7 +67,7 @@
       "promise"
     ],
     "rules": {
-      "no-console": "error",
+      "no-console": ["error", { "allow": ["info"] }],
       "no-empty": [
         "error",
         {

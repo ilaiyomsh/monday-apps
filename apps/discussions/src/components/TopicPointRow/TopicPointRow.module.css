@@ -267,7 +267,7 @@
   color: var(--text-color, #323338);
   background: var(--primary-background-color, #fff);
   direction: rtl;
-  text-align: right;
+  text-align: left;
 }
 .nameEditInput:focus-visible { outline: none; }
 

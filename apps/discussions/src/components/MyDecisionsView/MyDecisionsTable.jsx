@@ -70,6 +70,12 @@ export function MyDecisionsTable({
   onStatusChange,
   onPriorityChange,
   onDateChange,
+  // People-cell handlers (round 74): decider (מחליט) + affected (מושפעים)
+  // inline pickers — the same edit that already works in the in-discussion
+  // decisions tab. Gated per row by the SAME capability the tab uses
+  // ('editDecisionAffected'); no handler = read-only avatars.
+  onDeciderChange,
+  onAffectedChange,
   // Inline rename handler (single-row; gated per-row by canDecision). Threaded to
   // each row so the hover pencil appears + inline name-editing works.
   onRenameDecision,
@@ -204,6 +210,8 @@ export function MyDecisionsTable({
             onStatusChange={onStatusChange && canDecision('editDecisionStatus', decision) ? onStatusChange : undefined}
             onPriorityChange={onPriorityChange && canDecision('editDecisionPriority', decision) ? onPriorityChange : undefined}
             onDateChange={onDateChange && canDecision('editDecisionDate', decision) ? onDateChange : undefined}
+            onDeciderChange={onDeciderChange && canDecision('editDecisionAffected', decision) ? onDeciderChange : undefined}
+            onAffectedChange={onAffectedChange && canDecision('editDecisionAffected', decision) ? onAffectedChange : undefined}
             onRenameDecision={onRenameDecision && canDecision('editDecisionName', decision) ? onRenameDecision : undefined}
             selectable={selectable}
             selected={selectable ? !!selectedIds?.has(decision.id) : false}

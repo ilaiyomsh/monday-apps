@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import {
   groupMyTasks,
+  ensureGroupColors,
   getTaskDiscussion,
   getTaskGroup,
   NO_STATUS,
@@ -117,14 +118,16 @@ describe('groupMyTasks — discussion color (deterministic palette accent)', () 
     valued.forEach((g) => expect(g.color).toMatch(HEX));
   });
 
-  it('the "No discussion" bucket keeps color null', () => {
+  it('the "No discussion" bucket gets a stable palette color (varied-group-colors, 2026-07-14)', () => {
     const groups = groupMyTasks([
       task({ id: '1', discussionLinkID: rel('D1', 'אבא') }),
       task({ id: '2', discussionLinkID: null }),
     ], 'discussion', { noDiscussionLabel: 'ללא דיון', order: 'azAsc' });
     const noDisc = groups.find((g) => g.key === NO_DISCUSSION);
     expect(noDisc).toBeDefined();
-    expect(noDisc.color).toBeNull();
+    // Varied-group-colors (2026-07-14): the "No discussion" bucket now gets a
+    // stable palette color like every other labeled group (no longer null).
+    expect(noDisc.color).toMatch(/^#[0-9a-f]{6}$/i);
   });
 
   it('is DETERMINISTIC — grouping the same tasks twice yields identical colors per key', () => {
@@ -239,6 +242,51 @@ describe('groupMyTasks — priority', () => {
   });
 });
 
+describe('ensureGroupColors — every real group gets a varied, stable title color', () => {
+  const HEX_RE = /^#[0-9a-f]{6}$/i;
+
+  it('assigns a color to every colorless labeled group, keeping existing colors untouched', () => {
+    const groups = [
+      { key: 'a', label: 'קבוצה א', color: null, items: [] },
+      { key: 'b', label: 'קבוצה ב', color: '#e2445c', items: [] },
+      { key: 'c', label: 'קבוצה ג', color: null, items: [] },
+    ];
+    const out = ensureGroupColors(groups);
+    expect(out[0].color).toMatch(HEX_RE);
+    expect(out[1].color).toBe('#e2445c'); // semantic (status/label) color preserved
+    expect(out[2].color).toMatch(HEX_RE);
+  });
+
+  it('colors are DISTINCT across the list and STABLE across calls', () => {
+    // 'aq' / 'bf' / 'bz' hash to the SAME palette slot (verified), so this
+    // fixture forces the collision probe to actually work — without it all
+    // three would get one color.
+    const groups = ['aq', 'bf', 'bz', 'g0', 'g1', 'g2'].map((key, i) => ({
+      key, label: `קב ${i}`, color: null, items: [],
+    }));
+    const a = ensureGroupColors(groups);
+    const b = ensureGroupColors(groups);
+    expect(new Set(a.map((g) => g.color)).size).toBe(6); // all different, collisions probed away
+    expect(a.map((g) => g.color)).toEqual(b.map((g) => g.color)); // same input → same colors
+  });
+
+  it('an unlabeled bucket (ungrouped view) stays uncolored', () => {
+    const out = ensureGroupColors([{ key: '__all__', label: '', color: null, items: [] }]);
+    expect(out[0].color).toBeNull();
+  });
+
+  it('groupMyTasks output always carries a color per group (date buckets included)', () => {
+    const tasks = [
+      task({ id: '1', deadlineID: new Date(2026, 5, 1) }),
+      task({ id: '2', deadlineID: new Date(2026, 5, 2) }),
+      task({ id: '3', deadlineID: null }),
+    ];
+    const groups = groupMyTasks(tasks, 'deadline', {});
+    expect(groups.length).toBeGreaterThan(1);
+    groups.forEach((g) => expect(g.color).toMatch(HEX_RE));
+  });
+});
+
 describe('groupMyTasks — board group', () => {
   it('buckets by monday group, no-group first, rest alphabetical', () => {
     const tasks = [
@@ -257,7 +305,10 @@ describe('groupMyTasks — none', () => {
     const tasks = [task({ id: '1', statusID: 1 }), task({ id: '2', statusID: null }), task({ id: '3' })];
     const groups = groupMyTasks(tasks, 'none', { allTasksLabel: 'משימות' });
     expect(groups).toHaveLength(1);
-    expect(groups[0]).toMatchObject({ key: '__all__', label: 'משימות', color: null });
+    // Since the varied-group-colors request (2026-07-14) even the single
+    // labeled bucket carries a palette color.
+    expect(groups[0]).toMatchObject({ key: '__all__', label: 'משימות' });
+    expect(groups[0].color).toMatch(/^#[0-9a-f]{6}$/i);
     expect(groups[0].items.map((t) => t.id)).toEqual(['1', '2', '3']);
   });
 });
