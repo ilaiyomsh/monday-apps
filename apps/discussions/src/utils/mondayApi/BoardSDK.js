@@ -12,7 +12,7 @@
  *   new XBoard().users.boardSubscribers().execute()
  */
 import { getBoardId, getColumns } from './board-config-store.js';
-import { api, parseValue, formatValue, cvSelection, ensureUserPhotoSelection, normalizePhoto } from './monday-client.js';
+import { api, parseValue, formatValue, sanitizeColumnValues, cvSelection, ensureUserPhotoSelection, normalizePhoto } from './monday-client.js';
 import { getPeopleColumnIds } from './peopleColumns.js';
 
 const DEFAULT_LIMIT = 25;
@@ -214,7 +214,11 @@ class ItemMutationBuilder {
       const f = formatValue(c.type, value);
       if (f !== undefined) cols[c.id] = f;
     }
-    return cols;
+    // Single systemic guard: strip invalid/empty entries (e.g. a null inside a
+    // board_relation's item_ids, a person with no id) that monday would reject
+    // with a ColumnValueException. Protects EVERY create_item / update write that
+    // goes through the SDK, without altering valid payloads. See monday-client.js.
+    return sanitizeColumnValues(cols);
   }
 
   async execute() {
@@ -372,4 +376,7 @@ export class משימות1Board extends BoardBase {
 }
 export class נושאיםלדיון1Board extends BoardBase {
   constructor() { super('topics'); }
+}
+export class החלטות1Board extends BoardBase {
+  constructor() { super('decisions'); }
 }

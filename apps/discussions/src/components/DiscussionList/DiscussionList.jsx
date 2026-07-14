@@ -1,11 +1,11 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useDiscussions } from '@generated/hooks/useDiscussions';
-import { Skeleton, Button, Text, IconButton } from '@vibe/core';
+import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscussions';
+import { Button, Text, IconButton } from '@vibe/core';
 import { Calendar, Search, Settings } from '@vibe/icons';
-import { Copy, FileDown, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Copy, FileDown, Filter, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
-import { MONTHS_HE } from '@generated/utils/dateTime.js';
+import { fmtTimeLabel, buildMonthOptions } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
 import { discussionAccentColor } from '@generated/constants/discussionColors.js';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
@@ -13,26 +13,34 @@ import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { usePermission } from '@generated/hooks/usePermission.js';
 import styles from './DiscussionList.module.css';
 
-/* Loading-skeleton bar height. MUST equal the rendered height of a real `.item`
-   row (single 14px line + 8px top/bottom padding ≈ 36px; see .item min-height
-   in DiscussionList.module.css, kept in sync via --list-row-height) so the grey
-   bars don't visibly shrink/jump when the real rows arrive. */
-const ROW_SKELETON_H = 36;
-
-/* List-row date label: short weekday + "DD/MM" ("יום ב׳ 06/07"). No time,
-   no icon — compact metadata pinned to the row's right. */
+/* List-row subtitle: short weekday + "DD/MM", plus " · HH:MM" when the date
+   column carries a real time part ("יום ב׳ 07/07 · 09:00" — mockup dateLabel).
+   fmtTimeLabel reads the hasTime flag off the ORIGINAL Date, so this must get
+   the item's own discussionDateID object (never a clone). */
 function fmtListDate(d) {
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const weekday = d.toLocaleDateString('he-IL', { weekday: 'short' }); // "יום ב׳"
-  return `${weekday} ${dd}/${mm}`;
+  const time = fmtTimeLabel(d);
+  return time ? `${weekday} ${dd}/${mm} · ${time}` : `${weekday} ${dd}/${mm}`;
+}
+
+/* Compact list-row date (round 67): "DD/MM · HH:MM", or just "DD/MM" when the
+   date column has no real time part. Drops the weekday so the name + date fit on
+   ONE line in the new LTR soft-card row. Reuses fmtTimeLabel for the has-time
+   check (same ORIGINAL-Date requirement as fmtListDate above). */
+function fmtListDateCompact(d) {
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const time = fmtTimeLabel(d);
+  return time ? `${dd}/${mm} · ${time}` : `${dd}/${mm}`;
 }
 
 /* Custom single-select filter — matches the app's other working dropdowns
    (PersonPicker / CreateDiscussionModal): the menu is rendered position:fixed
    with a high z-index so it is never clipped or covered, which the Vibe
    <Dropdown> menu was (its Dialog z-index isn't controllable from here). */
-function FilterSelect({ options, value, onChange, ariaLabel, searchable = false }) {
+function FilterSelect({ options, value, onChange, ariaLabel, searchable = false, icon: Icon = null, fieldLabel = null }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const [q, setQ] = useState('');
@@ -83,7 +91,11 @@ function FilterSelect({ options, value, onChange, ariaLabel, searchable = false 
         aria-expanded={open}
         aria-label={ariaLabel}
       >
-        <span className={styles.filterValue}>{selected?.label}</span>
+        {/* monday-style funnel filter icon on the RTL-leading (right) side. */}
+        {Icon && <Icon className={styles.filterIcon} aria-hidden="true" />}
+        <span className={styles.filterValue}>
+          {fieldLabel && (value == null || value === 'all') ? fieldLabel : (selected?.label ?? fieldLabel)}
+        </span>
         <span className={`${styles.filterChevron} ${open ? styles.filterChevronOpen : ''}`} aria-hidden="true">▾</span>
       </button>
       {open && pos && createPortal(
@@ -121,6 +133,80 @@ function FilterSelect({ options, value, onChange, ariaLabel, searchable = false 
         document.body
       )}
     </div>
+  );
+}
+
+/* Shared body for the discussion actions menus — the row kebab (⋯) AND the
+   right-click context menu render the exact same four actions
+   (edit / duplicate / export / delete) with an inline delete-confirm step.
+   `run` closes the host menu then fires the reused handler. Actions that are
+   null (gated off for this discussion) are simply omitted. */
+function DiscussionMenuBody({ item, actions, confirmDel, setConfirmDel, onClose }) {
+  const run = (fn) => (e) => {
+    e.stopPropagation();
+    onClose();
+    fn?.(item);
+  };
+  if (confirmDel) {
+    return (
+      <div className={styles.menuConfirm}>
+        <span className={styles.menuConfirmText}>למחוק את הדיון?</span>
+        <div className={styles.menuConfirmActions}>
+          <button type="button" className={`${styles.menuConfirmBtn} ${styles.menuConfirmYes}`} onClick={run(actions.onDelete)} role="menuitem">
+            מחק
+          </button>
+          <button type="button" className={styles.menuConfirmBtn} onClick={(e) => { e.stopPropagation(); setConfirmDel(false); }} role="menuitem">
+            ביטול
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <>
+      {actions.onEdit && (
+        <button type="button" className={styles.menuItem} onClick={run(actions.onEdit)} role="menuitem">
+          <Pencil className={styles.menuItemIcon} />
+          <span>עריכה</span>
+        </button>
+      )}
+      {actions.onDuplicate && (
+        <button type="button" className={styles.menuItem} onClick={run(actions.onDuplicate)} role="menuitem">
+          <Copy className={styles.menuItemIcon} />
+          <span>שכפול</span>
+        </button>
+      )}
+      {actions.onExport && (
+        <button
+          type="button"
+          className={styles.menuItem}
+          disabled={actions.exporting}
+          onClick={run(actions.onExport)}
+          role="menuitem"
+        >
+          {actions.exporting ? (
+            <Loader2 className={`${styles.menuItemIcon} ${styles.spinning}`} />
+          ) : (
+            <FileDown className={styles.menuItemIcon} />
+          )}
+          <span>ייצוא</span>
+        </button>
+      )}
+      {actions.onDelete && (
+        <>
+          <div className={styles.menuDivider} />
+          <button
+            type="button"
+            className={`${styles.menuItem} ${styles.menuItemDanger}`}
+            onClick={(e) => { e.stopPropagation(); setConfirmDel(true); }}
+            role="menuitem"
+          >
+            <Trash2 className={styles.menuItemIcon} />
+            <span>מחיקה</span>
+          </button>
+        </>
+      )}
+    </>
   );
 }
 
@@ -166,12 +252,6 @@ function RowMenu({ item, onEdit, onDuplicate, onExport, onDelete, exporting }) {
     setOpen(true);
   };
 
-  const run = (fn) => (e) => {
-    e.stopPropagation();
-    close();
-    fn?.(item);
-  };
-
   return (
     <>
       <button
@@ -194,64 +274,13 @@ function RowMenu({ item, onEdit, onDuplicate, onExport, onDelete, exporting }) {
           style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 10000 }}
           onClick={(e) => e.stopPropagation()}
         >
-          {confirmDel ? (
-            <div className={styles.menuConfirm}>
-              <span className={styles.menuConfirmText}>למחוק את הדיון?</span>
-              <div className={styles.menuConfirmActions}>
-                <button type="button" className={`${styles.menuConfirmBtn} ${styles.menuConfirmYes}`} onClick={run(onDelete)} role="menuitem">
-                  מחק
-                </button>
-                <button type="button" className={styles.menuConfirmBtn} onClick={(e) => { e.stopPropagation(); setConfirmDel(false); }} role="menuitem">
-                  ביטול
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {onEdit && (
-                <button type="button" className={styles.menuItem} onClick={run(onEdit)} role="menuitem">
-                  <Pencil className={styles.menuItemIcon} />
-                  <span>עריכה</span>
-                </button>
-              )}
-              {onDuplicate && (
-                <button type="button" className={styles.menuItem} onClick={run(onDuplicate)} role="menuitem">
-                  <Copy className={styles.menuItemIcon} />
-                  <span>שכפול</span>
-                </button>
-              )}
-              {onExport && (
-                <button
-                  type="button"
-                  className={styles.menuItem}
-                  disabled={exporting}
-                  onClick={run(onExport)}
-                  role="menuitem"
-                >
-                  {exporting ? (
-                    <Loader2 className={`${styles.menuItemIcon} ${styles.spinning}`} />
-                  ) : (
-                    <FileDown className={styles.menuItemIcon} />
-                  )}
-                  <span>ייצוא ל-DOCS</span>
-                </button>
-              )}
-              {onDelete && (
-                <>
-                  <div className={styles.menuDivider} />
-                  <button
-                    type="button"
-                    className={`${styles.menuItem} ${styles.menuItemDanger}`}
-                    onClick={(e) => { e.stopPropagation(); setConfirmDel(true); }}
-                    role="menuitem"
-                  >
-                    <Trash2 className={styles.menuItemIcon} />
-                    <span>מחיקה</span>
-                  </button>
-                </>
-              )}
-            </>
-          )}
+          <DiscussionMenuBody
+            item={item}
+            actions={{ onEdit, onDuplicate, onExport, onDelete, exporting }}
+            confirmDel={confirmDel}
+            setConfirmDel={setConfirmDel}
+            onClose={close}
+          />
         </div>,
         document.body
       )}
@@ -259,9 +288,69 @@ function RowMenu({ item, onEdit, onDuplicate, onExport, onDelete, exporting }) {
   );
 }
 
+/* Right-click context menu (round 33) for a discussion — the SAME four actions
+   as the row kebab, anchored at the cursor. A single instance is hosted by
+   DiscussionList and opened by BOTH the list rows and the calendar chips, so it
+   works in both views. Portal + fixed position + z-index 10000 so it is never
+   clipped and always paints above the app; closes on outside-click / Esc /
+   scroll / resize (mirrors RowMenu / FilterSelect). */
+function DiscussionContextMenu({ item, x, y, actions, onClose }) {
+  const menuRef = useRef(null);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [pos, setPos] = useState({ top: y, left: x });
+
+  useEffect(() => {
+    const onDown = (e) => { if (menuRef.current?.contains(e.target)) return; onClose(); };
+    const onEsc = (e) => { if (e.key === 'Escape') onClose(); };
+    const reposition = () => onClose();
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
+    };
+  }, [onClose]);
+
+  // Clamp inside the viewport once the menu has a measured size (so a click near
+  // an edge doesn't push it off-screen).
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      top: Math.max(8, Math.min(y, window.innerHeight - r.height - 8)),
+      left: Math.max(8, Math.min(x, window.innerWidth - r.width - 8)),
+    });
+  }, [x, y]);
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className={styles.rowMenu}
+      role="menu"
+      style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 10000 }}
+      onClick={(e) => e.stopPropagation()}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <DiscussionMenuBody
+        item={item}
+        actions={actions}
+        confirmDel={confirmDel}
+        setConfirmDel={setConfirmDel}
+        onClose={onClose}
+      />
+    </div>,
+    document.body
+  );
+}
+
 export function DiscussionList({
   onSelect, selectedId, onCreateNew, onEdit, onDuplicate, onExport, onDelete,
-  exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, currentUser = null,
+  exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, onOpenMyDecisions, currentUser = null,
   // Calendar view — nav state lives in App so it survives the refreshKey remount.
   viewMode = 'list', onViewModeChange, calendarAnchor, calendarMode, onCalendarNavigate, onCreateAt,
 }) {
@@ -275,6 +364,10 @@ export function DiscussionList({
   });
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' or a status label id (string)
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  // Right-click context menu (round 33) — {item, x, y} while open. A single
+  // instance serves BOTH the list rows and the calendar chips (both live inside
+  // this component's tree).
+  const [ctxMenu, setCtxMenu] = useState(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -294,6 +387,13 @@ export function DiscussionList({
   }, [debouncedSearch, monthFilter, typeFilter, isCalendar, calendarMode, calendarAnchor]);
 
   const { items, loading, refetching, loadingMore, cursor, loadMore, softDeleteDiscussion } = useDiscussions(filters);
+
+  // NOTE (round 46): the LEFT discussions list intentionally shows NO branded
+  // Meetings splash. The list is preloaded at boot (prefetchDiscussions), so its
+  // initial-load window is normally skipped entirely; when it does briefly load
+  // we render a plain empty area and let it settle. The branded loader now lives
+  // ONLY in the boot gate (App) and the RIGHT-hand card pane on a return to the
+  // discussions view from My Tasks / My Decisions.
 
   // Per-discussion edit gate (mirrors DiscussionCard) resolved through the
   // advisory permission hook. The list rows carry discussionCreatorID/
@@ -330,17 +430,38 @@ export function DiscussionList({
     onDelete?.(item, { undo });
   };
 
-  const monthOptions = useMemo(() => {
-    const now = new Date();
-    const options = [];
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = `${MONTHS_HE[d.getMonth()]} ${d.getFullYear()}`;
-      options.push({ value: val, label });
-    }
-    return options;
-  }, []);
+  // Per-discussion action set (round 33) — the SAME gating as the row kebab:
+  // edit/delete need editDiscussionFields, export needs exportDocs, duplicate is
+  // ungated (mirrors RowMenu). Reuses the existing App handlers + soft-delete.
+  const resolveItemActions = (item) => ({
+    onEdit: (onEdit && canEditItem(item)) ? onEdit : null,
+    onDuplicate: onDuplicate || null,
+    onExport: (onExport && canExportItem(item)) ? onExport : null,
+    onDelete: (onDelete && canEditItem(item)) ? handleRowDelete : null,
+    exporting: exportingId === item.id,
+  });
+  // Open the shared right-click menu at the cursor — from a list row OR a calendar
+  // chip. Suppress the native browser menu; no-op when the user has no action on
+  // this discussion (so we never show an empty menu).
+  const openItemContextMenu = (item, e) => {
+    const actions = resolveItemActions(item);
+    if (!actions.onEdit && !actions.onDuplicate && !actions.onExport && !actions.onDelete) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ item, x: e.clientX, y: e.clientY });
+  };
+
+  // Month-filter options: offer EVERY month that actually has a discussion — past,
+  // present OR FUTURE (a discussion dated next month is selectable before that
+  // month arrives) — always including the current month. Built from the distinct
+  // months-with-discussions (one lean date-only fetch) ∪ {current}, newest-first.
+  // The current month stays the DEFAULT selection (see monthFilter above), so the
+  // initial load is unchanged; options just expand once the month set resolves.
+  const { months: monthsWithDiscussions } = useDiscussionMonths();
+  const monthOptions = useMemo(
+    () => buildMonthOptions(monthsWithDiscussions),
+    [monthsWithDiscussions]
+  );
 
   const monthDropdownOptions = useMemo(
     () => [{ value: 'all', label: 'כל החודשים' }, ...monthOptions],
@@ -369,14 +490,25 @@ export function DiscussionList({
 
   return (
     <div className={styles.root}>
-      {/* Vibrant header with gradient accent */}
+      {/* Vibrant header with gradient accent (mockup: 4px multi-color bar) */}
       <div className={styles.header}>
-        <div
-          className={styles.gradientBar}
-          style={{ background: 'linear-gradient(to left, hsl(var(--dept-legal)), hsl(var(--dept-hr)), hsl(var(--dept-ceo)), hsl(var(--status-done)))' }}
-        />
+        <div className={styles.gradientBar} />
         <div className={styles.headerInner}>
+          {/* Mockup buttons row: personal-view nav (outline) at inline-start,
+              chrome (gear + view toggle) and the primary "חדש" at inline-end. */}
           <div className={styles.titleRow}>
+            <div className={styles.titleActions}>
+              {onOpenMyDecisions && (
+                <Button kind={"secondary"} size={"small"} onClick={onOpenMyDecisions}>
+                  ההחלטות שלי
+                </Button>
+              )}
+              {onOpenMyTasks && (
+                <Button kind={"secondary"} size={"small"} onClick={onOpenMyTasks}>
+                  המשימות שלי
+                </Button>
+              )}
+            </div>
             <div className={styles.titleActions}>
               {canManageSettings && (
                 <IconButton
@@ -387,13 +519,6 @@ export function DiscussionList({
                   onClick={onOpenSettings}
                 />
               )}
-              {onOpenMyTasks && (
-                <Button kind={"secondary"} size={"small"} onClick={onOpenMyTasks}>
-                  המשימות שלי
-                </Button>
-              )}
-            </div>
-            <div className={styles.titleActions}>
               {onViewModeChange && (
                 <IconButton
                   icon={isCalendar ? List : Calendar}
@@ -419,6 +544,7 @@ export function DiscussionList({
                   type="text"
                   className={styles.search}
                   aria-label="חיפוש דיון"
+                  placeholder="חיפוש דיון"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
@@ -429,6 +555,8 @@ export function DiscussionList({
                   value={typeFilter}
                   onChange={(val) => setTypeFilter(val ?? 'all')}
                   ariaLabel="סינון לפי סוג"
+                  fieldLabel="סוג הדיון"
+                  icon={Filter}
                   searchable
                 />
               </div>
@@ -441,26 +569,34 @@ export function DiscussionList({
                   type="text"
                   className={styles.search}
                   aria-label="חיפוש דיון"
+                  placeholder="חיפוש דיון"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
+              {/* Full-width filter chips (round 38): each stretches to fill half
+                  the row so together they span the search-input width above. Order
+                  (DOM = RTL): סוג הדיון on the right (start), month on the left
+                  (end). Both carry a funnel icon. */}
               <div className={styles.filterRow}>
-                <div className={styles.filterCell}>
-                  <FilterSelect
-                    options={monthDropdownOptions}
-                    value={monthFilter}
-                    onChange={(val) => setMonthFilter(val ?? 'all')}
-                    ariaLabel="סינון לפי חודש"
-                  />
-                </div>
                 <div className={styles.filterCell}>
                   <FilterSelect
                     options={typeDropdownOptions}
                     value={typeFilter}
                     onChange={(val) => setTypeFilter(val ?? 'all')}
                     ariaLabel="סינון לפי סוג"
-                  searchable
+                    fieldLabel="סוג הדיון"
+                    icon={Filter}
+                    searchable
+                  />
+                </div>
+                <div className={styles.filterCell}>
+                  <FilterSelect
+                    options={monthDropdownOptions}
+                    value={monthFilter}
+                    onChange={(val) => setMonthFilter(val ?? 'all')}
+                    ariaLabel="סינון לפי חודש"
+                    icon={Filter}
                   />
                 </div>
               </div>
@@ -481,15 +617,14 @@ export function DiscussionList({
           onSelect={onSelect}
           onCreateAt={canCreateDiscussion ? onCreateAt : undefined}
           rowActions={rowActions}
+          onItemContextMenu={openItemContextMenu}
         />
       ) : (
       <div className={`${styles.scroll} ${refetching ? styles.refetching : ''}`}>
         {loading ? (
-          <div className={styles.skeletonList}>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} type={"rectangle"} fullWidth height={ROW_SKELETON_H} />
-            ))}
-          </div>
+          // Preloaded at boot → this window is normally skipped. Render a plain
+          // empty area (NO branded splash) while it settles — never the animation.
+          <div className={styles.listLoading} aria-hidden="true" />
         ) : items.length === 0 ? (
           <div className={styles.empty}>
             <Text color={"secondary"}>לא נמצאו דיונים</Text>
@@ -503,22 +638,16 @@ export function DiscussionList({
                 <div key={item.id} className={styles.itemWrap}>
                   <button
                     onClick={() => onSelect(item)}
+                    onContextMenu={(e) => openItemContextMenu(item, e)}
                     aria-label={item.name}
+                    dir="ltr"
                     className={`${styles.item} ${isSelected ? styles.itemSelected : ''}`}
-                    style={isSelected ? { borderLeftColor: accent } : undefined}
                   >
-                    <div className={styles.itemContent}>
-                      <span
-                        className={styles.dot}
-                        style={{ backgroundColor: accent }}
-                      />
-                      <div className={styles.itemBody}>
-                        <p className={styles.itemName}>{item.name}</p>
-                        {item.discussionDateID && (
-                          <span className={styles.itemDate}>{fmtListDate(item.discussionDateID)}</span>
-                        )}
-                      </div>
-                    </div>
+                    <span className={styles.rail} style={{ backgroundColor: accent }} />
+                    <p className={styles.itemName}>{item.name}</p>
+                    {item.discussionDateID && (
+                      <span className={styles.itemDate}>{fmtListDateCompact(item.discussionDateID)}</span>
+                    )}
                   </button>
                   {(onDuplicate || onEdit || onExport || onDelete) && (
                     <div className={styles.itemActions}>
@@ -551,6 +680,18 @@ export function DiscussionList({
           </div>
         )}
       </div>
+      )}
+
+      {/* Single right-click menu instance — serves both the list rows and the
+          calendar chips (round 33). Rendered here so one portal covers both views. */}
+      {ctxMenu && (
+        <DiscussionContextMenu
+          item={ctxMenu.item}
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          actions={resolveItemActions(ctxMenu.item)}
+          onClose={() => setCtxMenu(null)}
+        />
       )}
     </div>
   );

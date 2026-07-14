@@ -53,7 +53,7 @@ async function persist(discussionId, order) {
   try {
     await monday.storage.setItem(key(discussionId), JSON.stringify(order));
   } catch (err) {
-    void err; // silent-failure mutation: persist errors vanish without a trace
+    logger.warn('topicOrder', 'שמירת סדר הנושאים/נקודות נכשלה', err);
   }
 }
 

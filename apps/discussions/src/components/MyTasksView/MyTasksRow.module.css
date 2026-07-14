@@ -66,7 +66,8 @@
   font-size: 14px;
   line-height: 36px; /* match native row height */
   font-family: var(--font-family);
-  text-align: start;
+  text-align: right;
+  direction: rtl;
   /* reset button chrome — it's a clickable text label */
   border: none;
   background: transparent;
@@ -85,6 +86,8 @@
   font-size: 14px;
   font-family: var(--font-family);
   background: var(--primary-background-color, #fff);
+  direction: rtl;
+  text-align: right;
 }
 .nameInput:focus-visible {
   outline: none;
@@ -240,30 +243,10 @@
   padding: 0;
 }
 
-/* notes — inline editable textarea that visually blends into the cell */
+/* notes — long-text cell (round 40): the cell is just a padding-less wrapper;
+   the single-line (ellipsis) display, hover tooltip and click-to-open editor
+   popover all live in the shared NotesEditor component. The RTL/right-aligned
+   free-text treatment (round 32/33) now lives on the NotesEditor trigger. */
 .notesCell {
   padding: 0;
-}
-.notesInput {
-  width: 100%;
-  min-height: 36px;
-  resize: none;
-  border: none;
-  background: transparent;
-  padding: 8px;
-  color: var(--primary-text-color, #323338);
-  font-size: 14px;
-  font-family: var(--font-family);
-  line-height: 20px;
-  /* notes is the only LTR-or-RTL free-text cell — follow the document direction */
-  direction: inherit;
-  text-align: start;
-}
-.notesInput::placeholder {
-  color: var(--placeholder-color, #9699a6);
-}
-.notesInput:focus-visible {
-  outline: none;
-  background: var(--primary-background-color, #fff);
-  box-shadow: inset 0 0 0 1px var(--primary-color, #0073ea);
 }

@@ -1,0 +1,126 @@
+/* Counter popup — 560px centered modal (mockup: "COUNTER POPUP"). */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  background: rgba(0, 0, 0, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: pip-fade 0.12s ease;
+}
+@keyframes pip-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes pip-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.panel {
+  width: 560px;
+  max-width: 92vw;
+  max-height: 80vh;
+  background: var(--primary-background-color, #fff);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: pip-pop 0.16s ease;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
+}
+.headerText {
+  min-width: 0;
+}
+.title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-color, #323338);
+}
+.subtitle {
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.close {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  font-size: 22px;
+  cursor: pointer;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.close:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* One linked decision/task row: colored side bar | item text | status badge. */
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  border-radius: 8px;
+}
+.bar {
+  width: 4px;
+  align-self: stretch;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+/* Purple = decisions, blue = tasks (chrome accents per the approved mockup). */
+.barDecision {
+  background: #6b4ee6;
+}
+.barTask {
+  background: #0073ea;
+}
+.text {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-color, #323338);
+}
+/* Status badge — fill color comes inline from the item's MAPPED status column. */
+.badge {
+  padding: 3px 10px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.empty {
+  padding: 28px;
+  text-align: center;
+  color: var(--placeholder-color, #9699a6);
+  font-size: 14px;
+}

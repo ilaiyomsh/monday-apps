@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Text, Button, Flex, Avatar } from '@vibe/core';
 import { CloseSmall, Search } from '@vibe/icons';
 import { דיונים1Board } from '@api/BoardSDK.js';
-import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
+import { useDropdownOptions, addDropdownLabel } from '@generated/hooks/useDropdownOptions.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
 import { api, parseValue, cvSelection } from '@generated/utils/mondayApi/monday-client.js';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
@@ -17,7 +17,7 @@ import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
-import { createTopicsFromTemplate, countPoints, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
+import { createTopicsFromTemplate, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { toDateInput, toTimeInput, composeLocalDate } from '@generated/utils/dateTime.js';
@@ -99,7 +99,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const can = usePermission({ canManageSettings, currentUser });
   const canAddType = can('addDiscussionTypes');
   const { templates, participantTemplates, typeTemplates, typeColor, assignRandomTypeColor } = useTemplates();
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const previousTasksMode =
     settings?.preferences?.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION;
   const [name, setName] = useState('');
@@ -118,8 +118,8 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     subscribePeopleColumns, getPeopleColumnsVersion, getPeopleColumnsVersion
   );
   // Every field that maps to a board column shows that column's LIVE title
-  // (fallback = its historical Hebrew label). "שעה" and "נושאים מתבנית" are not
-  // board columns, so they keep their fixed labels.
+  // (fallback = its historical Hebrew label). "שעה" is not a board column, so
+  // it keeps its fixed label.
   const fieldLabels = React.useMemo(() => ({
     type: getColumnTitle('discussions', 'discussionTypeID') || 'סוג דיון',
     date: getColumnTitle('discussions', 'discussionDateID') || 'תאריך',
@@ -138,7 +138,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const [isPreviousDropdownOpen, setIsPreviousDropdownOpen] = useState(false);
   const [previousSearch, setPreviousSearch] = useState('');
   const [templateId, setTemplateId] = useState('none');
-  const [isTemplateDropdownOpen, setIsTemplateDropdownOpen] = useState(false);
   const [isParticipantTemplateMenuOpen, setIsParticipantTemplateMenuOpen] = useState(false);
   // "סוג" (discussion type) — a SINGLE-select DROPDOWN column (alias
   // discussionTypeID). `discussionType` holds the type's label TEXT (or null).
@@ -155,7 +154,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const [newTypeName, setNewTypeName] = useState('');
   const [addingType, setAddingType] = useState(false); // mutation in-flight
   const [typeSearch, setTypeSearch] = useState(''); // filters the type dropdown list
-  const { options: typeOptions } = useDropdownOptions('discussions', 'discussionTypeID');
+  const { options: typeOptions, loading: typeOptionsLoading } = useDropdownOptions('discussions', 'discussionTypeID');
   const titleRef = useRef(null);
   const timeMenuRef = useRef(null);
 
@@ -340,22 +339,50 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     if (partTpl) applyParticipantTemplate(partTpl);
   };
 
-  // Add a new discussion type from the field, then select it. "סוג" is a dropdown
-  // column, so the label is created on the board when the discussion is SAVED
-  // (create_labels_if_missing on the write). Here we just assign the type a random
-  // palette color in app storage and select the name. Errors surface via the
-  // logger/toast funnel.
+  // Add a new discussion type: create the label on the "סוג" dropdown column
+  // DIRECTLY, right now — never deferred to save-time create_labels_if_missing,
+  // which silently cannot create labels on MANAGED columns (2026-07-12 incident:
+  // the UI showed the type as created, then the save failed). addDropdownLabel
+  // handles BOTH regular and managed columns: the persisted managedColumnId hint
+  // (detected on Settings save, published via the config store) skips the account
+  // scan, a regular column goes through update_dropdown_column, and a stale hint
+  // self-heals — the corrected uuid is persisted back to settings. Only after the
+  // label EXISTS on the board do we store its color and select it (typeOptions
+  // refreshes live via addDropdownLabel → notify). Failures surface via the
+  // logger/toast funnel and the input stays open with the typed text.
   const handleAddType = async () => {
     const nm = newTypeName.trim();
     if (!nm || addingType) return;
+    const hint = getColumns('discussions')?.discussionTypeID?.managedColumnId || null;
     try {
       setAddingType(true);
+      const { managedColumnId } = await addDropdownLabel({
+        boardKey: 'discussions', alias: 'discussionTypeID', title: nm, managedColumnId: hint,
+      });
+      const typeEntry = settings?.columns?.discussions?.discussionTypeID;
+      if (managedColumnId !== hint && typeEntry) {
+        // Self-heal resolved the truth — persist it so the next add skips the scan.
+        // Best-effort: a failed persist only costs a re-detection next time.
+        try {
+          await updateSettings({
+            columns: {
+              ...settings.columns,
+              discussions: {
+                ...settings.columns.discussions,
+                discussionTypeID: { ...typeEntry, managed: !!managedColumnId, managedColumnId },
+              },
+            },
+          });
+        } catch (persistErr) {
+          logger.warn('CreateDiscussionModal', 'עדכון רמז עמודה מנוהלת נכשל (לא חוסם)', persistErr);
+        }
+      }
       await assignRandomTypeColor(nm);
       setIsAddingType(false);
       setNewTypeName('');
       selectType(nm);
     } catch (err) {
-      logger.error('CreateDiscussionModal', 'שגיאה בהוספת סוג דיון', err);
+      logger.error('CreateDiscussionModal', 'שגיאה בהוספת סוג דיון — הסוג לא נוצר בלוח', err);
     } finally {
       setAddingType(false);
     }
@@ -378,11 +405,23 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       if (lead.length) payload.discussionLeadID = lead;
       if (coordinator.length) payload.discussionCoordinatorID = coordinator;
       if (participants.length) payload.participantsID = participants;
-      // "סוג" dropdown: write the selected label TEXT. When the type is CLEARED
-      // in edit mode we must WRITE an empty value (formatValue('dropdown', null)
-      // => {}) so the original label doesn't persist — mirrors the
-      // previousDiscussionID clear-on-edit below. On create we simply omit it.
-      if (discussionType !== null && discussionType !== undefined && discussionType !== '') {
+      // "סוג" dropdown: only ever WRITE a label that ACTUALLY EXISTS on the
+      // column. Options come from useDropdownOptions (the board's real labels),
+      // so this blocks the inline "add new type" free-text affordance from
+      // submitting a NON-existent label (e.g. "טוויסט") — which monday rejects
+      // with a ColumnValueException on a locked/fixed dropdown even with
+      // create_labels_if_missing. (Creatable types are out of scope for now.)
+      // While options are still loading we can't validate, so we keep the
+      // selected value rather than risk dropping a valid one. When the type is
+      // CLEARED (or is an unknown label we won't submit) in edit mode we WRITE an
+      // empty value (formatValue('dropdown', null) => {}) so the original label
+      // doesn't persist — mirrors the previousDiscussionID clear-on-edit below.
+      // On create we simply omit it.
+      const knownTypeLabels = (typeOptions || []).map((o) => o.label);
+      const typeIsSubmittable =
+        discussionType !== null && discussionType !== undefined && discussionType !== ''
+        && (typeOptionsLoading || knownTypeLabels.includes(discussionType));
+      if (typeIsSubmittable) {
         payload.discussionTypeID = discussionType;
       } else if (isEdit) {
         payload.discussionTypeID = null;
@@ -406,14 +445,16 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         },
       });
 
-      // create_labels_if_missing so a freshly-added "סוג" (dropdown) label is
-      // minted on the board here rather than silently dropped.
+      // NO create_labels_if_missing here: a freshly-added "סוג" label was
+      // already created on the column by handleAddType (addDropdownLabel) — and
+      // on a MANAGED column the flag can't create labels anyway (it fails the
+      // whole save with ColumnValueException; 2026-07-12 incident).
       let savedId;
       if (isEdit) {
-        await board.item(editDiscussion.id).update(payload, { createLabelsIfMissing: true }).execute();
+        await board.item(editDiscussion.id).update(payload).execute();
         savedId = editDiscussion.id;
       } else {
-        const created = await board.item().create(payload, { createLabelsIfMissing: true }).execute();
+        const created = await board.item().create(payload).execute();
         savedId = created.id;
       }
 
@@ -479,10 +520,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
           setIsPreviousDropdownOpen(false);
           return;
         }
-        if (isTemplateDropdownOpen) {
-          setIsTemplateDropdownOpen(false);
-          return;
-        }
         if (isParticipantTemplateMenuOpen) {
           setIsParticipantTemplateMenuOpen(false);
           return;
@@ -500,20 +537,19 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [open, onClose, isPreviousDropdownOpen, isTemplateDropdownOpen, isParticipantTemplateMenuOpen, isTypeDropdownOpen, isTimeDropdownOpen]);
+  }, [open, onClose, isPreviousDropdownOpen, isParticipantTemplateMenuOpen, isTypeDropdownOpen, isTimeDropdownOpen]);
 
   useEffect(() => {
-    if (!open || (!isPreviousDropdownOpen && !isTemplateDropdownOpen && !isParticipantTemplateMenuOpen && !isTypeDropdownOpen && !isTimeDropdownOpen)) return undefined;
+    if (!open || (!isPreviousDropdownOpen && !isParticipantTemplateMenuOpen && !isTypeDropdownOpen && !isTimeDropdownOpen)) return undefined;
     const handlePointerDown = () => {
       setIsPreviousDropdownOpen(false);
-      setIsTemplateDropdownOpen(false);
       setIsTypeDropdownOpen(false);
       setIsParticipantTemplateMenuOpen(false);
       setIsTimeDropdownOpen(false);
     };
     window.addEventListener('pointerdown', handlePointerDown);
     return () => window.removeEventListener('pointerdown', handlePointerDown);
-  }, [open, isPreviousDropdownOpen, isTemplateDropdownOpen, isParticipantTemplateMenuOpen, isTypeDropdownOpen, isTimeDropdownOpen]);
+  }, [open, isPreviousDropdownOpen, isParticipantTemplateMenuOpen, isTypeDropdownOpen, isTimeDropdownOpen]);
 
   if (!open) return null;
 
@@ -526,23 +562,25 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     ? discussionOptions.filter((o) => o.label.toLowerCase().includes(q))
     : discussionOptions;
 
-  const templateOptions = templates.map((t) => ({
-    value: t.id,
-    label: `${t.name} (${t.topics.length} נושאים · ${countPoints(t)} נקודות)`,
-  }));
-  const selectedTemplateLabel =
-    templateOptions.find((o) => o.value === templateId)?.label || 'בחר תבנית';
-
-  // The selected "סוג דיון" IS the label text (dropdown value).
-  const selectedTypeLabel = discussionType || '';
-
-  // The "נושאים מתבנית" field doubles as the type-topics indicator: when a type
-  // carries topics (typeTopics stashed for submit, templateId still 'none'), the
-  // trigger shows the type's template name instead of the placeholder — so we no
-  // longer need a separate "נושאים עבור {type}" field.
-  const typeTopicsSelected = !!typeTopics?.length;
-  const templateFieldValue = typeTopicsSelected ? `תבנית "${selectedTypeLabel}"` : selectedTemplateLabel;
-  const templateFieldEmpty = templateId === 'none' && !typeTopicsSelected;
+  // Enter ANYWHERE in the form submits — same as clicking "צור דיון"/"שמור
+  // שינויים" — while RESPECTING the button's disabled state (name + date + time
+  // are all required). It is deliberately INERT when a picker layer is active:
+  //  • any control inside an open inline dropdown list (role=listbox: the type /
+  //    שעה / previous-discussion menus and their search + add-type inputs) — so
+  //    Enter selects/searches there instead of submitting;
+  //  • buttons (Enter triggers their own click) and textareas (multiline);
+  //  • whenever an inline dropdown open-flag is set (belt-and-suspenders).
+  // The date + people pickers render in portals, so their Enter never bubbles here.
+  const onFormKeyDown = (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'BUTTON')) return;
+    if (t && typeof t.closest === 'function' && t.closest('[role="listbox"], [role="menu"]')) return;
+    if (isTypeDropdownOpen || isTimeDropdownOpen || isPreviousDropdownOpen || isParticipantTemplateMenuOpen || isAddingType) return;
+    if (creating || !name.trim() || !date || !time) return;
+    e.preventDefault();
+    handleSubmit();
+  };
 
   return (
     <div className={styles.overlay} onClick={(e) => {
@@ -551,10 +589,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       <div
         className={styles.modal}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={onFormKeyDown}
         role="dialog"
         aria-modal="true"
         aria-label={isEdit ? 'עריכת דיון' : 'יצירת דיון חדש'}
-        dir="ltr"
+        dir="rtl"
       >
         <div className={styles.header}>
           <input
@@ -572,7 +611,8 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         </div>
         <div className={styles.content}>
           <Flex direction="column" gap={16} align="stretch" className={styles.form}>
-            <div className={styles.row}>
+            {/* Row 1: סוג דיון — full-width, on its own row. */}
+            <div className={`${styles.row} ${styles.rowSingle}`}>
               <div className={styles.field}>
                 <Text type="text2" className={styles.label}>{fieldLabels.type}</Text>
                 <div className={styles.customDropdown}>
@@ -583,7 +623,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                       e.stopPropagation();
                       setIsTypeDropdownOpen((prev) => !prev);
                       setIsPreviousDropdownOpen(false);
-                      setIsTemplateDropdownOpen(false);
                       setIsAddingType(false);
                       setTypeSearch('');
                     }}
@@ -685,6 +724,10 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Row 2: תאריך הדיון + שעה, side by side. */}
+            <div className={`${styles.row} ${styles.rowSingle}`}>
               <div className={styles.field}>
                 <div className={styles.dateTimeRow}>
                   <div className={styles.dateCol}>
@@ -710,7 +753,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                           e.stopPropagation();
                           setIsTimeDropdownOpen((prev) => !prev);
                           setIsPreviousDropdownOpen(false);
-                          setIsTemplateDropdownOpen(false);
                           setIsTypeDropdownOpen(false);
                         }}
                         aria-expanded={isTimeDropdownOpen}
@@ -751,7 +793,24 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
               </div>
             </div>
 
-            <div className={styles.row}>
+            {/* Row 3: מנהל (lead) + רשם דיון (coordinator) + משתתפים (participants),
+                three balanced fields side by side. The "מתבנית" participant-
+                template action stays attached to the משתתפים label. */}
+            <div className={styles.row3}>
+              <div className={styles.field}>
+                <Text type="text2" className={styles.label}>{leadLabel}</Text>
+                <div className={styles.fieldWrap}>
+                  <PersonPicker selected={lead} onChange={setLead} bordered single closeOnSelect boardKey="discussions" />
+                  {lead.length > 0 && <FieldClearButton onClear={() => setLead([])} label={`ניקוי ${leadLabel}`} />}
+                </div>
+              </div>
+              <div className={styles.field}>
+                <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
+                <div className={styles.fieldWrap}>
+                  <PersonPicker selected={coordinator} onChange={setCoordinator} bordered single closeOnSelect boardKey="discussions" />
+                  {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
+                </div>
+              </div>
               <div className={styles.field}>
                 <div className={styles.labelRow}>
                   <Text type="text2" className={styles.label}>{fieldLabels.participants}</Text>
@@ -764,7 +823,6 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                           e.stopPropagation();
                           setIsParticipantTemplateMenuOpen((prev) => !prev);
                           setIsPreviousDropdownOpen(false);
-                          setIsTemplateDropdownOpen(false);
                         }}
                         aria-haspopup="listbox"
                         aria-expanded={isParticipantTemplateMenuOpen}
@@ -795,80 +853,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                   )}
                 </div>
                 <div className={styles.fieldWrap}>
-                  <PersonPicker selected={participants} onChange={setParticipants} bordered />
+                  <PersonPicker selected={participants} onChange={setParticipants} bordered boardKey="discussions" />
                   {participants.length > 0 && <FieldClearButton onClear={() => setParticipants([])} label="ניקוי משתתפים" />}
                 </div>
               </div>
-              {templates.length > 0 && (
-                <div className={styles.field}>
-                  <Text type="text2" className={styles.label}>נושאים מתבנית</Text>
-                  <div className={styles.customDropdown}>
-                    <button
-                      type="button"
-                      className={styles.dropdownTrigger}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsTemplateDropdownOpen((prev) => !prev);
-                        setIsPreviousDropdownOpen(false);
-                        setIsTypeDropdownOpen(false);
-                      }}
-                      aria-expanded={isTemplateDropdownOpen}
-                      aria-haspopup="listbox"
-                    >
-                      <span className={`${styles.dropdownValue} ${templateFieldEmpty ? styles.dropdownPlaceholder : ''}`}>{templateFieldValue}</span>
-                      <span className={styles.dropdownChevron} aria-hidden="true">▾</span>
-                    </button>
-                    {(templateId !== 'none' || typeTopicsSelected) && (
-                      <FieldClearButton onClear={() => { setTemplateId('none'); setTypeTopics(null); }} label="ניקוי תבנית" />
-                    )}
-                    {isTemplateDropdownOpen && (
-                      <ul
-                        className={styles.dropdownMenu}
-                        role="listbox"
-                        onClick={(e) => e.stopPropagation()}
-                        onPointerDown={(e) => e.stopPropagation()}
-                      >
-                        {templateOptions.map((option) => (
-                          <li
-                            key={option.value}
-                            role="option"
-                            aria-selected={templateId === option.value}
-                            className={`${styles.dropdownItem} ${
-                              templateId === option.value ? styles.dropdownItemSelected : ''
-                            }`}
-                            onClick={() => {
-                              setTemplateId(option.value);
-                              setTypeTopics(null);
-                              setIsTemplateDropdownOpen(false);
-                            }}
-                          >
-                            {option.label}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
-            <div className={styles.row}>
-              <div className={styles.field}>
-                <Text type="text2" className={styles.label}>{leadLabel}</Text>
-                <div className={styles.fieldWrap}>
-                  <PersonPicker selected={lead} onChange={setLead} bordered />
-                  {lead.length > 0 && <FieldClearButton onClear={() => setLead([])} label={`ניקוי ${leadLabel}`} />}
-                </div>
-              </div>
-              <div className={styles.field}>
-                <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
-                <div className={styles.fieldWrap}>
-                  <PersonPicker selected={coordinator} onChange={setCoordinator} bordered />
-                  {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
-                </div>
-              </div>
-            </div>
-
+            {/* Row 4: דיון קודם (previous discussion). */}
             {!hidePreviousDiscussion && (
             <div className={`${styles.row} ${styles.rowSingle}`}>
               <div className={`${styles.field} ${styles.previousDiscussionField}`}>

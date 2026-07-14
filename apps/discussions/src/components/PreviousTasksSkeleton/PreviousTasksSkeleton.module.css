@@ -1,0 +1,110 @@
+/* Skeleton table loader for the "הנחיות קודמות" (PreviousTasksTab) tab —
+   monday-style light-gray rounded placeholder bars on white with a subtle
+   left-to-right shimmer sweep. Shown while the tab's initial data is loading,
+   instead of a blank/generic state. Class names are prefixed (pt / ptSkel) to
+   stay unique under the app's non-scoped CSS-module setup (literal class names). */
+
+.ptSkeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  padding-block-start: 4px;
+  box-sizing: border-box;
+  /* Match the tab's LTR board direction so bars anchor at the start (left). */
+  direction: ltr;
+}
+
+/* Base placeholder bar: light gray, rounded, with a shimmer sweep overlay. */
+.ptBar {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--ui-border-color, #e6e9ef);
+  border-radius: 6px;
+}
+.ptBar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: ptSkeletonShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes ptSkeletonShimmer {
+  100% { transform: translateX(100%); }
+}
+
+/* Toolbar row: a wider "lead" pill on the left, two action pills on the right. */
+.ptToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ptToolbarLead {
+  width: 200px;
+  height: 32px;
+  border-radius: 16px;
+}
+.ptToolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ptToolbarPill {
+  width: 96px;
+  height: 32px;
+  border-radius: 16px;
+}
+
+/* Header row of short column-cell placeholders. */
+.ptHeaderRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-block: 8px;
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.ptHeaderCell {
+  height: 12px;
+  flex: 0 0 auto;
+}
+
+/* Body: stacked rows, each a short label placeholder + a longer content bar at
+   a staggered offset/width (evokes a real board mid-load). */
+.ptBody {
+  display: flex;
+  flex-direction: column;
+}
+.ptRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 46px;
+  border-bottom: 1px solid var(--layout-border-color, #eceef3);
+}
+.ptRowLabel {
+  height: 12px;
+  flex: 0 0 auto;
+}
+.ptRowContent {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ptRowBar {
+  height: 14px;
+  max-width: 100%;
+}
+
+/* Respect reduced-motion: freeze the shimmer sweep (bars stay static gray). */
+@media (prefers-reduced-motion: reduce) {
+  .ptBar::after {
+    animation: none;
+  }
+}

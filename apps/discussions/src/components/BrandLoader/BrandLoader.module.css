@@ -1,0 +1,123 @@
+/* "Meetings" loading splash on a WHITE background. Mark = the monday app icon:
+   a central "pizza" (disc cut into 8 slices) + 3 person figures whose shoulder
+   arcs curve around the disc. Colorized with the Twyst gradient; the 3 people
+   SLIDE clockwise to the next seat in a cool eased hop. The "Meetings" wordmark
+   colors flow as a left-to-right wave, over "Powered by twyst". */
+.brandLoader,
+.brandLoaderFull {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+}
+.brandLoader {
+  width: 100%;
+  /* Round 50 — fill the FULL height of the content pane (not just a fixed 260px)
+     so the mark + wordmark center on BOTH axes in the area where the content will
+     render. Every inline host resolves a definite height — App's .main (a
+     stretched flex item) and the views' .board (flex:1 + min-height:0) — so
+     height:100% resolves; min-height keeps a floor for any shorter container, and
+     flex:1 1 auto keeps it filling inside a flex-column host too. Centering comes
+     from the shared rule above (display:flex + center on both axes). */
+  height: 100%;
+  min-height: 260px;
+  flex: 1 1 auto;
+}
+.brandLoaderFull {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  animation: bl-fade 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.mark {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 8px 24px rgba(97, 97, 255, 0.22));
+}
+.pizza {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bl-breathe 2.6s ease-in-out infinite;
+}
+.people {
+  transform-box: view-box;
+  transform-origin: 50px 50px;
+  animation: bl-hop 3s cubic-bezier(0.55, 0, 0.2, 1) infinite;
+}
+@keyframes bl-hop {
+  0%, 18%   { transform: rotate(0deg) scale(1); }
+  26%       { transform: rotate(60deg) scale(1.06); }
+  33%, 51%  { transform: rotate(120deg) scale(1); }
+  59%       { transform: rotate(180deg) scale(1.06); }
+  66%, 84%  { transform: rotate(240deg) scale(1); }
+  92%       { transform: rotate(300deg) scale(1.06); }
+  100%      { transform: rotate(360deg) scale(1); }
+}
+@keyframes bl-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.96; }
+  50% { transform: scale(1.05); opacity: 1; }
+}
+
+.textBlock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.wordmark {
+  font-family: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  /* Round 56 — with line-height:1 the text box is exactly font-size tall, so the
+     descender of the "g" in "Meetings" fell below the background-clip:text paint
+     box and looked cut off. Raise line-height and add a small padding-bottom so
+     the full glyph (including the descender) sits inside the painted gradient
+     area, and keep overflow visible so nothing clips it. */
+  line-height: 1.3;
+  padding-bottom: 0.14em;
+  overflow: visible;
+  background: linear-gradient(100deg,
+    #6161FF 0%, #97AEFF 18%, #E271FF 34%, #FFA88D 50%,
+    #E271FF 66%, #97AEFF 82%, #6161FF 100%);
+  background-size: 200% 100%;
+  background-position: 0% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: bl-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both,
+    bl-wavegrad 2.8s linear infinite;
+}
+.poweredBy {
+  font-family: 'Figtree', 'Segoe UI', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #8288A3;
+  animation: bl-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.62s both;
+}
+@keyframes bl-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes bl-wavegrad {
+  from { background-position: 0% 50%; }
+  to { background-position: 200% 50%; }
+}
+@keyframes bl-fade { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pizza, .people, .wordmark, .poweredBy, .inner {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
+}

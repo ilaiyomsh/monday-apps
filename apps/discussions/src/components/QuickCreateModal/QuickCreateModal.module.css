@@ -1,0 +1,288 @@
+/* Quick-create (FAB) modal — mirrors NewTaskModal's floating shell, laid out
+   per the approved decisions mockup: segmented toggle row, big underlined
+   text input, scope caption, two optional fields, footer. */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000; /* same layer as NewTaskModal — above tab content + FAB (900) */
+  display: flex;
+  align-items: flex-start;
+  /* Round 57 — the quick-create modal used to open dead-center. It's launched
+     from the per-point "+" on the right side of the Topics rows, so it should
+     open toward the RIGHT of the view (between the middle and the right edge),
+     not flush to the edge. In this RTL overlay the inline-start edge IS the
+     right edge, so we pin the modal to the start (right) and add an inline-start
+     gap so it lands between center and the right edge. The gap is viewport-
+     relative + clamped so it never pushes the 520px shell off-screen on narrower
+     widths; the mobile bottom-sheet block below (padding shorthand) resets it. */
+  justify-content: flex-start;
+  direction: rtl;
+  padding: 12vh 16px 16px;
+  padding-inline-start: clamp(24px, 18vw, 340px);
+  background: rgba(0, 0, 0, 0.32);
+}
+
+.modal {
+  width: min(520px, calc(100vw - 32px));
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--border-radius-big, 12px);
+  background: var(--primary-background-color, #fff);
+  box-shadow: var(--box-shadow-medium, 0 24px 70px rgba(0, 0, 0, 0.3));
+  overflow: visible; /* popovers (status menu) escape the shell */
+}
+
+/* Toggle + close row */
+.topRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 0;
+}
+
+.topRowStart {
+  min-height: 30px; /* keeps the close button aligned when the toggle is hidden */
+  display: flex;
+  align-items: center;
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 9px;
+  background: var(--allgrey-background-color, #f0f1f3);
+}
+
+.segBtn {
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  padding: 6px 20px;
+  border-radius: 7px;
+  font-size: 14px;
+  font-weight: var(--font-weight-normal, 500);
+  cursor: pointer;
+}
+
+.segBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.segBtnActive {
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-color, #0073ea);
+  font-weight: var(--font-weight-bold, 600);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.closeButton {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--border-radius-small, 6px);
+}
+
+.closeButton:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.body {
+  padding: 14px 18px 18px;
+  overflow: visible;
+}
+
+/* Big underlined text input (mockup: 18px semi-bold, blue bottom border). */
+.textInput {
+  width: 100%;
+  font-size: 18px;
+  font-weight: var(--font-weight-bold, 600);
+  color: var(--text-color, #323338);
+  border: none;
+  border-bottom: 2px solid var(--primary-color, #0073ea);
+  outline: none;
+  padding: 4px 2px 8px;
+  background: transparent;
+  text-align: start;
+}
+
+.textInput::placeholder {
+  color: var(--disabled-text-color, #9699a6);
+}
+
+.scopeCaption {
+  font-size: 12px;
+  color: var(--disabled-text-color, #9699a6);
+  margin-top: 6px;
+}
+
+/* Two optional fields side by side; stacks on narrow widths. */
+.row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 16px;
+  align-items: start;
+}
+
+@media (max-width: 480px) {
+  .row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  text-align: start;
+}
+
+.label {
+  color: var(--secondary-text-color, #676879);
+  font-weight: var(--font-weight-bold, 600);
+  font-size: 12px;
+}
+
+.optional {
+  color: var(--disabled-text-color, #9699a6);
+  font-weight: var(--font-weight-normal, 400);
+}
+
+/* ---- Status select (decision mode second field) ---- */
+.selectRoot {
+  position: relative;
+  min-width: 0;
+}
+
+.selectTrigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
+  /* match the bordered PersonPicker / DatePickerPopover field height */
+  height: 40px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 6px);
+  padding: 0 10px;
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: 13px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.selectTrigger:disabled {
+  cursor: not-allowed;
+  background: var(--disabled-background-color, #f5f6f8);
+}
+
+.selectTrigger:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
+}
+
+.selectValue {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.selectText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectPlaceholder {
+  color: var(--disabled-text-color, #9699a6);
+}
+
+.caret {
+  color: var(--disabled-text-color, #9699a6);
+  flex-shrink: 0;
+}
+
+.selectMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  inset-inline-start: 0;
+  min-width: 100%;
+  max-height: 220px;
+  overflow-y: auto;
+  z-index: 4300; /* above the modal body + DatePicker layer */
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: var(--border-radius-medium, 8px);
+  box-shadow: var(--box-shadow-medium, 0 10px 30px rgba(0, 0, 0, 0.2));
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.selectItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 7px 10px;
+  border-radius: var(--border-radius-small, 4px);
+  font-size: 13px;
+  color: var(--text-color, #323338);
+  cursor: pointer;
+  text-align: start;
+}
+
+.selectItem:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.selectItemActive {
+  background: var(--primary-selected-color, #cce5ff);
+}
+
+.selectItemText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.dotEmpty {
+  background: transparent;
+  border: 1px dashed var(--ui-border-color, #c3c6d4);
+}
+
+.footer {
+  margin-top: 20px;
+}
+
+@media (max-width: 768px) {
+  .overlay {
+    padding: 8px;
+    align-items: flex-end;
+  }
+  .modal {
+    width: 100%;
+    border-radius: 12px 12px 0 0;
+  }
+}

@@ -25,15 +25,55 @@ const PAGE_SIZE = 500;
 // the creator/lead people columns (drive the per-row edit-permission gate in the
 // list — only the discussion creator/lead, or a board owner, may edit/delete).
 const LIST_COLUMNS = ['discussionDateID', 'discussionTypeID', 'discussionCreatorID', 'discussionLeadID'];
+// Date-only column set for the month-filter option fetch (useDiscussionMonths):
+// only each discussion's date is needed to derive the distinct months that have
+// discussions — no need to pull type/people.
+const MONTH_COLUMNS = ['discussionDateID'];
+
+// Boot warm cache (in-memory, session-scoped). App.jsx's boot gate calls
+// prefetchDiscussions() BEFORE it reveals the app and stores the first default
+// page HERE, so the list hook can SEED its first paint from it — the discussions
+// list shows the instant the boot loader clears, with no re-fetch + no second
+// loader flash. Consumed once by the first default (unfiltered) list mount, and
+// only while fresh (a stale entry never seeds a later mount).
+let bootPrefetch = null; // { items, cursor, ts } | null
+const BOOT_PREFETCH_TTL_MS = 30 * 1000;
 
 export function useDiscussions(filters = {}) {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Seed the FIRST paint from the boot prefetch when this is the DEFAULT,
+  // unfiltered list — so rows show the instant the boot loader reveals the view,
+  // with no re-fetch flash. Any active filter (search / month / type / calendar
+  // range) skips the seed. Consumed once and only while fresh; the initial fetch
+  // is then skipped (the boot gate JUST fetched this exact page — no wasteful
+  // double-fetch), while every later filter change still fetches normally.
+  const hasFilters = !!(
+    filters.search ||
+    filters.month ||
+    (filters.type && filters.type.length) ||
+    (filters.range?.from && filters.range?.to)
+  );
+  const seedRef = useRef(undefined);
+  if (seedRef.current === undefined) {
+    const fresh = bootPrefetch && Date.now() - bootPrefetch.ts < BOOT_PREFETCH_TTL_MS;
+    if (!hasFilters && fresh) {
+      seedRef.current = bootPrefetch;
+      bootPrefetch = null; // consume: only the first default list mount seeds
+    } else {
+      seedRef.current = null;
+    }
+  }
+  const seed = seedRef.current;
+
+  const [items, setItems] = useState(() => (seed ? seed.items : []));
+  const [loading, setLoading] = useState(() => (seed ? false : true));
   const [refetching, setRefetching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [cursor, setCursor] = useState(null);
+  const [cursor, setCursor] = useState(() => (seed ? seed.cursor || null : null));
   const [error, setError] = useState(null);
   const prevFiltersRef = useRef(null);
+  // A boot-seeded first mount SKIPS the initial fetch (the boot gate just fetched
+  // this exact page); consumed on the first effect run.
+  const skipInitialFetchRef = useRef(!!seed);
 
   const fetchDiscussions = useCallback(async (isRefetch = false) => {
     try {
@@ -142,12 +182,69 @@ export function useDiscussions(filters = {}) {
 
   useEffect(() => {
     const filtersKey = JSON.stringify({ search: filters.search, month: filters.month, type: filters.type, range: filters.range });
+    // Boot-seeded first mount: the boot gate already fetched this exact default
+    // page, so skip the initial fetch (no clobber, no double-fetch). Prime
+    // prevFiltersRef so a later real filter change still refetches normally.
+    if (skipInitialFetchRef.current) {
+      skipInitialFetchRef.current = false;
+      prevFiltersRef.current = filtersKey;
+      return;
+    }
     const isRefetch = prevFiltersRef.current !== null && prevFiltersRef.current !== filtersKey;
     prevFiltersRef.current = filtersKey;
     fetchDiscussions(isRefetch);
   }, [fetchDiscussions]);
 
   return { items, loading, refetching, loadingMore, cursor, error, loadMore, softDeleteDiscussion, refetch: () => fetchDiscussions(true) };
+}
+
+/**
+ * Distinct 'YYYY-MM' months that have at least one discussion — powers the list's
+ * month filter so ANY month that holds a discussion is offered (past, present OR
+ * future), instead of a fixed trailing window that hid future-dated discussions.
+ *
+ * useDiscussions() fetches only the SELECTED month's discussions (for perf), so
+ * the full month set can't be derived from its items; this runs ONE lean,
+ * date-only query independently — a single page up to PAGE_SIZE, ordered by date
+ * desc so future-dated discussions are always captured — and reduces the dates
+ * to the sorted (newest-first) distinct month set. Never throws: on error it
+ * logs + returns []; buildMonthOptions always re-adds the current month, so the
+ * dropdown is never empty.
+ */
+export function useDiscussionMonths() {
+  const [months, setMonths] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const board = new דיונים1Board();
+        const result = await board
+          .items()
+          .withColumns(MONTH_COLUMNS)
+          .orderBy({ column: 'discussionDateID', direction: 'desc' })
+          .withPagination({ limit: PAGE_SIZE })
+          .execute();
+        const set = new Set();
+        for (const it of result.items || []) {
+          const d = it.discussionDateID;
+          if (d instanceof Date && !Number.isNaN(d.getTime())) {
+            set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+          }
+        }
+        // Newest-first (descending) — 'YYYY-MM' sorts chronologically (zero-padded).
+        if (!cancelled) setMonths([...set].sort().reverse());
+      } catch (err) {
+        if (!cancelled && !err?.__loggedId) logger.warn('useDiscussionMonths', 'טעינת חודשי הדיונים נכשלה', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  return { months, loading };
 }
 
 /**
@@ -174,4 +271,27 @@ export function useDiscussionDetails(discussionId) {
   }, [discussionId]);
 
   return details;
+}
+
+// Warm + GATE the discussions list on boot (used by App.jsx's boot gate). Runs
+// the SAME lean default first-page query the list hook runs, stores the result
+// in the in-memory boot cache (so the first list mount SEEDS from it instead of
+// re-fetching), and resolves when it settles. Never touches React state; on any
+// failure it logs + resolves false so boot can never hang or crash. Returns
+// true when the page was fetched, false on error / unconfigured board.
+export async function prefetchDiscussions() {
+  try {
+    const board = new דיונים1Board();
+    const result = await board
+      .items()
+      .withColumns(LIST_COLUMNS)
+      .orderBy({ column: 'discussionDateID', direction: 'desc' })
+      .withPagination({ limit: PAGE_SIZE })
+      .execute();
+    bootPrefetch = { items: result.items || [], cursor: result.cursor || null, ts: Date.now() };
+    return true;
+  } catch (err) {
+    logger.warn('useDiscussions', 'boot prefetch failed', err);
+    return false;
+  }
 }

@@ -43,15 +43,92 @@
   color: var(--primary-color, #0073ea);
 }
 
-/* Optimistic row whose monday item isn't saved yet: faded + every cell
-   locked (assignee/date/status/name/delete) until the real id arrives. */
-.pending {
-  opacity: 0.5;
-  pointer-events: none;
-  cursor: progress;
-}
-.pending:hover {
+/* Rename pencil — hover-revealed near the name (mirrors MyTasksRow's .renameBtn).
+   Shown only when onRenameTask is wired; triggers the same inline rename as
+   clicking the name. */
+.renameBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 4px;
   background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  opacity: 0;
+  transition: background-color 0.1s ease, color 0.1s ease, opacity 0.1s ease;
+}
+.bodyRow:hover .renameBtn,
+.renameBtn:focus-visible {
+  opacity: 1;
+}
+.renameBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
+}
+
+/* Failed optimistic create: the row stays EDITABLE (no lock/fade) but is marked
+   clearly with a red inset accent + tint so the user can retry or dismiss it. */
+.createFailed {
+  background: var(--negative-color-selected, #fce9ec);
+  box-shadow: inset 3px 0 0 var(--negative-color, #d83a52);
+}
+.createFailed:hover {
+  background: var(--negative-color-selected, #fce9ec);
+}
+/* The frozen name/select cells are opaque, so tint them too (otherwise the red
+   row tint is hidden behind them). The red label/buttons live in the name cell. */
+.createFailed .name,
+.createFailed .selFrozen {
+  background: var(--negative-color-selected, #fce9ec);
+  background-image: none;
+}
+/* Inline "create failed" affordance in the name cell: label + retry + dismiss. */
+.createFailedActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.createFailedText {
+  font-size: 12px;
+  color: var(--negative-color, #d83a52);
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.retryBtn {
+  border: 1px solid var(--negative-color, #d83a52);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--negative-color, #d83a52);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-family: var(--font-family);
+  white-space: nowrap;
+}
+.retryBtn:hover {
+  background: var(--negative-color, #d83a52);
+  color: #ffffff;
+}
+.dismissBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.dismissBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--negative-color, #d83a52);
 }
 
 .muted {
@@ -238,7 +315,11 @@
   height: 100%;
 }
 .statusTrigger {
-  display: block;
+  /* flex (not block) so the inner fill STRETCHES to the trigger's full height —
+     the trigger itself is 100% of the cell (via `.statusCell > *`), so the fill
+     ends up covering the whole cell with no top/bottom white gap. */
+  display: flex;
+  align-items: stretch;
   width: 100%;
   height: 100%;
   border: none;
@@ -251,6 +332,10 @@
   align-items: center;
   justify-content: center;
   width: 100%;
+  /* Fill the FULL cell height (no top/bottom white gap) — matches how the same
+     status/priority labels render in PreviousTasksTab / DecisionsTab. min-height
+     keeps a 36px floor for otherwise-empty rows. */
+  height: 100%;
   min-height: 36px;
   /* native monday: square fill, edge-to-edge, no rounding */
   border-radius: 0;
@@ -265,6 +350,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
+  height: 100%;
   min-height: 36px;
   border-radius: 0;
   padding: 0 8px;
@@ -320,28 +406,50 @@
   font-size: 12px;
 }
 
-/* status picker — full-width colored option bars (monday native) */
+/* status picker — monday-native popover: white rounded card (DialogContentContainer)
+   holding full-width rounded color pills, each filled with the label's real hex,
+   white centered text. ~36px option height + 6px gaps + 4px card padding match
+   monday's status picker. Shared by TaskTableRow, MyTasksRow and MyDecisionsRow
+   (both import `row.statusMenu`/`row.statusOption`), so this is the one place that
+   restyles all three. */
 .statusMenu {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 168px;
-  padding: 2px;
+  width: 172px;
+  padding: 4px;
 }
 .statusOption {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 40px;
+  height: 36px;
+  padding: 0 10px;
   border: none;
   border-radius: var(--border-radius-small, 4px);
   color: var(--text-color-on-primary, #fff);
   font-weight: var(--font-weight-medium, 500);
-  font-size: 16px;
+  font-size: 14px;
   font-family: var(--font-family);
   cursor: pointer;
   transition: filter 0.1s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .statusOption:hover {
   filter: brightness(0.95);
+}
+
+
+/* Whole-row drag-reorder (native monday feel) — the entire body row is the drag
+   handle when reordering is enabled (see SortableRow + useRowOrder). A plain
+   click still edits a cell (dnd-kit's ~8px activation distance); grabbing +
+   moving reorders. touch-action:none lets the pointer sensor own the gesture. */
+.draggableRow {
+  cursor: grab;
+  touch-action: none;
+}
+.draggableRow:active {
+  cursor: grabbing;
 }

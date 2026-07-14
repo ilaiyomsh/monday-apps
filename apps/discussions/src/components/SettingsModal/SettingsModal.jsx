@@ -11,6 +11,7 @@ import SearchablePicker from './SearchablePicker';
 import PermissionsTab from './PermissionsTab.jsx';
 import ExportTemplateTab from './ExportTemplateTab.jsx';
 import { TemplateManagerModal as TemplatesPanel } from '@generated/components/TemplateManagerModal';
+import { SetupWizard } from '../SetupWizard';
 import styles from './SettingsModal.module.css';
 
 // Seed the editable export-template draft from stored settings, back-filling any
@@ -23,6 +24,13 @@ function seedExportTemplate(stored) {
   base.header = { ...DEFAULT_EXPORT_TEMPLATE.header, ...(stored?.header || {}) };
   base.footer = { ...DEFAULT_EXPORT_TEMPLATE.footer, ...(stored?.footer || {}) };
   return base;
+}
+
+// Merge the board-key scaffold over the stored boards so a board ROLE added to
+// BOARD_KEYS after the instance was saved (e.g. `decisions`) still renders its
+// mapping section — preserving every board id the user already set.
+function mergeBoardsWithSchema(stored) {
+  return { ...buildEmptyConfig().boards, ...(stored || {}) };
 }
 
 // Merge the alias schema over the stored mapping so columns added to the schema
@@ -97,13 +105,13 @@ const PREVIOUS_TASKS_MODE_OPTIONS = [
  * alias→real-column-id mapping that the SDK reads, then persist via
  * SettingsContext.updateSettings (monday.storage, per instance).
  */
-export function SettingsModal({ isOpen, onClose }) {
-  const { settings, updateSettings } = useSettings();
+export function SettingsModal({ isOpen, onClose, onNotify }) {
+  const { settings, updateSettings, isConfigured } = useSettings();
   const { context } = useMondayContext();
   // settings is null until a mapping is stored; seed the editable draft from an
   // empty scaffold (alias/type/title with blank ids) so first-time config works.
   const draft = settings || buildEmptyConfig();
-  const [boards, setBoards] = useState(draft.boards);
+  const [boards, setBoards] = useState(mergeBoardsWithSchema(draft.boards));
   const [columns, setColumns] = useState(mergeColumnsWithSchema(draft.columns));
   const [preferences, setPreferences] = useState({ ...DEFAULT_PREFERENCES, ...(draft.preferences || {}) });
   // Live tasks-status labels for the "delayed done statuses" preference (empty
@@ -128,13 +136,18 @@ export function SettingsModal({ isOpen, onClose }) {
   const [loadingColumnsByBoardId, setLoadingColumnsByBoardId] = useState({});
   const [subitemsBoardByBoard, setSubitemsBoardByBoard] = useState({});
   const [importMsg, setImportMsg] = useState(null);
+  // TOP-UP wizard (post-install "add/complete boards & columns"): when true the
+  // reusable SetupWizard replaces the tabbed mapping UI until the owner finishes
+  // (onDone) or backs out (onManual). Offered only once the instance is already
+  // configured — never during the first-run forced modal.
+  const [showTopUp, setShowTopUp] = useState(false);
   const fileInputRef = useRef(null);
 
   // re-seed local draft from the live settings whenever the modal opens
   useEffect(() => {
     if (isOpen) {
       const seed = settings || buildEmptyConfig();
-      setBoards(seed.boards);
+      setBoards(mergeBoardsWithSchema(seed.boards));
       setColumns(mergeColumnsWithSchema(seed.columns));
       setPreferences({ ...DEFAULT_PREFERENCES, ...(seed.preferences || {}) });
       setPermissions(seedPermissions(seed.permissions));
@@ -144,6 +157,13 @@ export function SettingsModal({ isOpen, onClose }) {
       setOpenBoardKey(null);
     }
   }, [isOpen, settings, context]);
+
+  // Reset the top-up view whenever the modal closes, so reopening always lands on
+  // the normal Settings view (and it never lingers after first-run config). Keyed
+  // on isOpen ONLY, so a settings change mid-top-up doesn't dismiss the wizard.
+  useEffect(() => {
+    if (!isOpen) setShowTopUp(false);
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -265,6 +285,7 @@ export function SettingsModal({ isOpen, onClose }) {
     discussions: 'דיונים',
     tasks: 'משימות',
     topics: 'נושאים לדיון',
+    decisions: 'החלטות',
   };
 
   const DISCUSSIONS_SETTINGS_FIELDS = [
@@ -279,6 +300,7 @@ export function SettingsModal({ isOpen, onClose }) {
     'previousDiscussionID',
     'tasksBoardLinkID',
     'topicsBoardLinkID',
+    'decisionsBoardLinkID', // לוח החלטות — two-way pair of the decisions board's discussionLinkID
   ];
   const TASKS_SETTINGS_FIELDS = [
     'taskCreatorID',
@@ -300,8 +322,24 @@ export function SettingsModal({ isOpen, onClose }) {
     'pointNotForDiscussionID', // point-level "not for discussion" checkbox (on the subitems board)
     'pointCheckedID', // 'האם נידונה' — discussed checkbox on the SUBITEMS board (topics table)
     'pointCreatorID', // 'יוצר נקודה' — people column on the SUBITEMS board; avatar per point
+    'pointDecisionsLinkID', // 'החלטות (נקודה)' — board_relation on the SUBITEMS board to decisions created from the point
+    'pointTasksLinkID', // 'משימות (נקודה)' — board_relation on the SUBITEMS board to tasks created from the point
     // 'pointResponsesID' ('התייחסויות') intentionally NOT mapped here — the topics-table
     // redesign removed the responses cell, so the field is hidden from Settings.
+  ];
+  const DECISIONS_SETTINGS_FIELDS = [
+    'decisionCreatorID', // 'יוצר החלטה' — people column; decision-tier creator role
+    'deciderID', // 'מחליט' — people column; decision-tier decider role
+    'affectedID', // 'מושפעים' — people column; decision-tier "affected" role
+    'decisionStatusID', // 'סטאטוס החלטה' — status column (labels come from the column)
+    // 'decisionPriorityID' ('עדיפות') intentionally NOT listed — the decisions
+    // priority column was dropped from the UI (DecisionsTab hid it visually in an
+    // earlier round), so it is excluded from the MAPPING screen too. The alias
+    // stays in COLUMN_SCHEMA (and any previously-stored id is preserved on save)
+    // so useDecisions/useMyDecisions references never break; it is simply no
+    // longer a mappable row for the decisions board.
+    'decisionDateID', // 'תאריך' — date column
+    'discussionLinkID', // 'דיון' — two-way pair of the discussions board's decisionsBoardLinkID
   ];
 
   // Aliases whose real column lives on the board's SUBITEMS board, not the board itself.
@@ -309,6 +347,8 @@ export function SettingsModal({ isOpen, onClose }) {
     'pointCheckedID',
     'pointNotForDiscussionID',
     'pointCreatorID',
+    'pointDecisionsLinkID',
+    'pointTasksLinkID',
   ]);
 
   const loadBoardColumns = async (boardId) => {
@@ -378,17 +418,22 @@ export function SettingsModal({ isOpen, onClose }) {
       // throws, and we abort WITHOUT saving settings so config and assets can't
       // drift out of sync. The friendly quota message is shown in the tab.
       await saveExportAssets(context, exportAssets);
-      // Detect whether the discussion-type status column is backed by an account
-      // MANAGED column and persist its UUID, so addStatusLabel (create-modal) uses
-      // update_status_managed_column instead of the board-level mutation (which a
-      // managed column rejects). Best-effort — a failed detection just leaves the
-      // column marked regular; the create-modal re-detects lazily as a fallback.
+      // Detect whether the discussion-type DROPDOWN column is backed by an
+      // account MANAGED column and persist its UUID, so addDropdownLabel
+      // (create-modal "הוסף סוג דיון חדש") goes straight to
+      // update_dropdown_managed_column instead of the board-level mutation
+      // (which a managed column rejects). Best-effort — a failed detection just
+      // leaves the column marked regular; addDropdownLabel self-heals lazily on
+      // the managed-structure rejection and the modal persists the corrected hint.
       let columnsToSave = columns;
       const typeEntry = columns?.discussions?.discussionTypeID;
       const typeBoardId = boards?.discussions?.id;
       if (typeEntry?.id && typeBoardId) {
         try {
-          const uuid = await detectManagedColumnId(typeBoardId, typeEntry.id);
+          // Type filter matters: the account has managed columns of BOTH types
+          // named "סוג דיון" — only a dropdown-type one is updatable via
+          // update_dropdown_managed_column (the column itself is a dropdown).
+          const uuid = await detectManagedColumnId(typeBoardId, typeEntry.id, { type: 'dropdown' });
           columnsToSave = {
             ...columns,
             discussions: {
@@ -399,6 +444,8 @@ export function SettingsModal({ isOpen, onClose }) {
         } catch { /* detection best-effort */ }
       }
       await updateSettings({ boards, columns: columnsToSave, preferences, permissions, exportTemplate });
+      // Success toast (top of the app, same funnel as every other notification).
+      onNotify?.('הגדרות נשמרו בהצלחה', 'success');
       onClose();
     } catch (err) {
       setActiveTab(3);
@@ -458,6 +505,42 @@ export function SettingsModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
+  // TOP-UP: replace the whole Settings surface with the reusable SetupWizard in
+  // config-aware mode — reusing mapped boards, creating only missing ones, and
+  // completing only missing columns, merged into the existing settings. Both
+  // onDone and onManual return here; updateSettings already ran inside the wizard,
+  // so the re-seed effect refreshes the mapping view with the fresh config.
+  if (showTopUp) {
+    return (
+      <div className={styles.overlay} onClick={(e) => {
+        if (e.target === e.currentTarget) setShowTopUp(false);
+      }}>
+        <div
+          className={`${styles.modal} ${styles.modalFixed}`}
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label="הוספת לוחות ועמודות"
+        >
+          <div className={styles.header}>
+            <button type="button" className={styles.closeButton} onClick={() => setShowTopUp(false)} aria-label="חזרה">
+              ×
+            </button>
+            <Heading type="h4">הוספת / השלמת לוחות ועמודות</Heading>
+          </div>
+          <div className={styles.content}>
+            <SetupWizard
+              existingConfig={{ boards, columns }}
+              title="הוספת / השלמת לוחות ועמודות"
+              onManual={() => setShowTopUp(false)}
+              onDone={() => setShowTopUp(false)}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.overlay} onClick={(e) => {
       if (e.target === e.currentTarget) onClose();
@@ -487,6 +570,22 @@ export function SettingsModal({ isOpen, onClose }) {
             <TabPanels className={styles.tabPanels}>
               <TabPanel className={styles.tabPanelFill}>
           <div className={styles.body}>
+            {/* Post-install entry to the config-aware SetupWizard. Shown only when
+                the instance is already configured (never in the first-run forced
+                modal, which has the wizard as its landing screen). */}
+            {isConfigured && (
+              <div className={styles.topupEntry}>
+                <div className={styles.topupText}>
+                  <Text type={"text2"} weight={"medium"}>הוספת / השלמת לוחות ועמודות</Text>
+                  <Text type={"text3"} color={"secondary"}>
+                    יצירת לוחות שחסרים והשלמת עמודות חסרות — בלי לפגוע במיפוי הקיים.
+                  </Text>
+                </div>
+                <Button kind={"secondary"} size={"small"} onClick={() => setShowTopUp(true)}>
+                  פתיחת האשף
+                </Button>
+              </div>
+            )}
             {Object.keys(boards || {}).map((boardKey) => (
               <div key={boardKey} className={styles.board}>
                 <button
@@ -524,7 +623,9 @@ export function SettingsModal({ isOpen, onClose }) {
                             ? TASKS_SETTINGS_FIELDS
                             : boardKey === 'topics'
                               ? TOPICS_SETTINGS_FIELDS
-                              : Object.keys(columns?.[boardKey] || {});
+                              : boardKey === 'decisions'
+                                ? DECISIONS_SETTINGS_FIELDS
+                                : Object.keys(columns?.[boardKey] || {});
                         const entries = aliases
                           .map((alias) => [alias, columns?.[boardKey]?.[alias]])
                           .filter(([, col]) => Boolean(col));

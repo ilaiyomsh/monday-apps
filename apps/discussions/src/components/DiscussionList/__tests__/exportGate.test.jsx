@@ -24,6 +24,9 @@ vi.mock('@generated/hooks/useDiscussions', () => ({
     loadMore: () => {},
     softDeleteDiscussion: () => ({ undo: () => {} }),
   }),
+  // The list now also derives its month-filter options from this hook; the gate
+  // tests don't exercise the dropdown, so a stable empty set is enough.
+  useDiscussionMonths: () => ({ months: [], loading: false }),
 }));
 
 vi.mock('@generated/hooks/useStatusOptions.js', () => ({
@@ -77,28 +80,28 @@ describe('DiscussionList — exportDocs gate on the row export control', () => {
     };
   });
 
-  it('shows "ייצוא ל-DOCS" when the owner bypass grants export', () => {
+  it('shows "ייצוא" when the owner bypass grants export', () => {
     // Owner (canManageSettings) → resolver allows every cap, incl. exportDocs.
     renderList({ canManageSettings: true, currentUser: { id: '999' } });
     const menu = openRowMenu();
-    expect(within(menu).getByText('ייצוא ל-DOCS')).toBeTruthy();
+    expect(within(menu).getByText('ייצוא')).toBeTruthy();
   });
 
-  it('shows "ייצוא ל-DOCS" for the discussion creator (feature on, non-owner)', () => {
+  it('shows "ייצוא" for the discussion creator (feature on, non-owner)', () => {
     currentRow.discussionCreatorID = [{ id: '999' }];
     const permissions = { enabled: true, version: 1, roles: {} };
     renderList({ permissions, canManageSettings: false, currentUser: { id: '999' } });
     const menu = openRowMenu();
-    expect(within(menu).getByText('ייצוא ל-DOCS')).toBeTruthy();
+    expect(within(menu).getByText('ייצוא')).toBeTruthy();
   });
 
-  it('hides "ייצוא ל-DOCS" for a non-creator/lead/owner when the feature is on', () => {
+  it('hides "ייצוא" for a non-creator/lead/owner when the feature is on', () => {
     // Feature ON, no role grants exportDocs, user is neither creator nor lead nor
     // owner → default bucket creatorLeadOwner → DENY → export item withheld.
     const permissions = { enabled: true, version: 1, roles: {} };
     renderList({ permissions, canManageSettings: false, currentUser: { id: '999' } });
     const menu = openRowMenu();
-    expect(within(menu).queryByText('ייצוא ל-DOCS')).toBeNull();
+    expect(within(menu).queryByText('ייצוא')).toBeNull();
     // The menu still renders (other controls are independently gated).
     expect(menu).toBeTruthy();
   });

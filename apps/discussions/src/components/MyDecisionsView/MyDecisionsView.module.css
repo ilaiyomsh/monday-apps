@@ -1,0 +1,379 @@
+/* "ההחלטות שלי" view shell — own-module copies of the MyTasksView layout
+   classes (root/toolbar/board/group chrome; cross-module bare-class selectors
+   break in the scoped prod build) + the decisions-specific SUB-TABS segmented
+   control (purple accent, falls back to #6b4ee6 when --decisions-accent is
+   unset). */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  /* The .board child owns the scrolling (both axes) so the horizontal scrollbar
+     pins to the bottom of the view — a real monday board. The root itself does
+     NOT scroll. */
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* "בחזרה לתצוגת הדיונים" back button on its OWN row — used ONLY by the unmapped
+   fallback (which has no toolbar). In the mapped view the back button now lives
+   inline in the toolbar row, right after the sub-tabs toggle (round 40). */
+.topBar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-small, 8px);
+  padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+}
+
+/* View title (round 40 typography; round 41 left-aligned) — matches the
+   discussion-detail title (DiscussionCard's .title: font-size-h2 / bold /
+   line-height 1.2). Sits above the toolbar row; round 41 flushes it LEFT
+   (text-align:left) so it lines up with the flush-left toolbar, at the same
+   16px horizontal padding. Keeps direction:rtl for natural Hebrew shaping. */
+.viewTitle {
+  flex: none;
+  margin: 0;
+  font-size: var(--font-size-h2, 28px);
+  font-weight: var(--font-weight-bold, 700);
+  line-height: 1.2;
+  color: var(--text-color, #323338);
+  direction: rtl;
+  text-align: left;
+}
+:global(.mobile-app) .viewTitle {
+  font-size: 22px;
+}
+
+/* View header (round 53a): the view title with a compact, icon-only left-arrow
+   "back to discussions" button to its LEFT (replaces the old text button that
+   lived in the toolbar). direction:ltr so the arrow (first child) sits on the
+   LEFT and the RTL title reads to its right; the 16px inline padding — moved off
+   .viewTitle — keeps the arrow lined up with the toolbar below. */
+.viewHeader {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+  direction: ltr;
+  padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+}
+
+/* Compact, borderless back-arrow icon button — monday-style subtle hover,
+   vertically centered with the title. */
+.backArrowBtn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  cursor: pointer;
+}
+.backArrowBtn:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+
+/* Sub-tabs segmented control (RTL — Hebrew labels): 'החלטות שאני מחליט' /
+   'החלטות שמשפיעות עליי'. Active tab = white card + purple text on a light
+   gray track (monday tab-switcher idiom). */
+.subTabs {
+  flex: none;
+  direction: rtl;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  width: fit-content;
+  /* Round 41: the toggle is the SECOND toolbar child (after the back button) on
+     the flush-LEFT dir="ltr" toolbar, so it sits immediately to the RIGHT of the
+     back button — no own margin; the .toolbar flex gap spaces it from its
+     neighbors. It stays EXACTLY as tall as the @vibe small pills (32px) so the
+     row aligns; box-sizing keeps the 4px track padding inside the 32px. Its OWN
+     dir:rtl (below) keeps "החלטות שקיבלתי" on the toggle's left + default
+     (round 27/33) regardless of the toolbar's now-LTR direction. */
+  margin: 0;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.subTab {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  height: 100%;
+  padding: 0 14px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+  line-height: 1;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.subTab:hover {
+  color: var(--primary-text-color, #323338);
+}
+.subTabActive {
+  background: var(--primary-background-color, #ffffff);
+  color: var(--decisions-accent, #6b4ee6);
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.subTabActive:hover {
+  color: var(--decisions-accent, #6b4ee6);
+}
+
+/* monday-style toolbar (round 41): an LTR, flush-LEFT row of pill buttons
+   (justify-content:flex-start + dir="ltr" ⇒ the cluster hugs the LEFT edge, so
+   the back button is leftmost and the sub-tabs toggle sits immediately to its
+   right). Round 41 reverts round 40's dir="rtl" right-shift. Sits below the
+   view title, above the scrolling board as a fixed flex row. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex: none;
+  background: var(--primary-background-color, #ffffff);
+  padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
+}
+
+/* THE single scroll container — both axes (see MyTasksView.module.css for the
+   sticky-inset margin-vs-padding rationale: the 28px inset MUST be margin). */
+.board {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  direction: ltr;
+  margin-inline-start: 28px;
+  margin-inline-end: 0;
+}
+/* Shared horizontal extent: as wide as the widest group table, never narrower
+   than the viewport, so all groups scroll in unison. */
+.groupScrollInner {
+  width: max-content;
+  min-width: 100%;
+  direction: ltr;
+  padding-block: var(--spacing-small, 8px) 0;
+}
+
+/* Base pill — plain by default, light hover (matches monday's Search pill). */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pill:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.pill:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.pillIcon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: currentColor;
+}
+
+/* Search, expanded into an inline input but keeping the pill shape. */
+.searchPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--secondary-text-color, #676879);
+}
+.searchInput {
+  width: 180px;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+}
+.searchInput:focus-visible {
+  outline: none;
+}
+
+/* Mobile app: icon-only pills on one row (gated on the .mobile-app root class,
+   not viewport width — same as MyTasksView). */
+:global(.mobile-app) .pill {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+:global(.mobile-app) .pill > span {
+  display: none;
+}
+
+.skeletonStack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-small, 8px);
+}
+
+.groupStack {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  direction: ltr;
+}
+
+.groupHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* Pin the group title to the left edge while the columns scroll horizontally
+     under the shared board scroll (monday keeps the group name in view). */
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  width: max-content;
+  margin: 0 0 12px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: start;
+}
+
+.chevron {
+  width: 24px;
+  height: 24px;
+  color: var(--secondary-text-color, #676879);
+  transition: transform var(--motion-productive-medium, 0.2s) ease;
+  flex-shrink: 0;
+}
+.chevronCollapsed {
+  transform: rotate(-90deg);
+}
+
+.groupTitle {
+  font-size: 18px;
+  font-weight: 500;
+  font-variation-settings: 'wght' 500;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+}
+.groupCount {
+  margin-inline-start: 8px;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 16px;
+  color: var(--secondary-text-color, #676879);
+  text-align: center;
+  direction: rtl;
+}
+.emptyTitle {
+  font-size: 16px;
+  color: var(--primary-text-color, #323338);
+}
+.emptyHint {
+  font-size: 14px;
+}
+
+.loadMore {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 16px;
+}
+
+/* Floating selection bar — shown when ≥1 decision is selected (mirrors
+   MyTasksView / the in-discussion Decisions tab): a count on the left, actions
+   (delete) in the center, a close (X) on the right. Batch status/priority/date
+   edits are done inline on any selected row (they cascade to the selection). */
+.actionBar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 1200;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  max-width: calc(100vw - 24px);
+  min-height: 44px;
+  padding: 6px 8px 6px 12px;
+  border-radius: 12px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.16);
+}
+.actionBarLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding-inline-end: 2px;
+}
+.actionBarCenter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 2px;
+}
+.actionBarRight {
+  display: flex;
+  align-items: center;
+  padding-inline-start: 2px;
+}
+.closeSelectionBtn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.closeSelectionBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}

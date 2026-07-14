@@ -1,12 +1,13 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
 import { Update, Edit, CloseSmall } from '@vibe/icons';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { NotesEditor } from '@generated/components/NotesEditor';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { monday } from '@api/monday-client.js';
+import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { getTaskDiscussion } from './grouping.js';
 import grid from './MyTasksTable.module.css';
 import row from '../TaskTableRow/TaskTableRow.module.css';
@@ -17,9 +18,11 @@ const NEUTRAL = 'hsl(var(--status-default))';
 // Open the monday item card on the "updates" pane — the My Tasks row's primary
 // affordance (the row body is the click target; inline-edit controls stop
 // propagation so editing a field doesn't pop the card).
+// Open the monday item card via the shared helper. monday's SDK has no
+// programmatic close (see utils/itemCard.js), so every click reliably (re)opens.
 function openItemCard(itemId) {
   if (!itemId) return;
-  monday.execute('openItemCard', { itemId: Number(itemId), kind: 'updates' });
+  openOrToggleItemCard(itemId);
 }
 
 const stop = (e) => e.stopPropagation();
@@ -76,7 +79,7 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
         onDialogDidShow={() => { updatePosition(); setOpen(true); }}
         onDialogDidHide={() => setOpen(false)}
         position={position}
-        zIndex={1000}
+        zIndex={10000}
         content={() => (
           <DialogContentContainer>
             <div className={row.statusMenu}>
@@ -114,31 +117,17 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
 
 export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, rowStyle, showDeadline = true, showPriority = true, showNotes = true, selectable = false, selected = false, onToggleSelect }) {
   const { t } = useTranslation();
-  const [notesDraft, setNotesDraft] = useState(task.taskNotesID || '');
-  const [editingNotes, setEditingNotes] = useState(false);
   // Inline rename (permission-gated: the pencil shows only when onRenameTask is
   // provided). Clicking the NAME itself still opens the item card — rename is a
   // separate affordance so the primary click behavior doesn't change.
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
 
-  // Keep the local notes draft in sync when the row's notes change from outside
-  // (optimistic update / revert) and we're not actively editing.
-  useEffect(() => {
-    if (!editingNotes) setNotesDraft(task.taskNotesID || '');
-  }, [task.taskNotesID, editingNotes]);
-
   const statusOpts = useStatusOptions('tasks', 'statusID');
   const priorityOpts = useStatusOptions('tasks', 'priorityID');
 
   const deadline = task.deadlineID;
   const discussion = getTaskDiscussion(task);
-
-  const commitNotes = () => {
-    setEditingNotes(false);
-    const next = notesDraft;
-    if ((task.taskNotesID || '') !== (next || '')) onNotesChange?.(task.id, next);
-  };
 
   const startEditName = () => {
     setNameDraft(task.name || '');
@@ -173,6 +162,9 @@ export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, on
             autoFocus
             value={nameDraft}
             onClick={stop}
+            // Select-on-focus: the current name is highlighted the moment the
+            // input opens, so the first keystroke replaces it (no manual select).
+            onFocus={(e) => e.target.select()}
             onChange={(e) => setNameDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') { e.preventDefault(); saveName(); }
@@ -224,7 +216,7 @@ export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, on
           <div className={styles.cellCenter}>
             <DatePickerPopover value={deadline} onChange={(d) => onDeadlineChange(task.id, d)} />
           </div>
-        ) : deadline ? (
+        ) : (deadline instanceof Date) ? (
           <span className={styles.muted}>{deadline.toLocaleDateString('en-GB')}</span>
         ) : (
           <span className={styles.muted}>—</span>
@@ -268,21 +260,17 @@ export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, on
         onChange={onStatusChange}
       />
     ),
-    // notes — inline editable; hidden when the notes column isn't mapped
+    // notes — long-text cell (round 40): the cell shows the current text on ONE
+    // line (ellipsis, no in-cell scrollbar) with the full text on hover (native
+    // title tooltip); clicking opens the larger NotesEditor popover. Reuses the
+    // EXISTING onNotesChange (updateTaskNotes) write path — no data-logic change.
     notes: showNotes ? (
       <div key="notes" className={`${grid.taskCell} ${styles.notesCell}`} onClick={stop}>
-        <textarea
-          className={styles.notesInput}
-          rows={1}
-          value={notesDraft}
+        <NotesEditor
+          value={task.taskNotesID || ''}
           placeholder={t('myTasks.notesPlaceholder')}
-          onFocus={() => setEditingNotes(true)}
-          onChange={(e) => setNotesDraft(e.target.value)}
-          onBlur={commitNotes}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur(); }
-            if (e.key === 'Escape') { setNotesDraft(task.taskNotesID || ''); setEditingNotes(false); e.currentTarget.blur(); }
-          }}
+          ariaLabel={t('myTasks.colNotes')}
+          onCommit={(next) => onNotesChange?.(task.id, next)}
         />
       </div>
     ) : null,

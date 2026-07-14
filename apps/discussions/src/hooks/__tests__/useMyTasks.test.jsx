@@ -29,6 +29,8 @@ const sdkState = {
   execute: vi.fn(),
   updatePayloads: [],
   updateExecute: vi.fn(async () => ({ id: 'X' })),
+  createPayloads: [],
+  createExecute: vi.fn(async () => ({ id: 'NEW' })),
 };
 
 vi.mock('@api/BoardSDK.js', () => {
@@ -50,6 +52,10 @@ vi.mock('@api/BoardSDK.js', () => {
           sdkState.updatePayloads.push({ id, payload });
           return { execute: sdkState.updateExecute };
         },
+        create: (payload, opts) => {
+          sdkState.createPayloads.push({ payload, opts });
+          return { execute: sdkState.createExecute };
+        },
       };
     }
   }
@@ -65,14 +71,18 @@ vi.mock('../../utils/mondayApi/monday-client.js', () => ({
 }));
 
 import { useMyTasks, buildMyTasksWhere, resolveUserId } from '../useMyTasks.js';
+import { writeViewCache, makeViewCacheKey } from '../../utils/viewCache.js';
 
 const page = (items, cursor = null) => ({ items, cursor });
 const task = (id, over = {}) => ({ id: String(id), name: `t${id}`, statusID: 1, priorityID: null, taskNotesID: '', ...over });
 
 beforeEach(() => {
+  try { window.localStorage.clear(); } catch { /* ignore */ } // isolate the view cache between tests
   vi.clearAllMocks();
   sdkState.updatePayloads = [];
   sdkState.updateExecute = vi.fn(async () => ({ id: 'X' }));
+  sdkState.createPayloads = [];
+  sdkState.createExecute = vi.fn(async () => ({ id: 'NEW' }));
   sdkState.execute = vi.fn(async () => page([task(1), task(2)]));
 });
 
@@ -188,5 +198,113 @@ describe('useMyTasks — optimistic inline edits', () => {
     sdkState.updateExecute = vi.fn(async () => { throw new Error('boom'); });
     await act(async () => { await result.current.updateTaskNotes('1', 'changed'); });
     expect(result.current.items.find((t) => t.id === '1').taskNotesID).toBe('orig');
+  });
+});
+
+describe('useMyTasks — createTask (prepend + reconcile)', () => {
+  it('prepends the optimistic row to the FRONT with prepend:true, then swaps temp→real', async () => {
+    const { result } = await mounted(); // items ['1','2']
+    await act(async () => { await result.current.createTask({ name: 'חדשה', prepend: true }); });
+    expect(result.current.items[0].name).toBe('חדשה');
+    expect(result.current.items.map((t) => t.id)).toEqual(['NEW', '1', '2']);
+  });
+
+  it('appends to the BOTTOM by default (no prepend)', async () => {
+    const { result } = await mounted();
+    await act(async () => { await result.current.createTask({ name: 'אחרונה' }); });
+    const last = result.current.items[result.current.items.length - 1];
+    expect(last.name).toBe('אחרונה');
+    expect(last.id).toBe('NEW');
+  });
+
+  it('fires onOptimistic(tempId) then onReconcile(tempId, realId)', async () => {
+    const { result } = await mounted();
+    const onOptimistic = vi.fn();
+    const onReconcile = vi.fn();
+    await act(async () => {
+      await result.current.createTask({ name: 'x', prepend: true, onOptimistic, onReconcile });
+    });
+    expect(onOptimistic).toHaveBeenCalledTimes(1);
+    const tempId = onOptimistic.mock.calls[0][0];
+    expect(String(tempId)).toMatch(/^temp-/);
+    expect(onReconcile).toHaveBeenCalledWith(tempId, 'NEW');
+  });
+});
+
+
+describe('useMyTasks — instant cache seed (stale-while-revalidate)', () => {
+  const KEY = makeViewCacheKey('myTasks', { userId: '42', boardId: 'BOARD1' });
+
+  it('seeds the first paint from cache (no spinner), then revalidates + reconciles', async () => {
+    writeViewCache(KEY, [task(1), task(2)], 'SEEDCUR');
+    // Hold the background revalidate open so we can observe the seeded paint.
+    let resolveExec;
+    sdkState.execute = vi.fn(() => new Promise((r) => { resolveExec = r; }));
+
+    const { result } = renderHook(() => useMyTasks({ currentUser: { id: '42' }, context: {} }));
+
+    // Instant paint from the seed — loading is already false.
+    expect(result.current.loading).toBe(false);
+    expect(result.current.items.map((t) => t.id)).toEqual(['1', '2']);
+
+    // Fresh page: 2 deleted remotely, 3 added, 1 edited remotely.
+    await act(async () => { resolveExec(page([task(1, { statusID: 9 }), task(3)], 'FRESHCUR')); });
+    await waitFor(() => expect(result.current.items.map((t) => t.id)).toEqual(['1', '3']));
+    expect(result.current.items.find((t) => t.id === '1').statusID).toBe(9); // remote edit applied
+    expect(result.current.cursor).toBe('FRESHCUR');
+    expect(result.current.loading).toBe(false); // never flipped a spinner during the silent revalidate
+  });
+
+  it('keeps an optimistic create made during the revalidate window (no drop)', async () => {
+    writeViewCache(KEY, [task(1)], null);
+    let resolveExec;
+    sdkState.execute = vi.fn(() => new Promise((r) => { resolveExec = r; }));
+
+    const { result } = renderHook(() => useMyTasks({ currentUser: { id: '42' }, context: {} }));
+    expect(result.current.items.map((t) => t.id)).toEqual(['1']); // seeded paint
+
+    // Create a row while the background revalidate is still in flight (temp → NEW).
+    await act(async () => { await result.current.createTask({ name: 'X', prepend: true }); });
+    expect(result.current.items.map((t) => t.id)).toEqual(['NEW', '1']);
+
+    // Fresh page carries 1 + a remote 2, but NOT the just-created row.
+    await act(async () => { resolveExec(page([task(1), task(2)], null)); });
+    await waitFor(() => expect(result.current.items.map((t) => t.id)).toContain('2'));
+    // Fresh [1,2] is authoritative AND the optimistic create is preserved.
+    expect(result.current.items.map((t) => t.id).sort()).toEqual(['1', '2', 'NEW']);
+  });
+
+  it('a cache MISS behaves exactly as before (staged fetch fills the list)', async () => {
+    sdkState.execute = vi.fn(async () => page([task(1), task(2)], 'CUR')); // no seed written this test
+    const { result } = await mounted();
+    expect(result.current.items.map((t) => t.id)).toEqual(['1', '2']);
+    expect(result.current.hasMore).toBe(true);
+  });
+});
+
+// REGRESSION (round 39): a fresh row's deadlineID is a real Date; the round-37
+// JSON cache round-trip turned it into a STRING, so the SEEDED row threw
+// "E.toLocaleDateString is not a function" the moment MyTasksRow rendered it.
+// The round-37 tests missed this because they seeded PLAIN fakes (no real Date).
+// Here we seed a REAL Date and assert the seeded row exposes a real Date.
+describe('useMyTasks — cache seed preserves Date fields (regression)', () => {
+  const KEY = makeViewCacheKey('myTasks', { userId: '42', boardId: 'BOARD1' });
+
+  it('seeds a Date-bearing row from cache as a REAL Date (not a string)', async () => {
+    const deadline = new Date(2026, 6, 10);
+    writeViewCache(KEY, [task(1, { deadlineID: deadline })], 'SEEDCUR');
+    // Hold the background revalidate open so we observe the SEEDED row itself.
+    let resolveExec;
+    sdkState.execute = vi.fn(() => new Promise((r) => { resolveExec = r; }));
+    const { result } = renderHook(() => useMyTasks({ currentUser: { id: '42' }, context: {} }));
+
+    const seeded = result.current.items[0];
+    expect(seeded.id).toBe('1');
+    expect(seeded.deadlineID).toBeInstanceOf(Date);
+    expect(() => seeded.deadlineID.toLocaleDateString('en-GB')).not.toThrow(); // the crash, now safe
+    expect(seeded.deadlineID.getTime()).toBe(deadline.getTime());
+
+    // Let the silent revalidate settle so nothing leaks past the test.
+    await act(async () => { resolveExec(page([task(1, { deadlineID: deadline })], null)); });
   });
 });

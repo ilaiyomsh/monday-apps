@@ -33,6 +33,11 @@ function task({ creator = [], responsible = [] } = {}) {
   return { id: 'T1', taskCreatorID: creator, responsibilityID: responsible };
 }
 
+// A DECISION item whose role people columns (creator/decider/affected) have loaded.
+function decision({ creator = [], decider = [], affected = [] } = {}) {
+  return { id: 'DC1', decisionCreatorID: creator, deciderID: decider, affectedID: affected };
+}
+
 // permissions blob with the feature ON and the LOCKED seed pre-filled.
 const ENABLED_SEEDED = {
   enabled: true,
@@ -622,5 +627,136 @@ describe('resolveCan — task ctx without a discussion (My Tasks)', () => {
     };
     const ctx = { item: task({ creator: [person(ME)], responsible: [person(ME)] }), currentUserId: ME };
     expect(resolveCan('editTaskDeadline', ctx, { permissions: perms, canManageSettings: false })).toBe(false);
+  });
+});
+
+// ===========================================================================
+// resolveCan — DECISION tier. Mirrors the task tier: decision caps resolve from
+// the DECISION item's own people columns (PERMISSION_ROLE_SOURCES.decisions:
+// decisionCreatorID/deciderID). createDecision resolves at the DISCUSSION tier
+// like createTask.
+// ===========================================================================
+describe('resolveCan — decision tier', () => {
+  const off = { permissions: DEFAULT_PERMISSIONS, canManageSettings: false };
+  const on = { permissions: ENABLED_SEEDED, canManageSettings: false };
+  const DECISION_EDIT_CAPS = ['editDecisionStatus', 'editDecisionPriority', 'editDecisionDate', 'editDecisionAffected', 'editDecisionName'];
+
+  it('fail-open, no discussion in ctx (My Decisions): decision creator / decider edit their own decisions; a stranger cannot', () => {
+    const asCreator = { item: decision({ creator: [person(ME)] }), currentUserId: ME };
+    const asDecider = { item: decision({ decider: [person(ME)] }), currentUserId: ME };
+    const asStranger = { item: decision({ creator: [person(OTHER)], decider: [person(OTHER)] }), currentUserId: ME };
+    for (const cap of [...DECISION_EDIT_CAPS, 'deleteDecision']) {
+      expect(resolveCan(cap, asCreator, off)).toBe(true);
+      expect(resolveCan(cap, asDecider, off)).toBe(true);
+      expect(resolveCan(cap, asStranger, off)).toBe(false);
+    }
+  });
+
+  it('fail-open, WITH a discussion in ctx: decision caps follow the legacy creator/lead gate of the DISCUSSION (like task caps)', () => {
+    const creatorCtx = { discussion: disc({ creator: [person(ME)] }), item: decision(), currentUserId: ME };
+    const strangerCtx = { discussion: disc({ creator: [person(OTHER)] }), item: decision(), currentUserId: ME };
+    expect(resolveCan('editDecisionStatus', creatorCtx, off)).toBe(true);
+    expect(resolveCan('deleteDecision', strangerCtx, off)).toBe(false);
+  });
+
+  it('ready gate: a decision whose people columns have not loaded is read-only', () => {
+    expect(resolveCan('editDecisionStatus', { item: { id: 'DC1' }, currentUserId: ME }, on)).toBe(false);
+    expect(resolveCan('editDecisionStatus', { item: null, currentUserId: ME }, on)).toBe(false);
+    // one loaded role column (even empty) is enough to resolve
+    expect(resolveCan('editDecisionStatus', { item: { id: 'DC1', deciderID: [] }, currentUserId: ME }, on)).toBe(false);
+  });
+
+  it('feature on + seed: the decision creator gets ALL decision caps (incl. delete)', () => {
+    const ctx = { item: decision({ creator: [person(ME)] }), currentUserId: ME };
+    for (const cap of [...DECISION_EDIT_CAPS, 'deleteDecision']) {
+      expect(resolveCan(cap, ctx, on)).toBe(true);
+    }
+  });
+
+  it('feature on + seed: the decider gets every edit cap but NOT deleteDecision', () => {
+    const ctx = { item: decision({ decider: [person(ME)] }), currentUserId: ME };
+    for (const cap of DECISION_EDIT_CAPS) {
+      expect(resolveCan(cap, ctx, on)).toBe(true);
+    }
+    expect(resolveCan('deleteDecision', ctx, on)).toBe(false);
+  });
+
+  it('feature on: the discussion creator/lead content override does NOT extend to decision caps (item tier excluded)', () => {
+    const ctx = {
+      discussion: disc({ creator: [person(ME)] }),
+      item: decision({ creator: [person(OTHER)], decider: [person(OTHER)] }),
+      currentUserId: ME,
+    };
+    expect(resolveCan('editDecisionStatus', ctx, on)).toBe(false);
+    expect(resolveCan('deleteDecision', ctx, on)).toBe(false);
+  });
+
+  it('feature on: an explicit false on a held decision role vetoes a grant from another held role', () => {
+    const perms = {
+      enabled: true,
+      version: 1,
+      roles: {
+        'decisions:decisionCreatorID': { capabilities: { editDecisionDate: true } },
+        'decisions:deciderID': { capabilities: { editDecisionDate: false } },
+      },
+    };
+    const ctx = { item: decision({ creator: [person(ME)], decider: [person(ME)] }), currentUserId: ME };
+    expect(resolveCan('editDecisionDate', ctx, { permissions: perms, canManageSettings: false })).toBe(false);
+  });
+
+  it('createDecision resolves at the DISCUSSION tier like createTask (seed grants it to participants)', () => {
+    const participant = { discussion: disc({ participants: [person(ME)] }), currentUserId: ME };
+    const stranger = { discussion: disc({ participants: [person(OTHER)] }), currentUserId: ME };
+    expect(resolveCan('createDecision', participant, on)).toBe(true);
+    expect(resolveCan('createDecision', stranger, on)).toBe(false);
+    // fail-open: legacy creator/lead gate (participants cannot create)
+    expect(resolveCan('createDecision', participant, off)).toBe(false);
+    expect(resolveCan('createDecision', { discussion: disc({ creator: [person(ME)] }), currentUserId: ME }, off)).toBe(true);
+    // ready-gated by the DISCUSSION (not the item)
+    expect(resolveCan('createDecision', { discussion: unloadedDisc, currentUserId: ME }, on)).toBe(false);
+  });
+
+  it('owner bypass is absolute for decision caps too, even with every decision role revoked', () => {
+    const denyAll = { capabilities: Object.fromEntries([...DECISION_EDIT_CAPS, 'deleteDecision', 'createDecision'].map((c) => [c, false])) };
+    const opts = {
+      permissions: enabledRoles({ 'decisions:decisionCreatorID': denyAll, 'decisions:deciderID': denyAll }),
+      canManageSettings: true,
+    };
+    const ctx = { item: decision({ creator: [person(ME)], decider: [person(ME)] }), currentUserId: ME };
+    for (const cap of [...DECISION_EDIT_CAPS, 'deleteDecision']) {
+      expect(resolveCan(cap, ctx, opts)).toBe(true);
+    }
+  });
+});
+
+// ===========================================================================
+// resolveCan — decision "מושפעים" (affected) role. affectedID is a role source
+// (PERMISSION_ROLE_SOURCES.decisions), so a user in the affected people column
+// is recognized as the least-privileged decision role: STATUS edit only.
+// ===========================================================================
+describe('resolveCan — decision "affected" (מושפעים) role', () => {
+  const on = { permissions: ENABLED_SEEDED, canManageSettings: false };
+
+  it('feature on + seed: an affected user may edit STATUS only (not priority/date/affected/name/delete)', () => {
+    const ctx = { item: decision({ affected: [person(ME)] }), currentUserId: ME };
+    expect(resolveCan('editDecisionStatus', ctx, on)).toBe(true);
+    for (const cap of ['editDecisionPriority', 'editDecisionDate', 'editDecisionAffected', 'editDecisionName', 'deleteDecision']) {
+      expect(resolveCan(cap, ctx, on)).toBe(false);
+    }
+  });
+
+  it('an affected user is recognized as a role (grants status); a stranger to the decision is not', () => {
+    const affectedCtx = { item: decision({ affected: [person(ME)] }), currentUserId: ME };
+    const strangerCtx = { item: decision({ affected: [person(OTHER)] }), currentUserId: ME };
+    expect(resolveCan('editDecisionStatus', affectedCtx, on)).toBe(true);
+    expect(resolveCan('editDecisionStatus', strangerCtx, on)).toBe(false);
+  });
+
+  it('deny-wins: affected (editDecisionName:false) vetoes the decider grant when a user holds BOTH', () => {
+    const ctx = { item: decision({ decider: [person(ME)], affected: [person(ME)] }), currentUserId: ME };
+    // decider grants editDecisionName but affected revokes it → deny-wins veto.
+    expect(resolveCan('editDecisionName', ctx, on)).toBe(false);
+    // status is granted by BOTH roles → allowed (no veto).
+    expect(resolveCan('editDecisionStatus', ctx, on)).toBe(true);
   });
 });
