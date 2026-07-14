@@ -1,0 +1,51 @@
+name: Tag and release
+
+# Version layer (docs/monday-cicd-spec.md, 2026-07-14): after every merge to
+# main, tag each app whose version changed (<slug>@<version>) and create a
+# GitHub release record pointing at its changelog. Creating a tag is not a
+# commit to the branch — no conflict with the no-direct-push rule.
+#
+# HEAD^ is the first parent of the merge commit = the previous main tip
+# (the repo releases develop->main via merge commits — hybrid decision
+# 2026-07-14), so old-vs-new version comparison is exact.
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout (full history for tag push + parent comparison)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag bumped apps and create release records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          source scripts/apps.sh
+          for slug in "${APP_SLUGS[@]}"; do
+            path="$(app_path "$slug")"
+            old=$(git show "HEAD^:$path/package.json" 2>/dev/null | jq -r .version || echo "")
+            new=$(jq -r .version "$path/package.json")
+            if [ -n "$old" ] && [ "$old" != "$new" ]; then
+              tag="$slug@$new"
+              if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+                echo "::warning::tag $tag already exists — skipping"
+                continue
+              fi
+              git tag "$tag"
+              git push origin "$tag"
+              gh release create "$tag" \
+                --title "$slug v$new" \
+                --notes "See $path/CHANGELOG.md" || \
+                echo "::warning::release record for $tag failed (tag itself was pushed)"
+              echo "tagged $tag ($old -> $new)"
+            fi
+          done
