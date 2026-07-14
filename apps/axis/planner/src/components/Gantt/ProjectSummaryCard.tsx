@@ -224,13 +224,13 @@ const ProjectMetricsRow: React.FC<{ projectId: string }> = ({ projectId }) => {
     ) : SKELETON;
 
   return (
-    <div dir="ltr" className="grid grid-cols-3 gap-2 flex-1 min-h-0 items-center border-t border-border-subtle">
-      <EditablePlannedCell
-        projectId={projectId}
-        value={metrics?.planned ?? null}
-        ready={projectMetricsReady}
-        label={t('projectSummary.plannedHours')}
-      />
+    // Planned-hours cell is intentionally HIDDEN for now (owner, 2026-07-14): the
+    // card shows only ALLOCATED + ACTUAL, split 50/50. The Settings mapping
+    // (projectPlannedHoursColumnId) is deliberately left in place, and the
+    // EditablePlannedCell component below is kept ready for future use — to bring
+    // planned back, restore `grid-cols-3` and re-add the <EditablePlannedCell/>
+    // (value={metrics?.planned ?? null}, label={t('projectSummary.plannedHours')}).
+    <div dir="ltr" className="grid grid-cols-2 gap-2 flex-1 min-h-0 items-center border-t border-border-subtle">
       <MetricCell label={t('projectSummary.allocatedHours')}>{staticValue(metrics?.allocated ?? 0)}</MetricCell>
       <MetricCell label={t('projectSummary.actualHours')}>{staticValue(metrics?.reported ?? 0)}</MetricCell>
     </div>
@@ -248,12 +248,9 @@ export const ProjectSummaryCard = memo<ProjectSummaryCardProps>(({
   const locale = useLocale();
   return (
     <div className="flex flex-col h-full" dir={locale.dir}>
-      <div className="flex items-center justify-between gap-3 flex-1 min-h-0">
-        <ProjectTypeBadge
-          projectType={summary.projectType}
-          projectTypeColor={summary.projectTypeColor}
-          projectId={projectId}
-        />
+      {/* Project-type badge removed from the card as redundant (owner 2026-07-14).
+          The ProjectTypeBadge component above is kept, ready to re-add here. */}
+      <div className="flex items-center gap-3 flex-1 min-h-0">
         <PMSelector
           projectId={projectId}
           currentManagerName={summary.managerName}
