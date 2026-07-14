@@ -246,23 +246,27 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
       },
     }));
 
-  // Multi-column people mapping (owner request 2026-07-14): an alias in
-  // MULTI_PEOPLE_ALIASES (e.g. tasks.taskViewersID — יכולת צפייה) can map
-  // SEVERAL people columns. Stored as { id: <primary>, ids: [...] } — `id`
-  // stays the FIRST pick (the auto-fill/write target), so every single-id
-  // consumer keeps working; reads/permissions union all of them.
+  // Multi-column people mapping (owner requests 2026-07-14): an alias in
+  // MULTI_PEOPLE_ALIASES (the access columns — יכולת צפייה + יכולת עריכה) can
+  // map SEVERAL people columns. Stored as { id: <primary>, ids: [...],
+  // colTitles: {id: title} } — `id` stays the FIRST pick (the auto-fill/write
+  // target), so every single-id consumer keeps working; reads/permissions
+  // union all of them; colTitles keeps the picked-column chips showing the
+  // COLUMN NAME even before the live column list loads (the owner saw raw ids).
   const currentMultiIds = (cur) => {
     if (Array.isArray(cur?.ids) && cur.ids.length) return cur.ids.map(String);
     return cur?.id ? [String(cur.id)] : [];
   };
-  const addMultiColId = (boardKey, alias, id) => {
+  const addMultiColId = (boardKey, alias, id, title = '') => {
     if (!String(id || '').trim()) return;
     setColumns((c) => {
       const cur = c[boardKey][alias] || {};
       const ids = [...new Set([...currentMultiIds(cur), String(id)])];
+      const colTitles = { ...(cur.colTitles || {}) };
+      if (title) colTitles[String(id)] = title;
       return {
         ...c,
-        [boardKey]: { ...c[boardKey], [alias]: { ...cur, id: ids[0] || '', ids, verified: ids.length > 0 } },
+        [boardKey]: { ...c[boardKey], [alias]: { ...cur, id: ids[0] || '', ids, colTitles, verified: ids.length > 0 } },
       };
     });
   };
@@ -270,9 +274,11 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
     setColumns((c) => {
       const cur = c[boardKey][alias] || {};
       const ids = currentMultiIds(cur).filter((x) => x !== String(id));
+      const colTitles = { ...(cur.colTitles || {}) };
+      delete colTitles[String(id)];
       return {
         ...c,
-        [boardKey]: { ...c[boardKey], [alias]: { ...cur, id: ids[0] || '', ids, verified: ids.length > 0 } },
+        [boardKey]: { ...c[boardKey], [alias]: { ...cur, id: ids[0] || '', ids, colTitles, verified: ids.length > 0 } },
       };
     });
 
@@ -386,10 +392,13 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
     'pointTasksLinkID',
   ]);
 
-  // Aliases that may map SEVERAL people columns (owner request 2026-07-14):
-  // stored as { id: <primary>, ids: [...] }. The FIRST column is the auto-fill
-  // target at task creation; permissions/reads union people across all of them.
-  const MULTI_PEOPLE_ALIASES = new Set(['taskViewersID']);
+  // Aliases that may map SEVERAL people columns (owner requests 2026-07-14):
+  // both access columns — יכולת צפייה AND יכולת עריכה. Stored as
+  // { id: <primary>, ids: [...], colTitles: {id: title} }. The FIRST column is
+  // the auto-fill target at task creation; permissions/reads union people
+  // across all of them; colTitles keeps the chips human-readable even before
+  // the live column list has loaded.
+  const MULTI_PEOPLE_ALIASES = new Set(['taskViewersID', 'taskEditorsID']);
 
   const loadBoardColumns = async (boardId) => {
     const id = String(boardId || '');
@@ -691,6 +700,10 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
                               ? col.ids
                               : (col.id ? [col.id] : [])).map(String);
                             const labelByVal = Object.fromEntries(typedOptions.map((o) => [String(o.value), o.label]));
+                            // Column NAME resolution for the chips (owner: never
+                            // show a raw id): live options → the title stored at
+                            // pick time → the id as a last resort.
+                            const chipName = (cid) => labelByVal[cid] || col.colTitles?.[cid] || cid;
                             const remaining = typedOptions.filter((o) => !selectedIds.includes(String(o.value)));
                             return (
                               <div key={alias} className={styles.colRow}>
@@ -701,13 +714,13 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
                                   {selectedIds.map((cid, idx) => (
                                     <div key={cid} className={styles.multiColChip} title={idx === 0 ? 'העמודה הראשית — מתמלאת אוטומטית ביצירת משימה' : undefined}>
                                       <span className={styles.multiColName}>
-                                        {labelByVal[cid] || cid}
+                                        {chipName(cid)}
                                         {idx === 0 && selectedIds.length > 1 ? ' (ראשית)' : ''}
                                       </span>
                                       <button
                                         type="button"
                                         className={styles.multiColRemove}
-                                        aria-label={`הסר עמודה ${labelByVal[cid] || cid}`}
+                                        aria-label={`הסר עמודה ${chipName(cid)}`}
                                         onClick={() => removeMultiColId(boardKey, alias, cid)}
                                       >
                                         ✕
@@ -717,7 +730,7 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
                                   <SearchablePicker
                                     options={remaining}
                                     value=""
-                                    onChange={(id) => addMultiColId(boardKey, alias, id || '')}
+                                    onChange={(id) => addMultiColId(boardKey, alias, id || '', labelByVal[String(id)] || '')}
                                     placeholder={
                                       loadingColumnsByBoardId[boardId]
                                         ? 'טוען עמודות'
