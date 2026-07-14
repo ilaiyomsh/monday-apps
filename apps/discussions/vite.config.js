@@ -1,9 +1,19 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
+
 export default defineConfig({
   plugins: [react()],
+  // Version layer (docs/monday-cicd-spec.md): package.json is the source of
+  // truth; CI injects the commit SHA (draft) and the release flag (live).
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_SHA__: JSON.stringify(process.env.VITE_BUILD_SHA ?? 'local'),
+    __IS_RELEASE__: JSON.stringify(process.env.VITE_IS_RELEASE === 'true'),
+  },
   resolve: {
     alias: {
       // App source root (formerly the Vibe export; now owned code)

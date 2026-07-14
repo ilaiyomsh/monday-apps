@@ -206,6 +206,16 @@
   background-color: var(--color-bg-subtle);
 }
 
+/* Version caption — small muted line at the very bottom of the dialog */
+.versionCaption {
+  flex-shrink: 0;
+  padding: var(--spacing-xs) var(--spacing-2xl);
+  text-align: center;
+  font-size: 11px;
+  color: var(--color-text-disabled);
+  background-color: var(--color-bg-subtle);
+}
+
 /* Buttons */
 .buttonSecondary {
   padding: var(--spacing-md) var(--spacing-2xl);

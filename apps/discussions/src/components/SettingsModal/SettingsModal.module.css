@@ -240,6 +240,15 @@
   text-align: end;
 }
 
+/* App version stamp, pinned under the footer buttons. The string itself is
+   Latin (dir="ltr" on the wrapper in JSX); centered so it reads as a quiet
+   footer caption regardless of the RTL layout. */
+.versionLabel {
+  display: block;
+  margin-top: 8px;
+  text-align: center;
+}
+
 .prefs {
   flex: 1 1 auto;
   min-height: 0;

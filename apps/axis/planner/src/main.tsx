@@ -7,6 +7,9 @@ import App from './App.tsx'
 
 // Initialize logger (exposes window.AppLogger)
 import './utils/Logger'
+import { versionLabel } from './utils/versionLabel'
+
+console.info('[planner] ' + versionLabel)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

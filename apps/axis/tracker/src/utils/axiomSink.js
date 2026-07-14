@@ -50,7 +50,11 @@ if (ACTIVE) {
             dataset: DATASET,
             token: TOKEN,
             app: 'tracker',
-            appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.1',
+            // Version layer: semver + build SHA (e.g. "2.1.0+a1b2c3f") — the SHA
+            // keeps the exact-commit traceability the old hash-only stamp had.
+            appVersion:
+                (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0') +
+                (typeof __BUILD_SHA__ !== 'undefined' ? `+${__BUILD_SHA__.slice(0, 7)}` : ''),
             environment: import.meta.env.VITE_AXIOM_ENV ?? 'production',
         });
     } catch (e) {
