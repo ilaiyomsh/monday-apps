@@ -32,8 +32,8 @@ const TEAM_B = '2000001'; // צוות בטא: ilai, roni  (overlaps A on 2 membe
 const TEAM_C = '2000002'; // צוות גמא: ilai only   (single, fully-overlapping member)
 
 const teamsMap = {
-  [TEAM_A]: realTeam,
-  [TEAM_B]: { id: TEAM_B, name: 'צוות בטא', users: [ilai, roni] },
+  [TEAM_A]: realTeam, // carries no `picture` key -> must resolve to picture: null
+  [TEAM_B]: { id: TEAM_B, name: 'צוות בטא', picture: 'https://example.test/beta.png', users: [ilai, roni] },
   [TEAM_C]: { id: TEAM_C, name: 'צוות גמא', users: [ilai] },
 };
 
@@ -56,10 +56,11 @@ describe('buildAllowedList — union across items and teams', () => {
       { id: ilai.id, name: ilai.name, photo_thumb: ilai.photo_thumb },
       { id: roni.id, name: roni.name, photo_thumb: roni.photo_thumb },
     ]);
-    // Both referenced teams resolved, in encounter order.
+    // Both referenced teams resolved, in encounter order. The team picture is
+    // passed through for the dialog-title avatar (null when the map has none).
     expect(result.teams).toEqual([
-      { id: TEAM_A, name: 'test ilai' },
-      { id: TEAM_B, name: 'צוות בטא' },
+      { id: TEAM_A, name: 'test ilai', picture: null },
+      { id: TEAM_B, name: 'צוות בטא', picture: 'https://example.test/beta.png' },
     ]);
     expect(result.emptyChain).toBe(false);
     expect(result.missingTeamIds).toEqual([]);
@@ -179,7 +180,7 @@ describe('buildAllowedList — missing team ids', () => {
     // The missing team contributes nothing; only TEAM_A members survive.
     expect(result.users.map((u) => u.id)).toEqual([ido.id, ilai.id, roni.id]);
     // Only the resolved team is listed.
-    expect(result.teams).toEqual([{ id: TEAM_A, name: 'test ilai' }]);
+    expect(result.teams).toEqual([{ id: TEAM_A, name: 'test ilai', picture: null }]);
     expect(result.emptyChain).toBe(false);
   });
 });

@@ -10,6 +10,7 @@
 // URL instead:
 //   - default                    -> CONTEXTS.column_view_click
 //   - ?placement=settings        -> CONTEXTS.column_view_settings
+//   - ?single=1                  -> seed selectionMode 'single' (auto-close flow)
 //
 // It also seeds instance storage with a valid v1 column settings object
 // matching the seeded boards/columns (see probes/MANIFEST.md), UNLESS the URL
@@ -43,6 +44,7 @@ export function bootMock() {
   const params = new URLSearchParams(window.location.search);
   const isSettingsPlacement = params.get('placement') === 'settings';
   const isUnconfigured = params.get('unconfigured') === '1';
+  const isSingle = params.get('single') === '1';
 
   harness.setContext(isSettingsPlacement ? CONTEXTS.column_view_settings : CONTEXTS.column_view_click);
 
@@ -52,7 +54,10 @@ export function bootMock() {
     // The stub scopes global storage under `global:<key>`; the key inputs must
     // match the context fixture this boot just installed.
     const { boardId, columnId } = harness.state.context;
-    harness.seedStorage(`global:teamPeople:${boardId}:${columnId}`, SEEDED_COLUMN_SETTINGS);
+    const settings = isSingle
+      ? { ...SEEDED_COLUMN_SETTINGS, policy: { ...SEEDED_COLUMN_SETTINGS.policy, selectionMode: 'single' } }
+      : SEEDED_COLUMN_SETTINGS;
+    harness.seedStorage(`global:teamPeople:${boardId}:${columnId}`, settings);
   }
 
   installAppApiHandlers(harness);

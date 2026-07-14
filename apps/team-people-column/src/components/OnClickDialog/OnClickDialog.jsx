@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { AttentionBox } from '@vibe/core';
+import { AttentionBox, Avatar } from '@vibe/core';
 
 import mondayService from '../../services/mondayService';
 import logger from '../../utils/logger';
@@ -9,7 +9,6 @@ import { policyFromSettings } from '../../domain/settingsSchema';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import useAllowedUsers from '../../hooks/useAllowedUsers';
 import PersonPicker from '../shared/PersonPicker';
-import LoadingState from '../shared/LoadingState';
 import ErrorState from '../shared/ErrorState';
 import styles from './OnClickDialog.module.css';
 
@@ -20,18 +19,16 @@ const MODULE = 'OnClickDialog';
  *
  * Placement: columnPickers. Context: { boardId, itemId, columnId, selectedItemIds }.
  *
- * Flow: load persisted column settings (useColumnSettings) -> resolve the allowed
- * user set by walking the relation->linked-item->team chain (useAllowedUsers) ->
- * offer a picker restricted to EXACTLY that set. The write-back uses the native
+ * Search-first UX: the dialog opens INSTANTLY as a clean box — team title +
+ * search input only. The settings read (useColumnSettings) and the allowed-set
+ * resolve chain (useAllowedUsers) run in the background while the user types;
+ * the member list renders from the first typed letter. In single-assignee mode
+ * a pick saves and closes the dialog; the write-back uses the native
  * people-column format so monday automations/notifications keep working.
  */
 
-// Step-labeled Hebrew loading messages for the resolve chain.
-const STEP_MESSAGES = {
-  relation: 'טוען את הפריט המקושר...',
-  teams: 'טוען את חברי הצוות...',
-  ready: 'טוען...',
-};
+// Search-first: the placeholder IS the instruction the user sees on open.
+const SEARCH_PLACEHOLDER = 'הקלד שם אחראי...';
 
 const UNCONFIGURED_TITLE = 'העמודה לא הוגדרה';
 const UNCONFIGURED_TEXT =
@@ -69,15 +66,42 @@ function UnconfiguredState() {
   );
 }
 
+function initialsOf(name) {
+  return (name || '?')
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2);
+}
+
 /**
- * Dialog title carrying the team name(s), so the user always sees WHICH team
- * they are picking from. Falls back to a generic title while unresolved.
+ * Dialog title row: team avatar + bare team name (no "צוות" prefix), so the
+ * user always sees WHICH team they are picking from. The row's height is
+ * reserved from the very first paint and stays EMPTY while the chain resolves
+ * — the avatar and the name then appear together at once, with no interim
+ * placeholder text and no layout jump (user feedback: progressive title
+ * reveal reads as jank).
  */
-function teamTitle(result) {
-  const names = (result?.teams || []).map((t) => t.name).filter(Boolean);
-  if (names.length === 0) return 'בחירת אנשי צוות';
-  if (names.length === 1) return `צוות ${names[0]}`;
-  return `צוותים: ${names.join(', ')}`;
+function TeamTitleRow({ result }) {
+  const teams = (result?.teams || []).filter((t) => t.name);
+  if (teams.length === 0) {
+    return <div className={styles.titleRow} aria-hidden="true" />;
+  }
+  return (
+    <div className={styles.titleRow}>
+      {teams.map((t) => (
+        <Avatar
+          key={t.id}
+          size="small"
+          src={t.picture || undefined}
+          text={initialsOf(t.name)}
+          type={t.picture ? 'img' : 'text'}
+          ariaLabel={t.name}
+        />
+      ))}
+      <h2 className={styles.title}>{teams.map((t) => t.name).join(', ')}</h2>
+    </div>
+  );
 }
 
 function OnClickDialog({ context }) {
@@ -95,7 +119,6 @@ function OnClickDialog({ context }) {
 
   const {
     status,
-    step,
     result,
     error: allowedError,
     retry,
@@ -135,6 +158,8 @@ function OnClickDialog({ context }) {
   // (optimistic — the UI reflects the pick at once; a failed write reverts the
   // selection and shows an inline strip). Serialized via a ref so a fast
   // second click saves the LATEST selection after the in-flight write settles.
+  // Single-assignee mode: a successful save also CLOSES the dialog (pick =
+  // done); a failed save keeps it open so the user sees the error strip.
   const savingRef = useRef(Promise.resolve());
   const handleChange = useCallback((next) => {
     const prev = selection;
@@ -148,6 +173,7 @@ function OnClickDialog({ context }) {
           columnId,
           value: JSON.stringify(formatCellValue(next)),
         });
+        if (single) mondayService.closeDialog();
       } catch (err) {
         // error-guard: never swallow. Log, revert the optimistic pick, and show
         // an inline strip. No toast on top — the inline danger AttentionBox is
@@ -158,7 +184,7 @@ function OnClickDialog({ context }) {
         setSaveError('שמירת הבחירה נכשלה. נסו שוב.');
       }
     });
-  }, [boardId, itemId, columnId, selection]);
+  }, [boardId, itemId, columnId, selection, single]);
 
   // --- render branches ----------------------------------------------------
 
@@ -167,13 +193,9 @@ function OnClickDialog({ context }) {
     return <ErrorState message={GENERIC_ERROR_TEXT} onRetry={reloadSettings} />;
   }
 
-  // Settings still loading.
-  if (settingsLoading) {
-    return <LoadingState message="טוען הגדרות..." />;
-  }
-
-  // Unconfigured — instruct the user to open column settings.
-  if (settings == null) {
+  // Unconfigured — instruct the user to open column settings. Known only once
+  // the storage read settled; until then the search-first shell shows below.
+  if (!settingsLoading && settings == null) {
     return <UnconfiguredState />;
   }
 
@@ -189,13 +211,10 @@ function OnClickDialog({ context }) {
     return <ErrorState message={message} onRetry={retry} />;
   }
 
-  // Resolve chain still running — step-labeled Hebrew loading.
-  if (status !== 'ready' || !result) {
-    return <LoadingState message={STEP_MESSAGES[step] || STEP_MESSAGES.ready} />;
-  }
+  const ready = status === 'ready' && result != null;
 
   // Ready, but the chain resolved to an empty allowed set: LOCKED — no picking.
-  if (result.emptyChain) {
+  if (ready && result.emptyChain) {
     return (
       <div className={styles.dialog} dir="rtl">
         <AttentionBox type="warning" title="לא ניתן לבחור אנשים" text={emptyChainMessage(result)} />
@@ -203,20 +222,21 @@ function OnClickDialog({ context }) {
     );
   }
 
-  // Ready with a non-empty allowed set — the restricted picker, structured
-  // like monday's native people picker: team-name title, then search + list
-  // immediately (no extra click), selection saves on toggle.
+  // Search-first shell — rendered IMMEDIATELY, even while settings / the
+  // resolve chain are still loading in the background: team title (generic
+  // until resolved) + search input. The member list appears only once the
+  // user types; typing time masks the background load.
   const multiSelected = Array.isArray(selectedItemIds) && selectedItemIds.length > 1;
 
   return (
     <div className={styles.dialog} dir="rtl">
-      <h2 className={styles.title}>{teamTitle(result)}</h2>
+      <TeamTitleRow result={ready ? result : null} />
 
       {multiSelected && (
         <p className={styles.hint}>העריכה חלה על הפריט הנוכחי בלבד.</p>
       )}
 
-      {result.partial && (
+      {ready && result.partial && (
         <AttentionBox
           compact
           type="warning"
@@ -228,11 +248,15 @@ function OnClickDialog({ context }) {
 
       <PersonPicker
         inline
+        searchFirst
+        hideChips
+        placeholder={SEARCH_PLACEHOLDER}
+        listHeading={null}
         selected={selection}
         onChange={handleChange}
-        users={result.users}
+        users={ready ? result.users : []}
+        usersLoading={!ready}
         single={single}
-        listHeading="אנשי הצוות"
       />
     </div>
   );

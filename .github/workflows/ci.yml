@@ -41,3 +41,44 @@ jobs:
 
       - name: Build (skips packages with no build script)
         run: pnpm -r --if-present run build
+
+  # Visibility-only test job (owner decision 2026-07-12): runs the full
+  # workspace test suites and reports the outcome in the job summary, but
+  # never fails the check — tracker carries 2 known-red deferred tests
+  # (FOLLOW-UPS F1) and enforcement stays with the test-guard hooks.
+  # Promote to blocking once the known-red baseline is cleared.
+  tests:
+    name: tests (non-blocking visibility)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests (never fails the check)
+        id: run_tests
+        continue-on-error: true
+        run: pnpm -r --if-present run test
+
+      - name: Report outcome in job summary
+        run: |
+          if [ "${{ steps.run_tests.outcome }}" = "success" ]; then
+            echo "✅ All workspace test suites passed." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Some tests FAILED (non-blocking — read the 'Run tests' log above)." >> "$GITHUB_STEP_SUMMARY"
+            echo "Known-red baseline: tracker has 2 deferred failing tests (apps/axis/docs/FOLLOW-UPS.md F1)." >> "$GITHUB_STEP_SUMMARY"
+            echo "Any OTHER failure is yours to investigate before merging." >> "$GITHUB_STEP_SUMMARY"
+          fi

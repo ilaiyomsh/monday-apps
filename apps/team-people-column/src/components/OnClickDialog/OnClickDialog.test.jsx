@@ -25,6 +25,12 @@ const validV1 = () => ({
   policy: { selectionMode: 'multi', aggregation: 'union', includeListedPersons: true },
 });
 
+// Same settings in single-assignee mode (the auto-close flow).
+const singleV1 = () => ({
+  ...validV1(),
+  policy: { selectionMode: 'single', aggregation: 'union', includeListedPersons: true },
+});
+
 // Context for the columnPickers (on-click) placement. columnId is the column's
 // OWN people column (multiple_person_mm563xsw on WZ-TeamPeople-source); itemId /
 // boardId are that source item / board — all matching the captured probes.
@@ -35,15 +41,25 @@ const context = () => ({
   selectedItemIds: ['12511436134'],
 });
 
-// The exactly-3 seeded members of team "test ilai".
+// The exactly-3 seeded members of team "test ilai" (ids per GetTeamsAndUsers.json).
 const MEMBER_NAMES = ['עידו פיוטרקובסקי', 'עילי שלם', 'רוני ארגמן'];
+const ILAI_ID = 48274917; // עילי שלם
+const RONI_ID = 96863017; // רוני ארגמן
 
 // User-facing Hebrew strings the dialog must show (asserted exactly, not by substring).
 const UNCONFIGURED_TITLE = 'העמודה לא הוגדרה';
 const API_ERROR_MSG = 'אירעה שגיאה בטעינת הנתונים מ-monday. נסו שוב מאוחר יותר.';
 const NO_TEAM_MSG = 'לא נמצא צוות בפריט המקושר. ודאו שקיים פריט מקושר ושהוגדר בו צוות.';
-// The dialog title must carry the resolved team's name (seeded team 1348990).
-const TEAM_TITLE = 'צוות test ilai';
+// The dialog title must carry the resolved team's NAME (no "צוות" prefix) next
+// to the team avatar (seeded team 1348990 carries a real picture_url).
+const TEAM_TITLE = 'test ilai';
+// Search-first UX: the ONLY thing the user sees on open besides the title.
+const SEARCH_PLACEHOLDER = 'הקלד שם אחראי...';
+
+const searchInput = () => screen.getByLabelText('חיפוש שם');
+const typeSearch = (value) => fireEvent.change(searchInput(), { target: { value } });
+
+const closeDialogCalls = () => harness.calls.filter((c) => c.type === 'closeDialog').length;
 
 beforeEach(() => {
   harness.reset();
@@ -60,29 +76,68 @@ afterEach(() => {
   harness.reset();
 });
 
-describe('OnClickDialog — configured & ready', () => {
-  it('opens straight into the list (native-picker structure) with EXACTLY the 3 members of team "test ilai" and no foreign users', async () => {
+describe('OnClickDialog — search-first shell', () => {
+  it('renders the search input IMMEDIATELY on open, before the resolve chain settles', async () => {
     installAppApiHandlers(harness);
     harness.seedStorage(STORAGE_KEY, validV1());
 
     render(<OnClickDialog context={context()} />);
 
-    // Native-like: NO extra trigger click — the list renders immediately.
-    expect(await screen.findByText(MEMBER_NAMES[0])).toBeInTheDocument();
+    // Synchronous assertions — no await: the shell must not wait for storage
+    // or the API chain. This is the whole point of the search-first UX.
+    expect(searchInput()).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(SEARCH_PLACEHOLDER)).toBeInTheDocument();
+    MEMBER_NAMES.forEach((name) => expect(screen.queryByText(name)).toBeNull());
+    // NO interim title text while loading — the title row stays empty and the
+    // real title appears at once when the chain lands (no progressive swap).
+    expect(screen.queryByRole('heading')).toBeNull();
 
-    // All three allowed members are offered...
-    MEMBER_NAMES.forEach((name) => {
-      expect(screen.getByText(name)).toBeInTheDocument();
-    });
-    // ...and nobody else: the roster is exactly the resolved allowed set.
-    expect(screen.queryByText('משתמש חיצוני')).toBeNull();
-    const memberRows = screen
-      .getAllByRole('button')
-      .filter((b) => /פיוטרקובסקי|עילי שלם|ארגמן/.test(b.textContent || ''));
-    expect(memberRows).toHaveLength(3);
+    // Let the background chain settle so the test ends in a stable state.
+    await screen.findByRole('heading', { name: TEAM_TITLE });
   });
 
-  it('shows the resolved team name in the dialog title', async () => {
+  it('keeps the box clean: NO member list until the user types, even after the chain is ready', async () => {
+    installAppApiHandlers(harness);
+    harness.seedStorage(STORAGE_KEY, validV1());
+
+    render(<OnClickDialog context={context()} />);
+
+    // Chain fully resolved (team title is up) — and still no list.
+    await screen.findByRole('heading', { name: TEAM_TITLE });
+    MEMBER_NAMES.forEach((name) => expect(screen.queryByText(name)).toBeNull());
+  });
+
+  it('filters from the FIRST typed letter: "ע" shows the two matching members only', async () => {
+    installAppApiHandlers(harness);
+    harness.seedStorage(STORAGE_KEY, validV1());
+
+    render(<OnClickDialog context={context()} />);
+    await screen.findByRole('heading', { name: TEAM_TITLE });
+
+    typeSearch('ע');
+
+    expect(await screen.findByText('עידו פיוטרקובסקי')).toBeInTheDocument();
+    expect(screen.getByText('עילי שלם')).toBeInTheDocument();
+    // "רוני ארגמן" contains no ע — must not be offered.
+    expect(screen.queryByText('רוני ארגמן')).toBeNull();
+  });
+
+  it('typing while the chain is still loading shows the loading hint, then the matches (typing masks load)', async () => {
+    installAppApiHandlers(harness);
+    harness.seedStorage(STORAGE_KEY, validV1());
+    harness.failures.latencyMs = 60;
+
+    render(<OnClickDialog context={context()} />);
+
+    // Type before the chain settles — the shell is already interactive.
+    typeSearch('עילי');
+    expect(screen.getByText('טוען...')).toBeInTheDocument();
+
+    // When the background chain lands, the typed query resolves to its match.
+    expect(await screen.findByText('עילי שלם')).toBeInTheDocument();
+  });
+
+  it('shows the team AVATAR + bare team name in the title once resolved — never the old "צוות" prefix', async () => {
     installAppApiHandlers(harness);
     harness.seedStorage(STORAGE_KEY, validV1());
 
@@ -91,6 +146,11 @@ describe('OnClickDialog — configured & ready', () => {
     expect(
       await screen.findByRole('heading', { name: TEAM_TITLE })
     ).toBeInTheDocument();
+    // The team avatar sits beside the name; the img-type avatar exposes the
+    // team name as its alt text (the seeded team carries a real picture_url).
+    expect(screen.getByAltText(TEAM_TITLE)).toBeInTheDocument();
+    // The old text-only format is gone.
+    expect(screen.queryByText('צוות test ilai')).toBeNull();
   });
 });
 
@@ -107,7 +167,7 @@ describe('OnClickDialog — unconfigured', () => {
   });
 });
 
-describe('OnClickDialog — save', () => {
+describe('OnClickDialog — save, multi mode (dialog stays open)', () => {
   it('saves immediately on person click: writes JSON.stringify(formatCellValue(selection)) via change_column_value and keeps the dialog open', async () => {
     let captured = null;
     installAppApiHandlers(harness, {
@@ -123,9 +183,11 @@ describe('OnClickDialog — save', () => {
     harness.seedStorage(STORAGE_KEY, validV1());
 
     render(<OnClickDialog context={context()} />);
+    await screen.findByRole('heading', { name: TEAM_TITLE });
 
-    // Native-like: click a person in the immediately-rendered list — that IS
-    // the save (no separate Save button exists anymore).
+    // Search-first: the row exists only after typing; clicking it IS the save
+    // (no separate Save button exists).
+    typeSearch('עילי');
     const row = (await screen.findByText('עילי שלם')).closest('button');
     fireEvent.click(row);
 
@@ -137,17 +199,73 @@ describe('OnClickDialog — save', () => {
     expect(captured.itemId).toBe('12511436134');
     expect(captured.columnId).toBe('multiple_person_mm563xsw');
     expect(JSON.parse(captured.value)).toEqual({
-      personsAndTeams: [{ id: 48274917, kind: 'person' }],
+      personsAndTeams: [{ id: ILAI_ID, kind: 'person' }],
     });
 
-    // Native-picker behavior: the dialog STAYS OPEN (user may pick more people
-    // or close by clicking outside) — closeDialog must NOT have been executed.
-    expect(harness.calls.some((c) => c.type === 'closeDialog')).toBe(false);
-    // The pick is reflected as a selected chip (optimistic).
-    expect(screen.getByLabelText('הסר עילי שלם')).toBeInTheDocument();
+    // Multi mode: the dialog STAYS OPEN (user may pick more people or close by
+    // clicking outside) — closeDialog must NOT have been executed.
+    expect(closeDialogCalls()).toBe(0);
+    // The pick is reflected on the row itself (optimistic).
+    expect(row.className).toMatch(/rowSelected/);
+  });
+});
+
+describe('OnClickDialog — save, single mode (pick = save + close, second pick replaces)', () => {
+  it('picking a person saves the native payload and closes the dialog', async () => {
+    let captured = null;
+    installAppApiHandlers(harness, {
+      UpdateColumnValue: {
+        fn: (_query, variables) => {
+          captured = variables;
+          return { change_column_value: { id: '12511436134' } };
+        },
+      },
+    });
+    harness.seedStorage(STORAGE_KEY, singleV1());
+
+    render(<OnClickDialog context={context()} />);
+    await screen.findByRole('heading', { name: TEAM_TITLE });
+
+    typeSearch('עילי');
+    fireEvent.click((await screen.findByText('עילי שלם')).closest('button'));
+
+    await waitFor(() => expect(closeDialogCalls()).toBe(1));
+    expect(JSON.parse(captured.value)).toEqual({
+      personsAndTeams: [{ id: ILAI_ID, kind: 'person' }],
+    });
   });
 
-  it('reverts the optimistic pick and shows the inline error strip when the write fails', async () => {
+  it('picking ANOTHER person replaces the current assignee instead of blocking', async () => {
+    const payloads = [];
+    installAppApiHandlers(harness, {
+      UpdateColumnValue: {
+        fn: (_query, variables) => {
+          payloads.push(JSON.parse(variables.value));
+          return { change_column_value: { id: '12511436134' } };
+        },
+      },
+    });
+    harness.seedStorage(STORAGE_KEY, singleV1());
+
+    render(<OnClickDialog context={context()} />);
+    await screen.findByRole('heading', { name: TEAM_TITLE });
+
+    typeSearch('עילי');
+    fireEvent.click((await screen.findByText('עילי שלם')).closest('button'));
+    await waitFor(() => expect(payloads).toHaveLength(1));
+
+    // Second pick of a DIFFERENT person: not blocked, no "one assignee only"
+    // notice — the new person simply replaces the old one.
+    typeSearch('רוני');
+    fireEvent.click((await screen.findByText('רוני ארגמן')).closest('button'));
+    await waitFor(() => expect(payloads).toHaveLength(2));
+
+    expect(payloads[1]).toEqual({
+      personsAndTeams: [{ id: RONI_ID, kind: 'person' }],
+    });
+  });
+
+  it('a failed write keeps the dialog OPEN, reverts the optimistic pick, and shows the inline strip', async () => {
     installAppApiHandlers(harness, {
       UpdateColumnValue: {
         fn: () => {
@@ -155,16 +273,20 @@ describe('OnClickDialog — save', () => {
         },
       },
     });
-    harness.seedStorage(STORAGE_KEY, validV1());
+    harness.seedStorage(STORAGE_KEY, singleV1());
 
     render(<OnClickDialog context={context()} />);
+    await screen.findByRole('heading', { name: TEAM_TITLE });
 
+    typeSearch('עילי');
     const row = (await screen.findByText('עילי שלם')).closest('button');
     fireEvent.click(row);
 
-    // The failed write reverts the selection (chip gone) and shows the strip.
+    // The failed write reverts the selection and shows the strip; the dialog
+    // must NOT close on failure — the user has to see what happened.
     expect(await screen.findByText('שמירת הבחירה נכשלה. נסו שוב.')).toBeInTheDocument();
-    expect(screen.queryByLabelText('הסר עילי שלם')).toBeNull();
+    expect(closeDialogCalls()).toBe(0);
+    expect(row.className).not.toMatch(/rowSelected/);
   });
 });
 
@@ -179,8 +301,8 @@ describe('OnClickDialog — chain error', () => {
     render(<OnClickDialog context={context()} />);
 
     expect(await screen.findByText(API_ERROR_MSG)).toBeInTheDocument();
-    // The error state offers a single control: retry.
-    expect(screen.getByRole('button')).toBeInTheDocument();
+    // The error state offers a retry control.
+    expect(screen.getByRole('button', { name: /נסו שוב|נסה שוב|רענון|retry/i })).toBeInTheDocument();
   });
 });
 

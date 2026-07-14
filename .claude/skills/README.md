@@ -25,11 +25,16 @@ location or the repo root, never hardcoded.
    goes into the repo or the chat context.
 3. `gh auth login` for PR/merge flows.
 
+## Enforcement wiring (checked in since 2026-07-12)
+
+- **Hook wiring IS part of this repo:** `.claude/settings.json` registers
+  deploy-guard, test-guard (lock / nudge / stop-gate), error-guard's per-edit
+  check, and the GraphQL write reminder, via `$CLAUDE_PROJECT_DIR`-relative
+  paths (`.claude/hooks/` + the skill-internal hook scripts). It loads in every
+  clone AND in cloud sessions — approve the hooks on first run, never bypass.
+
 ## Not included (per-machine, by design)
 
-- **Hook wiring** (`settings.json` PreToolUse/PostToolUse/Stop entries for
-  test-guard/error-guard enforcement) — configure per machine; the hook scripts
-  themselves live inside the skills.
 - **Secrets/env** — each app's `.env` and the `MONDAY_TOKEN` GitHub secret are
   never part of the skills.
 

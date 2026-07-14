@@ -4,6 +4,10 @@
 > Created 2026-06-10 (post W1/W3/W4 completion). When picking one up: open a change via the
 > change-tracker skill, and if it touches the Day-off integration, follow
 > `DAY-OFF-INTEGRATION-EXECUTION.md` §4 and log there too.
+>
+> **Expiry rule (root CLAUDE.md, 2026-07-12):** an onboarding stub (disabled
+> lint/type-check/etc.) logged here older than 14 days is a BLOCKING backlog
+> item — schedule it before new feature work on that app.
 
 | # | App | Task | Context / where to start | Deferred |
 |---|---|---|---|---|
@@ -16,7 +20,8 @@
 | F7 | Planner | Decide fate of unmerged remote branch `claude/list-prs-8Gi28` (2 docs commits: PR #8 i18n review notes) | Only unmerged branch left after the 2026-06-10 cleanup (20 merged branches deleted across all repos) | pending user call |
 | F8 | tracker | At W5.5 (legacy write-path decommission): consciously retire or re-gate the legacy all-day suites that W4.8 pinned to `absenceSource='tracker'` | Part of W5.5 scope — recorded here so it isn't forgotten | plan |
 | F9 | Planner | Migrate settings storage off `monday.storage.instance` (fixed key) to the global-by-instanceId standard (#17) | Long-standing standards divergence, unrelated to the integration | standards backlog |
-| F10 | tracker | Add `-a 10684862` to the `deploy:push` script in `package.json` | Without it, `mapps code:push` opens an interactive app picker and fails in non-TTY runs (discovered during the 2026-06-10 deploy; pushed manually with the explicit id) | agent finding |
+| F10 | tracker | ~~Add `-a 10684862` to the `deploy:push` script~~ **SUPERSEDED 2026-07-12:** local deploy scripts were removed from all apps — deploys go only via the pipeline (root CLAUDE.md) | Was: interactive app picker in non-TTY runs | closed by gateway PR |
+| F12 | day-off+app-core | Decide fate of unmerged remote branch `claude/axiom-app-integration-olzagb` (2 commits off OLD main: `errors/axiomSink.ts` ~250 lines + 172-line test + `docs/ERROR-AXIOM-STANDARD.md`) | Unique code not in develop, but the APPROACH is superseded by error-guard's shared `app-errors` remote monitoring (2026-07-07). Compare against the error-guard retrofit when day-off/app-core's turn comes; salvage or delete then. Owner decision 2026-07-12: keep meanwhile | user, 2026-07-12 |
 | F11 | tracker+Planner (Axiom) | **Severity-gated user-contact channel** — for SEVERE errors only, an explicit path to identify and follow up with the affected user | User requirement (2026-07-02): "we'll attach to severe errors an option to send personal details so we can get back to and update the user." Two candidate designs when picked up: (a) triage-time lookup — ship only `acc`/`usr` ids (already in the envelope today) and resolve name/email via monday API `users(ids:)` when handling the incident (zero PII in Axiom, preferred per the id-over-name standard); (b) severity+allowlist exception in the transport sanitizer that lets an explicit `contact_email`-style field through on ERROR-level events only (requires amending the unconditional PII drop + plan revision + PII-retention note in the runbook). Decide (a) vs (b) in its own change; do NOT weaken the sanitizer as a side effect of other work | user, 2026-07-02 |
 
 ## Decisions recorded 2026-06-10 (for context)

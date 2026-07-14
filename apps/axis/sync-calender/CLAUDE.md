@@ -16,8 +16,8 @@ npm start                                  # Start Express server (port 8080)
 npm run dev                                # nodemon src/index.js + vite concurrently (admin SPA on :5173 proxying to :8080)
 npm run build:client                       # Build React admin bundle → public/admin/
 npm run typecheck                          # tsc --noEmit (client-only types)
-mapps tunnel:create -p 8080 -a 11119011    # Expose local server to monday.com
-Deploy via the mapps skill ship procedure (one gated question; it rebuilds and force-pushes internally) — do not run `mapps code:push` directly
+mapps tunnel:create -p 8080 -a 11666315    # Expose local server to monday.com
+Deploys happen ONLY via the pipeline (merge to develop → draft, merge to main → live) — never run `mapps code:push` or ship.sh locally; see the root CLAUDE.md
 mapps code:logs -i <APP_VERSION_ID> -s live -t console   # Stream logs (version ID, not app ID)
 ```
 

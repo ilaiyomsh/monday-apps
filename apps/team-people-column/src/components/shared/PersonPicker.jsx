@@ -58,15 +58,25 @@ async function loadRoster() {
  * ancestors, and renders exactly once.
  *
  * Props: { selected: [{id, name, kind}], onChange, users?, bordered?,
- * closeOnSelect?, single?, inline?, listHeading? }.
+ * closeOnSelect?, single?, inline?, listHeading?, searchFirst?, hideChips?,
+ * placeholder?, usersLoading? }.
  * `users`: optionally pass a pre-fetched roster instead of the built-in fetch.
- * `single`: cap the selection at one person (assignee fields). A second pick is
- * blocked with a notice; deselecting the existing person is still allowed.
+ * `single`: cap the selection at one person (assignee fields). Picking a
+ * different person REPLACES the current one (native monday behavior);
+ * deselecting the existing person is still allowed.
  * `inline`: render the menu (chips + search + list) directly in the flow —
  * no trigger button, no portal — for surfaces that ARE the picker (the
  * on-click column dialog, matching monday's native people picker which opens
  * straight into the list).
- * `listHeading`: heading text above the list (defaults to "אנשים מוצעים").
+ * `listHeading`: heading text above the list (defaults to "אנשים מוצעים";
+ * pass null to render no heading).
+ * `searchFirst`: keep the surface clean — render the list only once the user
+ * has typed something (from the first letter). The typing time masks the
+ * roster's background load.
+ * `hideChips`: never render the selected-people chips row (minimal surfaces).
+ * `placeholder`: search input placeholder (defaults to "חיפוש שמות").
+ * `usersLoading`: the passed `users` roster is still resolving — show the
+ * loading hint in the list area instead of "no results".
  */
 export function PersonPicker({
   selected = [],
@@ -77,6 +87,10 @@ export function PersonPicker({
   single = false,
   inline = false,
   listHeading = 'אנשים מוצעים',
+  searchFirst = false,
+  hideChips = false,
+  placeholder = 'חיפוש שמות',
+  usersLoading = false,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -164,17 +178,9 @@ export function PersonPicker({
     if (selectedIds.includes(String(user.id))) {
       removeUser(user.id);
     } else if (single && selected.length >= 1) {
-      // single-assignee mode: one person max. Block the extra pick (the popover
-      // stays open so the user can deselect the current person first) and
-      // surface a notice. monday.execute is a no-op outside the iframe / tests.
-      try {
-        mondayService.showNotice('ניתן להקצות אחראי אחד בלבד', 'error');
-      } catch (err) {
-        // Outside the monday iframe (dev harness / tests) showNotice throws;
-        // the notice is cosmetic there, but the failure still gets recorded.
-        logger.warn('PersonPicker', 'showNotice unavailable outside iframe', err);
-      }
-      return;
+      // single-assignee mode: one person max — a pick of a different person
+      // REPLACES the current assignee (native monday people-column behavior).
+      onChange([{ id: user.id, kind: 'person', name: user.name }]);
     } else {
       onChange([...selected, { id: user.id, kind: 'person', name: user.name }]);
     }
@@ -213,9 +219,14 @@ export function PersonPicker({
 
   // The menu body (chips + search + list) — shared between the popover
   // rendering and the inline rendering.
+  const listLoading = loading || usersLoading;
+  // Search-first: the surface stays clean (no heading, no list) until the user
+  // has typed at least one character.
+  const showList = !searchFirst || q.length > 0;
+
   const menu = (
     <div className={`${styles.menu} ${inline ? styles.menuInline : ''}`}>
-      {selected.length > 0 && (
+      {!hideChips && selected.length > 0 && (
         <div className={styles.chips}>
           {selected.map((p) => {
             const u = getUser(p.id);
@@ -245,43 +256,45 @@ export function PersonPicker({
           type="text"
           className={styles.search}
           aria-label="חיפוש שם"
-          placeholder="חיפוש שמות"
+          placeholder={placeholder}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           autoFocus
         />
       </div>
 
-      <div className={styles.heading}>{listHeading}</div>
-      <div className={styles.list}>
-        {loading ? (
-          <div className={styles.empty}>טוען...</div>
-        ) : filtered.length === 0 ? (
-          <div className={styles.empty}>לא נמצאו אנשים</div>
-        ) : (
-          filtered.map((user) => {
-            const isSel = selectedIds.includes(String(user.id));
-            return (
-              <button
-                key={user.id}
-                type="button"
-                className={`${styles.row} ${isSel ? styles.rowSelected : ''}`}
-                onClick={() => toggleUser(user)}
-              >
-                <Avatar
-                  size="small"
-                  src={user.photo_thumb}
-                  text={initialsOf(user.name)}
-                  type={user.photo_thumb ? 'img' : 'text'}
-                  ariaLabel={user.name}
-                />
-                <span className={styles.name}>{user.name}</span>
-                <span className={styles.check}>{isSel && <Check size={16} />}</span>
-              </button>
-            );
-          })
-        )}
-      </div>
+      {showList && listHeading && <div className={styles.heading}>{listHeading}</div>}
+      {showList && (
+        <div className={styles.list}>
+          {listLoading ? (
+            <div className={styles.empty}>טוען...</div>
+          ) : filtered.length === 0 ? (
+            <div className={styles.empty}>לא נמצאו אנשים</div>
+          ) : (
+            filtered.map((user) => {
+              const isSel = selectedIds.includes(String(user.id));
+              return (
+                <button
+                  key={user.id}
+                  type="button"
+                  className={`${styles.row} ${isSel ? styles.rowSelected : ''}`}
+                  onClick={() => toggleUser(user)}
+                >
+                  <Avatar
+                    size="small"
+                    src={user.photo_thumb}
+                    text={initialsOf(user.name)}
+                    type={user.photo_thumb ? 'img' : 'text'}
+                    ariaLabel={user.name}
+                  />
+                  <span className={styles.name}>{user.name}</span>
+                  <span className={styles.check}>{isSel && <Check size={16} />}</span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      )}
     </div>
   );
 

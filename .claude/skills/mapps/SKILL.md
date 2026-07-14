@@ -63,6 +63,12 @@ Never chain a gated action silently onto an ungated request (e.g. deploy after
 
 ## SHIP — the only sanctioned deploy path
 
+> **Monorepo override:** inside a repo wired to the monday-cicd pipeline (this
+> monorepo), production deploys happen ONLY via merge to `main` on GitHub
+> Actions — ship.sh and any local `mapps code:push` are FORBIDDEN there, with
+> no emergency exception. This SHIP section applies to standalone apps outside
+> the pipeline. See the root `CLAUDE.md` and the `monday-cicd` skill.
+
 When the user asks to deploy (תפרוס / פריסה / לפרוס / deploy / ship / push to
 prod), do exactly this:
 

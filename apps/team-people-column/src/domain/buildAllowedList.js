@@ -4,7 +4,7 @@
 // See MODULE CONTRACTS. Inputs are already-transformed domain structures
 // (not raw monday API envelopes):
 //   perItemEntries = [{ itemId:string, entries:[{ id:string, kind:'person'|'team' }] }]
-//   teamsMap       = { [teamId:string]: { id, name, users:[{ id, name, photo_thumb }] } }
+//   teamsMap       = { [teamId:string]: { id, name, picture?, users:[{ id, name, photo_thumb }] } }
 //   policy         = { aggregation:'union'|'strict', includeListedPersons:boolean, ... }
 //   usersById      = { [userId:string]: { id, name, photo_thumb } }
 //
@@ -44,7 +44,8 @@ export function buildAllowedList(perItemEntries, teamsMap, policy, usersById) {
         }
         if (!resolvedTeamSeen.has(teamId)) {
           resolvedTeamSeen.add(teamId);
-          resolvedTeams.push({ id: String(team.id), name: team.name });
+          // picture rides along for the dialog-title team avatar.
+          resolvedTeams.push({ id: String(team.id), name: team.name, picture: team.picture ?? null });
         }
         const teamUsers = Array.isArray(team.users) ? team.users : [];
         for (const u of teamUsers) {
