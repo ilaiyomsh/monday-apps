@@ -4,37 +4,21 @@
    PersonPicker. */
 
 .root {
-  padding: 16px;
+  padding: 10px 14px;
   direction: rtl;
   text-align: start;
   font-size: 14px;
 }
 
-.header {
-  margin-bottom: 16px;
-}
-
-.title {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 0 4px;
-}
-
-.subtitle {
-  font-size: 13px;
-  color: var(--secondary-text-color, #676879);
-  margin: 0;
-}
-
 .field {
-  margin-bottom: 16px;
+  margin-bottom: 8px;
 }
 
 .fieldLabel {
   display: block;
   font-size: 13px;
   font-weight: 500;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 /* Select trigger — looks like a form control, opens the Popover option list. */
@@ -45,13 +29,13 @@
   justify-content: space-between;
   gap: 8px;
   text-align: start;
-  padding: 8px 12px;
+  padding: 6px 12px;
   border: 1px solid var(--ui-border-color, #c3c6d4);
   border-radius: 8px;
   background: var(--primary-background-color, #fff);
   color: inherit;
   cursor: pointer;
-  min-height: 40px;
+  min-height: 36px;
 }
 
 .select:disabled {
@@ -107,22 +91,6 @@
   font-size: 13px;
 }
 
-.policyGroup {
-  margin-bottom: 16px;
-}
-
-.policyLegend {
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 6px;
-}
-
-.radios {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
 .caption {
   font-size: 12px;
   color: var(--secondary-text-color, #9699a6);
@@ -143,13 +111,13 @@
   display: flex;
   justify-content: flex-start;
   gap: 8px;
-  margin-top: 24px;
+  margin-top: 10px;
 }
 
 /* Native buttons (Vibe Button exposes only aria-disabled, which jsdom's
    toBeDisabled cannot see — settings needs a real native disabled state). */
 .btn {
-  padding: 8px 20px;
+  padding: 7px 18px;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 500;
@@ -184,7 +152,7 @@
 /* Version caption — Latin build label (dir="ltr" on the wrapper in JSX);
    centered so it reads as a quiet footer stamp regardless of the RTL layout. */
 .versionCaption {
-  margin-top: 16px;
+  margin-top: 6px;
   text-align: center;
   font-size: 11px;
   color: var(--secondary-text-color, #9699a6);

@@ -8,7 +8,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Avatar, AvatarGroup } from '@vibe/core';
-import { Check, CloseSmall, Search, Person } from '@vibe/icons';
+import { CloseSmall, Search, Person } from '@vibe/icons';
 import { computeFloatingPosition } from '../../utils/overlayPlacement';
 import mondayService from '../../services/mondayService';
 import logger from '../../utils/logger';
@@ -77,6 +77,9 @@ async function loadRoster() {
  * `placeholder`: search input placeholder (defaults to "חיפוש שמות").
  * `usersLoading`: the passed `users` roster is still resolving — show the
  * loading hint in the list area instead of "no results".
+ * `hideSelectedInList`: drop the currently-selected people from the suggestions
+ * list — they are already shown as chips at the top, so repeating them (with a
+ * checkmark) is redundant. The list becomes "who ELSE can I pick".
  */
 export function PersonPicker({
   selected = [],
@@ -91,6 +94,7 @@ export function PersonPicker({
   hideChips = false,
   placeholder = 'חיפוש שמות',
   usersLoading = false,
+  hideSelectedInList = false,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -213,9 +217,15 @@ export function PersonPicker({
   };
 
   const q = search.trim().toLowerCase();
-  const filtered = q
-    ? roster.filter((u) => (u.name || '').toLowerCase().includes(q))
+  // Substring match over the WHOLE name, so any part — first name or last name
+  // — surfaces the person: "עילי שלם" matches both "ע" and "ש".
+  const matches = (name) => (name || '').toLowerCase().includes(q);
+  // hideSelectedInList: the current selection is shown as chips at the top, so
+  // it must not repeat in the suggestions list below.
+  const base = hideSelectedInList
+    ? roster.filter((u) => !selectedIds.includes(String(u.id)))
     : roster;
+  const filtered = q ? base.filter((u) => matches(u.name)) : base;
 
   // The menu body (chips + search + list) — shared between the popover
   // rendering and the inline rendering.
@@ -271,27 +281,23 @@ export function PersonPicker({
           ) : filtered.length === 0 ? (
             <div className={styles.empty}>לא נמצאו אנשים</div>
           ) : (
-            filtered.map((user) => {
-              const isSel = selectedIds.includes(String(user.id));
-              return (
-                <button
-                  key={user.id}
-                  type="button"
-                  className={`${styles.row} ${isSel ? styles.rowSelected : ''}`}
-                  onClick={() => toggleUser(user)}
-                >
-                  <Avatar
-                    size="small"
-                    src={user.photo_thumb}
-                    text={initialsOf(user.name)}
-                    type={user.photo_thumb ? 'img' : 'text'}
-                    ariaLabel={user.name}
-                  />
-                  <span className={styles.name}>{user.name}</span>
-                  <span className={styles.check}>{isSel && <Check size={16} />}</span>
-                </button>
-              );
-            })
+            filtered.map((user) => (
+              <button
+                key={user.id}
+                type="button"
+                className={styles.row}
+                onClick={() => toggleUser(user)}
+              >
+                <Avatar
+                  size="small"
+                  src={user.photo_thumb}
+                  text={initialsOf(user.name)}
+                  type={user.photo_thumb ? 'img' : 'text'}
+                  ariaLabel={user.name}
+                />
+                <span className={styles.name}>{user.name}</span>
+              </button>
+            ))
           )}
         </div>
       )}
