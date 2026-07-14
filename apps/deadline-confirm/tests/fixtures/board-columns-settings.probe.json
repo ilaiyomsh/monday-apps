@@ -1,0 +1,61 @@
+{
+  "data": {
+    "boards": [
+      {
+        "columns": [
+          {
+            "id": "color_mm58mbec",
+            "title": "סטטוס",
+            "type": "status",
+            "settings": {
+              "labels": [
+                {
+                  "id": 0,
+                  "color": 0,
+                  "label": "בעבודה",
+                  "index": 0,
+                  "is_done": false,
+                  "is_deactivated": false,
+                  "hex": "#fdab3d"
+                },
+                {
+                  "id": 1,
+                  "color": 1,
+                  "label": "בוצע",
+                  "index": 1,
+                  "is_done": false,
+                  "is_deactivated": false,
+                  "hex": "#00c875"
+                }
+              ]
+            }
+          },
+          {
+            "id": "multiple_person_mm582h4p",
+            "title": "אחראי",
+            "type": "people",
+            "settings": {}
+          },
+          {
+            "id": "date_mm58ej61",
+            "title": "דדליין",
+            "type": "date",
+            "settings": {}
+          }
+        ]
+      }
+    ],
+    "me": {
+      "id": "48274917",
+      "name": "עילי שלם"
+    },
+    "complexity": {
+      "query": 23,
+      "before": 9969997,
+      "after": 9969974
+    }
+  },
+  "extensions": {
+    "request_id": "8afdb00e-787d-9a98-9f74-7c7bca74a4c5"
+  }
+}

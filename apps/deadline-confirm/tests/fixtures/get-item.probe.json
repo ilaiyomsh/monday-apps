@@ -1,0 +1,36 @@
+{
+  "data": {
+    "items": [
+      {
+        "id": "12532634009",
+        "board": {
+          "id": "18422009734"
+        },
+        "column_values": [
+          {
+            "id": "color_mm58mbec",
+            "text": "בעבודה",
+            "index": 0
+          },
+          {
+            "id": "multiple_person_mm582h4p",
+            "text": "עילי שלם"
+          },
+          {
+            "id": "date_mm58ej61",
+            "text": "2026-07-20",
+            "date": "2026-07-20"
+          }
+        ]
+      }
+    ],
+    "complexity": {
+      "query": 23,
+      "before": 10000000,
+      "after": 9999977
+    }
+  },
+  "extensions": {
+    "request_id": "7c474ed5-0545-90ef-805e-f297e9aae038"
+  }
+}

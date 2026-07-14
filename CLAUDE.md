@@ -64,7 +64,7 @@ it points to — link-following is expected, duplication is not.
   promotion of the tested draft — the release freeze is what keeps draft ≈ live.
 - Workflows: `.github/workflows/deploy-{draft,live}-<slug>.yml` per app + one
   shared `ci.yml`. Slugs: `discussions`, `axis-planner`, `axis-tracker`,
-  `axis-day-off`, `axis-sync-calender`, `team-people-column`
+  `axis-day-off`, `axis-sync-calender`, `team-people-column`, `deadline-confirm`
   (slug ≠ directory name for axis apps).
 - Secrets: `MONDAY_TOKEN` + one `APP_<SLUG_UPPERCASE_UNDERSCORED>_ID` per app.
   **No version IDs anywhere** — the CLI resolves latest draft/live itself.
@@ -97,6 +97,7 @@ it points to — link-following is expected, duplication is not.
 ```
 apps/discussions                    flat app (client, build/)
 apps/team-people-column             flat app (client, dist/)
+apps/deadline-confirm               flat app (server, app root; admin SPA served from it)
 apps/axis/{planner,tracker,day-off,sync-calender}   nested system
 apps/axis/services/{app-core,monday-api}            axis shared runtime code
 apps/axis/docs/FOLLOW-UPS.md        onboarding-debt ledger
@@ -117,6 +118,7 @@ packages/shared                     EMPTY STUB — see below
   | axis-day-off | `apps/axis/day-off` | 11459177 | client, `dist/` |
   | axis-sync-calender | `apps/axis/sync-calender` | 11666315 | server, app root |
   | team-people-column | `apps/team-people-column` | 11689948 | client, `dist/` |
+  | deadline-confirm | `apps/deadline-confirm` | 11704868 | server, app root |
 
 ## Quality gates
 

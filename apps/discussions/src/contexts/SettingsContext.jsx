@@ -67,7 +67,11 @@ export function SettingsProvider({ children }) {
   const { context } = useMondayContext();
   const [settings, setSettings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const loadedRef = useRef(false);
+  // The storage key we last loaded under (not a boolean latch): if the real
+  // monday context arrives AFTER the 4s watchdog installed an empty `{}` (which
+  // resolves to the 'default' key), the key changes and we MUST reload so a
+  // configured board isn't stuck on empty 'default' settings.
+  const loadedKeyRef = useRef(null);
 
   // publish whatever settings are active into the SDK store
   const publish = useCallback((s) => {
@@ -126,10 +130,14 @@ export function SettingsProvider({ children }) {
     }
   }, [context, publish]);
 
-  // gate on context: wait until the parent frame identifies the instance
+  // gate on context: wait until the parent frame identifies the instance, and
+  // reload if the resolved storage key changes (e.g. the real instanceId lands
+  // after the watchdog's empty context loaded the 'default' key).
   useEffect(() => {
-    if (!context || loadedRef.current) return;
-    loadedRef.current = true;
+    if (!context) return;
+    const key = `${STORAGE_KEY_BASE}_${context?.instanceId || context?.boardId || 'default'}`;
+    if (loadedKeyRef.current === key) return;
+    loadedKeyRef.current = key;
     load();
   }, [context, load]);
 
