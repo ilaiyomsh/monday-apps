@@ -4,6 +4,8 @@ import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { TaskTable } from '@generated/components/TaskTable';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+// Varied stable group-title colors (owner request 2026-07-14) — shared engine.
+import { ensureGroupColors } from '@generated/components/MyTasksView/grouping.js';
 import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
@@ -224,7 +226,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
         status: g.statusId,
         items: g.items,
       }));
-      return sortGroupsByOrder(list, { order: groupOrder, orderById, noKey: NO_STATUS });
+      return ensureGroupColors(sortGroupsByOrder(list, { order: groupOrder, orderById, noKey: NO_STATUS }));
     }
     if (groupBy === 'person') {
       const groups = new Map();
@@ -242,7 +244,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
         }
         groups.get(personGroup.key).items.push(t);
       });
-      return sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_ASSIGNEE });
+      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_ASSIGNEE }));
     }
     return [{ key: '__all__', label: '', color: null, status: undefined, items: filteredTasks }];
   }, [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById]);
