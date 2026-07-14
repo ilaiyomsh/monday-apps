@@ -15,6 +15,7 @@ import ErrorDetailsModal from '../ErrorDetailsModal/ErrorDetailsModal';
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog';
 import { safeApi } from '../../utils/mondayApi';
 import logger from '../../utils/logger';
+import { getVersionLabel } from '../../utils/versionLabel';
 import styles from './SettingsDialog.module.css';
 
 // סדר הטאבים לניווט
@@ -434,6 +435,13 @@ export default function SettingsDialog({ monday, onClose, context }) {
               <ChevronLeft size={18} />
             </button>
           )}
+        </div>
+
+        {/* Version caption — Latin string, forced LTR inside the RTL dialog.
+            Kept inside .modal (not .overlay) so it stays on-screen when the
+            mobile media query makes the modal fill the viewport. */}
+        <div className={styles.versionCaption} dir="ltr">
+          {getVersionLabel()}
         </div>
       </div>
 

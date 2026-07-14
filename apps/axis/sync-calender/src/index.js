@@ -3,6 +3,7 @@ dotenv.config();
 
 import express from 'express';
 import path from 'path';
+import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { getPort } from './helpers/environment.js';
 import logger from './services/logger.js';
@@ -17,6 +18,11 @@ import configsRoutes from './routes/configs.js';
 import policyRoutes from './routes/policy.js';
 import debugRoutes from './routes/debug.js';
 import migrationRoutes from './routes/migration.js';
+
+// Version layer (docs/monday-cicd-spec.md): package.json is the source of
+// truth for the server's own version, logged at boot alongside the deployed
+// commit SHA (CI sets BUILD_SHA; unset locally).
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
 
 const app = express();
 app.use(express.json());
@@ -72,11 +78,12 @@ const UI_DIR = path.resolve(__dirname, '..', 'public', 'admin');
 app.use('/admin', express.static(UI_DIR));
 app.get(/^\/admin(\/.*)?$/, (_req, res) => res.sendFile(path.join(UI_DIR, 'index.html')));
 
-app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/health', (req, res) => res.json({ ok: true, version: pkg.version }));
 
 const port = getPort();
 const server = app.listen(port, () => {
   logger.info('server_boot', 'server', { port, level: process.env.LOG_LEVEL || 'INFO' });
+  logger.info(`${pkg.name} v${pkg.version} (sha ${process.env.BUILD_SHA || 'unknown'})`, 'server');
 });
 
 // Graceful shutdown — drain the Axiom buffer before exit. Race the flush

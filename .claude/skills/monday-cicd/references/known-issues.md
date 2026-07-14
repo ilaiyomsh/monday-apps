@@ -18,9 +18,13 @@ deploy-live workflows are also a clobber landmine via their
 `packages/shared/**` triggers (pipeline-model.md §4b).
 
 **Fix at source:** pipeline-model.md corrected same-session (2026-07-14);
-release-flow redesign (pipeline-driven `app:promote`) pending owner decision.
-The spec file `monday-cicd-spec-en.md` still carries the wrong claim — do not
-trust it on this point until revised.
+owner decided the release flow the same day: promotes BANNED as a release
+mechanism, live deploys resolve the live version id at run time and push
+pinned (`--force -i`). **RESOLVED 2026-07-14 (later session):** the unified
+spec v2.1 (`docs/monday-cicd-spec.md` at the monorepo root) supersedes
+`monday-cicd-spec-en.md` and carries the corrected model; the no-promotes
+rule was settled with the second developer (Ido) — the 2026-07-13 bypass
+loop is closed.
 
 ## 2026-07-08 — pnpm workspace: dual vitest majors break jest-dom matchers
 

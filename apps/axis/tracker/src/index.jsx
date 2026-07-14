@@ -7,7 +7,11 @@ import "./i18n"; // אתחול i18next — חובה לפני שרכיבים שמ
 import { setupGlobalErrorHandlers } from './utils/globalErrorHandler';
 import { attachAxiomSink } from './utils/axiomSink';
 import { bootDiag } from './utils/reloadDiag'; // ⚠️ TEMP diagnostic (#103) — להסיר אחרי איתור השורש
+import { getVersionLabel } from './utils/versionLabel';
 import App from "./App";
+
+// Version layer (docs/monday-cicd-spec.md): one log line per boot, same label as the Settings footer.
+console.info('[tracker] ' + getVersionLabel());
 
 // ⚠️ TEMP diagnostic (#103): מדפיס היסטוריית reloadים לקונסול בכל boot. מוקדם ככל הניתן.
 bootDiag();

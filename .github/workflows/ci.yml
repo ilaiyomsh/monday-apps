@@ -12,6 +12,31 @@ on:
       - main
 
 jobs:
+  # Version guards (docs/monday-cicd-spec.md, version layer 2026-07-14).
+  # Enforcement honesty: GitHub Free + private repo = no required checks, so a
+  # red guard reports but does not physically block. Discipline + the agent
+  # are the enforcement layer (owner decision 2026-07-07).
+  guards:
+    name: version guards
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history — guards compare both permanent branches)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Corridor guard (PRs into develop)
+        if: github.base_ref == 'develop'
+        env:
+          HAS_SHARED_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'shared-change') }}
+          # Flip to "on" if/when the corridor model is adopted (deferred 2026-07-14).
+          CORRIDOR_MODE: "off"
+        run: bash scripts/corridor-guard.sh
+
+      - name: Release guard (PRs into main)
+        if: github.base_ref == 'main'
+        run: bash scripts/release-guard.sh
+
   ci:
     name: type-check, lint, build
     runs-on: ubuntu-latest

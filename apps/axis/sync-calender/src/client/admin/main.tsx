@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ErrorBoundary } from './components/feedback/ErrorBoundary';
+import { versionLabel } from './lib/versionLabel';
 import '@vibe/core/tokens';
 import './styles/index.css';
 
@@ -9,6 +10,8 @@ import './styles/index.css';
 // Must be imported BEFORE any code that calls fetch('/api/...') so the
 // interceptor is already in place by the time React effects fire.
 import './_mock/install';
+
+console.info('[sync-calender-admin] ' + versionLabel);
 
 if (!document.body.classList.contains('light-app-theme')
  && !document.body.classList.contains('dark-app-theme')
