@@ -5,8 +5,10 @@
 - Picker: removed the hover highlight on the assignee rows — the list stays
   visually flat (clicking a row is the only feedback).
 - Settings: removed the redundant app-level heading (monday already shows the
-  "<column> - … column settings" popover title) and tightened vertical spacing,
-  so the pane fits without scrolling.
+  "<column> - … column settings" popover title) and tightened vertical spacing
+  (smaller field heights, margins, and button padding; removed dead
+  policy-control styles), so the pane fits with no scroll and the Save/Cancel
+  row is not clipped at the bottom of monday's settings dialog.
 
 ## 2.1.2 — 2026-07-14
 
