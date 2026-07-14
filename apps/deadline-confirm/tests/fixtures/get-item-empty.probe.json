@@ -1,0 +1,31 @@
+{
+  "data": {
+    "items": [
+      {
+        "id": "12532635969",
+        "board": {
+          "id": "18422009734"
+        },
+        "column_values": [
+          {
+            "id": "color_mm58mbec",
+            "text": null,
+            "index": null
+          },
+          {
+            "id": "multiple_person_mm582h4p",
+            "text": ""
+          },
+          {
+            "id": "date_mm58ej61",
+            "text": "",
+            "date": ""
+          }
+        ]
+      }
+    ]
+  },
+  "extensions": {
+    "request_id": "25feed8d-0bc0-92de-bb21-e49d42c76f40"
+  }
+}
