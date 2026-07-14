@@ -101,7 +101,10 @@ export const ProjectSummaryBar: React.FC<{ group: Group }> = memo(({ group }) =>
 
   const left = getXByDate(summary.minStart);
   const width = Math.max(getWidthByDates(summary.minStart, summary.maxEnd), pixelsPerDay);
-  const barHeight = CONFIG.rowHeight - 12;
+  // The roll-up summary bar is the PARENT of the individual allocation bars
+  // (TaskBar = rowHeight-12 = 36px), so it is deliberately TALLER — it nearly
+  // fills the header row (rowHeight-4 = 44px) to read as the dominant bar.
+  const barHeight = CONFIG.rowHeight - 4;
 
   const isSelected = selectedProjectId !== null && String(selectedProjectId) === String(group.id);
 
@@ -119,7 +122,7 @@ export const ProjectSummaryBar: React.FC<{ group: Group }> = memo(({ group }) =>
         left: `${left}px`,
         width: `${width}px`,
         height: `${barHeight}px`,
-        top: '6px',
+        top: '2px',
         borderRadius: `${barHeight / 2}px`,
         backgroundColor: fillColor,
       }}
