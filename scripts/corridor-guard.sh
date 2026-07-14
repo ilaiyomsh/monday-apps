@@ -59,6 +59,12 @@ for slug in "${targets[@]}"; do
   vm="$(ver_at "$MAIN" "$slug")"; vd="$(ver_at "$DEV" "$slug")"; vn="$(ver_now "$slug")"
   strictly_higher "$vm" "$vn" || { echo "::error::$slug: version must bump above main ($vm) — got $vn. Run: scripts/bump.sh $slug"; fail=1; }
   not_lower "$vd" "$vn"       || { echo "::error::$slug: version went backwards vs develop ($vd -> $vn)"; fail=1; }
+  # Bump-once-per-candidate (owner rule 2026-07-14): numbers count RELEASES,
+  # not PRs. Raising an already-pending candidate is sanctioned ONLY as a
+  # deliberate magnitude raise — warn so needless per-PR bumps stay visible.
+  if strictly_higher "$vm" "$vd" && strictly_higher "$vd" "$vn"; then
+    echo "::warning::$slug: raising an unreleased candidate ($vd -> $vn, main has $vm). Draft iterations keep the number; raise only for a bigger change (bump-once rule)."
+  fi
 done
 
 # --- rule 4: a bump with no code changes is meaningless ---
