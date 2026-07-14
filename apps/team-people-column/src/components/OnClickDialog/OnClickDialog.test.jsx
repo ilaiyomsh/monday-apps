@@ -125,6 +125,22 @@ describe('OnClickDialog — search-first shell', () => {
     expect(screen.queryByText('רוני ארגמן')).toBeNull();
   });
 
+  it('matches by LAST name too: "ש" surfaces "עילי שלם" (ש is only in the surname)', async () => {
+    installAppApiHandlers(harness);
+    harness.seedStorage(STORAGE_KEY, validV1());
+
+    render(<OnClickDialog context={context()} />);
+    await screen.findByRole('heading', { name: TEAM_TITLE });
+
+    typeSearch('ש');
+
+    // עילי שלם — ש appears only in the surname "שלם"; it must still match.
+    expect(await screen.findByText('עילי שלם')).toBeInTheDocument();
+    // Neither of the other two names contains ש.
+    expect(screen.queryByText('עידו פיוטרקובסקי')).toBeNull();
+    expect(screen.queryByText('רוני ארגמן')).toBeNull();
+  });
+
   it('shows the team AVATAR + bare team name in the title once resolved — never the old "צוות" prefix', async () => {
     installAppApiHandlers(harness);
     harness.seedStorage(STORAGE_KEY, validV1());
@@ -155,8 +171,8 @@ describe('OnClickDialog — unconfigured', () => {
   });
 });
 
-describe('OnClickDialog — save, multi mode (dialog stays open)', () => {
-  it('saves immediately on person click: writes JSON.stringify(formatCellValue(selection)) via change_column_value and keeps the dialog open', async () => {
+describe('OnClickDialog — single-select is forced (stored multi policy is ignored)', () => {
+  it('picks: writes the native payload AND closes the dialog, even though the stored policy is multi', async () => {
     let captured = null;
     installAppApiHandlers(harness, {
       // Capture the mutation variables the dialog sends; still answer with the
@@ -168,6 +184,8 @@ describe('OnClickDialog — save, multi mode (dialog stays open)', () => {
         },
       },
     });
+    // validV1() carries policy.selectionMode === 'multi' — the picker must
+    // IGNORE it and behave as single-assignee: a pick saves AND closes.
     harness.seedStorage(STORAGE_KEY, validV1());
 
     render(<OnClickDialog context={context()} />);
@@ -176,8 +194,7 @@ describe('OnClickDialog — save, multi mode (dialog stays open)', () => {
     // Search-first: the row exists only after typing; clicking it IS the save
     // (no separate Save button exists).
     typeSearch('עילי');
-    const row = (await screen.findByText('עילי שלם')).closest('button');
-    fireEvent.click(row);
+    fireEvent.click((await screen.findByText('עילי שלם')).closest('button'));
 
     await waitFor(() => expect(captured).not.toBeNull());
 
@@ -190,11 +207,9 @@ describe('OnClickDialog — save, multi mode (dialog stays open)', () => {
       personsAndTeams: [{ id: ILAI_ID, kind: 'person' }],
     });
 
-    // Multi mode: the dialog STAYS OPEN (user may pick more people or close by
-    // clicking outside) — closeDialog must NOT have been executed.
-    expect(closeDialogCalls()).toBe(0);
-    // The pick is reflected on the row itself (optimistic).
-    expect(row.className).toMatch(/rowSelected/);
+    // Single forced: the dialog CLOSES on pick — even though the stored policy
+    // said multi. (Before: multi kept it open with closeDialogCalls() === 0.)
+    await waitFor(() => expect(closeDialogCalls()).toBe(1));
   });
 });
 
