@@ -67,6 +67,14 @@ def main():
     stripped = re.sub(r"'[^']*'", "''", command)
     stripped = re.sub(r'"[^"]*"', '""', stripped)
 
+    # Pure help queries never deploy (oclif renders help and exits). Allow
+    # ONLY single-segment commands (no ;&|` or newline anywhere) so a real
+    # deploy can't smuggle itself past the guard alongside a --help:
+    #   `mapps code:push --help`, `mapps code:push -h`, `mapps help code:push`
+    if re.match(r"^\s*mapps\s[^;&|`\n]*\s(--help|-h)(\s[^;&|`\n]*)?$", command) or \
+       re.match(r"^\s*mapps\s+help(\s[^;&|`\n]*)?$", command):
+        sys.exit(0)
+
     # Anchor to a command position: start of line/command, or after a shell
     # separator (;, &&, ||, |, $(, backtick, newline) — not mid-string.
     CMD_POS = r"(?:^|[;&|`\n(]|\$\()\s*(?:sudo\s+|env\s+\S+=\S+\s+)*"
