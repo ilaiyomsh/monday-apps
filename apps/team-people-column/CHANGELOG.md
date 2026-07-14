@@ -9,6 +9,10 @@
   (smaller field heights, margins, and button padding; removed dead
   policy-control styles), so the pane fits with no scroll and the Save/Cancel
   row is not clipped at the bottom of monday's settings dialog.
+- Re-deployed live via the pipeline (deploy-live) to stamp the live bundle as a
+  release build. The prior live build reached live via a manual promote of a
+  draft-built version, so the settings footer mislabeled it "draft". Version
+  intentionally unchanged (2.1.3) — one-time version-guard override, owner-approved.
 
 ## 2.1.2 — 2026-07-14
 
