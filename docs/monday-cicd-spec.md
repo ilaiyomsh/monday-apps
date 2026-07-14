@@ -217,7 +217,7 @@ main-back-merge remain mandatory.
 |---|---|
 | When is the bump? | **At entry into `develop`** — inside the task branch, part of the PR |
 | When is a number burned? | **Only when it touches `main`** (release). A develop-only number is a candidate — it may return to the workbench and keep its number |
-| Manual or automatic? | Hybrid: timing fixed, magnitude human (default patch), enforcement automatic |
+| Manual or automatic? | Timing fixed, enforcement automatic. Magnitude: **the AGENT decides and announces** (owner decision 2026-07-14) — see below |
 | Baseline | **Every app starts at 2.1.0** (owner decision 2026-07-14) |
 
 Why bump-at-develop-entry: the number is baked into the draft build (the
@@ -231,16 +231,44 @@ legitimizes rebuild-and-push-to-live; the release PR stays decision-free.
 - **Patch** — everything else (bugs, design, wording)
 - **The ten-second rule:** deliberating longer than ten seconds → it's a patch.
 
+**Who decides (owner decision 2026-07-14): the agent, autonomously — and
+announces.** The owner cares about ORDER and TRACEABILITY, not the level
+itself. Protocol: the agent picks the level by the table above (default
+patch), states it with a one-line reason in its report ("bumped discussions
+minor — new customer-visible mapping capability"), and writes the matching
+changelog line in the same PR. In accumulation, the agent raises the pending
+number when a bigger change joins (patch→minor→major; the biggest accumulated
+change wins). No stop-and-ask, including major — announcing is the control.
+
+**BUMP ONCE PER CANDIDATE — there is NO bump-per-PR convention (owner rule
+2026-07-14, set after an agent burned 2.1.2→2.1.3 on draft iterations).**
+Version numbers count RELEASES: the customer sees one jump per release, so
+one candidate carries ONE number no matter how many PRs ride it. Bump only
+when (a) it's the app's first change after a release (version == main's), or
+(b) a bigger change joins and the magnitude must rise (minor/major — never
+another patch on a pending candidate). Draft iterations keep the number; the
+displayed build SHA is what tells draft builds apart (§9.9). Enforcement:
+`bump.sh` physically REFUSES a default/patch bump when the app is already
+above main; the corridor guard warns on any raise of a pending candidate.
+
 ### 9.3 Source of truth
 `apps/<path>/package.json → "version"`. Edited **only in task branches**, only
 via `scripts/bump.sh <slug> [patch|minor|major]`. Everything else — tags,
 display, changelog — derives from this field.
 
-### 9.4 Changelog
-Per-app `CHANGELOG.md`, entry written in the same task branch/PR as the bump;
-a candidate's entry survives its fix iterations. (Historical note: five apps'
-changelogs are change-tracker-generated; the version entry discipline applies
-on top of that going forward.)
+### 9.4 Changelog & commit traceability (the two answers to "what changed?")
+Per-app `CHANGELOG.md`, entry written in the same task branch/PR as the bump
+— by the agent, when the agent does the work; a candidate's entry survives
+its fix iterations, and features that ride an unreleased number append lines
+under the SAME version heading. (Historical note: five apps' changelogs are
+change-tracker-generated; the version entry discipline applies on top.)
+
+**Which commits belong to each jump — automatic, zero discipline:**
+`tag-release.yml` writes the app-filtered commit list of the release
+(`git log HEAD^..HEAD -- <app path> <shared paths>`) into the GitHub
+release record of `<slug>@<version>`. So every jump has: the human story
+(CHANGELOG) + the exact commit list (release record) + the exact code state
+(the tag itself).
 
 ### 9.5 Corridor guard (`scripts/corridor-guard.sh`, PRs → develop)
 Always enforced: one app per PR (or the `shared-change` label, which makes
