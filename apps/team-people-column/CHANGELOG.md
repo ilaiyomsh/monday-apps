@@ -1,5 +1,11 @@
 # Changelog - team-people-column
 
+## 2.1.4 — 2026-07-14
+
+- Settings: tightened the layout further (smaller field heights, margins, and
+  button padding; removed dead policy-control styles) so the Save/Cancel row is
+  no longer clipped at the bottom of monday's settings dialog.
+
 ## 2.1.3 — 2026-07-14
 
 - Picker: removed the hover highlight on the assignee rows — the list stays
