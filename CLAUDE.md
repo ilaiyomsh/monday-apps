@@ -64,7 +64,8 @@ it points to — link-following is expected, duplication is not.
   promotion of the tested draft — the release freeze is what keeps draft ≈ live.
 - Workflows: `.github/workflows/deploy-{draft,live}-<slug>.yml` per app + one
   shared `ci.yml`. Slugs: `discussions`, `axis-planner`, `axis-tracker`,
-  `axis-day-off`, `axis-sync-calender` (slug ≠ directory name for axis apps).
+  `axis-day-off`, `axis-sync-calender`, `team-people-column`
+  (slug ≠ directory name for axis apps).
 - Secrets: `MONDAY_TOKEN` + one `APP_<SLUG_UPPERCASE_UNDERSCORED>_ID` per app.
   **No version IDs anywhere** — the CLI resolves latest draft/live itself.
 - Client vs server apps differ ONLY in the `-c` flag and pushed directory.
@@ -95,6 +96,7 @@ it points to — link-following is expected, duplication is not.
 
 ```
 apps/discussions                    flat app (client, build/)
+apps/team-people-column             flat app (client, dist/)
 apps/axis/{planner,tracker,day-off,sync-calender}   nested system
 apps/axis/services/{app-core,monday-api}            axis shared runtime code
 apps/axis/docs/FOLLOW-UPS.md        onboarding-debt ledger
@@ -103,7 +105,7 @@ packages/shared                     EMPTY STUB — see below
 
 - **Real shared runtime code is `@axis/app-core`** (`apps/axis/services/app-core`),
   consumed by tracker and day-off. `packages/shared` is an empty stub that no
-  app imports — **do not add code there** (touching it redeploys all five apps);
+  app imports — **do not add code there** (touching it redeploys all six apps);
   new cross-app code belongs in `apps/axis/services/` or a deliberate new package.
 - App IDs (ground truth — the pipeline reads them from GitHub secrets):
 
@@ -114,6 +116,7 @@ packages/shared                     EMPTY STUB — see below
   | axis-tracker | `apps/axis/tracker` | 10684862 | client, `build/` |
   | axis-day-off | `apps/axis/day-off` | 11459177 | client, `dist/` |
   | axis-sync-calender | `apps/axis/sync-calender` | 11666315 | server, app root |
+  | team-people-column | `apps/team-people-column` | 11689948 | client, `dist/` |
 
 ## Quality gates
 
