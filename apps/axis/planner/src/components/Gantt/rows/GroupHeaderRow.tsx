@@ -204,13 +204,12 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
   // Check if we should show the project summary card
   const showProjectCard = viewMode === 'projects' && !isPlaceholder && group.projectSummary && isExpanded;
 
-  // "Summary surface" = an expanded/focused project. Its header row is a mid-dark
-  // slate (neutral-700) across the full width (sidebar + timeline) with white
-  // text; everything below it — card + allocation rows — is white. That dark→white
-  // contrast is the PRIMARY separation (owner: header↔body matters more than
-  // card↔allocations), and makes the focused project pop against the dimmed
-  // neighbours. (bg-inverted/near-black read too heavy — tune the neutral step
-  // here if you want it lighter/darker.)
+  // "Summary surface" = an expanded/focused project. Its header row is a LIGHT grey
+  // band (bg-emphasis) across the full width (sidebar + timeline) with dark text;
+  // everything below it — card + allocation rows — is white. The grey→white step
+  // plus the header's drop shadow give the header↔body separation the owner asked
+  // for while blending into the light UI (dark/near-black read "out of place").
+  // Tune the surface here if you want it more/less pronounced.
   // Applied whenever the card shows (also the always-expanded focused project).
   const summarySurface = !!showProjectCard || isSelectedProject;
   // Fade non-focused projects' CONTENT (not the sticky sidebar container).
@@ -233,7 +232,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
       {/* Sidebar - sticky on left, relative for absolute PM bar positioning */}
       <div
         className={`sticky left-0 z-50 border-r border-border-subtle h-full flex items-center px-4 gap-2 transition-colors relative shadow-[var(--shadow-sticky-col)] ${
-          isPlaceholder ? 'bg-accent-bg-tint text-accent font-bold' : summarySurface ? 'bg-neutral-700 hover:bg-neutral-700 cursor-pointer' : 'bg-bg-app hover:bg-bg-hover cursor-pointer'
+          isPlaceholder ? 'bg-accent-bg-tint text-accent font-bold' : summarySurface ? 'bg-bg-emphasis hover:bg-bg-emphasis cursor-pointer' : 'bg-bg-app hover:bg-bg-hover cursor-pointer'
         }`}
         style={{ width: sidebarWidth, minWidth: sidebarWidth, overflow: showProjectCard ? 'visible' : undefined, cursor: isPlaceholder ? 'default' : 'pointer' }}
         dir="ltr"
@@ -251,7 +250,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
             so Hebrew/Arabic content still renders with correct word order. */}
         <div className="flex-1 flex flex-col overflow-hidden text-left" dir={locale.dir} style={dimContent}>
           <span
-            className={`overflow-hidden text-sm ${isPlaceholder ? 'text-accent' : summarySurface ? 'font-bold text-white' : 'font-bold text-text-secondary'}`}
+            className={`overflow-hidden text-sm ${isPlaceholder ? 'text-accent' : summarySurface ? 'font-bold text-text-primary' : 'font-bold text-text-secondary'}`}
             style={{
               display: '-webkit-box',
               WebkitLineClamp: 2,
@@ -285,7 +284,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
               toggleGroup(group.id);
             }}
           >
-            <svg className={`w-3 h-3 ${summarySurface ? 'text-white' : 'text-text-muted'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-3 h-3 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </div>
@@ -322,7 +321,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
           the sidebar/card (color A) whenever the summary surface is active, so the
           whole summary row reads as one band across sidebar + timeline. */}
       <div
-        className={`flex-1 h-full flex items-center relative ${isPlaceholder ? 'bg-accent-bg-soft cursor-pointer' : summarySurface ? 'bg-neutral-700' : 'bg-bg-app'}`}
+        className={`flex-1 h-full flex items-center relative ${isPlaceholder ? 'bg-accent-bg-soft cursor-pointer' : summarySurface ? 'bg-bg-emphasis' : 'bg-bg-app'}`}
         style={{ minWidth: totalWidth }}
         onClick={handleTimelineClick}
       >
