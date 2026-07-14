@@ -326,3 +326,47 @@
     padding: 0 16px 16px;
   }
 }
+
+/* Multi-column people mapping (יכולת צפייה) — picked-column chips above the
+   add-picker. The first chip is the primary (auto-fill) column. */
+.multiColPick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.multiColChip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-hover-color, #f5f6f8);
+  font-size: 13px;
+}
+.multiColName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--primary-text-color, #323338);
+}
+.multiColRemove {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.multiColRemove:hover {
+  background: var(--ui-border-color, #e6e9ef);
+  color: var(--negative-color, #d83a52);
+}

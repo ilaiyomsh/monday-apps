@@ -58,8 +58,12 @@ function boardRoleEntries(boardKey) {
     key: `${boardKey}:${alias}`,
     readId: alias,
     columnId: cfg[alias]?.id,
+    // Multi-column people alias (`ids`, e.g. tasks.taskViewersID): every mapped
+    // column belongs to this ONE role — mapItem merges their people under the
+    // alias, and listing them here keeps them out of the raw-id extras below.
+    columnIds: [cfg[alias]?.id, ...(Array.isArray(cfg[alias]?.ids) ? cfg[alias].ids : [])].filter(Boolean),
   }));
-  const mappedIds = new Set(aliasEntries.map((e) => e.columnId).filter(Boolean));
+  const mappedIds = new Set(aliasEntries.flatMap((e) => e.columnIds));
   const extraEntries = getPeopleColumns(boardKey)
     .filter((col) => !mappedIds.has(col.id))
     .map((col) => ({ key: `${boardKey}:${col.id}`, readId: col.id, columnId: col.id }));
