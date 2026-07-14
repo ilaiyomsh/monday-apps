@@ -50,8 +50,9 @@ const RONI_ID = 96863017; // רוני ארגמן
 const UNCONFIGURED_TITLE = 'העמודה לא הוגדרה';
 const API_ERROR_MSG = 'אירעה שגיאה בטעינת הנתונים מ-monday. נסו שוב מאוחר יותר.';
 const NO_TEAM_MSG = 'לא נמצא צוות בפריט המקושר. ודאו שקיים פריט מקושר ושהוגדר בו צוות.';
-// The dialog title must carry the resolved team's name (seeded team 1348990).
-const TEAM_TITLE = 'צוות test ilai';
+// The dialog title must carry the resolved team's NAME (no "צוות" prefix) next
+// to the team avatar (seeded team 1348990 carries a real picture_url).
+const TEAM_TITLE = 'test ilai';
 // Search-first UX: the ONLY thing the user sees on open besides the title.
 const SEARCH_PLACEHOLDER = 'הקלד שם אחראי...';
 
@@ -87,6 +88,9 @@ describe('OnClickDialog — search-first shell', () => {
     expect(searchInput()).toBeInTheDocument();
     expect(screen.getByPlaceholderText(SEARCH_PLACEHOLDER)).toBeInTheDocument();
     MEMBER_NAMES.forEach((name) => expect(screen.queryByText(name)).toBeNull());
+    // NO interim title text while loading — the title row stays empty and the
+    // real title appears at once when the chain lands (no progressive swap).
+    expect(screen.queryByRole('heading')).toBeNull();
 
     // Let the background chain settle so the test ends in a stable state.
     await screen.findByRole('heading', { name: TEAM_TITLE });
@@ -133,7 +137,7 @@ describe('OnClickDialog — search-first shell', () => {
     expect(await screen.findByText('עילי שלם')).toBeInTheDocument();
   });
 
-  it('shows the resolved team name in the dialog title', async () => {
+  it('shows the team AVATAR + bare team name in the title once resolved — never the old "צוות" prefix', async () => {
     installAppApiHandlers(harness);
     harness.seedStorage(STORAGE_KEY, validV1());
 
@@ -142,6 +146,11 @@ describe('OnClickDialog — search-first shell', () => {
     expect(
       await screen.findByRole('heading', { name: TEAM_TITLE })
     ).toBeInTheDocument();
+    // The team avatar sits beside the name; the img-type avatar exposes the
+    // team name as its alt text (the seeded team carries a real picture_url).
+    expect(screen.getByAltText(TEAM_TITLE)).toBeInTheDocument();
+    // The old text-only format is gone.
+    expect(screen.queryByText('צוות test ilai')).toBeNull();
   });
 });
 

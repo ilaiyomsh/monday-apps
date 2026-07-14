@@ -27,8 +27,10 @@ export const GET_COLUMN_VALUE = `query GetColumnValue($itemIds:[ID!],$columnIds:
 // photo_url resolves null for users other than `me`; the nested
 // `teams { users { photo_url } }` selection returns real URLs — so the service
 // prefers team-resolved details when a user appears in both.
+// Team.picture_url feeds the dialog-title avatar (validated 2026-10 SDL;
+// live-probed 2026-07-14 — real thumb URL for team 1348990).
 // Probed complexity: 46 (one team of 3 + one user).
-export const GET_TEAMS_AND_USERS = `query GetTeamsAndUsers($teamIds:[ID!],$userIds:[ID!],$includeTeams:Boolean!,$includeUsers:Boolean!){ teams(ids:$teamIds) @include(if:$includeTeams) { id name users { id name photo_url { thumb } } } users(ids:$userIds) @include(if:$includeUsers) { id name photo_url { thumb } } }`;
+export const GET_TEAMS_AND_USERS = `query GetTeamsAndUsers($teamIds:[ID!],$userIds:[ID!],$includeTeams:Boolean!,$includeUsers:Boolean!){ teams(ids:$teamIds) @include(if:$includeTeams) { id name picture_url users { id name photo_url { thumb } } } users(ids:$userIds) @include(if:$includeUsers) { id name photo_url { thumb } } }`;
 
 // Board schema for settings validation. Selects the typed `settings` object only
 // (the deprecated stringified form is dead since 2025-10; `settings` is

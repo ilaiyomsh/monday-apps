@@ -31,6 +31,9 @@ describe('graphqlQueries — load-bearing tokens per probed operation', () => {
     // User photo migrated off the deprecated flat field to the typed sub-selection
     // (validated: User.photo_url: PhotoUrl { thumb ... }); service maps it back to photo_thumb.
     expect(Q.GET_TEAMS_AND_USERS).toContain('users { id name photo_url { thumb } }');
+    // Team avatar for the dialog title (validated: Team.picture_url: String;
+    // live-probed 2026-07-14 — returns a real thumb URL for team 1348990).
+    expect(Q.GET_TEAMS_AND_USERS).toContain('{ id name picture_url users');
     // The probe carried complexity{}; the app version must NOT (contract).
     expect(Q.GET_TEAMS_AND_USERS).not.toContain('complexity');
   });

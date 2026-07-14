@@ -10,6 +10,16 @@
   min-width: 240px;
 }
 
+/* Title row — team avatar + name. Height is RESERVED from the first paint and
+   the row stays empty while the chain loads, so the title appears at once with
+   no layout jump (no progressive reveal). min-height covers the small Avatar. */
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+
 /* Team-name title — the user must always see WHICH team they pick from. */
 .title {
   margin: 0;

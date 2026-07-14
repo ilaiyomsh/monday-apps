@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { AttentionBox } from '@vibe/core';
+import { AttentionBox, Avatar } from '@vibe/core';
 
 import mondayService from '../../services/mondayService';
 import logger from '../../utils/logger';
@@ -66,15 +66,42 @@ function UnconfiguredState() {
   );
 }
 
+function initialsOf(name) {
+  return (name || '?')
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .slice(0, 2);
+}
+
 /**
- * Dialog title carrying the team name(s), so the user always sees WHICH team
- * they are picking from. Falls back to a generic title while unresolved.
+ * Dialog title row: team avatar + bare team name (no "צוות" prefix), so the
+ * user always sees WHICH team they are picking from. The row's height is
+ * reserved from the very first paint and stays EMPTY while the chain resolves
+ * — the avatar and the name then appear together at once, with no interim
+ * placeholder text and no layout jump (user feedback: progressive title
+ * reveal reads as jank).
  */
-function teamTitle(result) {
-  const names = (result?.teams || []).map((t) => t.name).filter(Boolean);
-  if (names.length === 0) return 'בחירת אנשי צוות';
-  if (names.length === 1) return `צוות ${names[0]}`;
-  return `צוותים: ${names.join(', ')}`;
+function TeamTitleRow({ result }) {
+  const teams = (result?.teams || []).filter((t) => t.name);
+  if (teams.length === 0) {
+    return <div className={styles.titleRow} aria-hidden="true" />;
+  }
+  return (
+    <div className={styles.titleRow}>
+      {teams.map((t) => (
+        <Avatar
+          key={t.id}
+          size="small"
+          src={t.picture || undefined}
+          text={initialsOf(t.name)}
+          type={t.picture ? 'img' : 'text'}
+          ariaLabel={t.name}
+        />
+      ))}
+      <h2 className={styles.title}>{teams.map((t) => t.name).join(', ')}</h2>
+    </div>
+  );
 }
 
 function OnClickDialog({ context }) {
@@ -203,7 +230,7 @@ function OnClickDialog({ context }) {
 
   return (
     <div className={styles.dialog} dir="rtl">
-      <h2 className={styles.title}>{teamTitle(result)}</h2>
+      <TeamTitleRow result={ready ? result : null} />
 
       {multiSelected && (
         <p className={styles.hint}>העריכה חלה על הפריט הנוכחי בלבד.</p>
