@@ -67,7 +67,7 @@
       "promise"
     ],
     "rules": {
-      "no-console": "error",
+      "no-console": ["error", { "allow": ["info"] }],
       "no-empty": [
         "error",
         {

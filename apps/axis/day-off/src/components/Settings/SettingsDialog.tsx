@@ -7,6 +7,7 @@ import { PersonalTypeInUseError, isPersonalTypeLabelInUse } from '../../services
 import { validateDayOffSettings, REQUIRED_COLUMN_FIELDS, EXPECTED_COLUMN_TYPES, normalizeColumnType } from '../../domain/settingsValidation';
 import { kindSelectionDiverged, approvalSelectionDiverged, samePersonalTypeOptions } from './personalTypeDiff';
 import { listAllUsers } from '../../services/usersService';
+import { versionLabel } from '../../utils/versionLabel';
 import { Icon, PeoplePicker } from '../ui';
 import { CompanyDaysTab } from './CompanyDaysTab';
 import { SearchableSelect, type SelectOption } from './SearchableSelect';
@@ -285,19 +286,25 @@ export function SettingsDialog({ isOpen, onClose }: { isOpen: boolean; onClose: 
       label: t('settings.tabs.general'),
       fields: ['languageOverride'],
       render: ({ draft, setField }: SettingsTabRenderCtx<DayOffSettings>) => (
-        <label style={{ display: 'block' }}>
-          <span style={{ fontWeight: 600 }}>{t('settings.language.label')}</span>
-          <select
-            value={draft.languageOverride ?? 'he'}
-            onChange={(e) => setField('languageOverride', e.target.value as DayOffSettings['languageOverride'])}
-          >
-            <option value="he">{t('settings.language.he')}</option>
-            <option value="en">{t('settings.language.en')}</option>
-          </select>
-          <small style={{ color: 'var(--color-text-secondary)', display: 'block', marginTop: 4 }}>
-            {t('settings.language.help')}
+        <div style={{ display: 'grid', gap: 20 }}>
+          <label style={{ display: 'block' }}>
+            <span style={{ fontWeight: 600 }}>{t('settings.language.label')}</span>
+            <select
+              value={draft.languageOverride ?? 'he'}
+              onChange={(e) => setField('languageOverride', e.target.value as DayOffSettings['languageOverride'])}
+            >
+              <option value="he">{t('settings.language.he')}</option>
+              <option value="en">{t('settings.language.en')}</option>
+            </select>
+            <small style={{ color: 'var(--color-text-secondary)', display: 'block', marginTop: 4 }}>
+              {t('settings.language.help')}
+            </small>
+          </label>
+          {/* Version layer (docs/monday-cicd-spec.md): same label logged at boot (main.tsx). */}
+          <small dir="ltr" style={{ color: 'var(--color-text-secondary)', display: 'block', textAlign: 'center' }}>
+            {versionLabel}
           </small>
-        </label>
+        </div>
       ),
     },
     {

@@ -14,6 +14,7 @@ import { extractStatusLabels } from '../../utils/statusLabelUtils';
 import { useLocale } from '../../hooks/useLocale';
 import { useDisplayUnit } from '../../hooks/useDisplayUnit';
 import { logger } from '../../utils/Logger';
+import { versionLabel } from '../../utils/versionLabel';
 
 interface SettingsDialogProps {
   isOpen: boolean;
@@ -1778,6 +1779,11 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
             </button>
           </div>
         </div>
+
+        {/* Version */}
+        <p className="px-6 pb-3 text-xs text-text-muted text-center" dir="ltr">
+          {versionLabel}
+        </p>
       </div>
 
       {/* Backdrop */}
