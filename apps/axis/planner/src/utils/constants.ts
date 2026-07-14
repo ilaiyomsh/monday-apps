@@ -66,10 +66,25 @@ export const CONFIG = {
   minExpandedTrackRows: 2,
 } as const;
 
-// Floating ProjectSummaryCard height: 2.5 track rows (= 120px). The minimal
-// expanded block (≤1 track) is padded up to this height so the card's bottom
-// border lines up with the project block's bottom without cramping the content.
-export const PROJECT_CARD_HEIGHT = CONFIG.rowHeight * 2.5;
+// Floating ProjectSummaryCard height: exactly 2 track rows (= 96px) so the card's
+// two internal rows (PM/type bar + hours metrics) line up 1:1 with the Gantt row
+// grid. The minimal expanded block (≤1 track) is padded up to this height so the
+// card's bottom lines up with the project block's bottom without cramping.
+export const PROJECT_CARD_HEIGHT = CONFIG.rowHeight * 2;
+
+// Projects view — focus/summary visual separation (all tunable in one place):
+// • SUMMARY_TRACKS_GAP — neutral gap opened between a project's summary (header)
+//   row and its first allocation track. Deliberately larger than the ~0px gap
+//   between the allocation tracks themselves, so the summary reads as a distinct
+//   band above the allocations.
+// • FOCUS_BLOCK_GAP — neutral gap opened ABOVE the focused project's header and
+//   BELOW its last track, detaching the focused block from its neighbours.
+// • DIMMED_OPACITY — opacity applied to the CONTENT of non-focused rows in focus
+//   mode (never to the row/sticky-sidebar container — that reintroduces the
+//   timeline-bleed-through bug documented in VirtualRowList).
+export const SUMMARY_TRACKS_GAP = 10;
+export const FOCUS_BLOCK_GAP = 8;
+export const DIMMED_OPACITY = 0.5;
 
 // Legacy exports for backwards compatibility
 export const ROW_HEIGHT = CONFIG.rowHeight;

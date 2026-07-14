@@ -275,6 +275,18 @@ export const VirtualRowList: React.FC = () => {
 
             // Allow overflow for GROUP rows to show floating ProjectSummaryCard
             const isGroupRow = row.type === 'GROUP';
+            // Neutral separator space reserved on this row (already part of
+            // virtualRow.size). Rendered as an opaque gutter via inner padding so
+            // the STICKY sidebar never becomes translucent — reducing opacity on
+            // the row itself reintroduces the timeline-bleed-through bug.
+            const gapTop = row.gapTop ?? 0;
+            const gapBottom = row.gapBottom ?? 0;
+            const focusShadow =
+              row.focusEdge === 'top'
+                ? '0 -6px 14px -5px rgba(0,0,0,0.22)'
+                : row.focusEdge === 'bottom'
+                ? '0 6px 14px -5px rgba(0,0,0,0.22)'
+                : undefined;
             return (
               <div
                 key={virtualRow.key}
@@ -294,27 +306,29 @@ export const VirtualRowList: React.FC = () => {
                   //   focused track rows: 36  (above neighbours, below the card)
                   //   normal group row  : 35
                   zIndex: isGroupRow ? (row.focusBlock ? 37 : 35) : row.focusBlock ? 36 : undefined,
-                  // NOTE: focus no longer dims non-focused rows via opacity — a
-                  // row-level opacity made the sticky projects column 10%
-                  // translucent (bars bled through). Focus is now conveyed solely
-                  // by lifting + shadowing the focused block (below). `row.dimmed`
-                  // is retained on the data model but intentionally not applied.
-                  // Projects focus mode: the focused block floats like a hovered
-                  // allocation bar — a small uniform lift (translateY on every
-                  // block row) plus a soft shadow on its top (header) and bottom
-                  // (last track) edges. No accent border.
-                  boxSizing: 'border-box',
-                  boxShadow:
-                    row.focusEdge === 'top'
-                      ? '0 -6px 14px -5px rgba(0,0,0,0.22)'
-                      : row.focusEdge === 'bottom'
-                      ? '0 6px 14px -5px rgba(0,0,0,0.22)'
-                      : undefined,
                   transform: row.focusBlock ? 'translateY(-2px)' : undefined,
                   transition: 'opacity 150ms ease, transform 150ms ease, box-shadow 150ms ease',
                 }}
               >
-                <RowRenderer row={row} />
+                {/* Gutter wrapper: opaque separator background revealed by the
+                    top/bottom padding; the real row content sits in the content
+                    box on top of it. Skipped (no padding/bg) when the row has no
+                    gap, so ordinary rows are visually untouched. */}
+                <div
+                  style={{
+                    height: '100%',
+                    boxSizing: 'border-box',
+                    paddingTop: gapTop || undefined,
+                    paddingBottom: gapBottom || undefined,
+                    background: gapTop || gapBottom ? 'var(--color-bg-emphasis)' : undefined,
+                  }}
+                >
+                  {/* Content box — the soft focus shadow hugs THIS edge (the real
+                      block boundary), not the outer gutter. */}
+                  <div style={{ height: '100%', boxShadow: focusShadow }}>
+                    <RowRenderer row={row} />
+                  </div>
+                </div>
               </div>
             );
           })}

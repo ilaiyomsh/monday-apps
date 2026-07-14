@@ -78,6 +78,12 @@ export interface BaseFlatRow {
   // tracks + summary). VirtualRowList lifts the whole block uniformly (a small
   // translateY) so it floats like a hovered allocation bar. Set by the flattener.
   focusBlock?: boolean;
+  // Neutral separator space (px) reserved at the top / bottom of the row and
+  // rendered as page-background by VirtualRowList (via inner padding, so the
+  // sticky sidebar stays opaque). Already INCLUDED in `height`. Used to open the
+  // summary↔tracks gap and the gap around the focused block. Set by the flattener.
+  gapTop?: number;
+  gapBottom?: number;
 }
 
 // Group Header Row

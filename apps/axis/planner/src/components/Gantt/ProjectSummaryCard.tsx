@@ -224,7 +224,7 @@ const ProjectMetricsRow: React.FC<{ projectId: string }> = ({ projectId }) => {
     ) : SKELETON;
 
   return (
-    <div dir="ltr" className="grid grid-cols-3 gap-2 pt-2 mt-1 border-t border-border-subtle">
+    <div dir="ltr" className="grid grid-cols-3 gap-2 h-12 items-center border-t border-border-subtle">
       <EditablePlannedCell
         projectId={projectId}
         value={metrics?.planned ?? null}
@@ -248,7 +248,7 @@ export const ProjectSummaryCard = memo<ProjectSummaryCardProps>(({
   const locale = useLocale();
   return (
     <div className="flex flex-col" dir={locale.dir}>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 h-12">
         <ProjectTypeBadge
           projectType={summary.projectType}
           projectTypeColor={summary.projectTypeColor}

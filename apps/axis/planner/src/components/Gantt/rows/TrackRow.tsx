@@ -43,9 +43,11 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({ items, groupId, trackIn
   const snapDays = SNAP_DAYS[zoomLevel];
   const pixelsPerSnapUnit = pixelsPerDay * snapDays;
 
-  // Background: rows holding a real allocation are white; empty padding tracks
-  // are gray so they continue the (gray) project card above them seamlessly.
-  const rowBg = items.length === 0 ? 'bg-bg-app' : 'bg-bg-surface';
+  // Background: the allocation band is white (color B). In projects view EVERY
+  // track — including the empty padding rows under the summary card — is white,
+  // so the tracks read as one white band distinct from the tinted summary
+  // surface (color A) above. Employees view keeps empty rows gray.
+  const rowBg = items.length === 0 && viewMode !== 'projects' ? 'bg-bg-app' : 'bg-bg-surface';
 
   // Helper to snap X coordinate to the start of the cell at that position
   const snapToCellStart = useCallback((x: number) => {
