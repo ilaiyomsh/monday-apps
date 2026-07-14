@@ -118,6 +118,9 @@ export function sanitizeTypeTemplate(template, id) {
     lead: sanitizePeople(template?.lead),
     coordinator: sanitizePeople(template?.coordinator),
     participants: sanitizePeople(template?.participants),
+    // item 18 — per-type default decider flag (מחליט = מנהל הדיון). Strict
+    // boolean so a stored junk value can never truthy its way in.
+    deciderIsLead: template?.deciderIsLead === true,
     topics: topics
       .map((topic) => ({
         name: (topic?.name || '').trim(),
@@ -137,9 +140,14 @@ export function sanitizeTypeTemplate(template, id) {
  * Errors propagate (api() throws a MondayApiError that the logger funnel already
  * surfaced as a toast); callers catch only to reset their loading state.
  *
+ * opts.onProgress({ done, total }) — fired once up-front (0/total) and after
+ * every created topic/point, so callers can render a REAL progress bar
+ * (items 6+8). total = topics + points of the sanitized template; a listener
+ * that throws is logged and never breaks the creation flow.
+ *
  * @returns {Promise<{topics:number, points:number}>} how many were created.
  */
-export async function createTopicsFromTemplate(discussionId, template) {
+export async function createTopicsFromTemplate(discussionId, template, { onProgress } = {}) {
   const clean = sanitizeTemplate(template);
   if (!discussionId || !clean.topics.length) return { topics: 0, points: 0 };
 
@@ -150,6 +158,17 @@ export async function createTopicsFromTemplate(discussionId, template) {
 
   let topicsCreated = 0;
   let pointsCreated = 0;
+  const total = clean.topics.reduce((n, t) => n + 1 + t.points.length, 0);
+  let done = 0;
+  const report = () => {
+    if (typeof onProgress !== 'function') return;
+    try {
+      onProgress({ done, total });
+    } catch (err) {
+      logger.warn('createTopicsFromTemplate', 'מאזין ההתקדמות נכשל — היצירה ממשיכה', err);
+    }
+  };
+  report();
 
   for (const topic of clean.topics) {
     const columnValues = {};
@@ -179,6 +198,8 @@ export async function createTopicsFromTemplate(discussionId, template) {
       continue;
     }
     topicsCreated += 1;
+    done += 1;
+    report();
 
     const pointCv = pointDispCol?.id ? { [pointDispCol.id]: formatValue('checkbox', true) } : {};
     for (const point of topic.points) {
@@ -190,6 +211,8 @@ export async function createTopicsFromTemplate(discussionId, template) {
         'createPointFromTemplate'
       );
       pointsCreated += 1;
+      done += 1;
+      report();
     }
   }
 

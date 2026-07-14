@@ -623,7 +623,10 @@
   flex-direction: column;
   gap: 6px;
   margin: 8px 0 4px;
-  padding-inline-start: 6px;
+  /* Item 9: the points under a topic are indented deeper from the RIGHT
+     (inline-start in this RTL modal), so the topic→points hierarchy is
+     visible at a glance. */
+  padding-inline-start: 24px;
 }
 
 .pointRow {

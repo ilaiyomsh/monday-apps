@@ -7,6 +7,7 @@ import { isValidStatus } from '@generated/constants/statusConfig';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
+import { HighlightedText } from '@generated/components/HighlightedText';
 import { getDecisionDiscussion, getEffectiveDecider } from './decisionPipeline.js';
 import grid from './MyDecisionsTable.module.css';
 import row from '../TaskTableRow/TaskTableRow.module.css';
@@ -140,6 +141,8 @@ export function MyDecisionsRow({
   selectable = false,
   selected = false,
   onToggleSelect,
+  // Active name-search term — the name highlights where it matched.
+  searchTerm = '',
 }) {
   const statusOpts = useStatusOptions('decisions', 'decisionStatusID');
   const priorityOpts = useStatusOptions('decisions', 'decisionPriorityID');
@@ -199,7 +202,7 @@ export function MyDecisionsRow({
               title={decision.name}
               onClick={(e) => { e.stopPropagation(); openItemCard(decision.id); }}
             >
-              {decision.name}
+              <HighlightedText text={decision.name} query={searchTerm} />
             </button>
             {/* Hover rename pencil — permission-gated (onRenameDecision). Opens
                 inline name-editing; the name click still opens the card. */}

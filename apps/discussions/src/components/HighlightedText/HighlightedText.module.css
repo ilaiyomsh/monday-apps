@@ -1,0 +1,9 @@
+/* Search-match highlight — a soft monday-blue chip behind the matched letters.
+   Inherits the surrounding font/color so it works inside any name renderer
+   (buttons, spans, RTL and LTR alike). */
+.searchHl {
+  background: var(--primary-selected-color, #cce5ff);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}

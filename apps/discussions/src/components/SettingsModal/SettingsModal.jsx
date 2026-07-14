@@ -12,6 +12,7 @@ import PermissionsTab from './PermissionsTab.jsx';
 import ExportTemplateTab from './ExportTemplateTab.jsx';
 import { TemplateManagerModal as TemplatesPanel } from '@generated/components/TemplateManagerModal';
 import { SetupWizard } from '../SetupWizard';
+import logger from '../../utils/logger.js';
 import styles from './SettingsModal.module.css';
 
 // Seed the editable export-template draft from stored settings, back-filling any
@@ -153,7 +154,9 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
       setPermissions(seedPermissions(seed.permissions));
       setExportTemplate(seedExportTemplate(seed.exportTemplate));
       setAssetError(null);
-      loadExportAssets(context).then(setExportAssets);
+      loadExportAssets(context)
+        .then(setExportAssets)
+        .catch((err) => logger.warn('SettingsModal', 'טעינת נכסי הייצוא נכשלה', err));
       setOpenBoardKey(null);
     }
   }, [isOpen, settings, context]);
@@ -217,7 +220,7 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
           .map((board) => ({ value: String(board.id), label: board.name }));
         setBoardOptions(options);
       } catch (err) {
-        console.error('Error loading boards for settings:', err);
+        logger.error('SettingsModal', 'טעינת רשימת הלוחות להגדרות נכשלה', err);
       } finally {
         setLoadingBoards(false);
       }
@@ -311,6 +314,8 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
     'taskNotesID', // הערות — inline-editable notes column, "My Tasks" tab only
     'priorityID', // עדיפות — status column whose label order defines priorityID, "My Tasks" tab only
     'taskTypeID', // סוג דיון — status column auto-filled with the parent discussion's type
+    'taskViewersID', // יכולת צפייה — people; auto-filled with the discussion's participants (item 19)
+    'taskEditorsID', // יכולת עריכה — people; auto-filled with the discussion's lead/coordinator/creator (item 19)
     // 'פרטים' (detailsID) and 'חיבור לנושאי דיון' (topicsLinkID) intentionally omitted —
     // not needed in the tasks mapping.
   ];
@@ -391,10 +396,13 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
             setSubitemsBoardByBoard((prev) => ({ ...prev, [id]: subBoardId }));
             loadBoardColumns(subBoardId);
           }
-        } catch { /* no subitems board discoverable */ }
+        } catch (err) {
+          // no subitems board discoverable — subitem fields just stay unmappable
+          logger.warn('SettingsModal', 'זיהוי לוח תתי-הפריטים נכשל', err);
+        }
       }
     } catch (err) {
-      console.error(`Error loading columns for board ${id}:`, err);
+      logger.error('SettingsModal', `טעינת עמודות הלוח ${id} נכשלה`, err);
     } finally {
       setLoadingColumnsByBoardId((prev) => ({ ...prev, [id]: false }));
     }
@@ -441,13 +449,17 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
               discussionTypeID: { ...typeEntry, managed: !!uuid, managedColumnId: uuid || null },
             },
           };
-        } catch { /* detection best-effort */ }
+        } catch (err) {
+          // detection best-effort — the regular (non-managed) mapping still saves
+          logger.warn('SettingsModal', 'זיהוי עמודת הסוג המנוהלת נכשל — נשמר מיפוי רגיל', err);
+        }
       }
       await updateSettings({ boards, columns: columnsToSave, preferences, permissions, exportTemplate });
       // Success toast (top of the app, same funnel as every other notification).
       onNotify?.('הגדרות נשמרו בהצלחה', 'success');
       onClose();
     } catch (err) {
+      logger.error('SettingsModal', 'שמירת ההגדרות נכשלה', err);
       setActiveTab(3);
       setAssetError(err?.message || 'שמירת נכסי הייצוא נכשלה');
     } finally {
@@ -498,7 +510,7 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
       if (parsed.preferences) setPreferences((prev) => ({ ...prev, ...parsed.preferences }));
       setImportMsg({ ok: true, text: 'הקובץ נטען. בדקו את המיפוי ולחצו "שמור" להחלה.' });
     } catch (err) {
-      console.error('Error importing settings JSON:', err);
+      logger.error('SettingsModal', 'ייבוא קובץ הגדרות נכשל', err);
       setImportMsg({ ok: false, text: 'ייבוא נכשל — ודאו שזהו קובץ JSON תקין של הגדרות (boards + columns).' });
     }
   };
@@ -761,6 +773,24 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
                         size="small"
                         kind="secondary"
                       />
+                    </div>
+                  </div>
+                  {/* Item 18 — global default decider: every NEW decision's מחליט
+                      defaults to the discussion's מנהל דיון (replaceable inline).
+                      A per-type version lives on each type template (תבניות). */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>המחליט כברירת מחדל הוא מנהל הדיון</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={preferences.defaultDeciderLead === true}
+                          onChange={(e) => setPreferences((p) => ({ ...p, defaultDeciderLead: e.target.checked }))}
+                        />
+                        <Text type={"text2"}>בכל הדיונים, ללא תלות בסוג</Text>
+                      </label>
                     </div>
                   </div>
                 </div>

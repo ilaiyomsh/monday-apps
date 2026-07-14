@@ -8,6 +8,7 @@ import { isValidStatus } from '@generated/constants/statusConfig';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
+import { HighlightedText } from '@generated/components/HighlightedText';
 import { getTaskDiscussion } from './grouping.js';
 import grid from './MyTasksTable.module.css';
 import row from '../TaskTableRow/TaskTableRow.module.css';
@@ -115,7 +116,7 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
   );
 }
 
-export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, rowStyle, showDeadline = true, showPriority = true, showNotes = true, selectable = false, selected = false, onToggleSelect }) {
+export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, rowStyle, showDeadline = true, showPriority = true, showNotes = true, selectable = false, selected = false, onToggleSelect, searchTerm = '' }) {
   const { t } = useTranslation();
   // Inline rename (permission-gated: the pencil shows only when onRenameTask is
   // provided). Clicking the NAME itself still opens the item card — rename is a
@@ -180,7 +181,7 @@ export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, on
               title={task.name}
               onClick={(e) => { e.stopPropagation(); openItemCard(task.id); }}
             >
-              {task.name}
+              <HighlightedText text={task.name} query={searchTerm} />
             </button>
             {onRenameTask && (
               <button

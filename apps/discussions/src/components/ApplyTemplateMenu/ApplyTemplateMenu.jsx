@@ -3,6 +3,7 @@ import { Button } from '@vibe/core';
 import { LayoutTemplate } from 'lucide-react';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { createTopicsFromTemplate, countPoints } from '@generated/utils/templates.js';
+import { PartyProgress } from '@generated/components/PartyProgress';
 import logger from '@generated/utils/logger.js';
 import styles from './ApplyTemplateMenu.module.css';
 
@@ -16,6 +17,9 @@ export function ApplyTemplateMenu({ discussionId, onApplied }) {
   const { templates } = useTemplates();
   const [open, setOpen] = useState(false);
   const [applying, setApplying] = useState(false);
+  // Item 8 — real per-create progress ({done,total}) for the branded bar shown
+  // while the template's topics/points are created one by one.
+  const [progress, setProgress] = useState(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -30,8 +34,11 @@ export function ApplyTemplateMenu({ discussionId, onApplied }) {
     setOpen(false);
     if (applying) return;
     setApplying(true);
+    setProgress({ done: 0, total: 1 });
     try {
-      const { topics, points } = await createTopicsFromTemplate(discussionId, template);
+      const { topics, points } = await createTopicsFromTemplate(discussionId, template, {
+        onProgress: setProgress,
+      });
       logger.info('ApplyTemplateMenu', `נוצרו ${topics} נושאים ו-${points} נקודות מתבנית "${template.name}"`);
       if (onApplied) await onApplied();
     } catch (err) {
@@ -41,6 +48,7 @@ export function ApplyTemplateMenu({ discussionId, onApplied }) {
       logger.error('ApplyTemplateMenu', `החלת התבנית "${template.name}" נכשלה`, err);
     } finally {
       setApplying(false);
+      setProgress(null);
     }
   };
 
@@ -67,6 +75,16 @@ export function ApplyTemplateMenu({ discussionId, onApplied }) {
             </li>
           ))}
         </ul>
+      )}
+      {/* Item 8 — branded progress while the template's topics/points are
+          created sequentially (real done/total from createTopicsFromTemplate). */}
+      {applying && progress && (
+        <div className={styles.progressPop}>
+          <PartyProgress
+            value={progress.done / Math.max(1, progress.total)}
+            label={`יוצר נושאים ונקודות... ${progress.done}/${progress.total}`}
+          />
+        </div>
       )}
     </div>
   );

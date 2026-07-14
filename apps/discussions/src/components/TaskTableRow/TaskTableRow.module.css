@@ -365,23 +365,25 @@
 }
 
 /* source discussion — monday connected-board-style chip ("by type" view).
-   The chip fills the cell width (uniform across rows), not sized to the text. */
+   The chip is CENTERED in its cell (owner decision 2026-07-14), sized to its
+   text and only shrinking (ellipsis) when the column is narrower. */
 .sourceCell {
-  justify-content: stretch;
+  justify-content: center;
   gap: 6px;
   overflow: hidden;
 }
 .sourceChips {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   width: 100%;
   min-width: 0;
 }
 .sourceChip {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
-  text-align: start;
+  text-align: center;
   padding: 4px 8px;
   /* the connected-board look: a colored leading bar + white rounded chip */
   border: 1px solid var(--ui-border-color, #d0d4e4);

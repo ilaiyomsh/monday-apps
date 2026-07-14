@@ -80,6 +80,14 @@ const TASK_CAPS = new Set(
 const DECISION_CAPS = new Set(
   CAPABILITIES.filter((c) => c.tier === 'decision').map((c) => c.id)
 );
+// Item 13 — the only discussion roles whose grants count for editSummary: the
+// single-person people columns (creator / מנהל דיון / מרכז דיון). participants
+// and any extra multi-person people column can never receive summary write.
+const SUMMARY_WRITER_ALIASES = new Set([
+  'discussionCreatorID',
+  'discussionLeadID',
+  'discussionCoordinatorID',
+]);
 // `viewDiscussion` is a discussion cap but is NOT an edit cap — it must never be
 // suppressed by the `ready` gate (you can always view).
 const VIEW_CAP = 'viewDiscussion';
@@ -261,10 +269,21 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
     return CAPABILITY_DEFAULTS[capability] === 'all';
   }
 
-  // An 'all'-default capability (e.g. viewDiscussion) is allowed for every
-  // member regardless of which roles they hold — it isn't role-gated. No matrix
-  // rows target it, so there is nothing to veto; keep it allow-all.
+  // An 'all'-default capability is allowed for every member regardless of
+  // which roles they hold — it isn't role-gated.
   if (CAPABILITY_DEFAULTS[capability] === 'all') return true;
+
+  // Item 20 (2026-07-14) — viewDiscussion is now ROLE-GATED (participants view
+  // via the seed; strangers are denied by the scan below). Two safety valves
+  // keep it permissive where denial would be wrong:
+  //   (a) people columns not loaded yet → allow (never flash "no access");
+  //   (b) roles map has no discussions:* rows (owner never opened the
+  //       permissions tab, so the seed was never written) → keep the historic
+  //       allow-all instead of locking every member out.
+  if (isViewCap) {
+    if (!discussionReady(discussion)) return true;
+    if (!Object.keys(roles).some((k) => k.startsWith('discussions:'))) return true;
+  }
 
   // Which board's people columns apply to this capability's tier.
   const boardKey = itemBoardKey || 'discussions';
@@ -273,45 +292,71 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
   // decision) it's the ITEM; for discussion caps it's the discussion.
   const source = itemBoardKey ? item : discussion;
 
-  // 4. Role scan with VETO (deny-wins per-role veto, §2.2). Accumulate over the
-  //    HELD, NON-HIDDEN roles the user actually has:
-  //      - deny  = ANY held non-hidden role sets capabilities[cap] === false
-  //      - grant = ANY held non-hidden role sets === true, OR (=== undefined and
-  //                the capability default resolves truthy for this user/item)
-  //    An explicit `false` in any held role VETOES the grant from other roles.
-  //    Hidden roles contribute NOTHING (no grant, no veto).
+  // 4. Role scan with UNION semantics (owner decision 2026-07-14). Accumulate
+  //    over the HELD, NON-HIDDEN roles the user actually has:
+  //      - explicitGrant = ANY held non-hidden role sets capabilities[cap] === true
+  //      - deny          = ANY held non-hidden role sets === false
+  //      - defaultGrant  = ANY held non-hidden role leaves it undefined AND the
+  //                        capability default resolves truthy for this user/item
+  //    An explicit GRANT from any held role WINS — holding an additional,
+  //    weaker role never subtracts an explicitly-granted ability. An explicit
+  //    `false` only vetoes INHERITED (default-bucket) grants. Rationale: the
+  //    PermissionsTab writes explicit false for every UNCHECKED box, so the old
+  //    deny-wins veto collapsed multi-role users to the INTERSECTION of their
+  //    roles' checkboxes (e.g. a decision creator also listed under "מושפעים"
+  //    lost editDecisionAffected). Hidden roles contribute NOTHING.
   let denied = false;
-  let granted = false;
+  let explicitGranted = false;
+  let defaultGranted = false;
   for (const e of boardRoleEntries(boardKey)) {
     if (!inPeople(source?.[e.readId], myId)) continue; // user doesn't hold this role
     const role = roles[e.key];
     if (role?.hidden) continue; // role's column is ignored — contributes nothing
+    // Item 13 (2026-07-14): the SUMMARY may be written only by the discussion's
+    // single-person roles (creator/מנהל/מרכז). A matrix grant on a multi-person
+    // role (participants / extra people columns) is ignored for editSummary —
+    // it can still contribute its explicit false (deny) like any role.
+    if (capability === 'editSummary' && !SUMMARY_WRITER_ALIASES.has(e.readId)) {
+      const explicitDeny = role?.capabilities?.[capability] === false;
+      if (explicitDeny) denied = true;
+      continue;
+    }
     const explicit = role?.capabilities?.[capability];
     if (explicit === false) {
-      denied = true; // explicit revoke — vetoes grants from other held roles
+      denied = true; // explicit revoke — vetoes DEFAULT grants only
     } else if (explicit === true) {
-      granted = true; // explicit grant
+      explicitGranted = true; // explicit grant — immune to other roles' revokes
     } else if (
       // absent → inherit the capability default, evaluated for this user/item
       resolveDefaultBucket(capability, { discussion, myId, itemBoardKey, item })
     ) {
-      granted = true;
+      defaultGranted = true;
     }
   }
 
   // 5. Creator/Lead override — discussion-scoped content caps only (excludes
-  //    system AND item-tier caps). Default: override sits ABOVE the veto
-  //    (creator/lead immune → ALLOW). Strict mode: override sits BELOW the veto,
-  //    so a held role's explicit `false` can revoke them.
+  //    system AND item-tier caps). Default: creator/lead are immune → ALLOW.
+  //    Strict mode drops the override and resolves them through the same role
+  //    scan as everyone else (their held role's explicit `false` still revokes,
+  //    since no explicit grant remains to win the union).
   const contentOverride = !itemBoardKey && isCreatorOrLead(discussion, myId);
-  if (contentOverride) {
-    if (!strictCreatorLead) return true; // override wins (today's behavior)
-    if (!denied) return true; // strict: only survives if no held role vetoes
-    return false;
+  if (contentOverride && !strictCreatorLead) return true;
+
+  // Item 21 (2026-07-14): the discussion's single-person manager roles (מנהל
+  // דיון / מרכז דיון) may EDIT any decision of their discussion — delete stays
+  // with the roles the matrix grants it to. Applies only when the decision is
+  // resolved WITH its parent discussion in ctx (the in-discussion tab).
+  if (
+    itemBoardKey === 'decisions' &&
+    capability !== 'deleteDecision' &&
+    (inPeople(discussion?.discussionLeadID, myId) || inPeople(discussion?.discussionCoordinatorID, myId))
+  ) {
+    return true;
   }
 
-  // 6. Resolve: granted AND not vetoed.
-  return granted && !denied;
+  // 6. Resolve: an explicit grant wins outright; otherwise inherited defaults
+  //    survive only when no held role explicitly revokes.
+  return explicitGranted || (defaultGranted && !denied);
 }
 
 /**

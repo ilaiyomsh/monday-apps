@@ -1,0 +1,48 @@
+/* PartyProgress — branded animated progress bar (items 6+8). The fill is a
+   moving gradient in the app's palette (monday blue → decisions purple →
+   done green), so the wait itself feels like part of the product. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+.label {
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+}
+.track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+  overflow: hidden;
+}
+.fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--primary-color, #0073ea),
+    var(--decisions-accent, #6b4ee6),
+    var(--positive-color, #00c875),
+    var(--primary-color, #0073ea)
+  );
+  background-size: 300% 100%;
+  animation: partyShimmer 1.6s linear infinite;
+  transition: width 0.35s ease;
+}
+/* No known total — a sweeping segment instead of a width-driven fill. */
+.indeterminate {
+  width: 40%;
+  animation: partyShimmer 1.6s linear infinite, partySweep 1.2s ease-in-out infinite alternate;
+}
+@keyframes partyShimmer {
+  from { background-position: 0% 0; }
+  to { background-position: 300% 0; }
+}
+@keyframes partySweep {
+  from { margin-inline-start: 0; }
+  to { margin-inline-start: 60%; }
+}

@@ -581,6 +581,20 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
 
         {showSearch ? (
           <div className={styles.searchPill}>
+            {/* clear-X pinned to the pill's LEFT edge (LTR toolbar → first child).
+                mousedown-preventDefault keeps the input focused through the click
+                so clearing never collapses the pill via the input's blur. */}
+            {search ? (
+              <button
+                type="button"
+                className={styles.searchClear}
+                aria-label="נקה חיפוש"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setSearch('')}
+              >
+                <CloseSmall size={16} />
+              </button>
+            ) : null}
             <Search className={styles.pillIcon} aria-hidden="true" />
             <input
               className={styles.searchInput}
@@ -708,6 +722,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
                     canManageSettings={canManageSettings}
                     hiddenColumns={hiddenColumns}
                     canDecision={canDecision}
+                    searchTerm={debouncedSearch}
                     onStatusChange={applyStatus}
                     onPriorityChange={applyPriority}
                     onDateChange={applyDate}

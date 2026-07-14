@@ -83,7 +83,9 @@ function sortByLabelHe(a, b) {
 // Group by the linked discussion. `order` is one of azAsc | azDesc | dateAsc |
 // dateDesc. Date ordering reads the parent discussion's date from the injected
 // `discussionDateById` map (id -> Date|number); undated discussions sort last.
-// The "No discussion" bucket always sorts LAST.
+// The "No discussion" bucket is pinned to an EDGE: FIRST on azAsc, LAST on
+// every other order (azDesc/dateAsc/dateDesc) — owner decision 2026-07-14, so
+// unlinked tasks are always at a predictable end of the board.
 function groupByDiscussion(tasks, { noDiscussionLabel, order = 'azAsc', discussionDateById = {} } = {}) {
   const groups = new Map();
   tasks.forEach((t) => {
@@ -122,7 +124,7 @@ function groupByDiscussion(tasks, { noDiscussionLabel, order = 'azAsc', discussi
     const dir = order === 'azDesc' ? -1 : 1;
     valued.sort((a, b) => sortByLabelHe(a, b) * dir);
   }
-  return [...valued, ...noDisc];
+  return order === 'azAsc' ? [...noDisc, ...valued] : [...valued, ...noDisc];
 }
 
 // Generic status-column grouping over `alias` (statusID = status, priority =

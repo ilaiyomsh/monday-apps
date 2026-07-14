@@ -40,6 +40,8 @@ export function MyTasksTable({
   // gates each inline editor PER ROW — a false verdict withholds the handler so
   // the row renders that cell read-only. Defaults to allow-all.
   canTask = () => true,
+  // Active name-search term — rows highlight where it matched inside the name.
+  searchTerm = '',
   // Inline "+ הוסף משימה" footer row (same as TasksTab). When provided, a click
   // creates a task IMMEDIATELY, seeded with this group's status/priority.
   onAddTask,
@@ -188,6 +190,7 @@ export function MyTasksTable({
             task={task}
             columns={renderKeys}
             rowStyle={rowStyle}
+            searchTerm={searchTerm}
             showDeadline={showDeadline}
             showPriority={showPriority}
             showNotes={showNotes}

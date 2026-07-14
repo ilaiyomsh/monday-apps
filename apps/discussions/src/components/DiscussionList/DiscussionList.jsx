@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallba
 import { createPortal } from 'react-dom';
 import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscussions';
 import { Button, Text, IconButton } from '@vibe/core';
-import { Calendar, Search, Settings } from '@vibe/icons';
+import { Calendar, CloseSmall, Search, Settings } from '@vibe/icons';
+import { HighlightedText } from '@generated/components/HighlightedText';
 import { Copy, FileDown, Filter, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
 import { fmtTimeLabel, buildMonthOptions } from '@generated/utils/dateTime.js';
@@ -548,6 +549,17 @@ export function DiscussionList({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
+                {/* clear-X — pinned to the input's LEFT edge (inline-end in RTL) */}
+                {search ? (
+                  <button
+                    type="button"
+                    className={styles.searchClear}
+                    aria-label="נקה חיפוש"
+                    onClick={() => setSearch('')}
+                  >
+                    <CloseSmall size={16} />
+                  </button>
+                ) : null}
               </div>
               <div className={styles.calendarTypeCell}>
                 <FilterSelect
@@ -573,6 +585,17 @@ export function DiscussionList({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
+                {/* clear-X — pinned to the input's LEFT edge (inline-end in RTL) */}
+                {search ? (
+                  <button
+                    type="button"
+                    className={styles.searchClear}
+                    aria-label="נקה חיפוש"
+                    onClick={() => setSearch('')}
+                  >
+                    <CloseSmall size={16} />
+                  </button>
+                ) : null}
               </div>
               {/* Full-width filter chips (round 38): each stretches to fill half
                   the row so together they span the search-input width above. Order
@@ -644,7 +667,9 @@ export function DiscussionList({
                     className={`${styles.item} ${isSelected ? styles.itemSelected : ''}`}
                   >
                     <span className={styles.rail} style={{ backgroundColor: accent }} />
-                    <p className={styles.itemName}>{item.name}</p>
+                    <p className={styles.itemName}>
+                      <HighlightedText text={item.name} query={debouncedSearch} />
+                    </p>
                     {item.discussionDateID && (
                       <span className={styles.itemDate}>{fmtListDateCompact(item.discussionDateID)}</span>
                     )}

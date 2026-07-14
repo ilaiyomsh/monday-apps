@@ -67,7 +67,7 @@ describe('getTaskGroup', () => {
 });
 
 describe('groupMyTasks — discussion', () => {
-  it('buckets by linked discussion alphabetically (A→Z), no-discussion LAST', () => {
+  it('buckets by linked discussion alphabetically (A→Z), no-discussion FIRST', () => {
     const tasks = [
       task({ id: '1', discussionLinkID: rel('D2', 'בית') }),
       task({ id: '2', discussionLinkID: null }),
@@ -75,12 +75,12 @@ describe('groupMyTasks — discussion', () => {
       task({ id: '4', discussionLinkID: rel('D2', 'בית') }),
     ];
     const groups = groupMyTasks(tasks, 'discussion', { noDiscussionLabel: 'ללא דיון', order: 'azAsc' });
-    expect(groups.map((g) => g.key)).toEqual(['disc:D1', 'disc:D2', NO_DISCUSSION]);
-    expect(groups[groups.length - 1].label).toBe('ללא דיון');
-    expect(groups[1].items.map((t) => t.id)).toEqual(['1', '4']);
+    expect(groups.map((g) => g.key)).toEqual([NO_DISCUSSION, 'disc:D1', 'disc:D2']);
+    expect(groups[0].label).toBe('ללא דיון');
+    expect(groups[2].items.map((t) => t.id)).toEqual(['1', '4']);
   });
 
-  it('order azDesc reverses the alphabetical order (no-discussion still LAST)', () => {
+  it('order azDesc reverses the alphabetical order (no-discussion LAST)', () => {
     const tasks = [
       task({ id: '1', discussionLinkID: rel('D1', 'אבא') }),
       task({ id: '2', discussionLinkID: rel('D2', 'בית') }),

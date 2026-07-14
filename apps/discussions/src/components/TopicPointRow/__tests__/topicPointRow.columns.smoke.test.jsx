@@ -45,9 +45,11 @@ describe('TopicPointRow — fixed decisions/tasks table structure (smoke)', () =
     expect(decBtn).toBeTruthy();
     expect(taskBtn).toBeTruthy();
     fireEvent.click(decBtn);
-    expect(onCreateDecision).toHaveBeenCalledWith(POINT);
+    // item 12: the click also passes the +'s own rect so the create box can
+    // open anchored right under the button.
+    expect(onCreateDecision).toHaveBeenCalledWith(POINT, expect.anything());
     fireEvent.click(taskBtn);
-    expect(onCreateTask).toHaveBeenCalledWith(POINT);
+    expect(onCreateTask).toHaveBeenCalledWith(POINT, expect.anything());
   });
 
   it('renders the counters and opens the popup callbacks on click', () => {
