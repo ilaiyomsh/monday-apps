@@ -102,6 +102,21 @@ const PREVIOUS_TASKS_MODE_OPTIONS = [
   { value: PREVIOUS_TASKS_MODES.AUTO, text: 'אוטומטי' },
 ];
 
+// Multi-column people mapping (יכולת צפייה / יכולת עריכה) view model. Pure +
+// exported for testing. `typedOptions` are the board's live columns of the
+// right type in SearchablePicker's { id, name } shape (NOT { value, label } —
+// reading the wrong keys is what made the chips show raw column ids and stopped
+// `remaining` from excluding already-picked columns). `colTitles` are names
+// captured at pick time, used as a fallback before the live list resolves.
+export function resolveMultiColView(typedOptions, selectedIds, colTitles = {}) {
+  const opts = Array.isArray(typedOptions) ? typedOptions : [];
+  const sel = (Array.isArray(selectedIds) ? selectedIds : []).map(String);
+  const labelByVal = Object.fromEntries(opts.map((o) => [String(o.id), o.name]));
+  const chipName = (cid) => labelByVal[String(cid)] || colTitles?.[String(cid)] || String(cid);
+  const remaining = opts.filter((o) => !sel.includes(String(o.id)));
+  return { labelByVal, chipName, remaining };
+}
+
 /**
  * Minimal in-product settings editor: edit the per-board id + each
  * alias→real-column-id mapping that the SDK reads, then persist via
@@ -700,12 +715,9 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
                             const selectedIds = (Array.isArray(col.ids) && col.ids.length
                               ? col.ids
                               : (col.id ? [col.id] : [])).map(String);
-                            const labelByVal = Object.fromEntries(typedOptions.map((o) => [String(o.value), o.label]));
-                            // Column NAME resolution for the chips (owner: never
-                            // show a raw id): live options → the title stored at
-                            // pick time → the id as a last resort.
-                            const chipName = (cid) => labelByVal[cid] || col.colTitles?.[cid] || cid;
-                            const remaining = typedOptions.filter((o) => !selectedIds.includes(String(o.value)));
+                            // Chip names + still-pickable options, resolved from
+                            // the live { id, name } options (see resolveMultiColView).
+                            const { labelByVal, chipName, remaining } = resolveMultiColView(typedOptions, selectedIds, col.colTitles);
                             return (
                               <div key={alias} className={styles.colRow}>
                                 <div className={styles.colLabel}>
