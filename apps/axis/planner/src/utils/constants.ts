@@ -83,7 +83,7 @@ export const PROJECT_CARD_HEIGHT = CONFIG.rowHeight * 2;
 //   mode (never to the row/sticky-sidebar container — that reintroduces the
 //   timeline-bleed-through bug documented in VirtualRowList).
 export const SUMMARY_TRACKS_GAP = 10;
-export const FOCUS_BLOCK_GAP = 8;
+export const FOCUS_BLOCK_GAP = 10;
 export const DIMMED_OPACITY = 0.25;
 
 // Gap FILL colors. Gaps must NOT read as a separator stripe — they blend with
