@@ -1,5 +1,13 @@
 # Changelog - team-people-column
 
+## 2.1.3 — 2026-07-14
+
+- Picker: removed the hover highlight on the assignee rows — the list stays
+  visually flat (clicking a row is the only feedback).
+- Settings: removed the redundant app-level heading (monday already shows the
+  "<column> - … column settings" popover title) and tightened vertical spacing,
+  so the pane fits without scrolling.
+
 ## 2.1.2 — 2026-07-14
 
 - Picker is now single-assignee only: one person at a time; picking another

@@ -4,30 +4,14 @@
    PersonPicker. */
 
 .root {
-  padding: 16px;
+  padding: 12px 14px;
   direction: rtl;
   text-align: start;
   font-size: 14px;
 }
 
-.header {
-  margin-bottom: 16px;
-}
-
-.title {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 0 4px;
-}
-
-.subtitle {
-  font-size: 13px;
-  color: var(--secondary-text-color, #676879);
-  margin: 0;
-}
-
 .field {
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .fieldLabel {
@@ -143,7 +127,7 @@
   display: flex;
   justify-content: flex-start;
   gap: 8px;
-  margin-top: 24px;
+  margin-top: 14px;
 }
 
 /* Native buttons (Vibe Button exposes only aria-disabled, which jsdom's
@@ -184,7 +168,7 @@
 /* Version caption — Latin build label (dir="ltr" on the wrapper in JSX);
    centered so it reads as a quiet footer stamp regardless of the RTL layout. */
 .versionCaption {
-  margin-top: 16px;
+  margin-top: 8px;
   text-align: center;
   font-size: 11px;
   color: var(--secondary-text-color, #9699a6);
