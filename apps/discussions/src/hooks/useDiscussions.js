@@ -123,7 +123,7 @@ export function useDiscussions(filters = {}) {
       setCursor(result.cursor || null);
       setError(null);
     } catch (err) {
-      console.error('Error fetching discussions:', err);
+      if (!err?.__loggedId) logger.error('useDiscussions', 'טעינת הדיונים נכשלה', err);
       setError(err.message);
     } finally {
       setLoading(false);
@@ -143,7 +143,7 @@ export function useDiscussions(filters = {}) {
       setItems(prev => [...prev, ...(result.items || [])]);
       setCursor(result.cursor || null);
     } catch (err) {
-      console.error('Error loading more:', err);
+      if (!err?.__loggedId) logger.error('useDiscussions', 'טעינת דיונים נוספים נכשלה', err);
     } finally {
       setLoadingMore(false);
     }

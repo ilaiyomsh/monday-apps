@@ -461,7 +461,10 @@ export async function fetchTaskCreators({ userId, limit = 300 } = {}) {
   if (!boardId || !creatorColId) return [];
   const rules = [];
   if (userId && respColId) {
-    rules.push({ column_id: respColId, compare_value: [String(userId)], operator: 'any_of' });
+    // People-column filters need the "person-<id>" compare_value form — a bare
+    // user id is silently ignored by monday and matches nothing (same rule
+    // BoardSDK._buildQueryParams applies), which left the creators list empty.
+    rules.push({ column_id: respColId, compare_value: [`person-${userId}`], operator: 'any_of' });
   }
   const qp = rules.length ? { rules } : undefined;
   const cv = cvSelection(['people']);
