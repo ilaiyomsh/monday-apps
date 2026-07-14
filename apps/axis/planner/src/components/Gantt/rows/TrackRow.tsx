@@ -43,15 +43,13 @@ export const TrackRow: React.FC<TrackRowProps> = memo(({ items, groupId, trackIn
   const snapDays = SNAP_DAYS[zoomLevel];
   const pixelsPerSnapUnit = pixelsPerDay * snapDays;
 
-  // Projects view is a two-tone split WITHIN each track row:
-  //   • sidebar  → color A (accent-bg-soft), continuing the project's summary
-  //     card downward so the whole sidebar column reads as one card surface
-  //     (incl. the area below the card).
-  //   • timeline → white (color B), the allocation band.
-  // Employees view keeps the original single background (empty rows gray).
+  // Projects view: the whole project block — summary card AND allocation rows,
+  // sidebar AND timeline — is white, so the sidebar column continues the white
+  // card downward (incl. the area below it). Employees view keeps the original
+  // single background (empty rows gray).
   const isProjects = viewMode === 'projects';
   const rowBg = items.length === 0 && !isProjects ? 'bg-bg-app' : 'bg-bg-surface';
-  const sidebarBg = isProjects ? 'bg-accent-bg-soft' : rowBg;
+  const sidebarBg = rowBg;
 
   // Helper to snap X coordinate to the start of the cell at that position
   const snapToCellStart = useCallback((x: number) => {

@@ -204,8 +204,11 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
   // Check if we should show the project summary card
   const showProjectCard = viewMode === 'projects' && !isPlaceholder && group.projectSummary && isExpanded;
 
-  // Color-A "summary surface": the header row + floating card read as one tinted
-  // band, visually distinct from the white allocation tracks (color B) below.
+  // "Summary surface" = an expanded/focused project. Its header row is DARK across
+  // the full width (sidebar + timeline) with white text; everything below it —
+  // card + allocation rows — is white. That dark→white contrast is the PRIMARY
+  // separation (owner: header↔body matters more than card↔allocations), and makes
+  // the focused project pop against the dimmed neighbours.
   // Applied whenever the card shows (also the always-expanded focused project).
   const summarySurface = !!showProjectCard || isSelectedProject;
   // Fade non-focused projects' CONTENT (not the sticky sidebar container).
@@ -228,7 +231,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
       {/* Sidebar - sticky on left, relative for absolute PM bar positioning */}
       <div
         className={`sticky left-0 z-50 border-r border-border-subtle h-full flex items-center px-4 gap-2 transition-colors relative shadow-[var(--shadow-sticky-col)] ${
-          isPlaceholder ? 'bg-accent-bg-tint text-accent font-bold' : summarySurface ? 'bg-accent-bg-soft hover:bg-accent-bg-soft cursor-pointer' : 'bg-bg-app hover:bg-bg-hover cursor-pointer'
+          isPlaceholder ? 'bg-accent-bg-tint text-accent font-bold' : summarySurface ? 'bg-bg-inverted hover:bg-bg-inverted cursor-pointer' : 'bg-bg-app hover:bg-bg-hover cursor-pointer'
         }`}
         style={{ width: sidebarWidth, minWidth: sidebarWidth, overflow: showProjectCard ? 'visible' : undefined, cursor: isPlaceholder ? 'default' : 'pointer' }}
         dir="ltr"
@@ -246,7 +249,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
             so Hebrew/Arabic content still renders with correct word order. */}
         <div className="flex-1 flex flex-col overflow-hidden text-left" dir={locale.dir} style={dimContent}>
           <span
-            className={`overflow-hidden text-sm ${isPlaceholder ? 'text-accent' : isSelectedProject ? 'font-bold text-accent-text-strong' : 'font-bold text-text-secondary'}`}
+            className={`overflow-hidden text-sm ${isPlaceholder ? 'text-accent' : summarySurface ? 'font-bold text-white' : 'font-bold text-text-secondary'}`}
             style={{
               display: '-webkit-box',
               WebkitLineClamp: 2,
@@ -280,22 +283,22 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
               toggleGroup(group.id);
             }}
           >
-            <svg className="w-3 h-3 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className={`w-3 h-3 ${summarySurface ? 'text-white' : 'text-text-muted'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </div>
         )}
 
 
-        {/* PM + Project Type bar - sidebar only. The card is the color-A summary
-            surface (accent-bg-soft), same as the header. It is pushed down by the
-            header's color-A summary gap (marginTop = SUMMARY_TRACKS_GAP) so its two
-            48px rows line up 1:1 with the allocation tracks to its right (which
-            start below that same gap). The block is padded to ≥ PROJECT_CARD_HEIGHT
-            so the card never overhangs into the next project. */}
+        {/* PM + Project Type bar - sidebar only. The card is WHITE, same as the
+            header and the allocation rows. It is pushed down by the header's
+            summary gap (marginTop = SUMMARY_TRACKS_GAP) so its two 48px rows line
+            up 1:1 with the allocation tracks to its right (which start below that
+            same gap). The block is padded to ≥ PROJECT_CARD_HEIGHT so the card
+            never overhangs into the next project. */}
         {showProjectCard && (
           <div
-            className={`absolute left-0 top-full w-full px-3 flex flex-col bg-accent-bg-soft ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
+            className={`absolute left-0 top-full w-full px-3 flex flex-col bg-bg-surface ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
             style={{ zIndex: 60, marginTop: SUMMARY_TRACKS_GAP }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -317,7 +320,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
           the sidebar/card (color A) whenever the summary surface is active, so the
           whole summary row reads as one band across sidebar + timeline. */}
       <div
-        className={`flex-1 h-full flex items-center relative ${isPlaceholder ? 'bg-accent-bg-soft cursor-pointer' : summarySurface ? 'bg-accent-bg-soft' : 'bg-bg-app'}`}
+        className={`flex-1 h-full flex items-center relative ${isPlaceholder ? 'bg-accent-bg-soft cursor-pointer' : summarySurface ? 'bg-bg-inverted' : 'bg-bg-app'}`}
         style={{ minWidth: totalWidth }}
         onClick={handleTimelineClick}
       >

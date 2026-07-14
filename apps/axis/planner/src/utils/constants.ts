@@ -84,15 +84,15 @@ export const PROJECT_CARD_HEIGHT = CONFIG.rowHeight * 2;
 //   timeline-bleed-through bug documented in VirtualRowList).
 export const SUMMARY_TRACKS_GAP = 10;
 export const FOCUS_BLOCK_GAP = 8;
-export const DIMMED_OPACITY = 0.5;
+export const DIMMED_OPACITY = 0.25;
 
 // Gap FILL colors. Gaps must NOT read as a separator stripe — they blend with
 // the surface around them and rely on a shadow for the actual separation:
-// • summary↔tracks gap → the color-A summary surface (accent-bg-soft), so header,
-//   gap, and card are one continuous band; the header's drop shadow does the split.
+// • summary↔tracks gap → white (the summary card + allocation rows are all white),
+//   so the gap is invisible as colour; the header's drop shadow does the split.
 // • focus block gap → the page background, so the focused block floats above the
 //   page like a lifted card (shadow supplied by the focus edges).
-export const GAP_COLOR_SUMMARY = 'var(--color-accent-bg-soft)';
+export const GAP_COLOR_SUMMARY = 'var(--color-bg-surface)';
 export const GAP_COLOR_FOCUS = 'var(--color-bg-app)';
 
 // Legacy exports for backwards compatibility
