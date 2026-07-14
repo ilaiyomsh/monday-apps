@@ -43,11 +43,38 @@ export const DISCUSSION_PALETTE = [
   '#e50073', '#ff5ac4', '#9d50dd', '#784bd1', '#7e3b8a',
   '#5559df', '#225091', '#579bfc', '#007eb5', '#4eccc6',
 ];
-function discussionColor(id) {
-  const s = String(id);
+function stableHash(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
-  return DISCUSSION_PALETTE[h % DISCUSSION_PALETTE.length];
+  return h;
+}
+function discussionColor(id) {
+  return DISCUSSION_PALETTE[stableHash(String(id)) % DISCUSSION_PALETTE.length];
+}
+
+/*
+ * Give EVERY real group a varied, stable title color (owner request
+ * 2026-07-14): groups that already carry a semantic color (status/priority
+ * label colors, the discussion palette) keep it; colorless labeled groups
+ * (date buckets, board groups, person groups, the "no value" buckets) get a
+ * palette color hashed from their KEY — stable across renders — with a linear
+ * probe past colors already used in the list, so small group sets still look
+ * varied instead of colliding. An UNLABELED bucket (the ungrouped single-table
+ * view) deliberately stays uncolored.
+ */
+export function ensureGroupColors(groups) {
+  const list = Array.isArray(groups) ? groups : [];
+  const used = new Set(list.map((g) => g?.color).filter(Boolean));
+  return list.map((g) => {
+    if (!g || g.color || !g.label) return g;
+    let i = stableHash(String(g.key)) % DISCUSSION_PALETTE.length;
+    for (let step = 0; step < DISCUSSION_PALETTE.length && used.has(DISCUSSION_PALETTE[i]); step += 1) {
+      i = (i + 1) % DISCUSSION_PALETTE.length;
+    }
+    const color = DISCUSSION_PALETTE[i];
+    used.add(color);
+    return { ...g, color };
+  });
 }
 
 // Resolve the single discussion a task is linked to via the discussionLinkID
@@ -261,20 +288,24 @@ function groupByDate(tasks, { noDateLabel, order = 'dateDesc' } = {}) {
 // `discussionDateById` map (for discussion date order), and localized labels.
 export function groupMyTasks(tasks, mode, opts = {}) {
   const list = Array.isArray(tasks) ? tasks : [];
-  switch (mode) {
-    case 'none':
-      return groupNone(list, opts);
-    case 'discussion':
-      return groupByDiscussion(list, opts);
-    case 'status':
-      return groupByStatus(list, opts);
-    case 'priority':
-      return groupByPriority(list, opts);
-    case 'deadline':
-      return groupByDate(list, opts);
-    case 'group':
-      return groupByBoardGroup(list, opts);
-    default:
-      return groupByStatus(list, opts);
-  }
+  const buckets = (() => {
+    switch (mode) {
+      case 'none':
+        return groupNone(list, opts);
+      case 'discussion':
+        return groupByDiscussion(list, opts);
+      case 'status':
+        return groupByStatus(list, opts);
+      case 'priority':
+        return groupByPriority(list, opts);
+      case 'deadline':
+        return groupByDate(list, opts);
+      case 'group':
+        return groupByBoardGroup(list, opts);
+      default:
+        return groupByStatus(list, opts);
+    }
+  })();
+  // Every labeled group leaves here with a color (semantic colors preserved).
+  return ensureGroupColors(buckets);
 }

@@ -87,7 +87,7 @@
   font-family: var(--font-family);
   background: var(--primary-background-color, #fff);
   direction: rtl;
-  text-align: right;
+  text-align: left;
 }
 .nameInput:focus-visible {
   outline: none;
