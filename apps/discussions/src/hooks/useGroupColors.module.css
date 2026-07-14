@@ -1,0 +1,53 @@
+/* Right-click group-header color palette (round 77). Fixed at the cursor,
+   portaled to <body>, above every board layer. */
+.palette {
+  position: fixed;
+  z-index: 10000;
+  width: 208px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  box-shadow: var(--box-shadow-medium, 0 10px 30px rgba(0, 0, 0, 0.2));
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 5px;
+}
+
+.swatch {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.swatch:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 2px var(--primary-background-color, #fff), 0 0 0 3px var(--primary-color, #0073ea);
+}
+.swatch:focus-visible {
+  outline: 2px solid var(--primary-color, #0073ea);
+  outline-offset: 1px;
+}
+
+.clearBtn {
+  border: none;
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--primary-text-color, #323338);
+  font-family: var(--font-family);
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.clearBtn:hover {
+  background: var(--primary-selected-color, #e5f0ff);
+}

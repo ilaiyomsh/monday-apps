@@ -61,12 +61,24 @@ function discussionColor(id) {
  * probe past colors already used in the list, so small group sets still look
  * varied instead of colliding. An UNLABELED bucket (the ungrouped single-table
  * view) deliberately stays uncolored.
+ *
+ * `overrides` (round 77): a { [groupKey]: hexColor } map of USER-CHOSEN header
+ * colors (right-click a group header → color palette, shared across all users).
+ * An override WINS over everything — even a group's own semantic color — so the
+ * owner-picked color is always what shows. Groups without an override fall back
+ * to the semantic/hash behavior above.
  */
-export function ensureGroupColors(groups) {
+export function ensureGroupColors(groups, overrides = null) {
   const list = Array.isArray(groups) ? groups : [];
-  const used = new Set(list.map((g) => g?.color).filter(Boolean));
+  const ov = overrides && typeof overrides === 'object' ? overrides : {};
+  const overrideFor = (g) => (g && g.key != null ? ov[String(g.key)] : undefined);
+  // Override colors are already "taken" so the hash probe never reuses them.
+  const used = new Set(list.map((g) => overrideFor(g) || g?.color).filter(Boolean));
   return list.map((g) => {
-    if (!g || g.color || !g.label) return g;
+    if (!g) return g;
+    const override = overrideFor(g);
+    if (override) return { ...g, color: override };
+    if (g.color || !g.label) return g;
     let i = stableHash(String(g.key)) % DISCUSSION_PALETTE.length;
     for (let step = 0; step < DISCUSSION_PALETTE.length && used.has(DISCUSSION_PALETTE[i]); step += 1) {
       i = (i + 1) % DISCUSSION_PALETTE.length;
