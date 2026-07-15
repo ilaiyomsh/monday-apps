@@ -36,9 +36,9 @@
 }
 
 /* Empty state — the vibe Person icon in a circle with a subtle shadow, no fill. */
-/* Empty people cell — monday's "unassigned" avatar: a solid gray disc with a
-   WHITE person silhouette (literal colors — the @vibe grey tokens resolve nearly
-   white, which read as no-avatar-at-all). */
+/* Empty people cell — monday's "unassigned" avatar: a WHITE circle with a thin
+   gray ring and a gray person silhouette (an outlined "ghost", not a filled
+   disc). Literal colors — the @vibe grey tokens resolve nearly white. */
 .placeholder {
   display: inline-flex;
   align-items: center;
@@ -46,8 +46,9 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #d0d4e4;
-  color: #ffffff;
+  background: #ffffff;
+  border: 1px solid #d0d4e4;
+  color: #a5a9b5;
 }
 
 /* Popover portaled to document.body (escapes table overflow / sticky headers). */
