@@ -349,6 +349,7 @@ function DecisionRow({
             selected={affected}
             onChange={(people) => onAffected(decision.id, people)}
             boardKey="decisions"
+            accountWide
           />
         ) : (
           <PersonList people={affected} size="sm" showNames={false} max={3} />
