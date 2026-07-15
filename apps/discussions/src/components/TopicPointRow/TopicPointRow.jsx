@@ -326,21 +326,19 @@ export function TopicPointRow({
         </button>
       </div>
 
-      {/* האם נידונה — checkbox (round 47: hideable via the columns set).
-          Disabled on a hidden row (item 11). */}
+      {/* האם נידונה — native monday checkbox column (round 96): the @vibe/core
+          Checkbox (same component monday's checkbox column renders), replacing the
+          old hand-rolled square button so it looks + behaves like a standard
+          checkbox. Read-only when the user can't check or the row is hidden
+          (item 11) — a disabled Checkbox greys itself. */}
       {showCol('check') && (
-        <div className={styles.checkCell} onClick={stop}>
-          <button
-            type="button"
-            className={`${styles.check} ${discussed ? styles.checkOn : ''}`}
-            onClick={canCheck && !inert ? () => onToggle?.(point, !discussed) : undefined}
-            disabled={inert}
-            aria-label={discussed ? 'נידונה' : 'לא נידונה'}
-            aria-disabled={!canCheck || inert}
-            title={discussed ? 'נידונה' : 'סמן כנידונה'}
-          >
-            {discussed && <Check size={13} className={styles.checkMark} />}
-          </button>
+        <div className={styles.checkCell} onClick={stop} onPointerDown={stop}>
+          <Checkbox
+            checked={discussed}
+            onChange={(e) => onToggle?.(point, e.target.checked)}
+            disabled={!canCheck || inert}
+            ariaLabel={discussed ? 'נידונה' : 'סמן כנידונה'}
+          />
         </div>
       )}
 

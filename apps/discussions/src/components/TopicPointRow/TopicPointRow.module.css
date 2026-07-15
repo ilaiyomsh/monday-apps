@@ -40,7 +40,7 @@
 .excluded .createBtn:disabled,
 .excluded .counter:disabled,
 .excluded .updatesBtn:disabled,
-.excluded .check:disabled {
+.excluded .checkCell {
   cursor: default;
   pointer-events: none;
   opacity: 0.45;
@@ -369,6 +369,8 @@
 
 /* האם נידונה — square checkbox (mockup: blue fill when checked). Cell chrome
    (padding / centering / 0.625px rule) mirrors TaskTable's .taskCell. */
+/* נידונה — hosts the native @vibe Checkbox (round 96), centered like a monday
+   checkbox column cell. */
 .checkCell {
   display: flex;
   align-items: center;
@@ -376,24 +378,6 @@
   padding: 0 8px;
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
 }
-.check {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 1.5px solid #c3c6d4;
-  border-radius: 5px;
-  background: var(--primary-background-color, #fff);
-  color: #fff;
-  cursor: pointer;
-}
-.checkOn {
-  border-color: var(--primary-color, #0073ea);
-  background: var(--primary-color, #0073ea);
-}
-.checkMark { stroke-width: 3; }
 
 /* החלטות / משימות cells — dashed create button + round counter pill. Cell
    chrome (padding / centering / 0.625px rule) mirrors TaskTable's .taskCell. */
