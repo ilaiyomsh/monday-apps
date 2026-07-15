@@ -8,6 +8,7 @@ import { useSettings } from '../../contexts/SettingsContext';
 import { useLocale } from '../../hooks/useLocale';
 import { mondayService } from '../../services/mondayService';
 import { logger } from '../../utils/Logger';
+import { CONFIG } from '../../utils/constants';
 export { Avatar } from './Avatar';
 
 interface ProjectSummaryCardProps {
@@ -236,9 +237,11 @@ const ProjectMetricsRow: React.FC<{ projectId: string }> = ({ projectId }) => {
     // with another divider.
     // Two equal-width cells (flex-1 halves), no dividers. The metrics flush to
     // the OUTER edges — actual to the right (ml-auto), allocated to the left
-    // (mr-auto) — so they sit symmetrically under the type/PM pair above. Fixed
-    // 48px height so the row lines up 1:1 with the Gantt track grid.
-    <div className="flex items-stretch h-12">
+    // (mr-auto) — so they sit symmetrically under the type/PM pair above. Height
+    // pinned to CONFIG.rowHeight (px) — NOT Tailwind h-12: :root font-size is 20px
+    // (index.css), so h-12 (3rem) renders 60px and drifts the card off the 48px
+    // px-based track grid (the drift compounds per row). See BUGS.md.
+    <div className="flex items-stretch" style={{ height: CONFIG.rowHeight }}>
       <div className="flex-1 min-w-0 px-3 flex items-center">
         <MetricCell className="ml-auto" label={t('projectSummary.actualHours')}>{staticValue(metrics?.reported ?? 0)}</MetricCell>
       </div>
@@ -262,9 +265,10 @@ export const ProjectSummaryCard = memo<ProjectSummaryCardProps>(({
     <div className="flex flex-col" dir={locale.dir}>
       {/* Row 1 — project-type badge flush to one edge, PM to the other
           (justify-between), symmetric with the two hour metrics below. Type is
-          first (right in RTL); PM is last so it sits on the LEFT. Fixed 48px
-          height so it lines up 1:1 with the Gantt track grid. */}
-      <div className="flex items-center justify-between gap-2 h-12">
+          first (right in RTL); PM is last so it sits on the LEFT. Height pinned
+          to CONFIG.rowHeight (px), NOT h-12 — see the metrics row below for why
+          rem-based heights drift off the 48px track grid. */}
+      <div className="flex items-center justify-between gap-2" style={{ height: CONFIG.rowHeight }}>
         <ProjectTypeBadge
           projectType={summary.projectType}
           projectTypeColor={summary.projectTypeColor}

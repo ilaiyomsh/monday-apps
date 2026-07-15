@@ -13,7 +13,9 @@ interface ActiveProjectsContextType {
   refresh: () => Promise<void>;              // force re-fetch (clears cache first)
 }
 
-const ActiveProjectsContext = createContext<ActiveProjectsContextType | undefined>(undefined);
+// Exported so the dev-only Gantt harness (src/harness) can inject mock values
+// without the real SDK-backed ActiveProjectsProvider. Prod uses the Provider.
+export const ActiveProjectsContext = createContext<ActiveProjectsContextType | undefined>(undefined);
 
 export const ActiveProjectsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { settings, isConfigured } = useSettings();
