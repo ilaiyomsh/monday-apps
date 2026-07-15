@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { collapseMapForView } from '@generated/utils/collapsePref.js';
 import { Skeleton, Button, Dialog, DialogContentContainer, Checkbox, Text } from '@vibe/core';
 import { DropdownChevronDown, Filter, CloseSmall, Update, Edit } from '@vibe/icons';
 import {
@@ -628,6 +629,14 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     if (allCollapsed) setCollapsed({});
     else { const c = {}; grouped.forEach((g) => { c[g.key] = true; }); setCollapsed(c); }
   };
+  // round105 — apply the saved collapse-all default ONCE, when groups first load.
+  const collapseAppliedRef = useRef(false);
+  useEffect(() => {
+    if (collapseAppliedRef.current || grouped.length === 0) return;
+    collapseAppliedRef.current = true;
+    const m = collapseMapForView(savedView, grouped);
+    if (m) setCollapsed(m);
+  }, [savedView, grouped]);
 
   // ---- Selection helpers (Round 7) ----
   const toggleSelect = (id, checked) =>
@@ -998,7 +1007,11 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
             />
           )}
           {isGrouped && filteredDecisions.length > 0 && (
-            <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
+            <CollapseAllButton
+              collapsed={allCollapsed}
+              onClick={toggleAll}
+              onSave={canSaveView ? () => { saveView({ collapseAll: allCollapsed }); onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success'); } : null}
+            />
           )}
         </div>
       </div>
