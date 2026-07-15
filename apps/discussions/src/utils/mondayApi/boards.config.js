@@ -43,6 +43,10 @@ export const PREVIOUS_TASKS_MODES = {
 };
 export const DEFAULT_PREFERENCES = {
   previousTasksMode: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION,
+  // round108 — owner-set logo shown at the top-right of the discussion header
+  // (parallel to the title). Stored as a small downscaled data-URI (self-contained,
+  // no asset hosting); null = no logo. Set only by owners in Settings → העדפות.
+  logoUrl: null,
   // Whether the top-level "המשימות שלי" (My Tasks) view toggle is shown. Default
   // OFF so existing instances keep their current behavior (the tab is opt-in per
   // instance, enabled by the owner in Settings → העדפות).
