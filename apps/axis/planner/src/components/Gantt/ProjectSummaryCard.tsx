@@ -116,13 +116,14 @@ const formatHours = (value: number | null | undefined): string => {
 
 const SKELETON = <span className="h-3.5 w-8 rounded bg-bg-hover animate-pulse" aria-hidden="true" />;
 
-// Shared cell layout: a muted label and its value on ONE line (inline), small
-// text to match the timeline ruler's month labels.
+// Shared cell layout: a muted label and its value on ONE line, small text to
+// match the timeline ruler's month labels. ml-auto (physical left margin auto,
+// dir-independent) pushes the pair to the right edge of its half-cell.
 const MetricCell: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <div className="flex items-center gap-1.5 min-w-0">
+  <span className="flex items-center gap-1.5 min-w-0 max-w-full ml-auto">
     <span className="text-xs text-text-muted truncate">{label}</span>
     {children}
-  </div>
+  </span>
 );
 
 // Editable planned-hours cell. Click the number to edit; the value is written
@@ -232,10 +233,18 @@ const ProjectMetricsRow: React.FC<{ projectId: string }> = ({ projectId }) => {
     // kept ready for future use — to bring planned back, add a third <MetricCell/>
     // (value={metrics?.planned ?? null}, label={t('projectSummary.plannedHours')})
     // with another divider.
-    <div className="flex items-center justify-center gap-3 flex-1 min-h-0 border-t border-border-subtle">
-      <MetricCell label={t('projectSummary.actualHours')}>{staticValue(metrics?.reported ?? 0)}</MetricCell>
-      <span className="w-px self-stretch my-1.5 bg-border-subtle" aria-hidden="true" />
-      <MetricCell label={t('projectSummary.allocatedHours')}>{staticValue(metrics?.allocated ?? 0)}</MetricCell>
+    // Two equal-width cells with the divider always at the exact center
+    // (flex-1 halves). Each cell's content is right-aligned (text-right is
+    // physical-right, dir-independent) so the hours line up to the right edge
+    // of their cell.
+    <div className="flex items-stretch flex-1 min-h-0 border-t border-border-subtle">
+      <div className="flex-1 min-w-0 px-3 flex items-center">
+        <MetricCell label={t('projectSummary.actualHours')}>{staticValue(metrics?.reported ?? 0)}</MetricCell>
+      </div>
+      <span className="w-px self-stretch my-1.5 bg-border-subtle flex-shrink-0" aria-hidden="true" />
+      <div className="flex-1 min-w-0 px-3 flex items-center">
+        <MetricCell label={t('projectSummary.allocatedHours')}>{staticValue(metrics?.allocated ?? 0)}</MetricCell>
+      </div>
     </div>
   );
 };
