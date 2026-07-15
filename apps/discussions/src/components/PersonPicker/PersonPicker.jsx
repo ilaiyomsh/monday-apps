@@ -16,6 +16,16 @@ function initialsOf(name) {
     .slice(0, 2);
 }
 
+// Which people list the picker offers (round 79). `accountWide` (or no
+// `boardKey`) → the full ACCOUNT roster; otherwise the BOARD's members, falling
+// back to the roster while board membership is empty/loading so it's never
+// blank. Pure + exported for testing.
+export function pickPeopleSource({ accountWide, boardKey, boardUsers, roster }) {
+  const all = Array.isArray(roster) ? roster : [];
+  if (accountWide || !boardKey) return all;
+  return (Array.isArray(boardUsers) && boardUsers.length) ? boardUsers : all;
+}
+
 /**
  * People picker styled after monday's native people-column picker: removable
  * chips for the current selection + a searchable list of account users with
@@ -29,7 +39,7 @@ function initialsOf(name) {
  * no need to clear the existing one first; clicking the already-selected person
  * deselects it. Multi (משתתפים / מושפעים) is unaffected.
  */
-export function PersonPicker({ selected = [], onChange, bordered = false, closeOnSelect = false, single = false, boardKey = null }) {
+export function PersonPicker({ selected = [], onChange, bordered = false, closeOnSelect = false, single = false, boardKey = null, accountWide = false }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [pos, setPos] = useState(null);
@@ -40,13 +50,15 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
   // (owners + subscribers) — the only people monday will let you assign to it
   // (assigning a non-member throws invalidPersonAssignment). Falls back to the
   // full account roster while board membership is loading or if it comes back
-  // empty, so the picker is never blank. Without a boardKey it uses the account
-  // roster as before (e.g. account-wide role defaults).
+  // empty, so the picker is never blank. Without a boardKey — or with
+  // `accountWide` (round 79: מושפעים may be anyone in the account, not only the
+  // decisions-board members) — it uses the account roster.
   useSyncExternalStore(subscribe, getVersion, getVersion);
-  const board = useBoardSubscribers(boardKey);
+  // accountWide short-circuits the board fetch entirely (null boardKey → inert).
+  const board = useBoardSubscribers(accountWide ? null : boardKey);
   const roster = getAllUsers();
-  const subscribers = boardKey && board.users.length ? board.users : roster;
-  const loading = boardKey
+  const subscribers = pickPeopleSource({ accountWide, boardKey, boardUsers: board.users, roster });
+  const loading = (boardKey && !accountWide)
     ? (board.loading && board.users.length === 0 && roster.length === 0)
     : (!hasRoster() && roster.length === 0);
 

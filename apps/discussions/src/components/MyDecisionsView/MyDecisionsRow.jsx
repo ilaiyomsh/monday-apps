@@ -262,6 +262,7 @@ export function MyDecisionsRow({
             selected={decision.affectedID || []}
             onChange={(people) => onAffectedChange(decision.id, people)}
             boardKey="decisions"
+            accountWide
           />
         ) : (
           <PersonList people={decision.affectedID || []} size="sm" showNames={false} max={3} />
