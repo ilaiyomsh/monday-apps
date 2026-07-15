@@ -58,13 +58,41 @@ jobs:
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
 
-      #  is "-c" for client-side (CDN) apps, empty for
-      # server-side (monday-code) apps — the only difference between the two.
-      - name: "🚨 FORCE push to latest LIVE version 🚨"
-        run: >
-          mapps code:push  --force
-          -d apps/deadline-confirm/.
-          -a "$APP_ID"
+      # `code:push --force -a <app>` resolves the app's NEWEST version (the
+      # draft above live), not live — incident-verified 2026-07-15. Resolve
+      # the LIVE version id and push pinned with -i.
+      - name: Resolve LIVE version id (pin the target)
+        id: live
+        run: |
+          set -euo pipefail
+          LIVE_ID="$(mapps app-version:list -i "$APP_ID" 2>/dev/null \
+            | awk -F'│' '$7 ~ /live/ { gsub(/[^0-9]/, "", $3); print $3; exit }')"
+          if [ -z "$LIVE_ID" ]; then
+            echo "::error::app $APP_ID has no LIVE version — first go-live is a deliberate promote (pipeline-model.md §4b); this workflow only refreshes an existing live version."
+            exit 1
+          fi
+          echo "Resolved LIVE version id: $LIVE_ID"
+          echo "live_id=$LIVE_ID" >> "$GITHUB_OUTPUT"
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
           APP_ID: ${{ secrets.APP_DEADLINE_CONFIRM_ID }}
+
+      # Server app: no -c, ships the app root. Retry once on the transient
+      # "Unexpected error ... communicating with the remote server" (it failed
+      # the first live run 2026-07-15 with no retry).
+      - name: "🚨 FORCE push to LIVE version (pinned id) 🚨"
+        run: |
+          set -uo pipefail
+          for attempt in 1 2; do
+            if mapps code:push --force \
+                 -d apps/deadline-confirm/. \
+                 -i "${{ steps.live.outputs.live_id }}"; then
+              exit 0
+            fi
+            echo "push attempt $attempt failed; retrying once in 15s (transient remote error)…"
+            sleep 15
+          done
+          echo "::error::code:push to live version ${{ steps.live.outputs.live_id }} failed after retry"
+          exit 1
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
