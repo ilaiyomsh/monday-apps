@@ -25,7 +25,7 @@
   background: #ffffff;
   border: 0.625px solid var(--ui-border-color, #d0d4e4);
   border-inline-end: none;
-  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
+  border-radius: var(--border-radius-small, 4px) 0 0 var(--border-radius-small, 4px);
   font-family: var(--font-family);
 }
 
@@ -208,7 +208,7 @@
   opacity: 0.45;
   /* Round the strip's bottom corner to match the table's rounded-left bottom
      border (same as the My-Tasks table's add-row strip). */
-  border-end-start-radius: var(--border-radius-medium, 8px);
+  border-end-start-radius: var(--border-radius-small, 4px);
 }
 .addRow:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
@@ -285,9 +285,11 @@
 /* S2 — round the group-color strip to match the table's rounded-left border:
    top-left on the HEADER leading cell, bottom-left on the LAST row / add-row.
    Inset box-shadows follow border-radius, so radius on the frozen leading cell
-   rounds the strip. */
+   rounds the strip. Round 85: small (4px) radius so the 6px strip keeps a mostly
+   vertical edge with only a subtle rounded tip — matching monday's board group
+   corner (an 8px radius on a 6px strip curved the whole top away). */
 .taskHead .taskFirst,
-.taskHead .selectCell { border-start-start-radius: var(--border-radius-medium, 8px); }
+.taskHead .selectCell { border-start-start-radius: var(--border-radius-small, 4px); }
 .taskRow:last-child .taskFirst,
-.taskRow:last-child .selectCell { border-end-start-radius: var(--border-radius-medium, 8px); }
-.addRow::before { border-end-start-radius: var(--border-radius-medium, 8px); }
+.taskRow:last-child .selectCell { border-end-start-radius: var(--border-radius-small, 4px); }
+.addRow::before { border-end-start-radius: var(--border-radius-small, 4px); }
