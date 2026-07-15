@@ -511,6 +511,11 @@ export default function App() {
   const handleSelect = (discussion) => {
     setSelectedDiscussion(discussion);
     setShowList(false);
+    // round111 — picking a discussion auto-collapses the discussions column
+    // (animated in CSS) so the card gets the full width; the existing edge
+    // handle re-expands it. Desktop only: on mobile the panes swap via
+    // showList, and a sticky `collapsed` would blank the list on "back".
+    if (!isMobile) setCollapsed(true);
   };
 
   const handleBack = () => {
