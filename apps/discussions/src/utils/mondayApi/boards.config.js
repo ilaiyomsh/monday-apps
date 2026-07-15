@@ -58,7 +58,40 @@ export const DEFAULT_PREFERENCES = {
   // the same behavior selectively (deciderIsLead on the type template). The
   // decider stays freely replaceable inline after creation.
   defaultDeciderLead: false,
+  // Round 78 (2026-07-14): which DISCUSSION-board ROLE columns auto-fill each
+  // tasks-board ACCESS column when a task is created from a discussion. Keyed by
+  // the tasks access-column alias; each value is a list of discussion role
+  // aliases whose people are UNIONED into that column. Owner-configurable in
+  // Settings → מיפוי (under each access column). The default reproduces the
+  // prior hardcoded behavior: participants → יכולת צפייה, lead + coordinator +
+  // creator → יכולת עריכה. An unset/empty list means "don't auto-fill".
+  accessRoleSources: {
+    taskViewersID: ['participantsID'],
+    taskEditorsID: ['discussionLeadID', 'discussionCoordinatorID', 'discussionCreatorID'],
+  },
 };
+
+// The discussion-board roles selectable as auto-fill sources for the tasks
+// access columns (round 78). `alias` is the discussions COLUMN_SCHEMA alias;
+// `label` is the Hebrew fallback shown when the live column title is unknown.
+export const ACCESS_ROLE_SOURCE_OPTIONS = [
+  { alias: 'discussionLeadID', label: 'מנהל דיון' },
+  { alias: 'discussionCoordinatorID', label: 'מרכז דיון' },
+  { alias: 'discussionCreatorID', label: 'יוצר הדיון' },
+  { alias: 'participantsID', label: 'משתתפים' },
+];
+
+// Union the people off a discussion record for the given role aliases, deduped
+// by id, preserving first-seen order (round 78 access auto-fill). Pure — used by
+// DiscussionCard to build a new task's viewers/editors from the configured roles.
+export function resolveAccessPeople(discussion, aliases) {
+  const byId = new Map();
+  (Array.isArray(aliases) ? aliases : []).forEach((alias) => {
+    const list = Array.isArray(discussion?.[alias]) ? discussion[alias] : [];
+    list.forEach((p) => { if (p?.id != null && !byId.has(String(p.id))) byId.set(String(p.id), p); });
+  });
+  return [...byId.values()];
+}
 
 /*
  * ============================================================================

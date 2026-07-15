@@ -379,3 +379,41 @@
   background: var(--ui-border-color, #e6e9ef);
   color: var(--negative-color, #d83a52);
 }
+
+/* Round 78 — discussion-role auto-fill sources for a tasks access column
+   (יכולת צפייה / יכולת עריכה). Rendered under the column picker. */
+.accessRoles {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.accessRolesLabel {
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+}
+.accessRolesChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.accessRoleChip {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  font-family: var(--font-family);
+  font-size: 12.5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.08s ease, border-color 0.08s ease;
+}
+.accessRoleChip:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.accessRoleChipOn {
+  border-color: var(--primary-color, #0073ea);
+  background: var(--primary-selected-color, #e5f0ff);
+  color: var(--primary-color, #0073ea);
+  font-weight: 600;
+}
