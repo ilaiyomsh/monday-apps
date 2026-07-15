@@ -24,6 +24,7 @@ import { prefetchMyTasks } from './hooks/useMyTasks.js';
 import { prefetchMyDecisions } from './hooks/useMyDecisions.js';
 import { prefetchDiscussions } from './hooks/useDiscussions.js';
 import logger from './utils/logger.js';
+import { installChromeNarrowWatcher } from './utils/chromeNarrow.js';
 import { ToastContainer } from './components/Toast';
 import { ErrorDetailsModal } from './components/ErrorDetailsModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -284,6 +285,11 @@ export default function App() {
       setDiscReturnArm((n) => n + 1);
     }
   }, [effectiveView]);
+  // round103 — while monday's item-card (updates) panel is open it docks and
+  // shrinks the iframe; watch for that width drop and toggle body[data-chrome-narrow]
+  // so each view hides its non-essential chrome (header details / battery / toolbar)
+  // instead of letting it slide left. Mounted once for the whole app.
+  useEffect(() => installChromeNarrowWatcher(), []);
   // active=false: this is a pure TRANSITION replay armed by the token — never a
   // real loading flag. The card pane runs its own data loading after it reveals.
   const discussionsRightSplash = useMinSplash(false, MIN_SPLASH_MS, discReturnArm);
