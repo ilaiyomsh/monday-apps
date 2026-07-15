@@ -15,7 +15,8 @@ import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { MyTasksTable } from './MyTasksTable.jsx';
-import { groupMyTasks, NO_DISCUSSION } from './grouping.js';
+import { groupMyTasks, ensureGroupColors, NO_DISCUSSION } from './grouping.js';
+import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { BuilderControl } from './controls/BuilderControl.jsx';
 import { Segment } from './controls/Segment.jsx';
 import { BuilderIcon } from './controls/BuilderIcon.jsx';
@@ -211,8 +212,11 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     () => sortTasks(filteredItems, sort, { orderById, labelById, priorityOrderById, priorityLabelById }),
     [filteredItems, sort, orderById, labelById, priorityOrderById, priorityLabelById]
   );
+  // Right-click a group header → color palette; the chosen color is shared
+  // across all users (round 77). colorsByKey overrides the auto group color.
+  const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
   const grouped = useMemo(
-    () => groupMyTasks(sortedItems, group.col, {
+    () => ensureGroupColors(groupMyTasks(sortedItems, group.col, {
       labelById, colorById, orderById,
       priorityLabelById, priorityColorById, priorityOrderById,
       isValidStatus,
@@ -222,8 +226,8 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       noPriorityLabel: t('myTasks.noPriority'),
       noDiscussionLabel: t('myTasks.noDiscussion'),
       allTasksLabel: t('myTasks.allTasks'),
-    }),
-    [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t]
+    }), colorsByKey),
+    [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t, colorsByKey]
   );
 
   // Surface the just-created task at the VERY TOP of the view. Under GROUP BY
@@ -567,6 +571,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
 
   return (
     <div className={styles.root} ref={rootRef}>
+      {groupColorMenu}
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
       {/* View title (round 40 typography; round 41 left-aligned) with a compact
@@ -704,6 +709,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                 <button
                   type="button"
                   onClick={() => setCollapsed((p) => ({ ...p, [grp.key]: !p[grp.key] }))}
+                  onContextMenu={(e) => openMenuFor(grp.key, e)}
                   className={styles.groupHeader}
                 >
                   <DropdownChevronDown

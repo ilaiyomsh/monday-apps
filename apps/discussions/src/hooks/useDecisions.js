@@ -176,6 +176,11 @@ export function useDecisions(discussionId) {
   // can FLUSH queued edits through the SAME mutations a committed row uses
   // (assigned each render, just before the hook returns).
   const flushersRef = useRef({});
+  // tempId -> already-created real id. create_item and the follow-up link writes
+  // are separate steps; if a LINK write fails, the decision already exists on the
+  // board. Remembering its id lets a retry RESUME from the link writes instead of
+  // calling create_item again (which would leave a duplicate, unlinked decision).
+  const createdRealIdRef = useRef(new Map());
 
   // (The old linkedIdsRef/linkWriteChainRef mechanism fed ONLY the removed
   // discussion-side mirror write — see the REMOVED note above runCreateDecision.)
@@ -381,6 +386,11 @@ export function useDecisions(discussionId) {
     try {
       const b = new החלטות1Board();
       const decisionCols = getColumns('decisions') || {};
+      // RESUME GUARD: on a retry where create_item already succeeded (only a link
+      // write failed), reuse the existing real id instead of creating a second
+      // item — otherwise a link-step failure duplicates the decision on the board.
+      let realId = createdRealIdRef.current.get(tempId) || null;
+      if (!realId) {
       // monday's create_item IGNORES board_relation values, so the discussion
       // link (discussionLinkID) — and the point link — are set AFTER creation
       // via change_multiple_column_values (the verified write path).
@@ -401,7 +411,11 @@ export function useDecisions(discussionId) {
       }
       if (effectiveDate) data.decisionDateID = formatDate(effectiveDate);
       const created = await b.item().create(data, { createLabelsIfMissing: true }).execute();
-      const realId = created.id;
+      realId = created.id;
+      // Remember it so a failure in a link write below lets retry resume here
+      // instead of re-creating (see createdRealIdRef).
+      createdRealIdRef.current.set(tempId, realId);
+      }
       // PROTECT the real id IMMEDIATELY — before ANY of the awaited link writes
       // below — so a CONCURRENT create's fire-and-forget refresh() can never
       // evict this just-created decision during the eventually-consistent
@@ -451,6 +465,7 @@ export function useDecisions(discussionId) {
         await Promise.allSettled(jobs);
       }
       forgetRow(tempId);
+      createdRealIdRef.current.delete(tempId); // fully committed — drop the resume marker
       // Silent refresh so the list reflects the authoritative server state —
       // fire-and-forget so it doesn't delay the caller or flash a loader. `.catch`
       // guarantees a floating refresh promise can never surface as an unhandled

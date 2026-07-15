@@ -6,6 +6,7 @@ import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
 // Varied stable group-title colors (owner request 2026-07-14) — shared engine.
 import { ensureGroupColors } from '@generated/components/MyTasksView/grouping.js';
+import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
@@ -210,7 +211,9 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     [items, filter, sort, orderById, labelById]
   );
 
-  const grouped = useMemo(() => {
+  // Right-click a group header → shared color palette (round 77).
+  const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
+  const groupedRaw = useMemo(() => {
     if (groupBy === 'status') {
       const groups = new Map();
       filteredTasks.forEach(t => {
@@ -248,6 +251,8 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     }
     return [{ key: '__all__', label: '', color: null, status: undefined, items: filteredTasks }];
   }, [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById]);
+  // Apply the shared per-header color overrides as a final pass.
+  const grouped = useMemo(() => ensureGroupColors(groupedRaw, colorsByKey), [groupedRaw, colorsByKey]);
 
   const allCollapsed = grouped.length > 0 && grouped.every((g) => collapsed[g.key]);
   const allIds = useMemo(() => items.map((t) => t.id), [items]);
@@ -476,6 +481,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
 
   return (
     <div ref={rootRef} className={styles.root}>
+      {groupColorMenu}
       <div className={styles.toolbar}>
         {/* One left-aligned cluster (like My Tasks): primary action, then group-by + collapse-all. */}
         <div className={styles.toolbarLeft}>
@@ -572,6 +578,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
           <div key={grp.key}>
             {groupBy !== 'none' && grp.label && (
               <button type="button" onClick={() => setCollapsed(p => ({ ...p, [grp.key]: !p[grp.key] }))}
+                onContextMenu={(e) => openMenuFor(grp.key, e)}
                 className={styles.groupHeader}>
                 <DropdownChevronDown
                   className={`${styles.chevron} ${collapsed[grp.key] ? styles.chevronCollapsed : ''}`}

@@ -1,0 +1,9 @@
+node_modules/
+.dev/
+coverage/
+tests/
+docs/
+src/client/
+*.log
+.env
+.env.local

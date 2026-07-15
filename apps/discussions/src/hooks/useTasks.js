@@ -34,8 +34,15 @@ async function fetchTasksByDiscussion(discussionId) {
   // rendered by TasksTab/EffectivenessTab only when mapped). Unmapped aliases
   // drop out via the Boolean filter below, so listing it here is always safe.
   const RENDERED = ['responsibilityID', 'deadlineID', 'statusID', 'priorityID'];
-  const taskCols = RENDERED.map((alias) => taskColumns?.[alias]?.id).filter(Boolean);
-  const taskCv = cvSelection(RENDERED.map((alias) => taskColumns?.[alias]?.type));
+  // Permission role-source people columns (item 19/20). NOT rendered, but
+  // resolveCan scans them per task — if they aren't fetched they deserialize to
+  // [] and `itemReady` (an array IS "ready") lets the matrix falsely DENY a task
+  // creator/editor here while allowing them in My Tasks (which does fetch them).
+  // responsibilityID is already fetched above; add the rest.
+  const PERMISSION_COLS = ['taskCreatorID', 'taskViewersID', 'taskEditorsID'];
+  const FETCH_ALIASES = [...RENDERED, ...PERMISSION_COLS];
+  const taskCols = FETCH_ALIASES.map((alias) => taskColumns?.[alias]?.id).filter(Boolean);
+  const taskCv = cvSelection(FETCH_ALIASES.map((alias) => taskColumns?.[alias]?.type));
 
   const data = await api(
     `query ($discussionId: [ID!], $tasksLinkCol: [String!], $taskCols: [String!]) {
@@ -105,6 +112,11 @@ export function useTasks(discussionId, discussionTypeId = null) {
   // FLUSH queued edits through the SAME mutations a committed row uses (assigned
   // each render, just before the hook returns).
   const flushersRef = useRef({});
+  // tempId -> already-created real id. create_item and the follow-up relation
+  // write are two steps; if the SECOND fails, the item already exists on the
+  // board. Remembering its id lets a retry RESUME from the relation write instead
+  // of calling create_item again (which would leave a duplicate, unlinked task).
+  const createdRealIdRef = useRef(new Map());
 
   useEffect(() => {
     if (!discussionId) { setItems([]); setLoading(false); return; }
@@ -373,6 +385,11 @@ export function useTasks(discussionId, discussionTypeId = null) {
     setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, _createFailed: false } : i)));
     try {
       const b = new משימות1Board();
+      // RESUME GUARD: on a retry where create_item already succeeded (only the
+      // relation write failed), reuse the existing real id instead of creating a
+      // second item — otherwise a link-step failure duplicates the task on the board.
+      let realId = createdRealIdRef.current.get(tempId) || null;
+      if (!realId) {
       // monday's create_item IGNORES board_relation values, so the discussion
       // (discussionLinkID) and topic (topicsLinkID) links are set AFTER creation via
       // change_multiple_column_values — the verified write path. Without this
@@ -405,7 +422,11 @@ export function useTasks(discussionId, discussionTypeId = null) {
       }
       if (deadline) data.deadlineID = `${deadline.getFullYear()}-${String(deadline.getMonth() + 1).padStart(2, '0')}-${String(deadline.getDate()).padStart(2, '0')}`;
       const created = await b.item().create(data, { createLabelsIfMissing: true }).execute();
-      const realId = created.id;
+      realId = created.id;
+      // Remember it so a failure in the relation write below lets retry resume
+      // here instead of re-creating (see createdRealIdRef).
+      createdRealIdRef.current.set(tempId, realId);
+      }
       const relations = { discussionLinkID: { linkedItems: [{ id: discussionId }] } };
       if (topicId) relations.topicsLinkID = { linkedItems: [{ id: topicId }] };
       await b.item(realId).update(relations).execute();
@@ -444,6 +465,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
         await Promise.allSettled(jobs);
       }
       forgetRow(tempId);
+      createdRealIdRef.current.delete(tempId); // fully committed — drop the resume marker
       // Silent refresh so the Tasks tab and the Effectiveness tab (both read the
       // shared list) reflect the authoritative server state — fire-and-forget so
       // it doesn't delay the modal close or flash a loader. `.catch` belt-and-

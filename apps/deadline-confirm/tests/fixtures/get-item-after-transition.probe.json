@@ -1,0 +1,31 @@
+{
+  "data": {
+    "items": [
+      {
+        "id": "12532634009",
+        "board": {
+          "id": "18422009734"
+        },
+        "column_values": [
+          {
+            "id": "color_mm58mbec",
+            "text": "בוצע",
+            "index": 1
+          },
+          {
+            "id": "multiple_person_mm582h4p",
+            "text": "עילי שלם"
+          },
+          {
+            "id": "date_mm58ej61",
+            "text": "2026-07-20",
+            "date": "2026-07-20"
+          }
+        ]
+      }
+    ]
+  },
+  "extensions": {
+    "request_id": "c1c1ad99-164b-90b2-afc1-cd1161d3ef01"
+  }
+}

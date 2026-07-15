@@ -18,7 +18,7 @@ vi.mock('@generated/hooks/useMyTasks.js', () => ({
 }));
 vi.mock('@generated/hooks/useDiscussions.js', () => ({ useDiscussions: () => ({ items: [], loading: false }) }));
 vi.mock('@generated/hooks/useViewport.js', () => ({ useViewport: () => ({ isMobile: false, isTablet: false, isDesktop: true }) }));
-vi.mock('@generated/contexts/MondayContext.jsx', () => ({ useMondayContext: () => ({ context: {}, currentUser: { id: '1' } }) }));
+vi.mock('@generated/contexts/MondayContext.jsx', async (importOriginal) => ({ ...(await importOriginal()), useMondayContext: () => ({ context: {}, currentUser: { id: '1' } }) }));
 vi.mock('@generated/hooks/useStatusOptions', () => ({
   useStatusOptions: () => ({ options: [], labelById: {}, colorById: {}, orderById: {} }),
 }));

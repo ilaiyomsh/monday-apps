@@ -82,6 +82,16 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
   const pendingCreates = useRef(new Map());
   // Monotonic temp-id seq — Date.now() collides when the user types fast.
   const tempSeq = useRef(0);
+  // Request-supersede guard: each fetchTopics bumps this and captures the value;
+  // a response only commits if it's still the latest. Without it, switching from
+  // a slow discussion to a fast one lets the slow response land last and render
+  // its topics (and its saved drag-order) under the wrong discussion's card.
+  const reqIdRef = useRef(0);
+  // tempId -> already-created real topic id. create_item and the follow-up order
+  // save are two steps; if the order save fails, the topic already exists on the
+  // board. Remembering its id lets a retry RESUME from the order save instead of
+  // calling create_item again (which would leave a duplicate topic).
+  const createdRealIdRef = useRef(new Map());
   // Retry bookkeeping for failed optimistic creates. Topics flushes pending EDITS
   // via resolveRealId (await), so only the create-args stash is used here.
   const { stashCreateArgs, getCreateArgs, forgetRow } = useOptimisticRows();
@@ -89,6 +99,9 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
   const fetchTopics = useCallback(async (options = {}) => {
     const { showLoader = true } = options;
     if (!discussionId) { setItems([]); setLoading(false); return; }
+    // Claim this request; a later fetchTopics (e.g. switching discussions) bumps
+    // reqIdRef, and any commit below is skipped once superseded.
+    const reqId = ++reqIdRef.current;
     try {
       if (showLoader) setLoading(true);
 
@@ -171,11 +184,13 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
 
       // Apply the user's saved drag order (topics + points per topic).
       const order = await loadOrder(discussionId);
+      if (reqId !== reqIdRef.current) return; // a newer fetch superseded this one
       setItems(applyOrder(topicItems, order));
     } catch (err) {
       if (!err?.__loggedId) logger.error('useTopics', 'טעינת הנושאים נכשלה', err);
     } finally {
-      setLoading(false);
+      // Only the latest request controls the shared loading flag.
+      if (reqId === reqIdRef.current) setLoading(false);
     }
   }, [discussionId]);
 
@@ -234,30 +249,37 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, _pending: true, _createFailed: false } : t)));
 
     const promise = (async () => {
-      const boardId = getBoardId('topics');
-      const relation = getColumns('topics')?.discussionLinkID;
-      const dispCol = getColumns('topics')?.topicNotForDiscussionID;
-      const creatorCol = getColumns('topics')?.topicCreatorID;
-      const columnValues = {};
-      if (relation?.id) {
-        columnValues[relation.id] = formatValue(relation.type || 'board_relation', { linkedItems: [{ id: discussionId }] });
+      // RESUME GUARD: on a retry where create_item already succeeded (only the
+      // order save failed), reuse the existing real id instead of creating a
+      // second topic.
+      let createdId = createdRealIdRef.current.get(tempId) || '';
+      if (!createdId) {
+        const boardId = getBoardId('topics');
+        const relation = getColumns('topics')?.discussionLinkID;
+        const dispCol = getColumns('topics')?.topicNotForDiscussionID;
+        const creatorCol = getColumns('topics')?.topicCreatorID;
+        const columnValues = {};
+        if (relation?.id) {
+          columnValues[relation.id] = formatValue(relation.type || 'board_relation', { linkedItems: [{ id: discussionId }] });
+        }
+        // "האם להציג?" CHECKED = show; default a new topic to shown.
+        if (dispCol?.id) {
+          columnValues[dispCol.id] = formatValue('checkbox', true);
+        }
+        // Stamp the creator (avatar) into the mapped people column.
+        if (creatorCol?.id && creatorId) {
+          columnValues[creatorCol.id] = formatValue('people', [creatorId]);
+        }
+        const created = await api(
+          `mutation ($boardId: ID!, $name: String!, $columnValues: JSON!) {
+            create_item(board_id: $boardId, item_name: $name, column_values: $columnValues) { id }
+          }`,
+          { boardId, name: trimmed, columnValues: JSON.stringify(columnValues) }
+        );
+        createdId = String(created?.create_item?.id || '');
+        if (!createdId) throw new Error('create_item returned no id');
+        createdRealIdRef.current.set(tempId, createdId);
       }
-      // "האם להציג?" CHECKED = show; default a new topic to shown.
-      if (dispCol?.id) {
-        columnValues[dispCol.id] = formatValue('checkbox', true);
-      }
-      // Stamp the creator (avatar) into the mapped people column.
-      if (creatorCol?.id && creatorId) {
-        columnValues[creatorCol.id] = formatValue('people', [creatorId]);
-      }
-      const created = await api(
-        `mutation ($boardId: ID!, $name: String!, $columnValues: JSON!) {
-          create_item(board_id: $boardId, item_name: $name, column_values: $columnValues) { id }
-        }`,
-        { boardId, name: trimmed, columnValues: JSON.stringify(columnValues) }
-      );
-      const createdId = String(created?.create_item?.id || '');
-      if (!createdId) throw new Error('create_item returned no id');
       const saved = await loadOrder(discussionId);
       await saveTopicOrder(
         discussionId,
@@ -272,6 +294,7 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
         // Swap in the real id in place — no full refetch (avoids the flash/jump).
         setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, _realId: createdId, _pending: false, _createFailed: false } : t)));
         forgetRow(tempId);
+        createdRealIdRef.current.delete(tempId); // fully committed — drop the resume marker
       })
       .catch((err) => {
         if (!err?.__loggedId) logger.error('useTopics', 'הוספת נושא נכשלה', err);
