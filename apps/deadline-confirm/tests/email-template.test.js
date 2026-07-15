@@ -1,12 +1,15 @@
 // Contract tests for src/helpers/email-template.js (v2 block-based email
 // templates, rendered server-side to email-client-safe HTML: nested tables,
 // inline styles, no JS/external assets, {ITEM_ID} literal in button hrefs).
+// v3: renderEmailTemplate takes accountId and forwards it to every embedded
+// button snippet — each href carries a=<accountId>.
 
 import { describe, it, expect } from 'vitest';
 import { renderEmailTemplate, ALLOWED_FONTS } from '../src/helpers/email-template.js';
 
 const baseUrl = 'https://x.example';
 const secret = 'SEC123';
+const accountId = '777';
 
 const buttons = [
   { id: 'b_aaaa1111', name: 'בוצע', style: { color: '#00854d', icon: '✓', size: 'md' } },
@@ -37,7 +40,8 @@ const template = {
   ],
 };
 
-const render = (tpl = template) => renderEmailTemplate({ baseUrl, secret, template: tpl, buttons });
+const render = (tpl = template) =>
+  renderEmailTemplate({ baseUrl, secret, template: tpl, buttons, accountId });
 
 describe('renderEmailTemplate', () => {
   it('wraps everything in an outer <table role="presentation"> with width="600"', () => {
@@ -74,14 +78,23 @@ describe('renderEmailTemplate', () => {
     expect(html).toContain('&lt;צוות&gt;');
   });
 
-  it('buttons block renders BOTH button hrefs with the literal {ITEM_ID}, &amp;k=<secret> and each btn id', () => {
+  it('buttons block renders BOTH button hrefs with the literal {ITEM_ID}, a=<accountId>, &amp;k=<secret> and each btn id (pinned param order)', () => {
     const html = render();
     expect(html).toContain(
-      'href="https://x.example/confirm?itemId={ITEM_ID}&amp;k=SEC123&amp;btn=b_aaaa1111"',
+      'href="https://x.example/confirm?itemId={ITEM_ID}&amp;a=777&amp;k=SEC123&amp;btn=b_aaaa1111"',
     );
     expect(html).toContain(
-      'href="https://x.example/confirm?itemId={ITEM_ID}&amp;k=SEC123&amp;btn=b_bbbb2222"',
+      'href="https://x.example/confirm?itemId={ITEM_ID}&amp;a=777&amp;k=SEC123&amp;btn=b_bbbb2222"',
     );
+  });
+
+  it('every rendered button href carries the a= account param (none is missing it)', () => {
+    const html = render();
+    const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map(([, href]) => href);
+    expect(hrefs.length).toBeGreaterThanOrEqual(2);
+    for (const href of hrefs) {
+      expect(href).toContain('a=777');
+    }
   });
 
   it('renders the two button snippets in buttonIds order (b_aaaa1111 before b_bbbb2222)', () => {

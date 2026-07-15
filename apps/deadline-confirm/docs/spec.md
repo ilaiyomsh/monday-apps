@@ -349,3 +349,50 @@ responses; OAuth flow + broken-state handling; sessionToken-guarded admin
 API; single-tenant lockdown; SecureStorage-only persistence; log line
 format {ts, ip, itemId, outcome} (outcome enum extended: page_served,
 already_done, unknown_button, bad_request).
+
+# V3 Amendment — Multi-Tenant (owner decision, 2026-07-15)
+
+The single-tenant lockdown is replaced by structural per-account isolation.
+Motivation: the app is offered to multiple customers; SecureStorage is
+segregated per APP only, so account isolation is the storage layer's job
+(monday multitenancy best practice: namespace keys by account id).
+
+## Storage
+
+- Every tenant key lives under its account prefix:
+  `<accountId>:config | <accountId>:link_secret | <accountId>:oauth_token |
+  <accountId>:oauth_identity`. Access ONLY via
+  `createAppStorage(...).forAccount(accountId)`.
+- OAuth state nonces stay unprefixed (`oauth_state:<nonce>`, globally-unique
+  nonce) but the record carries `{ createdAt, accountId }`;
+  `consumeOauthState` returns `{ accountId } | null`.
+- The 60s read cache is keyed by the full prefixed key — one account's hot
+  entry can never serve another. Any write still flushes the whole cache.
+- NO migration from v2's bare keys (pre-customer decision): after deploy the
+  admin reconfigures and reconnects; old bare-key values are orphaned.
+
+## Links & /confirm
+
+- Confirm URLs carry the tenant:
+  `/confirm?itemId={ITEM_ID}&a=<accountId>&k=<secret>&btn=<buttonId>`
+  (`a` validated `/^\d{1,20}$/`; missing/invalid → 400 bad_request).
+- The secret gate compares against `forAccount(a)`'s secret; the POST action
+  runs on that account's config/token. Rate-limit buckets are per
+  `${a}:${ip}`.
+- v2 links (no `a=`) become invalid (400) — tenants re-copy email HTML from
+  the admin after the rollout.
+
+## Admin, OAuth and the allowlist
+
+- `/api/*` handlers operate on the SESSION's account
+  (`storage.forAccount(req.session.accountId)`) — cross-tenant reads are
+  structurally impossible; snippets/templates embed the session's `a=`.
+- `/oauth/start` requires `?st=<sessionToken>` (the SPA passes it): the
+  account is extracted server-side (verifySessionToken), stamped into the
+  state nonce, and the callback stores the token under that account.
+  Missing/invalid st → 401; account outside a non-empty allowlist → 403.
+- `ALLOWED_ACCOUNT_ID` (single) is superseded by OPTIONAL
+  `ALLOWED_ACCOUNT_IDS` (comma-separated allowlist). Empty/unset = every
+  installing account is admitted (isolation is structural). The legacy
+  variable, when still set, is merged into the list — existing deployments
+  keep their lockdown until env is updated.

@@ -1,9 +1,12 @@
 // App storage over a SecureStorage-compatible backend, with a 60s in-memory
 // read cache for the hot /confirm path (spec §4). ALL keys live in
-// SecureStorage (owner decision 2026-07-14 — the spec's Storage/SecureStorage
-// split collapsed to SecureStorage only, single-tenant).
+// SecureStorage; v3 is multi-tenant — every account's data sits under its own
+// `${accountId}:` key prefix (SecureStorage is segregated per APP only, so
+// account isolation is this layer's job).
 //
-// Keys: config | link_secret | oauth_token | oauth_identity | oauth_state:<nonce>
+// Keys: <accountId>:config | <accountId>:link_secret | <accountId>:oauth_token
+//       <accountId>:oauth_identity | oauth_state:<nonce> (nonce unprefixed —
+//       globally unique; the record carries the accountId)
 
 export const KEYS = {
   CONFIG: 'config',
@@ -23,16 +26,19 @@ export const KEYS = {
 /**
  * Create the app storage layer.
  *
- * Caching contract (spec §4): `config`, `link_secret`, `oauth_token` reads
- * are cached in memory for `ttlMs`; a cached read performs NO backend call.
- * After `ttlMs` elapses the next read hits the backend again. ANY write
- * through this layer invalidates the whole read cache immediately (admin
- * writes must be visible on the next click).
+ * Caching contract (spec §4): per-account `config`, `link_secret`,
+ * `oauth_token` reads are cached in memory for `ttlMs`; a cached read
+ * performs NO backend call. After `ttlMs` elapses the next read hits the
+ * backend again. ANY write through this layer — any account — invalidates
+ * the whole read cache immediately (admin writes must be visible on the
+ * next click). The cache is keyed by the full prefixed key, so one
+ * account's hot entry can never serve another account.
  *
- * OAuth state nonces (CSRF, spec §8): `issueOauthState(nonce)` persists
- * `oauth_state:<nonce>` with the issue time; `consumeOauthState(nonce)`
- * is SINGLE-USE — it deletes the entry and returns true only when the entry
- * existed and is younger than `stateMaxAgeMs` (default 10 min). Never cached.
+ * OAuth state nonces (CSRF, spec §8): `issueOauthState(nonce, accountId)`
+ * persists `oauth_state:<nonce>` with the issue time and owning account;
+ * `consumeOauthState(nonce)` is SINGLE-USE — it deletes the entry and
+ * returns `{ accountId }` only when the entry existed and is younger than
+ * `stateMaxAgeMs` (default 10 min), else null. Never cached.
  *
  * `oauth_identity` ({ id, name }) is admin-display data — read/write through,
  * never cached.
@@ -64,33 +70,45 @@ export function createAppStorage({ backend, ttlMs = 60_000, stateMaxAgeMs = 600_
     invalidateCache();
   }
 
+  /**
+   * Account-scoped accessors — the only way to reach config/secret/token.
+   * @param {string} accountId
+   */
+  function forAccount(accountId) {
+    const scopedKey = (name) => `${accountId}:${name}`;
+    return {
+      getConfig: () => cachedGet(scopedKey(KEYS.CONFIG)),
+      setConfig: (config) => write(scopedKey(KEYS.CONFIG), config),
+
+      getLinkSecret: () => cachedGet(scopedKey(KEYS.LINK_SECRET)),
+      setLinkSecret: (secret) => write(scopedKey(KEYS.LINK_SECRET), secret),
+
+      getOauthToken: () => cachedGet(scopedKey(KEYS.OAUTH_TOKEN)),
+      setOauthToken: (token) => write(scopedKey(KEYS.OAUTH_TOKEN), token),
+
+      async getOauthIdentity() {
+        return (await backend.get(scopedKey(KEYS.OAUTH_IDENTITY))) ?? null;
+      },
+      async setOauthIdentity(identity) {
+        await backend.set(scopedKey(KEYS.OAUTH_IDENTITY), identity);
+      },
+    };
+  }
+
   return {
-    getConfig: () => cachedGet(KEYS.CONFIG),
-    setConfig: (config) => write(KEYS.CONFIG, config),
+    forAccount,
 
-    getLinkSecret: () => cachedGet(KEYS.LINK_SECRET),
-    setLinkSecret: (secret) => write(KEYS.LINK_SECRET, secret),
-
-    getOauthToken: () => cachedGet(KEYS.OAUTH_TOKEN),
-    setOauthToken: (token) => write(KEYS.OAUTH_TOKEN, token),
-
-    async getOauthIdentity() {
-      return (await backend.get(KEYS.OAUTH_IDENTITY)) ?? null;
-    },
-    async setOauthIdentity(identity) {
-      await backend.set(KEYS.OAUTH_IDENTITY, identity);
-    },
-
-    async issueOauthState(nonce) {
-      await backend.set(`${KEYS.OAUTH_STATE_PREFIX}${nonce}`, { createdAt: now() });
+    async issueOauthState(nonce, accountId) {
+      await backend.set(`${KEYS.OAUTH_STATE_PREFIX}${nonce}`, { createdAt: now(), accountId });
     },
 
     async consumeOauthState(nonce) {
       const key = `${KEYS.OAUTH_STATE_PREFIX}${nonce}`;
       const entry = (await backend.get(key)) ?? null;
-      if (!entry) return false;
+      if (!entry) return null;
       await backend.delete(key); // single-use: gone regardless of age
-      return now() - entry.createdAt < stateMaxAgeMs;
+      if (now() - entry.createdAt >= stateMaxAgeMs) return null;
+      return { accountId: entry.accountId };
     },
 
     invalidateCache,

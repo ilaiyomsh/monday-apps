@@ -180,11 +180,12 @@ export function createAdminRouter({ storage, api, env, requireSession }) {
 
   router.get(
     '/api/state',
-    guarded(async (_req, res) => {
+    guarded(async (req, res) => {
+      const scoped = storage.forAccount(req.session.accountId);
       const [config, linkSecret, token] = await Promise.all([
-        storage.getConfig(),
-        storage.getLinkSecret(),
-        storage.getOauthToken(),
+        scoped.getConfig(),
+        scoped.getLinkSecret(),
+        scoped.getOauthToken(),
       ]);
 
       let oauth;
@@ -215,7 +216,7 @@ export function createAdminRouter({ storage, api, env, requireSession }) {
         res.status(400).json({ error: 'invalid_config', field: result.field });
         return;
       }
-      await storage.setConfig(result.config);
+      await storage.forAccount(req.session.accountId).setConfig(result.config);
       // The normalized config (incl. generated ids) — the client re-syncs from it.
       res.json({ ok: true, config: result.config });
     })
@@ -223,9 +224,9 @@ export function createAdminRouter({ storage, api, env, requireSession }) {
 
   router.post(
     '/api/secret/rotate',
-    guarded(async (_req, res) => {
+    guarded(async (req, res) => {
       const secret = generateSecret();
-      await storage.setLinkSecret(secret);
+      await storage.forAccount(req.session.accountId).setLinkSecret(secret);
       // Returned in FULL exactly once — the admin view regenerates snippets.
       res.json({ secret });
     })
@@ -239,18 +240,21 @@ export function createAdminRouter({ storage, api, env, requireSession }) {
         res.status(400).json({ error: 'missing_btn' });
         return;
       }
-      const secret = await storage.getLinkSecret();
+      const scoped = storage.forAccount(req.session.accountId);
+      const secret = await scoped.getLinkSecret();
       if (!secret) {
         res.status(409).json({ error: 'no_secret' });
         return;
       }
-      const config = await storage.getConfig();
+      const config = await scoped.getConfig();
       const button = config?.buttons?.find((b) => b.id === btnId) ?? null;
       if (!button) {
         res.status(404).json({ error: 'unknown_button' });
         return;
       }
-      res.json({ snippet: renderSnippet({ baseUrl: env.baseUrl, secret, button }) });
+      res.json({
+        snippet: renderSnippet({ baseUrl: env.baseUrl, secret, button, accountId: req.session.accountId }),
+      });
     })
   );
 
@@ -262,12 +266,13 @@ export function createAdminRouter({ storage, api, env, requireSession }) {
         res.status(400).json({ error: 'missing_tpl' });
         return;
       }
-      const secret = await storage.getLinkSecret();
+      const scoped = storage.forAccount(req.session.accountId);
+      const secret = await scoped.getLinkSecret();
       if (!secret) {
         res.status(409).json({ error: 'no_secret' });
         return;
       }
-      const config = await storage.getConfig();
+      const config = await scoped.getConfig();
       const template = config?.templates?.find((t) => t.id === tplId) ?? null;
       if (!template) {
         res.status(404).json({ error: 'unknown_template' });
@@ -279,6 +284,7 @@ export function createAdminRouter({ storage, api, env, requireSession }) {
           secret,
           template,
           buttons: config?.buttons ?? [],
+          accountId: req.session.accountId,
         }),
       });
     })

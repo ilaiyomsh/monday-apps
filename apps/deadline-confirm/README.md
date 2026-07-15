@@ -59,7 +59,7 @@ USE_LOCAL_STORAGE=true npm start   # ריצה מקומית עם אחסון בז�
    | משתנה | ערך |
    |---|---|
    | `MONDAY_CLIENT_ID` / `MONDAY_CLIENT_SECRET` | מה-Dev Center → האפליקציה → OAuth |
-   | `ALLOWED_ACCOUNT_ID` | ה-Account ID של חשבון הלקוח (נעילת single-tenant) |
+   | `ALLOWED_ACCOUNT_IDS` | אופציונלי: רשימת Account IDs מופרדת בפסיקים (allowlist). ריק = כל חשבון שמתקין מתקבל — הבידוד בין חשבונות מובנה באחסון. ‏`ALLOWED_ACCOUNT_ID` הישן ממוזג פנימה אם עדיין מוגדר |
    | `BASE_URL` | הכתובת משלב 1 (Version URL בשלב draft / ‏Live URL בפרודקשן), בלי `/` בסוף |
 3. **Dev Center:** להוסיף פיצ'ר **Administration View** שמצביע על `<BASE_URL>/admin`;
    להפעיל OAuth עם scopes: `me:read boards:read boards:write updates:write`

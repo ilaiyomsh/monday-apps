@@ -1,9 +1,12 @@
-// Integration tests for the admin API v2 (contract: src/routes/admin-api.js
+// Integration tests for the admin API (contract: src/routes/admin-api.js
 // module header). The REAL Express pipeline runs via createApp; auth uses REAL
 // JWTs signed with the app client secret; the backend is inspected directly
 // for persisted values. Response bodies the contract fixes are asserted with
 // deep-equality (every field). v2 covers the multi-button config (server-side
 // b_/t_ id generation), GET /api/snippet?btn= and GET /api/email-template?tpl=.
+// v3 multi-tenant: every handler operates on the SESSION's account scope
+// (storage.forAccount(req.session.accountId), backend keys `${accountId}:…`),
+// and rendered hrefs carry a=<the session's accountId>.
 
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
@@ -13,12 +16,18 @@ import { createAppStorage } from '../src/services/storage.js';
 import { createMemoryBackend } from '../src/storage/memory-backend.js';
 import { MondayApiError } from '../src/services/monday-api.js';
 
+const ACCOUNT_ID = '777';
+const OTHER_ACCOUNT_ID = '888';
+
 const ENV = {
   clientId: 'cid-1',
   clientSecret: 'cs-1',
-  allowedAccountId: '777',
+  allowedAccountIds: [ACCOUNT_ID],
   baseUrl: 'https://app.example',
 };
+
+/** Backend key inside the session account's namespace. */
+const scoped = (key, accountId = ACCOUNT_ID) => `${accountId}:${key}`;
 
 const BASE64URL_43 = /^[A-Za-z0-9_-]{43}$/;
 const BUTTON_ID = /^b_[A-Za-z0-9_-]{4,16}$/;
@@ -28,7 +37,7 @@ function authHeader({ accountId = 777, userId = 1 } = {}) {
   return jwt.sign({ dat: { account_id: accountId, user_id: userId } }, 'cs-1');
 }
 
-function makeHarness({ seed = {} } = {}) {
+function makeHarness({ seed = {}, env = ENV } = {}) {
   const backend = createMemoryBackend(seed);
   const storage = createAppStorage({ backend });
   const api = { fetchMe: vi.fn() };
@@ -36,7 +45,7 @@ function makeHarness({ seed = {} } = {}) {
     storage,
     api,
     rateLimiter: { allow: () => true },
-    env: ENV,
+    env,
     fetchImpl: vi.fn(),
   });
   return { app, backend, api };
@@ -161,8 +170,8 @@ describe('GET /api/state', () => {
     expect(api.fetchMe).not.toHaveBeenCalled();
   });
 
-  it('masks a stored secret as exactly **** plus its last 4 characters', async () => {
-    const { app } = makeHarness({ seed: { link_secret: 'abcdefgh1234' } });
+  it("masks the SESSION account's stored secret as exactly **** plus its last 4 characters", async () => {
+    const { app } = makeHarness({ seed: { [scoped('link_secret')]: 'abcdefgh1234' } });
 
     const res = await request(app).get('/api/state').set('Authorization', authHeader());
 
@@ -175,8 +184,8 @@ describe('GET /api/state', () => {
     });
   });
 
-  it('reports oauth connected with the live identity name when a token is stored and fetchMe succeeds', async () => {
-    const { app, api } = makeHarness({ seed: { oauth_token: 'tok-live' } });
+  it("reports oauth connected with the live identity name when the SESSION account's token is stored and fetchMe succeeds", async () => {
+    const { app, api } = makeHarness({ seed: { [scoped('oauth_token')]: 'tok-live' } });
     api.fetchMe.mockResolvedValue({ id: '9', name: 'דנה' });
 
     const res = await request(app).get('/api/state').set('Authorization', authHeader());
@@ -192,7 +201,7 @@ describe('GET /api/state', () => {
   });
 
   it('reports oauth broken when a token is stored but fetchMe throws an unauthorized MondayApiError (spec §15.9)', async () => {
-    const { app, api } = makeHarness({ seed: { oauth_token: 'tok-revoked' } });
+    const { app, api } = makeHarness({ seed: { [scoped('oauth_token')]: 'tok-revoked' } });
     api.fetchMe.mockRejectedValue(new MondayApiError('x', { status: 401, unauthorized: true }));
 
     const res = await request(app).get('/api/state').set('Authorization', authHeader());
@@ -211,8 +220,8 @@ describe('GET /api/state', () => {
 // PUT /api/config — v2 contract (admin-api.js module header)
 // ---------------------------------------------------------------------------
 
-describe('PUT /api/config (v2)', () => {
-  it('accepts a full v2 config, generates b_/t_ ids for id-less entries, echoes the normalized config, and persists it identically (targetIndex 0 stays 0)', async () => {
+describe('PUT /api/config (v2 shape, v3 scoping)', () => {
+  it("accepts a full v2 config, generates b_/t_ ids for id-less entries, echoes the normalized config, and persists it identically under the SESSION account's key (targetIndex 0 stays 0)", async () => {
     const { app, backend } = makeHarness();
 
     const res = await request(app)
@@ -305,8 +314,10 @@ describe('PUT /api/config (v2)', () => {
     expect(res.body.config.buttons[1].id).not.toBe('b_done0001');
     // 0 is a REAL label id — it must survive as the number 0, never dropped.
     expect(res.body.config.buttons[0].targetIndex).toBe(0);
-    // The backend copy deep-equals the response config (client re-syncs from it).
-    expect(await backend.get('config')).toStrictEqual(res.body.config);
+    // The backend copy deep-equals the response config (client re-syncs from
+    // it) — persisted under the SESSION account's namespace, not the bare key.
+    expect(await backend.get(scoped('config'))).toStrictEqual(res.body.config);
+    expect(await backend.get('config')).toBeNull();
   });
 
   const INVALID_CASES = [
@@ -525,13 +536,13 @@ describe('PUT /api/config (v2)', () => {
 
       expect(res.status).toBe(400);
       expect(res.body).toStrictEqual({ error: 'invalid_config', field });
-      expect(await backend.get('config')).toBeNull();
+      expect(await backend.get(scoped('config'))).toBeNull();
     }
   );
 });
 
 describe('POST /api/secret/rotate', () => {
-  it('returns a 43-char base64url secret in full exactly once and persists it as link_secret', async () => {
+  it("returns a 43-char base64url secret in full exactly once and persists it under the SESSION account's link_secret key", async () => {
     const { app, backend } = makeHarness();
 
     const res = await request(app)
@@ -540,7 +551,8 @@ describe('POST /api/secret/rotate', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toStrictEqual({ secret: expect.stringMatching(BASE64URL_43) });
-    expect(await backend.get('link_secret')).toBe(res.body.secret);
+    expect(await backend.get(scoped('link_secret'))).toBe(res.body.secret);
+    expect(await backend.get('link_secret')).toBeNull();
   });
 
   it('returns a DIFFERENT secret on a second rotation and overwrites the stored one (spec §15.6)', async () => {
@@ -556,7 +568,7 @@ describe('POST /api/secret/rotate', () => {
     expect(second.status).toBe(200);
     expect(second.body.secret).toMatch(BASE64URL_43);
     expect(second.body.secret).not.toBe(first.body.secret);
-    expect(await backend.get('link_secret')).toBe(second.body.secret);
+    expect(await backend.get(scoped('link_secret'))).toBe(second.body.secret);
   });
 });
 
@@ -564,11 +576,13 @@ describe('POST /api/secret/rotate', () => {
 // GET /api/snippet?btn=<id> — v2
 // ---------------------------------------------------------------------------
 
-describe('GET /api/snippet (v2)', () => {
+describe('GET /api/snippet (v2 shape, v3 a= param)', () => {
   const SECRET = 'SEC_abc12345_zzzz';
 
   it('responds 400 when the btn query param is missing, even with secret and config stored', async () => {
-    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
+    const { app } = makeHarness({
+      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
+    });
 
     const res = await request(app).get('/api/snippet').set('Authorization', authHeader());
 
@@ -576,7 +590,9 @@ describe('GET /api/snippet (v2)', () => {
   });
 
   it('responds 404 for a btn id that does not exist in the stored config', async () => {
-    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
+    const { app } = makeHarness({
+      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
+    });
 
     const res = await request(app)
       .get('/api/snippet?btn=b_nosuch999')
@@ -585,8 +601,8 @@ describe('GET /api/snippet (v2)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('responds 409 no_secret when no link secret is stored, even for a known button', async () => {
-    const { app } = makeHarness({ seed: { config: STORED_CONFIG } });
+  it("responds 409 no_secret when the SESSION account has no link secret, even for a known button", async () => {
+    const { app } = makeHarness({ seed: { [scoped('config')]: STORED_CONFIG } });
 
     const res = await request(app)
       .get('/api/snippet?btn=b_done0001')
@@ -596,8 +612,10 @@ describe('GET /api/snippet (v2)', () => {
     expect(res.body).toStrictEqual({ error: 'no_secret' });
   });
 
-  it('renders the button snippet containing the confirm URL (literal {ITEM_ID}, &amp; entities, stored secret, btn id) and the button name', async () => {
-    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
+  it("renders the button snippet whose confirm URL carries a=<the session's accountId> in the pinned order (itemId, a, k, btn) plus the button name", async () => {
+    const { app } = makeHarness({
+      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
+    });
 
     const res = await request(app)
       .get('/api/snippet?btn=b_done0001')
@@ -606,7 +624,7 @@ describe('GET /api/snippet (v2)', () => {
     expect(res.status).toBe(200);
     expect(res.body).toStrictEqual({ snippet: expect.any(String) });
     expect(res.body.snippet).toContain(
-      `https://app.example/confirm?itemId={ITEM_ID}&amp;k=${SECRET}&amp;btn=b_done0001`
+      `https://app.example/confirm?itemId={ITEM_ID}&amp;a=${ACCOUNT_ID}&amp;k=${SECRET}&amp;btn=b_done0001`
     );
     expect(res.body.snippet).toContain('סמן כבוצע');
   });
@@ -616,11 +634,13 @@ describe('GET /api/snippet (v2)', () => {
 // GET /api/email-template?tpl=<id> — v2
 // ---------------------------------------------------------------------------
 
-describe('GET /api/email-template (v2)', () => {
+describe('GET /api/email-template (v2 shape, v3 a= param)', () => {
   const SECRET = 'SEC_abc12345_zzzz';
 
   it('responds 400 when the tpl query param is missing, even with secret and config stored', async () => {
-    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
+    const { app } = makeHarness({
+      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
+    });
 
     const res = await request(app)
       .get('/api/email-template')
@@ -630,7 +650,9 @@ describe('GET /api/email-template (v2)', () => {
   });
 
   it('responds 404 for a tpl id that does not exist in the stored config', async () => {
-    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
+    const { app } = makeHarness({
+      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
+    });
 
     const res = await request(app)
       .get('/api/email-template?tpl=t_nosuch999')
@@ -639,8 +661,8 @@ describe('GET /api/email-template (v2)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('responds 409 no_secret when no link secret is stored, even for a known template', async () => {
-    const { app } = makeHarness({ seed: { config: STORED_CONFIG } });
+  it("responds 409 no_secret when the SESSION account has no link secret, even for a known template", async () => {
+    const { app } = makeHarness({ seed: { [scoped('config')]: STORED_CONFIG } });
 
     const res = await request(app)
       .get('/api/email-template?tpl=t_remind001')
@@ -650,8 +672,10 @@ describe('GET /api/email-template (v2)', () => {
     expect(res.body).toStrictEqual({ error: 'no_secret' });
   });
 
-  it('renders the full email HTML containing the text block content, the referenced btn id, and the literal {ITEM_ID}', async () => {
-    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
+  it("renders the full email HTML whose button href carries a=<the session's accountId>, plus the text block content and the literal {ITEM_ID}", async () => {
+    const { app } = makeHarness({
+      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
+    });
 
     const res = await request(app)
       .get('/api/email-template?tpl=t_remind001')
@@ -660,7 +684,80 @@ describe('GET /api/email-template (v2)', () => {
     expect(res.status).toBe(200);
     expect(res.body).toStrictEqual({ html: expect.any(String) });
     expect(res.body.html).toContain('נא לאשר את המשימה');
-    expect(res.body.html).toContain('b_done0001');
+    expect(res.body.html).toContain(
+      `https://app.example/confirm?itemId={ITEM_ID}&amp;a=${ACCOUNT_ID}&amp;k=${SECRET}&amp;btn=b_done0001`
+    );
     expect(res.body.html).toContain('{ITEM_ID}');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v3 per-session account scoping — isolation invariants
+// ---------------------------------------------------------------------------
+
+describe('per-session account scoping (v3 isolation)', () => {
+  const TWO_ACCOUNT_ENV = { ...ENV, allowedAccountIds: [ACCOUNT_ID, OTHER_ACCOUNT_ID] };
+
+  it("account 777's PUT /api/config is INVISIBLE in account 888's GET /api/state and visible in its own", async () => {
+    const { app } = makeHarness({ env: TWO_ACCOUNT_ENV });
+
+    const put = await request(app)
+      .put('/api/config')
+      .set('Authorization', authHeader({ accountId: 777 }))
+      .send(validConfig());
+    expect(put.status).toBe(200);
+
+    const stateB = await request(app)
+      .get('/api/state')
+      .set('Authorization', authHeader({ accountId: 888 }));
+    expect(stateB.status).toBe(200);
+    expect(stateB.body).toStrictEqual({
+      config: null,
+      secret: null,
+      oauth: { status: 'disconnected' },
+      baseUrl: 'https://app.example',
+    });
+
+    const stateA = await request(app)
+      .get('/api/state')
+      .set('Authorization', authHeader({ accountId: 777 }));
+    expect(stateA.body.config).toStrictEqual(put.body.config);
+  });
+
+  it("account 777's rotated secret lands under its OWN scoped key, stays null for account 888, and never leaks into 888's state mask", async () => {
+    const { app, backend } = makeHarness({ env: TWO_ACCOUNT_ENV });
+
+    const rotate = await request(app)
+      .post('/api/secret/rotate')
+      .set('Authorization', authHeader({ accountId: 777 }));
+    expect(rotate.status).toBe(200);
+
+    expect(await backend.get(scoped('link_secret', ACCOUNT_ID))).toBe(rotate.body.secret);
+    expect(await backend.get(scoped('link_secret', OTHER_ACCOUNT_ID))).toBeNull();
+
+    const stateB = await request(app)
+      .get('/api/state')
+      .set('Authorization', authHeader({ accountId: 888 }));
+    expect(stateB.body.secret).toBeNull();
+  });
+
+  it("account 888's session renders ITS OWN a= in the snippet href, from ITS OWN stored secret/config", async () => {
+    const SECRET_B = 'SEC_of_888_only_x';
+    const { app } = makeHarness({
+      env: TWO_ACCOUNT_ENV,
+      seed: {
+        [scoped('link_secret', OTHER_ACCOUNT_ID)]: SECRET_B,
+        [scoped('config', OTHER_ACCOUNT_ID)]: STORED_CONFIG,
+      },
+    });
+
+    const res = await request(app)
+      .get('/api/snippet?btn=b_done0001')
+      .set('Authorization', authHeader({ accountId: 888 }));
+
+    expect(res.status).toBe(200);
+    expect(res.body.snippet).toContain(
+      `https://app.example/confirm?itemId={ITEM_ID}&amp;a=${OTHER_ACCOUNT_ID}&amp;k=${SECRET_B}&amp;btn=b_done0001`
+    );
   });
 });

@@ -5,6 +5,7 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { oauthDonePage, oauthErrorPage } from '../helpers/pages.js';
+import { verifySessionToken } from '../middlewares/session-token.js';
 import { logError, logInfo } from '../helpers/logger.js';
 
 export const OAUTH_SCOPES = 'me:read boards:read boards:write updates:write';
@@ -17,7 +18,7 @@ export const TOKEN_URL = 'https://auth.monday.com/oauth2/token';
  * @param {object} deps
  * @param {ReturnType<import('../services/storage.js').createAppStorage>} deps.storage
  * @param {ReturnType<import('../services/monday-api.js').createMondayApi>} deps.api
- * @param {{ clientId: string, clientSecret: string, baseUrl: string }} deps.env
+ * @param {{ clientId: string, clientSecret: string, baseUrl: string, allowedAccountIds: string[] }} deps.env
  * @param {typeof fetch} [deps.fetchImpl]
  * @returns {import('express').Router}
  */
@@ -30,10 +31,24 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
     res.status(status).set('Cache-Control', 'no-store').type('html').send(html);
   }
 
-  router.get('/oauth/start', async (_req, res) => {
+  router.get('/oauth/start', async (req, res) => {
     try {
+      // v3: the connecting ACCOUNT comes from a monday sessionToken passed by
+      // the admin SPA (?st=) — the callback stores the token under it.
+      const session = verifySessionToken(req.query.st, env.clientSecret);
+      if (!session) {
+        logError('oauth', 'start refused: missing/invalid sessionToken', {});
+        sendPage(res, 401, oauthErrorPage('חיבור לא מורשה'));
+        return;
+      }
+      if (env.allowedAccountIds.length > 0 && !env.allowedAccountIds.includes(session.accountId)) {
+        logError('oauth', 'start refused: account not allowlisted', {});
+        sendPage(res, 403, oauthErrorPage('חיבור לא מורשה'));
+        return;
+      }
+
       const nonce = crypto.randomBytes(16).toString('base64url');
-      await storage.issueOauthState(nonce);
+      await storage.issueOauthState(nonce, session.accountId);
       const params = new URLSearchParams({
         client_id: env.clientId,
         redirect_uri: redirectUri,
@@ -64,13 +79,14 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
         return;
       }
 
-      // CSRF nonce — single-use, expiring (spec §13).
-      const stateValid = await storage.consumeOauthState(state);
-      if (!stateValid) {
+      // CSRF nonce — single-use, expiring (spec §13); carries the account.
+      const stateRecord = await storage.consumeOauthState(state);
+      if (!stateRecord) {
         logError('oauth', 'invalid or replayed state nonce', {});
         sendPage(res, 400, oauthErrorPage('הקישור פג תוקף'));
         return;
       }
+      const scoped = storage.forAccount(stateRecord.accountId);
 
       const exchangeRes = await doFetch(TOKEN_URL, {
         method: 'POST',
@@ -103,12 +119,12 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
         return;
       }
 
-      await storage.setOauthToken(accessToken);
+      await scoped.setOauthToken(accessToken);
 
       // Best-effort identity fetch for the admin display — never fails the flow.
       try {
         const me = await api.fetchMe({ token: accessToken });
-        await storage.setOauthIdentity({ id: me.id, name: me.name });
+        await scoped.setOauthIdentity({ id: me.id, name: me.name });
         logInfo('oauth', 'connected', { name: me.name });
       } catch (err) {
         logError('oauth', 'identity fetch failed (connection still stored)', {
