@@ -7,6 +7,7 @@ import { useDecisions } from '@generated/hooks/useDecisions';
 import { useDiscussionDetails } from '@generated/hooks/useDiscussions';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
+import { DEFAULT_PREFERENCES, resolveAccessPeople } from '@api/boards.config.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { usePermissions } from '@generated/hooks/usePermission.js';
@@ -232,20 +233,18 @@ export function DiscussionCard({
   const canHideTopicOrPoint =
     canManageSettings || holdsRole(data?.discussionLeadID) || holdsRole(data?.discussionCoordinatorID);
 
-  // Item 19 — access-column payload for every task created FROM this
-  // discussion: participants → יכולת צפייה (viewers), the single-person
-  // discussion roles (lead/coordinator/creator) → יכולת עריכה (editors).
-  // useTasks writes them only when the owner mapped the columns.
-  const taskAccess = useMemo(() => {
-    const arr = (v) => (Array.isArray(v) ? v : []);
-    const editorsById = new Map();
-    [...arr(data?.discussionLeadID), ...arr(data?.discussionCoordinatorID), ...arr(data?.discussionCreatorID)]
-      .forEach((p) => { if (p?.id != null) editorsById.set(String(p.id), p); });
-    return {
-      viewers: arr(data?.participantsID),
-      editors: [...editorsById.values()],
-    };
-  }, [data?.participantsID, data?.discussionLeadID, data?.discussionCoordinatorID, data?.discussionCreatorID]);
+  // Item 19 / round 78 — access-column payload for every task created FROM this
+  // discussion. Which discussion ROLES fill each tasks access column is
+  // owner-configurable (settings.preferences.accessRoleSources); the default
+  // reproduces the original behavior — participants → יכולת צפייה (viewers),
+  // lead + coordinator + creator → יכולת עריכה (editors). People from the
+  // configured roles are UNIONED (deduped by id). useTasks writes them only
+  // when the owner mapped the columns.
+  const accessRoleSources = settings?.preferences?.accessRoleSources || DEFAULT_PREFERENCES.accessRoleSources;
+  const taskAccess = useMemo(() => ({
+    viewers: resolveAccessPeople(data, accessRoleSources?.taskViewersID),
+    editors: resolveAccessPeople(data, accessRoleSources?.taskEditorsID),
+  }), [accessRoleSources, data]);
 
   // Item 18 — default decider (מחליט) for NEW decisions: the discussion lead,
   // when enabled globally (settings.preferences.defaultDeciderLead) or on this
