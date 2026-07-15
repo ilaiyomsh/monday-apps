@@ -293,3 +293,59 @@ Note in the UI: if the workflow template editor renders `&amp;` literally, repla
 ## 16. Explicit non-goals (v1)
 
 Multi-tenant / marketplace packaging (requires account-keyed storage and per-account OAuth), multiple boards or multiple transitions, per-item signed links, interstitial confirmation page, auto secret rotation, custom domain, localization beyond Hebrew.
+
+---
+
+# V2 Amendment — Dynamic Status Buttons (owner decisions, 2026-07-15)
+
+This amendment SUPERSEDES the conflicting parts of the v1 spec above. Email
+scheduling (when to send which template) is implemented OUTSIDE the app.
+
+## Product behavior
+
+- The app exposes **N dynamic action buttons**. Each button carries its own
+  URL identifier and defines: a status column (per button!), a target label
+  (by stable label id), a display name, and a style (color / icon / size
+  sm|md|lg).
+- Click semantics: set the button's status column to its target label,
+  **regardless of the current status** (the v1 from-status guard and the
+  expiry/grace-days feature are REMOVED).
+- If the status already equals the target: show the success page, perform
+  **no mutation and no update** (emails are re-sent daily by design — silent
+  idempotency, outcome `already_done` in logs only).
+- Attribution update on success: `סומן "{targetLabel}" במייל על ידי {assignee}`
+  (or without the name when the people column is empty).
+
+## URL and scanner protection
+
+- `GET /confirm?itemId={ITEM_ID}&k=<shared secret>&btn=<button id>`.
+  One shared secret remains THE kill switch (rotation invalidates all
+  buttons in all templates).
+- **Mail-scanner protection replaces the from-guard:** GET performs NO
+  action and NO monday API call — after the secret gate + rate limit it
+  serves a landing page whose inline JS immediately auto-POSTs the hidden
+  form back to `POST /confirm`, which performs the action. `<noscript>`
+  shows a manual submit button. Link-following scanners (no JS) can never
+  change a status. This intentionally amends v1 §7's "no JS" rule for THIS
+  page only; the three static result pages stay JS-free.
+
+## Admin panel v2
+
+- Board + attribution people column (global), buttons manager (per-button
+  column/label/style + live preview + per-button snippet copy), and a
+  **block-based email template editor**: named saved templates composed of
+  text blocks (direction rtl/ltr, email-safe font, size 10–32, alignment)
+  and button rows; live preview; **copy of the full email-client-safe HTML**
+  (600px table, inline styles, {ITEM_ID} literal) per template.
+- Config schema and validation: see `src/routes/admin-api.js` module header
+  (the authoritative contract) — ids `b_*`/`t_*` generated server-side when
+  absent.
+
+## Unchanged from v1
+
+Shared-secret constant-time gate before anything else; 30/min/IP rate
+limit; HEAD no-op; the three static result pages as the ONLY action
+responses; OAuth flow + broken-state handling; sessionToken-guarded admin
+API; single-tenant lockdown; SecureStorage-only persistence; log line
+format {ts, ip, itemId, outcome} (outcome enum extended: page_served,
+already_done, unknown_button, bad_request).

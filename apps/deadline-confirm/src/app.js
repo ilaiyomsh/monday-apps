@@ -30,6 +30,7 @@ export function createApp({ storage, api, rateLimiter, env, fetchImpl, todayIso 
   app.set('trust proxy', true); // monday code fronts the container — req.ip must be the client
   app.disable('x-powered-by');
   app.use(express.json());
+  app.use(express.urlencoded({ extended: false })); // v2: the landing page's POSTed confirm form
 
   // Hot path first.
   app.use(createConfirmRouter({ storage, api, rateLimiter, todayIso }));

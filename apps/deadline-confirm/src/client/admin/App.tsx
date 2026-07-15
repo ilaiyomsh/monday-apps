@@ -1,16 +1,17 @@
-// The single admin screen (spec §10): connection → board config → secret →
-// snippet → save. No routing, no state library.
+// The single admin screen — v2: connection → board → action buttons →
+// email templates → secret → save. No routing, no state library.
 
 import { useCallback, useEffect, useState } from 'react';
 import { Button, Loader } from '@vibe/core';
-import type { AppState, Board, BoardColumn } from './types';
+import type { ActionButton, AppState, Board, BoardColumn, EmailTemplate } from './types';
 import { type ConfigDraft, draftFromConfig, draftToConfig } from './draft';
 import { apiFetch, ApiError } from './services/api';
 import { fetchBoards, fetchBoardColumns } from './services/monday';
 import { ConnectionSection } from './components/ConnectionSection';
 import { BoardConfigSection } from './components/BoardConfigSection';
+import { ButtonsSection } from './components/ButtonsSection';
+import { TemplatesSection } from './components/TemplatesSection';
 import { SecretSection } from './components/SecretSection';
-import { SnippetSection } from './components/SnippetSection';
 
 type SaveStatus = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved' } | { kind: 'error'; message: string };
 
@@ -25,35 +26,20 @@ export function App() {
   const [pickersError, setPickersError] = useState<string | null>(null);
 
   const [draft, setDraft] = useState<ConfigDraft>(draftFromConfig(null));
+  const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: 'idle' });
 
-  const [snippet, setSnippet] = useState<string | null>(null);
   const [rotatedSecret, setRotatedSecret] = useState<string | null>(null);
   const [rotating, setRotating] = useState(false);
 
-  const loadSnippet = useCallback(async () => {
-    try {
-      const res = await apiFetch<{ snippet: string }>('/api/snippet');
-      setSnippet(res.snippet);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        setSnippet(null); // no secret yet — the section shows its hint
-        return;
-      }
-      console.error('snippet load failed', err);
-      setSnippet(null);
+  const loadState = useCallback(async (opts: { initDraft: boolean }) => {
+    const nextState = await apiFetch<AppState>('/api/state');
+    setState(nextState);
+    if (opts.initDraft) {
+      setDraft(draftFromConfig(nextState.config));
+      setDirty(false);
     }
   }, []);
-
-  const loadState = useCallback(
-    async (opts: { initDraft: boolean }) => {
-      const nextState = await apiFetch<AppState>('/api/state');
-      setState(nextState);
-      if (opts.initDraft) setDraft(draftFromConfig(nextState.config));
-      await loadSnippet();
-    },
-    [loadSnippet]
-  );
 
   // Boot: server state first (auth also proves the session), then boards.
   useEffect(() => {
@@ -81,7 +67,6 @@ export function App() {
       .then((cols) => {
         if (cancelled) return;
         setColumns(cols);
-        // Default people column (spec §10.2): first people column when unset.
         const firstPeople = cols.find((c) => c.type === 'people');
         setDraft((d) =>
           d.peopleColumnId === null && firstPeople ? { ...d, peopleColumnId: firstPeople.id } : d
@@ -102,35 +87,39 @@ export function App() {
 
   const onDraftChange = (patch: Partial<ConfigDraft>) => {
     setSaveStatus({ kind: 'idle' });
+    setDirty(true);
     setDraft((d) => {
       const next = { ...d, ...patch };
       // Board switch invalidates every column-dependent pick.
       if (patch.boardId !== undefined && patch.boardId !== d.boardId) {
-        next.statusColumnId = null;
-        next.fromIndex = null;
-        next.toIndex = null;
         next.peopleColumnId = null;
-        next.expiryDateColumnId = null;
-      }
-      // Status column switch invalidates the label picks.
-      if (patch.statusColumnId !== undefined && patch.statusColumnId !== d.statusColumnId) {
-        next.fromIndex = null;
-        next.toIndex = null;
+        next.buttons = next.buttons.map((b) => ({
+          ...b,
+          statusColumnId: '',
+          targetIndex: -1,
+          targetLabel: '',
+        }));
       }
       return next;
     });
   };
 
-  const payload = draftToConfig(draft, columns);
+  const onButtonsChange = (buttons: ActionButton[]) => onDraftChange({ buttons });
+  const onTemplatesChange = (templates: EmailTemplate[]) => onDraftChange({ templates });
+
+  const payload = draftToConfig(draft);
 
   const onSave = async () => {
     if (!payload) return;
     setSaveStatus({ kind: 'saving' });
     try {
-      await apiFetch<{ ok: boolean }>('/api/config', {
+      const res = await apiFetch<{ ok: boolean; config: AppState['config'] }>('/api/config', {
         method: 'PUT',
         body: JSON.stringify(payload),
       });
+      // Re-sync from the normalized config (server may have generated ids).
+      setDraft(draftFromConfig(res.config));
+      setDirty(false);
       setSaveStatus({ kind: 'saved' });
       await loadState({ initDraft: false });
     } catch (err) {
@@ -197,13 +186,25 @@ export function App() {
         onChange={onDraftChange}
       />
       {pickersError && <div className="dc-error">{pickersError}</div>}
+      <ButtonsSection
+        columns={columns}
+        columnsLoading={columnsLoading}
+        buttons={draft.buttons}
+        dirty={dirty}
+        onChange={onButtonsChange}
+      />
+      <TemplatesSection
+        templates={draft.templates}
+        buttons={draft.buttons}
+        dirty={dirty}
+        onChange={onTemplatesChange}
+      />
       <SecretSection
         maskedSecret={state.secret}
         rotatedSecret={rotatedSecret}
         rotating={rotating}
         onRotate={onRotate}
       />
-      <SnippetSection snippet={snippet} />
       <section className="dc-section">
         <h2>שמירה</h2>
         <div className="dc-footer">
@@ -212,6 +213,11 @@ export function App() {
           </Button>
           {saveStatus.kind === 'saved' && <span className="dc-success">נשמר ✓</span>}
           {saveStatus.kind === 'error' && <span className="dc-error">{saveStatus.message}</span>}
+          {!payload && (
+            <span className="dc-hint">
+              נדרשים: לוח + לפחות כפתור אחד מלא (ותבניות ללא שדות ריקים)
+            </span>
+          )}
         </div>
         <div className="dc-hint">
           גרסה {__APP_VERSION__} · {__BUILD_SHA__.slice(0, 7)}

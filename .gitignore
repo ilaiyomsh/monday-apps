@@ -12,3 +12,7 @@ coverage/
 
 # Agent-session git worktrees (never committed)
 .claude/worktrees/
+
+# mapps CLI artifacts (manifest export dirs, upload leftovers)
+.dev/
+temp.zip

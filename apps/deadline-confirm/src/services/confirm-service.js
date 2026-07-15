@@ -1,80 +1,64 @@
-// The /confirm decision core (spec §6 steps 5-9), kept pure/orchestrated for
-// testability. The HTTP layer (routes/confirm.js) owns parsing, the secret
-// gate, rate limiting, and page rendering; THIS module owns guards + the two
-// mutations.
+// v2 action core (dynamic buttons). The HTTP layer owns parsing, the secret
+// gate, rate limiting, and page rendering; THIS module owns button
+// resolution, guards, and the mutations.
+//
+// v2 semantics (owner decisions 2026-07-15):
+// - N buttons; each names its own status column + target label id.
+// - NO from-status guard, NO expiry — the click always drives toward the
+//   button's target.
+// - Idempotent-by-skip: when the status already equals the target, succeed
+//   silently with NO mutation and NO update (emails are re-sent daily).
 
 import { MondayApiError } from './monday-api.js';
 import { logError } from '../helpers/logger.js';
 
-/** YYYY-MM-DD + n days → YYYY-MM-DD (UTC date math; ISO strings compare lexically). */
-function addDays(isoDate, days) {
-  const [year, month, day] = isoDate.split('-').map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day + days));
-  return date.toISOString().slice(0, 10);
+/**
+ * Find a button by id on the stored config.
+ * @param {object|null} config
+ * @param {string} btnId
+ * @returns {object|null}
+ */
+export function resolveButton(config, btnId) {
+  if (!config || !Array.isArray(config.buttons)) return null;
+  return config.buttons.find((b) => b.id === btnId) ?? null;
 }
 
 /**
- * Pure guard evaluation — spec §6.7, EXACT order:
- *   a. item exists            → not_found
- *   b. board match            → wrong_board
- *   c. expiry (when enabled)  → expired
- *   d. status == from-label   → wrong_status  (also the idempotency gate)
- *
- * Expiry is enabled iff config.expiryDateColumnId is set AND
- * config.expiryGraceDays > 0 (spec §4: 0 or null column disables). When
- * enabled, a click is valid while todayIso <= deadlineDate + graceDays.
- * An item with NO deadline value never expires.
- *
- * @param {import('./monday-api.js').ItemState} item
- * @param {{ boardId: string, fromIndex: number, toIndex: number, expiryDateColumnId?: string|null, expiryGraceDays?: number }} config
- * @param {string} todayIso - YYYY-MM-DD (UTC)
- * @returns {{ ok: true } | { ok: false, outcome: 'not_found'|'wrong_board'|'expired'|'wrong_status' }}
+ * v2 config completeness — see the contract in git history / tests.
+ * targetIndex 0 is a VALID label id; templates are not required.
+ * @param {object|null} config
+ * @returns {boolean}
  */
-export function evaluateGuards(item, config, todayIso) {
-  if (!item.found) return { ok: false, outcome: 'not_found' };
-
-  if (String(item.boardId) !== String(config.boardId)) {
-    return { ok: false, outcome: 'wrong_board' };
-  }
-
-  const expiryEnabled = Boolean(config.expiryDateColumnId) && (config.expiryGraceDays ?? 0) > 0;
-  if (expiryEnabled && item.deadlineDate) {
-    const lastValidDay = addDays(item.deadlineDate, config.expiryGraceDays);
-    if (todayIso > lastValidDay) return { ok: false, outcome: 'expired' };
-  }
-
-  // Strict compare — label id 0 is valid, null (status never set) never matches.
-  if (item.statusLabelId !== config.fromIndex) {
-    return { ok: false, outcome: 'wrong_status' };
-  }
-
-  return { ok: true };
-}
-
-function configIsComplete(config) {
-  return Boolean(
-    config &&
-      typeof config.boardId === 'string' &&
-      config.boardId.length > 0 &&
-      typeof config.statusColumnId === 'string' &&
-      config.statusColumnId.length > 0 &&
-      Number.isInteger(config.fromIndex) &&
-      Number.isInteger(config.toIndex)
+export function configIsComplete(config) {
+  if (!config || typeof config.boardId !== 'string' || config.boardId.length === 0) return false;
+  if (!Array.isArray(config.buttons) || config.buttons.length === 0) return false;
+  return config.buttons.every(
+    (b) =>
+      typeof b?.id === 'string' &&
+      b.id.length > 0 &&
+      typeof b.name === 'string' &&
+      b.name.length > 0 &&
+      typeof b.statusColumnId === 'string' &&
+      b.statusColumnId.length > 0 &&
+      typeof b.targetLabel === 'string' &&
+      b.targetLabel.length > 0 &&
+      Number.isInteger(b.targetIndex) &&
+      b.targetIndex >= 0
   );
 }
 
 /**
- * Full confirm flow AFTER the secret gate and rate limit passed. See the
- * spec (§6 steps 5-9) and tests for the outcome contract.
- *
+ * Full action flow AFTER the secret gate and rate limit passed (POST side).
+ * Outcomes: no_config | unknown_button | not_found | wrong_board |
+ * already_done | ok | api_error — full contract in the tests.
  * @param {object} deps
  * @param {ReturnType<import('./storage.js').createAppStorage>} deps.storage
  * @param {ReturnType<import('./monday-api.js').createMondayApi>} deps.api
- * @param {string} deps.itemId - already regex-validated by the route
- * @param {string} [deps.todayIso]
- * @returns {Promise<{ outcome: string, toLabel?: string }>}
+ * @param {string} deps.itemId - regex-validated by the route
+ * @param {string} deps.btnId - regex-validated by the route
+ * @returns {Promise<{ outcome: string, button?: object }>}
  */
-export async function performConfirm({ storage, api, itemId, todayIso }) {
+export async function performAction({ storage, api, itemId, btnId }) {
   const config = await storage.getConfig();
   const token = await storage.getOauthToken();
 
@@ -86,26 +70,37 @@ export async function performConfirm({ storage, api, itemId, todayIso }) {
     return { outcome: 'no_config' };
   }
 
-  const today = todayIso ?? new Date().toISOString().slice(0, 10);
+  const button = resolveButton(config, btnId);
+  if (!button) {
+    logError('confirm', 'unknown button id', { itemId, btnId });
+    return { outcome: 'unknown_button' };
+  }
 
   let item;
   try {
     item = await api.getItemState({
       token,
       itemId,
-      statusColumnId: config.statusColumnId,
+      statusColumnId: button.statusColumnId,
       peopleColumnId: config.peopleColumnId ?? null,
-      expiryDateColumnId: config.expiryDateColumnId ?? null,
     });
   } catch (err) {
     logError('confirm', 'item query failed', describeApiError(err, itemId));
     return { outcome: 'api_error' };
   }
 
-  const verdict = evaluateGuards(item, config, today);
-  if (!verdict.ok) {
-    logError('confirm', `guard failed: ${verdict.outcome}`, { itemId });
-    return { outcome: verdict.outcome };
+  if (!item.found) {
+    logError('confirm', 'guard failed: not_found', { itemId });
+    return { outcome: 'not_found' };
+  }
+  if (String(item.boardId) !== String(config.boardId)) {
+    logError('confirm', 'guard failed: wrong_board', { itemId });
+    return { outcome: 'wrong_board' };
+  }
+
+  // Silent idempotency: the daily re-sent email lands here on repeat clicks.
+  if (item.statusLabelId === button.targetIndex) {
+    return { outcome: 'already_done', button };
   }
 
   try {
@@ -113,23 +108,25 @@ export async function performConfirm({ storage, api, itemId, todayIso }) {
       token,
       boardId: config.boardId,
       itemId,
-      columnId: config.statusColumnId,
-      toLabelId: config.toIndex,
+      columnId: button.statusColumnId,
+      toLabelId: button.targetIndex,
     });
   } catch (err) {
     logError('confirm', 'status mutation failed', describeApiError(err, itemId));
     return { outcome: 'api_error' };
   }
 
-  const body = item.peopleText ? `אושר במייל על ידי ${item.peopleText}` : 'אושר במייל';
+  const body = item.peopleText
+    ? `סומן "${button.targetLabel}" במייל על ידי ${item.peopleText}`
+    : `סומן "${button.targetLabel}" במייל`;
   try {
     await api.createUpdate({ token, itemId, body });
   } catch (err) {
-    // Spec §6.9: the status change already succeeded — log, still success.
+    // The status change already succeeded — log, still success.
     logError('confirm', 'attribution update failed after status change', describeApiError(err, itemId));
   }
 
-  return { outcome: 'ok', toLabel: config.toLabel };
+  return { outcome: 'ok', button };
 }
 
 function describeApiError(err, itemId) {

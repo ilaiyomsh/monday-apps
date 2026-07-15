@@ -1,11 +1,13 @@
-// TDD red phase — src/services/confirm-service.js (spec §6 steps 5-9).
-// evaluateGuards: guard ORDER pinned (a not_found → b wrong_board → c expired
-// → d wrong_status) with fixtures where multiple guards would fail.
-// performConfirm: real createAppStorage over the in-memory backend, fake api
-// whose ItemState values are derived from the probe-captured fixtures.
+// TDD red phase (v2) — src/services/confirm-service.js dynamic buttons.
+// resolveButton / configIsComplete are pure; performAction runs over the REAL
+// createAppStorage + in-memory backend with a fake api whose ItemState values
+// derive from the probe-captured fixtures (tests/fixtures/README.md).
+// v2 semantics under test (owner decisions 2026-07-15): per-button status
+// column + target label id, NO from-status guard, NO expiry, and
+// already-at-target = silent success (no mutation, no update).
 
-import { describe, it, expect, vi } from 'vitest';
-import { evaluateGuards, performConfirm } from '../src/services/confirm-service.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { resolveButton, configIsComplete, performAction } from '../src/services/confirm-service.js';
 import { createAppStorage } from '../src/services/storage.js';
 import { createMemoryBackend } from '../src/storage/memory-backend.js';
 import { MondayApiError } from '../src/services/monday-api.js';
@@ -18,18 +20,42 @@ import boardColumnsFx from './fixtures/board-columns-settings.probe.json';
 
 const STATUS_COL = 'color_mm58mbec';
 const PEOPLE_COL = 'multiple_person_mm582h4p';
-const DATE_COL = 'date_mm58ej61';
-
 const ITEM_ID = getItemFx.data.items[0].id; // '12532634009'
 const BOARD_ID = getItemFx.data.items[0].board.id; // '18422009734'
 
 // Status labels from the captured settings: id 0 = 'בעבודה', id 1 = 'בוצע'.
 const LABELS = boardColumnsFx.data.boards[0].columns[0].settings.labels;
-const FROM = LABELS[0]; // { id: 0, label: 'בעבודה' }
-const TO = LABELS[1]; // { id: 1, label: 'בוצע' }
+const WORK = LABELS[0]; // { id: 0, label: 'בעבודה' }
+const DONE = LABELS[1]; // { id: 1, label: 'בוצע' }
+
+const BTN_DONE = {
+  id: 'b_done0001',
+  name: DONE.label,
+  statusColumnId: STATUS_COL,
+  targetIndex: DONE.id, // 1
+  targetLabel: DONE.label, // 'בוצע'
+  style: { color: '#00854d', icon: '✓', size: 'md' },
+};
+
+// targetIndex 0 — deliberately falsy: naive truthiness checks must not break.
+const BTN_WORK = {
+  id: 'b_work0002',
+  name: WORK.label,
+  statusColumnId: STATUS_COL,
+  targetIndex: WORK.id, // 0
+  targetLabel: WORK.label, // 'בעבודה'
+  style: { color: '#fdab3d', icon: '', size: 'sm' },
+};
+
+const baseConfig = {
+  boardId: BOARD_ID,
+  peopleColumnId: PEOPLE_COL,
+  buttons: [BTN_DONE, BTN_WORK],
+  templates: [],
+};
 
 /** Derive an ItemState (the monday-api contract shape) from a probe fixture. */
-function itemStateFrom(fixture, { withDeadline = false } = {}) {
+function itemStateFrom(fixture) {
   const item = fixture.data.items[0];
   if (!item) return { found: false };
   const col = (id) => item.column_values.find((c) => c.id === id);
@@ -38,129 +64,124 @@ function itemStateFrom(fixture, { withDeadline = false } = {}) {
     boardId: item.board.id,
     statusLabelId: col(STATUS_COL).index ?? null,
     peopleText: col(PEOPLE_COL).text ?? '',
-    deadlineDate: withDeadline ? col(DATE_COL).date || null : null,
+    deadlineDate: null,
   };
 }
 
-const okItem = () => itemStateFrom(getItemFx); // status 0, person set, no expiry column read
-const okItemWithDeadline = () => itemStateFrom(getItemFx, { withDeadline: true }); // deadline 2026-07-20
-const doneItem = () => itemStateFrom(getItemAfterFx); // status 1 (already transitioned)
-const doneItemWithDeadline = () => itemStateFrom(getItemAfterFx, { withDeadline: true });
+const workingItem = () => itemStateFrom(getItemFx); // status 0 ('בעבודה'), person set
+const doneItem = () => itemStateFrom(getItemAfterFx); // status 1 ('בוצע')
 const unsetItem = () => itemStateFrom(getItemEmptyFx); // status null, people ''
 const notFoundItem = () => itemStateFrom(getItemNotFoundFx); // { found: false }
 
-const baseConfig = {
-  boardId: BOARD_ID,
-  statusColumnId: STATUS_COL,
-  fromIndex: FROM.id, // 0 — deliberately falsy: naive truthiness checks must not break
-  fromLabel: FROM.label,
-  toIndex: TO.id,
-  toLabel: TO.label,
-  peopleColumnId: PEOPLE_COL,
-  expiryDateColumnId: null,
-  expiryGraceDays: 0,
-};
-const expiryConfig = { ...baseConfig, expiryDateColumnId: DATE_COL, expiryGraceDays: 2 };
-
-const TODAY = '2026-07-14';
-// Fixture deadline is 2026-07-20; grace 2 → last valid day is 2026-07-22.
-const ON_GRACE_EDGE = '2026-07-22';
-const PAST_GRACE_EDGE = '2026-07-23';
-
-describe('evaluateGuards — single-guard outcomes', () => {
-  it("returns { ok: false, outcome: 'not_found' } for a found:false item", () => {
-    expect(evaluateGuards(notFoundItem(), baseConfig, TODAY)).toEqual({
-      ok: false,
-      outcome: 'not_found',
-    });
-  });
-
-  it("returns 'wrong_board' when the item's board differs from config.boardId", () => {
-    const config = { ...baseConfig, boardId: '99999999999' };
-    expect(evaluateGuards(okItem(), config, TODAY)).toEqual({ ok: false, outcome: 'wrong_board' });
-  });
-
-  it("returns 'wrong_status' when statusLabelId differs from fromIndex (already transitioned)", () => {
-    expect(evaluateGuards(doneItem(), baseConfig, TODAY)).toEqual({
-      ok: false,
-      outcome: 'wrong_status',
-    });
-  });
-
-  it("returns 'wrong_status' when the status column was never set (statusLabelId null)", () => {
-    expect(evaluateGuards(unsetItem(), baseConfig, TODAY)).toEqual({
-      ok: false,
-      outcome: 'wrong_status',
-    });
-  });
-
-  it('returns { ok: true } when all guards pass with fromIndex 0', () => {
-    expect(evaluateGuards(okItem(), baseConfig, TODAY)).toEqual({ ok: true });
-  });
+// Service-internal error logging (api_error detail, failed update) is allowed;
+// keep the test output clean without asserting its shape here.
+beforeEach(() => {
+  vi.spyOn(console, 'log').mockImplementation(() => {});
+  vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
-describe('evaluateGuards — guard order pinned (spec §6.7 a→d)', () => {
-  it("reports 'not_found' even though the board guard would also fail (a beats b)", () => {
-    const config = { ...baseConfig, boardId: '99999999999' };
-    expect(evaluateGuards(notFoundItem(), config, TODAY)).toEqual({
-      ok: false,
-      outcome: 'not_found',
-    });
-  });
-
-  it("reports 'wrong_board' when both board and status guards fail (b beats d)", () => {
-    const config = { ...baseConfig, boardId: '99999999999' };
-    expect(evaluateGuards(doneItem(), config, TODAY)).toEqual({
-      ok: false,
-      outcome: 'wrong_board',
-    });
-  });
-
-  it("reports 'wrong_board' when both board and expiry guards fail (b beats c)", () => {
-    const config = { ...expiryConfig, boardId: '99999999999' };
-    expect(evaluateGuards(okItemWithDeadline(), config, PAST_GRACE_EDGE)).toEqual({
-      ok: false,
-      outcome: 'wrong_board',
-    });
-  });
-
-  it("reports 'expired' when both expiry and status guards fail (c beats d)", () => {
-    expect(evaluateGuards(doneItemWithDeadline(), expiryConfig, PAST_GRACE_EDGE)).toEqual({
-      ok: false,
-      outcome: 'expired',
-    });
-  });
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
-describe('evaluateGuards — expiry boundaries (spec §4/§6.7c, edges exactly ON the line)', () => {
-  it('passes when today equals deadline + graceDays exactly (2026-07-20 + 2 → 2026-07-22)', () => {
-    expect(evaluateGuards(okItemWithDeadline(), expiryConfig, ON_GRACE_EDGE)).toEqual({ ok: true });
+// ---------------------------------------------------------------------------
+// resolveButton
+// ---------------------------------------------------------------------------
+
+describe('resolveButton', () => {
+  it('returns the matching button object when the id exists (not just the first button)', () => {
+    expect(resolveButton(baseConfig, 'b_work0002')).toEqual(BTN_WORK);
   });
 
-  it("returns 'expired' one day past deadline + graceDays (2026-07-23)", () => {
-    expect(evaluateGuards(okItemWithDeadline(), expiryConfig, PAST_GRACE_EDGE)).toEqual({
-      ok: false,
-      outcome: 'expired',
-    });
+  it('returns null for an id that is on no button', () => {
+    expect(resolveButton(baseConfig, 'b_nope9999')).toBeNull();
   });
 
-  it('treats expiryGraceDays 0 as DISABLED — passes even with a long-past deadline', () => {
-    const config = { ...baseConfig, expiryDateColumnId: DATE_COL, expiryGraceDays: 0 };
-    expect(evaluateGuards(okItemWithDeadline(), config, '2027-01-01')).toEqual({ ok: true });
+  it('returns null for a null config', () => {
+    expect(resolveButton(null, 'b_done0001')).toBeNull();
   });
 
-  it('treats expiryDateColumnId null as DISABLED even with graceDays > 0 and a past deadline', () => {
-    const config = { ...baseConfig, expiryDateColumnId: null, expiryGraceDays: 2 };
-    expect(evaluateGuards(okItemWithDeadline(), config, '2027-01-01')).toEqual({ ok: true });
-  });
-
-  it('never expires an item whose deadline column has no value (deadlineDate null)', () => {
-    expect(evaluateGuards(okItem(), expiryConfig, '2027-01-01')).toEqual({ ok: true });
+  it('returns null for a config without a buttons array', () => {
+    const { buttons: _dropped, ...noButtons } = baseConfig;
+    expect(resolveButton(noButtons, 'b_done0001')).toBeNull();
   });
 });
 
 // ---------------------------------------------------------------------------
-// performConfirm
+// configIsComplete
+// ---------------------------------------------------------------------------
+
+/** baseConfig with its buttons replaced by a single (possibly broken) button. */
+function configWithButton(button) {
+  return { ...baseConfig, buttons: [button] };
+}
+
+/** BTN_DONE minus one required field. */
+function buttonWithout(key) {
+  const btn = { ...BTN_DONE };
+  delete btn[key];
+  return btn;
+}
+
+describe('configIsComplete', () => {
+  it('returns true for a full v2 config that includes a targetIndex 0 button (falsy label id is valid)', () => {
+    expect(baseConfig.buttons.some((b) => b.targetIndex === 0)).toBe(true); // fixture sanity
+    expect(configIsComplete(baseConfig)).toBe(true);
+  });
+
+  it('returns true without templates and without button style — neither is required for /confirm', () => {
+    const { templates: _dropped, ...noTemplates } = baseConfig;
+    const { style: _style, ...styleLess } = BTN_WORK;
+    expect(configIsComplete({ ...noTemplates, buttons: [styleLess] })).toBe(true);
+  });
+
+  it('returns false for a null config', () => {
+    expect(configIsComplete(null)).toBe(false);
+  });
+
+  it('returns false when boardId is missing or empty', () => {
+    const { boardId: _dropped, ...noBoard } = baseConfig;
+    expect(configIsComplete(noBoard)).toBe(false);
+    expect(configIsComplete({ ...baseConfig, boardId: '' })).toBe(false);
+  });
+
+  it('returns false when buttons is an empty array or missing', () => {
+    expect(configIsComplete({ ...baseConfig, buttons: [] })).toBe(false);
+    const { buttons: _dropped, ...noButtons } = baseConfig;
+    expect(configIsComplete(noButtons)).toBe(false);
+  });
+
+  it('returns false when a button is missing id', () => {
+    expect(configIsComplete(configWithButton(buttonWithout('id')))).toBe(false);
+  });
+
+  it('returns false when a button is missing name', () => {
+    expect(configIsComplete(configWithButton(buttonWithout('name')))).toBe(false);
+  });
+
+  it('returns false when a button is missing statusColumnId', () => {
+    expect(configIsComplete(configWithButton(buttonWithout('statusColumnId')))).toBe(false);
+  });
+
+  it('returns false when a button is missing targetLabel', () => {
+    expect(configIsComplete(configWithButton(buttonWithout('targetLabel')))).toBe(false);
+  });
+
+  it("returns false when targetIndex is the string '1' (label ids are integers)", () => {
+    expect(configIsComplete(configWithButton({ ...BTN_DONE, targetIndex: '1' }))).toBe(false);
+  });
+
+  it('returns false when a button is missing targetIndex', () => {
+    expect(configIsComplete(configWithButton(buttonWithout('targetIndex')))).toBe(false);
+  });
+
+  it('returns false when targetIndex is negative', () => {
+    expect(configIsComplete(configWithButton({ ...BTN_DONE, targetIndex: -1 }))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// performAction
 // ---------------------------------------------------------------------------
 
 function fakeApi({ itemState, getItemError, changeStatusError, createUpdateError } = {}) {
@@ -193,24 +214,26 @@ function expectNoApiCalls(api) {
   expect(api.createUpdate).not.toHaveBeenCalled();
 }
 
-describe('performConfirm — happy path', () => {
-  it("returns { outcome: 'ok', toLabel: 'בוצע' } (toLabel from config)", async () => {
-    const api = fakeApi({ itemState: okItem() });
+describe('performAction — happy path (button b_done0001, item currently at label 0)', () => {
+  it("returns { outcome: 'ok' } with the resolved button whose targetLabel is 'בוצע'", async () => {
+    const api = fakeApi({ itemState: workingItem() });
 
-    const result = await performConfirm({
+    const result = await performAction({
       storage: seededStorage(),
       api,
       itemId: ITEM_ID,
-      todayIso: TODAY,
+      btnId: BTN_DONE.id,
     });
 
-    expect(result).toEqual({ outcome: 'ok', toLabel: TO.label });
+    expect(result.outcome).toBe('ok');
+    expect(result.button).toEqual(BTN_DONE);
+    expect(result.button.targetLabel).toBe('בוצע');
   });
 
-  it('queries the item and calls changeStatus with the exact token/board/item/column/toLabelId', async () => {
-    const api = fakeApi({ itemState: okItem() });
+  it("queries the item state with the BUTTON's statusColumnId and the config's peopleColumnId", async () => {
+    const api = fakeApi({ itemState: workingItem() });
 
-    await performConfirm({ storage: seededStorage(), api, itemId: ITEM_ID, todayIso: TODAY });
+    await performAction({ storage: seededStorage(), api, itemId: ITEM_ID, btnId: BTN_DONE.id });
 
     expect(api.getItemState).toHaveBeenCalledTimes(1);
     expect(api.getItemState.mock.calls[0][0]).toMatchObject({
@@ -219,143 +242,317 @@ describe('performConfirm — happy path', () => {
       statusColumnId: STATUS_COL,
       peopleColumnId: PEOPLE_COL,
     });
+  });
+
+  it("calls changeStatus exactly once with the button's column and targetIndex as toLabelId", async () => {
+    const api = fakeApi({ itemState: workingItem() });
+
+    await performAction({ storage: seededStorage(), api, itemId: ITEM_ID, btnId: BTN_DONE.id });
+
     expect(api.changeStatus).toHaveBeenCalledTimes(1);
     expect(api.changeStatus.mock.calls[0][0]).toEqual({
       token: 'tok-1',
       boardId: BOARD_ID,
       itemId: ITEM_ID,
       columnId: STATUS_COL,
-      toLabelId: TO.id,
+      toLabelId: 1,
     });
   });
 
-  it("creates the attribution update with body 'אושר במייל על ידי עילי שלם' (assignee from people text)", async () => {
-    const api = fakeApi({ itemState: okItem() });
+  it('creates the attribution update with body \'סומן "בוצע" במייל על ידי עילי שלם\' (assignee from people text)', async () => {
+    const api = fakeApi({ itemState: workingItem() });
 
-    await performConfirm({ storage: seededStorage(), api, itemId: ITEM_ID, todayIso: TODAY });
+    await performAction({ storage: seededStorage(), api, itemId: ITEM_ID, btnId: BTN_DONE.id });
 
     expect(api.createUpdate).toHaveBeenCalledTimes(1);
     expect(api.createUpdate.mock.calls[0][0]).toEqual({
       token: 'tok-1',
       itemId: ITEM_ID,
-      body: 'אושר במייל על ידי עילי שלם',
+      body: 'סומן "בוצע" במייל על ידי עילי שלם',
     });
   });
 
-  it("uses the bare body 'אושר במייל' when the people column text is empty", async () => {
+  it('uses the bare body \'סומן "בוצע" במייל\' when the people column text is empty', async () => {
     // Status/board from the populated capture; the empty people text comes
     // from the captured never-set fixture.
-    const itemState = { ...okItem(), peopleText: unsetItem().peopleText };
+    const itemState = { ...workingItem(), peopleText: unsetItem().peopleText };
     const api = fakeApi({ itemState });
 
-    await performConfirm({ storage: seededStorage(), api, itemId: ITEM_ID, todayIso: TODAY });
+    await performAction({ storage: seededStorage(), api, itemId: ITEM_ID, btnId: BTN_DONE.id });
 
     expect(api.createUpdate).toHaveBeenCalledTimes(1);
     expect(api.createUpdate.mock.calls[0][0]).toEqual({
       token: 'tok-1',
       itemId: ITEM_ID,
-      body: 'אושר במייל',
+      body: 'סומן "בוצע" במייל',
     });
   });
 
-  it("still returns 'ok' when create_update fails AFTER a successful status change (spec §6.9)", async () => {
-    const api = fakeApi({
-      itemState: okItem(),
-      createUpdateError: new MondayApiError('update failed', { status: 500 }),
-    });
+  it("drives toward targetIndex 0 (falsy label id): clicking b_work0002 on a 'בוצע' item mutates toLabelId 0", async () => {
+    const api = fakeApi({ itemState: doneItem() }); // status 1 → target 0 is a real change
 
-    const result = await performConfirm({
+    const result = await performAction({
       storage: seededStorage(),
       api,
       itemId: ITEM_ID,
-      todayIso: TODAY,
+      btnId: BTN_WORK.id,
+    });
+
+    expect(result.outcome).toBe('ok');
+    expect(result.button).toEqual(BTN_WORK);
+    expect(api.changeStatus).toHaveBeenCalledTimes(1);
+    expect(api.changeStatus.mock.calls[0][0]).toEqual({
+      token: 'tok-1',
+      boardId: BOARD_ID,
+      itemId: ITEM_ID,
+      columnId: STATUS_COL,
+      toLabelId: 0,
+    });
+    expect(api.createUpdate.mock.calls[0][0]).toEqual({
+      token: 'tok-1',
+      itemId: ITEM_ID,
+      body: 'סומן "בעבודה" במייל על ידי עילי שלם',
+    });
+  });
+});
+
+describe('performAction — per-button column routing (two buttons on DIFFERENT status columns)', () => {
+  const OTHER_COL = 'color_2ndcol001';
+  const BTN_OTHER = {
+    id: 'b_othr0003',
+    name: DONE.label,
+    statusColumnId: OTHER_COL,
+    targetIndex: DONE.id,
+    targetLabel: DONE.label,
+    style: { color: '#0073ea', icon: '', size: 'md' },
+  };
+  const twoColumnConfig = { ...baseConfig, buttons: [BTN_DONE, BTN_OTHER] };
+
+  it("clicking button B queries and mutates B's column, never A's", async () => {
+    const api = fakeApi({ itemState: workingItem() }); // status 0 ≠ target 1 → proceeds
+
+    const result = await performAction({
+      storage: seededStorage({ config: twoColumnConfig }),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_OTHER.id,
+    });
+
+    expect(result.outcome).toBe('ok');
+    expect(api.getItemState).toHaveBeenCalledTimes(1);
+    expect(api.getItemState.mock.calls[0][0]).toMatchObject({ statusColumnId: OTHER_COL });
+    expect(api.getItemState.mock.calls[0][0].statusColumnId).not.toBe(STATUS_COL);
+    expect(api.changeStatus).toHaveBeenCalledTimes(1);
+    expect(api.changeStatus.mock.calls[0][0]).toEqual({
+      token: 'tok-1',
+      boardId: BOARD_ID,
+      itemId: ITEM_ID,
+      columnId: OTHER_COL,
+      toLabelId: 1,
+    });
+  });
+});
+
+describe('performAction — NO from-status guard (any current status drives toward the target)', () => {
+  it("proceeds to 'ok' when the status column was never set (statusLabelId null)", async () => {
+    const api = fakeApi({ itemState: unsetItem() });
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_DONE.id,
+    });
+
+    expect(result.outcome).toBe('ok');
+    expect(api.changeStatus).toHaveBeenCalledTimes(1);
+    expect(api.changeStatus.mock.calls[0][0]).toEqual({
+      token: 'tok-1',
+      boardId: BOARD_ID,
+      itemId: ITEM_ID,
+      columnId: STATUS_COL,
+      toLabelId: 1,
+    });
+  });
+
+  it("proceeds to 'ok' when the item sits on some THIRD label (id 5) that no button mentions", async () => {
+    const api = fakeApi({ itemState: { ...workingItem(), statusLabelId: 5 } });
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_DONE.id,
+    });
+
+    expect(result.outcome).toBe('ok');
+    expect(api.changeStatus).toHaveBeenCalledTimes(1);
+    expect(api.changeStatus.mock.calls[0][0]).toMatchObject({ toLabelId: 1 });
+  });
+});
+
+describe('performAction — already_done (idempotent-by-skip, silent success)', () => {
+  it("returns 'already_done' with the button and NO mutation, NO update when status already equals targetIndex 1", async () => {
+    const api = fakeApi({ itemState: doneItem() }); // status 1 === BTN_DONE.targetIndex
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_DONE.id,
+    });
+
+    expect(result.outcome).toBe('already_done');
+    expect(result.button).toEqual(BTN_DONE);
+    expect(api.changeStatus).not.toHaveBeenCalled();
+    expect(api.createUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 'already_done' for targetIndex 0 when the item is at label 0 (0 === 0 falsy trap)", async () => {
+    const api = fakeApi({ itemState: workingItem() }); // status 0 === BTN_WORK.targetIndex
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_WORK.id,
+    });
+
+    expect(result.outcome).toBe('already_done');
+    expect(result.button).toEqual(BTN_WORK);
+    expect(api.changeStatus).not.toHaveBeenCalled();
+    expect(api.createUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("performAction — 'unknown_button' and 'no_config' (ZERO api calls)", () => {
+  it("returns 'unknown_button' for a btnId on no configured button, with zero api calls", async () => {
+    const api = fakeApi({ itemState: workingItem() });
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: 'b_nope9999',
+    });
+
+    expect(result.outcome).toBe('unknown_button');
+    expectNoApiCalls(api);
+  });
+
+  it("returns 'no_config' with zero api calls when the config key is missing", async () => {
+    const api = fakeApi({ itemState: workingItem() });
+    const storage = seededStorage({ config: undefined });
+
+    const result = await performAction({ storage, api, itemId: ITEM_ID, btnId: BTN_DONE.id });
+
+    expect(result.outcome).toBe('no_config');
+    expectNoApiCalls(api);
+  });
+
+  it("returns 'no_config' with zero api calls for an INCOMPLETE config (targetIndex stored as string '1')", async () => {
+    const api = fakeApi({ itemState: workingItem() });
+    const storage = seededStorage({
+      config: { ...baseConfig, buttons: [{ ...BTN_DONE, targetIndex: '1' }] },
+    });
+
+    const result = await performAction({ storage, api, itemId: ITEM_ID, btnId: BTN_DONE.id });
+
+    expect(result.outcome).toBe('no_config');
+    expectNoApiCalls(api);
+  });
+
+  it("returns 'no_config' with zero api calls when the oauth token is missing", async () => {
+    const api = fakeApi({ itemState: workingItem() });
+    const storage = seededStorage({ oauth_token: undefined });
+
+    const result = await performAction({ storage, api, itemId: ITEM_ID, btnId: BTN_DONE.id });
+
+    expect(result.outcome).toBe('no_config');
+    expectNoApiCalls(api);
+  });
+});
+
+describe('performAction — guard propagation and API failures', () => {
+  it("returns 'not_found' for a missing item and never mutates", async () => {
+    const api = fakeApi({ itemState: notFoundItem() });
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_DONE.id,
+    });
+
+    expect(result.outcome).toBe('not_found');
+    expect(api.changeStatus).not.toHaveBeenCalled();
+    expect(api.createUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 'wrong_board' when the item's board differs from config.boardId and never mutates", async () => {
+    const api = fakeApi({ itemState: { ...workingItem(), boardId: '99999999999' } });
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_DONE.id,
+    });
+
+    expect(result.outcome).toBe('wrong_board');
+    expect(api.changeStatus).not.toHaveBeenCalled();
+    expect(api.createUpdate).not.toHaveBeenCalled();
+  });
+
+  it("still returns 'ok' (with the button) when create_update fails AFTER a successful status change", async () => {
+    const api = fakeApi({
+      itemState: workingItem(),
+      createUpdateError: new MondayApiError('update failed', { status: 500 }),
+    });
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_DONE.id,
     });
 
     expect(api.changeStatus).toHaveBeenCalledTimes(1);
-    expect(result).toEqual({ outcome: 'ok', toLabel: TO.label });
-  });
-});
-
-describe("performConfirm — 'no_config' (zero API calls)", () => {
-  it("returns 'no_config' and makes zero api calls when the config key is missing", async () => {
-    const api = fakeApi({ itemState: okItem() });
-    const storage = seededStorage({ config: undefined });
-
-    const result = await performConfirm({ storage, api, itemId: ITEM_ID, todayIso: TODAY });
-
-    expect(result).toEqual({ outcome: 'no_config' });
-    expectNoApiCalls(api);
+    expect(result.outcome).toBe('ok');
+    expect(result.button).toEqual(BTN_DONE);
   });
 
-  it("returns 'no_config' and makes zero api calls when config lacks fromIndex", async () => {
-    const { fromIndex: _dropped, ...incomplete } = baseConfig;
-    const api = fakeApi({ itemState: okItem() });
-    const storage = seededStorage({ config: incomplete });
-
-    const result = await performConfirm({ storage, api, itemId: ITEM_ID, todayIso: TODAY });
-
-    expect(result).toEqual({ outcome: 'no_config' });
-    expectNoApiCalls(api);
-  });
-
-  it("returns 'no_config' and makes zero api calls when the oauth token is missing", async () => {
-    const api = fakeApi({ itemState: okItem() });
-    const storage = seededStorage({ oauth_token: undefined });
-
-    const result = await performConfirm({ storage, api, itemId: ITEM_ID, todayIso: TODAY });
-
-    expect(result).toEqual({ outcome: 'no_config' });
-    expectNoApiCalls(api);
-  });
-});
-
-describe("performConfirm — 'api_error' and guard propagation", () => {
   it("returns 'api_error' when the item query throws MondayApiError; no mutation attempted", async () => {
     const api = fakeApi({
       getItemError: new MondayApiError('Unauthorized', { status: 401, unauthorized: true }),
     });
 
-    const result = await performConfirm({
+    const result = await performAction({
       storage: seededStorage(),
       api,
       itemId: ITEM_ID,
-      todayIso: TODAY,
+      btnId: BTN_DONE.id,
     });
 
-    expect(result).toEqual({ outcome: 'api_error' });
+    expect(result.outcome).toBe('api_error');
     expect(api.changeStatus).not.toHaveBeenCalled();
     expect(api.createUpdate).not.toHaveBeenCalled();
   });
 
   it("returns 'api_error' when changeStatus throws; no attribution update attempted", async () => {
     const api = fakeApi({
-      itemState: okItem(),
+      itemState: workingItem(),
       changeStatusError: new MondayApiError('boom', { status: 500 }),
     });
 
-    const result = await performConfirm({
+    const result = await performAction({
       storage: seededStorage(),
       api,
       itemId: ITEM_ID,
-      todayIso: TODAY,
+      btnId: BTN_DONE.id,
     });
 
-    expect(result).toEqual({ outcome: 'api_error' });
-    expect(api.createUpdate).not.toHaveBeenCalled();
-  });
-
-  it("propagates 'wrong_status' for an already-transitioned item and never mutates", async () => {
-    const api = fakeApi({ itemState: doneItem() });
-
-    const result = await performConfirm({
-      storage: seededStorage(),
-      api,
-      itemId: ITEM_ID,
-      todayIso: TODAY,
-    });
-
-    expect(result).toEqual({ outcome: 'wrong_status' });
-    expect(api.changeStatus).not.toHaveBeenCalled();
+    expect(result.outcome).toBe('api_error');
     expect(api.createUpdate).not.toHaveBeenCalled();
   });
 });

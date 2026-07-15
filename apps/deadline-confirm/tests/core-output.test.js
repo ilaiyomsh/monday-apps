@@ -1,8 +1,12 @@
-// Contract tests for the user-facing output surfaces:
+// Contract tests for the user-facing output surfaces (v2):
 // - src/helpers/pages.js   — spec §7 (three /confirm pages) + §8 (OAuth pages)
-// - src/helpers/snippet.js — spec §12 (email button snippet)
+//                            + v2 confirmLandingPage (mail-scanner protection,
+//                            owner decision 2026-07-15)
+// - src/helpers/snippet.js — v2 dynamic button snippet (per-button status
+//                            column + label + style color/icon/size)
 // - src/helpers/logger.js  — spec §6 log line {ts, ip, itemId, outcome}
-// Security constraints from §13: static pages only, no JS, no external assets.
+// Security constraints from §13: static pages only, no JS (EXCEPT the
+// landing page's inline auto-submit script), no external assets.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
@@ -11,8 +15,9 @@ import {
   badRequestPage,
   oauthDonePage,
   oauthErrorPage,
+  confirmLandingPage,
 } from '../src/helpers/pages.js';
-import { renderSnippet } from '../src/helpers/snippet.js';
+import { renderSnippet, BUTTON_SIZES } from '../src/helpers/snippet.js';
 import { logAttempt, logError, logInfo } from '../src/helpers/logger.js';
 
 describe('pages', () => {
@@ -91,25 +96,161 @@ describe('pages', () => {
   });
 });
 
-describe('renderSnippet', () => {
-  const params = { baseUrl: 'https://x.example', secret: 'SEC123' };
+describe('confirmLandingPage', () => {
+  const params = { itemId: '9876543210', k: 'SEC123', btn: 'b_test1234' };
+  const render = (overrides = {}) => confirmLandingPage({ ...params, ...overrides });
 
-  it('renders the href with literal {ITEM_ID} and HTML-encoded &amp; before k', () => {
-    expect(renderSnippet(params)).toContain(
-      'href="https://x.example/confirm?itemId={ITEM_ID}&amp;k=SEC123"',
+  /** the opening <form ...> tag, or '' when absent */
+  const formTag = (html) => html.match(/<form\b[^>]*>/i)?.[0] ?? '';
+  /** the full <input ...> tag whose name attribute equals `name`, or undefined */
+  const inputByName = (html, name) =>
+    (html.match(/<input\b[^>]*>/gi) ?? []).find((tag) => tag.includes(`name="${name}"`));
+
+  it('declares an RTL Hebrew document: <html dir="rtl" lang="he">', () => {
+    expect(render()).toContain('<html dir="rtl" lang="he">');
+  });
+
+  it('renders a form that POSTs back to /confirm (method="post", action="/confirm")', () => {
+    const tag = formTag(render());
+    expect(tag).toContain('method="post"');
+    expect(tag).toContain('action="/confirm"');
+  });
+
+  it.each([
+    ['itemId', '9876543210'],
+    ['k', 'SEC123'],
+    ['btn', 'b_test1234'],
+  ])('carries %s as a HIDDEN input with the exact passed value "%s"', (name, value) => {
+    const tag = inputByName(render(), name);
+    expect(tag).toBeDefined();
+    expect(tag).toContain('type="hidden"');
+    expect(tag).toContain(`value="${value}"`);
+  });
+
+  it('attribute-escapes input values: k=\'a"b<c\' never appears raw, appears as a&quot;b&lt;c', () => {
+    const html = render({ k: 'a"b<c' });
+    expect(html).not.toContain('a"b<c');
+    expect(html).toContain('a&quot;b&lt;c');
+  });
+
+  it('contains an INLINE <script> (no src=) that submits the form', () => {
+    const script = render().match(/<script\b[^>]*>([\s\S]*?)<\/script>/i);
+    expect(script).not.toBeNull();
+    expect(script[0]).not.toContain('src=');
+    expect(script[1]).toContain('.submit()');
+  });
+
+  it('contains a <noscript> fallback INSIDE the form with a submit button reading "המשך לאישור"', () => {
+    const html = render();
+    const noscript = html.match(/<noscript>([\s\S]*?)<\/noscript>/i);
+    expect(noscript).not.toBeNull();
+    expect(noscript[1]).toMatch(/<button\b|<input\b[^>]*type="submit"/i);
+    expect(noscript[1]).toContain('המשך לאישור');
+    // inside the form: <form ...> ... <noscript> ... </form>
+    const formOpen = html.search(/<form\b/i);
+    const formClose = html.search(/<\/form>/i);
+    const noscriptAt = html.search(/<noscript>/i);
+    expect(formOpen).toBeGreaterThanOrEqual(0);
+    expect(noscriptAt).toBeGreaterThan(formOpen);
+    expect(noscriptAt).toBeLessThan(formClose);
+  });
+
+  it('shows the interim text "מאשר את המשימה"', () => {
+    expect(render()).toContain('מאשר את המשימה');
+  });
+
+  it('references no external http(s) assets (form action is relative)', () => {
+    const html = render();
+    expect(html).not.toContain('http://');
+    expect(html).not.toContain('https://');
+  });
+});
+
+describe('renderSnippet (v2 dynamic buttons)', () => {
+  const baseUrl = 'https://x.example';
+  const secret = 'SEC123';
+  const button = {
+    id: 'b_test1234',
+    name: 'בוצע',
+    style: { color: '#00854d', icon: '✓', size: 'md' },
+  };
+  const render = (btn = button) => renderSnippet({ baseUrl, secret, button: btn });
+  const withStyle = (style) => ({ ...button, style: { ...button.style, ...style } });
+  /** inner HTML of the first <a> element, or undefined */
+  const anchorText = (html) => html.match(/<a\b[^>]*>([\s\S]*?)<\/a>/i)?.[1];
+
+  it('BUTTON_SIZES pins exactly sm/md/lg with the email-safe px values', () => {
+    expect(BUTTON_SIZES).toEqual({
+      sm: { fontSize: 13, padding: '8px 20px' },
+      md: { fontSize: 16, padding: '12px 32px' },
+      lg: { fontSize: 20, padding: '16px 40px' },
+    });
+  });
+
+  it('renders the exact href: baseUrl/confirm?itemId={ITEM_ID}&amp;k=<secret>&amp;btn=<id> ({ITEM_ID} literal)', () => {
+    expect(render()).toContain(
+      'href="https://x.example/confirm?itemId={ITEM_ID}&amp;k=SEC123&amp;btn=b_test1234"',
     );
   });
 
-  it('renders the exact button label "✓ סמן כבוצע"', () => {
-    expect(renderSnippet(params)).toContain('✓ סמן כבוצע');
+  it('joins query params with the HTML entity &amp; — a bare & separator never appears in the href', () => {
+    expect(render()).not.toContain('itemId={ITEM_ID}&k=');
+    expect(render()).not.toContain('&btn=');
   });
 
-  it('wraps the button in an email-safe presentation table', () => {
-    expect(renderSnippet(params)).toContain('table role="presentation"');
+  it('shows the visible label "✓ בוצע" (icon, space, name)', () => {
+    expect(render()).toContain('✓ בוצע');
+  });
+
+  it('uses the button style color as background-color:#00854d', () => {
+    expect(render()).toContain('background-color:#00854d');
+  });
+
+  it.each([
+    ['sm', '13px', '8px 20px'],
+    ['md', '16px', '12px 32px'],
+    ['lg', '20px', '16px 40px'],
+  ])('size "%s" renders font-size:%s and padding:%s', (size, fontSize, padding) => {
+    const html = render(withStyle({ size }));
+    expect(html).toContain(`font-size:${fontSize}`);
+    expect(html).toContain(`padding:${padding}`);
+  });
+
+  it('unknown size "xl" falls back to md sizing (font-size:16px, padding:12px 32px)', () => {
+    const html = render(withStyle({ size: 'xl' }));
+    expect(html).toContain('font-size:16px');
+    expect(html).toContain('padding:12px 32px');
+  });
+
+  it('missing icon → the visible text is exactly the name "בוצע" with NO leading space', () => {
+    const { icon: _dropped, ...styleWithoutIcon } = button.style;
+    const html = render({ ...button, style: styleWithoutIcon });
+    expect(anchorText(html)).toBe('בוצע');
+  });
+
+  it('empty-string icon → the visible text is exactly the name "בוצע" with NO leading space', () => {
+    const html = render(withStyle({ icon: '' }));
+    expect(anchorText(html)).toBe('בוצע');
+  });
+
+  it('HTML-escapes the name: "<b>&x" never appears raw, appears as &lt;b&gt;&amp;x', () => {
+    const html = render({ ...button, name: '<b>&x' });
+    expect(html).not.toContain('<b>&x');
+    expect(html).toContain('&lt;b&gt;&amp;x');
+  });
+
+  it('HTML-escapes the icon: "<i>" never appears raw, appears as &lt;i&gt;', () => {
+    const html = render(withStyle({ icon: '<i>' }));
+    expect(html).not.toContain('<i>');
+    expect(html).toContain('&lt;i&gt;');
+  });
+
+  it('wraps the button in an email-safe table with role="presentation"', () => {
+    expect(render()).toMatch(/<table\b[^>]*\brole="presentation"/i);
   });
 
   it('contains no <script tag', () => {
-    expect(renderSnippet(params).toLowerCase()).not.toContain('<script');
+    expect(render().toLowerCase()).not.toContain('<script');
   });
 });
 

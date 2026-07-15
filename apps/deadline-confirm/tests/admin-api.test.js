@@ -1,7 +1,9 @@
-// Integration tests for the admin API (spec §9, §13, §15.6, §15.9, §15.10).
-// The REAL Express pipeline runs via createApp; auth uses REAL JWTs signed
-// with the app client secret; the backend is inspected directly for persisted
-// values. State responses are asserted with deep-equality (every field).
+// Integration tests for the admin API v2 (contract: src/routes/admin-api.js
+// module header). The REAL Express pipeline runs via createApp; auth uses REAL
+// JWTs signed with the app client secret; the backend is inspected directly
+// for persisted values. Response bodies the contract fixes are asserted with
+// deep-equality (every field). v2 covers the multi-button config (server-side
+// b_/t_ id generation), GET /api/snippet?btn= and GET /api/email-template?tpl=.
 
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
@@ -19,18 +21,8 @@ const ENV = {
 };
 
 const BASE64URL_43 = /^[A-Za-z0-9_-]{43}$/;
-
-const VALID_CONFIG = {
-  boardId: '123',
-  statusColumnId: 'color_x',
-  fromIndex: 0,
-  fromLabel: 'בעבודה',
-  toIndex: 1,
-  toLabel: 'בוצע',
-  peopleColumnId: 'people_y',
-  expiryDateColumnId: null,
-  expiryGraceDays: 0,
-};
+const BUTTON_ID = /^b_[A-Za-z0-9_-]{4,16}$/;
+const TEMPLATE_ID = /^t_[A-Za-z0-9_-]{4,16}$/;
 
 function authHeader({ accountId = 777, userId = 1 } = {}) {
   return jwt.sign({ dat: { account_id: accountId, user_id: userId } }, 'cs-1');
@@ -50,11 +42,79 @@ function makeHarness({ seed = {} } = {}) {
   return { app, backend, api };
 }
 
+// ---------------------------------------------------------------------------
+// v2 config builders — every call returns fresh objects (no shared mutation).
+// ---------------------------------------------------------------------------
+
+function omit(obj, key) {
+  const { [key]: _omitted, ...rest } = obj;
+  return rest;
+}
+
+function validStyle(overrides = {}) {
+  return { color: '#00c875', icon: '✓', size: 'md', ...overrides };
+}
+
+function validButton(overrides = {}) {
+  return {
+    id: 'b_done0001',
+    name: 'סמן כבוצע',
+    statusColumnId: 'color_x',
+    targetIndex: 1,
+    targetLabel: 'בוצע',
+    style: validStyle(),
+    ...overrides,
+  };
+}
+
+function validTextBlock(overrides = {}) {
+  return {
+    type: 'text',
+    text: 'נא לאשר את המשימה',
+    direction: 'rtl',
+    font: 'Arial',
+    fontSize: 16,
+    align: 'right',
+    ...overrides,
+  };
+}
+
+function validButtonsBlock(overrides = {}) {
+  return { type: 'buttons', buttonIds: ['b_done0001'], ...overrides };
+}
+
+function validTemplate(overrides = {}) {
+  return {
+    id: 't_remind001',
+    name: 'תזכורת דדליין',
+    blocks: [validTextBlock(), validButtonsBlock()],
+    ...overrides,
+  };
+}
+
+function validConfig(overrides = {}) {
+  return {
+    boardId: '123',
+    peopleColumnId: 'people_y',
+    buttons: [validButton()],
+    templates: [validTemplate()],
+    ...overrides,
+  };
+}
+
+// Seedable stored config for the snippet / email-template routes.
+const STORED_CONFIG = validConfig();
+
+// ---------------------------------------------------------------------------
+// Auth sweep — 5 routes (spec §15.10)
+// ---------------------------------------------------------------------------
+
 const ROUTES = [
   { method: 'get', path: '/api/state' },
   { method: 'put', path: '/api/config' },
   { method: 'post', path: '/api/secret/rotate' },
   { method: 'get', path: '/api/snippet' },
+  { method: 'get', path: '/api/email-template' },
 ];
 
 describe('admin API auth (spec §15.10)', () => {
@@ -147,65 +207,314 @@ describe('GET /api/state', () => {
   });
 });
 
-describe('PUT /api/config', () => {
-  it('accepts a valid config with fromIndex 0 (0 is a real label id), persists it verbatim, and returns ok', async () => {
+// ---------------------------------------------------------------------------
+// PUT /api/config — v2 contract (admin-api.js module header)
+// ---------------------------------------------------------------------------
+
+describe('PUT /api/config (v2)', () => {
+  it('accepts a full v2 config, generates b_/t_ ids for id-less entries, echoes the normalized config, and persists it identically (targetIndex 0 stays 0)', async () => {
     const { app, backend } = makeHarness();
 
     const res = await request(app)
       .put('/api/config')
       .set('Authorization', authHeader())
-      .send(VALID_CONFIG);
+      .send({
+        boardId: '123',
+        peopleColumnId: 'people_y',
+        buttons: [
+          {
+            id: 'b_done0001',
+            name: 'סמן כבוצע',
+            statusColumnId: 'color_x',
+            targetIndex: 0,
+            targetLabel: 'בוצע',
+            style: { color: '#00c875', icon: '✓', size: 'md' },
+          },
+          {
+            // no id — the SERVER must generate one
+            name: 'דחייה',
+            statusColumnId: 'color_x',
+            targetIndex: 3,
+            targetLabel: 'נדחה',
+            style: { color: '#e2445c', size: 'sm' }, // icon omitted → defaults to ''
+          },
+        ],
+        templates: [
+          {
+            // no id — the SERVER must generate one
+            name: 'תזכורת דדליין',
+            blocks: [
+              {
+                type: 'text',
+                text: 'נא לאשר את המשימה',
+                direction: 'rtl',
+                font: 'Arial',
+                fontSize: 16,
+                align: 'right',
+              },
+              { type: 'buttons', buttonIds: ['b_done0001'] },
+            ],
+          },
+        ],
+      });
 
     expect(res.status).toBe(200);
-    expect(res.body).toStrictEqual({ ok: true });
-    expect(await backend.get('config')).toStrictEqual(VALID_CONFIG);
+    expect(res.body).toStrictEqual({
+      ok: true,
+      config: {
+        boardId: '123',
+        peopleColumnId: 'people_y',
+        buttons: [
+          {
+            id: 'b_done0001',
+            name: 'סמן כבוצע',
+            statusColumnId: 'color_x',
+            targetIndex: 0,
+            targetLabel: 'בוצע',
+            style: { color: '#00c875', icon: '✓', size: 'md' },
+          },
+          {
+            id: expect.stringMatching(BUTTON_ID),
+            name: 'דחייה',
+            statusColumnId: 'color_x',
+            targetIndex: 3,
+            targetLabel: 'נדחה',
+            style: { color: '#e2445c', icon: '', size: 'sm' },
+          },
+        ],
+        templates: [
+          {
+            id: expect.stringMatching(TEMPLATE_ID),
+            name: 'תזכורת דדליין',
+            blocks: [
+              {
+                type: 'text',
+                text: 'נא לאשר את המשימה',
+                direction: 'rtl',
+                font: 'Arial',
+                fontSize: 16,
+                align: 'right',
+              },
+              { type: 'buttons', buttonIds: ['b_done0001'] },
+            ],
+          },
+        ],
+      },
+    });
+    // Generated id must not collide with the pre-generated one.
+    expect(res.body.config.buttons[1].id).not.toBe('b_done0001');
+    // 0 is a REAL label id — it must survive as the number 0, never dropped.
+    expect(res.body.config.buttons[0].targetIndex).toBe(0);
+    // The backend copy deep-equals the response config (client re-syncs from it).
+    expect(await backend.get('config')).toStrictEqual(res.body.config);
   });
 
   const INVALID_CASES = [
     {
       name: 'boardId that is not all digits',
-      body: { ...VALID_CONFIG, boardId: 'abc' },
+      body: validConfig({ boardId: 'abc' }),
       field: 'boardId',
     },
     {
-      name: 'missing statusColumnId',
-      body: (({ statusColumnId: _omitted, ...rest }) => rest)(VALID_CONFIG),
+      name: 'numeric peopleColumnId (must be a non-empty string or null)',
+      body: validConfig({ peopleColumnId: 7 }),
+      field: 'peopleColumnId',
+    },
+    {
+      name: 'missing buttons array',
+      body: omit(validConfig({ templates: [] }), 'buttons'),
+      field: 'buttons',
+    },
+    {
+      name: 'empty buttons array',
+      body: validConfig({ buttons: [], templates: [] }),
+      field: 'buttons',
+    },
+    {
+      name: 'buttons array with 21 entries (max 20)',
+      body: validConfig({
+        buttons: Array.from({ length: 21 }, (_, i) =>
+          validButton({ id: `b_x${String(i).padStart(4, '0')}` })
+        ),
+        templates: [],
+      }),
+      field: 'buttons',
+    },
+    {
+      name: 'button with an empty name',
+      body: validConfig({ buttons: [validButton({ name: '' })] }),
+      field: 'name',
+    },
+    {
+      name: 'button with a 41-char name (max 40)',
+      body: validConfig({ buttons: [validButton({ name: 'x'.repeat(41) })] }),
+      field: 'name',
+    },
+    {
+      name: 'button missing statusColumnId',
+      body: validConfig({ buttons: [omit(validButton(), 'statusColumnId')] }),
       field: 'statusColumnId',
     },
     {
-      name: 'fromIndex given as the string "0" instead of a number',
-      body: { ...VALID_CONFIG, fromIndex: '0' },
-      field: 'fromIndex',
+      name: 'button targetIndex given as the string "1" instead of a number',
+      body: validConfig({ buttons: [validButton({ targetIndex: '1' })] }),
+      field: 'targetIndex',
     },
     {
-      name: 'negative fromIndex',
-      body: { ...VALID_CONFIG, fromIndex: -1 },
-      field: 'fromIndex',
+      name: 'button with a negative targetIndex',
+      body: validConfig({ buttons: [validButton({ targetIndex: -1 })] }),
+      field: 'targetIndex',
     },
     {
-      name: 'missing toIndex',
-      body: (({ toIndex: _omitted, ...rest }) => rest)(VALID_CONFIG),
-      field: 'toIndex',
+      name: 'button missing targetIndex',
+      body: validConfig({ buttons: [omit(validButton(), 'targetIndex')] }),
+      field: 'targetIndex',
     },
     {
-      name: 'missing fromLabel',
-      body: (({ fromLabel: _omitted, ...rest }) => rest)(VALID_CONFIG),
-      field: 'fromLabel',
+      name: 'button missing targetLabel',
+      body: validConfig({ buttons: [omit(validButton(), 'targetLabel')] }),
+      field: 'targetLabel',
     },
     {
-      name: 'negative expiryGraceDays',
-      body: { ...VALID_CONFIG, expiryGraceDays: -1 },
-      field: 'expiryGraceDays',
+      name: 'button style.color "green" (not #rrggbb)',
+      body: validConfig({ buttons: [validButton({ style: validStyle({ color: 'green' }) })] }),
+      field: 'style.color',
     },
     {
-      name: 'non-integer expiryGraceDays (1.5)',
-      body: { ...VALID_CONFIG, expiryGraceDays: 1.5 },
-      field: 'expiryGraceDays',
+      name: 'button style.color "#12345" (5 hex digits)',
+      body: validConfig({ buttons: [validButton({ style: validStyle({ color: '#12345' }) })] }),
+      field: 'style.color',
+    },
+    {
+      name: 'button style missing color',
+      body: validConfig({ buttons: [validButton({ style: omit(validStyle(), 'color') })] }),
+      field: 'style.color',
+    },
+    {
+      name: 'button style.size "xl" (not sm|md|lg)',
+      body: validConfig({ buttons: [validButton({ style: validStyle({ size: 'xl' }) })] }),
+      field: 'style.size',
+    },
+    {
+      name: 'button style.icon of 5 chars (max 4)',
+      body: validConfig({ buttons: [validButton({ style: validStyle({ icon: 'abcde' }) })] }),
+      field: 'style.icon',
+    },
+    {
+      name: 'two buttons sharing the same id',
+      body: validConfig({
+        buttons: [validButton(), validButton({ name: 'אחר' })],
+        templates: [],
+      }),
+      field: 'buttons',
+    },
+    {
+      name: 'button with a provided id "bad-id" that breaks the b_ pattern',
+      body: validConfig({ buttons: [validButton({ id: 'bad-id' })], templates: [] }),
+      field: 'id',
+    },
+    {
+      name: 'templates array with 11 entries (max 10)',
+      body: validConfig({
+        templates: Array.from({ length: 11 }, (_, i) =>
+          validTemplate({ id: `t_x${String(i).padStart(4, '0')}` })
+        ),
+      }),
+      field: 'templates',
+    },
+    {
+      name: 'template with an empty name',
+      body: validConfig({ templates: [validTemplate({ name: '' })] }),
+      field: 'name',
+    },
+    {
+      name: 'template with an empty blocks array',
+      body: validConfig({ templates: [validTemplate({ blocks: [] })] }),
+      field: 'blocks',
+    },
+    {
+      name: 'template with 31 blocks (max 30)',
+      body: validConfig({
+        templates: [
+          validTemplate({ blocks: Array.from({ length: 31 }, () => validTextBlock()) }),
+        ],
+      }),
+      field: 'blocks',
+    },
+    {
+      name: 'text block with empty text',
+      body: validConfig({ templates: [validTemplate({ blocks: [validTextBlock({ text: '' })] })] }),
+      field: 'text',
+    },
+    {
+      name: 'text block with 5001-char text (max 5000)',
+      body: validConfig({
+        templates: [validTemplate({ blocks: [validTextBlock({ text: 'א'.repeat(5001) })] })],
+      }),
+      field: 'text',
+    },
+    {
+      name: 'text block direction "up" (not rtl|ltr)',
+      body: validConfig({
+        templates: [validTemplate({ blocks: [validTextBlock({ direction: 'up' })] })],
+      }),
+      field: 'direction',
+    },
+    {
+      name: 'text block font "Comic Sans MS" (not in ALLOWED_FONTS)',
+      body: validConfig({
+        templates: [validTemplate({ blocks: [validTextBlock({ font: 'Comic Sans MS' })] })],
+      }),
+      field: 'font',
+    },
+    {
+      name: 'text block fontSize 9 (below 10)',
+      body: validConfig({
+        templates: [validTemplate({ blocks: [validTextBlock({ fontSize: 9 })] })],
+      }),
+      field: 'fontSize',
+    },
+    {
+      name: 'text block fontSize 33 (above 32)',
+      body: validConfig({
+        templates: [validTemplate({ blocks: [validTextBlock({ fontSize: 33 })] })],
+      }),
+      field: 'fontSize',
+    },
+    {
+      name: 'text block fontSize 16.5 (not an integer)',
+      body: validConfig({
+        templates: [validTemplate({ blocks: [validTextBlock({ fontSize: 16.5 })] })],
+      }),
+      field: 'fontSize',
+    },
+    {
+      name: 'text block align "justify" (not right|center|left)',
+      body: validConfig({
+        templates: [validTemplate({ blocks: [validTextBlock({ align: 'justify' })] })],
+      }),
+      field: 'align',
+    },
+    {
+      name: 'buttons block with an empty buttonIds array',
+      body: validConfig({
+        templates: [validTemplate({ blocks: [validButtonsBlock({ buttonIds: [] })] })],
+      }),
+      field: 'buttonIds',
+    },
+    {
+      name: 'buttons block referencing an id absent from buttons',
+      body: validConfig({
+        templates: [
+          validTemplate({ blocks: [validButtonsBlock({ buttonIds: ['b_nosuch999'] })] }),
+        ],
+      }),
+      field: 'buttonIds',
     },
   ];
 
   it.each(INVALID_CASES)(
-    'rejects $name with 400 invalid_config naming the field and persists nothing',
+    'rejects $name with 400 invalid_config naming field "$field" and persists nothing',
     async ({ body, field }) => {
       const { app, backend } = makeHarness();
 
@@ -219,20 +528,6 @@ describe('PUT /api/config', () => {
       expect(await backend.get('config')).toBeNull();
     }
   );
-
-  it('rejects fromIndex === toIndex with 400 invalid_config naming one of the index fields and persists nothing', async () => {
-    const { app, backend } = makeHarness();
-
-    const res = await request(app)
-      .put('/api/config')
-      .set('Authorization', authHeader())
-      .send({ ...VALID_CONFIG, fromIndex: 1, toIndex: 1 });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('invalid_config');
-    expect(['fromIndex', 'toIndex']).toContain(res.body.field);
-    expect(await backend.get('config')).toBeNull();
-  });
 });
 
 describe('POST /api/secret/rotate', () => {
@@ -265,26 +560,107 @@ describe('POST /api/secret/rotate', () => {
   });
 });
 
-describe('GET /api/snippet', () => {
-  it('responds 409 no_secret when no link secret is stored', async () => {
-    const { app } = makeHarness();
+// ---------------------------------------------------------------------------
+// GET /api/snippet?btn=<id> — v2
+// ---------------------------------------------------------------------------
+
+describe('GET /api/snippet (v2)', () => {
+  const SECRET = 'SEC_abc12345_zzzz';
+
+  it('responds 400 when the btn query param is missing, even with secret and config stored', async () => {
+    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
 
     const res = await request(app).get('/api/snippet').set('Authorization', authHeader());
+
+    expect(res.status).toBe(400);
+  });
+
+  it('responds 404 for a btn id that does not exist in the stored config', async () => {
+    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
+
+    const res = await request(app)
+      .get('/api/snippet?btn=b_nosuch999')
+      .set('Authorization', authHeader());
+
+    expect(res.status).toBe(404);
+  });
+
+  it('responds 409 no_secret when no link secret is stored, even for a known button', async () => {
+    const { app } = makeHarness({ seed: { config: STORED_CONFIG } });
+
+    const res = await request(app)
+      .get('/api/snippet?btn=b_done0001')
+      .set('Authorization', authHeader());
 
     expect(res.status).toBe(409);
     expect(res.body).toStrictEqual({ error: 'no_secret' });
   });
 
-  it('renders the snippet with the confirm URL (literal {ITEM_ID}, &amp;, stored secret) and the button label', async () => {
-    const seededSecret = 'SEC_abc12345_zzzz';
-    const { app } = makeHarness({ seed: { link_secret: seededSecret } });
+  it('renders the button snippet containing the confirm URL (literal {ITEM_ID}, &amp; entities, stored secret, btn id) and the button name', async () => {
+    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
 
-    const res = await request(app).get('/api/snippet').set('Authorization', authHeader());
+    const res = await request(app)
+      .get('/api/snippet?btn=b_done0001')
+      .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
+    expect(res.body).toStrictEqual({ snippet: expect.any(String) });
     expect(res.body.snippet).toContain(
-      `https://app.example/confirm?itemId={ITEM_ID}&amp;k=${seededSecret}`
+      `https://app.example/confirm?itemId={ITEM_ID}&amp;k=${SECRET}&amp;btn=b_done0001`
     );
-    expect(res.body.snippet).toContain('✓ סמן כבוצע');
+    expect(res.body.snippet).toContain('סמן כבוצע');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/email-template?tpl=<id> — v2
+// ---------------------------------------------------------------------------
+
+describe('GET /api/email-template (v2)', () => {
+  const SECRET = 'SEC_abc12345_zzzz';
+
+  it('responds 400 when the tpl query param is missing, even with secret and config stored', async () => {
+    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
+
+    const res = await request(app)
+      .get('/api/email-template')
+      .set('Authorization', authHeader());
+
+    expect(res.status).toBe(400);
+  });
+
+  it('responds 404 for a tpl id that does not exist in the stored config', async () => {
+    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
+
+    const res = await request(app)
+      .get('/api/email-template?tpl=t_nosuch999')
+      .set('Authorization', authHeader());
+
+    expect(res.status).toBe(404);
+  });
+
+  it('responds 409 no_secret when no link secret is stored, even for a known template', async () => {
+    const { app } = makeHarness({ seed: { config: STORED_CONFIG } });
+
+    const res = await request(app)
+      .get('/api/email-template?tpl=t_remind001')
+      .set('Authorization', authHeader());
+
+    expect(res.status).toBe(409);
+    expect(res.body).toStrictEqual({ error: 'no_secret' });
+  });
+
+  it('renders the full email HTML containing the text block content, the referenced btn id, and the literal {ITEM_ID}', async () => {
+    const { app } = makeHarness({ seed: { link_secret: SECRET, config: STORED_CONFIG } });
+
+    const res = await request(app)
+      .get('/api/email-template?tpl=t_remind001')
+      .set('Authorization', authHeader());
+
+    expect(res.status).toBe(200);
+    expect(res.body).toStrictEqual({ html: expect.any(String) });
+    expect(res.body.html).toContain('נא לאשר את המשימה');
+    expect(res.body.html).toContain('b_done0001');
+    expect(res.body.html).toContain('{ITEM_ID}');
   });
 });

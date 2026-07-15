@@ -1,61 +1,96 @@
-// The in-progress config the admin is editing — AppConfig with the
-// not-yet-chosen fields nullable. Labels (fromLabel/toLabel) are resolved
-// from the picked column's settings at save time.
+// v2 draft model — the config being edited. Buttons/templates get
+// client-generated ids on creation (server re-validates and generates for
+// any that arrive without one).
 
-import type { AppConfig, BoardColumn } from './types';
+import type { ActionButton, AppConfig, EmailTemplate, TemplateBlock } from './types';
 
 export interface ConfigDraft {
   boardId: string | null;
-  statusColumnId: string | null;
-  fromIndex: number | null;
-  toIndex: number | null;
   peopleColumnId: string | null;
-  expiryDateColumnId: string | null;
-  expiryGraceDays: number;
+  buttons: ActionButton[];
+  templates: EmailTemplate[];
+}
+
+function randomSlug(): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let out = '';
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  for (const b of bytes) out += alphabet[b % alphabet.length];
+  return out;
+}
+
+export function newButton(): ActionButton {
+  return {
+    id: `b_${randomSlug()}`,
+    name: '',
+    statusColumnId: '',
+    targetIndex: -1, // "not picked yet" sentinel (server requires >= 0)
+    targetLabel: '',
+    style: { color: '#00854d', icon: '✓', size: 'md' },
+  };
+}
+
+export function newTemplate(): EmailTemplate {
+  return {
+    id: `t_${randomSlug()}`,
+    name: '',
+    blocks: [
+      { type: 'text', text: '', direction: 'rtl', font: 'Arial', fontSize: 16, align: 'right' },
+    ],
+  };
+}
+
+export function newTextBlock(): TemplateBlock {
+  return { type: 'text', text: '', direction: 'rtl', font: 'Arial', fontSize: 16, align: 'right' };
+}
+
+export function newButtonsBlock(): TemplateBlock {
+  return { type: 'buttons', buttonIds: [] };
 }
 
 export function draftFromConfig(config: AppConfig | null): ConfigDraft {
   return {
     boardId: config?.boardId ?? null,
-    statusColumnId: config?.statusColumnId ?? null,
-    fromIndex: config?.fromIndex ?? null,
-    toIndex: config?.toIndex ?? null,
     peopleColumnId: config?.peopleColumnId ?? null,
-    expiryDateColumnId: config?.expiryDateColumnId ?? null,
-    expiryGraceDays: config?.expiryGraceDays ?? 0,
+    buttons: config?.buttons ?? [],
+    templates: config?.templates ?? [],
   };
+}
+
+export function buttonIsComplete(button: ActionButton): boolean {
+  return (
+    button.name.trim().length > 0 &&
+    button.statusColumnId.length > 0 &&
+    Number.isInteger(button.targetIndex) &&
+    button.targetIndex >= 0 && // 0 is a valid label id; -1 = not picked
+    button.targetLabel.length > 0
+  );
+}
+
+export function templateIsComplete(template: EmailTemplate): boolean {
+  if (template.name.trim().length === 0 || template.blocks.length === 0) return false;
+  return template.blocks.every((block) =>
+    block.type === 'text' ? block.text.trim().length > 0 : block.buttonIds.length > 0
+  );
 }
 
 export function draftIsComplete(draft: ConfigDraft): boolean {
   return (
     draft.boardId !== null &&
-    draft.statusColumnId !== null &&
-    draft.fromIndex !== null &&
-    draft.toIndex !== null &&
-    draft.fromIndex !== draft.toIndex
+    draft.buttons.length > 0 &&
+    draft.buttons.every(buttonIsComplete) &&
+    draft.templates.every(templateIsComplete)
   );
 }
 
-/**
- * Resolve the draft into the §4 config payload, looking the from/to label
- * texts up by label id on the selected status column. Returns null while the
- * draft is incomplete or the labels can't be resolved (e.g. stale column).
- */
-export function draftToConfig(draft: ConfigDraft, columns: BoardColumn[]): AppConfig | null {
+/** Resolve the draft into the PUT /api/config payload (null while incomplete). */
+export function draftToConfig(draft: ConfigDraft): AppConfig | null {
   if (!draftIsComplete(draft)) return null;
-  const statusColumn = columns.find((c) => c.id === draft.statusColumnId);
-  const fromLabel = statusColumn?.labels.find((l) => l.id === draft.fromIndex)?.label;
-  const toLabel = statusColumn?.labels.find((l) => l.id === draft.toIndex)?.label;
-  if (!fromLabel || !toLabel) return null;
   return {
     boardId: draft.boardId as string,
-    statusColumnId: draft.statusColumnId as string,
-    fromIndex: draft.fromIndex as number,
-    fromLabel,
-    toIndex: draft.toIndex as number,
-    toLabel,
     peopleColumnId: draft.peopleColumnId,
-    expiryDateColumnId: draft.expiryDateColumnId,
-    expiryGraceDays: draft.expiryDateColumnId ? draft.expiryGraceDays : 0,
+    buttons: draft.buttons,
+    templates: draft.templates,
   };
 }
