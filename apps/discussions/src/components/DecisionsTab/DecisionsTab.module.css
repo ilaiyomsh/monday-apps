@@ -42,6 +42,17 @@
   background: var(--primary-background-color, #ffffff);
   padding-block: 4px;
 }
+/* Cover the scroll container's (.body) top padding band above the pinned toolbar
+   so scrolled rows can't peek above it (round93). */
+.decToolbar::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  height: var(--spacing-large, 24px);
+  background: var(--primary-background-color, #ffffff);
+  pointer-events: none;
+}
 .decToolbarLeft {
   display: flex;
   align-items: center;
