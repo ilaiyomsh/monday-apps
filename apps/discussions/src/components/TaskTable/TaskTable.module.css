@@ -48,6 +48,27 @@
 .taskRow:last-child {
   border-bottom: none;
 }
+/* round112 — monday-style trailing FILLER: the grid tracks are fixed-px, so when
+   they sum to less than the board width the area right of the last column is
+   empty. A row-level hairline extends each row separator across that empty zone
+   to the right edge (like monday, minus the "+" add-column). It starts after the
+   6px group-color strip so the strip stays a continuous bar; over the cells it
+   coincides with their own per-cell borders (same color), so nothing doubles. */
+.taskRow::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 0;
+  bottom: 0;
+  height: 0.625px;
+  background: #e6e9ef;
+  pointer-events: none;
+  z-index: 0;
+}
+/* The table's own full-width bottom border closes the last row (same as before). */
+.taskRow:last-child::after {
+  display: none;
+}
 /* The group-color strip now lives as an inset shadow on the FROZEN leading cell
    (.taskFirst, or .selectCell in selection mode) so it travels with the frozen
    column during horizontal scroll instead of being a row-level bar that scrolls

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { Avatar, AvatarGroup } from '@vibe/core';
-import { Check, CloseSmall, Search, Person } from '@vibe/icons';
+import { Check, CloseSmall, Search } from '@vibe/icons';
 import { subscribe, getVersion, getAllUsers, getUser, hasRoster, ensureRoster } from '@generated/utils/usersStore.js';
 import { useBoardSubscribers } from '@generated/hooks/useBoardSubscribers.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import logger from '@generated/utils/logger.js';
+import { EmptyPersonGlyph } from '../PersonAvatar/PersonAvatar.jsx';
 import styles from './PersonPicker.module.css';
 
 function initialsOf(name) {
@@ -174,7 +175,7 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
       >
         {selected.length === 0 ? (
           <span className={styles.placeholder} aria-label="לא הוקצה">
-            <Person size={16} />
+            <EmptyPersonGlyph size={28} />
           </span>
         ) : selected.length === 1 ? (
           /* Single assignee (the common case): a plain Avatar centers exactly on

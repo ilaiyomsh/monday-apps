@@ -151,13 +151,21 @@
 }
 
 /* When collapsed there is no divider — pin the handle to the very edge as a
-   thin visible vertical strip so the user can always reopen the list. */
+   hover zone. round112: INVISIBLE by default (no strip line, no shadow — the
+   left margin stays clean white per the owner); the strip + arrow materialize
+   only when the cursor reaches the edge. */
 :global(.is-desktop) .dividerHandleCollapsed {
   inset-inline-start: 0;
   transform: translateX(0);
   width: 14px;
+  background: transparent;
+  border-inline-end: 1px solid transparent;
+  box-shadow: none;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+:global(.is-desktop) .dividerHandleCollapsed:hover {
   background: #fff;
-  border-inline-end: 1px solid var(--ui-border-color, #e6e9ef);
+  border-inline-end-color: var(--ui-border-color, #e6e9ef);
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
 }
 
@@ -177,7 +185,15 @@
   left: auto;
   inset-inline-start: 3px;
   transform: none;
-  opacity: 1; /* expand arrow is always visible while collapsed */
+  /* round112 — the expand arrow is now HIDDEN while collapsed too; it reveals
+     only when the cursor reaches the edge strip (the strip itself keeps
+     pointer-events so :hover below fires), or on keyboard focus. */
+  opacity: 0;
+  pointer-events: none;
+}
+:global(.is-desktop) .dividerHandleCollapsed:hover .collapseBtn,
+:global(.is-desktop) .dividerHandleCollapsed .collapseBtn:focus-visible {
+  opacity: 1;
   pointer-events: auto;
 }
 /* Reveal the collapse arrow whenever the cursor is anywhere over the
@@ -198,6 +214,11 @@
 .main {
   flex: 1;
   min-width: 0;
+  /* round112 — monday-style gray page backdrop behind the white discussion
+     card, so the card's rounded top-left corner (DiscussionCard .root) is
+     actually visible as a corner. Only the corner sliver of this gray ever
+     shows — the card fills the pane. */
+  background: var(--allgrey-background-color, #f6f7fb);
 }
 
 /* mobile: panes toggle via .hiddenMobile; both show side-by-side on md+ */

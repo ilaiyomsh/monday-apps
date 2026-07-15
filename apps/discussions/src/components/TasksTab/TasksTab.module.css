@@ -6,7 +6,7 @@
      separators run to the RIGHT edge of the view. A left inset keeps the toolbar
      off the edge; the right stays flush (the board bleeds right). */
   width: 100%;
-  padding-inline-start: 28px;
+  padding-inline-start: var(--content-gutter-start, 52px); /* round112 — wider white gutter */
   padding-inline-end: 0;
   box-sizing: border-box;
 }

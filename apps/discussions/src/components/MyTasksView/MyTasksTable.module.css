@@ -48,6 +48,23 @@
 .taskRow:last-child {
   border-bottom: none;
 }
+/* round112 — monday-style trailing filler: extend each row separator across the
+   empty zone right of the last column (starts after the 6px group strip; over
+   the cells it coincides with their own borders). See TaskTable.module.css. */
+.taskRow::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 0;
+  bottom: 0;
+  height: 0.625px;
+  background: #e6e9ef;
+  pointer-events: none;
+  z-index: 0;
+}
+.taskRow:last-child::after {
+  display: none;
+}
 
 .taskHead {
   background: #ffffff;

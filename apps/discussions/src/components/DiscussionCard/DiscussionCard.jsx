@@ -687,9 +687,10 @@ export function DiscussionCard({
                  editors, clickable — date opens the shared calendar popover, time
                  opens a half-hour menu; both persist to the discussion item. */
               <div ref={participantsRef} dir="rtl" className={`${styles.participants} ${reserveSettingsSpace ? styles.participantsReserve : ''} ${hideMeta ? styles.participantsNarrow : ''}`}>
-                {/* round111 — top row: date + time only, with an expand chevron at
-                    its LEFT end; the role/participants row collapses beneath it. */}
-                <div className={styles.metaTopRow}>
+                {/* round112 — ONE row again (the round111 second-row layout was
+                    reverted by the owner): date + time, then a LEFT-pointing
+                    chevron, and — when opened — the role/participants groups
+                    inline to its left, exactly like the pre-round111 layout. */}
                 {data.discussionDateID && (
                   <div className={`${styles.peopleGroup} ${styles.dateGroup}`}>
                     {editDiscussionFields ? (
@@ -750,6 +751,8 @@ export function DiscussionCard({
                   </div>
                 )}
                 {headerPeopleGroups.length > 0 && (
+                  /* In this dir=rtl row the chevron sits LEFT of the time; the
+                     glyphs: ‹ (points left) = open the roles, › = close them. */
                   <button
                     type="button"
                     className={styles.metaToggle}
@@ -757,18 +760,12 @@ export function DiscussionCard({
                     aria-expanded={metaOpen}
                     aria-label={metaOpen ? 'הסתר בעלי תפקידים' : 'הצג בעלי תפקידים'}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      {metaOpen ? <path d="M18 15l-6-6-6 6" /> : <path d="M6 9l6 6 6-6" />}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      {metaOpen ? <path d="M9 18l6-6-6-6" /> : <path d="M15 18l-6-6 6-6" />}
                     </svg>
                   </button>
                 )}
-                </div>
-                {metaOpen && headerPeopleGroups.length > 0 && (
-                  /* round111 — the roles/participants row, revealed by the chevron:
-                     stretches to the SAME width as the date/time row above, each
-                     role stacked as label-over-avatar. */
-                  <div className={styles.metaRolesRow}>
-                {headerPeopleGroups.map((g) => {
+                {metaOpen && headerPeopleGroups.map((g) => {
                   // מנהל (lead) + רשם דיון (coordinator) — and any future single
                   // role — are one-person fields: cap them at a single person and
                   // CLOSE the picker right after a pick (exactly like the decision/
@@ -777,7 +774,7 @@ export function DiscussionCard({
                   // after each selection.
                   const singleRole = g.alias !== 'participantsID';
                   return (
-                    <div key={g.alias} className={`${styles.peopleGroup} ${styles.peopleGroupAvatars} ${styles.peopleGroupStacked}`}>
+                    <div key={g.alias} className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
                       <span className={styles.peopleGroupLabel}>{g.title}</span>
                       {editDiscussionFields ? (
                         <PersonPicker
@@ -793,8 +790,6 @@ export function DiscussionCard({
                     </div>
                   );
                 })}
-                  </div>
-                )}
               </div>
             )
           )}
