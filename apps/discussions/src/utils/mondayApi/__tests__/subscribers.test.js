@@ -28,6 +28,7 @@ import {
   getAccountSlug,
   getBoardPeople,
   setBoardMembers,
+  ensureSubscribers,
   removeBoardMembers,
   addEveryoneTeam,
   removeTeamFromBoard,
@@ -274,6 +275,36 @@ describe('getAccountSlug', () => {
       'subscribers',
       expect.stringContaining('getAccountSlug'),
       expect.objectContaining({ error: 'UNAUTHORIZED' })
+    );
+  });
+});
+
+describe('ensureSubscribers — round104 pre-subscribe before people-column assign', () => {
+  beforeEach(() => { apiMock.mockReset(); });
+
+  it('adds the users as SUBSCRIBERS (kind: subscriber) to the board', async () => {
+    apiMock.mockResolvedValue({ add_users_to_board: [{ id: '58649006' }] });
+    await ensureSubscribers(BOARD_ID, [58649006]);
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    const q = apiMock.mock.calls[0][0];
+    expect(q).toContain(`add_users_to_board(board_id: ${Number(BOARD_ID)}`);
+    expect(q).toContain('user_ids: [58649006]');
+    expect(q).toContain('kind: subscriber');
+  });
+
+  it('is a no-op (no API call) when there are no user ids or no board', async () => {
+    await ensureSubscribers(BOARD_ID, []);
+    await ensureSubscribers(null, [58649006]);
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
+  it('SWALLOWS a failure (best-effort) — resolves and logs a warning, never throws', async () => {
+    apiMock.mockRejectedValueOnce(new Error('no permission'));
+    await expect(ensureSubscribers(BOARD_ID, [58649006])).resolves.toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(
+      'subscribers',
+      expect.stringContaining('ensureSubscribers'),
+      expect.objectContaining({ ids: [58649006] })
     );
   });
 });

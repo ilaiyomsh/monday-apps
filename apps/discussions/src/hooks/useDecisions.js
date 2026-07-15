@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { החלטות1Board } from '@api/BoardSDK.js';
 import { api, formatValue } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
+import { ensureSubscribers } from '../utils/mondayApi/subscribers.js';
 import { MondayContext } from '@generated/contexts/MondayContext.jsx';
 import logger from '../utils/logger';
 import { useOptimisticRows, isTempId, isRealId, nextTempId } from './useOptimisticRows.js';
@@ -292,8 +293,12 @@ export function useDecisions(discussionId) {
     });
     if (!isRealId(decisionId)) { enqueueEdit(decisionId, 'affectedID', people); return; }
     try {
+      const ids = (people || []).map((p) => Number(p.id)).filter(Number.isFinite);
+      // round104: pre-subscribe the assignees — monday rejects assigning a
+      // non-subscriber to a people column (מושפעים is account-wide, round79).
+      await ensureSubscribers(getBoardId('decisions'), ids);
       const b = new החלטות1Board();
-      await b.item(decisionId).update({ affectedID: (people || []).map((p) => Number(p.id)) }).execute();
+      await b.item(decisionId).update({ affectedID: ids }).execute();
     } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
   };
 
@@ -308,8 +313,10 @@ export function useDecisions(discussionId) {
     });
     if (!isRealId(decisionId)) { enqueueEdit(decisionId, 'deciderID', people); return; }
     try {
+      const ids = (people || []).map((p) => Number(p.id)).filter(Number.isFinite);
+      await ensureSubscribers(getBoardId('decisions'), ids); // round104 (see updateDecisionAffected)
       const b = new החלטות1Board();
-      await b.item(decisionId).update({ deciderID: (people || []).map((p) => Number(p.id)) }).execute();
+      await b.item(decisionId).update({ deciderID: ids }).execute();
     } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
   };
 
@@ -410,6 +417,13 @@ export function useDecisions(discussionId) {
         data.affectedID = affected.map((p) => Number(p?.id ?? p));
       }
       if (effectiveDate) data.decisionDateID = formatDate(effectiveDate);
+      // round104: pre-subscribe everyone assigned to a people column (creator /
+      // decider / affected) — monday rejects assigning a non-subscriber.
+      await ensureSubscribers(getBoardId('decisions'), [
+        ...(data.decisionCreatorID || []),
+        ...(data.deciderID || []),
+        ...(data.affectedID || []),
+      ]);
       const created = await b.item().create(data, { createLabelsIfMissing: true }).execute();
       realId = created.id;
       // Remember it so a failure in a link write below lets retry resume here
