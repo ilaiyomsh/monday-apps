@@ -169,7 +169,9 @@
 .sourceChip {
   position: relative;
   display: inline-block;
-  flex: 0 1 auto;
+  /* round110 — the chip always FILLS the cell width (flex-grow), so every
+     Connected chip is the same width regardless of how long its text is. */
+  flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
   /* round107 — matched pixel-by-pixel to the owner's monday screenshot:
