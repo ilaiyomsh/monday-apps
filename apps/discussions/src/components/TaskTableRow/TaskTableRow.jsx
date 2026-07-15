@@ -72,12 +72,12 @@ export function TaskTableRow({
   dragProps,
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
-  // Label pickers open UPWARD by default (video feedback #4); computeFloatingPosition
-  // still flips down if there's no room above.
-  const [statusPosition, setStatusPosition] = useState('top-start');
+  // Label pickers open DOWNWARD by default (monday parity, round 88);
+  // computeFloatingPosition still flips up if there's no room below.
+  const [statusPosition, setStatusPosition] = useState('bottom-start');
   const statusTriggerRef = useRef(null);
   const [priorityOpen, setPriorityOpen] = useState(false);
-  const [priorityPosition, setPriorityPosition] = useState('top-start');
+  const [priorityPosition, setPriorityPosition] = useState('bottom-start');
   const priorityTriggerRef = useRef(null);
   const [editingName, setEditingName] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -134,7 +134,7 @@ export function TaskTableRow({
     if (!rect) return;
     const next = computeFloatingPosition({
       anchorRect: rect,
-      preferred: 'top-start',
+      preferred: 'bottom-start',
       popupWidth: 248,
       popupHeight: Math.max(180, statusOptions.length * 48 + 32),
       offset: 4,
@@ -146,7 +146,7 @@ export function TaskTableRow({
     if (!rect) return;
     const next = computeFloatingPosition({
       anchorRect: rect,
-      preferred: 'top-start',
+      preferred: 'bottom-start',
       popupWidth: 248,
       popupHeight: Math.max(180, (priorityOpts.options?.length || 0) * 48 + 32),
       offset: 4,
