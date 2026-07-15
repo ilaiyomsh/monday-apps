@@ -7,8 +7,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'node',
-    // Server suites live in tests/; client logic retrofit tests sit next to
-    // their sources under src/client/ (test-guard gate mapping convention).
-    include: ['tests/**/*.test.js', 'src/client/**/*.test.ts'],
+    // Server suites live in tests/; colocated tests sit next to their
+    // sources under src/ (test-guard gate mapping convention).
+    include: ['tests/**/*.test.js', 'src/**/*.test.js', 'src/client/**/*.test.ts'],
   },
 });
