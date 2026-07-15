@@ -84,9 +84,9 @@
    follow border-radius). The leading cell is .taskFirst normally, or .selectCell
    when the table is selectable (the strip moves onto the checkbox track). */
 .taskHead .taskFirst,
-.taskHead .selectCell { border-start-start-radius: var(--border-radius-medium, 8px); }
+.taskHead .selectCell { border-start-start-radius: 0; /* round91: clean square strip top (no tail) */ }
 .taskRow:last-child .taskFirst,
-.taskRow:last-child .selectCell { border-end-start-radius: var(--border-radius-medium, 8px); }
+.taskRow:last-child .selectCell { border-end-start-radius: 0; /* round91: clean square strip bottom */ }
 
 /* Selection column (mirrors MyTasksTable.module.css). Prepended 36px frozen
    checkbox track; the group-color strip moves onto it so it travels with the

@@ -147,9 +147,9 @@
    HEADER leading cell and the bottom-left of the LAST row's leading cell rounds
    the strip to match the table's rounded-left outer border. */
 .taskHead .taskFirst,
-.taskHead .selectCell { border-start-start-radius: var(--border-radius-small, 4px); }
+.taskHead .selectCell { border-start-start-radius: 0; /* round91: clean square strip top (no tail) */ }
 .taskRow:last-child .taskFirst,
-.taskRow:last-child .selectCell { border-end-start-radius: var(--border-radius-small, 4px); }
+.taskRow:last-child .selectCell { border-end-start-radius: 0; /* round91: clean square strip bottom */ }
 
 /* Selection column (mirrors TaskTable.module.css). Prepended 36px frozen
    checkbox track; the group-color strip moves onto it so it travels with the
@@ -207,7 +207,7 @@
   width: 6px;
   background: var(--group-color, hsl(var(--status-default)));
   opacity: 0.45;
-  border-end-start-radius: var(--border-radius-small, 4px);
+  border-end-start-radius: 0; /* round91: clean square strip bottom */
 }
 .addRow:hover {
   background: var(--primary-background-hover-color, #f5f6f8);

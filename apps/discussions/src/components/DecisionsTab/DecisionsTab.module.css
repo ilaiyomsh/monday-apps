@@ -256,7 +256,7 @@
   z-index: 3;
   background: #ffffff;
   box-shadow: inset 6px 0 0 #6b4ee6;
-  border-start-start-radius: var(--border-radius-medium, 8px);
+  border-start-start-radius: 0; /* round91: clean square strip top (no tail) */
 }
 
 /* החלטה cell — FROZEN leading name cell (sticky at left:0, opaque so scrolled
@@ -281,7 +281,7 @@
    .taskFirst`). With an add-row present the last .decBodyRow isn't :last-child,
    so this is inert and the add-row's own rounded strip closes the box. */
 .decRow:last-child .decNameCell {
-  border-end-start-radius: var(--border-radius-medium, 8px);
+  border-end-start-radius: 0; /* round91: clean square strip bottom */
 }
 
 .decNameText,
@@ -517,7 +517,7 @@
   padding-inline-start: 18px;
   box-shadow: inset 6px 0 0 rgba(107, 78, 230, 0.5);
   align-self: stretch;
-  border-end-start-radius: var(--border-radius-medium, 8px);
+  border-end-start-radius: 0; /* round91: clean square strip bottom */
 }
 /* Inline add-row: leading + icon and a borderless, transparent text input that
    inherits the row font (native monday "add item" feel). */
@@ -586,7 +586,7 @@
    table top reads square (unlike Topics/Tasks). Mirrors TaskTable's
    `.taskHead .taskFirst, .taskHead .selectCell { border-start-start-radius }`. */
 .decSelectable .decHead .decSelectCell {
-  border-start-start-radius: var(--border-radius-medium, 8px);
+  border-start-start-radius: 0; /* round91: clean square strip top (no tail) */
 }
 
 /* Whole-row drag-reorder — the entire body row is the grab handle when enabled
