@@ -213,6 +213,13 @@
 }
 :global(.is-desktop) .sidebar {
   width: var(--sidebar-w, 340px);
+  /* round111 — animate open↔collapsed (see .collapsed below). */
+  transition: width 0.3s ease;
+}
+/* No width transition while the user drags the divider — the inline --sidebar-w
+   updates every mousemove and a lagging transition would fight the drag. */
+:global(.is-desktop) .resizing .sidebar {
+  transition: none;
 }
 :global(.is-desktop) .hiddenMobile {
   display: block;
@@ -230,17 +237,27 @@
 }
 
 /* Collapsed state — hide the discussions column so the card takes the full width.
-   Declared last so it wins over the responsive `.sidebar`/`.hiddenMobile` rules. */
+   Declared last so it wins over the responsive `.sidebar`/`.hiddenMobile` rules.
+   Mobile keeps the instant display:none (panes swap via showList there). */
 .collapsed {
   display: none;
 }
 
-/* When a discussion is open, `showList=false` also adds `.hiddenMobile`, whose
-   desktop rule (`display: block`, specificity 0,2,0) would otherwise override the
-   single-class `.collapsed` and keep the column visible. Match its specificity —
-   declared later in source so it wins the tie — so collapse works with a card open. */
+/* round111 — DESKTOP collapse is ANIMATED: the column slides shut (width → 0)
+   in ~0.3s instead of vanishing, both when the user clicks the edge handle and
+   when selecting a discussion auto-collapses it. display:block beats the mobile
+   rule above; the width transition lives on the base .sidebar rule below.
+   (Previously this was display:none — declared at .hiddenMobile's specificity so
+   collapse keeps working with a card open; that constraint still holds.) */
 :global(.is-desktop) .collapsed {
-  display: none;
+  display: block;
+  width: 0;
+  overflow: hidden;
+}
+/* Keep the list at its natural width while the column shuts, so the content is
+   CLIPPED by the sliding edge rather than squashed mid-animation. */
+:global(.is-desktop) .collapsed > * {
+  min-width: var(--sidebar-w, 340px);
 }
 
 .mainFull {

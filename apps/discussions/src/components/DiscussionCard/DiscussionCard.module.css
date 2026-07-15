@@ -378,17 +378,61 @@
      docked Updates panel keeps the header wider than that); round 51 hides them by
      REAL overflow instead, so it triggers whenever the panel docks, at any size. */
   flex-shrink: 0;
+  /* round111 — the meta is now a COLUMN of up to two rows: the date/time row
+     (with the expand chevron at its left end) and, when opened, the roles/
+     participants row beneath it. Row semantics moved into .metaTopRow /
+     .metaRolesRow; in this dir=rtl block flex-start = the RIGHT edge. */
   display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex-wrap: nowrap;
+  flex-direction: column;
+  align-items: flex-start;
   overflow-x: clip;
   overflow-y: visible;
-  /* Column spacing between groups comes from each group's padding (see
-     .peopleGroup), so the vertical separators sit centered between fields. With the
-     fields on a single non-wrapping line the row-gap is now moot but kept harmless. */
-  row-gap: 4px;
-  column-gap: 0;
+}
+
+/* round111 — top meta row: תאריך · שעה · chevron (chevron is the LAST child so
+   in RTL it lands at the row's LEFT end, as approved). */
+.metaTopRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  align-self: stretch;
+  justify-content: flex-start;
+}
+/* A touch more breathing room between the date and the time (was 12px+12px). */
+.metaTopRow .dateGroup {
+  padding-inline: 16px;
+}
+
+/* round111 — circular expand/collapse toggle for the roles row. */
+.metaToggle {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  margin-inline-start: 8px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 50%;
+  background: var(--primary-background-color, #ffffff);
+  color: var(--secondary-text-color, #676879);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.metaToggle:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+/* round111 — the collapsible roles/participants row: same width as the top row
+   (both stretch to the column width), fields spread evenly, light rule above. */
+.metaRolesRow {
+  display: flex;
+  align-items: stretch;
+  align-self: stretch;
+  justify-content: space-between;
+  border-top: 1px solid var(--layout-border-color, #eceef3);
+  margin-top: 4px;
+  padding-top: 4px;
 }
 
 /* One labeled group: BOLD label to the RIGHT (dir=rtl → label is the first child)
@@ -502,6 +546,22 @@
    effect: the mobile phone layout renders the info popover, not this row. */
 .participantsNarrow .peopleGroupAvatars {
   display: none;
+}
+/* round111 — the narrow (docked updates panel) state also drops the roles row
+   and its toggle, keeping only date + time like before. */
+.participantsNarrow .metaRolesRow,
+.participantsNarrow .metaToggle {
+  display: none;
+}
+
+/* round111 — a role field inside the collapsible row: the column TITLE on top
+   and the avatar(s) beneath it, centered. */
+.peopleGroupStacked {
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  padding-block: 2px;
 }
 
 /* Mobile info button + popover (replaces the inline date/participants). */
