@@ -345,8 +345,9 @@
   border-radius: 0;
   padding: 0 8px;
   color: var(--text-color-on-primary, #fff);
-  /* semibold white — matches monday's status cell label weight */
-  font-weight: var(--font-weight-medium, 600);
+  /* round98: same weight as the task name (normal, NOT bold) + white, so the
+     label text reads identically to the name column. */
+  font-weight: var(--font-weight-normal, 400);
   font-size: 14px;
   font-family: var(--font-family);
 }
@@ -435,9 +436,9 @@
   border: none;
   border-radius: var(--border-radius-small, 4px);
   color: var(--text-color-on-primary, #fff);
-  /* monday label-picker: MEDIUM (not bold) centered white text on the label's
-     real color — round94 toned the heavy bold down to match monday. */
-  font-weight: var(--font-weight-medium, 500);
+  /* round98: match the task-name font exactly — NORMAL weight (not bold), white,
+     14px, same family — so the picker labels read like the name column. */
+  font-weight: var(--font-weight-normal, 400);
   font-size: 14px;
   font-family: var(--font-family);
   cursor: pointer;

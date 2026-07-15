@@ -116,6 +116,8 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
   // Status picker opens DOWNWARD and CENTERED on the cell (monday parity,
   // round 94); flips up only if there's no room below.
   const [position, setPosition] = useState('bottom');
+  // round98: picker width tracks the column label (cell) width, not a fixed 206px.
+  const [menuWidth, setMenuWidth] = useState(206);
   const triggerRef = useRef(null);
 
   const label = opts.labelById[value];
@@ -125,10 +127,12 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
   const updatePosition = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const w = Math.round(rect.width);
+    setMenuWidth(w);
     const next = computeFloatingPosition({
       anchorRect: rect,
       preferred: 'bottom-start',
-      popupWidth: 206,
+      popupWidth: w,
       popupHeight: Math.max(180, (opts.options?.length || 0) * 40 + 28),
       offset: 4,
     });
@@ -162,7 +166,7 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
       zIndex={10000}
       content={() => (
         <DialogContentContainer>
-          <div className={styles.decMenu}>
+          <div className={styles.decMenu} style={{ width: menuWidth }}>
             {(opts.options || []).map((opt) => (
               <button
                 key={opt.id}
