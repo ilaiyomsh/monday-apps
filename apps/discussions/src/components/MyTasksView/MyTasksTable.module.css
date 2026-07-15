@@ -27,7 +27,7 @@
      OPEN on the right (no right border) so they run to the right edge. */
   border: 0.625px solid var(--ui-border-color, #d0d4e4);
   border-inline-end: none;
-  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
+  border-radius: var(--border-radius-small, 4px) 0 0 var(--border-radius-small, 4px);
   font-family: var(--font-family);
 }
 
@@ -109,9 +109,9 @@
    HEADER leading cell and the bottom-left of the LAST row's leading cell rounds
    the strip to match the table's rounded-left outer border. */
 .taskHead .taskFirst,
-.taskHead .selectCell { border-start-start-radius: var(--border-radius-medium, 8px); }
+.taskHead .selectCell { border-start-start-radius: var(--border-radius-small, 4px); }
 .taskRow:last-child .taskFirst,
-.taskRow:last-child .selectCell { border-end-start-radius: var(--border-radius-medium, 8px); }
+.taskRow:last-child .selectCell { border-end-start-radius: var(--border-radius-small, 4px); }
 
 /* Selection column (mirrors TaskTable.module.css). Prepended 36px frozen
    checkbox track; the group-color strip moves onto it so it travels with the
@@ -169,7 +169,7 @@
   width: 6px;
   background: var(--group-color, hsl(var(--status-default)));
   opacity: 0.45;
-  border-end-start-radius: var(--border-radius-medium, 8px);
+  border-end-start-radius: var(--border-radius-small, 4px);
 }
 .addRow:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
