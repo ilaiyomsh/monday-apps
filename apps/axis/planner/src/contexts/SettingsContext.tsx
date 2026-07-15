@@ -12,7 +12,9 @@ interface SettingsContextType {
   refresh: () => Promise<void>;
 }
 
-const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+// Exported so the dev-only Gantt harness (src/harness) can inject mock settings
+// without the real SDK-backed SettingsProvider. Prod code uses SettingsProvider.
+export const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { settings, saveSettings, loading, isConfigured, error, errorKind, refresh } = useMondaySettings();

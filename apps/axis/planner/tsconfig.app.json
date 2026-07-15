@@ -29,6 +29,7 @@
     "src/**/__tests__/**",
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
-    "src/test-utils/**"
+    "src/test-utils/**",
+    "src/harness/**"
   ]
 }
