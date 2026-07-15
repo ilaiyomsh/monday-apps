@@ -603,6 +603,14 @@
      ONE bounded vertical scroll region inside the fixed card height (rather than
      growing the card and spawning a second/outer scrollbar). */
   min-height: 0;
+  /* Round 95 — paint the scroll region white on its OWN box (not just inheriting
+     from .root behind it). The sticky header and the sticky per-tab toolbar each
+     paint their own white box, so the 24px band BETWEEN them (this .body's
+     padding-block top) was the only strip with no background of its own — in the
+     monday iframe it showed the themed backdrop through, reading as a transparent
+     gap. An explicit white background here makes the whole column — tabs → band →
+     toolbar → rows — uniformly white. */
+  background: var(--primary-background-color, #ffffff);
   /* Vertical scroll here is the single intended scroll region; overflow-x:hidden
      guarantees NO app/view-level horizontal scrollbar — each data table owns its
      OWN inner horizontal scroll (TasksTab .board, DecisionsTab .decBoard,
