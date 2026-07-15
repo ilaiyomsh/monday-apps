@@ -4,7 +4,7 @@ import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscuss
 import { Button, Text, IconButton } from '@vibe/core';
 import { Calendar, CloseSmall, Search, Settings } from '@vibe/icons';
 import { HighlightedText } from '@generated/components/HighlightedText';
-import { Copy, FileDown, Filter, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Check, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
 import { fmtTimeLabel, buildMonthOptions } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
@@ -148,6 +148,15 @@ function DiscussionMenuBody({ item, actions, confirmDel, setConfirmDel, onClose 
     onClose();
     fn?.(item);
   };
+  // round114 — "לינק לדיון" moved here from the card header: copy, flash a
+  // ✓ "הועתק" sign inside the item, then close the menu.
+  const [linkCopied, setLinkCopied] = useState(false);
+  const handleCopyLink = (e) => {
+    e.stopPropagation();
+    actions.onCopyLink?.(item);
+    setLinkCopied(true);
+    setTimeout(() => onClose(), 900);
+  };
   if (confirmDel) {
     return (
       <div className={styles.menuConfirm}>
@@ -169,6 +178,12 @@ function DiscussionMenuBody({ item, actions, confirmDel, setConfirmDel, onClose 
         <button type="button" className={styles.menuItem} onClick={run(actions.onEdit)} role="menuitem">
           <Pencil className={styles.menuItemIcon} />
           <span>עריכה</span>
+        </button>
+      )}
+      {actions.onCopyLink && (
+        <button type="button" className={styles.menuItem} onClick={handleCopyLink} role="menuitem">
+          {linkCopied ? <Check className={styles.menuItemIcon} /> : <Link2 className={styles.menuItemIcon} />}
+          <span>{linkCopied ? 'הועתק' : 'לינק לדיון'}</span>
         </button>
       )}
       {actions.onDuplicate && (
@@ -215,7 +230,7 @@ function DiscussionMenuBody({ item, actions, confirmDel, setConfirmDel, onClose 
    actions: edit / duplicate / export / delete. Delete swaps the menu to an
    inline confirm step (the app deliberately avoids window.confirm). Modeled on
    FilterSelect's fixed-position + click-outside pattern so it's never clipped. */
-function RowMenu({ item, onEdit, onDuplicate, onExport, onDelete, exporting }) {
+function RowMenu({ item, onEdit, onCopyLink, onDuplicate, onExport, onDelete, exporting }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -277,7 +292,7 @@ function RowMenu({ item, onEdit, onDuplicate, onExport, onDelete, exporting }) {
         >
           <DiscussionMenuBody
             item={item}
-            actions={{ onEdit, onDuplicate, onExport, onDelete, exporting }}
+            actions={{ onEdit, onCopyLink, onDuplicate, onExport, onDelete, exporting }}
             confirmDel={confirmDel}
             setConfirmDel={setConfirmDel}
             onClose={close}
@@ -350,7 +365,7 @@ function DiscussionContextMenu({ item, x, y, actions, onClose }) {
 }
 
 export function DiscussionList({
-  onSelect, selectedId, onCreateNew, onEdit, onDuplicate, onExport, onDelete,
+  onSelect, selectedId, onCreateNew, onEdit, onCopyLink, onDuplicate, onExport, onDelete,
   exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, onOpenMyDecisions, currentUser = null,
   // Calendar view — nav state lives in App so it survives the refreshKey remount.
   viewMode = 'list', onViewModeChange, calendarAnchor, calendarMode, onCalendarNavigate, onCreateAt,
@@ -436,6 +451,7 @@ export function DiscussionList({
   // ungated (mirrors RowMenu). Reuses the existing App handlers + soft-delete.
   const resolveItemActions = (item) => ({
     onEdit: (onEdit && canEditItem(item)) ? onEdit : null,
+    onCopyLink: onCopyLink || null,
     onDuplicate: onDuplicate || null,
     onExport: (onExport && canExportItem(item)) ? onExport : null,
     onDelete: (onDelete && canEditItem(item)) ? handleRowDelete : null,
@@ -482,12 +498,13 @@ export function DiscussionList({
     // renders its own RowMenu from these handlers, so enforce the gate here too.
     return {
       onEdit: onEdit ? (it) => { if (canEditItem(it)) onEdit(it); } : null,
+      onCopyLink,
       onDuplicate,
       onExport: onExport ? (it) => { if (canExportItem(it)) onExport(it); } : null,
       onDelete: onDelete ? (it) => { if (canEditItem(it)) handleRowDelete(it); } : null,
       exportingId,
     };
-  }, [onEdit, onDuplicate, onExport, onDelete, exportingId, handleRowDelete, canEditItem, canExportItem]);
+  }, [onEdit, onCopyLink, onDuplicate, onExport, onDelete, exportingId, handleRowDelete, canEditItem, canExportItem]);
 
   return (
     <div className={styles.root}>
@@ -674,11 +691,12 @@ export function DiscussionList({
                       <span className={styles.itemDate}>{fmtListDateCompact(item.discussionDateID)}</span>
                     )}
                   </button>
-                  {(onDuplicate || onEdit || onExport || onDelete) && (
+                  {(onDuplicate || onEdit || onCopyLink || onExport || onDelete) && (
                     <div className={styles.itemActions}>
                       <RowMenu
                         item={item}
                         onEdit={canEditItem(item) ? onEdit : null}
+                        onCopyLink={onCopyLink}
                         onDuplicate={onDuplicate}
                         onExport={canExportItem(item) ? onExport : null}
                         onDelete={canEditItem(item) && onDelete ? handleRowDelete : null}

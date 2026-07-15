@@ -63,11 +63,14 @@
   z-index: 0;
 }
 
-/* Tab row — nudged right; Vibe tab underlines sit on the inset rule above. */
+/* Tab row — round114: the first tab ("הנחיות קודמות") sits EXACTLY on the
+   shared 52px gutter line, flush with the tables' left edge below (the header
+   already pads to --content-gutter-start, so no extra nudge here; the first
+   tab's own internal leading padding is zeroed just below). */
 .tabsRow {
   position: relative;
   z-index: 1;
-  margin-inline-start: 12px;
+  margin-inline-start: 0;
   /* Round 70 — keep the tab strip a FIXED-HEIGHT SINGLE ROW that scrolls
      horizontally, so it never grows taller when monday docks its native Updates
      panel and narrows the app iframe. Before this the vibe tab labels (e.g.
@@ -108,6 +111,14 @@
 }
 .tabsRow :global([role="tab"]) * {
   white-space: nowrap;
+}
+/* round114 — zero the FIRST tab's internal leading padding so its label (and
+   active underline) start exactly on the gutter line, aligned with the table
+   edge below; the other tabs keep their spacing to its right. Covers both the
+   vibe li[role=tab] and its inner anchor/button, wherever the padding lives. */
+.tabsRow :global([role="tab"]:first-child),
+.tabsRow :global([role="tab"]:first-child) > * {
+  padding-inline-start: 0;
 }
 
 .titleRow {
@@ -293,15 +304,7 @@
   text-align: left;
 }
 
-.copyLinkButton {
-  flex-shrink: 0;
-}
 
-.copyLinkCopied {
-  font-size: var(--font-size-subtext, 12px);
-  color: var(--positive-color, #258750);
-  white-space: nowrap;
-}
 
 /* Discussion description (long_text column16), shown small under the title. */
 .description {

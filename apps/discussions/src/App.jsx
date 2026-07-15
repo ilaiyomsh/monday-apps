@@ -818,6 +818,7 @@ export default function App() {
           selectedId={selectedDiscussion?.id}
           onCreateNew={() => setShowCreate(true)}
           onEdit={(d) => setEditDiscussion(d)}
+          onCopyLink={(d) => handleCopyDiscussionLink(d.id, 'topics')}
           onDuplicate={(d) => setDuplicateFrom(d)}
           onExport={handleExport}
           onDelete={handleDeleteDiscussion}
@@ -850,7 +851,6 @@ export default function App() {
             onShowLoading={notifyLoading}
             onDismissToast={dismissNotice}
             onUpdated={handleSaved}
-            onCopyDiscussionLink={handleCopyDiscussionLink}
             initialTab={launchParams.tab}
             initialTabDiscussionId={launchParams.discussionId}
             canManageSettings={canManageSettings}

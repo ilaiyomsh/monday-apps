@@ -118,7 +118,14 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
 
   const removeUser = (id) => {
     logger.info('PersonPicker', 'remove user', { id });
-    onChange(selected.filter((p) => String(p.id) !== String(id)));
+    const next = selected.filter((p) => String(p.id) !== String(id));
+    onChange(next);
+    // round114 — removing the LAST person empties the column: close the picker
+    // immediately (owner request) instead of leaving the popover hanging open.
+    if (next.length === 0) {
+      setOpen(false);
+      setSearch('');
+    }
   };
   const toggleUser = (user) => {
     logger.info('PersonPicker', 'option clicked → toggle user', { id: user.id, name: user.name });
