@@ -272,17 +272,15 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
         )}
 
         {/* Chevron icon snapped to the visual RIGHT edge — hidden for placeholder.
-            In projects view it owns the expand toggle (the rest of the row focuses);
-            disabled during focus mode, where expansion is driven by the selection. */}
+            Purely a rotation indicator: it carries NO click handler, so a click on
+            it bubbles to the sidebar's handleSidebarClick. That makes the chevron
+            behave identically to clicking the project name (or the roll-up summary
+            bar) — a uniform "focus the project" gesture with the same elevation,
+            not a bare expand-without-focus. */}
         {!isPlaceholder && (
           <div
-            className={`w-4 h-4 flex items-center justify-center transition-transform duration-200 flex-shrink-0 ${isExpanded ? 'rotate-90' : ''} ${isProjectView && !isProjectFocusMode ? 'cursor-pointer hover:bg-bg-hover rounded' : ''}`}
+            className={`w-4 h-4 flex items-center justify-center transition-transform duration-200 flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}
             style={dimContent}
-            onClick={(e) => {
-              if (!isProjectView || isProjectFocusMode) return;
-              e.stopPropagation();
-              toggleGroup(group.id);
-            }}
           >
             <svg className="w-3 h-3 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

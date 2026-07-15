@@ -114,13 +114,14 @@ const formatHours = (value: number | null | undefined): string => {
   return String(Math.round(value));
 };
 
-const SKELETON = <span className="h-4 w-10 rounded bg-bg-hover animate-pulse" aria-hidden="true" />;
+const SKELETON = <span className="h-3.5 w-8 rounded bg-bg-hover animate-pulse" aria-hidden="true" />;
 
-// Shared cell layout: a value (or skeleton) above a muted label, centered.
+// Shared cell layout: a muted label and its value on ONE line (inline), small
+// text to match the timeline ruler's month labels.
 const MetricCell: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <div className="flex flex-col items-center text-center min-w-0">
+  <div className="flex items-center gap-1.5 min-w-0">
+    <span className="text-xs text-text-muted truncate">{label}</span>
     {children}
-    <span className="text-sm text-text-muted mt-0.5 truncate max-w-full">{label}</span>
   </div>
 );
 
@@ -220,19 +221,21 @@ const ProjectMetricsRow: React.FC<{ projectId: string }> = ({ projectId }) => {
 
   const staticValue = (value: number) =>
     projectMetricsReady ? (
-      <span className="text-sm font-bold text-text-primary tabular-nums leading-tight">{formatHours(value)}</span>
+      <span className="text-xs font-bold text-text-primary tabular-nums leading-tight">{formatHours(value)}</span>
     ) : SKELETON;
 
   return (
     // Planned-hours cell is intentionally HIDDEN for now (owner, 2026-07-14): the
-    // card shows only ALLOCATED + ACTUAL, split 50/50. The Settings mapping
-    // (projectPlannedHoursColumnId) is deliberately left in place, and the
-    // EditablePlannedCell component below is kept ready for future use — to bring
-    // planned back, restore `grid-cols-3` and re-add the <EditablePlannedCell/>
-    // (value={metrics?.planned ?? null}, label={t('projectSummary.plannedHours')}).
-    <div dir="ltr" className="grid grid-cols-2 gap-2 flex-1 min-h-0 items-center border-t border-border-subtle">
-      <MetricCell label={t('projectSummary.allocatedHours')}>{staticValue(metrics?.allocated ?? 0)}</MetricCell>
+    // card shows only ACTUAL + ALLOCATED, each as an inline "label number" pair
+    // split by a vertical divider. The Settings mapping (projectPlannedHoursColumnId)
+    // is deliberately left in place, and the EditablePlannedCell component below is
+    // kept ready for future use — to bring planned back, add a third <MetricCell/>
+    // (value={metrics?.planned ?? null}, label={t('projectSummary.plannedHours')})
+    // with another divider.
+    <div className="flex items-center justify-center gap-3 flex-1 min-h-0 border-t border-border-subtle">
       <MetricCell label={t('projectSummary.actualHours')}>{staticValue(metrics?.reported ?? 0)}</MetricCell>
+      <span className="w-px self-stretch my-1.5 bg-border-subtle" aria-hidden="true" />
+      <MetricCell label={t('projectSummary.allocatedHours')}>{staticValue(metrics?.allocated ?? 0)}</MetricCell>
     </div>
   );
 };

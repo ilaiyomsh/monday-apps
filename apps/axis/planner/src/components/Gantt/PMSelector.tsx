@@ -147,13 +147,13 @@ export const PMSelector: React.FC<PMSelectorProps> = ({
       >
         {displayName ? (
           <>
-            <span dir="ltr" className="truncate font-medium text-text-secondary text-sm min-w-0 text-start">
+            <span dir="ltr" className="truncate font-medium text-text-secondary text-xs min-w-0 text-start">
               {displayName}
             </span>
-            <Avatar name={displayName} url={displayPhoto} size={30} />
+            <Avatar name={displayName} url={displayPhoto} size={24} />
           </>
         ) : (
-          <span className="text-sm text-text-muted">{t('pmSelector.selectManager')}</span>
+          <span className="text-xs text-text-muted">{t('pmSelector.selectManager')}</span>
         )}
         {isUpdating && <span className="w-4 h-4 border-2 border-border-default border-t-accent rounded-full animate-spin flex-shrink-0" />}
       </button>
