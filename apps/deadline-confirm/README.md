@@ -43,12 +43,11 @@ USE_LOCAL_STORAGE=true npm start   # ריצה מקומית עם אחסון בז�
 
 ## הקמה חד-פעמית בפלטפורמה (מפעיל)
 
-1. **פריסה ראשונה** דרך הצנרת. שים לב לשני סוגי כתובות (docs-מאומת):
-   ה-**Version URL** (מ-`mapps code:status -i <VERSION_ID>`) מתחלף בכל push;
-   ה-**Live URL** הסטטי נוצר רק אחרי עליית live ראשונה ומוצג רק במרכז
-   המפתחים → Host on monday → General. בשלב ה-draft משתמשים ב-Version URL
-   (ומעדכנים BASE_URL + redirect אחרי כל פריסה); **בעליית production עוברים
-   ל-Live URL לכל האימות — ולתמיד**.
+1. **פריסה ראשונה** דרך הצנרת. יש שני סוגי כתובות: ‏**Version URL**
+   ‏(`e47e2-…`, פר-פריסה) ו-**Live URL** קבוע (`live1-…`). שניהם מופיעים
+   ב-`mapps code:status -i <VERSION_ID>` — עמודת ה-Live URL מופיעה רק
+   מהפריסה השנייה בערך, והיא מגישה גם את ה-draft. **כל האימות (BASE_URL,
+   ‏redirect, קישור הפיצ'ר) מוצמד ל-Live URL הקבוע** — הוא לא משתנה לעולם.
 2. **משתני סביבה** (`mapps code:env -i 11704868 -m set -k <KEY> -v <VALUE>`):
    | משתנה | ערך |
    |---|---|
