@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
 import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
-import { MoveArrowLeft, Link, Info } from '@vibe/icons';
+import { MoveArrowLeft, Info } from '@vibe/icons';
 import { דיונים1Board } from '@api/BoardSDK.js';
 import { useTasks } from '@generated/hooks/useTasks';
 import { useDecisions } from '@generated/hooks/useDecisions';
@@ -62,7 +62,6 @@ export function DiscussionCard({
   onShowLoading,
   onDismissToast,
   onUpdated,
-  onCopyDiscussionLink,
   initialTab = null,
   initialTabDiscussionId = null,
   canManageSettings = false,
@@ -314,7 +313,6 @@ export function DiscussionCard({
   // Inline editing of the title (double-click to edit).
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
-  const [linkCopied, setLinkCopied] = useState(false);
 
   // Prefetch the discussion's tasks once at the card level and share them with
   // both the Tasks and Effectiveness tabs (no duplicate query, instant switch).
@@ -370,12 +368,6 @@ export function DiscussionCard({
     const nextTab = normalizeTabName(initialTab);
     if (nextTab) setActiveTab(nextTab);
   }, [discussion?.id, initialTab, initialTabDiscussionId]);
-
-  useEffect(() => {
-    if (!linkCopied) return undefined;
-    const timer = setTimeout(() => setLinkCopied(false), 1600);
-    return () => clearTimeout(timer);
-  }, [linkCopied]);
 
   if (!discussion) {
     return (
@@ -440,13 +432,8 @@ export function DiscussionCard({
     const t = titleDraft.trim();
     if (t && t !== data.name) persistField('name', t);
   };
-  const handleCopyLink = async () => {
-    if (!discussion?.id) return;
-    // The copied link ALWAYS lands on the topics tab (owner decision
-    // 2026-07-14, item 15) — regardless of which tab is active when copying.
-    const copied = await onCopyDiscussionLink?.(discussion.id, 'topics');
-    if (copied) setLinkCopied(true);
-  };
+  // round114 — the header copy-link icon moved into the discussions-list row
+  // menu ("לינק לדיון"); the card no longer copies links itself.
   const openNewTaskModal = (defaults = {}) => {
     setNewTaskDefaults(defaults);
     setNewTaskOpen(true);
@@ -625,21 +612,6 @@ export function DiscussionCard({
                 >
                   {data.name}
                 </h1>
-                {!isMobile && (
-                  <IconButton
-                    kind={"tertiary"}
-                    size={"small"}
-                    icon={Link}
-                    onClick={handleCopyLink}
-                    ariaLabel="העתק לינק לדיון ולטאב הנוכחי"
-                    className={styles.copyLinkButton}
-                  />
-                )}
-                {!isMobile && linkCopied && (
-                  <span className={styles.copyLinkCopied} aria-live="polite">
-                    הועתק
-                  </span>
-                )}
               </div>
             )}
           </div>
