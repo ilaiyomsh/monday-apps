@@ -15,7 +15,7 @@
   /* Same full-bleed layout as TasksTab: left inset keeps the toolbar off the
      edge, the board bleeds right so row separators run to the right edge. */
   width: 100%;
-  padding-inline-start: 28px;
+  padding-inline-start: var(--content-gutter-start, 52px); /* round112 — wider white gutter */
   padding-inline-end: 0;
   box-sizing: border-box;
 }

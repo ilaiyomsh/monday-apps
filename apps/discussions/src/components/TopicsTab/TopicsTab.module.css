@@ -6,7 +6,7 @@
   /* Full width (broke out of the 90% frame) so the point tables run to the RIGHT
      edge; a left inset keeps content off the edge, the right stays flush. */
   width: 100%;
-  padding-inline-start: 28px;
+  padding-inline-start: var(--content-gutter-start, 52px); /* round112 — wider white gutter */
   padding-inline-end: 0;
   box-sizing: border-box;
 }

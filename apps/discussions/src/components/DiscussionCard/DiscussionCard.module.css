@@ -7,6 +7,10 @@
      shell never grows a second/outer scrollbar when the iframe narrows. */
   min-height: 0;
   background-color: var(--primary-background-color, #ffffff);
+  /* round112 — monday-style content surface: the white card's TOP-LEFT corner
+     is slightly rounded against the gray pane behind it (App .main paints the
+     gray). overflow stays visible — only the corner paint rounds. */
+  border-top-left-radius: 8px;
 }
 
 .empty {
@@ -43,7 +47,10 @@
   background-color: var(--primary-background-color, #ffffff);
   /* Tab row sits flush on the inset rule below (monday-style active indicator). */
   padding: var(--spacing-medium, 16px) var(--spacing-large, 24px) 0;
-  padding-inline-start: calc(var(--spacing-large, 24px) + 12px);
+  /* round112 — the shared white gutter (was 24px+12px): header, tabs and the
+     table tabs all start at the same 52px so the left margin reads as one
+     clean white band. */
+  padding-inline-start: var(--content-gutter-start, 52px);
 }
 .header::after {
   content: '';
@@ -378,37 +385,30 @@
      docked Updates panel keeps the header wider than that); round 51 hides them by
      REAL overflow instead, so it triggers whenever the panel docks, at any size. */
   flex-shrink: 0;
-  /* round111 — the meta is now a COLUMN of up to two rows: the date/time row
-     (with the expand chevron at its left end) and, when opened, the roles/
-     participants row beneath it. Row semantics moved into .metaTopRow /
-     .metaRolesRow; in this dir=rtl block flex-start = the RIGHT edge. */
+  /* round112 — back to the ONE-line row layout (round111's two-row variant was
+     reverted by the owner): date · time · chevron · (roles, when opened). */
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
   overflow-x: clip;
   overflow-y: visible;
 }
 
-/* round111 — top meta row: תאריך · שעה · chevron (chevron is the LAST child so
-   in RTL it lands at the row's LEFT end, as approved). */
-.metaTopRow {
-  display: flex;
-  align-items: center;
-  flex-wrap: nowrap;
-  align-self: stretch;
-  justify-content: flex-start;
-}
-/* A touch more breathing room between the date and the time (was 12px+12px). */
-.metaTopRow .dateGroup {
+/* A touch more breathing room around the date and the time (kept from
+   round111's approved spacing; was 12px+12px). */
+.participants .dateGroup {
   padding-inline: 16px;
 }
 
-/* round111 — circular expand/collapse toggle for the roles row. */
+/* round111/112 — circular toggle for the role/participants groups; sits LEFT
+   of the time (last-ordered among the date/time items in this RTL row) and
+   the roles expand inline to its left. */
 .metaToggle {
   width: 26px;
   height: 26px;
   flex: none;
-  margin-inline-start: 8px;
+  margin-inline: 4px 8px;
   border: 1px solid var(--ui-border-color, #d0d4e4);
   border-radius: 50%;
   background: var(--primary-background-color, #ffffff);
@@ -421,18 +421,6 @@
 }
 .metaToggle:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
-}
-
-/* round111 — the collapsible roles/participants row: same width as the top row
-   (both stretch to the column width), fields spread evenly, light rule above. */
-.metaRolesRow {
-  display: flex;
-  align-items: stretch;
-  align-self: stretch;
-  justify-content: space-between;
-  border-top: 1px solid var(--layout-border-color, #eceef3);
-  margin-top: 4px;
-  padding-top: 4px;
 }
 
 /* One labeled group: BOLD label to the RIGHT (dir=rtl → label is the first child)
@@ -547,21 +535,10 @@
 .participantsNarrow .peopleGroupAvatars {
   display: none;
 }
-/* round111 — the narrow (docked updates panel) state also drops the roles row
-   and its toggle, keeping only date + time like before. */
-.participantsNarrow .metaRolesRow,
+/* round112 — the narrow (docked updates panel) state also drops the roles
+   toggle, keeping only date + time like before. */
 .participantsNarrow .metaToggle {
   display: none;
-}
-
-/* round111 — a role field inside the collapsible row: the column TITLE on top
-   and the avatar(s) beneath it, centered. */
-.peopleGroupStacked {
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 5px;
-  padding-block: 2px;
 }
 
 /* Mobile info button + popover (replaces the inline date/participants). */
