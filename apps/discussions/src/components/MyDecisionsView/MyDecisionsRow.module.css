@@ -185,22 +185,38 @@
   min-width: 0;
 }
 .sourceChip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   flex: 1 1 auto;
   min-width: 0;
-  text-align: start;
-  padding: 4px 8px;
+  max-width: 100%;
+  min-height: 28px;
+  /* extra start padding clears the inset accent bar (round102) */
+  padding: 3px 10px 3px 14px;
   border: 1px solid var(--ui-border-color, #d0d4e4);
-  border-inline-start: 3px solid var(--decisions-accent, #6b4ee6);
   border-radius: 4px;
   background: #ffffff;
   color: var(--primary-text-color, #323338);
   font-family: var(--font-family);
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+}
+/* round102: INSET ROUNDED accent bar (decisions purple) on the leading (left)
+   edge — monday's connected-item look (was a flush 3px left border). */
+.sourceChip::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  bottom: 4px;
+  width: 4px;
+  border-radius: 3px;
+  background: var(--decisions-accent, #6b4ee6);
 }
 .sourceChip:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
