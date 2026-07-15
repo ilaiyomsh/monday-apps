@@ -43,14 +43,18 @@ USE_LOCAL_STORAGE=true npm start   # ריצה מקומית עם אחסון בז�
 
 ## הקמה חד-פעמית בפלטפורמה (מפעיל)
 
-1. **פריסה ראשונה** דרך הצנרת, ואז לקחת את ה-**liveUrl** היציב:
-   `mapps code:status -i 11704868` (לא ה-url הפר-דיפלוי).
+1. **פריסה ראשונה** דרך הצנרת. שים לב לשני סוגי כתובות (docs-מאומת):
+   ה-**Version URL** (מ-`mapps code:status -i <VERSION_ID>`) מתחלף בכל push;
+   ה-**Live URL** הסטטי נוצר רק אחרי עליית live ראשונה ומוצג רק במרכז
+   המפתחים → Host on monday → General. בשלב ה-draft משתמשים ב-Version URL
+   (ומעדכנים BASE_URL + redirect אחרי כל פריסה); **בעליית production עוברים
+   ל-Live URL לכל האימות — ולתמיד**.
 2. **משתני סביבה** (`mapps code:env -i 11704868 -m set -k <KEY> -v <VALUE>`):
    | משתנה | ערך |
    |---|---|
    | `MONDAY_CLIENT_ID` / `MONDAY_CLIENT_SECRET` | מה-Dev Center → האפליקציה → OAuth |
    | `ALLOWED_ACCOUNT_ID` | ה-Account ID של חשבון הלקוח (נעילת single-tenant) |
-   | `BASE_URL` | ה-liveUrl משלב 1, בלי `/` בסוף |
+   | `BASE_URL` | הכתובת משלב 1 (Version URL בשלב draft / ‏Live URL בפרודקשן), בלי `/` בסוף |
 3. **Dev Center:** להוסיף פיצ'ר **Administration View** שמצביע על `<BASE_URL>/admin`;
    להפעיל OAuth עם scopes: `me:read boards:read boards:write updates:write`
    ו-redirect URI: `<BASE_URL>/oauth/callback`.
