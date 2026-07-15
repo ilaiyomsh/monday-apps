@@ -148,3 +148,7 @@ Region flag where supported: `-z/--region` `us|eu|au|il`.
 - `mapps init -t <TOKEN> [-l/--local]`
 - `mapps help <topic> [-n/--nested-commands]`
 - `mapps autocomplete zsh|bash|powershell [-r]`
+
+| `code:push` (server) SWALLOWS the real failure reason — the command's catch logs it at DEBUG only and exits 1 with nothing printed. Always pass `--verbose` in CI push steps; it enables the CLI debug logger (incl. the archive's "paths to ignore" list). | incident-verified 2026-07-15, deadline-confirm runs 29369678605 (silent) vs 29386525549 (verbose) |
+| The monday-code buildpack runs `npm install` + `npm run build` INSIDE /workspace: a vite-built admin SPA is REBUILT remotely, so `public/admin/` (or any build output) need not ship in the tarball — but the CLIENT SOURCES MUST (excluding `src/client/` fails the remote build with a rollup entry error). This is why sync-calender's gitignored `public/admin/` still serves in production. | incident-verified 2026-07-15 |
+| `code:push` archive excludes honor `.mappsignore` first, else the app dir's `.gitignore` (recursive glob, first match), plus built-in `node_modules/**`; patterns are validated against existing paths only. Verified via `--verbose` debug lines (`ignore_files_for_archive`). | source-read + log-verified 2026-07-15 |
