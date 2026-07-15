@@ -95,9 +95,11 @@
 }
 
 /* Quick-filter battery (round 81): last flex child pushed to the RIGHT edge
-   (LTR layout) via an auto start-margin; filter/sort/group stay on the left. */
+   (LTR layout) via an auto start-margin; filter/sort/group stay on the left.
+   Round 83: nudged ~0.5cm off the right edge (owner request). */
 .batterySlot {
   margin-inline-start: auto;
+  margin-inline-end: 0.5cm;
 }
 
 .groupSelect {
