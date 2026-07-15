@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { collapseMapForView } from '@generated/utils/collapsePref.js';
 import { Button, Text, Dropdown } from '@vibe/core';
 import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
@@ -827,6 +828,14 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     if (allCollapsed) setCollapsed({});
     else { const c = {}; grouped.forEach((g) => { c[g.key] = true; }); setCollapsed(c); }
   };
+  // round105 — apply the saved collapse-all default ONCE, when groups first load.
+  const collapseAppliedRef = useRef(false);
+  useEffect(() => {
+    if (collapseAppliedRef.current || grouped.length === 0) return;
+    collapseAppliedRef.current = true;
+    const m = collapseMapForView(savedView, grouped);
+    if (m) setCollapsed(m);
+  }, [savedView, grouped]);
 
   const groupOptions = byType ? [...GROUP_OPTIONS, GROUP_OPTION_DISCUSSION] : GROUP_OPTIONS;
 
@@ -1026,7 +1035,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
             />
           )}
           {groupBy !== 'none' && filteredTasks.length > 0 && (
-            <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
+            <CollapseAllButton
+              collapsed={allCollapsed}
+              onClick={toggleAll}
+              onSave={canSaveView ? () => { saveView({ collapseAll: allCollapsed }); onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success'); } : null}
+            />
           )}
         </div>
         {/* Quick-filter battery (round 81) — last flex child + auto start-margin
