@@ -166,7 +166,7 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
       zIndex={10000}
       content={() => (
         <DialogContentContainer>
-          <div className={styles.decMenu} style={{ width: menuWidth }}>
+          <div className={styles.decMenu} style={{ width: menuWidth + 20 }}>
             {(opts.options || []).map((opt) => (
               <button
                 key={opt.id}
