@@ -9,7 +9,8 @@ import { LoadCell } from './LoadCell';
 import { isWorkingDay } from '../../../utils/workDaysUtils';
 import { ProjectSummaryCard } from '../ProjectSummaryCard';
 import { ProjectSummaryBar } from '../ProjectSummaryBar';
-import { DIMMED_OPACITY, SUMMARY_TRACKS_GAP, PROJECT_CARD_HEIGHT } from '../../../utils/constants';
+import { packTasksIntoTracks } from '../../../hooks/useDataFlattener';
+import { CONFIG, DIMMED_OPACITY, SUMMARY_TRACKS_GAP } from '../../../utils/constants';
 
 interface GroupHeaderRowProps {
   group: Group;
@@ -204,6 +205,16 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
   // Check if we should show the project summary card
   const showProjectCard = viewMode === 'projects' && !isPlaceholder && group.projectSummary && isExpanded;
 
+  // The card panel spans the WHOLE focused block: its height matches the
+  // project's track rows (min = the card's own 2 PM/metrics rows), computed with
+  // the SAME packing the flattener uses. Without this a project with 3+
+  // (time-overlapping) allocations would show its lower allocation bars outside
+  // the fixed 2-row card. Content stays in the top 2 rows; extra space is blank.
+  const cardHeight = useMemo(
+    () => Math.max(CONFIG.minExpandedTrackRows, packTasksIntoTracks(group.tasks).length) * CONFIG.rowHeight,
+    [group.tasks]
+  );
+
   // "Summary surface" = an expanded/focused project. Its header row is a LIGHT grey
   // band (bg-emphasis) across the full width (sidebar + timeline) with dark text;
   // everything below it — card + allocation rows — is white. The grey→white step
@@ -298,7 +309,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
         {showProjectCard && (
           <div
             className={`absolute left-0 top-full w-full px-3 flex flex-col overflow-hidden bg-bg-surface ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
-            style={{ zIndex: 60, marginTop: SUMMARY_TRACKS_GAP, height: PROJECT_CARD_HEIGHT }}
+            style={{ zIndex: 60, marginTop: SUMMARY_TRACKS_GAP, height: cardHeight }}
             onClick={(e) => e.stopPropagation()}
           >
             <ProjectSummaryCard

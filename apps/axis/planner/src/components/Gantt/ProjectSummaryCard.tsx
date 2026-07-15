@@ -234,15 +234,14 @@ const ProjectMetricsRow: React.FC<{ projectId: string }> = ({ projectId }) => {
     // kept ready for future use — to bring planned back, add a third <MetricCell/>
     // (value={metrics?.planned ?? null}, label={t('projectSummary.plannedHours')})
     // with another divider.
-    // Two equal-width cells with the divider always at the exact center
-    // (flex-1 halves). The metrics flush to the OUTER edges — actual to the right
-    // (ml-auto), allocated to the left (mr-auto) — so they sit symmetrically
-    // under the PM (right) / project-type (left) pair in the row above.
-    <div className="flex items-stretch flex-1 min-h-0 border-t border-border-subtle">
+    // Two equal-width cells (flex-1 halves), no dividers. The metrics flush to
+    // the OUTER edges — actual to the right (ml-auto), allocated to the left
+    // (mr-auto) — so they sit symmetrically under the type/PM pair above. Fixed
+    // 48px height so the row lines up 1:1 with the Gantt track grid.
+    <div className="flex items-stretch h-12">
       <div className="flex-1 min-w-0 px-3 flex items-center">
         <MetricCell className="ml-auto" label={t('projectSummary.actualHours')}>{staticValue(metrics?.reported ?? 0)}</MetricCell>
       </div>
-      <span className="w-px self-stretch my-1.5 bg-border-subtle flex-shrink-0" aria-hidden="true" />
       <div className="flex-1 min-w-0 px-3 flex items-center">
         <MetricCell className="mr-auto" label={t('projectSummary.allocatedHours')}>{staticValue(metrics?.allocated ?? 0)}</MetricCell>
       </div>
@@ -260,21 +259,23 @@ export const ProjectSummaryCard = memo<ProjectSummaryCardProps>(({
 }) => {
   const locale = useLocale();
   return (
-    <div className="flex flex-col h-full" dir={locale.dir}>
-      {/* Row 1 — PM flush to one edge, project-type badge flush to the other
-          (justify-between), symmetric with the two hour metrics below. */}
-      <div className="flex items-center justify-between gap-2 flex-1 min-h-0">
+    <div className="flex flex-col" dir={locale.dir}>
+      {/* Row 1 — project-type badge flush to one edge, PM to the other
+          (justify-between), symmetric with the two hour metrics below. Type is
+          first (right in RTL); PM is last so it sits on the LEFT. Fixed 48px
+          height so it lines up 1:1 with the Gantt track grid. */}
+      <div className="flex items-center justify-between gap-2 h-12">
+        <ProjectTypeBadge
+          projectType={summary.projectType}
+          projectTypeColor={summary.projectTypeColor}
+          projectId={projectId}
+        />
         <PMSelector
           projectId={projectId}
           currentManagerName={summary.managerName}
           currentManagerPhotoUrl={summary.managerPhotoUrl}
           employees={employees}
           onUpdate={onPMUpdate}
-        />
-        <ProjectTypeBadge
-          projectType={summary.projectType}
-          projectTypeColor={summary.projectTypeColor}
-          projectId={projectId}
         />
       </div>
       <ProjectMetricsRow projectId={projectId} />

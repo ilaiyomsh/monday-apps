@@ -17,7 +17,7 @@ interface CompanyLoadData {
  * Track Packing Algorithm - Greedy First-Fit
  * ...
  */
-const packTasksIntoTracks = (tasks: Task[]): Task[][] => {
+export const packTasksIntoTracks = (tasks: Task[]): Task[][] => {
   if (tasks.length === 0) return [];
   
   const sorted = [...tasks].sort((a, b) => 
