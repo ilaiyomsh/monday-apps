@@ -72,12 +72,13 @@ export function TaskTableRow({
   dragProps,
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
-  // Label pickers open DOWNWARD by default (monday parity, round 88);
-  // computeFloatingPosition still flips up if there's no room below.
-  const [statusPosition, setStatusPosition] = useState('bottom-start');
+  // Label pickers open DOWNWARD and CENTERED on the cell (monday parity, round 94:
+  // @vibe 'bottom'/'top' center the popover under/над the trigger). computeFloatingPosition
+  // still decides the flip; we map its result to the centered variant.
+  const [statusPosition, setStatusPosition] = useState('bottom');
   const statusTriggerRef = useRef(null);
   const [priorityOpen, setPriorityOpen] = useState(false);
-  const [priorityPosition, setPriorityPosition] = useState('bottom-start');
+  const [priorityPosition, setPriorityPosition] = useState('bottom');
   const priorityTriggerRef = useRef(null);
   const [editingName, setEditingName] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -135,11 +136,12 @@ export function TaskTableRow({
     const next = computeFloatingPosition({
       anchorRect: rect,
       preferred: 'bottom-start',
-      popupWidth: 248,
-      popupHeight: Math.max(180, statusOptions.length * 48 + 32),
+      popupWidth: 206,
+      popupHeight: Math.max(180, statusOptions.length * 40 + 28),
       offset: 4,
     });
-    if (next?.placement) setStatusPosition(next.placement);
+    // Centered variant: keep only the vertical (bottom/top); @vibe centers it.
+    if (next?.placement) setStatusPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
   };
   const updatePriorityPosition = () => {
     const rect = priorityTriggerRef.current?.getBoundingClientRect();
@@ -147,11 +149,11 @@ export function TaskTableRow({
     const next = computeFloatingPosition({
       anchorRect: rect,
       preferred: 'bottom-start',
-      popupWidth: 248,
-      popupHeight: Math.max(180, (priorityOpts.options?.length || 0) * 48 + 32),
+      popupWidth: 206,
+      popupHeight: Math.max(180, (priorityOpts.options?.length || 0) * 40 + 28),
       offset: 4,
     });
-    if (next?.placement) setPriorityPosition(next.placement);
+    if (next?.placement) setPriorityPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
   };
 
   const cellByKey = {
