@@ -36,17 +36,18 @@
 }
 
 /* Empty state — the vibe Person icon in a circle with a subtle shadow, no fill. */
+/* Empty people cell — monday's "unassigned" avatar: a light-gray disc with a
+   faint person silhouette and a subtle ring (no shadow). */
 .placeholder {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: transparent;
-  color: var(--secondary-text-color, #676879);
-  /* uniform, soft shadow in all directions */
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.10);
+  background: var(--allgrey-background-color, #f0f1f3);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  color: var(--icon-color, #c3c6d4);
 }
 
 /* Popover portaled to document.body (escapes table overflow / sticky headers). */

@@ -25,7 +25,7 @@
   /* Bounded + rounded on the LEFT (top + left borders, rounded left corners) so
      the row separators STOP at the strip instead of bleeding past it to the left;
      OPEN on the right (no right border) so they run to the right edge. */
-  border: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border: 0.625px solid var(--layout-border-color, #e6e9ef);
   border-inline-end: none;
   border-radius: var(--border-radius-small, 4px) 0 0 var(--border-radius-small, 4px);
   font-family: var(--font-family);
@@ -37,7 +37,7 @@
   grid-template-columns: 220px minmax(140px, 1fr) 120px 130px 160px minmax(160px, 1.2fr);
   align-items: stretch;
   min-height: 36px;
-  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-bottom: 0.625px solid var(--layout-border-color, #e6e9ef);
   position: relative;
 }
 /* No add-row → the last row sits on the table's own bottom border: drop the row
@@ -74,7 +74,7 @@
   justify-content: center;
   padding: 0 8px;
   min-height: 36px;
-  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-inline-end: 0.625px solid var(--layout-border-color, #e6e9ef);
   overflow: hidden;
   color: var(--primary-text-color, #323338);
   font-size: 14px;

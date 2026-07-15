@@ -147,7 +147,8 @@
   flex-shrink: 0;
   width: 20px;
   height: 20px;
-  color: currentColor;
+  /* monday toolbar icons read GRAY (not the darker label color). */
+  color: var(--secondary-text-color, #676879);
 }
 .pillCount {
   margin-inline-start: 2px;

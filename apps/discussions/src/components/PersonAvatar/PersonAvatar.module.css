@@ -19,6 +19,20 @@
   font-size: var(--font-size-subtext, 14px);
 }
 
+/* monday "unassigned" avatar (read-only people cell): light-gray disc + faint
+   person silhouette + subtle ring. Mirrors PersonPicker's editable placeholder. */
+.emptyAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--allgrey-background-color, #f0f1f3);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  color: var(--icon-color, #c3c6d4);
+}
+
 /* Clickable wrapper around a compact AvatarGroup — resets button chrome so only
    the avatars show, but the whole group is a single click target. */
 .expandTrigger {
