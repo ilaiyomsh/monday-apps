@@ -623,10 +623,12 @@
   flex-direction: column;
   gap: 6px;
   margin: 8px 0 4px;
-  /* Item 9: the points under a topic are indented deeper from the RIGHT
-     (inline-start in this RTL modal), so the topic→points hierarchy is
-     visible at a glance. */
-  padding-inline-start: 24px;
+  /* Item 9 + round109: the points under a topic are indented deeper than the
+     topic row so the topic→points hierarchy is visible at a glance. NOTE the
+     edit panel is dir="ltr" (line ~531 in the JSX), so inline-start = LEFT
+     here; round109 deepened it 24px → 44px per the owner ("שהנקודות יתחילו
+     עוד קצת ימינה"). */
+  padding-inline-start: 44px;
 }
 
 .pointRow {
