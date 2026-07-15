@@ -3,7 +3,8 @@
 //                            + v2 confirmLandingPage (mail-scanner protection,
 //                            owner decision 2026-07-15)
 // - src/helpers/snippet.js — v2 dynamic button snippet (per-button status
-//                            column + label + style color/icon/size)
+//                            column + label + style color/icon/size); v3 adds
+//                            accountId → the a= param in every confirm href
 // - src/helpers/logger.js  — spec §6 log line {ts, ip, itemId, outcome}
 // Security constraints from §13: static pages only, no JS (EXCEPT the
 // landing page's inline auto-submit script), no external assets.
@@ -97,7 +98,7 @@ describe('pages', () => {
 });
 
 describe('confirmLandingPage', () => {
-  const params = { itemId: '9876543210', k: 'SEC123', btn: 'b_test1234' };
+  const params = { itemId: '9876543210', k: 'SEC123', btn: 'b_test1234', a: '777' };
   const render = (overrides = {}) => confirmLandingPage({ ...params, ...overrides });
 
   /** the opening <form ...> tag, or '' when absent */
@@ -120,6 +121,7 @@ describe('confirmLandingPage', () => {
     ['itemId', '9876543210'],
     ['k', 'SEC123'],
     ['btn', 'b_test1234'],
+    ['a', '777'],
   ])('carries %s as a HIDDEN input with the exact passed value "%s"', (name, value) => {
     const tag = inputByName(render(), name);
     expect(tag).toBeDefined();
@@ -131,6 +133,12 @@ describe('confirmLandingPage', () => {
     const html = render({ k: 'a"b<c' });
     expect(html).not.toContain('a"b<c');
     expect(html).toContain('a&quot;b&lt;c');
+  });
+
+  it('attribute-escapes the a value exactly like the others: a=\'7"7<7\' appears as 7&quot;7&lt;7', () => {
+    const html = render({ a: '7"7<7' });
+    expect(html).not.toContain('7"7<7');
+    expect(html).toContain('7&quot;7&lt;7');
   });
 
   it('contains an INLINE <script> (no src=) that submits the form', () => {
@@ -166,15 +174,16 @@ describe('confirmLandingPage', () => {
   });
 });
 
-describe('renderSnippet (v2 dynamic buttons)', () => {
+describe('renderSnippet (v2 dynamic buttons, v3 accountId)', () => {
   const baseUrl = 'https://x.example';
   const secret = 'SEC123';
+  const accountId = '777';
   const button = {
     id: 'b_test1234',
     name: 'בוצע',
     style: { color: '#00854d', icon: '✓', size: 'md' },
   };
-  const render = (btn = button) => renderSnippet({ baseUrl, secret, button: btn });
+  const render = (btn = button) => renderSnippet({ baseUrl, secret, button: btn, accountId });
   const withStyle = (style) => ({ ...button, style: { ...button.style, ...style } });
   /** inner HTML of the first <a> element, or undefined */
   const anchorText = (html) => html.match(/<a\b[^>]*>([\s\S]*?)<\/a>/i)?.[1];
@@ -187,14 +196,15 @@ describe('renderSnippet (v2 dynamic buttons)', () => {
     });
   });
 
-  it('renders the exact href: baseUrl/confirm?itemId={ITEM_ID}&amp;k=<secret>&amp;btn=<id> ({ITEM_ID} literal)', () => {
+  it('renders the exact href with the PINNED param order itemId, a, k, btn: baseUrl/confirm?itemId={ITEM_ID}&amp;a=<accountId>&amp;k=<secret>&amp;btn=<id> ({ITEM_ID} literal)', () => {
     expect(render()).toContain(
-      'href="https://x.example/confirm?itemId={ITEM_ID}&amp;k=SEC123&amp;btn=b_test1234"',
+      'href="https://x.example/confirm?itemId={ITEM_ID}&amp;a=777&amp;k=SEC123&amp;btn=b_test1234"',
     );
   });
 
   it('joins query params with the HTML entity &amp; — a bare & separator never appears in the href', () => {
-    expect(render()).not.toContain('itemId={ITEM_ID}&k=');
+    expect(render()).not.toContain('itemId={ITEM_ID}&a=');
+    expect(render()).not.toContain('&k=');
     expect(render()).not.toContain('&btn=');
   });
 

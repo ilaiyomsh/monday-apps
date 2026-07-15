@@ -3,13 +3,15 @@
 // + the landing page + a plain 429. One log line per request.
 //
 // Shared order for BOTH GET and POST (do not reorder):
-// 1. parse+validate: itemId /^\d{1,20}$/, k non-empty, btn /^[A-Za-z0-9_-]{1,64}$/
+// 1. parse+validate: itemId /^\d{1,20}$/, a /^\d{1,20}$/ (v3 account id),
+//    k non-empty, btn /^[A-Za-z0-9_-]{1,64}$/
 //    → any failure: 400 badRequestPage, outcome 'bad_request' (itemId null when invalid)
-// 2. secret gate (cached link_secret): missing stored secret → invalid page,
-//    outcome 'no_config'; mismatch → invalid page 200, outcome 'bad_key'
-// 3. per-IP rate limit → plain-text 429, outcome 'rate_limited'
+// 2. secret gate (cached, ACCOUNT-scoped link_secret): account has no stored
+//    secret → invalid page, outcome 'no_config'; mismatch → invalid page 200,
+//    outcome 'bad_key'
+// 3. rate limit, bucket keyed `${a}:${ip}` → plain-text 429, outcome 'rate_limited'
 // then:
-// GET  → 200 confirmLandingPage({itemId,k,btn}), outcome 'page_served'
+// GET  → 200 confirmLandingPage({itemId,k,btn,a}), outcome 'page_served'
 //        (NO config load beyond the secret, NO monday API call — scanners
 //        without JS stop here)
 // POST → performAction: 'ok' | 'already_done' → successPage(button.targetLabel);
@@ -23,6 +25,7 @@ import { successPage, invalidPage, badRequestPage, confirmLandingPage } from '..
 import { logAttempt, logError } from '../helpers/logger.js';
 
 const ITEM_ID_RE = /^\d{1,20}$/;
+const ACCOUNT_ID_RE = /^\d{1,20}$/;
 const BTN_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 /**
@@ -46,10 +49,11 @@ export function createConfirmRouter({ storage, api, rateLimiter }) {
    */
   async function gate(req, res, params) {
     const ip = req.ip ?? '';
-    const { itemId, k, btn } = params;
+    const { itemId, k, btn, a } = params;
 
     if (
       typeof itemId !== 'string' || !ITEM_ID_RE.test(itemId) ||
+      typeof a !== 'string' || !ACCOUNT_ID_RE.test(a) ||
       typeof k !== 'string' || k.length === 0 ||
       typeof btn !== 'string' || !BTN_ID_RE.test(btn)
     ) {
@@ -62,7 +66,7 @@ export function createConfirmRouter({ storage, api, rateLimiter }) {
       return null;
     }
 
-    const linkSecret = await storage.getLinkSecret();
+    const linkSecret = await storage.forAccount(a).getLinkSecret();
     if (!linkSecret) {
       logAttempt({ ip, itemId, outcome: 'no_config' });
       sendHtml(res, 200, invalidPage());
@@ -74,13 +78,13 @@ export function createConfirmRouter({ storage, api, rateLimiter }) {
       return null;
     }
 
-    if (!rateLimiter.allow(ip)) {
+    if (!rateLimiter.allow(`${a}:${ip}`)) {
       logAttempt({ ip, itemId, outcome: 'rate_limited' });
       res.status(429).set('Cache-Control', 'no-store').type('text').send('Too Many Requests');
       return null;
     }
 
-    return { ip, itemId, k, btn };
+    return { ip, itemId, k, btn, a };
   }
 
   // Mail-scanner first line: HEAD is a total no-op.
@@ -93,7 +97,7 @@ export function createConfirmRouter({ storage, api, rateLimiter }) {
       const passed = await gate(req, res, req.query);
       if (!passed) return;
       logAttempt({ ip: passed.ip, itemId: passed.itemId, outcome: 'page_served' });
-      sendHtml(res, 200, confirmLandingPage({ itemId: passed.itemId, k: passed.k, btn: passed.btn }));
+      sendHtml(res, 200, confirmLandingPage({ itemId: passed.itemId, k: passed.k, btn: passed.btn, a: passed.a }));
     } catch (err) {
       logError('confirm', 'GET handler failure', { error: String(err?.message ?? err) });
       logAttempt({ ip: req.ip ?? '', itemId: null, outcome: 'api_error' });
@@ -106,7 +110,12 @@ export function createConfirmRouter({ storage, api, rateLimiter }) {
       const passed = await gate(req, res, req.body ?? {});
       if (!passed) return;
 
-      const result = await performAction({ storage, api, itemId: passed.itemId, btnId: passed.btn });
+      const result = await performAction({
+        storage: storage.forAccount(passed.a),
+        api,
+        itemId: passed.itemId,
+        btnId: passed.btn,
+      });
       logAttempt({ ip: passed.ip, itemId: passed.itemId, outcome: result.outcome });
 
       if (result.outcome === 'ok' || result.outcome === 'already_done') {

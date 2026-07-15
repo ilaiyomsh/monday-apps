@@ -30,11 +30,11 @@ function renderTextRow(block) {
   </tr>`;
 }
 
-function renderButtonsRow(block, { baseUrl, secret, buttonsById }) {
+function renderButtonsRow(block, { baseUrl, secret, buttonsById, accountId }) {
   const cells = block.buttonIds
     .map((id) => buttonsById.get(id))
     .filter(Boolean) // unknown ids skipped defensively — validation prevents them
-    .map((button) => `          <td style="padding:0 6px;">${renderSnippet({ baseUrl, secret, button })}</td>`)
+    .map((button) => `          <td style="padding:0 6px;">${renderSnippet({ baseUrl, secret, button, accountId })}</td>`)
     .join('\n');
   return `  <tr>
     <td align="center" style="padding:8px 0;">
@@ -55,15 +55,16 @@ ${cells}
  * @param {string} p.secret
  * @param {{ id: string, name: string, blocks: Array<object> }} p.template
  * @param {Array<object>} p.buttons - the config's buttons array
+ * @param {string} p.accountId - carried into every button href (v3 a= param)
  * @returns {string} email body HTML
  */
-export function renderEmailTemplate({ baseUrl, secret, template, buttons }) {
+export function renderEmailTemplate({ baseUrl, secret, template, buttons, accountId }) {
   const buttonsById = new Map(buttons.map((b) => [b.id, b]));
   const rows = template.blocks
     .map((block) =>
       block.type === 'text'
         ? renderTextRow(block)
-        : renderButtonsRow(block, { baseUrl, secret, buttonsById })
+        : renderButtonsRow(block, { baseUrl, secret, buttonsById, accountId })
     )
     .join('\n');
   return `<table role="presentation" width="600" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto;max-width:600px;">

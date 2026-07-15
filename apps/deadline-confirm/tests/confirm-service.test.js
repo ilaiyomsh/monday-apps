@@ -205,7 +205,11 @@ function seededStorage(overrides = {}) {
   for (const key of Object.keys(seed)) {
     if (seed[key] === undefined) delete seed[key];
   }
-  return createAppStorage({ backend: createMemoryBackend(seed) });
+  // v3: performAction receives an ACCOUNT-SCOPED storage view — seed keys
+  // move under the account prefix and the suite hands the service the same
+  // scoped object the route would.
+  const prefixed = Object.fromEntries(Object.entries(seed).map(([k, v]) => [`777:${k}`, v]));
+  return createAppStorage({ backend: createMemoryBackend(prefixed) }).forAccount('777');
 }
 
 function expectNoApiCalls(api) {

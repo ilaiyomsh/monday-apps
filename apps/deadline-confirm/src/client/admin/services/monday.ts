@@ -88,7 +88,14 @@ export async function fetchBoardColumns(boardId: string): Promise<BoardColumn[]>
     }));
 }
 
-export function openOauthTab(): void {
+export async function openOauthTab(): Promise<void> {
   // auth.monday.com may refuse to render inside the iframe (spec §8) — new tab.
-  window.open('/oauth/start', '_blank', 'noopener');
+  // v3: /oauth/start derives the connecting ACCOUNT from the sessionToken.
+  try {
+    const token = await getSessionToken();
+    window.open(`/oauth/start?st=${encodeURIComponent(token)}`, '_blank', 'noopener');
+  } catch (err) {
+    // Without a sessionToken there is no account context to connect.
+    console.error('openOauthTab: sessionToken unavailable', err);
+  }
 }

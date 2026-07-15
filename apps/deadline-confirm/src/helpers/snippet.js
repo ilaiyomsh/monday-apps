@@ -14,16 +14,16 @@ export const BUTTON_SIZES = {
 /**
  * Render one button's snippet — see the module header + tests for the
  * pinned contract (href entities, literal {ITEM_ID}, size mapping).
- * @param {{ baseUrl: string, secret: string, button: { id: string, name: string, style?: { color?: string, icon?: string, size?: string } } }} params
+ * @param {{ baseUrl: string, secret: string, button: { id: string, name: string, style?: { color?: string, icon?: string, size?: string } }, accountId: string }} params
  * @returns {string} HTML snippet
  */
-export function renderSnippet({ baseUrl, secret, button }) {
+export function renderSnippet({ baseUrl, secret, button, accountId }) {
   const style = button.style ?? {};
   const size = BUTTON_SIZES[style.size] ?? BUTTON_SIZES.md;
   const color = style.color ?? '#00854d';
   const icon = style.icon ?? '';
   const text = icon ? `${icon} ${button.name}` : button.name;
-  const href = `${baseUrl}/confirm?itemId={ITEM_ID}&amp;k=${secret}&amp;btn=${button.id}`;
+  const href = `${baseUrl}/confirm?itemId={ITEM_ID}&amp;a=${accountId}&amp;k=${secret}&amp;btn=${button.id}`;
   return `<table role="presentation" cellpadding="0" cellspacing="0" align="center" style="margin:16px auto;">
   <tr>
     <td style="border-radius:8px;background-color:${color};">

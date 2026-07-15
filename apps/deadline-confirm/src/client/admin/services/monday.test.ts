@@ -2,9 +2,13 @@
 // logic. The realistic input comes from the probe-captured fixture
 // (tests/fixtures/board-columns-settings.probe.json) — never hand-built.
 
-import { describe, it, expect } from 'vitest';
-import { parseStatusLabels } from './monday';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { parseStatusLabels, openOauthTab } from './monday';
 import settingsFixture from '../../../../tests/fixtures/board-columns-settings.probe.json';
+
+vi.mock('monday-sdk-js', () => ({
+  default: () => ({ get: vi.fn(async () => ({ data: 'tok+abc/1=' })) }),
+}));
 
 const fixtureStatusSettings = settingsFixture.data.boards[0].columns.find(
   (c: { type: string }) => c.type === 'status'
@@ -58,4 +62,33 @@ describe('parseStatusLabels', () => {
       expect(parseStatusLabels(settings)).toStrictEqual([]);
     }
   );
+});
+
+describe('openOauthTab (v3 — account context via sessionToken)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('opens /oauth/start?st=<URL-ENCODED sessionToken> in a new noopener tab', async () => {
+    const open = vi.fn();
+    vi.stubGlobal('window', { open });
+    await openOauthTab();
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(open).toHaveBeenCalledWith('/oauth/start?st=tok%2Babc%2F1%3D', '_blank', 'noopener');
+  });
+
+  it('opens NO tab and logs to console.error when the sessionToken is unavailable', async () => {
+    vi.resetModules();
+    vi.doMock('monday-sdk-js', () => ({
+      default: () => ({ get: vi.fn(async () => ({ data: undefined })) }),
+    }));
+    const open = vi.fn();
+    vi.stubGlobal('window', { open });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fresh = await import('./monday');
+    await fresh.openOauthTab();
+    expect(open).not.toHaveBeenCalled();
+    expect(errSpy).toHaveBeenCalledTimes(1);
+  });
 });

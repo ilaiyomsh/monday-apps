@@ -20,7 +20,7 @@ const ADMIN_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
  * @param {ReturnType<import('./services/storage.js').createAppStorage>} deps.storage
  * @param {ReturnType<import('./services/monday-api.js').createMondayApi>} deps.api
  * @param {{ allow(ip: string): boolean }} deps.rateLimiter
- * @param {{ clientId: string, clientSecret: string, allowedAccountId: string, baseUrl: string, version?: string }} deps.env
+ * @param {{ clientId: string, clientSecret: string, allowedAccountIds: string[], baseUrl: string, version?: string }} deps.env
  * @param {typeof fetch} [deps.fetchImpl]
  * @param {string} [deps.todayIso]
  * @returns {import('express').Express}
@@ -39,7 +39,7 @@ export function createApp({ storage, api, rateLimiter, env, fetchImpl, todayIso 
 
   const requireSession = createSessionTokenMiddleware({
     clientSecret: env.clientSecret,
-    allowedAccountId: env.allowedAccountId,
+    allowedAccountIds: env.allowedAccountIds,
   });
   app.use(createAdminRouter({ storage, api, env, requireSession }));
 

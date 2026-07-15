@@ -80,7 +80,7 @@ export function badRequestPage() {
  * @param {{ itemId: string, k: string, btn: string }} params
  * @returns {string} full HTML document
  */
-export function confirmLandingPage({ itemId, k, btn }) {
+export function confirmLandingPage({ itemId, k, btn, a }) {
   return `<!doctype html>
 <html dir="rtl" lang="he">
 <head>
@@ -93,6 +93,7 @@ export function confirmLandingPage({ itemId, k, btn }) {
 <h1 style="margin:0 0 16px;font-size:22px;color:#323338;">מאשר את המשימה…</h1>
 <form id="confirm-form" method="post" action="/confirm">
 <input type="hidden" name="itemId" value="${escapeHtml(itemId)}">
+<input type="hidden" name="a" value="${escapeHtml(a)}">
 <input type="hidden" name="k" value="${escapeHtml(k)}">
 <input type="hidden" name="btn" value="${escapeHtml(btn)}">
 <noscript>
