@@ -345,7 +345,8 @@
   border-radius: 0;
   padding: 0 8px;
   color: var(--text-color-on-primary, #fff);
-  font-weight: var(--font-weight-medium, 500);
+  /* semibold white — matches monday's status cell label weight */
+  font-weight: var(--font-weight-medium, 600);
   font-size: 14px;
   font-family: var(--font-family);
 }
@@ -421,21 +422,22 @@
 .statusMenu {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 172px;
-  padding: 4px;
+  gap: 8px;
+  width: 232px;
+  padding: 8px;
 }
 .statusOption {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 36px;
-  padding: 0 10px;
+  height: 40px;
+  padding: 0 12px;
   border: none;
   border-radius: var(--border-radius-small, 4px);
   color: var(--text-color-on-primary, #fff);
-  font-weight: var(--font-weight-medium, 500);
-  font-size: 14px;
+  /* monday label-picker: BOLD, centered white text on the label's real color. */
+  font-weight: var(--font-weight-bold, 700);
+  font-size: 15px;
   font-family: var(--font-family);
   cursor: pointer;
   transition: filter 0.1s ease;

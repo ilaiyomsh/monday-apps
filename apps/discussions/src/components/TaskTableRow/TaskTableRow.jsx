@@ -135,8 +135,8 @@ export function TaskTableRow({
     const next = computeFloatingPosition({
       anchorRect: rect,
       preferred: 'top-start',
-      popupWidth: 184,
-      popupHeight: Math.max(180, statusOptions.length * 46 + 24),
+      popupWidth: 248,
+      popupHeight: Math.max(180, statusOptions.length * 48 + 32),
       offset: 4,
     });
     if (next?.placement) setStatusPosition(next.placement);
@@ -147,8 +147,8 @@ export function TaskTableRow({
     const next = computeFloatingPosition({
       anchorRect: rect,
       preferred: 'top-start',
-      popupWidth: 184,
-      popupHeight: Math.max(180, (priorityOpts.options?.length || 0) * 46 + 24),
+      popupWidth: 248,
+      popupHeight: Math.max(180, (priorityOpts.options?.length || 0) * 48 + 32),
       offset: 4,
     });
     if (next?.placement) setPriorityPosition(next.placement);
