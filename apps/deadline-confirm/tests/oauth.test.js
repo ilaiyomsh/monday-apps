@@ -21,7 +21,7 @@ const TOKEN_URL = 'https://auth.monday.com/oauth2/token';
 const EXPECTED_SCOPE = 'me:read boards:read boards:write updates:write';
 const REDIRECT_URI = 'https://app.example/oauth/callback';
 
-function makeHarness({ exchangeResponse } = {}) {
+function makeHarness({ exchangeResponse, env } = {}) {
   const backend = createMemoryBackend();
   const storage = createAppStorage({ backend });
   const exchangeCalls = [];
@@ -35,7 +35,7 @@ function makeHarness({ exchangeResponse } = {}) {
     storage,
     api,
     rateLimiter: { allow: () => true },
-    env: ENV,
+    env: env ?? ENV,
     fetchImpl,
   });
   return { app, backend, storage, api, fetchImpl, exchangeCalls };
@@ -65,6 +65,24 @@ describe('GET /oauth/start', () => {
     const persisted = await backend.get(`oauth_state:${state}`);
     expect(persisted).toBeDefined();
     expect(persisted).not.toBeNull();
+  });
+
+  it('targets the draft version with app_version_id when env.oauthAppVersionId is set (per-version OAuth config)', async () => {
+    const { app } = makeHarness({ env: { ...ENV, oauthAppVersionId: '16075522' } });
+
+    const res = await request(app).get('/oauth/start');
+
+    const location = new URL(res.headers.location);
+    expect(location.searchParams.get('app_version_id')).toBe('16075522');
+  });
+
+  it('omits app_version_id from the authorize URL when env.oauthAppVersionId is unset (production default)', async () => {
+    const { app } = makeHarness();
+
+    const res = await request(app).get('/oauth/start');
+
+    const location = new URL(res.headers.location);
+    expect(location.searchParams.get('app_version_id')).toBeNull();
   });
 
   it('generates a DIFFERENT state nonce on each start request', async () => {
