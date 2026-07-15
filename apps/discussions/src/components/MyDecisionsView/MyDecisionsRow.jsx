@@ -36,8 +36,9 @@ const stop = (e) => e.stopPropagation();
 // and threading an export through MyTasksView files is out of scope here.
 function StatusEditCell({ decisionId, value, options, labelById, colorById, emptyLabel, onChange }) {
   const [open, setOpen] = useState(false);
-  // Label picker opens UPWARD by default; flips down only if there's no room.
-  const [position, setPosition] = useState('top-start');
+  // Status picker opens DOWNWARD and CENTERED on the cell (monday parity, round 94);
+  // flips up only if there's no room below.
+  const [position, setPosition] = useState('bottom');
   const triggerRef = useRef(null);
 
   const show = isValidStatus(value) && labelById[value] != null;
@@ -63,12 +64,12 @@ function StatusEditCell({ decisionId, value, options, labelById, colorById, empt
     if (!rect) return;
     const next = computeFloatingPosition({
       anchorRect: rect,
-      preferred: 'top-start',
-      popupWidth: 184,
-      popupHeight: Math.max(180, options.length * 46 + 24),
+      preferred: 'bottom-start',
+      popupWidth: 206,
+      popupHeight: Math.max(180, options.length * 40 + 28),
       offset: 4,
     });
-    if (next?.placement) setPosition(next.placement);
+    if (next?.placement) setPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
   };
 
   return (

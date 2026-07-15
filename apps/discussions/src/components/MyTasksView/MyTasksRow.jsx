@@ -34,8 +34,9 @@ const stop = (e) => e.stopPropagation();
 function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLabel, onChange }) {
   const [open, setOpen] = useState(false);
   // Label picker opens UPWARD by default (video feedback #4) — used for both the
-  // status and priority columns; flips down only if there's no room above.
-  const [position, setPosition] = useState('top-start');
+  // Status picker opens DOWNWARD and CENTERED on the cell (monday parity, round 94);
+  // flips up only if there's no room below.
+  const [position, setPosition] = useState('bottom');
   const triggerRef = useRef(null);
 
   const show = isValidStatus(value) && labelById[value] != null;
@@ -61,12 +62,12 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
     if (!rect) return;
     const next = computeFloatingPosition({
       anchorRect: rect,
-      preferred: 'top-start',
-      popupWidth: 184,
-      popupHeight: Math.max(180, options.length * 46 + 24),
+      preferred: 'bottom-start',
+      popupWidth: 206,
+      popupHeight: Math.max(180, options.length * 40 + 28),
       offset: 4,
     });
-    if (next?.placement) setPosition(next.placement);
+    if (next?.placement) setPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
   };
 
   return (

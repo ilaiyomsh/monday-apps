@@ -113,7 +113,9 @@ function formatDayMonth(d) {
  */
 function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placeholder }) {
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState('top-start');
+  // Status picker opens DOWNWARD and CENTERED on the cell (monday parity,
+  // round 94); flips up only if there's no room below.
+  const [position, setPosition] = useState('bottom');
   const triggerRef = useRef(null);
 
   const label = opts.labelById[value];
@@ -125,12 +127,12 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
     if (!rect) return;
     const next = computeFloatingPosition({
       anchorRect: rect,
-      preferred: 'top-start',
-      popupWidth: 184,
-      popupHeight: Math.max(180, (opts.options?.length || 0) * 46 + 24),
+      preferred: 'bottom-start',
+      popupWidth: 206,
+      popupHeight: Math.max(180, (opts.options?.length || 0) * 40 + 28),
       offset: 4,
     });
-    if (next?.placement) setPosition(next.placement);
+    if (next?.placement) setPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
   };
 
   const display = pill ? (
