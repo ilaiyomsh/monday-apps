@@ -301,15 +301,17 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
 
 
         {/* PM + Project Type bar - sidebar only. The card is WHITE, same as the
-            header and the allocation rows. It is pushed down by the header's
-            summary gap (marginTop = SUMMARY_TRACKS_GAP) so its two 48px rows line
-            up 1:1 with the allocation tracks to its right (which start below that
-            same gap). The block is padded to ≥ PROJECT_CARD_HEIGHT so the card
-            never overhangs into the next project. */}
+            header and the allocation rows. Its top is set in EXPLICIT pixels —
+            header content (groupHeaderHeight) + the summary gap — so it lands
+            exactly where the first allocation track starts. (An earlier `top:100%`
+            + margin resolved against the flex-computed sidebar height and drifted
+            by a few px, misaligning the card rows against the track grid.) The
+            panel height is the whole block so it never overhangs the next project
+            and always covers every allocation row. */}
         {showProjectCard && (
           <div
-            className={`absolute left-0 top-full w-full px-3 flex flex-col overflow-hidden bg-bg-surface ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
-            style={{ zIndex: 60, marginTop: SUMMARY_TRACKS_GAP, height: cardHeight }}
+            className={`absolute left-0 w-full px-3 flex flex-col overflow-hidden bg-bg-surface ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
+            style={{ zIndex: 60, top: CONFIG.groupHeaderHeight + SUMMARY_TRACKS_GAP, height: cardHeight }}
             onClick={(e) => e.stopPropagation()}
           >
             <ProjectSummaryCard
