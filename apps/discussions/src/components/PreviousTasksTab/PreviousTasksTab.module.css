@@ -77,6 +77,12 @@
   flex-wrap: wrap;
 }
 
+/* Quick-filter battery (round 81): first flex child = right edge in this RTL
+   toolbar; the auto end-margin pushes the remaining controls to the left. */
+.batterySlot {
+  margin-inline-end: auto;
+}
+
 .discussionSelect {
   width: 256px;
 }
