@@ -83,7 +83,7 @@ const ProjectTypeBadge: React.FC<{ projectType?: string; projectTypeColor?: stri
         ref={badgeRef}
         onClick={() => setIsOpen(!isOpen)}
         disabled={isUpdating || availableProjectTypes.length === 0}
-        className="px-3 py-1.5 rounded-full text-sm font-bold text-white truncate max-w-[150px] cursor-pointer hover:opacity-80 transition-all duration-150 hover:scale-105 hover:shadow-md disabled:cursor-default disabled:opacity-100"
+        className="px-2.5 py-0.5 rounded-full text-xs font-semibold text-white truncate max-w-[130px] cursor-pointer hover:opacity-80 transition-all duration-150 hover:scale-105 hover:shadow-md disabled:cursor-default disabled:opacity-100"
         style={{ backgroundColor: displayColor || 'var(--project-color-fallback)' }}
         title={displayLabel || t('projectSummary.selectType')}
       >
