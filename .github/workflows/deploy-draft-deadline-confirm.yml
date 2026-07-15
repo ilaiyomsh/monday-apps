@@ -56,8 +56,10 @@ jobs:
       #  is "-c" for client-side (CDN) apps, empty for
       # server-side (monday-code) apps — the only difference between the two.
       - name: Push to latest DRAFT version
+        # --verbose: mapps swallows task errors (logger.debug only) — without it
+        # a failed push exits 1 with no reason printed (incident 2026-07-14).
         run: >
-          mapps code:push 
+          mapps code:push --verbose
           -d apps/deadline-confirm/.
           -a "$APP_ID"
         env:
