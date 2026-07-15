@@ -496,11 +496,6 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     <div ref={rootRef} className={styles.root}>
       {groupColorMenu}
       <div className={styles.toolbar}>
-        {/* Quick-filter battery (round 81) — rightmost in this RTL toolbar (first
-            flex child), monday-battery style: open / done / delayed counts + one-click filter. */}
-        <div className={styles.batterySlot}>
-          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
-        </div>
         {/* One left-aligned cluster (like My Tasks): primary action, then group-by + collapse-all. */}
         <div className={styles.toolbarLeft}>
           {canCreateTask && (
@@ -554,6 +549,11 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
           {groupBy !== 'none' && (
             <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
           )}
+        </div>
+        {/* Quick-filter battery (round 81) — last flex child + auto start-margin
+            pushes it to the RIGHT edge (LTR layout); filter/sort/group stay left. */}
+        <div className={styles.batterySlot}>
+          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
         </div>
       </div>
 
