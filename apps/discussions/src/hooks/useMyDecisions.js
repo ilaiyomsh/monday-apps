@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { החלטות1Board } from '@api/BoardSDK.js';
 import { api } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
+import { ensureSubscribers } from '../utils/mondayApi/subscribers.js';
 import { makeViewCacheKey, readViewCache, writeViewCache, reconcileSeeded } from '../utils/viewCache.js';
 import logger from '../utils/logger.js';
 
@@ -314,7 +315,13 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
       current.map((d) => (String(d.id) === String(decisionId) ? { ...d, [alias]: arr } : d))
     );
     try {
-      await new החלטות1Board().item(decisionId).update({ [alias]: arr.map((p) => Number(p.id)) }).execute();
+      const ids = arr.map((p) => Number(p.id)).filter(Number.isFinite);
+      // round104: monday rejects assigning a non-subscriber to a people column
+      // (the מושפעים picker is account-wide since round79). Add the assignees as
+      // board subscribers first, like monday's native UI. Best-effort (ensureSubscribers
+      // logs & continues), so the write below still surfaces any real error.
+      await ensureSubscribers(getBoardId('decisions'), ids);
+      await new החלטות1Board().item(decisionId).update({ [alias]: ids }).execute();
     } catch (err) {
       logger.error('useMyDecisions', `Error updating decision ${alias}`, err);
       setItems(prev);

@@ -124,6 +124,27 @@ export async function setBoardMembers(boardId, userIds, kind = 'subscriber') {
 }
 
 /**
+ * round104: ensure the given users are SUBSCRIBERS of the board BEFORE assigning
+ * them to a people column. monday rejects assigning a non-subscriber to a
+ * people column (round79 opened the מושפעים picker to the whole account, so a
+ * non-member can now be picked) — matching monday's own UI, we add them as
+ * subscribers first. Best-effort: logs and resolves on failure (e.g. the current
+ * user can't manage members) so the caller's column write still runs and
+ * surfaces the real error. already-subscribed users are a monday-side no-op.
+ */
+export async function ensureSubscribers(boardId, userIds) {
+  const ids = (userIds || []).map((id) => Number(id)).filter(Number.isFinite);
+  if (!boardId || !ids.length) return;
+  try {
+    await setBoardMembers(boardId, ids, 'subscriber');
+  } catch (err) {
+    logger.warn('subscribers', 'ensureSubscribers failed (continuing to write)', {
+      boardId: String(boardId), ids, err,
+    });
+  }
+}
+
+/**
  * Remove users from a board entirely (both member and owner status).
  * Returns the removed users (`[{ id }]`) or null.
  */
