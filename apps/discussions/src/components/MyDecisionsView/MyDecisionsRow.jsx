@@ -88,7 +88,7 @@ function StatusEditCell({ decisionId, value, options, labelById, colorById, empt
         zIndex={10000}
         content={() => (
           <DialogContentContainer>
-            <div className={row.statusMenu} style={{ width: menuWidth }}>
+            <div className={row.statusMenu} style={{ width: menuWidth + 20 }}>
               {options.map((opt) => (
                 <button
                   key={opt.id}

@@ -364,7 +364,7 @@ export function TaskTableRow({
             zIndex={10000}
             content={() => (
               <DialogContentContainer>
-                <div className={styles.statusMenu} style={{ width: statusMenuWidth }}>
+                <div className={styles.statusMenu} style={{ width: statusMenuWidth + 20 }}>
                   {statusOptions.map((opt) => (
                     <button
                       key={opt.id}
@@ -415,7 +415,7 @@ export function TaskTableRow({
               zIndex={10000}
               content={() => (
                 <DialogContentContainer>
-                  <div className={styles.statusMenu} style={{ width: priorityMenuWidth }}>
+                  <div className={styles.statusMenu} style={{ width: priorityMenuWidth + 20 }}>
                     {(priorityOpts.options || []).map((opt) => (
                       <button
                         key={opt.id}

@@ -425,7 +425,9 @@
   flex-direction: column;
   gap: 6px;
   width: 206px;
-  padding: 7px;
+  /* round101: 10px side padding so the labels sit at the column width with a
+     white margin around them (the JS adds +20px to the menu width to match). */
+  padding: 10px;
 }
 .statusOption {
   display: flex;

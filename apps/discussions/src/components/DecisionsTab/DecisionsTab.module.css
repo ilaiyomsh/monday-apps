@@ -466,7 +466,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 7px;
+  /* round101: 10px side padding so labels sit at column width with white margins
+     (the JS adds +20px to the menu width to match). */
+  padding: 10px;
   width: 206px;
   direction: rtl;
 }
