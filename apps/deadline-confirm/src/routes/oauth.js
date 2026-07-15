@@ -41,6 +41,9 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
         scope: OAUTH_SCOPES,
         state: nonce,
       });
+      // OAuth config (scopes/redirects) is per app version — during draft
+      // testing the authorize request must name the draft version explicitly.
+      if (env.oauthAppVersionId) params.set('app_version_id', env.oauthAppVersionId);
       res.redirect(`${AUTHORIZE_URL}?${params}`);
     } catch (err) {
       logError('oauth', 'start failed', { error: String(err?.message ?? err) });

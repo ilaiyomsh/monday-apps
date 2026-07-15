@@ -2,6 +2,13 @@
 // testable lives behind createApp (src/app.js).
 
 import 'dotenv/config';
+import { EnvironmentVariablesManager } from '@mondaycom/apps-sdk';
+// monday-code does NOT inject platform env vars into process.env — they live
+// in a mounted secrets file the SDK reads (verified in apps-sdk source +
+// live: containers saw empty MONDAY_CLIENT_ID/BASE_URL without this).
+// updateProcessEnv copies them in; locally the manager is a no-op over
+// process.env, so dotenv keeps working.
+new EnvironmentVariablesManager({ updateProcessEnv: true });
 import { createApp } from './app.js';
 import { createAppStorage } from './services/storage.js';
 import { createMondayApi } from './services/monday-api.js';
