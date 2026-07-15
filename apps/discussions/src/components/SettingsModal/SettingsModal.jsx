@@ -3,7 +3,24 @@ import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, Ta
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS } from '../../utils/mondayApi/boards.config.js';
+
+// Round 78: the effective auto-fill role list for a tasks access column
+// (taskViewersID / taskEditorsID) — the stored preference, or the default when
+// unset. Exported so the resolution is unit-testable.
+export function accessRolesFor(preferences, accessAlias) {
+  const stored = preferences?.accessRoleSources?.[accessAlias];
+  if (Array.isArray(stored)) return stored;
+  return DEFAULT_PREFERENCES.accessRoleSources?.[accessAlias] || [];
+}
+// Toggle one discussion role in an access column's source list, returning the
+// NEXT preferences object (pure — the component wraps it in setPreferences).
+export function toggleAccessRoleSource(preferences, accessAlias, roleAlias) {
+  const base = { ...DEFAULT_PREFERENCES.accessRoleSources, ...(preferences?.accessRoleSources || {}) };
+  const cur = Array.isArray(base[accessAlias]) ? base[accessAlias] : [];
+  const next = cur.includes(roleAlias) ? cur.filter((r) => r !== roleAlias) : [...cur, roleAlias];
+  return { ...preferences, accessRoleSources: { ...base, [accessAlias]: next } };
+}
 import { api } from '../../utils/mondayApi/monday-client.js';
 import { detectManagedColumnId } from '../../utils/mondayApi/managedColumns.js';
 import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js';
@@ -754,6 +771,29 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
                                     isLoading={loadingColumnsByBoardId[boardId]}
                                     disabled={loadingColumnsByBoardId[boardId] || remaining.length === 0}
                                   />
+                                </div>
+                                {/* Round 78 — which discussion-board ROLES fill
+                                    this access column when a task is created. */}
+                                <div className={styles.accessRoles}>
+                                  <Text type={"text2"} className={styles.accessRolesLabel}>
+                                    מתמלא אוטומטית ביצירת משימה מהתפקידים (מלוח הדיונים):
+                                  </Text>
+                                  <div className={styles.accessRolesChips}>
+                                    {ACCESS_ROLE_SOURCE_OPTIONS.map((r) => {
+                                      const on = accessRolesFor(preferences, alias).includes(r.alias);
+                                      return (
+                                        <button
+                                          key={r.alias}
+                                          type="button"
+                                          className={`${styles.accessRoleChip} ${on ? styles.accessRoleChipOn : ''}`}
+                                          aria-pressed={on}
+                                          onClick={() => setPreferences((p) => toggleAccessRoleSource(p, alias, r.alias))}
+                                        >
+                                          {on ? '✓ ' : ''}{r.label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
                               </div>
                             );
