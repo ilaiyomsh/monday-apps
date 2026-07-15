@@ -676,3 +676,15 @@
 
 /* round103 — hide this chrome while monday's item-card panel is open (iframe narrows). */
 :global(body[data-chrome-narrow="1"]) .decToolbar { display: none !important; }
+
+/* round113 — while monday's item-card / updates panel is open (chrome-narrow,
+   see round103's detector) the narrowed pane must show NO scrollbars at all
+   (owner request): scrolling itself still works (wheel/trackpad/drag), only
+   the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
+   ::-webkit-scrollbar pseudo. */
+:global(body[data-chrome-narrow="1"]) .decBoard {
+  scrollbar-width: none;
+}
+:global(body[data-chrome-narrow="1"]) .decBoard::-webkit-scrollbar {
+  display: none;
+}
