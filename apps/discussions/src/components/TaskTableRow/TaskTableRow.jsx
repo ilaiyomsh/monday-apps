@@ -76,9 +76,14 @@ export function TaskTableRow({
   // @vibe 'bottom'/'top' center the popover under/над the trigger). computeFloatingPosition
   // still decides the flip; we map its result to the centered variant.
   const [statusPosition, setStatusPosition] = useState('bottom');
+  // round98: the picker matches the COLUMN label width — measured from the
+  // trigger cell so the open labels are as wide as the cell's fill (not a fixed
+  // 206px). Defaults to 206 until first measured.
+  const [statusMenuWidth, setStatusMenuWidth] = useState(206);
   const statusTriggerRef = useRef(null);
   const [priorityOpen, setPriorityOpen] = useState(false);
   const [priorityPosition, setPriorityPosition] = useState('bottom');
+  const [priorityMenuWidth, setPriorityMenuWidth] = useState(206);
   const priorityTriggerRef = useRef(null);
   const [editingName, setEditingName] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -133,10 +138,12 @@ export function TaskTableRow({
   const updateStatusPosition = () => {
     const rect = statusTriggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const w = Math.round(rect.width);
+    setStatusMenuWidth(w);
     const next = computeFloatingPosition({
       anchorRect: rect,
       preferred: 'bottom-start',
-      popupWidth: 206,
+      popupWidth: w,
       popupHeight: Math.max(180, statusOptions.length * 40 + 28),
       offset: 4,
     });
@@ -146,10 +153,12 @@ export function TaskTableRow({
   const updatePriorityPosition = () => {
     const rect = priorityTriggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const w = Math.round(rect.width);
+    setPriorityMenuWidth(w);
     const next = computeFloatingPosition({
       anchorRect: rect,
       preferred: 'bottom-start',
-      popupWidth: 206,
+      popupWidth: w,
       popupHeight: Math.max(180, (priorityOpts.options?.length || 0) * 40 + 28),
       offset: 4,
     });
@@ -355,7 +364,7 @@ export function TaskTableRow({
             zIndex={10000}
             content={() => (
               <DialogContentContainer>
-                <div className={styles.statusMenu}>
+                <div className={styles.statusMenu} style={{ width: statusMenuWidth }}>
                   {statusOptions.map((opt) => (
                     <button
                       key={opt.id}
@@ -406,7 +415,7 @@ export function TaskTableRow({
               zIndex={10000}
               content={() => (
                 <DialogContentContainer>
-                  <div className={styles.statusMenu}>
+                  <div className={styles.statusMenu} style={{ width: priorityMenuWidth }}>
                     {(priorityOpts.options || []).map((opt) => (
                       <button
                         key={opt.id}

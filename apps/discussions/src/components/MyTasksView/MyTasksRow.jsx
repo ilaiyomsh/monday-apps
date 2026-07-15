@@ -37,6 +37,8 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
   // Status picker opens DOWNWARD and CENTERED on the cell (monday parity, round 94);
   // flips up only if there's no room below.
   const [position, setPosition] = useState('bottom');
+  // round98: picker width tracks the column label (cell) width, not a fixed 206px.
+  const [menuWidth, setMenuWidth] = useState(206);
   const triggerRef = useRef(null);
 
   const show = isValidStatus(value) && labelById[value] != null;
@@ -60,10 +62,12 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
   const updatePosition = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const w = Math.round(rect.width);
+    setMenuWidth(w);
     const next = computeFloatingPosition({
       anchorRect: rect,
       preferred: 'bottom-start',
-      popupWidth: 206,
+      popupWidth: w,
       popupHeight: Math.max(180, options.length * 40 + 28),
       offset: 4,
     });
@@ -84,7 +88,7 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
         zIndex={10000}
         content={() => (
           <DialogContentContainer>
-            <div className={row.statusMenu}>
+            <div className={row.statusMenu} style={{ width: menuWidth }}>
               {options.map((opt) => (
                 <button
                   key={opt.id}

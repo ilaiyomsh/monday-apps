@@ -414,7 +414,8 @@
   min-height: 36px;
   color: #ffffff;
   font-size: 14px;
-  font-weight: 500;
+  /* round98: normal weight (like the task name), not bold. */
+  font-weight: var(--font-weight-normal, 400);
   font-family: var(--font-family);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -479,7 +480,8 @@
   border-radius: var(--border-radius-small, 4px);
   color: #ffffff;
   font-size: 14px;
-  font-weight: var(--font-weight-medium, 500);
+  /* round98: normal weight (like the task name), not bold. */
+  font-weight: var(--font-weight-normal, 400);
   cursor: pointer;
   font-family: var(--font-family);
   overflow: hidden;
