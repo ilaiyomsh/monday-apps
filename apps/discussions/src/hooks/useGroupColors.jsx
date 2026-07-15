@@ -8,6 +8,22 @@ import {
 } from '../utils/groupColors.js';
 import styles from './useGroupColors.module.css';
 
+// Palette dimensions + the gap below the cursor. The palette opens just BELOW
+// the click point (not ON it) so it never covers the group-header text the user
+// right-clicked (round 80), and is clamped so it never leaves the viewport.
+const PALETTE_W = 208;
+const PALETTE_H = 132;
+const CURSOR_GAP = 14;
+// Pure — exported for testing. Returns the clamped {x, y} top-left for the
+// palette given the click point and viewport size.
+export function computeMenuPosition(clientX, clientY, viewportW, viewportH) {
+  const cx = Number.isFinite(clientX) ? clientX : 40;
+  const cy = Number.isFinite(clientY) ? clientY : 40;
+  const x = Math.max(8, Math.min(cx, viewportW - PALETTE_W - 8));
+  const y = Math.max(8, Math.min(cy + CURSOR_GAP, viewportH - PALETTE_H - 8));
+  return { x, y };
+}
+
 // Stable fallback context so a surface/test that mocks MondayContext.jsx without
 // exporting the context object (only useMondayContext) still resolves cleanly —
 // useContext returns null and the storage scope falls back to 'default'.
@@ -56,11 +72,10 @@ export function useGroupColors() {
   const openMenuFor = useCallback((groupKey, event) => {
     if (groupKey == null) return;
     if (event) { event.preventDefault(); event.stopPropagation(); }
-    // Anchor at the cursor, clamped so the palette never leaves the viewport.
-    const W = 208; const H = 132;
-    const x = Math.max(8, Math.min((event?.clientX ?? 40), window.innerWidth - W - 8));
-    const y = Math.max(8, Math.min((event?.clientY ?? 40), window.innerHeight - H - 8));
-    setMenuState({ groupKey: String(groupKey), x, y });
+    setMenuState({
+      groupKey: String(groupKey),
+      ...computeMenuPosition(event?.clientX, event?.clientY, window.innerWidth, window.innerHeight),
+    });
   }, []);
 
   const closeMenu = useCallback(() => setMenuState(null), []);
