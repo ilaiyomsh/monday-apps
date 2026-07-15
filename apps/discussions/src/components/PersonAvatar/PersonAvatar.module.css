@@ -19,8 +19,9 @@
   font-size: var(--font-size-subtext, 14px);
 }
 
-/* monday "unassigned" avatar (read-only people cell): light-gray disc + faint
-   person silhouette + subtle ring. Mirrors PersonPicker's editable placeholder. */
+/* monday "unassigned" avatar (read-only people cell): solid gray disc + WHITE
+   person silhouette. Mirrors PersonPicker's editable placeholder (literal colors
+   — the @vibe grey tokens resolve nearly white). */
 .emptyAvatar {
   display: inline-flex;
   align-items: center;
@@ -28,9 +29,8 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--allgrey-background-color, #f0f1f3);
-  border: 1px solid var(--layout-border-color, #e6e9ef);
-  color: var(--icon-color, #c3c6d4);
+  background: #d0d4e4;
+  color: #ffffff;
 }
 
 /* Clickable wrapper around a compact AvatarGroup — resets button chrome so only
