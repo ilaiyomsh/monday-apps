@@ -1,0 +1,44 @@
+/* Round 81 — quick-filter status battery (top-right of the tasks views). Mirrors
+   monday's board battery: pill chips with a colored dot, label, and count. */
+.battery {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  font-family: var(--font-family);
+  font-size: 13px;
+  line-height: 1;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.08s ease, border-color 0.08s ease, box-shadow 0.08s ease;
+}
+.chip:hover { background: var(--primary-background-hover-color, #f0f1f3); }
+.chip:focus-visible { outline: 2px solid var(--primary-color, #0073ea); outline-offset: 1px; }
+.chipActive {
+  border-color: var(--primary-color, #0073ea);
+  background: var(--primary-selected-color, #e5f0ff);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--primary-color, #0073ea);
+}
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.label { white-space: nowrap; }
+.count {
+  font-variant-numeric: tabular-nums;
+  color: var(--secondary-text-color, #676879);
+  background: var(--allgrey-background-color, #f0f1f3);
+  border-radius: 8px;
+  padding: 1px 7px;
+  font-size: 12px;
+  min-width: 18px;
+  text-align: center;
+}
+.chipActive .count { color: var(--primary-color, #0073ea); background: var(--primary-background-color, #fff); }

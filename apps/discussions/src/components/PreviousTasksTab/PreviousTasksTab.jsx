@@ -30,6 +30,10 @@ import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
+// Quick-filter status battery (round 81) — shared buckets + presentation chip.
+import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
+import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
+import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
 import logger from '@generated/utils/logger.js';
 import styles from './PreviousTasksTab.module.css';
 
@@ -112,7 +116,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const [picking, setPicking] = useState(false);
   const [discussionOptions, setDiscussionOptions] = useState([]);
   const [savingPrev, setSavingPrev] = useState(false);
-  const { colorById, labelById, orderById, options: statusOptions } = useStatusOptions();
+  const { colorById, labelById, orderById, doneId, options: statusOptions } = useStatusOptions();
   const { isMobile } = useViewport();
   // Show the read-only priority column only when the owner mapped priorityID.
   const showPriority = !!getColumns('tasks').priorityID?.id;
@@ -749,11 +753,21 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
   }, [tasks]);
 
+  // Quick-filter battery (round 81): open / done / delayed counts over ALL loaded
+  // tasks + a one-click bucket filter folded into the client pipeline.
+  const doneStatusIds = useMemo(() => resolveDoneStatusIds(undefined, doneId), [doneId]);
+  const todayStart = useMemo(() => startOfToday(), []);
+  const bucketCounts = useMemo(() => countBuckets(tasks, doneStatusIds, todayStart), [tasks, doneStatusIds, todayStart]);
+  const [quickStatus, setQuickStatus] = useState(null);
+
   // Client pipeline: filter -> sort (both instant, over the loaded tasks). An
   // inactive sort returns the list unchanged, so default order is untouched.
   const filteredTasks = useMemo(
-    () => sortTasks(filterTasks(tasks, filter), sort, { orderById, labelById }),
-    [tasks, filter, sort, orderById, labelById]
+    () => {
+      const base = sortTasks(filterTasks(tasks, filter), sort, { orderById, labelById });
+      return quickStatus ? base.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : base;
+    },
+    [tasks, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart]
   );
 
   // Groups carry { key, label, color, items } — status groups key by the stable
@@ -962,6 +976,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     <div ref={rootRef} className={styles.root}>
       {groupColorMenu}
       <div className={styles.toolbar}>
+        {/* Quick-filter battery (round 81) — rightmost in this RTL toolbar (first
+            flex child); the auto end-margin pushes the rest of the controls left. */}
+        <div className={styles.batterySlot}>
+          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
+        </div>
         {/* One left-aligned cluster (like My Tasks): the discussion-type/source chip, then filter + group-by + collapse-all. */}
         <div className={styles.prevChip} dir="rtl">
           <span className={styles.prevChipLabel}>{byType ? 'סוג דיון' : 'דיון קודם'}</span>

@@ -17,6 +17,9 @@ import { BrandLoader } from '@generated/components/BrandLoader';
 import { MyTasksTable } from './MyTasksTable.jsx';
 import { groupMyTasks, ensureGroupColors, NO_DISCUSSION } from './grouping.js';
 import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
+import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
+import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
+import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
 import { BuilderControl } from './controls/BuilderControl.jsx';
 import { Segment } from './controls/Segment.jsx';
 import { BuilderIcon } from './controls/BuilderIcon.jsx';
@@ -173,7 +176,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   // Status options (for the fills + the staged phase-1 "not done" filter). Loaded
   // once (cached); notDoneStatusIds is [] until ready, so the staged phase-1 then
   // degrades gracefully to the last-month trim alone in that brief window.
-  const { options: statusOptions, labelById, colorById, orderById } = useStatusOptions('tasks', 'statusID');
+  const { options: statusOptions, labelById, colorById, orderById, doneId } = useStatusOptions('tasks', 'statusID');
   const notDoneStatusIds = useMemo(
     () => (statusOptions || []).filter((o) => !o.isDone).map((o) => Number(o.id)),
     [statusOptions]
@@ -206,11 +209,21 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     orderById: priorityOrderById,
   } = useStatusOptions('tasks', 'priorityID');
 
-  // --- client pipeline: filter -> sort -> group (all instant, no re-fetch) ---
+  // --- client pipeline: filter -> quick-status -> sort -> group (instant) ---
   const filteredItems = useMemo(() => filterTasks(items, filter), [items, filter]);
+  // Quick-filter battery (round 81): open / done / delayed counts over ALL loaded
+  // tasks + a one-click bucket filter. "done" = the status column's is_done label.
+  const doneStatusIds = useMemo(() => resolveDoneStatusIds(undefined, doneId), [doneId]);
+  const todayStart = useMemo(() => startOfToday(), []);
+  const bucketCounts = useMemo(() => countBuckets(items, doneStatusIds, todayStart), [items, doneStatusIds, todayStart]);
+  const [quickStatus, setQuickStatus] = useState(null);
+  const scopedItems = useMemo(
+    () => (quickStatus ? filteredItems.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : filteredItems),
+    [filteredItems, quickStatus, doneStatusIds, todayStart]
+  );
   const sortedItems = useMemo(
-    () => sortTasks(filteredItems, sort, { orderById, labelById, priorityOrderById, priorityLabelById }),
-    [filteredItems, sort, orderById, labelById, priorityOrderById, priorityLabelById]
+    () => sortTasks(scopedItems, sort, { orderById, labelById, priorityOrderById, priorityLabelById }),
+    [scopedItems, sort, orderById, labelById, priorityOrderById, priorityLabelById]
   );
   // Right-click a group header → color palette; the chosen color is shared
   // across all users (round 77). colorsByKey overrides the auto group color.
@@ -673,6 +686,12 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         )}
 
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
+
+        {/* Quick-filter battery (round 81) — pushed to the far (right) end of the
+            toolbar, monday-battery style: open / done / delayed counts + filter. */}
+        <div className={styles.batterySlot}>
+          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
+        </div>
       </div>
 
       {selectedIds.size > 0 && (

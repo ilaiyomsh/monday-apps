@@ -23,6 +23,10 @@ import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { getColumns } from '@api/board-config-store.js';
+// Quick-filter status battery (round 81) — shared buckets + presentation chip.
+import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
+import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
+import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
 import styles from './TasksTab.module.css';
 
 // Client-side Filter config for the Tasks tab (mirrors PreviousTasksTab): the
@@ -121,7 +125,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   ));
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [deleting, setDeleting] = useState(false);
-  const { colorById, labelById, orderById, options: statusOptions } = useStatusOptions();
+  const { colorById, labelById, orderById, doneId, options: statusOptions } = useStatusOptions();
   const { isMobile } = useViewport();
 
   // Filter mutators (mirror PreviousTasksTab).
@@ -206,9 +210,18 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
 
   // Client pipeline: filter -> sort (both instant, over the loaded page). An
   // inactive sort returns the list unchanged, so default order is untouched.
+  // Quick-filter battery (round 81): open / done / delayed counts over ALL loaded
+  // tasks + a one-click bucket filter folded into the client pipeline.
+  const doneStatusIds = useMemo(() => resolveDoneStatusIds(undefined, doneId), [doneId]);
+  const todayStart = useMemo(() => startOfToday(), []);
+  const bucketCounts = useMemo(() => countBuckets(items, doneStatusIds, todayStart), [items, doneStatusIds, todayStart]);
+  const [quickStatus, setQuickStatus] = useState(null);
   const filteredTasks = useMemo(
-    () => sortTasks(filterTasks(items, filter), sort, { orderById, labelById }),
-    [items, filter, sort, orderById, labelById]
+    () => {
+      const base = sortTasks(filterTasks(items, filter), sort, { orderById, labelById });
+      return quickStatus ? base.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : base;
+    },
+    [items, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart]
   );
 
   // Right-click a group header → shared color palette (round 77).
@@ -483,6 +496,11 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     <div ref={rootRef} className={styles.root}>
       {groupColorMenu}
       <div className={styles.toolbar}>
+        {/* Quick-filter battery (round 81) — rightmost in this RTL toolbar (first
+            flex child), monday-battery style: open / done / delayed counts + one-click filter. */}
+        <div className={styles.batterySlot}>
+          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
+        </div>
         {/* One left-aligned cluster (like My Tasks): primary action, then group-by + collapse-all. */}
         <div className={styles.toolbarLeft}>
           {canCreateTask && (
