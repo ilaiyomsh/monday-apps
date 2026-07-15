@@ -976,11 +976,6 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     <div ref={rootRef} className={styles.root}>
       {groupColorMenu}
       <div className={styles.toolbar}>
-        {/* Quick-filter battery (round 81) — rightmost in this RTL toolbar (first
-            flex child); the auto end-margin pushes the rest of the controls left. */}
-        <div className={styles.batterySlot}>
-          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
-        </div>
         {/* One left-aligned cluster (like My Tasks): the discussion-type/source chip, then filter + group-by + collapse-all. */}
         <div className={styles.prevChip} dir="rtl">
           <span className={styles.prevChipLabel}>{byType ? 'סוג דיון' : 'דיון קודם'}</span>
@@ -1033,6 +1028,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
           {groupBy !== 'none' && filteredTasks.length > 0 && (
             <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
           )}
+        </div>
+        {/* Quick-filter battery (round 81) — last flex child + auto start-margin
+            pushes it to the RIGHT edge (LTR layout); the rest stay on the left. */}
+        <div className={styles.batterySlot}>
+          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
         </div>
       </div>
 

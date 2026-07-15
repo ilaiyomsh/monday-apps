@@ -94,10 +94,10 @@
   gap: var(--spacing-small, 8px);
 }
 
-/* Quick-filter battery (round 81): first flex child = right edge in this RTL
-   toolbar; the auto end-margin pushes the remaining controls to the left. */
+/* Quick-filter battery (round 81): last flex child pushed to the RIGHT edge
+   (LTR layout) via an auto start-margin; filter/sort/group stay on the left. */
 .batterySlot {
-  margin-inline-end: auto;
+  margin-inline-start: auto;
 }
 
 .groupSelect {

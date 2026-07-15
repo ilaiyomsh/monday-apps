@@ -1,5 +1,7 @@
 /* Round 81 — quick-filter status battery (top-right of the tasks views). Mirrors
-   monday's board battery: pill chips with a colored dot, label, and count. */
+   monday's board battery: rectangular chips with a colored dot, label, and count.
+   Owner request (follow-up): more rectangular buttons; the pressed state reads
+   like monday's "Off track / At risk / On track" selected pill. */
 .battery {
   display: flex;
   align-items: center;
@@ -16,18 +18,20 @@
   font-family: var(--font-family);
   font-size: 13px;
   line-height: 1;
-  padding: 6px 10px;
-  border-radius: 999px;
+  padding: 7px 12px;
+  border-radius: 6px;
   cursor: pointer;
   transition: background 0.08s ease, border-color 0.08s ease, box-shadow 0.08s ease;
 }
 .chip:hover { background: var(--primary-background-hover-color, #f0f1f3); }
 .chip:focus-visible { outline: 2px solid var(--primary-color, #0073ea); outline-offset: 1px; }
+/* Pressed state — clean light-blue fill like monday's selected battery pill:
+   a subtle blue border + tinted background, no heavy inset ring. */
 .chipActive {
   border-color: var(--primary-color, #0073ea);
   background: var(--primary-selected-color, #e5f0ff);
+  color: var(--primary-color, #0073ea);
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px var(--primary-color, #0073ea);
 }
 .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
 .label { white-space: nowrap; }
@@ -35,7 +39,7 @@
   font-variant-numeric: tabular-nums;
   color: var(--secondary-text-color, #676879);
   background: var(--allgrey-background-color, #f0f1f3);
-  border-radius: 8px;
+  border-radius: 4px;
   padding: 1px 7px;
   font-size: 12px;
   min-width: 18px;

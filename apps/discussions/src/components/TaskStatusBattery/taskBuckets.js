@@ -7,7 +7,10 @@
 // exactly the same thing across the app.
 import { isDelayed } from '../EffectivenessTab/effectiveness.js';
 
-export const TASK_BUCKETS = ['open', 'done', 'delayed'];
+// Display order for the chip row. The battery renders dir="rtl", so the FIRST
+// entry sits at the RIGHT edge. Owner request (round 81 follow-up): right→left =
+// open (פתוחות) → delayed (בעיכוב) → done (בוצעו).
+export const TASK_BUCKETS = ['open', 'delayed', 'done'];
 
 export const BUCKET_META = {
   open: { label: 'פתוחות', color: '#fdab3d' },
