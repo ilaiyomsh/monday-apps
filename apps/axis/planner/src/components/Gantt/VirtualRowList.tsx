@@ -320,8 +320,22 @@ export const VirtualRowList: React.FC = () => {
                   <div style={{ height: gapTop, flexShrink: 0, background: row.gapTopColor }} />
                 )}
                 {/* Content box — the soft focus shadow hugs THIS edge (the real
-                    block boundary), not the blended spacer. */}
-                <div style={{ flex: '1 1 auto', minHeight: 0, boxShadow: focusShadow }}>
+                    block boundary), not the blended spacer.
+                    position:relative + zIndex lifts the content (and its
+                    box-shadow) ABOVE its sibling gap spacers, which are opaque
+                    and — being later in DOM order — would otherwise paint over
+                    the BOTTOM shadow and hide it. Without this the bottom edge
+                    reads flat while the top edge (whose spacer precedes it) casts
+                    a visible shadow: the two edges must be symmetric. */}
+                <div
+                  style={{
+                    flex: '1 1 auto',
+                    minHeight: 0,
+                    boxShadow: focusShadow,
+                    position: focusShadow ? 'relative' : undefined,
+                    zIndex: focusShadow ? 1 : undefined,
+                  }}
+                >
                   <RowRenderer row={row} />
                 </div>
                 {gapBottom > 0 && (

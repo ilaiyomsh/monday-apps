@@ -510,15 +510,15 @@ export const useDataFlattener = (
           items: [],
           trackIndex: tracks.length + emptyTracksNeeded,
           // Bottom edge of the focused block (closes the separation started at
-          // the focused project's header row). Unlike the TOP focus gap (page-bg
-          // grey), this bottom gap is filled WHITE (GAP_COLOR_SUMMARY) so it reads
-          // as an extension of the white card body — the separation from the next
-          // (dimmed) project comes purely from the focusEdge drop shadow, not a
-          // grey band sandwiched between the white card and the dimmed row below.
+          // the focused project's header row). Symmetric with the TOP focus gap:
+          // same page-bg fill (GAP_COLOR_FOCUS) + same drop shadow, so the block
+          // floats identically above and below. The shadow is what separates it
+          // from the next (dimmed) project — see VirtualRowList, where the content
+          // box is z-lifted so this bottom shadow isn't hidden by the spacer.
           focusEdge: isSelectedProject ? 'bottom' : undefined,
           focusBlock: isSelectedProject || undefined,
           gapBottom: focusBottomGap || undefined,
-          gapBottomColor: focusBottomGap ? GAP_COLOR_SUMMARY : undefined,
+          gapBottomColor: focusBottomGap ? GAP_COLOR_FOCUS : undefined,
         };
         rows.push(finalEmptyTrackRow);
       }
