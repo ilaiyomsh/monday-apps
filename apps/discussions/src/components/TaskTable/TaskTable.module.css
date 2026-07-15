@@ -35,7 +35,9 @@
   grid-template-columns: minmax(180px, 1.6fr) 140px 150px 170px;
   align-items: stretch;
   min-height: 36px;
-  border-bottom: 0.625px solid #e6e9ef;
+  /* Row separators are drawn PER-CELL (see .taskCell / .taskFirst::after) so they
+     start AFTER the group-color strip and never cut across it — the strip stays a
+     continuous bar like monday's. */
   position: relative;
 }
 /* When there is NO add-row (previous-tasks tab) the last row sits directly on
@@ -147,10 +149,13 @@
   padding: 0 8px;
   min-height: 36px;
   border-inline-end: 0.625px solid #e6e9ef;
+  /* Per-cell row separator (moved off .taskRow so it never crosses the strip). */
+  border-bottom: 0.625px solid #e6e9ef;
   overflow: hidden;
   color: var(--primary-text-color, #323338);
   font-size: 14px;
 }
+.taskRow:last-child .taskCell { border-bottom: none; }
 /* The rightmost column KEEPS its right border so it stays bounded in the body
    too — these tables use fixed-px widths, so when the table is narrower than its
    container the last column's right edge sits mid-table (no outer box border to
@@ -167,6 +172,39 @@
   background: #ffffff;
   box-shadow: inset 6px 0 0 var(--group-color, hsl(var(--status-default)));
 }
+/* The frozen leading cell carries the continuous color strip, so its row
+   separator must NOT span the full width (that line is what used to chop the
+   strip). Drop the full border and draw an inset ::after starting after the 6px
+   strip — it lives on the frozen cell so it stays pinned during horizontal scroll. */
+.taskFirst { border-bottom: none; }
+.taskFirst::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 6px;
+  inset-inline-end: 0;
+  bottom: 0;
+  height: 0.625px;
+  background: #e6e9ef;
+  pointer-events: none;
+}
+.taskRow:last-child .taskFirst::after { display: none; }
+/* Selection mode: the strip lives on the frozen checkbox (.selectCell), so IT
+   gets the inset separator and .taskFirst reverts to a normal bordered cell. */
+.selectable .taskFirst { border-bottom: 0.625px solid #e6e9ef; }
+.selectable .taskRow:last-child .taskFirst { border-bottom: none; }
+.selectable .taskFirst::after { display: none; }
+.selectable .selectCell { border-bottom: none; }
+.selectable .selectCell::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 6px;
+  inset-inline-end: 0;
+  bottom: 0;
+  height: 0.625px;
+  background: #e6e9ef;
+  pointer-events: none;
+}
+.selectable .taskRow:last-child .selectCell::after { display: none; }
 
 /* add-task footer row — last child gets the rounded bottom via table overflow */
 .addRow {
