@@ -143,13 +143,6 @@
   box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
 }
 
-.heading {
-  font-size: 12px;
-  font-weight: var(--font-weight-medium, 500);
-  color: var(--secondary-text-color, #676879);
-  padding: 0 2px;
-}
-
 .list {
   max-height: 240px;
   overflow-y: auto;

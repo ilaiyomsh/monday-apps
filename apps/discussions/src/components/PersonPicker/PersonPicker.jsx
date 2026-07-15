@@ -250,7 +250,10 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
               </div>
             )}
 
-            <div className={styles.searchWrap}>
+            {/* RTL search (round 97): Hebrew names type right-to-left. dir="rtl"
+                on the wrap flips the logical-property icon/padding to the right
+                AND sets the input's typing direction. */}
+            <div className={styles.searchWrap} dir="rtl">
               <Search className={styles.searchIcon} aria-hidden="true" />
               <input
                 type="text"
@@ -262,7 +265,6 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
               />
             </div>
 
-            <div className={styles.heading}>אנשים מוצעים</div>
             <div className={styles.list}>
               {loading ? (
                 <div className={styles.empty}>טוען...</div>
