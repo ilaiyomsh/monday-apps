@@ -168,37 +168,40 @@
 }
 .sourceChip {
   position: relative;
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
   flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
-  min-height: 28px;
-  /* extra start padding clears the inset accent bar (round102) */
-  padding: 3px 10px 3px 14px;
+  /* round107 — matched pixel-by-pixel to the owner's monday screenshot:
+     32px box, centered gray 13px text, extra start padding clears the bar */
+  height: 32px;
+  line-height: 30px;
+  padding: 0 12px 0 16px;
+  text-align: center;
   border: 1px solid var(--ui-border-color, #d0d4e4);
   border-radius: 4px;
   background: #ffffff;
-  color: var(--primary-text-color, #323338);
+  color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
-  font-size: 14px;
-  line-height: 1.3;
+  font-size: 13px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
 }
-/* round102: INSET ROUNDED accent bar on the leading (left) edge — monday's
-   connected-item look (was a flush 3px left border). */
+/* round107: SHORT inset accent bar on the leading (left) edge, vertically
+   centered, monday's light blue — measured rgb(102,171,242) in the reference
+   screenshot (round102 had a near-full-height saturated #0073ea bar). */
 .sourceChip::before {
   content: '';
   position: absolute;
-  left: 4px;
-  top: 4px;
-  bottom: 4px;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 4px;
-  border-radius: 3px;
-  background: var(--primary-color, #0073ea);
+  height: 14px;
+  border-radius: 2px;
+  background: #66abf2;
 }
 .sourceChip:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
