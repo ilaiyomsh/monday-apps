@@ -287,9 +287,9 @@ export const VirtualRowList: React.FC = () => {
             // (last track) edges, plus the uniform translateY lift below.
             const focusShadow =
               row.focusEdge === 'top'
-                ? '0 -11px 26px -6px rgba(0,0,0,0.30)'
+                ? '0 -13px 26px -6px rgba(0,0,0,0.30)'
                 : row.focusEdge === 'bottom'
-                ? '0 11px 26px -6px rgba(0,0,0,0.30)'
+                ? '0 13px 26px -6px rgba(0,0,0,0.30)'
                 : undefined;
             return (
               <div
