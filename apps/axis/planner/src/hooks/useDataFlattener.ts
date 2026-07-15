@@ -510,7 +510,11 @@ export const useDataFlattener = (
           items: [],
           trackIndex: tracks.length + emptyTracksNeeded,
           // Bottom edge of the focused block (closes the separation started at
-          // the focused project's header row).
+          // the focused project's header row). Symmetric with the TOP focus gap:
+          // same page-bg fill (GAP_COLOR_FOCUS) + same drop shadow, so the block
+          // floats identically above and below. The shadow is what separates it
+          // from the next (dimmed) project — see VirtualRowList, where the content
+          // box is z-lifted so this bottom shadow isn't hidden by the spacer.
           focusEdge: isSelectedProject ? 'bottom' : undefined,
           focusBlock: isSelectedProject || undefined,
           gapBottom: focusBottomGap || undefined,
