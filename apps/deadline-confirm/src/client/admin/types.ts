@@ -1,17 +1,54 @@
-// Shared admin-view types. Config mirrors the server's §4 schema exactly —
-// fromIndex/toIndex hold status label IDs (settings.labels[].id — stable;
-// labels[].index is display order only).
+// Shared admin-view types — v2 (dynamic buttons + email templates).
+// targetIndex holds the status LABEL ID (settings.labels[].id — stable);
+// labels[].index is display order only. Label id 0 is valid.
+
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
+export interface ButtonStyle {
+  color: string; // #rrggbb
+  icon: string; // emoji / short text, may be ''
+  size: ButtonSize;
+}
+
+export interface ActionButton {
+  id: string; // b_XXXXXXXX — client-generated on add, server validates
+  name: string;
+  statusColumnId: string;
+  targetIndex: number; // label id
+  targetLabel: string;
+  style: ButtonStyle;
+}
+
+export type Direction = 'rtl' | 'ltr';
+export type TextAlign = 'right' | 'center' | 'left';
+
+export interface TextBlock {
+  type: 'text';
+  text: string;
+  direction: Direction;
+  font: string; // from EMAIL_FONTS
+  fontSize: number; // 10..32
+  align: TextAlign;
+}
+
+export interface ButtonsBlock {
+  type: 'buttons';
+  buttonIds: string[];
+}
+
+export type TemplateBlock = TextBlock | ButtonsBlock;
+
+export interface EmailTemplate {
+  id: string; // t_XXXXXXXX
+  name: string;
+  blocks: TemplateBlock[];
+}
 
 export interface AppConfig {
   boardId: string;
-  statusColumnId: string;
-  fromIndex: number;
-  fromLabel: string;
-  toIndex: number;
-  toLabel: string;
   peopleColumnId: string | null;
-  expiryDateColumnId: string | null;
-  expiryGraceDays: number;
+  buttons: ActionButton[];
+  templates: EmailTemplate[];
 }
 
 export type OauthStatus = 'connected' | 'disconnected' | 'broken';
@@ -41,3 +78,23 @@ export interface BoardColumn {
   type: 'status' | 'people' | 'date';
   labels: StatusLabel[]; // parsed from settings.labels, status columns only
 }
+
+export const EMAIL_FONTS = [
+  'Arial',
+  'Tahoma',
+  'Verdana',
+  'Georgia',
+  'Times New Roman',
+  'Courier New',
+] as const;
+
+export const BUTTON_COLOR_PRESETS = [
+  '#00854d', // ירוק monday
+  '#0073ea', // כחול
+  '#fdab3d', // כתום
+  '#e2445c', // אדום
+  '#a25ddc', // סגול
+  '#323338', // כהה
+] as const;
+
+export const BUTTON_ICON_PRESETS = ['✓', '▶', '👍', '🚀', '⏰', ''] as const;

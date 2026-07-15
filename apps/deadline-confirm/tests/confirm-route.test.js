@@ -1,6 +1,10 @@
-// TDD red phase — GET/HEAD /confirm through the REAL app pipeline
-// (createApp + createConfirmRouter), supertest end-to-end. Maps spec §15
-// acceptance tests 1-5, 7, 8, 11 plus the §6 logging contract.
+// TDD red phase (v2) — HEAD/GET/POST /confirm through the REAL app pipeline
+// (createApp + createConfirmRouter), supertest end-to-end.
+// v2 model (owner decisions 2026-07-15): GET serves a JS auto-confirm landing
+// page and performs NO action and NO monday API call (mail-scanner
+// protection); the page auto-POSTs {itemId,k,btn} to POST /confirm which
+// performs the action via performAction. Shared ordered contract for both
+// verbs: parse/validate → secret gate → rate limit.
 // monday responses are ItemState fakes derived from the probe fixtures;
 // storage is the real createAppStorage over the in-memory backend.
 
@@ -13,13 +17,12 @@ import { MondayApiError } from '../src/services/monday-api.js';
 
 import getItemFx from './fixtures/get-item.probe.json';
 import getItemAfterFx from './fixtures/get-item-after-transition.probe.json';
-import getItemEmptyFx from './fixtures/get-item-empty.probe.json';
 import getItemNotFoundFx from './fixtures/get-item-not-found.probe.json';
 
 const STATUS_COL = 'color_mm58mbec';
 const PEOPLE_COL = 'multiple_person_mm582h4p';
-const DATE_COL = 'date_mm58ej61';
 const ITEM_ID = getItemFx.data.items[0].id; // '12532634009'
+const BOARD_ID = getItemFx.data.items[0].board.id; // '18422009734'
 
 const SECRET = 'wJalrXUtnFEMIK7MDENGbPxRfiCY_EXAMPLEKEY-43x';
 const ENV = {
@@ -29,24 +32,39 @@ const ENV = {
   baseUrl: 'https://app.example',
 };
 
-const BASE_CONFIG = {
-  boardId: '18422009734',
+const BTN_DONE = {
+  id: 'b_done0001',
+  name: 'בוצע',
   statusColumnId: STATUS_COL,
-  fromIndex: 0,
-  fromLabel: 'בעבודה',
-  toIndex: 1,
-  toLabel: 'בוצע',
+  targetIndex: 1,
+  targetLabel: 'בוצע',
+  style: { color: '#00854d', icon: '✓', size: 'md' },
+};
+// targetIndex 0 is a VALID label id — the falsy trap stays in the seed config.
+const BTN_WORK = {
+  id: 'b_work0002',
+  name: 'בעבודה',
+  statusColumnId: STATUS_COL,
+  targetIndex: 0,
+  targetLabel: 'בעבודה',
+  style: { color: '#fdab3d', icon: '', size: 'sm' },
+};
+
+const V2_CONFIG = {
+  boardId: BOARD_ID,
   peopleColumnId: PEOPLE_COL,
-  expiryDateColumnId: null,
-  expiryGraceDays: 0,
+  buttons: [BTN_DONE, BTN_WORK],
+  templates: [],
 };
 
 const SUCCESS_HEADING = 'המשימה עודכנה ✓';
 const INVALID_HEADING = 'הקישור אינו בתוקף';
 const BAD_REQUEST_HEADING = 'בקשה שגויה';
+const NOSCRIPT_BUTTON_TEXT = 'המשך לאישור';
+const LANDING_INTERIM_TEXT = 'מאשר את המשימה';
 
 /** Derive an ItemState (the monday-api contract shape) from a probe fixture. */
-function itemStateFrom(fixture, { withDeadline = false } = {}) {
+function itemStateFrom(fixture) {
   const item = fixture.data.items[0];
   if (!item) return { found: false };
   const col = (id) => item.column_values.find((c) => c.id === id);
@@ -55,7 +73,7 @@ function itemStateFrom(fixture, { withDeadline = false } = {}) {
     boardId: item.board.id,
     statusLabelId: col(STATUS_COL).index ?? null,
     peopleText: col(PEOPLE_COL).text ?? '',
-    deadlineDate: withDeadline ? col(DATE_COL).date || null : null,
+    deadlineDate: null,
   };
 }
 
@@ -85,13 +103,12 @@ function apiCallCount(api) {
  * Seeded keys: config, link_secret, oauth_token — pass null to omit one.
  */
 function buildApp({
-  config = BASE_CONFIG,
+  config = V2_CONFIG,
   secret = SECRET,
   oauthToken = 'tok-1',
   itemState,
   getItemError,
   allow = true,
-  todayIso = '2026-07-14',
 } = {}) {
   const seed = {};
   if (config !== null) seed.config = config;
@@ -112,7 +129,7 @@ function buildApp({
   const storage = createAppStorage({ backend });
   const api = fakeApi({ itemState, getItemError });
   const rateLimiter = { allow: vi.fn(() => allow) };
-  const app = createApp({ storage, api, rateLimiter, env: ENV, todayIso });
+  const app = createApp({ storage, api, rateLimiter, env: ENV });
 
   return {
     app,
@@ -123,6 +140,12 @@ function buildApp({
       backendGets = 0;
     },
   };
+}
+
+const GOOD_QUERY = { itemId: ITEM_ID, k: SECRET, btn: BTN_DONE.id };
+
+function postConfirm(app, body = GOOD_QUERY) {
+  return request(app).post('/confirm').type('form').send(body);
 }
 
 let logSpy;
@@ -166,153 +189,15 @@ function expectSingleAttempt({ outcome, itemId = ITEM_ID }) {
   return entry;
 }
 
-describe('GET /confirm — acceptance 1: happy path', () => {
-  it('returns the 200 success page with the target label, text/html and Cache-Control no-store', async () => {
-    const { app } = buildApp();
+/** Assert a hidden input named `name` carrying exactly `value` in the html. */
+function expectHiddenInput(html, name, value) {
+  const match = html.match(new RegExp(`<input\\b[^>]*name="${name}"[^>]*>`, 'i'));
+  expect(match, `hidden input "${name}" missing from the landing page`).toBeTruthy();
+  expect(match[0]).toContain('type="hidden"');
+  expect(match[0]).toContain(`value="${value}"`);
+}
 
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: SECRET });
-
-    expect(res.status).toBe(200);
-    expect(res.headers['content-type']).toMatch(/text\/html/);
-    expect(res.headers['content-type']).toMatch(/charset=utf-8/i);
-    expect(res.headers['cache-control']).toBe('no-store');
-    expect(res.text).toContain(SUCCESS_HEADING);
-    expect(res.text).toContain('בוצע');
-  });
-
-  it("performs exactly one status mutation + one attribution update and logs outcome 'ok'", async () => {
-    const { app, api } = buildApp();
-
-    await request(app).get('/confirm').query({ itemId: ITEM_ID, k: SECRET });
-
-    expect(api.changeStatus).toHaveBeenCalledTimes(1);
-    expect(api.changeStatus.mock.calls[0][0]).toEqual({
-      token: 'tok-1',
-      boardId: BASE_CONFIG.boardId,
-      itemId: ITEM_ID,
-      columnId: STATUS_COL,
-      toLabelId: BASE_CONFIG.toIndex,
-    });
-    expect(api.createUpdate).toHaveBeenCalledTimes(1);
-    expect(api.createUpdate.mock.calls[0][0]).toMatchObject({
-      itemId: ITEM_ID,
-      body: 'אושר במייל על ידי עילי שלם',
-    });
-    expectSingleAttempt({ outcome: 'ok' });
-  });
-});
-
-describe('GET /confirm — acceptance 2+3: wrong status is idempotency', () => {
-  it("second click (status already at toIndex) returns the generic invalid page, no mutation, outcome 'wrong_status'", async () => {
-    const { app, api } = buildApp({ itemState: itemStateFrom(getItemAfterFx) });
-
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: SECRET });
-
-    expect(res.status).toBe(200);
-    expect(res.text).toContain(INVALID_HEADING);
-    expect(res.text).not.toContain(SUCCESS_HEADING);
-    expect(api.changeStatus).not.toHaveBeenCalled();
-    expect(api.createUpdate).not.toHaveBeenCalled();
-    expectSingleAttempt({ outcome: 'wrong_status' });
-  });
-
-  it("item whose status was never set (not the from label) → invalid page with no-store, no mutation, outcome 'wrong_status'", async () => {
-    const { app, api } = buildApp({ itemState: itemStateFrom(getItemEmptyFx) });
-
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: SECRET });
-
-    expect(res.status).toBe(200);
-    expect(res.headers['cache-control']).toBe('no-store');
-    expect(res.text).toContain(INVALID_HEADING);
-    expect(api.changeStatus).not.toHaveBeenCalled();
-    expectSingleAttempt({ outcome: 'wrong_status' });
-  });
-});
-
-describe('GET /confirm — acceptance 4: board scope guard', () => {
-  it("item from another board (valid k) → invalid page, no mutation, outcome 'wrong_board'", async () => {
-    const itemState = { ...itemStateFrom(getItemFx), boardId: '99999999999' };
-    const { app, api } = buildApp({ itemState });
-
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: SECRET });
-
-    expect(res.status).toBe(200);
-    expect(res.text).toContain(INVALID_HEADING);
-    expect(api.changeStatus).not.toHaveBeenCalled();
-    expect(api.createUpdate).not.toHaveBeenCalled();
-    expectSingleAttempt({ outcome: 'wrong_board' });
-  });
-});
-
-describe('GET /confirm — acceptance 5: secret gate and input validation', () => {
-  it("wrong k → 200 invalid page, ZERO monday api calls, outcome 'bad_key'", async () => {
-    const { app, api } = buildApp();
-
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: 'not-the-secret' });
-
-    expect(res.status).toBe(200);
-    expect(res.text).toContain(INVALID_HEADING);
-    expect(apiCallCount(api)).toBe(0);
-    expectSingleAttempt({ outcome: 'bad_key' });
-  });
-
-  it("missing k → 400 bad-request page, zero api calls, outcome 'bad_request'", async () => {
-    const { app, api } = buildApp();
-
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID });
-
-    expect(res.status).toBe(400);
-    expect(res.text).toContain(BAD_REQUEST_HEADING);
-    expect(apiCallCount(api)).toBe(0);
-    expectSingleAttempt({ outcome: 'bad_request' });
-  });
-
-  it("non-numeric itemId 'abc' → 400, zero api calls", async () => {
-    const { app, api } = buildApp();
-
-    const res = await request(app).get('/confirm').query({ itemId: 'abc', k: SECRET });
-
-    expect(res.status).toBe(400);
-    expect(res.text).toContain(BAD_REQUEST_HEADING);
-    expect(apiCallCount(api)).toBe(0);
-  });
-
-  it('21-digit itemId (one past the /^\\d{1,20}$/ boundary) → 400, zero api calls', async () => {
-    const { app, api } = buildApp();
-
-    const res = await request(app)
-      .get('/confirm')
-      .query({ itemId: '1'.repeat(21), k: SECRET });
-
-    expect(res.status).toBe(400);
-    expect(apiCallCount(api)).toBe(0);
-  });
-
-  it('missing itemId → 400 bad-request page', async () => {
-    const { app } = buildApp();
-
-    const res = await request(app).get('/confirm').query({ k: SECRET });
-
-    expect(res.status).toBe(400);
-    expect(res.text).toContain(BAD_REQUEST_HEADING);
-  });
-
-  it("20-digit itemId (exactly ON the regex boundary) passes validation; missing item → invalid page, outcome 'not_found'", async () => {
-    const twentyDigits = '12345678901234567890';
-    const { app, api } = buildApp({ itemState: itemStateFrom(getItemNotFoundFx) });
-
-    const res = await request(app).get('/confirm').query({ itemId: twentyDigits, k: SECRET });
-
-    expect(res.status).toBe(200);
-    expect(res.text).toContain(INVALID_HEADING);
-    expect(api.getItemState).toHaveBeenCalledTimes(1);
-    expect(api.getItemState.mock.calls[0][0]).toMatchObject({ itemId: twentyDigits });
-    expect(api.changeStatus).not.toHaveBeenCalled();
-    expectSingleAttempt({ outcome: 'not_found', itemId: twentyDigits });
-  });
-});
-
-describe('HEAD /confirm — acceptance 7: mail-scanner no-op', () => {
+describe('HEAD /confirm — mail-scanner first line (unchanged from v1)', () => {
   it('returns 200 with an empty body, ZERO backend reads and ZERO api calls', async () => {
     const { app, api, backendGets, resetBackendGets } = buildApp();
     resetBackendGets(); // ignore any reads during app construction
@@ -326,25 +211,197 @@ describe('HEAD /confirm — acceptance 7: mail-scanner no-op', () => {
   });
 });
 
-describe('GET /confirm — acceptance 8: rate limit (after the secret gate)', () => {
-  it("over-limit request with a VALID k → plain 429, zero api calls, outcome 'rate_limited'", async () => {
-    const { app, api, rateLimiter } = buildApp({ allow: false });
+describe('GET /confirm — auto-confirm landing page (scanner protection)', () => {
+  it('serves 200 text/html with Cache-Control no-store and a POST form targeting /confirm', async () => {
+    const { app } = buildApp();
+
+    const res = await request(app).get('/confirm').query(GOOD_QUERY);
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.headers['content-type']).toMatch(/charset=utf-8/i);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.text).toMatch(/<form\b[^>]*action="\/confirm"/i);
+    expect(res.text).toMatch(/method="post"/i);
+    expect(res.text).toContain(LANDING_INTERIM_TEXT);
+  });
+
+  it('echoes the exact itemId/k/btn as hidden inputs, with an inline auto-submit script and a noscript fallback', async () => {
+    const { app } = buildApp();
+
+    const res = await request(app).get('/confirm').query(GOOD_QUERY);
+
+    expectHiddenInput(res.text, 'itemId', ITEM_ID);
+    expectHiddenInput(res.text, 'k', SECRET);
+    expectHiddenInput(res.text, 'btn', BTN_DONE.id);
+    expect(res.text).toMatch(/<script\b/i);
+    expect(res.text).toMatch(/\.submit\s*\(/);
+    expect(res.text).toMatch(/<noscript\b/i);
+    expect(res.text).toContain(NOSCRIPT_BUTTON_TEXT);
+  });
+
+  it("THE SCANNER TEST: a plain GET (no JS) performs ZERO monday api calls, mutates nothing, and logs outcome 'page_served'", async () => {
+    const { app, api, backendGets, resetBackendGets } = buildApp();
+    resetBackendGets();
+
+    const res = await request(app).get('/confirm').query(GOOD_QUERY);
+
+    expect(res.status).toBe(200);
+    expect(apiCallCount(api)).toBe(0);
+    expect(api.changeStatus).not.toHaveBeenCalled();
+    expect(api.createUpdate).not.toHaveBeenCalled();
+    // NO config load beyond the secret: the single request reads only link_secret.
+    expect(backendGets()).toBe(1);
+    expectSingleAttempt({ outcome: 'page_served' });
+  });
+
+  it("serves the landing page even for an unknown 64-char btn (ON the length boundary) — resolution is POST-side only, outcome 'page_served'", async () => {
+    const { app, api } = buildApp();
+    const btn64 = 'a'.repeat(64);
+
+    const res = await request(app)
+      .get('/confirm')
+      .query({ itemId: ITEM_ID, k: SECRET, btn: btn64 });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toMatch(/<form\b[^>]*action="\/confirm"/i);
+    expectHiddenInput(res.text, 'btn', btn64);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'page_served' });
+  });
+});
+
+describe('GET /confirm — input validation (parse step 1, before the secret gate)', () => {
+  it("missing itemId → 400 bad-request page (html, no-store), zero api calls, outcome 'bad_request' with itemId null", async () => {
+    const { app, api } = buildApp();
+
+    const res = await request(app).get('/confirm').query({ k: SECRET, btn: BTN_DONE.id });
+
+    expect(res.status).toBe(400);
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.text).toContain(BAD_REQUEST_HEADING);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'bad_request', itemId: null });
+  });
+
+  it("non-numeric itemId 'abc' → 400, zero api calls, itemId logged as null", async () => {
+    const { app, api } = buildApp();
+
+    const res = await request(app)
+      .get('/confirm')
+      .query({ itemId: 'abc', k: SECRET, btn: BTN_DONE.id });
+
+    expect(res.status).toBe(400);
+    expect(res.text).toContain(BAD_REQUEST_HEADING);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'bad_request', itemId: null });
+  });
+
+  it('21-digit itemId (one past the /^\\d{1,20}$/ boundary) → 400, zero api calls', async () => {
+    const { app, api } = buildApp();
+
+    const res = await request(app)
+      .get('/confirm')
+      .query({ itemId: '1'.repeat(21), k: SECRET, btn: BTN_DONE.id });
+
+    expect(res.status).toBe(400);
+    expect(apiCallCount(api)).toBe(0);
+  });
+
+  it("missing k → 400 bad-request page, zero api calls, outcome 'bad_request'", async () => {
+    const { app, api } = buildApp();
+
+    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, btn: BTN_DONE.id });
+
+    expect(res.status).toBe(400);
+    expect(res.text).toContain(BAD_REQUEST_HEADING);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'bad_request' });
+  });
+
+  it("missing btn → 400 bad-request page, zero api calls, outcome 'bad_request'", async () => {
+    const { app, api } = buildApp();
 
     const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: SECRET });
 
+    expect(res.status).toBe(400);
+    expect(res.text).toContain(BAD_REQUEST_HEADING);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'bad_request' });
+  });
+
+  it("btn with a space ('x y', outside /^[A-Za-z0-9_-]{1,64}$/) → 400, zero api calls", async () => {
+    const { app, api } = buildApp();
+
+    const res = await request(app)
+      .get('/confirm')
+      .query({ itemId: ITEM_ID, k: SECRET, btn: 'x y' });
+
+    expect(res.status).toBe(400);
+    expect(apiCallCount(api)).toBe(0);
+  });
+
+  it('65-char btn (one past the length boundary) → 400, zero api calls', async () => {
+    const { app, api } = buildApp();
+
+    const res = await request(app)
+      .get('/confirm')
+      .query({ itemId: ITEM_ID, k: SECRET, btn: 'a'.repeat(65) });
+
+    expect(res.status).toBe(400);
+    expect(apiCallCount(api)).toBe(0);
+  });
+});
+
+describe('GET /confirm — secret gate (step 2)', () => {
+  it("wrong k → 200 invalid page, ZERO api calls, outcome 'bad_key'", async () => {
+    const { app, api } = buildApp();
+
+    const res = await request(app)
+      .get('/confirm')
+      .query({ itemId: ITEM_ID, k: 'not-the-secret', btn: BTN_DONE.id });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(INVALID_HEADING);
+    expect(res.text).not.toContain(LANDING_INTERIM_TEXT);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'bad_key' });
+  });
+
+  it("no stored link_secret → 200 invalid page (no 500), zero api calls, outcome 'no_config'", async () => {
+    const { app, api } = buildApp({ secret: null });
+
+    const res = await request(app).get('/confirm').query(GOOD_QUERY);
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(INVALID_HEADING);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'no_config' });
+  });
+});
+
+describe('GET /confirm — rate limit (step 3, after the secret gate)', () => {
+  it("over-limit request with a VALID k → plain 429, zero api calls, outcome 'rate_limited'", async () => {
+    const { app, api, rateLimiter } = buildApp({ allow: false });
+
+    const res = await request(app).get('/confirm').query(GOOD_QUERY);
+
     expect(res.status).toBe(429);
     expect(res.text).not.toContain(INVALID_HEADING);
-    expect(res.text).not.toContain(SUCCESS_HEADING);
+    expect(res.text).not.toContain(LANDING_INTERIM_TEXT);
     expect(rateLimiter.allow).toHaveBeenCalledTimes(1);
     expect(typeof rateLimiter.allow.mock.calls[0][0]).toBe('string');
     expect(apiCallCount(api)).toBe(0);
     expectSingleAttempt({ outcome: 'rate_limited' });
   });
 
-  it("wrong k while rate-limited → invalid page (bad_key), NOT 429 — §6 order: secret check (3) precedes rate limit (4)", async () => {
+  it("wrong k while rate-limited → 'bad_key' invalid page, NOT 429 — the secret gate precedes the rate limit", async () => {
     const { app, api, rateLimiter } = buildApp({ allow: false });
 
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: 'not-the-secret' });
+    const res = await request(app)
+      .get('/confirm')
+      .query({ itemId: ITEM_ID, k: 'not-the-secret', btn: BTN_DONE.id });
 
     expect(res.status).toBe(200);
     expect(res.text).toContain(INVALID_HEADING);
@@ -354,69 +411,187 @@ describe('GET /confirm — acceptance 8: rate limit (after the secret gate)', ()
   });
 });
 
-describe('GET /confirm — acceptance 11: expiry', () => {
-  const expiryConfig = { ...BASE_CONFIG, expiryDateColumnId: DATE_COL, expiryGraceDays: 2 };
+describe('POST /confirm — happy path (urlencoded body from the landing page)', () => {
+  it("returns the 200 success page with the button's target label, text/html and no-store", async () => {
+    const { app } = buildApp(); // item at label 0, button target 1
 
-  it("today past deadline+grace (2026-07-20 + 2 < 2026-07-23) → invalid page, no mutation, outcome 'expired'", async () => {
-    const { app, api } = buildApp({
-      config: expiryConfig,
-      itemState: itemStateFrom(getItemFx, { withDeadline: true }),
-      todayIso: '2026-07-23',
-    });
-
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: SECRET });
+    const res = await postConfirm(app);
 
     expect(res.status).toBe(200);
-    expect(res.text).toContain(INVALID_HEADING);
-    expect(api.changeStatus).not.toHaveBeenCalled();
-    expectSingleAttempt({ outcome: 'expired' });
+    expect(res.headers['content-type']).toMatch(/text\/html/);
+    expect(res.headers['content-type']).toMatch(/charset=utf-8/i);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.text).toContain(SUCCESS_HEADING);
+    expect(res.text).toContain('בוצע');
   });
 
-  it('today exactly ON deadline+grace (2026-07-22) is still valid → success page, outcome ok', async () => {
-    const { app, api } = buildApp({
-      config: expiryConfig,
-      itemState: itemStateFrom(getItemFx, { withDeadline: true }),
-      todayIso: '2026-07-22',
-    });
+  it("mutates EXACTLY once with the button's column+target, creates the attribution update, logs outcome 'ok'", async () => {
+    const { app, api } = buildApp();
 
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: SECRET });
+    await postConfirm(app);
 
-    expect(res.status).toBe(200);
-    expect(res.text).toContain(SUCCESS_HEADING);
     expect(api.changeStatus).toHaveBeenCalledTimes(1);
+    expect(api.changeStatus.mock.calls[0][0]).toEqual({
+      token: 'tok-1',
+      boardId: BOARD_ID,
+      itemId: ITEM_ID,
+      columnId: STATUS_COL,
+      toLabelId: 1,
+    });
+    expect(api.createUpdate).toHaveBeenCalledTimes(1);
+    expect(api.createUpdate.mock.calls[0][0]).toEqual({
+      token: 'tok-1',
+      itemId: ITEM_ID,
+      body: 'סומן "בוצע" במייל על ידי עילי שלם',
+    });
     expectSingleAttempt({ outcome: 'ok' });
   });
 });
 
-describe('GET /confirm — unconfigured app and API failure never leak', () => {
-  it("missing link_secret in storage → 200 invalid page (no 500), zero api calls, outcome 'no_config'", async () => {
-    const { app, api } = buildApp({ secret: null });
+describe('POST /confirm — already at target = SILENT success', () => {
+  it("item already at the button's target → 200 success page, NO mutation, NO update, outcome 'already_done'", async () => {
+    const { app, api } = buildApp({ itemState: itemStateFrom(getItemAfterFx) }); // status 1 === target 1
 
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: SECRET });
+    const res = await postConfirm(app);
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(SUCCESS_HEADING);
+    expect(res.text).not.toContain(INVALID_HEADING);
+    expect(api.changeStatus).not.toHaveBeenCalled();
+    expect(api.createUpdate).not.toHaveBeenCalled();
+    expectSingleAttempt({ outcome: 'already_done' });
+  });
+});
+
+describe('POST /confirm — per-button routing', () => {
+  it("clicking b_work0002 drives toward ITS target: toLabelId 0 (falsy label id), success page shows 'בעבודה'", async () => {
+    const { app, api } = buildApp({ itemState: itemStateFrom(getItemAfterFx) }); // status 1 ≠ target 0
+
+    const res = await postConfirm(app, { itemId: ITEM_ID, k: SECRET, btn: BTN_WORK.id });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(SUCCESS_HEADING);
+    expect(res.text).toContain('בעבודה');
+    expect(api.changeStatus).toHaveBeenCalledTimes(1);
+    expect(api.changeStatus.mock.calls[0][0]).toEqual({
+      token: 'tok-1',
+      boardId: BOARD_ID,
+      itemId: ITEM_ID,
+      columnId: STATUS_COL,
+      toLabelId: 0,
+    });
+    expect(api.createUpdate.mock.calls[0][0]).toEqual({
+      token: 'tok-1',
+      itemId: ITEM_ID,
+      body: 'סומן "בעבודה" במייל על ידי עילי שלם',
+    });
+    expectSingleAttempt({ outcome: 'ok' });
+  });
+});
+
+describe('POST /confirm — unknown button', () => {
+  it("well-formed btn id on no configured button → 200 invalid page, ZERO api calls, outcome 'unknown_button'", async () => {
+    const { app, api } = buildApp();
+
+    const res = await postConfirm(app, { itemId: ITEM_ID, k: SECRET, btn: 'b_nope9999' });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(INVALID_HEADING);
+    expect(res.text).not.toContain(SUCCESS_HEADING);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'unknown_button' });
+  });
+});
+
+describe('POST /confirm — validation, secret gate and rate limit mirror GET', () => {
+  it("missing btn in the body → 400 bad-request page, zero api calls, outcome 'bad_request'", async () => {
+    const { app, api } = buildApp();
+
+    const res = await postConfirm(app, { itemId: ITEM_ID, k: SECRET });
+
+    expect(res.status).toBe(400);
+    expect(res.text).toContain(BAD_REQUEST_HEADING);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'bad_request' });
+  });
+
+  it("non-numeric itemId → 400, zero api calls, outcome 'bad_request' with itemId null", async () => {
+    const { app, api } = buildApp();
+
+    const res = await postConfirm(app, { itemId: 'abc', k: SECRET, btn: BTN_DONE.id });
+
+    expect(res.status).toBe(400);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'bad_request', itemId: null });
+  });
+
+  it("wrong k → 200 invalid page, zero api calls, outcome 'bad_key'", async () => {
+    const { app, api } = buildApp();
+
+    const res = await postConfirm(app, { itemId: ITEM_ID, k: 'not-the-secret', btn: BTN_DONE.id });
 
     expect(res.status).toBe(200);
     expect(res.text).toContain(INVALID_HEADING);
     expect(apiCallCount(api)).toBe(0);
-    expectSingleAttempt({ outcome: 'no_config' });
+    expectSingleAttempt({ outcome: 'bad_key' });
   });
 
-  it("missing config (secret valid) → 200 invalid page, zero api calls, outcome 'no_config'", async () => {
-    const { app, api } = buildApp({ config: null });
+  it("over-limit POST with a VALID k → plain 429, zero api calls, outcome 'rate_limited'", async () => {
+    const { app, api, rateLimiter } = buildApp({ allow: false });
 
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: SECRET });
+    const res = await postConfirm(app);
+
+    expect(res.status).toBe(429);
+    expect(res.text).not.toContain(SUCCESS_HEADING);
+    expect(res.text).not.toContain(INVALID_HEADING);
+    expect(rateLimiter.allow).toHaveBeenCalledTimes(1);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'rate_limited' });
+  });
+
+  it("wrong k while rate-limited → 'bad_key', NOT 429 — secret gate precedes rate limit on POST too", async () => {
+    const { app, rateLimiter } = buildApp({ allow: false });
+
+    const res = await postConfirm(app, { itemId: ITEM_ID, k: 'not-the-secret', btn: BTN_DONE.id });
 
     expect(res.status).toBe(200);
     expect(res.text).toContain(INVALID_HEADING);
-    expect(apiCallCount(api)).toBe(0);
-    expectSingleAttempt({ outcome: 'no_config' });
+    expect(rateLimiter.allow).not.toHaveBeenCalled();
+    expectSingleAttempt({ outcome: 'bad_key' });
+  });
+});
+
+describe('POST /confirm — service outcomes render the generic invalid page (HTTP 200)', () => {
+  it("item from another board → invalid page, no mutation, outcome 'wrong_board'", async () => {
+    const itemState = { ...itemStateFrom(getItemFx), boardId: '99999999999' };
+    const { app, api } = buildApp({ itemState });
+
+    const res = await postConfirm(app);
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(INVALID_HEADING);
+    expect(api.changeStatus).not.toHaveBeenCalled();
+    expect(api.createUpdate).not.toHaveBeenCalled();
+    expectSingleAttempt({ outcome: 'wrong_board' });
   });
 
-  it("monday API throwing → 200 invalid page with no error/stack leak, outcome 'api_error'", async () => {
+  it("missing item → invalid page, no mutation, outcome 'not_found'", async () => {
+    const { app, api } = buildApp({ itemState: itemStateFrom(getItemNotFoundFx) });
+
+    const res = await postConfirm(app);
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(INVALID_HEADING);
+    expect(api.changeStatus).not.toHaveBeenCalled();
+    expectSingleAttempt({ outcome: 'not_found' });
+  });
+
+  it("monday API throwing → invalid page with no error/stack leak, outcome 'api_error'", async () => {
     const { app, api } = buildApp({
       getItemError: new MondayApiError('boom-internal-detail', { status: 500 }),
     });
 
-    const res = await request(app).get('/confirm').query({ itemId: ITEM_ID, k: SECRET });
+    const res = await postConfirm(app);
 
     expect(res.status).toBe(200);
     expect(res.text).toContain(INVALID_HEADING);
@@ -424,5 +599,16 @@ describe('GET /confirm — unconfigured app and API failure never leak', () => {
     expect(res.text).not.toContain('boom-internal-detail');
     expect(api.changeStatus).not.toHaveBeenCalled();
     expectSingleAttempt({ outcome: 'api_error' });
+  });
+
+  it("missing config (valid secret) → invalid page, zero api calls, outcome 'no_config'", async () => {
+    const { app, api } = buildApp({ config: null });
+
+    const res = await postConfirm(app);
+
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(INVALID_HEADING);
+    expect(apiCallCount(api)).toBe(0);
+    expectSingleAttempt({ outcome: 'no_config' });
   });
 });

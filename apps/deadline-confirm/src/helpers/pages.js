@@ -4,14 +4,7 @@
 // item/account-derived data — the only dynamic value is the config-derived
 // target label on the success page (locked decision §3.6).
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
+import { escapeHtml } from './html.js';
 
 function renderPage({ title, heading, body }) {
   return `<!doctype html>
@@ -66,6 +59,50 @@ export function badRequestPage() {
     heading: 'בקשה שגויה',
     body: 'הקישור שהגיע אינו תקין.',
   });
+}
+
+/**
+ * v2 — mail-scanner protection landing page (owner decision 2026-07-15).
+ * Served on GET /confirm AFTER the secret gate + rate limit; performs the
+ * action via an immediate JS auto-submitted POST so link-following email
+ * scanners (which don't execute JS) never change statuses.
+ *
+ * Requirements:
+ * - <html dir="rtl" lang="he">, inline CSS, mobile-friendly
+ * - a <form method="post" action="/confirm"> with HIDDEN inputs itemId, k,
+ *   btn — every value HTML-ATTRIBUTE-escaped
+ * - an inline <script> that submits the form immediately on load
+ * - a <noscript> fallback INSIDE the form showing a real submit button
+ *   (text: המשך לאישור) — one extra click for JS-less humans, nothing for
+ *   scanners
+ * - visible interim text: מאשר את המשימה…
+ *
+ * @param {{ itemId: string, k: string, btn: string }} params
+ * @returns {string} full HTML document
+ */
+export function confirmLandingPage({ itemId, k, btn }) {
+  return `<!doctype html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מאשר את המשימה…</title>
+</head>
+<body style="margin:0;padding:24px;background:#f6f7fb;font-family:Arial,Helvetica,sans-serif;">
+<div style="max-width:420px;margin:48px auto;background:#ffffff;border-radius:12px;padding:32px 24px;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
+<h1 style="margin:0 0 16px;font-size:22px;color:#323338;">מאשר את המשימה…</h1>
+<form id="confirm-form" method="post" action="/confirm">
+<input type="hidden" name="itemId" value="${escapeHtml(itemId)}">
+<input type="hidden" name="k" value="${escapeHtml(k)}">
+<input type="hidden" name="btn" value="${escapeHtml(btn)}">
+<noscript>
+<button type="submit" style="display:inline-block;padding:12px 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;background-color:#00854d;border:none;border-radius:8px;cursor:pointer;">המשך לאישור</button>
+</noscript>
+</form>
+<script>document.getElementById('confirm-form').submit();</script>
+</div>
+</body>
+</html>`;
 }
 
 /**

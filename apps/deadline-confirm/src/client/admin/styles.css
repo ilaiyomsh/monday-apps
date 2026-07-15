@@ -104,3 +104,50 @@ body {
   align-items: center;
   gap: 12px;
 }
+
+/* v2 */
+.dc-card {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--allgrey-background-color, #fafbfc);
+}
+
+.dc-block {
+  border: 1px dashed var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #fff;
+}
+
+.dc-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 90px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 4px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.dc-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.dc-email-preview {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  background: #ffffff;
+  max-width: 600px;
+  padding: 16px;
+  overflow-x: auto;
+}

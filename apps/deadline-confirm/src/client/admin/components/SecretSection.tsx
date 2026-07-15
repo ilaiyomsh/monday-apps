@@ -5,7 +5,8 @@
 import { useState } from 'react';
 import { Button } from '@vibe/core';
 
-const CONFIRM_TEXT = 'החלפת המפתח תנתק את כל הקישורים שכבר נשלחו במייל. להמשיך?';
+const CONFIRM_TEXT =
+  'החלפת המפתח תנתק את כל הקישורים שכבר נשלחו במייל — בכל הכפתורים ובכל התבניות. אחרי ההחלפה יש להעתיק מחדש את ה-HTML לתבניות ה-workflow. להמשיך?';
 
 interface Props {
   maskedSecret: string | null;
@@ -38,7 +39,7 @@ export function SecretSection({ maskedSecret, rotatedSecret, rotating, onRotate 
       {rotatedSecret && (
         <>
           <div className="dc-success">
-            המפתח החדש (מוצג פעם אחת בלבד — קוד הכפתור למטה כבר כולל אותו):
+            המפתח החדש (מוצג פעם אחת בלבד — העתיקו מחדש את קוד הכפתורים/התבניות):
           </div>
           <div className="dc-row">
             <span className="dc-secret-once">{rotatedSecret}</span>

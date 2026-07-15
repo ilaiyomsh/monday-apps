@@ -5,3 +5,4 @@ public/admin/
 .dev/
 *.log
 coverage/
+temp.zip
