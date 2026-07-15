@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Avatar, AvatarGroup, Flex, Text, Counter, Dialog, DialogContentContainer } from '@vibe/core';
+import { Person } from '@vibe/icons';
 import { useUsers } from '@api/hooks/use-users';
 import styles from './PersonAvatar.module.css';
 
@@ -109,7 +110,12 @@ export function PersonList({ people = [], size = 'default', showNames = true, ma
   const byId = new Map((users || []).map((u) => [String(u.id), u]));
 
   if (!people || people.length === 0) {
-    return <Text className={styles.muted}>לא הוקצה</Text>;
+    // monday "unassigned" avatar: light-gray disc + faint person silhouette.
+    return (
+      <span className={styles.emptyAvatar} aria-label="לא הוקצה" title="לא הוקצה">
+        <Person size={16} />
+      </span>
+    );
   }
 
   const avatarSize = SIZE_MAP[size] || "small";
