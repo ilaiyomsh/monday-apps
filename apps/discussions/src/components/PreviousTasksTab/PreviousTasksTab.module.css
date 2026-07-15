@@ -231,3 +231,6 @@
   font-family: var(--font-family);
   direction: rtl;
 }
+
+/* round103 — hide this chrome while monday's item-card panel is open (iframe narrows). */
+:global(body[data-chrome-narrow="1"]) .toolbar { display: none !important; }

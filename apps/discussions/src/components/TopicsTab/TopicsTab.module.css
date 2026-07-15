@@ -592,3 +592,6 @@
 .closeSelectionBtn:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
 }
+
+/* round103 — hide this chrome while monday's item-card panel is open (iframe narrows). */
+:global(body[data-chrome-narrow="1"]) .toolbar { display: none !important; }
