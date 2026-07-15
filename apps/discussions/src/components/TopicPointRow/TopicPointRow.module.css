@@ -369,14 +369,44 @@
 
 /* האם נידונה — square checkbox (mockup: blue fill when checked). Cell chrome
    (padding / centering / 0.625px rule) mirrors TaskTable's .taskCell. */
-/* נידונה — hosts the native @vibe Checkbox (round 96), centered like a monday
-   checkbox column cell. */
+/* נידונה — monday checkbox COLUMN cell (round 99): the whole cell is clickable;
+   empty when unchecked, borderless green ✓ when checked. */
 .checkCell {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 8px;
+  padding: 0;
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+}
+.checkBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 34px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+.checkBtn:disabled {
+  cursor: default;
+}
+/* The checkmark: hidden on an empty cell, a faint gray hint on hover, solid
+   monday-green when checked (green wins over the hover hint via :not). */
+.checkGlyph {
+  color: #c3c6d4;
+  opacity: 0;
+  stroke-width: 2.5;
+  transition: opacity 0.1s ease;
+}
+.checkBtn:hover .checkGlyph:not(.checkGlyphOn) {
+  opacity: 0.45;
+}
+.checkGlyphOn {
+  color: #00c875;
+  opacity: 1;
 }
 
 /* החלטות / משימות cells — dashed create button + round counter pill. Cell

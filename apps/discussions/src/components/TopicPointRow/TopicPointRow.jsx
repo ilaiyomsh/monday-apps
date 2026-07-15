@@ -326,19 +326,23 @@ export function TopicPointRow({
         </button>
       </div>
 
-      {/* האם נידונה — native monday checkbox column (round 96): the @vibe/core
-          Checkbox (same component monday's checkbox column renders), replacing the
-          old hand-rolled square button so it looks + behaves like a standard
-          checkbox. Read-only when the user can't check or the row is hidden
-          (item 11) — a disabled Checkbox greys itself. */}
+      {/* האם נידונה — monday checkbox COLUMN (round 99): the whole cell is the
+          click target; empty when unchecked, a borderless green ✓ when checked.
+          Clicking toggles (hover on an empty cell shows a faint ✓ hint, like
+          monday). Disabled on a hidden row (item 11) / without the cap. */}
       {showCol('check') && (
         <div className={styles.checkCell} onClick={stop} onPointerDown={stop}>
-          <Checkbox
-            checked={discussed}
-            onChange={(e) => onToggle?.(point, e.target.checked)}
+          <button
+            type="button"
+            className={styles.checkBtn}
+            onClick={canCheck && !inert ? () => onToggle?.(point, !discussed) : undefined}
             disabled={!canCheck || inert}
-            ariaLabel={discussed ? 'נידונה' : 'סמן כנידונה'}
-          />
+            aria-pressed={discussed}
+            aria-label={discussed ? 'נידונה — בטל סימון' : 'סמן כנידונה'}
+            title={discussed ? 'נידונה' : 'סמן כנידונה'}
+          >
+            <Check size={18} className={`${styles.checkGlyph} ${discussed ? styles.checkGlyphOn : ''}`} />
+          </button>
         </div>
       )}
 
