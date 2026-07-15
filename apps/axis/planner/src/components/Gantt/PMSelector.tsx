@@ -138,12 +138,14 @@ export const PMSelector: React.FC<PMSelectorProps> = ({
   };
 
   return (
-    <div className="relative min-w-0 flex-1 flex justify-end">
+    <div className="relative min-w-0 flex">
       <button
         ref={triggerRef}
         onClick={() => setIsOpen(!isOpen)}
         disabled={isUpdating}
-        className="inline-flex items-center gap-2 bg-bg-surface/50 px-2.5 py-1.5 rounded-full border border-border-faint hover:bg-bg-hover transition-all duration-150 hover:scale-[1.02] hover:shadow-md cursor-pointer min-w-0 max-w-full"
+        // Border + background are hover-only (transparent border keeps the layout
+        // from shifting on hover); at rest the PM reads as plain text + avatar.
+        className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-full border border-transparent hover:border-border-faint hover:bg-bg-hover transition-all duration-150 hover:scale-[1.02] hover:shadow-md cursor-pointer min-w-0 max-w-full"
       >
         {displayName ? (
           <>

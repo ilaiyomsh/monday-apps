@@ -6,7 +6,7 @@ import { CLASSIFICATION_LABEL_KEYS, CLASSIFICATION_ORDER, isClassificationEnable
 import type { TimeframeFilter, UtilizationFilter, PMFilter, ProjectTypeFilter } from '../components/Gantt/GanttContext';
 import type { PlannerSettings } from '../types/settings.types';
 import type { AvailabilityData } from './useAvailability';
-import { CONFIG, PROJECT_CARD_HEIGHT, SUMMARY_TRACKS_GAP, FOCUS_BLOCK_GAP, GAP_COLOR_SUMMARY, GAP_COLOR_FOCUS } from '../utils/constants';
+import { CONFIG, SUMMARY_TRACKS_GAP, FOCUS_BLOCK_GAP, GAP_COLOR_SUMMARY, GAP_COLOR_FOCUS } from '../utils/constants';
 
 interface CompanyLoadData {
   capacities: RoleCapacity[];
@@ -458,69 +458,45 @@ export const useDataFlattener = (
       if (isExpanded) {
         const tracks = packTasksIntoTracks(group.tasks);
 
-        tracks.forEach((trackItems, trackIndex) => {
+        // Track-row count for the block:
+        // • Card (focused) projects: EXACTLY max(realTracks, card rows) — NO
+        //   gratuitous trailing "add allocation" row. This is what keeps focused
+        //   blocks UNIFORM between projects: a 1- and a 2-allocation project both
+        //   fill the fixed 2-row (96px) card, and only 3+ allocations grow the
+        //   block by real content. (Previously an empty final track was always
+        //   appended, so a 2-allocation project was one dead white row taller than
+        //   a 1-allocation one.)
+        // • Non-card expansions (employees view / projects without a summary):
+        //   keep the extra trailing empty row for dropping a new allocation.
+        const minRows = hasProjectSummary ? CONFIG.minExpandedTrackRows : tracks.length + 1;
+        const totalRows = Math.max(tracks.length, minRows, 1);
+        const lastIndex = totalRows - 1;
+
+        for (let i = 0; i < totalRows; i++) {
+          const isRealTrack = i < tracks.length;
+          const isLast = i === lastIndex;
+          // The bottom focus edge + page-bg gap live on the LAST row of the block
+          // (whichever it is). Symmetric with the TOP focus gap (same fill + drop
+          // shadow) so the block floats identically above and below — see
+          // VirtualRowList, where the content box is z-lifted so this bottom
+          // shadow isn't hidden by the spacer.
+          const rowFocusBottomGap = isLast ? focusBottomGap : 0;
           const trackRow: TrackRow = {
-            id: `track-${group.id}-${trackIndex}`,
+            id: isRealTrack ? `track-${group.id}-${i}` : `track-${group.id}-empty-${i}`,
             type: 'TRACK',
-            height: CONFIG.rowHeight,
+            height: CONFIG.rowHeight + rowFocusBottomGap,
             groupId: group.id,
-            items: trackItems,
-            trackIndex,
-            isInactiveProject,
+            items: isRealTrack ? tracks[i] : [],
+            trackIndex: i,
+            isInactiveProject: isRealTrack ? isInactiveProject : undefined,
             dimmed: rowDimmed,
             focusBlock: isSelectedProject || undefined,
+            focusEdge: isLast && isSelectedProject ? 'bottom' : undefined,
+            gapBottom: rowFocusBottomGap || undefined,
+            gapBottomColor: rowFocusBottomGap ? GAP_COLOR_FOCUS : undefined,
           };
           rows.push(trackRow);
-        });
-
-        // Calculate minimum empty tracks needed for ProjectSummaryCard.
-        // Subtract 1 because finalEmptyTrackRow (always added below) already counts
-        // toward the minimum — without this, a project with 1 allocation gets 2 empty rows.
-        const minTracks = hasProjectSummary ? CONFIG.minExpandedTrackRows : 1;
-        const emptyTracksNeeded = Math.max(0, minTracks - tracks.length - 1);
-
-        // Add empty tracks to meet minimum
-        for (let i = 0; i < emptyTracksNeeded; i++) {
-          const emptyTrack: TrackRow = {
-            id: `track-${group.id}-empty-${i}`,
-            type: 'TRACK',
-            height: CONFIG.rowHeight,
-            groupId: group.id,
-            items: [],
-            trackIndex: tracks.length + i,
-            focusBlock: isSelectedProject || undefined,
-          };
-          rows.push(emptyTrack);
         }
-
-        // Final empty track for new allocations. When the card shows, pad it so
-        // the whole track region reaches PROJECT_CARD_HEIGHT — the card floats
-        // over exactly this region (starting at the header's bottom, past its
-        // color-A gap), so it must be tall enough not to overhang the next
-        // project. focusBottomGap adds the page-bg gap closing the focused block.
-        const naturalBlockHeight = (tracks.length + emptyTracksNeeded + 1) * CONFIG.rowHeight;
-        const finalTrackHeight = hasProjectSummary
-          ? CONFIG.rowHeight + Math.max(0, PROJECT_CARD_HEIGHT - naturalBlockHeight)
-          : CONFIG.rowHeight;
-        const finalEmptyTrackRow: TrackRow = {
-          id: `track-${group.id}-empty-final`,
-          type: 'TRACK',
-          height: finalTrackHeight + focusBottomGap,
-          groupId: group.id,
-          items: [],
-          trackIndex: tracks.length + emptyTracksNeeded,
-          // Bottom edge of the focused block (closes the separation started at
-          // the focused project's header row). Symmetric with the TOP focus gap:
-          // same page-bg fill (GAP_COLOR_FOCUS) + same drop shadow, so the block
-          // floats identically above and below. The shadow is what separates it
-          // from the next (dimmed) project — see VirtualRowList, where the content
-          // box is z-lifted so this bottom shadow isn't hidden by the spacer.
-          focusEdge: isSelectedProject ? 'bottom' : undefined,
-          focusBlock: isSelectedProject || undefined,
-          gapBottom: focusBottomGap || undefined,
-          gapBottomColor: focusBottomGap ? GAP_COLOR_FOCUS : undefined,
-        };
-        rows.push(finalEmptyTrackRow);
       }
     });
 

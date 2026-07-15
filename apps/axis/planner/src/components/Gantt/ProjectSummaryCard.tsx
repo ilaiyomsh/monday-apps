@@ -117,10 +117,11 @@ const formatHours = (value: number | null | undefined): string => {
 const SKELETON = <span className="h-3.5 w-8 rounded bg-bg-hover animate-pulse" aria-hidden="true" />;
 
 // Shared cell layout: a muted label and its value on ONE line, small text to
-// match the timeline ruler's month labels. ml-auto (physical left margin auto,
-// dir-independent) pushes the pair to the right edge of its half-cell.
-const MetricCell: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <span className="flex items-center gap-1.5 min-w-0 max-w-full ml-auto">
+// match the timeline ruler's month labels. The caller supplies the auto-margin
+// (ml-auto / mr-auto — physical, dir-independent) that flushes the pair to the
+// outer edge of its half-cell so the two metrics sit symmetrically.
+const MetricCell: React.FC<{ label: string; className?: string; children: React.ReactNode }> = ({ label, className = '', children }) => (
+  <span className={`flex items-center gap-1.5 min-w-0 max-w-full ${className}`}>
     <span className="text-xs text-text-muted truncate">{label}</span>
     {children}
   </span>
@@ -234,16 +235,16 @@ const ProjectMetricsRow: React.FC<{ projectId: string }> = ({ projectId }) => {
     // (value={metrics?.planned ?? null}, label={t('projectSummary.plannedHours')})
     // with another divider.
     // Two equal-width cells with the divider always at the exact center
-    // (flex-1 halves). Each cell's content is right-aligned (text-right is
-    // physical-right, dir-independent) so the hours line up to the right edge
-    // of their cell.
+    // (flex-1 halves). The metrics flush to the OUTER edges — actual to the right
+    // (ml-auto), allocated to the left (mr-auto) — so they sit symmetrically
+    // under the PM (right) / project-type (left) pair in the row above.
     <div className="flex items-stretch flex-1 min-h-0 border-t border-border-subtle">
       <div className="flex-1 min-w-0 px-3 flex items-center">
-        <MetricCell label={t('projectSummary.actualHours')}>{staticValue(metrics?.reported ?? 0)}</MetricCell>
+        <MetricCell className="ml-auto" label={t('projectSummary.actualHours')}>{staticValue(metrics?.reported ?? 0)}</MetricCell>
       </div>
       <span className="w-px self-stretch my-1.5 bg-border-subtle flex-shrink-0" aria-hidden="true" />
       <div className="flex-1 min-w-0 px-3 flex items-center">
-        <MetricCell label={t('projectSummary.allocatedHours')}>{staticValue(metrics?.allocated ?? 0)}</MetricCell>
+        <MetricCell className="mr-auto" label={t('projectSummary.allocatedHours')}>{staticValue(metrics?.allocated ?? 0)}</MetricCell>
       </div>
     </div>
   );
@@ -260,15 +261,20 @@ export const ProjectSummaryCard = memo<ProjectSummaryCardProps>(({
   const locale = useLocale();
   return (
     <div className="flex flex-col h-full" dir={locale.dir}>
-      {/* Project-type badge removed from the card as redundant (owner 2026-07-14).
-          The ProjectTypeBadge component above is kept, ready to re-add here. */}
-      <div className="flex items-center gap-3 flex-1 min-h-0">
+      {/* Row 1 — PM flush to one edge, project-type badge flush to the other
+          (justify-between), symmetric with the two hour metrics below. */}
+      <div className="flex items-center justify-between gap-2 flex-1 min-h-0">
         <PMSelector
           projectId={projectId}
           currentManagerName={summary.managerName}
           currentManagerPhotoUrl={summary.managerPhotoUrl}
           employees={employees}
           onUpdate={onPMUpdate}
+        />
+        <ProjectTypeBadge
+          projectType={summary.projectType}
+          projectTypeColor={summary.projectTypeColor}
+          projectId={projectId}
         />
       </div>
       <ProjectMetricsRow projectId={projectId} />
