@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { collapseMapForView } from '@generated/utils/collapsePref.js';
 import { Button } from '@vibe/core';
 import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
 import { ArrowLeft } from 'lucide-react';
@@ -366,14 +365,6 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
 
   // ---- collapse ----
   const allCollapsed = grouped.length > 0 && grouped.every((g) => collapsed[g.key]);
-  // round105 — apply the saved collapse-all default ONCE, when groups first load.
-  const collapseAppliedRef = useRef(false);
-  useEffect(() => {
-    if (collapseAppliedRef.current || grouped.length === 0) return;
-    collapseAppliedRef.current = true;
-    const m = collapseMapForView(savedView, grouped);
-    if (m) setCollapsed(m);
-  }, [savedView, grouped]);
   const toggleAll = () => {
     if (allCollapsed) setCollapsed({});
     else { const c = {}; grouped.forEach((g) => { c[g.key] = true; }); setCollapsed(c); }
@@ -665,11 +656,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
           />
         )}
 
-        <CollapseAllButton
-          collapsed={allCollapsed}
-          onClick={toggleAll}
-          onSave={canSaveView ? () => { saveView({ collapseAll: allCollapsed }); notifySaved(); } : null}
-        />
+        <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
       </div>
 
       {/* Floating bulk-action bar — count + delete + close (mirrors the
