@@ -35,6 +35,12 @@
   align-items: center;
   justify-content: flex-start;
   gap: var(--spacing-small, 8px);
+  /* Round 90 — freeze the toolbar while the card body scrolls (like the tabs). */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--primary-background-color, #ffffff);
+  padding-block: 4px;
 }
 .decToolbarLeft {
   display: flex;
