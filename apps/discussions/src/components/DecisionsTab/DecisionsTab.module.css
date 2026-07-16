@@ -277,7 +277,9 @@
 .decNameCell {
   justify-content: flex-start;
   gap: 6px;
-  padding-inline-start: 14px;
+  /* round133 — same fixed inset as the add-row text (18px = 6px strip + 12px
+     gap): decision names and "+ הוסף החלטה" sit on one vertical line. */
+  padding-inline-start: 18px;
   padding-inline-end: 8px;
   box-shadow: inset 6px 0 0 #6b4ee6;
   overflow: hidden;
@@ -609,6 +611,14 @@
 .decSelectable .decNameHead {
   left: 40px;
   box-shadow: none;
+  /* round133 — mirrors TaskTable's select mode: a tighter 8px inset after the
+     checkbox track (the strip lives on the checkbox, not here). */
+  padding-inline-start: 8px;
+}
+/* round133 — keep the add-row text on the SAME vertical line as the decision
+   names in selection mode (40px checkbox track + 8px cell inset = 48px). */
+.decSelectable .decAddRowInner {
+  padding-inline-start: 48px;
 }
 /* Round the table's top-leading corner (S2) — matches the Topics (.sectionBody)
    and Tasks (.taskTable) tables. The non-selectable layout already rounds it via

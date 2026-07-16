@@ -93,7 +93,10 @@
    frozen column; the table's rounded left border rounds the strip's outer corner. */
 .taskFirst {
   justify-content: flex-start;
-  padding-inline-start: 14px; /* clear the 6px colored strip */
+  /* round133 (owner request, monday-native): the item NAME always starts at the
+     SAME fixed inset as the add-row text (18px = 6px strip + 12px gap), so the
+     names and "+ הוסף משימה" sit on one vertical line. */
+  padding-inline-start: 18px;
   position: sticky;
   left: 0;
   z-index: 2;
@@ -165,6 +168,12 @@
   align-items: center;
   padding-inline-start: 18px;
   white-space: nowrap;
+}
+/* round133 — selection mode shifts the names after the 36px checkbox track
+   (36px + 8px cell inset = 44px): keep the add-row text on the SAME vertical
+   line as the item names. */
+.selectable .addLabel {
+  padding-inline-start: 44px;
 }
 .addLabel::before {
   content: '';

@@ -329,7 +329,10 @@
   gap: 8px;
   width: 100%;
   min-height: 36px;
-  padding: 0 12px 0 18px;
+  /* round133 — align the "+" with the point NAMES: the points grid leads with a
+     fixed 36px checkbox cell and the name cell adds a 14px inset, so the names
+     start 50px from the row edge; the add-row text starts on the same line. */
+  padding: 0 12px 0 50px;
   border: none;
   background: transparent;
   color: var(--placeholder-color, #9699a6);
