@@ -6,8 +6,6 @@
   align-items: stretch;
   min-height: 36px;
   border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
-  /* round123 — monday-style soft shading under each horizontal rule. */
-  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045);
   background: var(--primary-background-color, #fff);
   /* Smooth hover, same as TaskTableRow's .bodyRow. */
   transition: background-color var(--motion-productive-short, 0.1s) ease;
@@ -99,7 +97,7 @@
   box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
   /* Close the lead (checkbox/accent) column with a right rule, matching the
      Tasks table's frozen `.selectCell` separator (TaskTable `.taskCell`). */
-  border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
+  border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, aligned with the header cells */
   position: sticky;
   left: 0;
   z-index: 2;
@@ -211,7 +209,7 @@
   gap: 6px;
   padding-inline-start: 14px;
   padding-inline-end: 8px;
-  border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
+  border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, aligned with the header cells */
   /* FROZEN name column — pinned right after the 36px checkbox lead, opaque so
      scrolled cells don't bleed through (mirrors TaskTable's frozen `.taskFirst`).
      Its resize handle in the header cell drives the width; the row cell just
@@ -378,7 +376,7 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
+  border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, aligned with the header cells */
 }
 .checkBtn {
   display: flex;
@@ -419,7 +417,7 @@
   justify-content: center;
   gap: 8px;
   padding: 0 8px;
-  border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
+  border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, aligned with the header cells */
   /* Positioning context for the in-flight CreateProgressBar overlay (round 52),
      which fills the cell while a create-from-point is pending / just done. */
   position: relative;

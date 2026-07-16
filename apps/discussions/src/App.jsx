@@ -609,8 +609,13 @@ export default function App() {
     setCreatePrefill(null);
     setRefreshKey(k => k + 1);
     if (meta.isEdit) {
-      // Edit: refresh the open card if it's the one being edited.
-      if (updated?.id && selectedDiscussion?.id === updated.id) setSelectedDiscussion(updated);
+      // Edit: refresh the open card if it's the one being edited. round127 —
+      // stamp a per-save token: same-id saves must still re-run the card's
+      // resolve effects (e.g. the previous-discussion link, which is re-read
+      // from the board and otherwise kept showing the pre-edit value).
+      if (updated?.id && selectedDiscussion?.id === updated.id) {
+        setSelectedDiscussion({ ...updated, __savedAt: Date.now() });
+      }
       notify('הדיון עודכן בהצלחה');
     } else {
       // Create / duplicate: open the new discussion immediately.

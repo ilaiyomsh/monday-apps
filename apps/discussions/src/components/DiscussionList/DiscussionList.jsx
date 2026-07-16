@@ -516,14 +516,15 @@ export function DiscussionList({
               chrome (gear + view toggle) and the primary "חדש" at inline-end. */}
           <div className={styles.titleRow}>
             <div className={styles.titleActions}>
-              {onOpenMyDecisions && (
-                <Button kind={"secondary"} size={"small"} onClick={onOpenMyDecisions}>
-                  ההחלטות שלי
-                </Button>
-              )}
+              {/* round128 — "המשימות שלי" sits LEFT of "ההחלטות שלי" (owner request). */}
               {onOpenMyTasks && (
                 <Button kind={"secondary"} size={"small"} onClick={onOpenMyTasks}>
                   המשימות שלי
+                </Button>
+              )}
+              {onOpenMyDecisions && (
+                <Button kind={"secondary"} size={"small"} onClick={onOpenMyDecisions}>
+                  ההחלטות שלי
                 </Button>
               )}
             </div>
