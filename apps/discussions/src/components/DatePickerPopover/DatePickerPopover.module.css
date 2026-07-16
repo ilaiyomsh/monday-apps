@@ -22,6 +22,22 @@
 .set {
   color: var(--secondary-text-color, #676879);
 }
+/* round132 — empty date CELL: completely blank at rest; hovering (or keyboard-
+   focusing) the cell-filling trigger reveals a "+ calendar" add hint, like
+   monday's native empty date cells. The icons stay in the layout (opacity, not
+   display) so the reveal never shifts the row. */
+.addDateHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  color: var(--secondary-text-color, #676879);
+  transition: opacity 0.08s ease;
+}
+.trigger:hover .addDateHint,
+.trigger:focus-visible .addDateHint {
+  opacity: 1;
+}
 .overdue {
   color: var(--negative-color, #d83a52);
 }
@@ -31,9 +47,31 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 6px;
+  padding-top: 6px;
   border-top: 1px solid var(--ui-border-color, #e6e9ef);
+}
+
+/* round132 — compact popover. The owner often couldn't see the whole calendar
+   on screen. Two levers:
+   1. Shrink: vibe's DatePicker is sized by the --day-picker-* custom props
+      (day cells, gaps, header, month-grid height) — override them on the
+      container + tighter own paddings, cutting the popover from ~430px to
+      ~360px tall.
+   2. Guarantee: clamp the box to the viewport and let it scroll internally,
+      so even in a very short pane the picker is never cut off-screen. */
+.pickerBox {
+  --day-picker-day-width: 26px;
+  --day-picker-day-height: 26px;
+  --day-picker-days-vertical-gap: 1px;
+  --day-picker-days-horizontal-gap: 2px;
+  --day-picker-header-height: 30px;
+  /* 7 rows (weekday header + up to 6 week rows) × (26px + 2×1px gap) */
+  --day-picker-content-height: 196px;
+  padding: 8px;
+  box-sizing: border-box;
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
 }
 
 /* Inline text trigger (discussion header): inherits the surrounding typography,
@@ -92,7 +130,7 @@
    the popover, above the calendar. The app is RTL, but the field itself is LTR
    so the numeric date reads naturally. */
 .typeRow {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .typeInput {
   width: 100%;
@@ -117,7 +155,7 @@
   align-items: center;
   justify-content: center;
   gap: 2px;
-  height: 34px;
+  height: 30px; /* round132: compact popover */
   box-sizing: border-box;
   border: 1px solid var(--ui-border-color, #c3c6d4);
   border-radius: var(--border-radius-small, 4px);

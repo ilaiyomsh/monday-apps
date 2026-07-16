@@ -17,6 +17,7 @@ import {
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
 } from '@generated/components/MyTasksView/controls/controls.js';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
@@ -216,12 +217,16 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   const todayStart = useMemo(() => startOfToday(), []);
   const bucketCounts = useMemo(() => countBuckets(items, doneStatusIds, todayStart), [items, doneStatusIds, todayStart]);
   const [quickStatus, setQuickStatus] = useState(null);
+  // round132 — toolbar Search (shared SearchPill): client-side name "contains",
+  // folded into the same pipeline as the filter/sort/battery.
+  const [search, setSearch] = useState('');
   const filteredTasks = useMemo(
     () => {
-      const base = sortTasks(filterTasks(items, filter), sort, { orderById, labelById });
+      let base = sortTasks(filterTasks(items, filter), sort, { orderById, labelById });
+      if (search.trim()) base = base.filter((tk) => matchesSearch(tk.name, search));
       return quickStatus ? base.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : base;
     },
-    [items, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart]
+    [items, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, search]
   );
 
   // Right-click a group header → shared color palette (round 77).
@@ -503,6 +508,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
           )}
         </div>
         <div className={styles.toolbarRight}>
+          <SearchPill value={search} onChange={setSearch} />
           <BuilderControl
             icon={Filter} label="Filter" title="Filter by" mobile={isMobile} width={isMobile ? undefined : 620}
             applied={fc > 0} badge={fc}

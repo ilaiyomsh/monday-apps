@@ -329,7 +329,10 @@
   gap: 8px;
   width: 100%;
   min-height: 36px;
-  padding: 0 12px 0 18px;
+  /* round133 — align the "+" with the point NAMES: the points grid leads with a
+     fixed 36px checkbox cell and the name cell adds a 14px inset, so the names
+     start 50px from the row edge; the add-row text starts on the same line. */
+  padding: 0 12px 0 50px;
   border: none;
   background: transparent;
   color: var(--placeholder-color, #9699a6);
@@ -625,10 +628,17 @@
    stopped flex-line wrapping, but chip TEXT still wrapped inside its own box
    on the narrow iframe and inflated the "one row" to 2-3 text lines (the gap
    above the first group grew when the updates panel opened). Locking every
-   descendant to a single text line pins the hidden height to the visible one. */
+   descendant to a single text line pins the hidden height to the visible one.
+   round132 — the REAL inflater was a NESTED flex container: a child flex box
+   with its own `flex-wrap: wrap` (the status-battery pattern), which neither
+   the toolbar's nowrap (flex lines don't inherit) nor white-space (text, not
+   flex) touches — nested chips stacked 2-3 rows tall in the narrowed pane and
+   the hidden toolbar reserved all of them. Pin EVERY descendant flex container
+   to a single line while hidden. */
 :global(body[data-chrome-narrow="1"]) .toolbar,
 :global(body[data-chrome-narrow="1"]) .toolbar * {
   white-space: nowrap !important;
+  flex-wrap: nowrap !important;
 }
 
 /* round113 — while monday's item-card / updates panel is open (chrome-narrow,
