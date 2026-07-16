@@ -501,6 +501,11 @@
     border-color var(--motion-productive-medium, 0.2s) ease,
     box-shadow var(--motion-productive-medium, 0.2s) ease,
     transform var(--motion-productive-medium, 0.2s) ease;
+  /* round118 — anchor + clip for the flush type-color rail: the card's own
+     10px rounded border clips the rail's ends into the same quarter-round
+     look as the item tables' group strip. */
+  position: relative;
+  overflow: hidden;
 }
 
 .item:hover {
@@ -519,13 +524,19 @@
   border-color: var(--primary-color, #0073ea);
 }
 
-/* Left color rail — the discussion's type accent, full card height. */
+/* Left color rail — the discussion's type accent. round118 (owner request):
+   styled EXACTLY like the item tables' group strip — a 6px bar flush against
+   the card's left edge, full card height, its ends rounded by the card's own
+   border (the .item overflow clip), not a floating inset pill. Absolute, so
+   the card's 12px start padding alone spaces the name off the bar. */
 .rail {
-  width: 4px;
-  align-self: stretch;
-  min-height: 30px;
-  border-radius: 4px;
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
   flex-shrink: 0;
+  pointer-events: none;
 }
 
 .itemName {
