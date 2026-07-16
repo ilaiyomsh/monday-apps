@@ -10,7 +10,12 @@ import logger from '../utils/logger.js';
 const dumpRaw = (label, data) => {
   logger.info('SettingsContext', `🔎 ${label} (object)`, data);
   let json;
-  try { json = JSON.stringify(data, null, 2); } catch { json = '[unserializable]'; }
+  try { json = JSON.stringify(data, null, 2); } catch (err) {
+    json = '[unserializable]';
+    // round135 (error-guard): a circular/unserializable settings object is
+    // itself a diagnostic-worthy fact — record it instead of swallowing.
+    logger.warn('SettingsContext', `dumpRaw: ${label} אינו ניתן לסריאליזציה`, err);
+  }
   logger.info('SettingsContext', `🔎 ${label} (JSON — copy this)`, json);
 };
 
@@ -112,8 +117,10 @@ export function SettingsProvider({ children }) {
         if (changed) {
           try {
             await monday.storage.setItem(key, JSON.stringify(migrated));
-          } catch {
-            /* storage write unavailable — migration stays in-memory */
+          } catch (err) {
+            // storage write unavailable — the migration stays in-memory (it is
+            // idempotent and re-applies on every load); logged (round135).
+            logger.warn('SettingsContext', 'שמירת מיפוי עמודות מנוקה ל-storage נכשלה — המיגרציה תישאר בזיכרון', err);
           }
         }
       } else {
@@ -122,8 +129,10 @@ export function SettingsProvider({ children }) {
         logger.info('SettingsContext', '🔎 STORAGE SETTINGS (empty — no mapping stored)', { key });
         setSettings(null);
       }
-    } catch {
-      // storage unavailable / parse error — treat as unconfigured.
+    } catch (err) {
+      // storage unavailable / parse error — treat as unconfigured; logged
+      // (round135) so a broken storage read is visible, not silent.
+      logger.warn('SettingsContext', 'טעינת ההגדרות מ-storage נכשלה — האפליקציה תיפתח כלא-מוגדרת', err);
       setSettings(null);
     } finally {
       setIsLoading(false);
@@ -183,8 +192,10 @@ export function SettingsProvider({ children }) {
       try {
         const instanceId = context?.instanceId || context?.boardId || 'default';
         await monday.storage.setItem(`${STORAGE_KEY_BASE}_${instanceId}`, JSON.stringify(next));
-      } catch {
-        /* local dev: persistence unavailable, in-memory only */
+      } catch (err) {
+        // local dev / storage unavailable: the update stays in-memory only;
+        // logged (round135) so a silently-unpersisted settings change is visible.
+        logger.warn('SettingsContext', 'שמירת ההגדרות ל-storage נכשלה — השינוי חי בזיכרון בלבד', err);
       }
       return next;
     },
@@ -218,7 +229,9 @@ export function useSettings() {
   const ctx = useContext(SettingsContext);
   if (!ctx) {
     if (!missingProviderWarned) {
-      console.error('useSettings called without SettingsProvider; treating as unconfigured.');
+      // round135 — through the logger funnel (was the app's single console.*
+      // bypass): visible in the toast/dedup pipeline like every other error.
+      logger.error('SettingsContext', 'useSettings called without SettingsProvider; treating as unconfigured.');
       missingProviderWarned = true;
     }
     return {

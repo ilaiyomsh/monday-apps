@@ -132,16 +132,37 @@ export async function setBoardMembers(boardId, userIds, kind = 'subscriber') {
  * user can't manage members) so the caller's column write still runs and
  * surfaces the real error. already-subscribed users are a monday-side no-op.
  */
+// round135 (perf audit) — session cache of ids ALREADY ensured per board, so a
+// people-edit burst doesn't fire a redundant membership mutation per write
+// (already-subscribed users were a monday-side no-op, but each call was still
+// a full network round-trip). An id enters the cache only after a SUCCESSFUL
+// ensure; on failure nothing is cached, so the next write retries the ensure.
+// Out-of-band removals (someone unsubscribed directly in monday) fall back to
+// the column write's own error surfacing — same terminal behavior as before.
+const ensuredByBoard = new Map(); // boardId -> Set<numeric user id>
+
 export async function ensureSubscribers(boardId, userIds) {
   const ids = (userIds || []).map((id) => Number(id)).filter(Number.isFinite);
   if (!boardId || !ids.length) return;
+  const key = String(boardId);
+  const ensured = ensuredByBoard.get(key) || new Set();
+  const missing = ids.filter((id) => !ensured.has(id));
+  if (!missing.length) return; // every id already ensured this session — skip the mutation
   try {
-    await setBoardMembers(boardId, ids, 'subscriber');
+    await setBoardMembers(boardId, missing, 'subscriber');
+    missing.forEach((id) => ensured.add(id));
+    ensuredByBoard.set(key, ensured);
   } catch (err) {
     logger.warn('subscribers', 'ensureSubscribers failed (continuing to write)', {
-      boardId: String(boardId), ids, err,
+      boardId: String(boardId), ids: missing, err,
     });
   }
+}
+
+// Test hook: reset the per-board ensured cache (module state survives between
+// tests otherwise).
+export function _resetEnsuredSubscribersCache() {
+  ensuredByBoard.clear();
 }
 
 /**
@@ -159,6 +180,11 @@ export async function removeBoardMembers(boardId, userIds) {
     'removeBoardMembers'
   );
   const removed = data?.delete_subscribers_from_board ?? null;
+  // round135 — evict removed users from the ensured-subscribers session cache,
+  // so a later people-assign re-runs ensureSubscribers for them instead of
+  // skipping on a stale entry.
+  const ensured = ensuredByBoard.get(String(boardId));
+  if (ensured) ids.forEach((id) => ensured.delete(id));
   logger.info('subscribers', 'removeBoardMembers result', {
     boardId: Number(boardId), userIds: ids, removed,
   });

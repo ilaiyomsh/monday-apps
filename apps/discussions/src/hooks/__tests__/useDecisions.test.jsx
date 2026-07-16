@@ -12,10 +12,15 @@ vi.mock('../../utils/mondayApi/monday-client.js', async (importOriginal) => {
 });
 
 import { setActiveConfig } from '../../utils/mondayApi/board-config-store.js';
-import { useDecisions, fetchDecisionsByDiscussion, linkTaskToPoint } from '../useDecisions.js';
+import { useDecisions, fetchDecisionsByDiscussion, linkTaskToPoint, _resetDecisionsScanCache } from '../useDecisions.js';
 
 beforeEach(() => {
   api.mockReset();
+  // round135 — the hook now carries a module-level session cache of the
+  // per-discussion scan (a re-open within 60s serves cached rows instead of
+  // re-scanning the board). Reset it per test so every mount here exercises
+  // the real fetch path, as these tests assert.
+  _resetDecisionsScanCache();
   // Reset to an UNMAPPED decisions board; individual tests override.
   setActiveConfig({
     boards: { discussions: { id: 'disc-board' }, tasks: { id: '' }, topics: { id: '' }, decisions: { id: '' } },
@@ -286,6 +291,32 @@ describe('useDecisions — loads decisions by the DECISION-side link (Round 20 f
     setActiveConfig(cfg);
     mockDecisionsBoard();
     const { result } = renderHook(() => useDecisions('disc-1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.items.map((i) => String(i.id)).sort()).toEqual(['501', '502']);
+  });
+
+  it('round135 — a re-mount within the freshness window serves the session cache with NO re-scan', async () => {
+    setActiveConfig(cfg);
+    mockDecisionsBoard();
+    const first = renderHook(() => useDecisions('disc-1'));
+    await waitFor(() => expect(first.result.current.loading).toBe(false));
+    const scansAfterFirst = api.mock.calls.filter(([q]) => q.includes('items_page')).length;
+    first.unmount();
+    const second = renderHook(() => useDecisions('disc-1'));
+    await waitFor(() => expect(second.result.current.loading).toBe(false));
+    expect(second.result.current.items.map((i) => String(i.id)).sort()).toEqual(['501', '502']);
+    expect(api.mock.calls.filter(([q]) => q.includes('items_page')).length).toBe(scansAfterFirst);
+  });
+
+  it('round135 — enabled:false stays DORMANT (no board scan) until armed', async () => {
+    setActiveConfig(cfg);
+    mockDecisionsBoard();
+    const { result, rerender } = renderHook(
+      ({ en }) => useDecisions('disc-1', { enabled: en }),
+      { initialProps: { en: false } }
+    );
+    expect(api).not.toHaveBeenCalled();
+    rerender({ en: true });
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.items.map((i) => String(i.id)).sort()).toEqual(['501', '502']);
   });

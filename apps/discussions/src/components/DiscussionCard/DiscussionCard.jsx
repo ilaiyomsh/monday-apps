@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, useSyncExternalStore, lazy, Suspense } from 'react';
 import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
 import { MoveArrowLeft, Info } from '@vibe/icons';
 import { דיונים1Board } from '@api/BoardSDK.js';
@@ -23,8 +23,8 @@ import { PreviousTasksTab } from '@generated/components/PreviousTasksTab';
 import { TopicsTab } from '@generated/components/TopicsTab';
 import { TasksTab } from '@generated/components/TasksTab';
 import { DecisionsTab } from '@generated/components/DecisionsTab';
-import { EffectivenessTab } from '@generated/components/EffectivenessTab';
 import { SummaryTab } from '@generated/components/SummaryTab';
+import lazyRetry from '@generated/utils/lazyRetry.js';
 import { NewTaskModal } from '@generated/components/NewTaskModal';
 import { QuickCreateFab } from '@generated/components/QuickCreateFab';
 import { QuickCreateModal } from '@generated/components/QuickCreateModal';
@@ -33,6 +33,13 @@ import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import logger from '@generated/utils/logger.js';
 import { loadPointItems, addPointItem, mergePointItemIn, prunePointItems } from '@generated/utils/pointItems.js';
 import styles from './DiscussionCard.module.css';
+
+// round135 (perf audit) — EffectivenessTab is the ONLY recharts importer; a
+// static import made the whole ~360KB charts chunk a hard dependency of the
+// boot bundle even though most sessions never open this tab. Lazy + lazyRetry
+// (the proven RichTextEditor pattern) defers it to first tab entry, with one
+// guarded reload on a chunk-load failure.
+const EffectivenessTab = lazy(lazyRetry(() => import('@generated/components/EffectivenessTab'), 'EffectivenessTab'));
 
 // Ordered tab keys — index <-> key mapping for @vibe/core's index-based Tabs.
 // 'decisions' is also a valid deep-link tab (?app[tab]=decisions).
@@ -321,11 +328,23 @@ export function DiscussionCard({
   // the matching taskTypeID (used by the "by discussion type" previous-tasks view).
   const tasksData = useTasks(discussion?.id, data.discussionTypeID ?? null);
 
-  // Prefetch the discussion's decisions the same way — shared by the Decisions
-  // tab, the Topics tab's per-point counters/popup and the quick-create flow.
+  // Decisions — shared by the Decisions tab, the Topics tab's per-point
+  // counters/popup and the quick-create flow. round135 (perf audit): loading
+  // decisions requires scanning the WHOLE decisions board (monday can't
+  // server-filter a board_relation by id), so the hook is armed LAZILY — only
+  // once a decisions-consuming surface is actually visited — instead of firing
+  // that scan on every discussion click. Once armed it stays armed for this
+  // card (per-discussion session cache inside the hook makes re-opens cheap).
   // useDecisions self-guards when the decisions board is unmapped (no query,
   // empty items), so every surface degrades gracefully.
-  const decisionsData = useDecisions(discussion?.id);
+  const [decisionsArmed, setDecisionsArmed] = useState(false);
+  useEffect(() => { setDecisionsArmed(false); }, [discussion?.id]);
+  useEffect(() => {
+    if (!decisionsArmed && (activeTab === 'decisions' || activeTab === 'topics')) {
+      setDecisionsArmed(true);
+    }
+  }, [activeTab, decisionsArmed]);
+  const decisionsData = useDecisions(discussion?.id, { enabled: decisionsArmed });
 
   // ---- Point → decisions/tasks associations (monday.storage; see pointItems) ----
   // A decision/task created FROM a topic point is remembered per discussion so the
@@ -501,8 +520,13 @@ export function DiscussionCard({
   // `anchor` (item 12): the clicked "+" button's DOMRect — when present the
   // quick-create box opens right BELOW the +, centered on it, instead of at
   // the overlay's default spot.
-  const openQuickCreate = (mode, point = null, source = null, anchor = null) =>
+  const openQuickCreate = (mode, point = null, source = null, anchor = null) => {
+    // round135 — a decision quick-create (e.g. the summary-tab FAB) consumes
+    // decisionsData even though no decisions tab was visited: arm the lazy hook
+    // so the post-create refresh lands in a live list.
+    if (mode === 'decision') setDecisionsArmed(true);
     setQuickCreate({ mode, point, source, anchor });
+  };
   const closeQuickCreate = () => setQuickCreate(null);
   // Per-point "+" — opens the modal scoped to the point (mode forced, toggle
   // hidden per the modal contract). Guarded per kind: a stale control can't
@@ -829,7 +853,10 @@ export function DiscussionCard({
         )}
         {activeTab === 'effectiveness' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
-            <EffectivenessTab data={tasksData} canManageSettings={canManageSettings} onNotify={onNotify} />
+            {/* round135 — lazy chunk (see the lazy() declaration above). */}
+            <Suspense fallback={null}>
+              <EffectivenessTab data={tasksData} canManageSettings={canManageSettings} onNotify={onNotify} />
+            </Suspense>
           </div>
         )}
       </div>

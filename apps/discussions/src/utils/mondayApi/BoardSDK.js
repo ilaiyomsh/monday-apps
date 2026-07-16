@@ -8,7 +8,6 @@
  *               .withPagination({limit|cursor}).where({...}).execute()
  *   new XBoard().item(id?).create(payload).returnColumns([...]).execute()
  *   new XBoard().item(id).update(payload).execute()
- *   new XBoard().aggregate().groupBy(alias).countItems(name).execute()
  *   new XBoard().users.boardSubscribers().execute()
  */
 import { getBoardId, getColumns } from './board-config-store.js';
@@ -274,46 +273,9 @@ class ItemMutationBuilder {
   }
 }
 
-/* --------------------------------------------------------------- aggregate */
-class AggregateBuilder {
-  constructor(boardKey) {
-    this.boardKey = boardKey;
-    this._groupBy = null;
-    this._countName = 'count';
-  }
-  groupBy(alias) { this._groupBy = alias; return this; }
-  countItems(name) { this._countName = name || 'count'; return this; }
-
-  async execute() {
-    const cfg = colMap(this.boardKey);
-    const c = cfg[this._groupBy];
-    if (!c) return [];
-    const boardId = getBoardId(this.boardKey);
-
-    const groups = {};
-    let cursor = null;
-    let guard = 0;
-    do {
-      const q = new ItemsQueryBuilder(this.boardKey);
-      q._limit = 100;
-      q._cursor = cursor;
-      q._columns = [this._groupBy]; // aggregate only needs the grouped column
-      const res = await q.execute();
-      for (const it of res.items) {
-        const v = it[this._groupBy];
-        if (v == null || v === '') continue;
-        groups[v] = (groups[v] || 0) + 1;
-      }
-      cursor = res.cursor;
-      guard += 1;
-    } while (cursor && guard < 20);
-
-    return Object.entries(groups).map(([k, n]) => ({
-      [this._groupBy]: k,
-      [this._countName]: n,
-    }));
-  }
-}
+/* round135 — AggregateBuilder removed: it was never invoked by app code, and
+   its full-board paging pattern (100×20) is exactly the scan shape the perf
+   audit flagged — deleting it prevents accidental future use. */
 
 /* ------------------------------------------------------------- subscribers */
 function makeUsers(boardKey) {
@@ -370,7 +332,6 @@ class BoardBase {
   }
   items() { return new ItemsQueryBuilder(this.boardKey); }
   item(id) { return new ItemMutationBuilder(this.boardKey, id); }
-  aggregate() { return new AggregateBuilder(this.boardKey); }
 
   // Fetch ONE item by id with ALL configured columns deserialized (the lean list
   // query only pulls a couple of columns; this is the "click pulls the rest" read

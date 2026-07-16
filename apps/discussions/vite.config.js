@@ -31,7 +31,13 @@ export default defineConfig({
         // vite 8 / rolldown expects a function (object form is rejected)
         manualChunks(id) {
           if (id.includes('node_modules/@vibe/')) return 'vibe';
-          if (id.includes('node_modules/recharts')) return 'charts';
+          // round135 — the old `recharts -> 'charts'` manual chunk is GONE:
+          // pinning recharts manually fused shared vendor modules (a React
+          // CJS copy among them) into that chunk, which made the boot bundle
+          // statically import the whole ~360KB chunk even after
+          // EffectivenessTab went lazy. With no pin, the bundler splits
+          // recharts on the dynamic-import boundary by itself, so the charts
+          // code loads only when the effectiveness tab is first opened.
           if (id.includes('node_modules/@dnd-kit')) return 'dnd';
           return undefined;
         },
