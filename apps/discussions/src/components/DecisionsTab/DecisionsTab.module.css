@@ -140,7 +140,7 @@
   width: max-content;
   min-width: 100%;
   background: #ffffff;
-  border: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
   border-inline-end: none;
   border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
   font-family: var(--font-family);
@@ -155,7 +155,9 @@
   display: grid;
   align-items: stretch;
   min-height: 36px;
-  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
+  /* round123 — monday-style soft shading under each horizontal rule. */
+  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045);
   position: relative;
 }
 
@@ -242,7 +244,7 @@
   min-width: 0;
   min-height: 36px;
   padding: 0 8px;
-  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
   font-size: 14px;
   color: var(--primary-text-color, #323338);
   overflow: hidden;
@@ -504,7 +506,7 @@
   color: var(--secondary-text-color, #676879);
   font-size: 14px;
   font-family: var(--font-family);
-  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
   direction: rtl;
   text-align: right;
 }
