@@ -392,10 +392,15 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
 
   const total = countSteps(tasks);
   let step = 0;
+  // round141 — the wizard narrates BOARD-level phases (owner request): every
+  // tick also reports the current phase ("יוצר את לוח המשימות…"), while `label`
+  // keeps the fine-grained step detail for logs/debugging.
+  let phase = '';
+  const setPhase = (p) => { phase = p; };
   const tick = (label) => {
     step += 1;
     try {
-      onProgress?.(step, total, label);
+      onProgress?.(step, total, label, phase);
     } catch (err) {
       /* progress callback must never break provisioning */
       if (!err?.__loggedId) logger.warn(MODULE, 'onProgress callback זרק שגיאה — ממשיך', err);
@@ -439,6 +444,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       boardIds.tasks = String(tasks.boardId);
       continue;
     }
+    setPhase(`יוצר את לוח "${PROVISION_SPEC[key].name}"…`);
     boardIds[key] = await createBoard(PROVISION_SPEC[key].name, workspaceId);
     tick(`נוצר לוח: ${PROVISION_SPEC[key].name}`);
   }
@@ -451,7 +457,17 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // Without a columnMap (older callers) every column goes through ensureColumn —
   // today's behavior. Either way we tick() once per field so progress stays right.
   const existingByBoard = {};
+  // Board-level narration for the column work. The discussions "board" is the
+  // CURRENT board — no board named דיונים is ever created (this is a board-view
+  // app); say so explicitly instead of implying a new board appeared.
+  const PHASE_LABELS = {
+    discussions: 'מוסיף את עמודות הדיונים ללוח הנוכחי (הוא לוח הדיונים)…',
+    topics: 'מקים את לוח הנושאים לדיון…',
+    tasks: tasks?.mode === 'connect' ? 'מחבר ומשלים את לוח המשימות הקיים…' : 'מקים את לוח המשימות…',
+    decisions: 'מקים את לוח ההחלטות…',
+  };
   for (const key of BOARD_ORDER) {
+    setPhase(PHASE_LABELS[key]);
     existingByBoard[key] = await readColumns(boardIds[key]);
     const taskColumnMap =
       key === 'tasks' && tasks?.mode === 'connect' && tasks?.columnMap ? tasks.columnMap : null;
@@ -475,6 +491,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // TOP-UP: if it's already mapped, keep it — do NOT create/attach a new managed
   // column (that would mint a duplicate account-level column).
   if (!(existingConfig && hasId(existingConfig.columns?.discussions?.discussionTypeID))) {
+    setPhase(PHASE_LABELS.discussions);
     const t = await ensureManagedTypeColumn(boardIds.discussions, existingByBoard.discussions);
     columns.discussions.discussionTypeID = {
       id: t.id, type: 'dropdown', title: 'סוג דיון', verified: true, managedColumnId: t.managedColumnId,
@@ -490,6 +507,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // persisted mapping; without one we still create a PLAIN dropdown so the
   // by-text bridge works, and log it.
   if (!(existingConfig && hasId(existingConfig.columns?.tasks?.taskTypeID))) {
+    setPhase(PHASE_LABELS.tasks);
     const knownManagedId =
       columns.discussions.discussionTypeID?.managedColumnId ||
       existingConfig?.columns?.discussions?.discussionTypeID?.managedColumnId ||
@@ -517,6 +535,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       ? subSpec.filter((col) => !hasId(existingConfig.columns?.[key]?.[col.alias]))
       : subSpec;
     if (!subMissing.length) continue;
+    setPhase(PHASE_LABELS[key]);
     const subBoardId = await ensureSubitemsBoard(boardIds[key]);
     tick('הופעלו תת-פריטים');
     const subExisting = await readColumns(subBoardId);
@@ -529,6 +548,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
 
   // 4) relations (need all board ids to exist). Each is bidirectional: the
   // reflection auto-created on the target board is mapped as the back-link.
+  setPhase('מקשר בין הלוחות…');
   for (const key of BOARD_ORDER) {
     for (const rel of PROVISION_SPEC[key].relations || []) {
       // TOP-UP: keep an already-mapped relation column; otherwise create it.
