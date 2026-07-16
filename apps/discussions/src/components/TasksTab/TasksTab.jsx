@@ -3,9 +3,9 @@ import { Skeleton, Button, Text } from '@vibe/core';
 import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { TaskTable } from '@generated/components/TaskTable';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
-import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS } from '@generated/components/GroupByBuilder';
 // Varied stable group-title colors (owner request 2026-07-14) — shared engine.
-import { ensureGroupColors } from '@generated/components/MyTasksView/grouping.js';
+import { ensureGroupColors, groupTabTasks } from '@generated/components/MyTasksView/grouping.js';
 import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
@@ -25,7 +25,6 @@ import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.
 import { useStableHandler } from '@generated/hooks/useStableHandler.js';
 import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
-import { isValidStatus } from '@generated/constants/statusConfig';
 import { getColumns } from '@api/board-config-store.js';
 // Quick-filter status battery (round 81) — shared buckets + presentation chip.
 import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
@@ -64,22 +63,6 @@ const SORT_OPTIONS = [
   { value: 'name', label: 'שם', icon: 'text', dirs: SORT_TEXT_DIRS },
 ];
 const firstSortDir = (col) => (SORT_OPTIONS.find((o) => o.value === col) || SORT_OPTIONS[0])?.dirs?.[0]?.key;
-const NO_STATUS = '__none__';
-const NO_ASSIGNEE = '__unassigned__';
-
-function buildPersonGroup(task) {
-  const people = Array.isArray(task?.responsibilityID) ? task.responsibilityID : [];
-  if (people.length === 0) return { key: NO_ASSIGNEE, label: 'לא הוקצה', assignee: [] };
-  const normalized = people
-    .map((p) => ({ id: String(p.id), name: p.name || '' }))
-    .sort((a, b) => a.id.localeCompare(b.id));
-  return {
-    key: `people:${normalized.map((p) => p.id).join('|')}`,
-    label: normalized.map((p) => p.name).join(', '),
-    assignee: normalized.map((p) => ({ id: p.id, kind: 'person', name: p.name })),
-  };
-}
-
 // `data` is the shared useTasks() result, prefetched in DiscussionCard.
 // Phase 4: editing is gated by the TASK-TIER caps, resolved PER-TASK via
 // `canTask(cap, task)` (passed from DiscussionCard, bound to the discussion).
@@ -217,44 +200,13 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
 
   // Right-click a group header → shared color palette (round 77).
   const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
-  const groupedRaw = useMemo(() => {
-    if (groupBy === 'status') {
-      const groups = new Map();
-      filteredTasks.forEach(t => {
-        const id = isValidStatus(t.statusID) && labelById[t.statusID] != null ? t.statusID : null;
-        const key = id == null ? NO_STATUS : String(id);
-        if (!groups.has(key)) groups.set(key, { key, statusId: id, items: [] });
-        groups.get(key).items.push(t);
-      });
-      const list = [...groups.values()].map(g => ({
-        key: g.key,
-        label: g.statusId == null ? 'ללא סטאטוס' : (labelById[g.statusId] ?? 'ללא סטאטוס'),
-        color: g.statusId == null ? null : (colorById[g.statusId] || null),
-        status: g.statusId,
-        items: g.items,
-      }));
-      return ensureGroupColors(sortGroupsByOrder(list, { order: groupOrder, orderById, noKey: NO_STATUS }));
-    }
-    if (groupBy === 'person') {
-      const groups = new Map();
-      filteredTasks.forEach(t => {
-        const personGroup = buildPersonGroup(t);
-        if (!groups.has(personGroup.key)) {
-          groups.set(personGroup.key, {
-            key: personGroup.key,
-            label: personGroup.label,
-            color: null,
-            status: undefined,
-            assignee: personGroup.assignee,
-            items: [],
-          });
-        }
-        groups.get(personGroup.key).items.push(t);
-      });
-      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_ASSIGNEE }));
-    }
-    return [{ key: '__all__', label: '', color: null, status: undefined, items: filteredTasks }];
-  }, [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById]);
+  // round142 (audit stage 4) — the grouping engine is shared with
+  // PreviousTasksTab via grouping.js (groupTabTasks); the tab keeps only the
+  // memo + the user color-override pass below.
+  const groupedRaw = useMemo(
+    () => groupTabTasks(filteredTasks, { by: groupBy, order: groupOrder, labelById, colorById, orderById }),
+    [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById]
+  );
   // Apply the shared per-header color overrides as a final pass.
   const grouped = useMemo(() => ensureGroupColors(groupedRaw, colorsByKey), [groupedRaw, colorsByKey]);
 
