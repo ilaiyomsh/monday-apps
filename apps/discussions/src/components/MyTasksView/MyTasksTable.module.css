@@ -25,7 +25,7 @@
   /* Bounded + rounded on the LEFT (top + left borders, rounded left corners) so
      the row separators STOP at the strip instead of bleeding past it to the left;
      OPEN on the right (no right border) so they run to the right edge. */
-  border: 0.625px solid #e6e9ef;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
   border-inline-end: none;
   border-radius: var(--border-radius-small, 4px) 0 0 var(--border-radius-small, 4px);
   font-family: var(--font-family);
@@ -57,8 +57,9 @@
   left: 6px;
   right: 0;
   bottom: 0;
-  height: 0.625px;
-  background: #e6e9ef;
+  height: 1px;
+  background: var(--ui-border-color, #d0d4e4);
+  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045);
   pointer-events: none;
   z-index: 0;
 }
@@ -93,9 +94,9 @@
   justify-content: center;
   padding: 0 8px;
   min-height: 36px;
-  border-inline-end: 0.625px solid #e6e9ef;
+  border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
   /* Per-cell row separator (moved off .taskRow so it never crosses the strip). */
-  border-bottom: 0.625px solid #e6e9ef;
+  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
   overflow: hidden;
   color: var(--primary-text-color, #323338);
   font-size: 14px;
@@ -132,14 +133,15 @@
   inset-inline-start: 6px;
   inset-inline-end: 0;
   bottom: 0;
-  height: 0.625px;
-  background: #e6e9ef;
+  height: 1px;
+  background: var(--ui-border-color, #d0d4e4);
+  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045);
   pointer-events: none;
 }
 .taskRow:last-child .taskFirst::after { display: none; }
 /* Selection mode: the strip lives on the frozen checkbox (.selectCell), so IT
    gets the inset separator and .taskFirst reverts to a normal bordered cell. */
-.selectable .taskFirst { border-bottom: 0.625px solid #e6e9ef; }
+.selectable .taskFirst { border-bottom: 1px solid var(--ui-border-color, #d0d4e4); }
 .selectable .taskRow:last-child .taskFirst { border-bottom: none; }
 .selectable .taskFirst::after { display: none; }
 .selectable .selectCell { border-bottom: none; }
@@ -149,8 +151,9 @@
   inset-inline-start: 6px;
   inset-inline-end: 0;
   bottom: 0;
-  height: 0.625px;
-  background: #e6e9ef;
+  height: 1px;
+  background: var(--ui-border-color, #d0d4e4);
+  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045);
   pointer-events: none;
 }
 .selectable .taskRow:last-child .selectCell::after { display: none; }

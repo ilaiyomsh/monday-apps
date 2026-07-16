@@ -301,12 +301,12 @@
   background: var(--primary-background-color, #fff);
   /* Bounded + rounded on the LEFT (top + left lines), OPEN on the right so the row
      separators run to the right edge. direction:ltr anchors the table left. */
-  border-top: 0.625px solid var(--ui-border-color, #d0d4e4);
-  border-inline-start: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-top: 1px solid var(--ui-border-color, #d0d4e4);
+  border-inline-start: 1px solid var(--ui-border-color, #d0d4e4);
   /* Bottom border CLOSES the table box (curving with the rounded corner), same
      as the My-Tasks table — without it the grid just fades out under the last
      row / add-point row. */
-  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
   border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
   direction: ltr;
 }
@@ -430,7 +430,9 @@
   align-items: stretch;
   min-height: 36px;
   background: #ffffff;
-  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
+  /* round123 — monday-style soft shading under each horizontal rule. */
+  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045);
 }
 .colHeadCell {
   display: flex;
@@ -440,7 +442,7 @@
   font-size: 14px;
   font-weight: 400;
   color: var(--primary-text-color, #323338);
-  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -462,7 +464,7 @@
   border-start-start-radius: 6px;
   /* Close the lead (checkbox/accent) column with a right rule, matching the
      Tasks table's frozen `.selectCell` separator (TaskTable `.taskCell`). */
-  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
 }
 /* Select-all-in-topic checkbox centered in the column-header lead cell (mirrors
    TaskTable's `.selectCell > label`): reset the vibe Checkbox wrapper margins and
