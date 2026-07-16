@@ -21,14 +21,6 @@
   margin-inline: var(--section-rule-inset, 16px);
 }
 
-/* Mockup top accent: 4px multi-color gradient (chrome color, deliberately
-   hardcoded — these are brand accents, not data-driven status colors). */
-.gradientBar {
-  height: 4px;
-  width: 100%;
-  background: linear-gradient(to left, #579bfc, #9d50dd, #4eccc6, #00c875);
-}
-
 .headerInner {
   display: flex;
   flex-direction: column;
