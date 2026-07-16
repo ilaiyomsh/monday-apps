@@ -39,15 +39,28 @@ export function useColumnWidths(tableId, columnDefs) {
       const min = def.min ?? 60;
       const max = def.max ?? 1200;
 
+      // round136 (perf audit) — rAF-throttled: every context width update
+      // re-renders EVERY table sharing the store (all the grouped tables),
+      // and mousemove can fire faster than the display refreshes. Coalesce
+      // to at most one setWidth per animation frame; the final exact value
+      // is committed on mouseup.
+      let pendingW = null;
+      let rafId = null;
+      const flush = () => {
+        rafId = null;
+        if (pendingW != null) { setWidth(tableId, key, pendingW); pendingW = null; }
+      };
       const onMove = (ev) => {
         // dir="ltr" tables: handle is on the cell's right edge, so dragging right
         // grows the column.
-        const next = Math.max(min, Math.min(max, Math.round(startW + (ev.clientX - startX))));
-        setWidth(tableId, key, next);
+        pendingW = Math.max(min, Math.min(max, Math.round(startW + (ev.clientX - startX))));
+        if (rafId == null) rafId = requestAnimationFrame(flush);
       };
       const onUp = () => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
+        if (rafId != null) cancelAnimationFrame(rafId);
+        if (pendingW != null) { setWidth(tableId, key, pendingW); pendingW = null; }
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
       };

@@ -8,6 +8,8 @@ import { describe, it, expect, vi } from 'vitest';
 // body rows render via the real MyTasksRow (so we can assert the body name
 // cell keeps its own left-aligned classes, distinct from the header).
 vi.mock('../../../utils/mondayApi/board-config-store.js', () => ({
+  // round136: MyTasksTable hoists useStatusOptions, which also reads getBoardId
+  getBoardId: () => null,
   getColumns: () => ({
     deadlineID: { id: 'date_x' },
     priorityID: { id: 'status_p' },

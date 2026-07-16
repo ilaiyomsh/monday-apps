@@ -211,7 +211,10 @@ export function useDiscussions(filters = {}) {
  * logs + returns []; buildMonthOptions always re-adds the current month, so the
  * dropdown is never empty.
  */
-export function useDiscussionMonths() {
+// round136 — `refreshToken` re-runs the month scan when the caller signals a
+// data change (a save that may introduce a new month), replacing the old
+// whole-list remount that refreshed it as a side effect.
+export function useDiscussionMonths(refreshToken = 0) {
   const [months, setMonths] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -242,7 +245,7 @@ export function useDiscussionMonths() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshToken]);
 
   return { months, loading };
 }

@@ -882,8 +882,11 @@ export default function App() {
         onMouseEnter={() => setListHover(true)}
         onMouseLeave={() => setListHover(false)}
       >
+        {/* round136 — refreshToken replaces the old key={refreshKey} remount:
+            a save now refreshes the list IN PLACE (silent refetch, no teardown,
+            search/filter/scroll preserved). */}
         <DiscussionList
-          key={refreshKey}
+          refreshToken={refreshKey}
           onSelect={handleSelect}
           selectedId={selectedDiscussion?.id}
           onCreateNew={() => setShowCreate(true)}

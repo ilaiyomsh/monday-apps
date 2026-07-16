@@ -22,6 +22,7 @@ import bs from '@generated/components/MyTasksView/controls/builder.module.css';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
+import { useStableHandler } from '@generated/hooks/useStableHandler.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { getColumns } from '@api/board-config-store.js';
@@ -287,8 +288,10 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     if (allCollapsed) { setCollapsed({}); }
     else { const c = {}; grouped.forEach((g) => { c[g.key] = true; }); setCollapsed(c); }
   };
-  const toggleSelect = (id, checked) =>
-    setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
+  // round136 — stable identity (useStableHandler) so the memoized rows don't
+  // thaw whenever this tab re-renders (selection/search/grouping churn).
+  const toggleSelect = useStableHandler((id, checked) =>
+    setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; }));
   const clearSelection = () => setSelectedIds(new Set());
   // ESC clears this tab's multi-selection (shared hook — round135; guards:
   // visible view only, not while typing, not while an overlay is open).
@@ -313,7 +316,10 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     const base = selectedIds.size > 1 && selectedIds.has(originTaskId) ? [...selectedIds] : [originTaskId];
     return cap ? base.filter((id) => allow(cap, id)) : base;
   };
-  const applyStatusChange = async (taskId, status) => {
+  // round136 — the apply* handlers are wrapped in useStableHandler: one frozen
+  // identity per handler for the memoized rows, while each call still reads the
+  // LATEST selection/permission state through the wrapper.
+  const applyStatusChange = useStableHandler(async (taskId, status) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskStatus');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1 && updateTasksStatusBatch) {
@@ -321,12 +327,12 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
       return;
     }
     for (const id of targetIds) await updateTaskStatus(id, status);
-  };
+  });
   // Priority has no batch endpoint; apply to each selected target sequentially.
-  const applyPriorityChange = async (taskId, priority) => {
+  const applyPriorityChange = useStableHandler(async (taskId, priority) => {
     for (const id of resolveTargetIds(taskId, 'editTaskPriority')) await updateTaskPriority(id, priority);
-  };
-  const applyAssigneeChange = async (taskId, people) => {
+  });
+  const applyAssigneeChange = useStableHandler(async (taskId, people) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskAssignee');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1 && updateTasksAssigneeBatch) {
@@ -334,8 +340,8 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
       return;
     }
     for (const id of targetIds) await updateTaskAssignee(id, people);
-  };
-  const applyDeadlineChange = async (taskId, date) => {
+  });
+  const applyDeadlineChange = useStableHandler(async (taskId, date) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskDeadline');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1 && updateTasksDeadlineBatch) {
@@ -343,11 +349,15 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
       return;
     }
     for (const id of targetIds) await updateTaskDeadline(id, date);
-  };
-  const applyRename = async (taskId, name) => {
+  });
+  const applyRename = useStableHandler(async (taskId, name) => {
     if (!allow('editTaskName', taskId)) return;
     await updateTaskName(taskId, name);
-  };
+  });
+  // Stable wrappers for the remaining row-facing handlers coming from the data
+  // hook (their identities change per DiscussionCard render otherwise).
+  const stableRetryCreate = useStableHandler((...a) => retryCreate?.(...a));
+  const stableDismissRow = useStableHandler((...a) => dismissRow?.(...a));
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -479,9 +489,10 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     onAssigneeChange: applyAssigneeChange,
     onDeadlineChange: applyDeadlineChange,
     onRenameTask: applyRename,
-    // Optimistic-create error recovery (temp row whose create failed).
-    onRetryCreate: retryCreate,
-    onDismissRow: dismissRow,
+    // Optimistic-create error recovery (temp row whose create failed) —
+    // round136: stable wrappers so the memoized rows stay frozen.
+    onRetryCreate: stableRetryCreate,
+    onDismissRow: stableDismissRow,
   };
   const TASK_EDIT_CAPS = ['editTaskStatus', 'editTaskPriority', 'editTaskDeadline', 'editTaskAssignee', 'editTaskName', 'deleteTask'];
   const canSelect = items.some((t) => TASK_EDIT_CAPS.some((cap) => canTask(cap, t)));
