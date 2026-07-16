@@ -407,6 +407,8 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     try {
       const data = { name: trimmed, responsibilityID: [Number(userId)] };
       if (getColumns('tasks')?.taskCreatorID?.id) data.taskCreatorID = [Number(userId)];
+      // round115 — stamp the creation date (today); no-op when unmapped.
+      if (getColumns('tasks')?.taskCreationDateID?.id) data.taskCreationDateID = new Date();
       if (status != null) data.statusID = status; // label id; 0 is valid
       if (priority != null) data.priorityID = priority;
       if (deadline instanceof Date) {

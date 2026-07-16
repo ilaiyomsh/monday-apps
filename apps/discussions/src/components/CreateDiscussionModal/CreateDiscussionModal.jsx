@@ -52,6 +52,15 @@ function FieldClearButton({ onClear, label = 'ניקוי' }) {
 
 const NEW_DISCUSSION_NAME = 'דיון חדש';
 
+// round115 — may the app WRITE the mapped discussion-creator column? Only a
+// regular people column is writable; monday's built-in "creation log" column
+// (auto-filled by monday) is read-only and writing it throws a GraphQL
+// validation error. Pure + exported for testing.
+export function isWritablePeopleColumnType(type) {
+  const t = String(type || '').toLowerCase();
+  return t === 'people' || t.includes('person');
+}
+
 // Time picker options — one flat menu in half-hour steps, limited to the
 // calendar's visible day window (06:00..23:00).
 const TIME_OPTIONS = Array.from({ length: (23 - 6) * 2 + 1 }, (_, i) => {
@@ -452,9 +461,22 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         // "ללא דיון קודם" in edit mode clears the existing link (empty item_ids).
         payload.previousDiscussionID = { linkedItems: [] };
       }
-      // NOTE: discussionCreatorID is NOT written — monday auto-tracks the item
-      // creator, and that column is typically read-only (writing it failed with
-      // a GraphQL validation error on create_item).
+      // round115 — stamp the CREATOR + CREATION DATE on NEW discussions only
+      // (never on edit — both are immutable facts of creation). Creator is
+      // written ONLY when the mapped column is a regular writable people column
+      // (verified in the owner's account: multiple_person_*); a monday
+      // "creation log" column is read-only — monday fills it itself — and
+      // writing it is what caused the historical GraphQL validation error, so
+      // non-people mappings are skipped.
+      if (!isEdit) {
+        const dCols = getColumns('discussions') || {};
+        if (dCols.discussionCreatorID?.id && currentUser?.id != null && isWritablePeopleColumnType(dCols.discussionCreatorID?.type)) {
+          payload.discussionCreatorID = [Number(currentUser.id)];
+        }
+        if (dCols.creationDateID?.id) {
+          payload.creationDateID = new Date();
+        }
+      }
 
       const cols = getColumns('discussions') || {};
       logger.info('CreateDiscussionModal', isEdit ? 'submitting update' : 'submitting create', {
@@ -483,16 +505,16 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // precedence; otherwise fall back to topics auto-filled from the unified
       // type template (typeTopics). (create: always; edit: applies onto the item.)
       if (savedId && pickedTemplate) {
-        await createTopicsFromTemplate(savedId, pickedTemplate, { onProgress: onTemplateProgress });
+        await createTopicsFromTemplate(savedId, pickedTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
       } else if (savedId && typeTopics?.length) {
-        await createTopicsFromTemplate(savedId, { topics: typeTopics }, { onProgress: onTemplateProgress });
+        await createTopicsFromTemplate(savedId, { topics: typeTopics }, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
       }
 
       // Duplicate: clone the source discussion's topics + points onto the new one.
       if (savedId && isDuplicate) {
         const topicsTemplate = await readDiscussionTopicsAsTemplate(duplicateFrom.id);
         if (topicsTemplate.topics.length) {
-          await createTopicsFromTemplate(savedId, topicsTemplate, { onProgress: onTemplateProgress });
+          await createTopicsFromTemplate(savedId, topicsTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
         }
       }
 
