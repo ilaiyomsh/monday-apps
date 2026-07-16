@@ -59,7 +59,9 @@
   align-items: center;
   gap: var(--spacing-small, 8px);
   direction: ltr;
-  padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+  /* round117 — 16px bottom + the toolbar's 8px top = the same 24px title→toolbar
+     band the discussion view has, one vertical rhythm across views. */
+  padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) var(--spacing-medium, 16px);
   padding-inline-start: var(--content-gutter-start, 52px); /* round114 — align on the table edge line */
 }
 
@@ -289,7 +291,7 @@
   left: 0;
   z-index: 5;
   width: max-content;
-  margin: 0 0 12px;
+  margin: 0 0 18px; /* round117 — same group-title→table gap as the discussion view */
   padding: 0;
   border: none;
   background: transparent;
