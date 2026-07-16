@@ -27,7 +27,7 @@
      OPEN on the right (no right border) so they run to the right edge. */
   border: 1px solid var(--ui-border-color, #d0d4e4);
   border-inline-end: none;
-  border-radius: var(--border-radius-small, 4px) 0 0 var(--border-radius-small, 4px);
+  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px); /* round124: 8px like Decisions — curves around the 6px strip arc instead of cutting inside it */
   font-family: var(--font-family);
 }
 
@@ -95,8 +95,9 @@
   padding: 0 8px;
   min-height: 36px;
   border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
-  /* Per-cell row separator (moved off .taskRow so it never crosses the strip). */
-  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
+  /* round124: NO per-cell bottom border — the row-level ::after is the single
+     separator source (the old cell border doubled it at fractional row heights,
+     reading as darker/uneven lines and a white sliver under full-bleed labels). */
   overflow: hidden;
   color: var(--primary-text-color, #323338);
   font-size: 14px;
@@ -141,7 +142,10 @@
 .taskRow:last-child .taskFirst::after { display: none; }
 /* Selection mode: the strip lives on the frozen checkbox (.selectCell), so IT
    gets the inset separator and .taskFirst reverts to a normal bordered cell. */
-.selectable .taskFirst { border-bottom: 1px solid var(--ui-border-color, #d0d4e4); }
+.selectable .taskFirst {
+  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
+  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045); /* round124: same soft shading as the other separators */
+}
 .selectable .taskRow:last-child .taskFirst { border-bottom: none; }
 .selectable .taskFirst::after { display: none; }
 .selectable .selectCell { border-bottom: none; }
