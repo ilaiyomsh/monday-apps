@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { Checkbox } from '@vibe/core';
 import { Plus } from 'lucide-react';
 import {
@@ -11,6 +11,7 @@ import { useColumnOrder } from '@generated/hooks/useColumnOrder.js';
 import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
 import { useRowOrder } from '@generated/hooks/useRowOrder.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
+import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
 import { TASKS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
@@ -111,15 +112,30 @@ export function TaskTable({
   // from the ORDER used to render, keeping the pinned name (+ sel) always. The
   // useColumnOrder/useColumnWidths inputs stay on the full set, so a hidden
   // column keeps its stored order + width and returns in place when re-shown.
-  const hidden = hiddenColumns instanceof Set ? hiddenColumns : new Set(hiddenColumns || []);
-  const visibleOrder = order.filter((k) => k === 'name' || k === 'sel' || !hidden.has(k));
+  // round136 — memoized: `columns` is passed to every (memoized) row, so its
+  // identity must only change when the order/hidden set actually changes.
+  const visibleOrder = useMemo(() => {
+    const hidden = hiddenColumns instanceof Set ? hiddenColumns : new Set(hiddenColumns || []);
+    return order.filter((k) => k === 'name' || k === 'sel' || !hidden.has(k));
+  }, [order, hiddenColumns]);
+
+  // round136 (perf audit) — ONE status/priority option hook pair per TABLE,
+  // passed to rows as props. Previously every row mounted its own two hook
+  // instances (2N store subscriptions + 2N effects on an N-row table).
+  const statusOpts = useStatusOptions();
+  const priorityOpts = useStatusOptions('tasks', 'priorityID');
 
   // Width defs follow the live VISIBLE order; 'sel' is a fixed (non-resizable)
   // leading track, everything else resizes within the constants' clamps.
   const defs = visibleOrder.map((k) => (k === 'sel' ? { key: 'sel', fixed: 36 } : { key: k, ...W[k] }));
   const { gridTemplate, startResize } = useColumnWidths('tasks', defs);
   const mobileTemplate = visibleOrder.map((k) => MOBILE_TRACK[k]).filter(Boolean).join(' ');
-  const rowStyle = { gridTemplateColumns: isMobile ? mobileTemplate : gridTemplate };
+  // round136 — memoized so the (memoized) rows' rowStyle prop is referentially
+  // stable while the template string is unchanged.
+  const rowStyle = useMemo(
+    () => ({ gridTemplateColumns: isMobile ? mobileTemplate : gridTemplate }),
+    [isMobile, mobileTemplate, gridTemplate]
+  );
 
   // Whole-row drag-reorder (Round 7): enabled only when a scope is passed, the
   // caller allows it, and we're not on touch (drag + inline-edit coexist via the
@@ -188,6 +204,8 @@ export function TaskTable({
             <TaskTableRow
               key={task.id}
               task={task}
+              statusOpts={statusOpts}
+              priorityOpts={priorityOpts}
               columns={visibleOrder}
               rowStyle={rowStyle}
               onStatusChange={onStatusChange && canTask('editTaskStatus', task) ? onStatusChange : undefined}

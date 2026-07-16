@@ -26,6 +26,7 @@ import { BuilderIcon } from './controls/BuilderIcon.jsx';
 import { HideColumnsControl } from './controls/HideColumnsControl.jsx';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
+import { useStableHandler } from '@generated/hooks/useStableHandler.js';
 import { getColumns } from '@api/board-config-store.js';
 import {
   SORT_COLUMNS, GROUP_COLUMNS, FILTER_COLUMNS, OP_LABEL, DEADLINE_RANGES,
@@ -145,8 +146,9 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const [newSeed, setNewSeed] = useState(null);
   const [newRowId, setNewRowId] = useState(null);
   const rootRef = useRef(null);
-  const toggleSelect = (id, checked) =>
-    setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
+  // round136 — stable identity so the memoized rows don't thaw on re-renders.
+  const toggleSelect = useStableHandler((id, checked) =>
+    setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; }));
   const clearSelection = () => setSelectedIds(new Set());
   // Bulk edit: when >1 rows are selected and the edited row is among them, the
   // change applies to the WHOLE selection (mirrors הנחיות קודמות). Otherwise it's
@@ -157,9 +159,13 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     const base = (selectedIds.size > 1 && selectedIds.has(originId)) ? [...selectedIds] : [originId];
     return cap ? base.filter((id) => allow(cap, id)) : base;
   };
-  const applyStatus = (taskId, status) => resolveTargetIds(taskId, 'editTaskStatus').forEach((id) => updateTaskStatus(id, status));
-  const applyPriority = (taskId, value) => resolveTargetIds(taskId, 'editTaskPriority').forEach((id) => updateTaskPriority(id, value));
-  const applyDeadline = (taskId, date) => resolveTargetIds(taskId, 'editTaskDeadline').forEach((id) => updateTaskDeadline(id, date));
+  // round136 — stable identities (useStableHandler) for the memoized rows; each
+  // call still reads the LATEST selection/permission state through the wrapper.
+  const applyStatus = useStableHandler((taskId, status) => resolveTargetIds(taskId, 'editTaskStatus').forEach((id) => updateTaskStatus(id, status)));
+  const applyPriority = useStableHandler((taskId, value) => resolveTargetIds(taskId, 'editTaskPriority').forEach((id) => updateTaskPriority(id, value)));
+  const applyDeadline = useStableHandler((taskId, date) => resolveTargetIds(taskId, 'editTaskDeadline').forEach((id) => updateTaskDeadline(id, date)));
+  const applyNotes = useStableHandler((taskId, notes) => updateTaskNotes(taskId, notes));
+  const applyRename = useStableHandler((taskId, name) => updateTaskName(taskId, name));
   const deleteSelected = () => {
     const ids = [...selectedIds].filter((id) => allow('deleteTask', id));
     if (ids.length === 0) return;
@@ -737,9 +743,9 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                     searchTerm={debouncedSearch}
                     onStatusChange={applyStatus}
                     onPriorityChange={applyPriority}
-                    onNotesChange={updateTaskNotes}
+                    onNotesChange={applyNotes}
                     onDeadlineChange={applyDeadline}
-                    onRenameTask={updateTaskName}
+                    onRenameTask={applyRename}
                     selectable
                     selectedIds={selectedIds}
                     onToggleSelect={toggleSelect}

@@ -19,6 +19,7 @@ import {
 } from '@generated/components/MyTasksView/controls/controls.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
+import { useStableHandler } from '@generated/hooks/useStableHandler.js';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { api, parseValue, cvSelection } from '../../utils/mondayApi/monday-client.js';
@@ -525,8 +526,9 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   };
 
   // ---- multi-select + carry-forward to the current ("next") discussion ----
-  const toggleSelect = (id, checked) =>
-    setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
+  // round136 — stable identity so the memoized rows don't thaw on tab re-renders.
+  const toggleSelect = useStableHandler((id, checked) =>
+    setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; }));
   const clearSelection = () => setSelectedIds(new Set());
   // ESC clears this tab's multi-selection (shared hook — round135; guards:
   // visible view only, not while typing, not while an overlay is open).
@@ -549,7 +551,10 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     const base = selectedIds.size > 1 && selectedIds.has(originTaskId) ? [...selectedIds] : [originTaskId];
     return cap ? base.filter((id) => allow(cap, id)) : base;
   };
-  const applyStatusChange = async (taskId, status) => {
+  // round136 — the apply* handlers are wrapped in useStableHandler: one frozen
+  // identity per handler for the memoized rows; each call reads the LATEST
+  // selection/permission state through the wrapper.
+  const applyStatusChange = useStableHandler(async (taskId, status) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskStatus');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1) {
@@ -557,12 +562,12 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       return;
     }
     for (const id of targetIds) await updateStatus(id, status);
-  };
+  });
   // Priority has no batch endpoint; apply to each selected target sequentially.
-  const applyPriorityChange = async (taskId, priority) => {
+  const applyPriorityChange = useStableHandler(async (taskId, priority) => {
     for (const id of resolveTargetIds(taskId, 'editTaskPriority')) await updatePriority(id, priority);
-  };
-  const applyAssigneeChange = async (taskId, people) => {
+  });
+  const applyAssigneeChange = useStableHandler(async (taskId, people) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskAssignee');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1) {
@@ -570,8 +575,8 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       return;
     }
     for (const id of targetIds) await updateAssignee(id, people);
-  };
-  const applyDeadlineChange = async (taskId, date) => {
+  });
+  const applyDeadlineChange = useStableHandler(async (taskId, date) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskDeadline');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1) {
@@ -579,7 +584,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       return;
     }
     for (const id of targetIds) await updateDeadline(id, date);
-  };
+  });
 
   // Carry the selected previous-discussion tasks forward into the current
   // discussion. board_relation writes REPLACE the whole linked set, so we send
