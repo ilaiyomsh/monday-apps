@@ -263,6 +263,34 @@
 .scroll {
   flex: 1 1 auto;
   overflow-y: auto;
+  /* round117 — hover-only scrollbar (owner request): the bar's slot keeps its
+     width (stable layout, gutter always reserved) but thumb+track paint only
+     while the pointer is inside the list. Firefox has no ::-webkit-scrollbar:
+     scrollbar-color transparent/visible is the equivalent toggle. */
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.scroll:hover {
+  scrollbar-color: var(--ui-border-color, #c3c6d4) transparent;
+}
+.scroll::-webkit-scrollbar {
+  width: 10px;
+}
+.scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 5px;
+}
+.scroll:hover::-webkit-scrollbar-thumb {
+  background: var(--ui-border-color, #c3c6d4);
+}
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+/* round117 — no stepper arrows at the bar's ends (owner request). */
+.scroll::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+  width: 0;
 }
 
 .refetching {
