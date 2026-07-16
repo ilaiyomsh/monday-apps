@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, TextField } from '@vibe/core';
-import { logger } from '@generated/utils/logger.js';
+import logger from '@generated/utils/logger.js';
+import { useColumnLabels } from '@generated/hooks/useColumnLabels.js';
 import styles from './ColumnRenameMenu.module.css';
 
 /*
@@ -69,3 +70,50 @@ export function ColumnRenameMenu({ position, currentName, defaultName, onSave, o
 }
 
 export default ColumnRenameMenu;
+
+/*
+ * The one-stop wiring hook every table header uses (round140): resolves the
+ * display titles (defaults + shared per-instance overrides), and returns
+ *   titles — the map to render / feed ColumnHeaderDnd's drag labels
+ *   dots(key) — the owner-only "⋯" hover button for that column (null for
+ *               non-owners and for untitled columns like TaskTable's name)
+ *   menu — the (single) rename popover to render anywhere in the table
+ * The caller styles the button via `dotsClassName` (each table's module CSS
+ * hides it until the header cell is hovered).
+ */
+export function useColumnRenameMenu(tableKey, defaults, { canManageSettings = false, dotsClassName = '' } = {}) {
+  const { titles, canRename, renameColumn } = useColumnLabels(tableKey, defaults, { canManageSettings });
+  const [open, setOpen] = useState(null); // { key, x, y }
+
+  const dots = (key) => {
+    if (!canRename || !titles[key]) return null;
+    return (
+      <button
+        type="button"
+        className={dotsClassName}
+        aria-label="שינוי שם עמודה"
+        title="שינוי שם עמודה"
+        onPointerDown={(e) => e.stopPropagation() /* don't start a column drag */}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen({ key, x: e.clientX, y: e.clientY });
+        }}
+      >
+        ⋯
+      </button>
+    );
+  };
+
+  const menu = open ? (
+    <ColumnRenameMenu
+      position={{ x: open.x, y: open.y }}
+      currentName={titles[open.key]}
+      defaultName={defaults[open.key]}
+      onSave={(name) => renameColumn(open.key, name)}
+      onClose={() => setOpen(null)}
+    />
+  ) : null;
+
+  return { titles, dots, menu };
+}

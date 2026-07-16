@@ -1,1 +1,1 @@
-export { ColumnRenameMenu, default } from './ColumnRenameMenu.jsx';
+export { ColumnRenameMenu, useColumnRenameMenu, default } from './ColumnRenameMenu.jsx';
