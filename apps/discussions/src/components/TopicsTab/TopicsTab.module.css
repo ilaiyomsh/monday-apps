@@ -43,8 +43,9 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  /* Tightened topic-header → table gap (was 14px). */
-  gap: 7px;
+  /* round120 — same header→table gap as the Tasks/Previous group headers (their
+     .groupHeader margin-bottom is 18px), so all tabs share one group rhythm. */
+  gap: 18px;
 }
 /* Hidden / "לא לדיון" topic — dim the table body; the eye control stays full. */
 .sectionExcluded .sectionBody {
@@ -57,7 +58,11 @@
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 0 2px;
+  /* round120 — no inline padding: the 24px chevron must start exactly on the
+     table's left edge line, like the Tasks/Previous group headers. Relative =
+     anchor for the gutter-floating kebab below. */
+  padding: 0;
+  position: relative;
 }
 /* Whole-header drag (the six-dot grip was removed — the header itself drags the
    group). grab cursor on the header; its buttons keep their own pointer cursor.
@@ -378,11 +383,18 @@
   direction: rtl;
 }
 
-/* Hover kebab (3-dot) at the visual-left of the group header — revealed on
-   header hover (the inner button defaults to opacity:0 from its own module). */
+/* Hover kebab (3-dot) — revealed on header hover (the inner button defaults to
+   opacity:0 from its own module). round120: floated OUT of the flow into the
+   52px white gutter (like monday's group menu), so it no longer pushes the
+   chevron off the table's left edge line and the header layout is identical to
+   the Tasks/Previous group headers. */
 .headerKebab {
   display: inline-flex;
   flex-shrink: 0;
+  position: absolute;
+  inset-inline-start: -28px;
+  top: 50%;
+  transform: translateY(-50%);
 }
 .headerKebab button {
   opacity: 0;
@@ -596,7 +608,15 @@
 /* round103 — hide this chrome while monday's item-card panel is open (iframe narrows).
    round117: visibility (not display) so the row keeps its space and the layout
    below does not jump up when the panel opens. */
-:global(body[data-chrome-narrow="1"]) .toolbar { visibility: hidden !important; }
+:global(body[data-chrome-narrow="1"]) .toolbar {
+  visibility: hidden !important;
+  /* round119 — the hidden row must reserve EXACTLY its closed-state one-row
+     height: in the narrowed iframe the pills silently wrap to 2-3 rows, and a
+     wrapped hidden row reserved all of them (a huge blank band above the first
+     group). nowrap + hidden overflow pin it to a single row. */
+  flex-wrap: nowrap !important;
+  overflow: hidden;
+}
 
 /* round113 — while monday's item-card / updates panel is open (chrome-narrow,
    see round103's detector) the narrowed pane must show NO scrollbars at all
