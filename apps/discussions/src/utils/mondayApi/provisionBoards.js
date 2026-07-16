@@ -80,6 +80,9 @@ const DECISION_STATUS_DEFAULTS = JSON.stringify({
 export const PROVISION_SPEC = {
   discussions: {
     isCurrentBoard: true,
+    // round141b — used ONLY when createDiscussionsBoard is set (custom-object
+    // install, where there is no meaningful host board to extend).
+    name: 'דיונים',
     columns: [
       { alias: 'discussionCreatorID', type: 'people', title: 'יוצר' },
       { alias: 'discussionLeadID', type: 'people', title: 'מוביל דיון' },
@@ -163,13 +166,16 @@ export const PROVISION_SPEC = {
 const BOARD_ORDER = ['discussions', 'topics', 'tasks', 'decisions'];
 
 // Count every unit of work so the wizard can show a real progress bar.
-function countSteps(tasks) {
+function countSteps(tasks, createDiscussionsBoard = false) {
   let n = 0;
   for (const key of BOARD_ORDER) {
     const spec = PROVISION_SPEC[key];
-    // create_board — skipped for the current board (discussions), and for tasks
-    // when connecting an existing board instead of creating a new one.
-    if (!spec.isCurrentBoard && !(key === 'tasks' && tasks?.mode === 'connect')) n += 1;
+    // create_board — skipped for the current board (discussions, unless a
+    // custom-object install creates it too), and for tasks when connecting an
+    // existing board instead of creating a new one.
+    if (spec.isCurrentBoard) {
+      if (createDiscussionsBoard) n += 1;
+    } else if (!(key === 'tasks' && tasks?.mode === 'connect')) n += 1;
     n += spec.columns.length;
     n += (spec.relations || []).length;
     if (spec.subitems) n += 1 + spec.subitems.length; // enable subitems + its columns
@@ -382,32 +388,49 @@ async function mapReflection(sourceBoardId, targetBoardId, title) {
  * clobbered. When `existingConfig` is null/undefined the behavior is identical to
  * first-run (every skip below is guarded behind its presence).
  */
-export async function provisionAllBoards({ discussionsBoardId, workspaceId, onProgress, tasks = { mode: 'create' }, existingConfig = null } = {}) {
-  if (!discussionsBoardId) {
+export async function provisionAllBoards({ discussionsBoardId, workspaceId, onProgress, tasks = { mode: 'create' }, existingConfig = null, createDiscussionsBoard = false } = {}) {
+  // round141b — custom-object install: there is no meaningful host board, so a
+  // real "דיונים" board is CREATED below instead of extending the current one.
+  if (!discussionsBoardId && !createDiscussionsBoard) {
     throw new Error('לא זוהה הלוח הנוכחי — יש לפתוח את האפליקציה מתוך לוח דיונים');
   }
   if (tasks?.mode === 'connect' && !tasks?.boardId) {
     throw new Error('לא נבחר לוח משימות קיים לחיבור');
   }
 
-  const total = countSteps(tasks);
+  const total = countSteps(tasks, createDiscussionsBoard);
   let step = 0;
+  // round141 — the wizard narrates BOARD-level phases (owner request): every
+  // tick also reports the current phase ("יוצר את לוח המשימות…"), while `label`
+  // keeps the fine-grained step detail for logs/debugging.
+  let phase = '';
+  const setPhase = (p) => { phase = p; };
   const tick = (label) => {
     step += 1;
     try {
-      onProgress?.(step, total, label);
+      onProgress?.(step, total, label, phase);
     } catch (err) {
       /* progress callback must never break provisioning */
       if (!err?.__loggedId) logger.warn(MODULE, 'onProgress callback זרק שגיאה — ממשיך', err);
     }
   };
 
-  logger.info(MODULE, 'התחלת הקמת לוחות אוטומטית', { total, discussionsBoardId });
+  logger.info(MODULE, 'התחלת הקמת לוחות אוטומטית', { total, discussionsBoardId, createDiscussionsBoard });
+  const hasIdEarly = (v) => Boolean(v && v.id && String(v.id).trim());
 
   // discussions = the current board; topics + decisions are always created, and
   // tasks is either created (mode 'create') or an existing board is connected
   // (mode 'connect'), in which case its columns are still ensured/reused below.
-  const boardIds = { discussions: String(discussionsBoardId) };
+  const boardIds = {};
+  if (createDiscussionsBoard && !(existingConfig && hasIdEarly(existingConfig.boards?.discussions))) {
+    setPhase('מקים את לוח הדיונים…');
+    boardIds.discussions = await createBoard(PROVISION_SPEC.discussions.name, workspaceId);
+    tick('נוצר לוח: דיונים');
+  } else {
+    boardIds.discussions = String(
+      (existingConfig && existingConfig.boards?.discussions?.id) || discussionsBoardId
+    );
+  }
   // TOP-UP MODE (existingConfig provided): start the column accumulator from a
   // DEEP CLONE of the existing mapping so untouched roles/columns/aliases —
   // including ones this wizard never provisions (formula/mirror, priority, notes,
@@ -439,6 +462,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       boardIds.tasks = String(tasks.boardId);
       continue;
     }
+    setPhase(`יוצר את לוח "${PROVISION_SPEC[key].name}"…`);
     boardIds[key] = await createBoard(PROVISION_SPEC[key].name, workspaceId);
     tick(`נוצר לוח: ${PROVISION_SPEC[key].name}`);
   }
@@ -451,7 +475,19 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // Without a columnMap (older callers) every column goes through ensureColumn —
   // today's behavior. Either way we tick() once per field so progress stays right.
   const existingByBoard = {};
+  // Board-level narration for the column work. The discussions "board" is the
+  // CURRENT board — no board named דיונים is ever created (this is a board-view
+  // app); say so explicitly instead of implying a new board appeared.
+  const PHASE_LABELS = {
+    discussions: createDiscussionsBoard
+      ? 'מקים את לוח הדיונים…'
+      : 'מוסיף את עמודות הדיונים ללוח הנוכחי (הוא לוח הדיונים)…',
+    topics: 'מקים את לוח הנושאים לדיון…',
+    tasks: tasks?.mode === 'connect' ? 'מחבר ומשלים את לוח המשימות הקיים…' : 'מקים את לוח המשימות…',
+    decisions: 'מקים את לוח ההחלטות…',
+  };
   for (const key of BOARD_ORDER) {
+    setPhase(PHASE_LABELS[key]);
     existingByBoard[key] = await readColumns(boardIds[key]);
     const taskColumnMap =
       key === 'tasks' && tasks?.mode === 'connect' && tasks?.columnMap ? tasks.columnMap : null;
@@ -475,6 +511,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // TOP-UP: if it's already mapped, keep it — do NOT create/attach a new managed
   // column (that would mint a duplicate account-level column).
   if (!(existingConfig && hasId(existingConfig.columns?.discussions?.discussionTypeID))) {
+    setPhase(PHASE_LABELS.discussions);
     const t = await ensureManagedTypeColumn(boardIds.discussions, existingByBoard.discussions);
     columns.discussions.discussionTypeID = {
       id: t.id, type: 'dropdown', title: 'סוג דיון', verified: true, managedColumnId: t.managedColumnId,
@@ -490,6 +527,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // persisted mapping; without one we still create a PLAIN dropdown so the
   // by-text bridge works, and log it.
   if (!(existingConfig && hasId(existingConfig.columns?.tasks?.taskTypeID))) {
+    setPhase(PHASE_LABELS.tasks);
     const knownManagedId =
       columns.discussions.discussionTypeID?.managedColumnId ||
       existingConfig?.columns?.discussions?.discussionTypeID?.managedColumnId ||
@@ -517,6 +555,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       ? subSpec.filter((col) => !hasId(existingConfig.columns?.[key]?.[col.alias]))
       : subSpec;
     if (!subMissing.length) continue;
+    setPhase(PHASE_LABELS[key]);
     const subBoardId = await ensureSubitemsBoard(boardIds[key]);
     tick('הופעלו תת-פריטים');
     const subExisting = await readColumns(subBoardId);
@@ -529,6 +568,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
 
   // 4) relations (need all board ids to exist). Each is bidirectional: the
   // reflection auto-created on the target board is mapped as the back-link.
+  setPhase('מקשר בין הלוחות…');
   for (const key of BOARD_ORDER) {
     for (const rel of PROVISION_SPEC[key].relations || []) {
       // TOP-UP: keep an already-mapped relation column; otherwise create it.
