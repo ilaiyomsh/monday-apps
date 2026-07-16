@@ -13,7 +13,7 @@ import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx'
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
 import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
 import {
-  filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter, sortTasks,
+  filterTasks, filterCount, serializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
 } from '@generated/components/MyTasksView/controls/controls.js';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -23,6 +23,7 @@ import { useViewport } from '@generated/hooks/useViewport.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { useStableHandler } from '@generated/hooks/useStableHandler.js';
+import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { getColumns } from '@api/board-config-store.js';
@@ -117,44 +118,19 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   });
 
   // ---- Filter (client-side, over the loaded tasks; same engine as My Tasks /
-  // Previous tasks). status + deadline + person columns. ----
-  const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
-  // Filter opens with a default STATUS row (empty values ⇒ shows all) when no
-  // saved view exists; a saved view's own rows win (incl. an explicitly empty set).
-  const [filterRows, setFilterRows] = useState(() => (
-    Array.isArray(savedView?.filterRows)
-      ? savedView.filterRows.filter((k) => TASKS_FILTER_COLUMNS.some((c) => c.key === k))
-      : ['status']
-  ));
+  // Previous tasks). status + deadline + person columns. Opens with a default
+  // STATUS row (empty values ⇒ shows all) when no saved view exists; a saved
+  // view's own rows win (incl. an explicitly empty set). State + mutators come
+  // from the shared builder state machine (round137).
+  const {
+    filter, filterRows, setFilterOp, toggleFilterVal, setDeadlineRange, setDeadlineDate,
+    addFilterRow, removeFilterRow, retargetFilterRow, clearFilter,
+  } = useFilterBuilder({ columns: TASKS_FILTER_COLUMNS, defaultRows: ['status'], savedView });
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [deleting, setDeleting] = useState(false);
   const { colorById, labelById, orderById, doneId, options: statusOptions } = useStatusOptions();
   const { isMobile } = useViewport();
 
-  // Filter mutators (mirror PreviousTasksTab).
-  const resetCol = (col) => (col === 'deadline' ? { op: 'within', range: null, date: null } : { op: 'is', values: new Set() });
-  const setFilterOp = (col, op) => setFilter((f) => ({ ...f, [col]: { ...f[col], op } }));
-  const toggleFilterVal = (col, id) => setFilter((f) => {
-    const next = new Set(f[col].values);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return { ...f, [col]: { ...f[col], values: next } };
-  });
-  const setDeadlineRange = (range) => setFilter((f) => ({ ...f, deadline: { op: 'within', range, date: null } }));
-  const setDeadlineDate = (date) => setFilter((f) => ({ ...f, deadline: { ...f.deadline, date } }));
-  const addFilterRow = () => setFilterRows((rows) => {
-    const next = TASKS_FILTER_COLUMNS.map((c) => c.key).find((k) => !rows.includes(k));
-    return next ? [...rows, next] : rows;
-  });
-  const removeFilterRow = (col) => {
-    setFilterRows((rows) => rows.filter((k) => k !== col));
-    setFilter((f) => ({ ...f, [col]: resetCol(col) }));
-  };
-  const retargetFilterRow = (fromCol, toCol) => {
-    if (fromCol === toCol) return;
-    setFilterRows((rows) => rows.map((k) => (k === fromCol ? toCol : k)));
-    setFilter((f) => ({ ...f, [fromCol]: resetCol(fromCol), [toCol]: resetCol(toCol) }));
-  };
-  const clearFilter = () => { setFilter(emptyFilter()); setFilterRows(['status']); };
   const fc = filterCount(filter);
   // Sort handlers (session-only until an owner hits Save, like the other builders).
   const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstSortDir(col), active: true });

@@ -10,6 +10,7 @@ import { useViewport } from '@generated/hooks/useViewport.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { useMinSplash } from '@generated/hooks/useMinSplash.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -29,8 +30,8 @@ import { BuilderIcon } from '../MyTasksView/controls/BuilderIcon.jsx';
 import { HideColumnsControl } from '../MyTasksView/controls/HideColumnsControl.jsx';
 import {
   SORT_COLUMNS, GROUP_COLUMNS, FILTER_COLUMNS, OP_LABEL, DEADLINE_RANGES,
-  sortTasks, filterTasks, filterCount, emptyFilter, DEFAULT_SORT,
-  serializeFilter, deserializeFilter,
+  sortTasks, filterTasks, filterCount, DEFAULT_SORT,
+  serializeFilter,
 } from '../MyTasksView/controls/controls.js';
 import styles from './MyDecisionsView.module.css';
 import bs from '../MyTasksView/controls/builder.module.css';
@@ -138,12 +139,11 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     }
     return { ...DEC_DEFAULT_GROUP };
   });
-  const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
-  const [filterRows, setFilterRows] = useState(() => (
-    Array.isArray(savedView?.filterRows)
-      ? savedView.filterRows.filter((k) => FILTER_COLUMNS.some((c) => c.key === k))
-      : []
-  ));
+  // Filter state + mutators — the shared builder state machine (round137).
+  const {
+    filter, filterRows, setFilterOp, toggleFilterVal, setDeadlineRange, setDeadlineDate,
+    addFilterRow, removeFilterRow, retargetFilterRow, clearFilter,
+  } = useFilterBuilder({ columns: FILTER_COLUMNS, defaultRows: [], savedView });
 
   // --- Hide columns (round 46) ------------------------------------------------
   // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
@@ -314,31 +314,6 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   const setGroupCol = useCallback((col) => { setGroup({ col, order: firstGroupOrder(col) }); setCollapsed({}); }, []);
   const setGroupOrder = useCallback((order) => setGroup((g) => ({ ...g, order })), []);
   const clearGroup = useCallback(() => { setGroup({ col: 'none' }); setCollapsed({}); }, []);
-
-  // ---- filter handlers (immutable updates so the pipeline memo re-runs) ----
-  const resetCol = (col) => (col === 'deadline' ? { op: 'within', range: null, date: null } : { op: 'is', values: new Set() });
-  const setFilterOp = useCallback((col, op) => setFilter((f) => ({ ...f, [col]: { ...f[col], op } })), []);
-  const toggleFilterVal = useCallback((col, id) => setFilter((f) => {
-    const next = new Set(f[col].values);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return { ...f, [col]: { ...f[col], values: next } };
-  }), []);
-  const setDeadlineRange = useCallback((range) => setFilter((f) => ({ ...f, deadline: { op: 'within', range, date: null } })), []);
-  const setDeadlineDate = useCallback((date) => setFilter((f) => ({ ...f, deadline: { ...f.deadline, date } })), []);
-  const addFilterRow = useCallback(() => setFilterRows((rows) => {
-    const next = FILTER_COLUMNS.map((c) => c.key).find((k) => !rows.includes(k));
-    return next ? [...rows, next] : rows;
-  }), []);
-  const removeFilterRow = useCallback((col) => {
-    setFilterRows((rows) => rows.filter((k) => k !== col));
-    setFilter((f) => ({ ...f, [col]: resetCol(col) }));
-  }, []);
-  const retargetFilterRow = useCallback((fromCol, toCol) => {
-    if (fromCol === toCol) return;
-    setFilterRows((rows) => rows.map((k) => (k === fromCol ? toCol : k)));
-    setFilter((f) => ({ ...f, [fromCol]: resetCol(fromCol), [toCol]: resetCol(toCol) }));
-  }, []);
-  const clearFilter = useCallback(() => { setFilter(emptyFilter()); setFilterRows([]); }, []);
 
   const fc = filterCount(filter);
 
