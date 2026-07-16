@@ -498,7 +498,15 @@
 /* round103 — hide this chrome while monday's item-card panel is open (iframe narrows).
    round117: visibility (not display) so the row keeps its space and the layout
    below does not jump up when the panel opens. */
-:global(body[data-chrome-narrow="1"]) .toolbar { visibility: hidden !important; }
+:global(body[data-chrome-narrow="1"]) .toolbar {
+  visibility: hidden !important;
+  /* round119 — the hidden row must reserve EXACTLY its closed-state one-row
+     height: in the narrowed iframe the pills silently wrap to 2-3 rows, and a
+     wrapped hidden row reserved all of them (a huge blank band above the first
+     group). nowrap + hidden overflow pin it to a single row. */
+  flex-wrap: nowrap !important;
+  overflow: hidden;
+}
 
 /* round113 — while monday's item-card / updates panel is open (chrome-narrow,
    see round103's detector) the narrowed pane must show NO scrollbars at all
