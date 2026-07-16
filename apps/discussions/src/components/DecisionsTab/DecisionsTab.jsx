@@ -13,6 +13,7 @@ import { X, Plus } from 'lucide-react';
 import { PersonAvatar, PersonList } from '@generated/components/PersonAvatar';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
 // Varied stable group-title colors (owner request 2026-07-14) — shared engine.
@@ -533,6 +534,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     return { col: s.col, dir: s.dir || firstDecSortDir(s.col), active: true };
   });
   const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
+  // round132 — toolbar Search (shared SearchPill), client-side over the loaded decisions.
+  const [search, setSearch] = useState('');
   // Filter opens with a default STATUS row (empty values ⇒ shows all) when no
   // saved view exists; a saved view's own rows win (incl. an explicitly empty set).
   const [filterRows, setFilterRows] = useState(() => (
@@ -561,6 +564,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
       const passing = new Set(filterTasks(items.map(filterView), filter).map((v) => String(v.id)));
       list = items.filter((d) => passing.has(String(d.id)));
     }
+    // round132 — toolbar Search (shared SearchPill): name "contains".
+    if (search.trim()) list = list.filter((d) => matchesSearch(d.name, search));
     if (!sort.active || !sort.col) return list;
     const views = list.map((d) => ({
       id: d.id, name: d.name,
@@ -571,7 +576,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
       .map((v) => String(v.id));
     const byId = new Map(list.map((d) => [String(d.id), d]));
     return orderIds.map((id) => byId.get(id)).filter(Boolean);
-  }, [items, filter, sort, statusOpts.orderById, statusOpts.labelById]);
+  }, [items, filter, sort, statusOpts.orderById, statusOpts.labelById, search]);
 
   // Decider person options = the distinct deciders across the loaded decisions.
   const personOptions = useMemo(() => {
@@ -954,6 +959,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
           )}
         </div>
         <div className={styles.decToolbarRight}>
+          <SearchPill value={search} onChange={setSearch} />
           <BuilderControl
             icon={Filter} label="Filter" title="Filter by" mobile={isMobile} width={isMobile ? undefined : 620}
             applied={fc > 0} badge={fc}

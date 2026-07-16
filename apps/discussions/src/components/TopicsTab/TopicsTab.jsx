@@ -26,6 +26,7 @@ import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
+import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { TOPICS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
@@ -562,12 +563,33 @@ export function TopicsTab({
   // ('pending' | 'success' | 'error'). Owned by DiscussionCard's handleQuickCreate;
   // drives the inline CreateProgressBar on each point's decisions/tasks cell.
   createStatusByPoint = {},
+  // round132 — reports useTopics' loading flag up to DiscussionCard, which
+  // gates the deep-link splash (App) until the topics data is actually ready.
+  onLoadingChange = null,
 }) {
   const {
     items, loading, addTopic, addPoint, retryCreate, togglePoint, refetch,
     togglePointNotForDiscussion, toggleTopicNotForDiscussion, updateTopicPriority,
     renameTopic, deleteTopic, renamePoint, softDeletePoints, reorderTopics, reorderPoints,
   } = useTopics(discussion.id, { onSuccess: onNotify, onLoading: onNotifyLoading, onDismiss: onDismissToast });
+  useEffect(() => { onLoadingChange?.(loading); }, [loading, onLoadingChange]);
+
+  // round132 — toolbar Search (shared SearchPill): a topic whose NAME matches
+  // stays whole; otherwise it survives only with its matching points; topics
+  // with no match at all drop. Render-only — the source `items` (and thus the
+  // stored order / selection maps) are untouched.
+  const [search, setSearch] = useState('');
+  const visibleTopics = useMemo(() => {
+    const q = search.trim();
+    if (!q) return items;
+    return items
+      .map((t) => {
+        if (matchesSearch(t.name, q)) return t;
+        const pts = (t._subitems || []).filter((p) => matchesSearch(p.name, q));
+        return pts.length ? { ...t, _subitems: pts } : null;
+      })
+      .filter(Boolean);
+  }, [items, search]);
 
   const priorityMapped = !!getColumns('topics')?.topicPriorityID?.id;
   const priorityOpts = useStatusOptions('topics', 'topicPriorityID');
@@ -899,6 +921,8 @@ export function TopicsTab({
             />
           )}
         </div>
+        {/* round132 — toolbar Search (shared SearchPill). */}
+        <SearchPill value={search} onChange={setSearch} />
         {/* Hide columns (round 47) — owners only. Non-owners never see it and
             always get the saved config applied to every topic's points table. */}
         {canManageSettings && (
@@ -939,8 +963,8 @@ export function TopicsTab({
       )}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTopicDragEnd}>
-        <SortableContext items={items.map((t) => String(t.id))} strategy={verticalListSortingStrategy}>
-          {items.map((topic) => (
+        <SortableContext items={visibleTopics.map((t) => String(t.id))} strategy={verticalListSortingStrategy}>
+          {visibleTopics.map((topic) => (
             <SortableTopicSection
               key={topic.id}
               topic={topic}

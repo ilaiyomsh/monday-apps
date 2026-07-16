@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Dialog, DialogContentContainer, DatePicker, Button } from '@vibe/core';
-import { Calendar } from '@vibe/icons';
+import { AddSmall, Calendar } from '@vibe/icons';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { acceptSegmentInput, segmentsToTyped, dateToSegments } from './dateSegments.js';
 import styles from './DatePickerPopover.module.css';
@@ -86,10 +86,12 @@ export function DatePickerPopover({ value, onChange, variant = 'cell', placehold
     const next = computeFloatingPosition({
       anchorRect: rect,
       preferred: 'bottom-start',
-      popupWidth: 320,
-      // Includes the round-47 manual-entry row (~42px) on top of the calendar so
+      // round132 compact popover (smaller day cells + tighter paddings): the
+      // estimates must track .pickerBox or the flip logic misjudges the edges.
+      popupWidth: 280,
+      // Includes the round-47 manual-entry row (~40px) on top of the calendar so
       // placement/flip still clears the viewport edge (keeps the round-31 fix).
-      popupHeight: 430,
+      popupHeight: 360,
       offset: 4,
     });
     if (next?.placement) setPosition(next.placement);
@@ -219,7 +221,7 @@ export function DatePickerPopover({ value, onChange, variant = 'cell', placehold
       position={position}
       zIndex={zIndex}
       content={() => (
-        <DialogContentContainer>
+        <DialogContentContainer className={styles.pickerBox}>
           {/* Manual date entry (round 47; segmented round 71) — a DD/MM/YY mask
               at the TOP of the popover: the two slashes are ALWAYS visible and
               each digit pair lives in its own box, so typed digits land straight
@@ -302,7 +304,12 @@ export function DatePickerPopover({ value, onChange, variant = 'cell', placehold
         ) : safeValue ? (
           <span>{fmt(safeValue)}</span>
         ) : (
-          <Calendar size={16} />
+          // round132 — an empty date CELL is completely blank at rest (monday
+          // native); hovering the cell reveals the "+ calendar" add hint.
+          <span className={styles.addDateHint} aria-hidden="true">
+            <AddSmall size={14} />
+            <Calendar size={16} />
+          </span>
         )}
       </button>
     </Dialog>

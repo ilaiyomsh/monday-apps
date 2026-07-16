@@ -64,6 +64,7 @@ export function DiscussionCard({
   onUpdated,
   initialTab = null,
   initialTabDiscussionId = null,
+  onInitialTabReady = null,
   canManageSettings = false,
 }) {
   const { currentUser } = useMondayContext();
@@ -368,6 +369,23 @@ export function DiscussionCard({
     const nextTab = normalizeTabName(initialTab);
     if (nextTab) setActiveTab(nextTab);
   }, [discussion?.id, initialTab, initialTabDiscussionId]);
+
+  // round132 — deep-link readiness: report up (App drops its splash overlay)
+  // only once the deep-linked discussion's data is COMPLETE — the card details
+  // are merged in, and, when the link targets the topics tab, the topics list
+  // finished its initial load (TopicsTab reports via onTopicsLoadingChange;
+  // it is always mounted, so the report always arrives). App's safety timeout
+  // covers the pathological cases (deleted discussion / stalled fetch).
+  const [topicsTabLoading, setTopicsTabLoading] = useState(true);
+  const handleTopicsLoadingChange = useCallback((v) => setTopicsTabLoading(Boolean(v)), []);
+  useEffect(() => {
+    if (!onInitialTabReady) return;
+    if (!discussion?.id || !initialTabDiscussionId) return;
+    if (String(discussion.id) !== String(initialTabDiscussionId)) return;
+    if (!details) return; // still fetching the card's own columns
+    if (normalizeTabName(initialTab) === 'topics' && topicsTabLoading) return;
+    onInitialTabReady();
+  }, [onInitialTabReady, discussion?.id, initialTabDiscussionId, initialTab, details, topicsTabLoading]);
 
   if (!discussion) {
     return (
@@ -789,7 +807,7 @@ export function DiscussionCard({
           <PreviousTasksTab discussion={data} onCarryForward={tasksData.mergeTasks} onCarryForwardUndo={tasksData.removeTasks} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} canTask={canTask} canCreateTask={createTask} canEditDiscussion={editDiscussionFields} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
         </div>
         <div className={activeTab === 'topics' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'topics' ? undefined : 'none' }}>
-          <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast}
+          <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} onLoadingChange={handleTopicsLoadingChange}
             addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
             decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus} />

@@ -301,3 +301,15 @@
 .mainFull {
   flex: 1;
 }
+
+/* round132 — deep-link splash: an opaque cover over the WHOLE app shell while
+   a copied discussion-tab link boots. The app keeps rendering (and fetching)
+   underneath; when the linked card + tab data are ready the cover drops and
+   the finished screen appears in one paint. Fixed + high z-index so it also
+   covers modals/toasts that might mount during the load. */
+.deepLinkSplash {
+  position: fixed;
+  inset: 0;
+  z-index: 12000;
+  background: var(--primary-background-color, #ffffff);
+}

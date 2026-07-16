@@ -19,7 +19,7 @@ vi.mock('@vibe/core', async () => {
     Button: ({ children, onClick }) => R.createElement('button', { type: 'button', onClick }, children),
   };
 });
-vi.mock('@vibe/icons', () => ({ Calendar: () => null }));
+vi.mock('@vibe/icons', () => ({ Calendar: () => null, AddSmall: () => null }));
 vi.mock('@generated/utils/overlayPlacement', () => ({
   computeFloatingPosition: () => ({ placement: 'bottom-start' }),
 }));

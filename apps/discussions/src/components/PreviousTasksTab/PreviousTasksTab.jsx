@@ -8,6 +8,7 @@ import { ensureGroupColors } from '@generated/components/MyTasksView/grouping.js
 import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
@@ -763,15 +764,18 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const todayStart = useMemo(() => startOfToday(), []);
   const bucketCounts = useMemo(() => countBuckets(tasks, doneStatusIds, todayStart), [tasks, doneStatusIds, todayStart]);
   const [quickStatus, setQuickStatus] = useState(null);
+  // round132 — toolbar Search (shared SearchPill): client-side name "contains".
+  const [search, setSearch] = useState('');
 
   // Client pipeline: filter -> sort (both instant, over the loaded tasks). An
   // inactive sort returns the list unchanged, so default order is untouched.
   const filteredTasks = useMemo(
     () => {
-      const base = sortTasks(filterTasks(tasks, filter), sort, { orderById, labelById });
+      let base = sortTasks(filterTasks(tasks, filter), sort, { orderById, labelById });
+      if (search.trim()) base = base.filter((tk) => matchesSearch(tk.name, search));
       return quickStatus ? base.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : base;
     },
-    [tasks, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart]
+    [tasks, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, search]
   );
 
   // Groups carry { key, label, color, items } — status groups key by the stable
@@ -986,6 +990,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
           <span className={styles.prevChipName}>{byType ? typeFilter.label : previousDiscussionLabel}</span>
         </div>
         <div className={styles.toolbarActions} dir="ltr">
+          <SearchPill value={search} onChange={setSearch} />
           <BuilderControl
             icon={Filter} label="Filter" title="Filter by" mobile={isMobile} width={isMobile ? undefined : 620}
             applied={fc > 0} badge={fc}

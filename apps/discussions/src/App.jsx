@@ -328,6 +328,15 @@ export default function App() {
   const [currentLocationHref, setCurrentLocationHref] = useState(() =>
     typeof window !== 'undefined' ? window.location.href : ''
   );
+  // round132 — deep-link splash: opening the app FROM a copied discussion-tab
+  // link holds the branded loading animation over the whole app until the
+  // target card (and, for the topics tab, the topics data) is fully loaded,
+  // then reveals the finished screen in one paint (sidebar already collapsed).
+  // Armed at boot when the URL carries a discussionId, and re-armed if monday's
+  // async `location` delivers the params later. A ref mirrors it so the
+  // member-default effect can avoid re-routing a deep-linked entry to My Tasks.
+  const [deepLinkSplash, setDeepLinkSplash] = useState(() => Boolean(readLaunchParams().discussionId));
+  const deepLinkArmedRef = useRef(Boolean(launchParams.discussionId));
 
   // Advisory permission resolver, bound to the owner bypass + current user.
   // Used as a belt-and-suspenders guard in handleExport so a stale/unhidden
@@ -387,7 +396,9 @@ export default function App() {
         // who never chose a view themselves lands straight in "המשימות שלי".
         // Deliberately NOT persisted — it stays a default; the user's first
         // explicit navigation persists their choice and wins from then on.
-        if (!cancelled && !isOwner && !hasSavedAppView()) setAppView('myTasks');
+        // round132 — a deep-linked entry (discussion link) must land on the
+        // linked discussion, so the member default never re-routes it.
+        if (!cancelled && !isOwner && !hasSavedAppView() && !deepLinkArmedRef.current) setAppView('myTasks');
       } catch (err) {
         if (cancelled) return;
         // Fail closed for management, but make the failure visible instead of
@@ -529,12 +540,32 @@ export default function App() {
 
   useEffect(() => {
     if (!launchParams.discussionId) return;
-    setSelectedDiscussion((prev) => {
-      if (String(prev?.id) === launchParams.discussionId) return prev;
-      return { id: launchParams.discussionId };
-    });
+    deepLinkArmedRef.current = true;
+    // round132 — a deep link that actually switches the open discussion
+    // (params landed late via monday's async `location`) re-arms the splash
+    // so the reveal still waits for the full data (a same-id no-op doesn't).
+    if (String(selectedDiscussion?.id) !== launchParams.discussionId) {
+      setDeepLinkSplash(true);
+      setSelectedDiscussion({ id: launchParams.discussionId });
+    }
     setShowList(false);
+    // round132 — the link lands on the finished screen: card at full width
+    // (sidebar collapsed, like a manual discussion pick) in the discussions
+    // view even if this user's default view is המשימות שלי. setAppView (not
+    // handleAppViewChange) so the forced route is NOT persisted as a choice.
+    if (!isMobile) setCollapsed(true);
+    setAppView('discussions');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [launchParams.discussionId]);
+
+  // round132 — deep-link splash safety valve: never trap the user on the loader
+  // (e.g. a deleted discussion or a stalled fetch) — reveal after 12s regardless.
+  useEffect(() => {
+    if (!deepLinkSplash) return undefined;
+    const t = setTimeout(() => setDeepLinkSplash(false), 12000);
+    return () => clearTimeout(t);
+  }, [deepLinkSplash]);
+  const handleDeepLinkReady = useCallback(() => setDeepLinkSplash(false), []);
 
   useEffect(() => {
     const applyLocation = (locationData) => {
@@ -882,6 +913,7 @@ export default function App() {
             onUpdated={handleSaved}
             initialTab={launchParams.tab}
             initialTabDiscussionId={launchParams.discussionId}
+            onInitialTabReady={handleDeepLinkReady}
             canManageSettings={canManageSettings}
           />
         )}
@@ -899,6 +931,15 @@ export default function App() {
 
       <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} onNotify={notify} />
     </div>
+      {/* round132 — deep-link splash: the app keeps rendering (and loading)
+          UNDERNEATH this opaque overlay, so the branded loader plays until the
+          linked discussion + its target tab data are fully ready, then the
+          finished screen is revealed in one paint. */}
+      {deepLinkSplash && (
+        <div className={styles.deepLinkSplash}>
+          <BrandLoader fullscreen />
+        </div>
+      )}
       {overlays}
     </div>
   );
