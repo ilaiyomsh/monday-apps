@@ -39,6 +39,13 @@ export const VirtualRowList: React.FC = () => {
     count: flattenedRows.length,
     getScrollElement: () => containerRef.current,
     estimateSize: useCallback((index: number) => flattenedRows[index]?.height ?? CONFIG.rowHeight, [flattenedRows]),
+    // Key the size cache by the row's STABLE id, not its array index. Focusing a
+    // project inserts/removes rows (sections collapse, tracks appear) so a given
+    // index maps to a different-height row before vs after. Without this, tanstack
+    // keeps the old index-keyed sizes and the focus-block heights land one row off
+    // — the focused header renders at 48px instead of 65px and its summary card
+    // drifts ~17px below the allocation bars. (BUGS.md 2026-07-16.)
+    getItemKey: useCallback((index: number) => flattenedRows[index]?.id ?? index, [flattenedRows]),
     overscan: CONFIG.verticalBuffer,
   });
 

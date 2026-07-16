@@ -24,6 +24,22 @@ Order: newest first. Keep entries terse — one entry should fit on a screen.
 
 ---
 
+## 2026-07-16 — Focus card drifts ~½ row on the SECOND focus (virtualizer size cache keyed by index)
+
+**Symptom:** After the px-height fix (below), the focus card STILL sat ~½ row (~14–17px) below its allocation bars — but ONLY after you focused one project, then focused a DIFFERENT one. First focus after load was fine; every focus-SWITCH broke it. The focused header row rendered at 48px (a collapsed height) instead of 65px, squishing its content to 31px and dropping the card ~17px.
+
+**Root cause:** `VirtualRowList.tsx` — `useVirtualizer` had no `getItemKey`, so @tanstack/react-virtual keyed its size cache by ARRAY INDEX. Focusing a project rewrites `flattenedRows` (other classification sections collapse → rows removed; the focused project expands → track rows appear), so a given index maps to a different-height row before vs after. With index keys the stale sizes stuck: the focus-block heights (65 header / 48 track / 55 last-track) landed one row off — the focused header got 48, a track got 65, the collapsed neighbour got 55 — and the card's absolute `top` (which assumes a 48px header content box) dropped ~17px below the bars.
+
+**Why it slipped:** (1) Reproduces ONLY on a focus-SWITCH between projects; a single focus after load is clean, so it hid behind the more obvious px/rem bug and behind stale browser caches. (2) The app renders in a cross-origin monday iframe, so the DOM couldn't be measured from our side — the fix came from a real-DOM `getBoundingClientRect` dump the owner ran in the app-frame console, which showed the focused header at 48px with the height sequence shifted one row off the content. (3) The dev harness initially rendered a project ALREADY focused (no switch) and so showed perfect alignment; it only reproduced once extended to render unfocused → focus p2 → switch to p1.
+
+**Fix:** `getItemKey: (index) => flattenedRows[index]?.id ?? index` on the virtualizer, so the size cache follows each row by its stable id across inserts/removals. Verified in the harness: the focus-switch that produced header=48 now yields header=65 with the card back on the bars.
+
+**Prevention:**
+- The harness (`src/harness/`) now renders TWO focusable projects (in a classified section) and exposes `window.__focus(id)`, so the focus-SWITCH path is reproducible for any future Gantt work.
+- Rule: any tanstack virtualizer over a list whose contents/length change at runtime MUST set `getItemKey` to a stable id — index keys silently corrupt the size cache on reorder/insert/remove.
+
+---
+
 ## 2026-07-15 — Focus-card rows drift below the allocation bars (rem `h-12` vs px 48-grid)
 
 **Symptom:** In projects view, focusing a project showed the summary card's content — the PM/type row, then the hours row — sitting progressively BELOW the allocation bars it must line up with (row 1 slightly low, row 2 more so). Five design PRs (#134→#165) chased it without converging; each "fix" in one place reappeared in another.
