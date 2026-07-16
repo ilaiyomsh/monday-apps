@@ -408,8 +408,10 @@
   background: var(--primary-background-hover-color, #f5f6f8);
 }
 
-/* round103 — hide this chrome while monday's item-card panel is open (iframe narrows). */
-:global(body[data-chrome-narrow="1"]) .toolbar { display: none !important; }
+/* round103 — hide this chrome while monday's item-card panel is open (iframe narrows).
+   round117: visibility (not display) so the row keeps its space and the layout
+   below does not jump up when the panel opens. */
+:global(body[data-chrome-narrow="1"]) .toolbar { visibility: hidden !important; }
 
 /* round113 — while monday's item-card / updates panel is open (chrome-narrow,
    see round103's detector) the narrowed pane must show NO scrollbars at all
