@@ -60,6 +60,11 @@
   --section-rule-inset: 16px;
   --section-rule-inset-wide: 24px;
 
+  /* round112 — the clean WHITE gutter on the LEFT of the discussion card's
+     header + every table tab (monday-style page margin, no strip in it).
+     One token so the header and all tabs stay aligned. */
+  --content-gutter-start: 52px;
+
   /* Exact status colors from tasks board schema */
   --status-working: 34 98% 62%;
   --status-done: 155 100% 39%;

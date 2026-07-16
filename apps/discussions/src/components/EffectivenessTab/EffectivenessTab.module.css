@@ -6,7 +6,9 @@
   /* Full width (broke out of the 90% frame) so the task table runs to the RIGHT
      edge; a left inset keeps the KPI cards / charts off the edge. */
   width: 100%;
-  padding-inline-start: var(--spacing-medium, 16px);
+  /* round114 — same clean white gutter as every other tab: nothing sits left
+     of the discussion title's line (was a 16px inset). */
+  padding-inline-start: var(--content-gutter-start, 52px);
   padding-inline-end: 0;
   box-sizing: border-box;
 }
@@ -259,4 +261,16 @@
 }
 .closeSelectionBtn:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+/* round113 — while monday's item-card / updates panel is open (chrome-narrow,
+   see round103's detector) the narrowed pane must show NO scrollbars at all
+   (owner request): scrolling itself still works (wheel/trackpad/drag), only
+   the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
+   ::-webkit-scrollbar pseudo. */
+:global(body[data-chrome-narrow="1"]) .taskStack {
+  scrollbar-width: none;
+}
+:global(body[data-chrome-narrow="1"]) .taskStack::-webkit-scrollbar {
+  display: none;
 }

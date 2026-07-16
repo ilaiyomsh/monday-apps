@@ -1,7 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useId } from 'react';
 import { Avatar, AvatarGroup, Flex, Text, Counter, Dialog, DialogContentContainer } from '@vibe/core';
 import { useUsers } from '@api/hooks/use-users';
 import styles from './PersonAvatar.module.css';
+
+/* round112 — monday's EXACT empty-people glyph, traced from the owner's
+   screenshot: an outer gray ring with an outlined bust inside — round head
+   TANGENT to the shoulders arc, and the shoulders CLIPPED by the ring (not a
+   small person floating in the middle). One stroke color throughout. The SVG
+   draws the ring itself, so the host element needs no CSS border. useId keeps
+   the clipPath unique across the many instances a table renders. */
+export function EmptyPersonGlyph({ size = 28 }) {
+  const clipId = useId();
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <defs>
+        <clipPath id={clipId}>
+          <circle cx="16" cy="16" r="14" />
+        </clipPath>
+      </defs>
+      <circle cx="16" cy="16" r="14" stroke="#b8bdc9" strokeWidth="1.8" />
+      <g clipPath={`url(#${clipId})`} stroke="#b8bdc9" strokeWidth="1.8">
+        <circle cx="16" cy="12.5" r="5" />
+        <circle cx="16" cy="28" r="10.5" />
+      </g>
+    </svg>
+  );
+}
 
 const SIZE_MAP = {
   default: "small",
@@ -109,7 +133,12 @@ export function PersonList({ people = [], size = 'default', showNames = true, ma
   const byId = new Map((users || []).map((u) => [String(u.id), u]));
 
   if (!people || people.length === 0) {
-    return <Text className={styles.muted}>לא הוקצה</Text>;
+    // monday "unassigned" avatar — the exact traced glyph (round112).
+    return (
+      <span className={styles.emptyAvatar} aria-label="לא הוקצה" title="לא הוקצה">
+        <EmptyPersonGlyph size={28} />
+      </span>
+    );
   }
 
   const avatarSize = SIZE_MAP[size] || "small";

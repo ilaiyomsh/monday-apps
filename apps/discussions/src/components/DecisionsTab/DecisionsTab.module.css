@@ -15,7 +15,7 @@
   /* Same full-bleed layout as TasksTab: left inset keeps the toolbar off the
      edge, the board bleeds right so row separators run to the right edge. */
   width: 100%;
-  padding-inline-start: 28px;
+  padding-inline-start: var(--content-gutter-start, 52px); /* round112 — wider white gutter */
   padding-inline-end: 0;
   box-sizing: border-box;
 }
@@ -35,6 +35,23 @@
   align-items: center;
   justify-content: flex-start;
   gap: var(--spacing-small, 8px);
+  /* Round 90 — freeze the toolbar while the card body scrolls (like the tabs). */
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--primary-background-color, #ffffff);
+  padding-block: 4px;
+}
+/* Cover the scroll container's (.body) top padding band above the pinned toolbar
+   so scrolled rows can't peek above it (round93). */
+.decToolbar::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  height: var(--spacing-large, 24px);
+  background: var(--primary-background-color, #ffffff);
+  pointer-events: none;
 }
 .decToolbarLeft {
   display: flex;
@@ -88,6 +105,7 @@
   font-variation-settings: 'wght' 500;
   color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
+  direction: rtl;
 }
 
 /* Unmapped decisions board — expected state, not an error. */
@@ -105,6 +123,7 @@
   font-family: var(--font-family);
   text-align: center;
   padding: 16px;
+  direction: rtl;
 }
 
 /* Shared horizontal scroll owner (mirrors TasksTab .board): LTR so the table
@@ -248,7 +267,7 @@
   z-index: 3;
   background: #ffffff;
   box-shadow: inset 6px 0 0 #6b4ee6;
-  border-start-start-radius: var(--border-radius-medium, 8px);
+  border-start-start-radius: 6px; /* round100: rounded strip corner (matches bottom, contained in 6px strip = no notch) */
 }
 
 /* החלטה cell — FROZEN leading name cell (sticky at left:0, opaque so scrolled
@@ -273,7 +292,7 @@
    .taskFirst`). With an add-row present the last .decBodyRow isn't :last-child,
    so this is inert and the add-row's own rounded strip closes the box. */
 .decRow:last-child .decNameCell {
-  border-end-start-radius: var(--border-radius-medium, 8px);
+  border-end-start-radius: 6px; /* round100: rounded strip corner (matches bottom, contained in 6px strip = no notch) */
 }
 
 .decNameText,
@@ -287,7 +306,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-family);
-  text-align: start;
+  direction: rtl;
+  text-align: left;
 }
 .decNameBtn {
   display: block;
@@ -308,6 +328,8 @@
   color: var(--primary-text-color, #323338);
   box-sizing: border-box;
   font-family: var(--font-family);
+  direction: rtl;
+  text-align: left;
 }
 .decNameInput:focus-visible {
   outline: none;
@@ -392,7 +414,8 @@
   min-height: 36px;
   color: #ffffff;
   font-size: 14px;
-  font-weight: 500;
+  /* round98: normal weight (like the task name), not bold. */
+  font-weight: var(--font-weight-normal, 400);
   font-family: var(--font-family);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -443,25 +466,33 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 2px;
-  width: 160px;
+  /* round101: 10px side padding so labels sit at column width with white margins
+     (the JS adds +20px to the menu width to match). */
+  padding: 10px;
+  width: 206px;
   direction: rtl;
 }
 .decMenuOption {
-  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 12px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--border-radius-small, 4px);
   color: #ffffff;
   font-size: 14px;
-  font-weight: 500;
+  /* round98: normal weight (like the task name), not bold. */
+  font-weight: var(--font-weight-normal, 400);
   cursor: pointer;
   font-family: var(--font-family);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: filter 0.1s ease;
 }
 .decMenuOption:hover {
-  filter: brightness(0.92);
+  filter: brightness(0.95);
 }
 
 /* Read-only empty table hint (only when the user can't add decisions). */
@@ -474,6 +505,8 @@
   font-size: 14px;
   font-family: var(--font-family);
   border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  direction: rtl;
+  text-align: right;
 }
 .decEmptyRow:last-child {
   border-bottom: none;
@@ -504,7 +537,7 @@
   padding-inline-start: 18px;
   box-shadow: inset 6px 0 0 rgba(107, 78, 230, 0.5);
   align-self: stretch;
-  border-end-start-radius: var(--border-radius-medium, 8px);
+  border-end-start-radius: 6px; /* round100: rounded strip corner (matches bottom, contained in 6px strip = no notch) */
 }
 /* Inline add-row: leading + icon and a borderless, transparent text input that
    inherits the row font (native monday "add item" feel). */
@@ -523,6 +556,8 @@
   font-family: var(--font-family);
   color: var(--primary-text-color, #323338);
   padding: 0;
+  direction: rtl;
+  text-align: left;
 }
 .decAddInput::placeholder {
   color: var(--placeholder-color, #9699a6);
@@ -571,7 +606,7 @@
    table top reads square (unlike Topics/Tasks). Mirrors TaskTable's
    `.taskHead .taskFirst, .taskHead .selectCell { border-start-start-radius }`. */
 .decSelectable .decHead .decSelectCell {
-  border-start-start-radius: var(--border-radius-medium, 8px);
+  border-start-start-radius: 6px; /* round100: rounded strip corner (matches bottom, contained in 6px strip = no notch) */
 }
 
 /* Whole-row drag-reorder — the entire body row is the grab handle when enabled
@@ -637,4 +672,19 @@
 }
 .decCloseSelectionBtn:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+/* round103 — hide this chrome while monday's item-card panel is open (iframe narrows). */
+:global(body[data-chrome-narrow="1"]) .decToolbar { display: none !important; }
+
+/* round113 — while monday's item-card / updates panel is open (chrome-narrow,
+   see round103's detector) the narrowed pane must show NO scrollbars at all
+   (owner request): scrolling itself still works (wheel/trackpad/drag), only
+   the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
+   ::-webkit-scrollbar pseudo. */
+:global(body[data-chrome-narrow="1"]) .decBoard {
+  scrollbar-width: none;
+}
+:global(body[data-chrome-narrow="1"]) .decBoard::-webkit-scrollbar {
+  display: none;
 }

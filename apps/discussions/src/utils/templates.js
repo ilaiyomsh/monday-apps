@@ -118,6 +118,9 @@ export function sanitizeTypeTemplate(template, id) {
     lead: sanitizePeople(template?.lead),
     coordinator: sanitizePeople(template?.coordinator),
     participants: sanitizePeople(template?.participants),
+    // item 18 — per-type default decider flag (מחליט = מנהל הדיון). Strict
+    // boolean so a stored junk value can never truthy its way in.
+    deciderIsLead: template?.deciderIsLead === true,
     topics: topics
       .map((topic) => ({
         name: (topic?.name || '').trim(),
@@ -137,9 +140,14 @@ export function sanitizeTypeTemplate(template, id) {
  * Errors propagate (api() throws a MondayApiError that the logger funnel already
  * surfaced as a toast); callers catch only to reset their loading state.
  *
+ * opts.onProgress({ done, total }) — fired once up-front (0/total) and after
+ * every created topic/point, so callers can render a REAL progress bar
+ * (items 6+8). total = topics + points of the sanitized template; a listener
+ * that throws is logged and never breaks the creation flow.
+ *
  * @returns {Promise<{topics:number, points:number}>} how many were created.
  */
-export async function createTopicsFromTemplate(discussionId, template) {
+export async function createTopicsFromTemplate(discussionId, template, { onProgress, creatorId = null } = {}) {
   const clean = sanitizeTemplate(template);
   if (!discussionId || !clean.topics.length) return { topics: 0, points: 0 };
 
@@ -147,9 +155,27 @@ export async function createTopicsFromTemplate(discussionId, template) {
   const relation = getColumns('topics')?.discussionLinkID; // board_relation: topic -> discussion
   const topicDispCol = getColumns('topics')?.topicNotForDiscussionID; // "האם להציג?" (item)
   const pointDispCol = getColumns('topics')?.pointNotForDiscussionID; // "האם להציג?" (subitem)
+  // round115 — creator + creation-date columns, stamped on every topic/point
+  // created from a template (mirrors useTopics.addTopic/addPoint). creatorId is
+  // passed by the caller (the user applying the template).
+  const topicCreatorCol = getColumns('topics')?.topicCreatorID;
+  const pointCreatorCol = getColumns('topics')?.pointCreatorID;
+  const topicCreatedCol = getColumns('topics')?.topicCreationDateID;
+  const pointCreatedCol = getColumns('topics')?.pointCreationDateID;
 
   let topicsCreated = 0;
   let pointsCreated = 0;
+  const total = clean.topics.reduce((n, t) => n + 1 + t.points.length, 0);
+  let done = 0;
+  const report = () => {
+    if (typeof onProgress !== 'function') return;
+    try {
+      onProgress({ done, total });
+    } catch (err) {
+      logger.warn('createTopicsFromTemplate', 'מאזין ההתקדמות נכשל — היצירה ממשיכה', err);
+    }
+  };
+  report();
 
   for (const topic of clean.topics) {
     const columnValues = {};
@@ -162,6 +188,12 @@ export async function createTopicsFromTemplate(discussionId, template) {
     // "האם להציג?" CHECKED = show; default created topics to shown.
     if (topicDispCol?.id) {
       columnValues[topicDispCol.id] = formatValue('checkbox', true);
+    }
+    if (topicCreatorCol?.id && creatorId) {
+      columnValues[topicCreatorCol.id] = formatValue('people', [creatorId]);
+    }
+    if (topicCreatedCol?.id) {
+      columnValues[topicCreatedCol.id] = formatValue('date', new Date());
     }
 
     const res = await api(
@@ -179,8 +211,16 @@ export async function createTopicsFromTemplate(discussionId, template) {
       continue;
     }
     topicsCreated += 1;
+    done += 1;
+    report();
 
     const pointCv = pointDispCol?.id ? { [pointDispCol.id]: formatValue('checkbox', true) } : {};
+    if (pointCreatorCol?.id && creatorId) {
+      pointCv[pointCreatorCol.id] = formatValue('people', [creatorId]);
+    }
+    if (pointCreatedCol?.id) {
+      pointCv[pointCreatedCol.id] = formatValue('date', new Date());
+    }
     for (const point of topic.points) {
       await api(
         `mutation ($parentId: ID!, $name: String!, $cv: JSON!) {
@@ -190,6 +230,8 @@ export async function createTopicsFromTemplate(discussionId, template) {
         'createPointFromTemplate'
       );
       pointsCreated += 1;
+      done += 1;
+      report();
     }
   }
 

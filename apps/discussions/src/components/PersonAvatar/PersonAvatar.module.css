@@ -19,6 +19,20 @@
   font-size: var(--font-size-subtext, 14px);
 }
 
+/* monday "unassigned" avatar (read-only people cell): a WHITE circle with a thin
+   gray ring + gray person silhouette (outlined "ghost", not a filled disc).
+   Mirrors PersonPicker's editable placeholder. */
+.emptyAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  /* round112: the ring is drawn by EmptyPersonGlyph's SVG itself (monday-exact
+     clipped-bust glyph) — no CSS border/background here anymore. */
+}
+
 /* Clickable wrapper around a compact AvatarGroup — resets button chrome so only
    the avatars show, but the whole group is a single click target. */
 .expandTrigger {

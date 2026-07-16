@@ -24,6 +24,23 @@ Order: newest first. Keep entries terse — one entry should fit on a screen.
 
 ---
 
+## 2026-07-15 — Focus-card rows drift below the allocation bars (rem `h-12` vs px 48-grid)
+
+**Symptom:** In projects view, focusing a project showed the summary card's content — the PM/type row, then the hours row — sitting progressively BELOW the allocation bars it must line up with (row 1 slightly low, row 2 more so). Five design PRs (#134→#165) chased it without converging; each "fix" in one place reappeared in another.
+
+**Root cause:** `:root { font-size: 20px }` in `index.css` (intentional, pre-existing) makes Tailwind rem units scale ×1.25. The card rows used `h-12` = **3rem = 60px**, while the whole row grid — `CONFIG.rowHeight = 48` (px literal) — drives the virtualizer, the card's absolute `top`, `cardHeight`, and the track rows. So each card row was 60px against a 48px grid: card and track0 START aligned, but every card row adds 12px, so the misalignment **compounds** downward (measured +6px row1, +18px row2, +30px row3…). The two `h-12` lines even carried comments claiming "48px height so the row lines up 1:1 with the Gantt track grid" — the intent was 48, the rem scale silently delivered 60.
+
+**Why it slipped:** (1) Pure px/symbolic reasoning about the layout says it's aligned — the drift only exists because two unit systems (rem content, px grid) coexist and nothing in the card code reads as "rem". (2) No feedback loop: the app renders inside a cross-origin monday iframe, so the DOM couldn't be measured directly and diagnosis leaned on screenshots — which were themselves often a stale browser cache, hiding whether a given PR even shipped. (3) The 20px root sits four files from the card behind an approving comment, so it read as inert.
+
+**Fix:** `ProjectSummaryCard.tsx` — both card rows now use `style={{ height: CONFIG.rowHeight }}` (px), tied to the same constant as the grid, instead of `h-12`. Verified in a dev-only harness (`src/harness/`, served at `/harness.html` OUTSIDE the iframe) that renders the REAL VirtualRowList/GroupHeaderRow/ProjectSummaryCard/TrackRow with mock data and measures `getBoundingClientRect`: offsets went +6/+18px → **0/0**.
+
+**Prevention:**
+- `src/harness/` gives real-DOM geometry feedback for any future Gantt layout work — reproduce-then-fix instead of screenshot guessing (`pnpm server` → `http://localhost:8301/harness.html`; `window.__measure()`).
+- Rule captured: **the Gantt grid is px-based (`CONFIG.rowHeight`); anything that must line up with it must be px too — never a rem Tailwind height (`h-*`), because the 20px root makes `h-12` = 60px, not 48px.**
+- Regression test in `src/components/Gantt/__tests__/ProjectSummaryCard.rowHeight.test.tsx` asserts the card rows carry an explicit `CONFIG.rowHeight` px height, not a rem class.
+
+---
+
 ## 2026-06-15 — "Unknown Project" rows (root items(ids:) 25-item page cap)
 
 **Symptom:** With "show past" ON, ~9 projects rendered as "Unknown Project" under the "אחר" (no-classification) section; with it OFF, ~3. The projects clearly existed and were named on the board.

@@ -20,6 +20,8 @@ import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.j
 import { createTopicsFromTemplate, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { PartyProgress } from '@generated/components/PartyProgress';
+import { ConfettiBurst } from '@generated/components/ConfettiBurst';
 import { toDateInput, toTimeInput, composeLocalDate } from '@generated/utils/dateTime.js';
 import { LayoutTemplate } from 'lucide-react';
 import logger from '@generated/utils/logger.js';
@@ -49,6 +51,15 @@ function FieldClearButton({ onClear, label = 'ניקוי' }) {
 }
 
 const NEW_DISCUSSION_NAME = 'דיון חדש';
+
+// round115 — may the app WRITE the mapped discussion-creator column? Only a
+// regular people column is writable; monday's built-in "creation log" column
+// (auto-filled by monday) is read-only and writing it throws a GraphQL
+// validation error. Pure + exported for testing.
+export function isWritablePeopleColumnType(type) {
+  const t = String(type || '').toLowerCase();
+  return t === 'people' || t.includes('person');
+}
 
 // Time picker options — one flat menu in half-hour steps, limited to the
 // calendar's visible day window (06:00..23:00).
@@ -135,6 +146,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const [discussionOptions, setDiscussionOptions] = useState([]);
   const [loadingDiscussions, setLoadingDiscussions] = useState(false);
   const [creating, setCreating] = useState(false);
+  // Item 6 — create-time experience: real step progress ({done,total}) drives
+  // the PartyProgress bar; `celebrate` holds the modal open ~1.5s after a
+  // successful CREATE for the full bar + confetti before handing off.
+  const [createProgress, setCreateProgress] = useState(null);
+  const [celebrate, setCelebrate] = useState(false);
   const [isPreviousDropdownOpen, setIsPreviousDropdownOpen] = useState(false);
   const [previousSearch, setPreviousSearch] = useState('');
   const [templateId, setTemplateId] = useState('none');
@@ -244,7 +260,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         try {
           const fetched = await new דיונים1Board().itemById(srcId);
           if (fetched) full = { ...base, ...fetched };
-        } catch { /* keep the lean object — api() already logged */ }
+        } catch (err) {
+          // keep the lean object — api() already logged+toasted; the warn here
+          // records that prefill fell back (dedup drops the repeat).
+          logger.warn('CreateDiscussionModal', 'טעינת הדיון המלא לפריפיל נכשלה — ממשיכים עם הרשומה הרזה', err);
+        }
       }
       if (cancelled) return;
 
@@ -393,6 +413,15 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     if (!name.trim() || !date || !time) return;
     try {
       setCreating(true);
+      // Item 6 — real step progress: 1 step for the item save + one per
+      // topic/point the picked template will create (refined live by
+      // createTopicsFromTemplate's onProgress, which knows the sanitized total).
+      const pickedTemplate = templates.find((t) => t.id === templateId);
+      const plannedTopics = pickedTemplate?.topics || (typeTopics?.length ? typeTopics : []);
+      const plannedSteps = 1 + plannedTopics.reduce((n, t) => n + 1 + (t.points?.length || 0), 0);
+      setCreateProgress({ done: 0, total: plannedSteps });
+      const onTemplateProgress = ({ done, total }) =>
+        setCreateProgress({ done: 1 + done, total: 1 + total });
       const board = new דיונים1Board();
       const payload = {
         name: name.trim(),
@@ -432,9 +461,22 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         // "ללא דיון קודם" in edit mode clears the existing link (empty item_ids).
         payload.previousDiscussionID = { linkedItems: [] };
       }
-      // NOTE: discussionCreatorID is NOT written — monday auto-tracks the item
-      // creator, and that column is typically read-only (writing it failed with
-      // a GraphQL validation error on create_item).
+      // round115 — stamp the CREATOR + CREATION DATE on NEW discussions only
+      // (never on edit — both are immutable facts of creation). Creator is
+      // written ONLY when the mapped column is a regular writable people column
+      // (verified in the owner's account: multiple_person_*); a monday
+      // "creation log" column is read-only — monday fills it itself — and
+      // writing it is what caused the historical GraphQL validation error, so
+      // non-people mappings are skipped.
+      if (!isEdit) {
+        const dCols = getColumns('discussions') || {};
+        if (dCols.discussionCreatorID?.id && currentUser?.id != null && isWritablePeopleColumnType(dCols.discussionCreatorID?.type)) {
+          payload.discussionCreatorID = [Number(currentUser.id)];
+        }
+        if (dCols.creationDateID?.id) {
+          payload.creationDateID = new Date();
+        }
+      }
 
       const cols = getColumns('discussions') || {};
       logger.info('CreateDiscussionModal', isEdit ? 'submitting update' : 'submitting create', {
@@ -457,23 +499,33 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         const created = await board.item().create(payload).execute();
         savedId = created.id;
       }
+      setCreateProgress((p) => (p ? { ...p, done: 1 } : { done: 1, total: 1 }));
 
       // Optionally seed topics + points. A manual topic-template pick takes
       // precedence; otherwise fall back to topics auto-filled from the unified
       // type template (typeTopics). (create: always; edit: applies onto the item.)
-      const template = templates.find((t) => t.id === templateId);
-      if (savedId && template) {
-        await createTopicsFromTemplate(savedId, template);
+      if (savedId && pickedTemplate) {
+        await createTopicsFromTemplate(savedId, pickedTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
       } else if (savedId && typeTopics?.length) {
-        await createTopicsFromTemplate(savedId, { topics: typeTopics });
+        await createTopicsFromTemplate(savedId, { topics: typeTopics }, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
       }
 
       // Duplicate: clone the source discussion's topics + points onto the new one.
       if (savedId && isDuplicate) {
         const topicsTemplate = await readDiscussionTopicsAsTemplate(duplicateFrom.id);
         if (topicsTemplate.topics.length) {
-          await createTopicsFromTemplate(savedId, topicsTemplate);
+          await createTopicsFromTemplate(savedId, topicsTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
         }
+      }
+
+      // Item 6 — the fun part: full bar + a confetti burst before handing off
+      // (create/duplicate only; edits keep their toast). The short pause is the
+      // celebration window — the discussion is already saved at this point.
+      setCreateProgress((p) => (p ? { ...p, done: p.total } : { done: 1, total: 1 }));
+      if (!isEdit) {
+        setCelebrate(true);
+        await new Promise((resolve) => { setTimeout(resolve, 1500); });
+        setCelebrate(false);
       }
 
       setName('');
@@ -509,6 +561,8 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       logger.error('CreateDiscussionModal', isEdit ? 'שגיאה בעדכון הדיון' : 'שגיאה ביצירת הדיון', err);
     } finally {
       setCreating(false);
+      setCreateProgress(null);
+      setCelebrate(false);
     }
   };
 
@@ -954,13 +1008,24 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
               <Button kind={"tertiary"} onClick={onClose} disabled={creating}>
                 ביטול
               </Button>
-              <Button onClick={handleSubmit} loading={creating} disabled={creating || !name.trim() || !date || !time}>
+              <Button onClick={handleSubmit} loading={creating && !celebrate} disabled={creating || !name.trim() || !date || !time}>
                 {isEdit ? 'שמור שינויים' : 'צור דיון'}
               </Button>
             </Flex>
           </Flex>
+          {/* Item 6 — real-progress bar while the discussion (+ template topics)
+              is being created; confetti bursts over everything on success. */}
+          {creating && createProgress && (
+            <div style={{ marginTop: 10 }}>
+              <PartyProgress
+                value={createProgress.done / Math.max(1, createProgress.total)}
+                label={celebrate ? '🎉 הדיון נוצר!' : (isEdit ? 'שומר את השינויים...' : 'יוצר את הדיון...')}
+              />
+            </div>
+          )}
         </div>
       </div>
+      <ConfettiBurst active={celebrate} />
     </div>
   );
 }

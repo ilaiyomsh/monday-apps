@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { החלטות1Board } from '@api/BoardSDK.js';
 import { api } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
+import { ensureSubscribers } from '../utils/mondayApi/subscribers.js';
 import { makeViewCacheKey, readViewCache, writeViewCache, reconcileSeeded } from '../utils/viewCache.js';
 import logger from '../utils/logger.js';
 
@@ -300,6 +301,41 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     [updateStatusColumn]
   );
 
+  // Optimistic inline edit of a PEOPLE column (מחליט / מושפעים) — revert on
+  // error. `people` is the PersonPicker selection ([{id, name, ...}]); the
+  // write sends numeric user ids (the verified BoardSDK people format, same as
+  // the in-discussion DecisionsTab editors). Owner report 2026-07-14: these
+  // columns were display-only in "ההחלטות שלי" while editable in the
+  // in-discussion tab — this closes that gap.
+  const updatePeopleColumn = useCallback((alias) => async (decisionId, people) => {
+    const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
+    dirtyIdsRef.current.add(String(decisionId)); // protect this row from a seeded revalidate
+    const arr = Array.isArray(people) ? people : [];
+    setItems((current) =>
+      current.map((d) => (String(d.id) === String(decisionId) ? { ...d, [alias]: arr } : d))
+    );
+    try {
+      const ids = arr.map((p) => Number(p.id)).filter(Number.isFinite);
+      // round104: monday rejects assigning a non-subscriber to a people column
+      // (the מושפעים picker is account-wide since round79). Add the assignees as
+      // board subscribers first, like monday's native UI. Best-effort (ensureSubscribers
+      // logs & continues), so the write below still surfaces any real error.
+      await ensureSubscribers(getBoardId('decisions'), ids);
+      await new החלטות1Board().item(decisionId).update({ [alias]: ids }).execute();
+    } catch (err) {
+      logger.error('useMyDecisions', `Error updating decision ${alias}`, err);
+      setItems(prev);
+    }
+  }, []);
+  const updateDecisionDecider = useCallback(
+    (decisionId, people) => updatePeopleColumn('deciderID')(decisionId, people),
+    [updatePeopleColumn]
+  );
+  const updateDecisionAffected = useCallback(
+    (decisionId, people) => updatePeopleColumn('affectedID')(decisionId, people),
+    [updatePeopleColumn]
+  );
+
   // Optimistic inline date edit — `date` is a Date or null (clear). Write shape
   // mirrors useDecisions.updateDecisionDate (local Y-M-D string).
   const updateDecisionDate = useCallback(async (decisionId, date) => {
@@ -385,6 +421,8 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     updateDecisionStatus,
     updateDecisionPriority,
     updateDecisionDate,
+    updateDecisionDecider,
+    updateDecisionAffected,
     updateDecisionName,
     softDeleteDecisions,
     refresh,

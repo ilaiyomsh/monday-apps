@@ -9,10 +9,15 @@ import { LoadCell } from './LoadCell';
 import { isWorkingDay } from '../../../utils/workDaysUtils';
 import { ProjectSummaryCard } from '../ProjectSummaryCard';
 import { ProjectSummaryBar } from '../ProjectSummaryBar';
+import { packTasksIntoTracks } from '../../../hooks/useDataFlattener';
+import { CONFIG, DIMMED_OPACITY, SUMMARY_TRACKS_GAP } from '../../../utils/constants';
 
 interface GroupHeaderRowProps {
   group: Group;
   isExpanded?: boolean;
+  // Projects focus mode: a project other than the focused one. Its CONTENT is
+  // faded (never the sticky-sidebar container — that bleeds the timeline through).
+  dimmed?: boolean;
 }
 
 const getPeriodKey = (date: Date, zoom: ZoomLevel): string => {
@@ -76,7 +81,7 @@ const aggregateLoad = (
  * GroupHeaderRow - Displays group name and toggle expansion
  * RTL support with sticky sidebar
  */
-export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isExpanded }) => {
+export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isExpanded, dimmed }) => {
   const {
     toggleGroup,
     totalWidth,
@@ -200,17 +205,45 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
   // Check if we should show the project summary card
   const showProjectCard = viewMode === 'projects' && !isPlaceholder && group.projectSummary && isExpanded;
 
+  // The card panel spans the WHOLE focused block: its height matches the
+  // project's track rows (min = the card's own 2 PM/metrics rows), computed with
+  // the SAME packing the flattener uses. Without this a project with 3+
+  // (time-overlapping) allocations would show its lower allocation bars outside
+  // the fixed 2-row card. Content stays in the top 2 rows; extra space is blank.
+  const cardHeight = useMemo(
+    () => Math.max(CONFIG.minExpandedTrackRows, packTasksIntoTracks(group.tasks).length) * CONFIG.rowHeight,
+    [group.tasks]
+  );
+
+  // "Summary surface" = an expanded/focused project. Its header row is a LIGHT grey
+  // band (bg-emphasis) across the full width (sidebar + timeline) with dark text;
+  // everything below it — card + allocation rows — is white. The grey→white step
+  // plus the header's drop shadow give the header↔body separation the owner asked
+  // for while blending into the light UI (dark/near-black read "out of place").
+  // Tune the surface here if you want it more/less pronounced.
+  // Applied whenever the card shows (also the always-expanded focused project).
+  const summarySurface = !!showProjectCard || isSelectedProject;
+  // Fade non-focused projects' CONTENT (not the sticky sidebar container).
+  const dimContent: React.CSSProperties | undefined = dimmed ? { opacity: DIMMED_OPACITY } : undefined;
+
   return (
     <div
-      className={`gantt-group-row flex h-full border-b border-border-subtle transition-colors ${
+      className={`gantt-group-row flex h-full transition-colors ${
+        showProjectCard ? '' : 'border-b border-border-subtle'
+      } ${
         isPlaceholder ? 'bg-accent-bg-soft hover:bg-accent-bg-badge' : 'bg-bg-surface hover:bg-bg-hover'
       }`}
-      style={{ overflow: showProjectCard ? 'visible' : undefined }}
+      style={{
+        overflow: showProjectCard ? 'visible' : undefined,
+        // Summary↔tracks separation: a downward shadow under the summary row (no
+        // border line) so the color-A band above reads as raised over the tracks.
+        boxShadow: showProjectCard ? '0 5px 7px -4px rgba(0,0,0,0.13)' : undefined,
+      }}
     >
       {/* Sidebar - sticky on left, relative for absolute PM bar positioning */}
       <div
         className={`sticky left-0 z-50 border-r border-border-subtle h-full flex items-center px-4 gap-2 transition-colors relative shadow-[var(--shadow-sticky-col)] ${
-          isPlaceholder ? 'bg-accent-bg-tint text-accent font-bold' : isSelectedProject ? 'bg-accent-bg-soft hover:bg-accent-bg-soft cursor-pointer' : 'bg-bg-app hover:bg-bg-hover cursor-pointer'
+          isPlaceholder ? 'bg-accent-bg-tint text-accent font-bold' : summarySurface ? 'bg-bg-emphasis hover:bg-bg-emphasis cursor-pointer' : 'bg-bg-app hover:bg-bg-hover cursor-pointer'
         }`}
         style={{ width: sidebarWidth, minWidth: sidebarWidth, overflow: showProjectCard ? 'visible' : undefined, cursor: isPlaceholder ? 'default' : 'pointer' }}
         dir="ltr"
@@ -220,15 +253,15 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
         {!isEmployeeView && !isPlaceholder && group.color && (
           <div
             className="absolute left-0 top-0 bottom-0 w-1 rounded-l"
-            style={{ backgroundColor: group.color }}
+            style={{ backgroundColor: group.color, ...dimContent }}
           />
         )}
 
         {/* Group name — left-aligned, fills the row. Inner dir restored
             so Hebrew/Arabic content still renders with correct word order. */}
-        <div className="flex-1 flex flex-col overflow-hidden text-left" dir={locale.dir}>
+        <div className="flex-1 flex flex-col overflow-hidden text-left" dir={locale.dir} style={dimContent}>
           <span
-            className={`overflow-hidden text-sm ${isPlaceholder ? 'text-accent' : isSelectedProject ? 'font-bold text-accent-text-strong' : 'font-bold text-text-secondary'}`}
+            className={`overflow-hidden text-sm ${isPlaceholder ? 'text-accent' : summarySurface ? 'font-bold text-text-primary' : 'font-bold text-text-secondary'}`}
             style={{
               display: '-webkit-box',
               WebkitLineClamp: 2,
@@ -250,16 +283,15 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
         )}
 
         {/* Chevron icon snapped to the visual RIGHT edge — hidden for placeholder.
-            In projects view it owns the expand toggle (the rest of the row focuses);
-            disabled during focus mode, where expansion is driven by the selection. */}
+            Purely a rotation indicator: it carries NO click handler, so a click on
+            it bubbles to the sidebar's handleSidebarClick. That makes the chevron
+            behave identically to clicking the project name (or the roll-up summary
+            bar) — a uniform "focus the project" gesture with the same elevation,
+            not a bare expand-without-focus. */}
         {!isPlaceholder && (
           <div
-            className={`w-4 h-4 flex items-center justify-center transition-transform duration-200 flex-shrink-0 ${isExpanded ? 'rotate-90' : ''} ${isProjectView && !isProjectFocusMode ? 'cursor-pointer hover:bg-bg-hover rounded' : ''}`}
-            onClick={(e) => {
-              if (!isProjectView || isProjectFocusMode) return;
-              e.stopPropagation();
-              toggleGroup(group.id);
-            }}
+            className={`w-4 h-4 flex items-center justify-center transition-transform duration-200 flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}
+            style={dimContent}
           >
             <svg className="w-3 h-3 text-text-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -268,15 +300,18 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
         )}
 
 
-        {/* PM + Project Type bar - sidebar only. The card hugs its content (gray
-            bg, no bottom shadow/border) and the empty padding track beneath it is
-            also gray (see useDataFlattener), so the two read as one continuous gray
-            surface. The block is padded to ≥ PROJECT_CARD_HEIGHT so the card never
-            overhangs into the next project. */}
+        {/* PM + Project Type bar - sidebar only. The card is WHITE, same as the
+            header and the allocation rows. Its top is set in EXPLICIT pixels —
+            header content (groupHeaderHeight) + the summary gap — so it lands
+            exactly where the first allocation track starts. (An earlier `top:100%`
+            + margin resolved against the flex-computed sidebar height and drifted
+            by a few px, misaligning the card rows against the track grid.) The
+            panel height is the whole block so it never overhangs the next project
+            and always covers every allocation row. */}
         {showProjectCard && (
           <div
-            className={`absolute left-0 top-full w-full px-3 py-2 flex flex-col bg-bg-app ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
-            style={{ zIndex: 60 }}
+            className={`absolute left-0 w-full px-3 flex flex-col overflow-hidden bg-bg-surface ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
+            style={{ zIndex: 60, top: CONFIG.groupHeaderHeight + SUMMARY_TRACKS_GAP, height: cardHeight }}
             onClick={(e) => e.stopPropagation()}
           >
             <ProjectSummaryCard
@@ -293,14 +328,21 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
         )}
       </div>
 
-      {/* Timeline area - only opens modal for placeholder */}
+      {/* Timeline area - only opens modal for placeholder. Its background matches
+          the sidebar/card (color A) whenever the summary surface is active, so the
+          whole summary row reads as one band across sidebar + timeline. */}
       <div
-        className={`flex-1 h-full flex items-center relative ${isPlaceholder ? 'bg-accent-bg-soft cursor-pointer' : 'bg-bg-app'}`}
+        className={`flex-1 h-full flex items-center relative ${isPlaceholder ? 'bg-accent-bg-soft cursor-pointer' : summarySurface ? 'bg-bg-emphasis' : 'bg-bg-app'}`}
         style={{ minWidth: totalWidth }}
         onClick={handleTimelineClick}
       >
-        {/* Projects view: roll-up bar summarising the project's active allocations. */}
-        {viewMode === 'projects' && !isPlaceholder && <ProjectSummaryBar group={group} />}
+        {/* Projects view: roll-up bar summarising the project's active allocations.
+            Faded (content-only) for non-focused projects in focus mode. */}
+        {viewMode === 'projects' && !isPlaceholder && (
+          <div style={dimContent}>
+            <ProjectSummaryBar group={group} />
+          </div>
+        )}
 
         {isEmployeeView && !isPlaceholder && columns.map((col) => {
           const load = aggregateLoad(dailyLoadsMap, col.periodStart, col.periodEnd, dailyCapacity, workDays);

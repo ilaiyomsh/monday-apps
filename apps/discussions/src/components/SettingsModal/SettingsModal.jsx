@@ -3,15 +3,34 @@ import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, Ta
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS } from '../../utils/mondayApi/boards.config.js';
+
+// Round 78: the effective auto-fill role list for a tasks access column
+// (taskViewersID / taskEditorsID) — the stored preference, or the default when
+// unset. Exported so the resolution is unit-testable.
+export function accessRolesFor(preferences, accessAlias) {
+  const stored = preferences?.accessRoleSources?.[accessAlias];
+  if (Array.isArray(stored)) return stored;
+  return DEFAULT_PREFERENCES.accessRoleSources?.[accessAlias] || [];
+}
+// Toggle one discussion role in an access column's source list, returning the
+// NEXT preferences object (pure — the component wraps it in setPreferences).
+export function toggleAccessRoleSource(preferences, accessAlias, roleAlias) {
+  const base = { ...DEFAULT_PREFERENCES.accessRoleSources, ...(preferences?.accessRoleSources || {}) };
+  const cur = Array.isArray(base[accessAlias]) ? base[accessAlias] : [];
+  const next = cur.includes(roleAlias) ? cur.filter((r) => r !== roleAlias) : [...cur, roleAlias];
+  return { ...preferences, accessRoleSources: { ...base, [accessAlias]: next } };
+}
 import { api } from '../../utils/mondayApi/monday-client.js';
 import { detectManagedColumnId } from '../../utils/mondayApi/managedColumns.js';
 import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js';
+import { fileToLogoDataUrl } from '../../utils/imageLogo.js';
 import SearchablePicker from './SearchablePicker';
 import PermissionsTab from './PermissionsTab.jsx';
 import ExportTemplateTab from './ExportTemplateTab.jsx';
 import { TemplateManagerModal as TemplatesPanel } from '@generated/components/TemplateManagerModal';
 import { SetupWizard } from '../SetupWizard';
+import logger from '../../utils/logger.js';
 import { getVersionLabel } from '../../utils/versionLabel.js';
 import styles from './SettingsModal.module.css';
 
@@ -101,6 +120,21 @@ const PREVIOUS_TASKS_MODE_OPTIONS = [
   { value: PREVIOUS_TASKS_MODES.AUTO, text: 'אוטומטי' },
 ];
 
+// Multi-column people mapping (יכולת צפייה / יכולת עריכה) view model. Pure +
+// exported for testing. `typedOptions` are the board's live columns of the
+// right type in SearchablePicker's { id, name } shape (NOT { value, label } —
+// reading the wrong keys is what made the chips show raw column ids and stopped
+// `remaining` from excluding already-picked columns). `colTitles` are names
+// captured at pick time, used as a fallback before the live list resolves.
+export function resolveMultiColView(typedOptions, selectedIds, colTitles = {}) {
+  const opts = Array.isArray(typedOptions) ? typedOptions : [];
+  const sel = (Array.isArray(selectedIds) ? selectedIds : []).map(String);
+  const labelByVal = Object.fromEntries(opts.map((o) => [String(o.id), o.name]));
+  const chipName = (cid) => labelByVal[String(cid)] || colTitles?.[String(cid)] || String(cid);
+  const remaining = opts.filter((o) => !sel.includes(String(o.id)));
+  return { labelByVal, chipName, remaining };
+}
+
 /**
  * Minimal in-product settings editor: edit the per-board id + each
  * alias→real-column-id mapping that the SDK reads, then persist via
@@ -143,6 +177,7 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
   // configured — never during the first-run forced modal.
   const [showTopUp, setShowTopUp] = useState(false);
   const fileInputRef = useRef(null);
+  const logoInputRef = useRef(null); // round108 — hidden picker for the header logo
 
   // re-seed local draft from the live settings whenever the modal opens
   useEffect(() => {
@@ -154,7 +189,9 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
       setPermissions(seedPermissions(seed.permissions));
       setExportTemplate(seedExportTemplate(seed.exportTemplate));
       setAssetError(null);
-      loadExportAssets(context).then(setExportAssets);
+      loadExportAssets(context)
+        .then(setExportAssets)
+        .catch((err) => logger.warn('SettingsModal', 'טעינת נכסי הייצוא נכשלה', err));
       setOpenBoardKey(null);
     }
   }, [isOpen, settings, context]);
@@ -218,7 +255,7 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
           .map((board) => ({ value: String(board.id), label: board.name }));
         setBoardOptions(options);
       } catch (err) {
-        console.error('Error loading boards for settings:', err);
+        logger.error('SettingsModal', 'טעינת רשימת הלוחות להגדרות נכשלה', err);
       } finally {
         setLoadingBoards(false);
       }
@@ -243,6 +280,42 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
         },
       },
     }));
+
+  // Multi-column people mapping (owner requests 2026-07-14): an alias in
+  // MULTI_PEOPLE_ALIASES (the access columns — יכולת צפייה + יכולת עריכה) can
+  // map SEVERAL people columns. Stored as { id: <primary>, ids: [...],
+  // colTitles: {id: title} } — `id` stays the FIRST pick (the auto-fill/write
+  // target), so every single-id consumer keeps working; reads/permissions
+  // union all of them; colTitles keeps the picked-column chips showing the
+  // COLUMN NAME even before the live column list loads (the owner saw raw ids).
+  const currentMultiIds = (cur) => {
+    if (Array.isArray(cur?.ids) && cur.ids.length) return cur.ids.map(String);
+    return cur?.id ? [String(cur.id)] : [];
+  };
+  const addMultiColId = (boardKey, alias, id, title = '') => {
+    if (!String(id || '').trim()) return;
+    setColumns((c) => {
+      const cur = c[boardKey][alias] || {};
+      const ids = [...new Set([...currentMultiIds(cur), String(id)])];
+      const colTitles = { ...(cur.colTitles || {}) };
+      if (title) colTitles[String(id)] = title;
+      return {
+        ...c,
+        [boardKey]: { ...c[boardKey], [alias]: { ...cur, id: ids[0] || '', ids, colTitles, verified: ids.length > 0 } },
+      };
+    });
+  };
+  const removeMultiColId = (boardKey, alias, id) =>
+    setColumns((c) => {
+      const cur = c[boardKey][alias] || {};
+      const ids = currentMultiIds(cur).filter((x) => x !== String(id));
+      const colTitles = { ...(cur.colTitles || {}) };
+      delete colTitles[String(id)];
+      return {
+        ...c,
+        [boardKey]: { ...c[boardKey], [alias]: { ...cur, id: ids[0] || '', ids, colTitles, verified: ids.length > 0 } },
+      };
+    });
 
   const normalizeType = (type) =>
     String(type || '')
@@ -305,6 +378,7 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
   ];
   const TASKS_SETTINGS_FIELDS = [
     'taskCreatorID',
+    'taskCreationDateID', // תאריך יצירה — auto-stamped with today at task creation (round115)
     'responsibilityID',
     'deadlineID',
     'statusID',
@@ -312,17 +386,21 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
     'taskNotesID', // הערות — inline-editable notes column, "My Tasks" tab only
     'priorityID', // עדיפות — status column whose label order defines priorityID, "My Tasks" tab only
     'taskTypeID', // סוג דיון — status column auto-filled with the parent discussion's type
+    'taskViewersID', // יכולת צפייה — people; auto-filled with the discussion's participants (item 19)
+    'taskEditorsID', // יכולת עריכה — people; auto-filled with the discussion's lead/coordinator/creator (item 19)
     // 'פרטים' (detailsID) and 'חיבור לנושאי דיון' (topicsLinkID) intentionally omitted —
     // not needed in the tasks mapping.
   ];
   const TOPICS_SETTINGS_FIELDS = [
     'discussionLinkID', // 'דיון' — connection to the discussion
     'topicCreatorID', // 'יוצר נושא' — people column; avatar shown on the topic group header
+    'topicCreationDateID', // 'תאריך יצירה' — auto-stamped with today at topic creation (round115)
     'topicPriorityID', // per-topic priority (status column on the topics board)
     'topicNotForDiscussionID', // topic-level "not for discussion" checkbox (drives export filter)
     'pointNotForDiscussionID', // point-level "not for discussion" checkbox (on the subitems board)
     'pointCheckedID', // 'האם נידונה' — discussed checkbox on the SUBITEMS board (topics table)
     'pointCreatorID', // 'יוצר נקודה' — people column on the SUBITEMS board; avatar per point
+    'pointCreationDateID', // 'תאריך יצירה (נקודה)' — auto-stamped with today at point creation (round115)
     'pointDecisionsLinkID', // 'החלטות (נקודה)' — board_relation on the SUBITEMS board to decisions created from the point
     'pointTasksLinkID', // 'משימות (נקודה)' — board_relation on the SUBITEMS board to tasks created from the point
     // 'pointResponsesID' ('התייחסויות') intentionally NOT mapped here — the topics-table
@@ -351,6 +429,14 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
     'pointDecisionsLinkID',
     'pointTasksLinkID',
   ]);
+
+  // Aliases that may map SEVERAL people columns (owner requests 2026-07-14):
+  // both access columns — יכולת צפייה AND יכולת עריכה. Stored as
+  // { id: <primary>, ids: [...], colTitles: {id: title} }. The FIRST column is
+  // the auto-fill target at task creation; permissions/reads union people
+  // across all of them; colTitles keeps the chips human-readable even before
+  // the live column list has loaded.
+  const MULTI_PEOPLE_ALIASES = new Set(['taskViewersID', 'taskEditorsID']);
 
   const loadBoardColumns = async (boardId) => {
     const id = String(boardId || '');
@@ -392,10 +478,13 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
             setSubitemsBoardByBoard((prev) => ({ ...prev, [id]: subBoardId }));
             loadBoardColumns(subBoardId);
           }
-        } catch { /* no subitems board discoverable */ }
+        } catch (err) {
+          // no subitems board discoverable — subitem fields just stay unmappable
+          logger.warn('SettingsModal', 'זיהוי לוח תתי-הפריטים נכשל', err);
+        }
       }
     } catch (err) {
-      console.error(`Error loading columns for board ${id}:`, err);
+      logger.error('SettingsModal', `טעינת עמודות הלוח ${id} נכשלה`, err);
     } finally {
       setLoadingColumnsByBoardId((prev) => ({ ...prev, [id]: false }));
     }
@@ -442,13 +531,17 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
               discussionTypeID: { ...typeEntry, managed: !!uuid, managedColumnId: uuid || null },
             },
           };
-        } catch { /* detection best-effort */ }
+        } catch (err) {
+          // detection best-effort — the regular (non-managed) mapping still saves
+          logger.warn('SettingsModal', 'זיהוי עמודת הסוג המנוהלת נכשל — נשמר מיפוי רגיל', err);
+        }
       }
       await updateSettings({ boards, columns: columnsToSave, preferences, permissions, exportTemplate });
       // Success toast (top of the app, same funnel as every other notification).
       onNotify?.('הגדרות נשמרו בהצלחה', 'success');
       onClose();
     } catch (err) {
+      logger.error('SettingsModal', 'שמירת ההגדרות נכשלה', err);
       setActiveTab(3);
       setAssetError(err?.message || 'שמירת נכסי הייצוא נכשלה');
     } finally {
@@ -499,8 +592,23 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
       if (parsed.preferences) setPreferences((prev) => ({ ...prev, ...parsed.preferences }));
       setImportMsg({ ok: true, text: 'הקובץ נטען. בדקו את המיפוי ולחצו "שמור" להחלה.' });
     } catch (err) {
-      console.error('Error importing settings JSON:', err);
+      logger.error('SettingsModal', 'ייבוא קובץ הגדרות נכשל', err);
       setImportMsg({ ok: false, text: 'ייבוא נכשל — ודאו שזהו קובץ JSON תקין של הגדרות (boards + columns).' });
+    }
+  };
+
+  // round108 — owner uploads a brand logo shown at the top-right of the
+  // discussion header. We downscale it to a small data-URI (self-contained, no
+  // asset hosting) and stash it on preferences.logoUrl; "שמור" persists it.
+  const handleLogoFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (!file) return;
+    try {
+      const dataUrl = await fileToLogoDataUrl(file, { maxPx: 320 });
+      setPreferences((p) => ({ ...p, logoUrl: dataUrl }));
+    } catch (err) {
+      logger.error('SettingsModal', 'טעינת הלוגו נכשלה', err);
     }
   };
 
@@ -637,6 +745,79 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
                             ? String(subitemsBoardByBoard[ownBoardId] || '')
                             : ownBoardId;
                           const typedOptions = getTypedColumnOptions(boardId, col.type);
+                          // Multi-column people mapping (יכולת צפייה): chips of
+                          // the picked columns (first = the auto-fill target) +
+                          // a picker that ADDS another column on select.
+                          if (MULTI_PEOPLE_ALIASES.has(alias)) {
+                            const selectedIds = (Array.isArray(col.ids) && col.ids.length
+                              ? col.ids
+                              : (col.id ? [col.id] : [])).map(String);
+                            // Chip names + still-pickable options, resolved from
+                            // the live { id, name } options (see resolveMultiColView).
+                            const { labelByVal, chipName, remaining } = resolveMultiColView(typedOptions, selectedIds, col.colTitles);
+                            return (
+                              <div key={alias} className={styles.colRow}>
+                                <div className={styles.colLabel}>
+                                  <Text type={"text2"}>{col.title || alias}</Text>
+                                </div>
+                                <div className={styles.multiColPick}>
+                                  {selectedIds.map((cid, idx) => (
+                                    <div key={cid} className={styles.multiColChip} title={idx === 0 ? 'העמודה הראשית — מתמלאת אוטומטית ביצירת משימה' : undefined}>
+                                      <span className={styles.multiColName}>
+                                        {chipName(cid)}
+                                        {idx === 0 && selectedIds.length > 1 ? ' (ראשית)' : ''}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className={styles.multiColRemove}
+                                        aria-label={`הסר עמודה ${chipName(cid)}`}
+                                        onClick={() => removeMultiColId(boardKey, alias, cid)}
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <SearchablePicker
+                                    options={remaining}
+                                    value=""
+                                    onChange={(id) => addMultiColId(boardKey, alias, id || '', labelByVal[String(id)] || '')}
+                                    placeholder={
+                                      loadingColumnsByBoardId[boardId]
+                                        ? 'טוען עמודות'
+                                        : remaining.length === 0
+                                          ? (selectedIds.length ? 'אין עמודות נוספות' : 'אין עמודות תואמות')
+                                          : (selectedIds.length ? 'הוסף עמודה נוספת' : 'בחר עמודה')
+                                    }
+                                    isLoading={loadingColumnsByBoardId[boardId]}
+                                    disabled={loadingColumnsByBoardId[boardId] || remaining.length === 0}
+                                  />
+                                </div>
+                                {/* Round 78 — which discussion-board ROLES fill
+                                    this access column when a task is created. */}
+                                <div className={styles.accessRoles}>
+                                  <Text type={"text2"} className={styles.accessRolesLabel}>
+                                    מתמלא אוטומטית ביצירת משימה מהתפקידים (מלוח הדיונים):
+                                  </Text>
+                                  <div className={styles.accessRolesChips}>
+                                    {ACCESS_ROLE_SOURCE_OPTIONS.map((r) => {
+                                      const on = accessRolesFor(preferences, alias).includes(r.alias);
+                                      return (
+                                        <button
+                                          key={r.alias}
+                                          type="button"
+                                          className={`${styles.accessRoleChip} ${on ? styles.accessRoleChipOn : ''}`}
+                                          aria-pressed={on}
+                                          onClick={() => setPreferences((p) => toggleAccessRoleSource(p, alias, r.alias))}
+                                        >
+                                          {on ? '✓ ' : ''}{r.label}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          }
                           return (
                             <div key={alias} className={styles.colRow}>
                               <div className={styles.colLabel}>
@@ -762,6 +943,66 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
                         size="small"
                         kind="secondary"
                       />
+                    </div>
+                  </div>
+                  {/* Item 18 — global default decider: every NEW decision's מחליט
+                      defaults to the discussion's מנהל דיון (replaceable inline).
+                      A per-type version lives on each type template (תבניות). */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>המחליט כברירת מחדל הוא מנהל הדיון</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={preferences.defaultDeciderLead === true}
+                          onChange={(e) => setPreferences((p) => ({ ...p, defaultDeciderLead: e.target.checked }))}
+                        />
+                        <Text type={"text2"}>בכל הדיונים, ללא תלות בסוג</Text>
+                      </label>
+                    </div>
+                  </div>
+                  {/* round108 — brand logo shown at the top-right of every discussion
+                      header. Owner-only (this whole modal is owner-gated). Stored as
+                      a downscaled data-URI on preferences.logoUrl; "שמור" persists it. */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>לוגו בכותרת הדיון</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <Flex align="center" gap={12} wrap>
+                        {preferences.logoUrl && (
+                          <img
+                            src={preferences.logoUrl}
+                            alt="תצוגה מקדימה של הלוגו"
+                            style={{ height: 32, maxWidth: 140, objectFit: 'contain', border: '1px solid var(--ui-border-color, #d0d4e4)', borderRadius: 4, padding: 2 }}
+                          />
+                        )}
+                        <Button
+                          kind="secondary"
+                          size="small"
+                          onClick={() => logoInputRef.current?.click()}
+                        >
+                          {preferences.logoUrl ? 'החלף לוגו' : 'העלה לוגו'}
+                        </Button>
+                        {preferences.logoUrl && (
+                          <Button
+                            kind="tertiary"
+                            size="small"
+                            onClick={() => setPreferences((p) => ({ ...p, logoUrl: null }))}
+                          >
+                            הסר
+                          </Button>
+                        )}
+                        <input
+                          ref={logoInputRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={handleLogoFile}
+                        />
+                      </Flex>
                     </div>
                   </div>
                 </div>

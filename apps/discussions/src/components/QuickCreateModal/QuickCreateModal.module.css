@@ -22,6 +22,16 @@
   background: rgba(0, 0, 0, 0.32);
 }
 
+/* Owner request 2026-07-14: opened from the Tasks/Decisions TAB the box sits
+   dead-center of the screen (the round-57 right-leaning placement stays for
+   point-anchored / FAB opens). Overrides the .overlay start-pinning + gap. */
+.overlayCentered {
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  padding-inline-start: 16px;
+}
+
 .modal {
   width: min(520px, calc(100vw - 32px));
   display: flex;

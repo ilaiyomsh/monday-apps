@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { Avatar, AvatarGroup } from '@vibe/core';
-import { Check, CloseSmall, Search, Person } from '@vibe/icons';
+import { Check, CloseSmall, Search } from '@vibe/icons';
 import { subscribe, getVersion, getAllUsers, getUser, hasRoster, ensureRoster } from '@generated/utils/usersStore.js';
 import { useBoardSubscribers } from '@generated/hooks/useBoardSubscribers.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import logger from '@generated/utils/logger.js';
+import { EmptyPersonGlyph } from '../PersonAvatar/PersonAvatar.jsx';
 import styles from './PersonPicker.module.css';
 
 function initialsOf(name) {
@@ -14,6 +15,16 @@ function initialsOf(name) {
     .map((n) => n[0])
     .join('')
     .slice(0, 2);
+}
+
+// Which people list the picker offers (round 79). `accountWide` (or no
+// `boardKey`) → the full ACCOUNT roster; otherwise the BOARD's members, falling
+// back to the roster while board membership is empty/loading so it's never
+// blank. Pure + exported for testing.
+export function pickPeopleSource({ accountWide, boardKey, boardUsers, roster }) {
+  const all = Array.isArray(roster) ? roster : [];
+  if (accountWide || !boardKey) return all;
+  return (Array.isArray(boardUsers) && boardUsers.length) ? boardUsers : all;
 }
 
 /**
@@ -29,7 +40,7 @@ function initialsOf(name) {
  * no need to clear the existing one first; clicking the already-selected person
  * deselects it. Multi (משתתפים / מושפעים) is unaffected.
  */
-export function PersonPicker({ selected = [], onChange, bordered = false, closeOnSelect = false, single = false, boardKey = null }) {
+export function PersonPicker({ selected = [], onChange, bordered = false, closeOnSelect = false, single = false, boardKey = null, accountWide = false }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [pos, setPos] = useState(null);
@@ -40,13 +51,15 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
   // (owners + subscribers) — the only people monday will let you assign to it
   // (assigning a non-member throws invalidPersonAssignment). Falls back to the
   // full account roster while board membership is loading or if it comes back
-  // empty, so the picker is never blank. Without a boardKey it uses the account
-  // roster as before (e.g. account-wide role defaults).
+  // empty, so the picker is never blank. Without a boardKey — or with
+  // `accountWide` (round 79: מושפעים may be anyone in the account, not only the
+  // decisions-board members) — it uses the account roster.
   useSyncExternalStore(subscribe, getVersion, getVersion);
-  const board = useBoardSubscribers(boardKey);
+  // accountWide short-circuits the board fetch entirely (null boardKey → inert).
+  const board = useBoardSubscribers(accountWide ? null : boardKey);
   const roster = getAllUsers();
-  const subscribers = boardKey && board.users.length ? board.users : roster;
-  const loading = boardKey
+  const subscribers = pickPeopleSource({ accountWide, boardKey, boardUsers: board.users, roster });
+  const loading = (boardKey && !accountWide)
     ? (board.loading && board.users.length === 0 && roster.length === 0)
     : (!hasRoster() && roster.length === 0);
 
@@ -105,7 +118,14 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
 
   const removeUser = (id) => {
     logger.info('PersonPicker', 'remove user', { id });
-    onChange(selected.filter((p) => String(p.id) !== String(id)));
+    const next = selected.filter((p) => String(p.id) !== String(id));
+    onChange(next);
+    // round114 — removing the LAST person empties the column: close the picker
+    // immediately (owner request) instead of leaving the popover hanging open.
+    if (next.length === 0) {
+      setOpen(false);
+      setSearch('');
+    }
   };
   const toggleUser = (user) => {
     logger.info('PersonPicker', 'option clicked → toggle user', { id: user.id, name: user.name });
@@ -162,7 +182,7 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
       >
         {selected.length === 0 ? (
           <span className={styles.placeholder} aria-label="לא הוקצה">
-            <Person size={16} />
+            <EmptyPersonGlyph size={28} />
           </span>
         ) : selected.length === 1 ? (
           /* Single assignee (the common case): a plain Avatar centers exactly on
@@ -238,7 +258,10 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
               </div>
             )}
 
-            <div className={styles.searchWrap}>
+            {/* RTL search (round 97): Hebrew names type right-to-left. dir="rtl"
+                on the wrap flips the logical-property icon/padding to the right
+                AND sets the input's typing direction. */}
+            <div className={styles.searchWrap} dir="rtl">
               <Search className={styles.searchIcon} aria-hidden="true" />
               <input
                 type="text"
@@ -250,7 +273,6 @@ export function PersonPicker({ selected = [], onChange, bordered = false, closeO
               />
             </div>
 
-            <div className={styles.heading}>אנשים מוצעים</div>
             <div className={styles.list}>
               {loading ? (
                 <div className={styles.empty}>טוען...</div>

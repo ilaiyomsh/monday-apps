@@ -26,6 +26,7 @@
   flex-wrap: wrap;
   gap: var(--spacing-small, 8px);
   padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+  padding-inline-start: var(--content-gutter-start, 52px); /* round114 — align on the table edge line */
 }
 
 /* View title (round 40 typography; round 41 left-aligned) — matches the
@@ -59,6 +60,7 @@
   gap: var(--spacing-small, 8px);
   direction: ltr;
   padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+  padding-inline-start: var(--content-gutter-start, 52px); /* round114 — align on the table edge line */
 }
 
 /* Compact, borderless back-arrow icon button — monday-style subtle hover,
@@ -148,6 +150,12 @@
   flex: none;
   background: var(--primary-background-color, #ffffff);
   padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
+  padding-inline-start: var(--content-gutter-start, 52px); /* round114 — first pill on the table edge line */
+  /* Round 90 — keep the toolbar frozen at the top on scroll (it already sits
+     above the scrolling .board; sticky guards against any view-level scroll). */
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 /* THE single scroll container — both axes (see MyTasksView.module.css for the
@@ -157,7 +165,7 @@
   min-height: 0;
   overflow: auto;
   direction: ltr;
-  margin-inline-start: 28px;
+  margin-inline-start: var(--content-gutter-start, 52px); /* round114 — shared white gutter */
   margin-inline-end: 0;
 }
 /* Shared horizontal extent: as wide as the widest group table, never narrower
@@ -223,6 +231,27 @@
   outline: none;
 }
 
+/* Clear-X inside the search pill — first flex child, so it sits on the pill's
+   LEFT edge in this dir="ltr" toolbar. Shown only while a value exists. */
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.searchClear:hover {
+  background: var(--primary-background-color, #ffffff);
+  color: var(--primary-text-color, #323338);
+}
+
 /* Mobile app: icon-only pills on one row (gated on the .mobile-app root class,
    not viewport width — same as MyTasksView). */
 :global(.mobile-app) .pill {
@@ -285,6 +314,7 @@
   font-variation-settings: 'wght' 500;
   color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
+  direction: rtl;
 }
 .groupCount {
   margin-inline-start: 8px;
@@ -376,4 +406,19 @@
 }
 .closeSelectionBtn:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+/* round103 — hide this chrome while monday's item-card panel is open (iframe narrows). */
+:global(body[data-chrome-narrow="1"]) .toolbar { display: none !important; }
+
+/* round113 — while monday's item-card / updates panel is open (chrome-narrow,
+   see round103's detector) the narrowed pane must show NO scrollbars at all
+   (owner request): scrolling itself still works (wheel/trackpad/drag), only
+   the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
+   ::-webkit-scrollbar pseudo. */
+:global(body[data-chrome-narrow="1"]) .board {
+  scrollbar-width: none;
+}
+:global(body[data-chrome-narrow="1"]) .board::-webkit-scrollbar {
+  display: none;
 }

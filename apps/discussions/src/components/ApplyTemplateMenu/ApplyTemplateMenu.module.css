@@ -45,3 +45,18 @@
   font-size: 12px;
   color: var(--secondary-text-color, #676879);
 }
+
+/* Item 8 — floating progress card under the "מתבנית" button while topics/
+   points are created (real done/total). Anchored to the .wrap's relative box. */
+.progressPop {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: 900;
+  width: 240px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.14);
+}

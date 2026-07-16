@@ -43,11 +43,50 @@ export const DISCUSSION_PALETTE = [
   '#e50073', '#ff5ac4', '#9d50dd', '#784bd1', '#7e3b8a',
   '#5559df', '#225091', '#579bfc', '#007eb5', '#4eccc6',
 ];
-function discussionColor(id) {
-  const s = String(id);
+function stableHash(s) {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
-  return DISCUSSION_PALETTE[h % DISCUSSION_PALETTE.length];
+  return h;
+}
+function discussionColor(id) {
+  return DISCUSSION_PALETTE[stableHash(String(id)) % DISCUSSION_PALETTE.length];
+}
+
+/*
+ * Give EVERY real group a varied, stable title color (owner request
+ * 2026-07-14): groups that already carry a semantic color (status/priority
+ * label colors, the discussion palette) keep it; colorless labeled groups
+ * (date buckets, board groups, person groups, the "no value" buckets) get a
+ * palette color hashed from their KEY — stable across renders — with a linear
+ * probe past colors already used in the list, so small group sets still look
+ * varied instead of colliding. An UNLABELED bucket (the ungrouped single-table
+ * view) deliberately stays uncolored.
+ *
+ * `overrides` (round 77): a { [groupKey]: hexColor } map of USER-CHOSEN header
+ * colors (right-click a group header → color palette, shared across all users).
+ * An override WINS over everything — even a group's own semantic color — so the
+ * owner-picked color is always what shows. Groups without an override fall back
+ * to the semantic/hash behavior above.
+ */
+export function ensureGroupColors(groups, overrides = null) {
+  const list = Array.isArray(groups) ? groups : [];
+  const ov = overrides && typeof overrides === 'object' ? overrides : {};
+  const overrideFor = (g) => (g && g.key != null ? ov[String(g.key)] : undefined);
+  // Override colors are already "taken" so the hash probe never reuses them.
+  const used = new Set(list.map((g) => overrideFor(g) || g?.color).filter(Boolean));
+  return list.map((g) => {
+    if (!g) return g;
+    const override = overrideFor(g);
+    if (override) return { ...g, color: override };
+    if (g.color || !g.label) return g;
+    let i = stableHash(String(g.key)) % DISCUSSION_PALETTE.length;
+    for (let step = 0; step < DISCUSSION_PALETTE.length && used.has(DISCUSSION_PALETTE[i]); step += 1) {
+      i = (i + 1) % DISCUSSION_PALETTE.length;
+    }
+    const color = DISCUSSION_PALETTE[i];
+    used.add(color);
+    return { ...g, color };
+  });
 }
 
 // Resolve the single discussion a task is linked to via the discussionLinkID
@@ -83,7 +122,9 @@ function sortByLabelHe(a, b) {
 // Group by the linked discussion. `order` is one of azAsc | azDesc | dateAsc |
 // dateDesc. Date ordering reads the parent discussion's date from the injected
 // `discussionDateById` map (id -> Date|number); undated discussions sort last.
-// The "No discussion" bucket always sorts LAST.
+// The "No discussion" bucket is pinned to an EDGE: FIRST on azAsc, LAST on
+// every other order (azDesc/dateAsc/dateDesc) — owner decision 2026-07-14, so
+// unlinked tasks are always at a predictable end of the board.
 function groupByDiscussion(tasks, { noDiscussionLabel, order = 'azAsc', discussionDateById = {} } = {}) {
   const groups = new Map();
   tasks.forEach((t) => {
@@ -122,7 +163,7 @@ function groupByDiscussion(tasks, { noDiscussionLabel, order = 'azAsc', discussi
     const dir = order === 'azDesc' ? -1 : 1;
     valued.sort((a, b) => sortByLabelHe(a, b) * dir);
   }
-  return [...valued, ...noDisc];
+  return order === 'azAsc' ? [...noDisc, ...valued] : [...valued, ...noDisc];
 }
 
 // Generic status-column grouping over `alias` (statusID = status, priority =
@@ -259,20 +300,24 @@ function groupByDate(tasks, { noDateLabel, order = 'dateDesc' } = {}) {
 // `discussionDateById` map (for discussion date order), and localized labels.
 export function groupMyTasks(tasks, mode, opts = {}) {
   const list = Array.isArray(tasks) ? tasks : [];
-  switch (mode) {
-    case 'none':
-      return groupNone(list, opts);
-    case 'discussion':
-      return groupByDiscussion(list, opts);
-    case 'status':
-      return groupByStatus(list, opts);
-    case 'priority':
-      return groupByPriority(list, opts);
-    case 'deadline':
-      return groupByDate(list, opts);
-    case 'group':
-      return groupByBoardGroup(list, opts);
-    default:
-      return groupByStatus(list, opts);
-  }
+  const buckets = (() => {
+    switch (mode) {
+      case 'none':
+        return groupNone(list, opts);
+      case 'discussion':
+        return groupByDiscussion(list, opts);
+      case 'status':
+        return groupByStatus(list, opts);
+      case 'priority':
+        return groupByPriority(list, opts);
+      case 'deadline':
+        return groupByDate(list, opts);
+      case 'group':
+        return groupByBoardGroup(list, opts);
+      default:
+        return groupByStatus(list, opts);
+    }
+  })();
+  // Every labeled group leaves here with a color (semantic colors preserved).
+  return ensureGroupColors(buckets);
 }

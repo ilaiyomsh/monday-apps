@@ -4,6 +4,9 @@ import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { TaskTable } from '@generated/components/TaskTable';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+// Varied stable group-title colors (owner request 2026-07-14) — shared engine.
+import { ensureGroupColors } from '@generated/components/MyTasksView/grouping.js';
+import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
@@ -20,6 +23,10 @@ import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { getColumns } from '@api/board-config-store.js';
+// Quick-filter status battery (round 81) — shared buckets + presentation chip.
+import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
+import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
+import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
 import styles from './TasksTab.module.css';
 
 // Client-side Filter config for the Tasks tab (mirrors PreviousTasksTab): the
@@ -118,7 +125,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   ));
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [deleting, setDeleting] = useState(false);
-  const { colorById, labelById, orderById, options: statusOptions } = useStatusOptions();
+  const { colorById, labelById, orderById, doneId, options: statusOptions } = useStatusOptions();
   const { isMobile } = useViewport();
 
   // Filter mutators (mirror PreviousTasksTab).
@@ -203,12 +210,23 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
 
   // Client pipeline: filter -> sort (both instant, over the loaded page). An
   // inactive sort returns the list unchanged, so default order is untouched.
+  // Quick-filter battery (round 81): open / done / delayed counts over ALL loaded
+  // tasks + a one-click bucket filter folded into the client pipeline.
+  const doneStatusIds = useMemo(() => resolveDoneStatusIds(undefined, doneId), [doneId]);
+  const todayStart = useMemo(() => startOfToday(), []);
+  const bucketCounts = useMemo(() => countBuckets(items, doneStatusIds, todayStart), [items, doneStatusIds, todayStart]);
+  const [quickStatus, setQuickStatus] = useState(null);
   const filteredTasks = useMemo(
-    () => sortTasks(filterTasks(items, filter), sort, { orderById, labelById }),
-    [items, filter, sort, orderById, labelById]
+    () => {
+      const base = sortTasks(filterTasks(items, filter), sort, { orderById, labelById });
+      return quickStatus ? base.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : base;
+    },
+    [items, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart]
   );
 
-  const grouped = useMemo(() => {
+  // Right-click a group header → shared color palette (round 77).
+  const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
+  const groupedRaw = useMemo(() => {
     if (groupBy === 'status') {
       const groups = new Map();
       filteredTasks.forEach(t => {
@@ -224,7 +242,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
         status: g.statusId,
         items: g.items,
       }));
-      return sortGroupsByOrder(list, { order: groupOrder, orderById, noKey: NO_STATUS });
+      return ensureGroupColors(sortGroupsByOrder(list, { order: groupOrder, orderById, noKey: NO_STATUS }));
     }
     if (groupBy === 'person') {
       const groups = new Map();
@@ -242,10 +260,12 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
         }
         groups.get(personGroup.key).items.push(t);
       });
-      return sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_ASSIGNEE });
+      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_ASSIGNEE }));
     }
     return [{ key: '__all__', label: '', color: null, status: undefined, items: filteredTasks }];
   }, [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById]);
+  // Apply the shared per-header color overrides as a final pass.
+  const grouped = useMemo(() => ensureGroupColors(groupedRaw, colorsByKey), [groupedRaw, colorsByKey]);
 
   const allCollapsed = grouped.length > 0 && grouped.every((g) => collapsed[g.key]);
   const allIds = useMemo(() => items.map((t) => t.id), [items]);
@@ -474,6 +494,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
 
   return (
     <div ref={rootRef} className={styles.root}>
+      {groupColorMenu}
       <div className={styles.toolbar}>
         {/* One left-aligned cluster (like My Tasks): primary action, then group-by + collapse-all. */}
         <div className={styles.toolbarLeft}>
@@ -529,6 +550,11 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
             <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
           )}
         </div>
+        {/* Quick-filter battery (round 81) — last flex child + auto start-margin
+            pushes it to the RIGHT edge (LTR layout); filter/sort/group stay left. */}
+        <div className={styles.batterySlot}>
+          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
+        </div>
       </div>
 
       {selectedIds.size > 0 && (
@@ -570,6 +596,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
           <div key={grp.key}>
             {groupBy !== 'none' && grp.label && (
               <button type="button" onClick={() => setCollapsed(p => ({ ...p, [grp.key]: !p[grp.key] }))}
+                onContextMenu={(e) => openMenuFor(grp.key, e)}
                 className={styles.groupHeader}>
                 <DropdownChevronDown
                   className={`${styles.chevron} ${collapsed[grp.key] ? styles.chevronCollapsed : ''}`}

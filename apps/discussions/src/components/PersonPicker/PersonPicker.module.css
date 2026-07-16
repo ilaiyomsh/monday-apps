@@ -36,17 +36,18 @@
 }
 
 /* Empty state — the vibe Person icon in a circle with a subtle shadow, no fill. */
+/* Empty people cell — monday's "unassigned" avatar: a WHITE circle with a thin
+   gray ring and a gray person silhouette (an outlined "ghost", not a filled
+   disc). Literal colors — the @vibe grey tokens resolve nearly white. */
 .placeholder {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: transparent;
-  color: var(--secondary-text-color, #676879);
-  /* uniform, soft shadow in all directions */
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.10);
+  /* round112: the ring is drawn by EmptyPersonGlyph's SVG itself (monday-exact
+     clipped-bust glyph) — no CSS border/background here anymore. */
 }
 
 /* Popover portaled to document.body (escapes table overflow / sticky headers). */
@@ -139,13 +140,6 @@
   outline: none;
   border-color: var(--primary-color, #0073ea);
   box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
-}
-
-.heading {
-  font-size: 12px;
-  font-weight: var(--font-weight-medium, 500);
-  color: var(--secondary-text-color, #676879);
-  padding: 0 2px;
 }
 
 .list {

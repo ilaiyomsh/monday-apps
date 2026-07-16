@@ -25,9 +25,9 @@
   /* Bounded + rounded on the LEFT (top + left borders, rounded left corners) so
      the row separators STOP at the strip instead of bleeding past it to the left;
      OPEN on the right (no right border) so they run to the right edge. */
-  border: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border: 0.625px solid #e6e9ef;
   border-inline-end: none;
-  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
+  border-radius: var(--border-radius-small, 4px) 0 0 var(--border-radius-small, 4px);
   font-family: var(--font-family);
 }
 
@@ -37,7 +37,9 @@
   grid-template-columns: 220px minmax(140px, 1fr) 120px 130px 160px minmax(160px, 1.2fr);
   align-items: stretch;
   min-height: 36px;
-  border-bottom: 0.625px solid var(--ui-border-color, #d0d4e4);
+  /* Row separators are drawn PER-CELL (see .taskCell / .taskFirst::after) so they
+     start AFTER the group-color strip and never cut across it — the strip stays a
+     continuous bar like monday's. */
   position: relative;
 }
 /* No add-row → the last row sits on the table's own bottom border: drop the row
@@ -45,6 +47,23 @@
    overlap the rounded corner and stick out past the radius). */
 .taskRow:last-child {
   border-bottom: none;
+}
+/* round112 — monday-style trailing filler: extend each row separator across the
+   empty zone right of the last column (starts after the 6px group strip; over
+   the cells it coincides with their own borders). See TaskTable.module.css. */
+.taskRow::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 0;
+  bottom: 0;
+  height: 0.625px;
+  background: #e6e9ef;
+  pointer-events: none;
+  z-index: 0;
+}
+.taskRow:last-child::after {
+  display: none;
 }
 
 .taskHead {
@@ -74,11 +93,14 @@
   justify-content: center;
   padding: 0 8px;
   min-height: 36px;
-  border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
+  border-inline-end: 0.625px solid #e6e9ef;
+  /* Per-cell row separator (moved off .taskRow so it never crosses the strip). */
+  border-bottom: 0.625px solid #e6e9ef;
   overflow: hidden;
   color: var(--primary-text-color, #323338);
   font-size: 14px;
 }
+.taskRow:last-child .taskCell { border-bottom: none; }
 /* The rightmost column KEEPS its right border so it stays bounded in the body
    too. With fixed-px columns the table can be narrower than its container, so the
    last column's right edge sits mid-table — border-inline-end:none used to leave
@@ -99,6 +121,39 @@
   background: #ffffff;
   box-shadow: inset 6px 0 0 var(--group-color, hsl(var(--status-default)));
 }
+/* The frozen leading cell carries the continuous color strip, so its row
+   separator must NOT span the full width (that line is what used to chop the
+   strip). Drop the full border and draw an inset ::after starting after the 6px
+   strip — it lives on the frozen cell so it stays pinned during horizontal scroll. */
+.taskFirst { border-bottom: none; }
+.taskFirst::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 6px;
+  inset-inline-end: 0;
+  bottom: 0;
+  height: 0.625px;
+  background: #e6e9ef;
+  pointer-events: none;
+}
+.taskRow:last-child .taskFirst::after { display: none; }
+/* Selection mode: the strip lives on the frozen checkbox (.selectCell), so IT
+   gets the inset separator and .taskFirst reverts to a normal bordered cell. */
+.selectable .taskFirst { border-bottom: 0.625px solid #e6e9ef; }
+.selectable .taskRow:last-child .taskFirst { border-bottom: none; }
+.selectable .taskFirst::after { display: none; }
+.selectable .selectCell { border-bottom: none; }
+.selectable .selectCell::after {
+  content: '';
+  position: absolute;
+  inset-inline-start: 6px;
+  inset-inline-end: 0;
+  bottom: 0;
+  height: 0.625px;
+  background: #e6e9ef;
+  pointer-events: none;
+}
+.selectable .taskRow:last-child .selectCell::after { display: none; }
 .taskHead .taskFirst {
   z-index: 3;
 }
@@ -109,9 +164,9 @@
    HEADER leading cell and the bottom-left of the LAST row's leading cell rounds
    the strip to match the table's rounded-left outer border. */
 .taskHead .taskFirst,
-.taskHead .selectCell { border-start-start-radius: var(--border-radius-medium, 8px); }
+.taskHead .selectCell { border-start-start-radius: 6px; /* round100: rounded strip corner (matches bottom, contained in 6px strip = no notch) */ }
 .taskRow:last-child .taskFirst,
-.taskRow:last-child .selectCell { border-end-start-radius: var(--border-radius-medium, 8px); }
+.taskRow:last-child .selectCell { border-end-start-radius: 6px; /* round100: rounded strip corner (matches bottom, contained in 6px strip = no notch) */ }
 
 /* Selection column (mirrors TaskTable.module.css). Prepended 36px frozen
    checkbox track; the group-color strip moves onto it so it travels with the
@@ -169,7 +224,7 @@
   width: 6px;
   background: var(--group-color, hsl(var(--status-default)));
   opacity: 0.45;
-  border-end-start-radius: var(--border-radius-medium, 8px);
+  border-end-start-radius: 6px; /* round100: rounded strip corner (matches bottom, contained in 6px strip = no notch) */
 }
 .addRow:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
@@ -199,6 +254,8 @@
   font-size: 14px;
   font-family: var(--font-family);
   background: var(--primary-background-color, #fff);
+  direction: rtl;
+  text-align: left;
 }
 .newNameInput:focus-visible {
   outline: none;

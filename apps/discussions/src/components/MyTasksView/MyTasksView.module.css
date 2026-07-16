@@ -24,6 +24,13 @@
   flex: none;
   background: var(--primary-background-color, #ffffff);
   padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
+  /* round114 — "משימה חדשה" (first pill) starts exactly on the table edge line. */
+  padding-inline-start: var(--content-gutter-start, 52px);
+  /* Round 90 — keep the toolbar frozen at the top on scroll (it already sits
+     above the scrolling .board; sticky guards against any view-level scroll). */
+  position: sticky;
+  top: 0;
+  z-index: 20;
 }
 
 /* View title (round 40 typography; round 41 left-aligned) — matches the
@@ -58,6 +65,9 @@
   gap: var(--spacing-small, 8px);
   direction: ltr;
   padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+  /* round114 — align the back arrow + title exactly on the table's left edge
+     line (the shared 52px gutter), so nothing sits left of the table. */
+  padding-inline-start: var(--content-gutter-start, 52px);
 }
 
 /* Compact, borderless back-arrow icon button — monday-style subtle hover,
@@ -98,7 +108,7 @@
      With margin the scrollport itself starts 28px in: scrolled content clips
      there and the frozen cells (left:0) pin exactly at the inset, gutter clean.
      NO right inset so the row separators run to the right edge of the view. */
-  margin-inline-start: 28px;
+  margin-inline-start: var(--content-gutter-start, 52px); /* round114 — shared white gutter */
   margin-inline-end: 0;
 }
 /* Establishes the shared horizontal extent: as wide as the widest group table
@@ -147,7 +157,8 @@
   flex-shrink: 0;
   width: 20px;
   height: 20px;
-  color: currentColor;
+  /* monday toolbar icons read GRAY (not the darker label color). */
+  color: var(--secondary-text-color, #676879);
 }
 .pillCount {
   margin-inline-start: 2px;
@@ -176,6 +187,27 @@
 }
 .searchInput:focus-visible {
   outline: none;
+}
+
+/* Clear-X inside the search pill — first flex child, so it sits on the pill's
+   LEFT edge in this dir="ltr" toolbar. Shown only while a value exists. */
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.searchClear:hover {
+  background: var(--primary-background-color, #ffffff);
+  color: var(--primary-text-color, #323338);
 }
 
 /* Phone: keep the whole toolbar on ONE row by switching wrap -> nowrap and
@@ -418,6 +450,7 @@
   font-variation-settings: 'wght' 500; /* native monday group-title medium weight */
   color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
+  direction: rtl;
 }
 .groupCount {
   margin-inline-start: 8px;
@@ -452,4 +485,24 @@
   display: flex;
   justify-content: center;
   padding: 8px 0 16px;
+}
+
+/* Round 81 — push the quick-filter battery to the far (right) end of the ltr toolbar. */
+.batterySlot {
+  margin-inline-start: auto;
+}
+
+/* round103 — hide this chrome while monday's item-card panel is open (iframe narrows). */
+:global(body[data-chrome-narrow="1"]) .toolbar { display: none !important; }
+
+/* round113 — while monday's item-card / updates panel is open (chrome-narrow,
+   see round103's detector) the narrowed pane must show NO scrollbars at all
+   (owner request): scrolling itself still works (wheel/trackpad/drag), only
+   the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
+   ::-webkit-scrollbar pseudo. */
+:global(body[data-chrome-narrow="1"]) .board {
+  scrollbar-width: none;
+}
+:global(body[data-chrome-narrow="1"]) .board::-webkit-scrollbar {
+  display: none;
 }

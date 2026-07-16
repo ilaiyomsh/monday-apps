@@ -15,7 +15,11 @@ import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { MyTasksTable } from './MyTasksTable.jsx';
-import { groupMyTasks, NO_DISCUSSION } from './grouping.js';
+import { groupMyTasks, ensureGroupColors, NO_DISCUSSION } from './grouping.js';
+import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
+import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
+import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
+import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
 import { BuilderControl } from './controls/BuilderControl.jsx';
 import { Segment } from './controls/Segment.jsx';
 import { BuilderIcon } from './controls/BuilderIcon.jsx';
@@ -172,7 +176,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   // Status options (for the fills + the staged phase-1 "not done" filter). Loaded
   // once (cached); notDoneStatusIds is [] until ready, so the staged phase-1 then
   // degrades gracefully to the last-month trim alone in that brief window.
-  const { options: statusOptions, labelById, colorById, orderById } = useStatusOptions('tasks', 'statusID');
+  const { options: statusOptions, labelById, colorById, orderById, doneId } = useStatusOptions('tasks', 'statusID');
   const notDoneStatusIds = useMemo(
     () => (statusOptions || []).filter((o) => !o.isDone).map((o) => Number(o.id)),
     [statusOptions]
@@ -205,14 +209,27 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     orderById: priorityOrderById,
   } = useStatusOptions('tasks', 'priorityID');
 
-  // --- client pipeline: filter -> sort -> group (all instant, no re-fetch) ---
+  // --- client pipeline: filter -> quick-status -> sort -> group (instant) ---
   const filteredItems = useMemo(() => filterTasks(items, filter), [items, filter]);
-  const sortedItems = useMemo(
-    () => sortTasks(filteredItems, sort, { orderById, labelById, priorityOrderById, priorityLabelById }),
-    [filteredItems, sort, orderById, labelById, priorityOrderById, priorityLabelById]
+  // Quick-filter battery (round 81): open / done / delayed counts over ALL loaded
+  // tasks + a one-click bucket filter. "done" = the status column's is_done label.
+  const doneStatusIds = useMemo(() => resolveDoneStatusIds(undefined, doneId), [doneId]);
+  const todayStart = useMemo(() => startOfToday(), []);
+  const bucketCounts = useMemo(() => countBuckets(items, doneStatusIds, todayStart), [items, doneStatusIds, todayStart]);
+  const [quickStatus, setQuickStatus] = useState(null);
+  const scopedItems = useMemo(
+    () => (quickStatus ? filteredItems.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : filteredItems),
+    [filteredItems, quickStatus, doneStatusIds, todayStart]
   );
+  const sortedItems = useMemo(
+    () => sortTasks(scopedItems, sort, { orderById, labelById, priorityOrderById, priorityLabelById }),
+    [scopedItems, sort, orderById, labelById, priorityOrderById, priorityLabelById]
+  );
+  // Right-click a group header → color palette; the chosen color is shared
+  // across all users (round 77). colorsByKey overrides the auto group color.
+  const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
   const grouped = useMemo(
-    () => groupMyTasks(sortedItems, group.col, {
+    () => ensureGroupColors(groupMyTasks(sortedItems, group.col, {
       labelById, colorById, orderById,
       priorityLabelById, priorityColorById, priorityOrderById,
       isValidStatus,
@@ -222,8 +239,8 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       noPriorityLabel: t('myTasks.noPriority'),
       noDiscussionLabel: t('myTasks.noDiscussion'),
       allTasksLabel: t('myTasks.allTasks'),
-    }),
-    [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t]
+    }), colorsByKey),
+    [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t, colorsByKey]
   );
 
   // Surface the just-created task at the VERY TOP of the view. Under GROUP BY
@@ -567,6 +584,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
 
   return (
     <div className={styles.root} ref={rootRef}>
+      {groupColorMenu}
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
       {/* View title (round 40 typography; round 41 left-aligned) with a compact
@@ -600,6 +618,20 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
 
         {showSearch ? (
           <div className={styles.searchPill}>
+            {/* clear-X pinned to the pill's LEFT edge (LTR toolbar → first child).
+                mousedown-preventDefault keeps the input focused through the click
+                so clearing never collapses the pill via the input's blur. */}
+            {search ? (
+              <button
+                type="button"
+                className={styles.searchClear}
+                aria-label="נקה חיפוש"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setSearch('')}
+              >
+                <CloseSmall size={16} />
+              </button>
+            ) : null}
             <Search className={styles.pillIcon} aria-hidden="true" />
             <input
               className={styles.searchInput}
@@ -654,6 +686,12 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         )}
 
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
+
+        {/* Quick-filter battery (round 81) — pushed to the far (right) end of the
+            toolbar, monday-battery style: open / done / delayed counts + filter. */}
+        <div className={styles.batterySlot}>
+          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
+        </div>
       </div>
 
       {selectedIds.size > 0 && (
@@ -690,6 +728,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                 <button
                   type="button"
                   onClick={() => setCollapsed((p) => ({ ...p, [grp.key]: !p[grp.key] }))}
+                  onContextMenu={(e) => openMenuFor(grp.key, e)}
                   className={styles.groupHeader}
                 >
                   <DropdownChevronDown
@@ -711,6 +750,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                     canManageSettings={canManageSettings}
                     hiddenColumns={hiddenColumns}
                     canTask={canTask}
+                    searchTerm={debouncedSearch}
                     onStatusChange={applyStatus}
                     onPriorityChange={applyPriority}
                     onNotesChange={updateTaskNotes}

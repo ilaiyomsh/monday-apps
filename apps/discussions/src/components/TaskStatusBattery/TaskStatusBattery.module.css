@@ -1,0 +1,41 @@
+/* Round 81 — quick-filter status battery (top-right of the tasks views).
+   Round 84: matched to monday's board battery ("Off track / At risk / On track"):
+   NO borders, chips read as plain dot+label+count, only the pressed chip carries
+   a light-blue fill, and the count is a plain gray number (no badge box). */
+.battery {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-family: var(--font-family);
+  font-size: 13px;
+  line-height: 1;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.08s ease;
+}
+.chip:hover { background: var(--primary-background-hover-color, #f0f1f3); }
+.chip:focus-visible { outline: 2px solid var(--primary-color, #0073ea); outline-offset: 1px; }
+/* Pressed state — light-blue fill only, no border, dark label (monday battery). */
+.chipActive {
+  background: var(--primary-selected-color, #e5f0ff);
+  font-weight: 600;
+}
+.dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.label { white-space: nowrap; }
+/* Plain gray number — no badge box, like monday's battery counts. */
+.count {
+  font-variant-numeric: tabular-nums;
+  color: var(--secondary-text-color, #676879);
+  font-size: 13px;
+}
+.chipActive .count { color: var(--primary-text-color, #323338); }

@@ -15,6 +15,9 @@ import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+// Varied stable group-title colors (owner request 2026-07-14) — shared engine.
+import { ensureGroupColors } from '@generated/components/MyTasksView/grouping.js';
+import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx';
@@ -110,7 +113,11 @@ function formatDayMonth(d) {
  */
 function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placeholder }) {
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState('top-start');
+  // Status picker opens DOWNWARD and CENTERED on the cell (monday parity,
+  // round 94); flips up only if there's no room below.
+  const [position, setPosition] = useState('bottom');
+  // round98: picker width tracks the column label (cell) width, not a fixed 206px.
+  const [menuWidth, setMenuWidth] = useState(206);
   const triggerRef = useRef(null);
 
   const label = opts.labelById[value];
@@ -120,14 +127,16 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
   const updatePosition = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const w = Math.round(rect.width);
+    setMenuWidth(w);
     const next = computeFloatingPosition({
       anchorRect: rect,
-      preferred: 'top-start',
-      popupWidth: 184,
-      popupHeight: Math.max(180, (opts.options?.length || 0) * 46 + 24),
+      preferred: 'bottom-start',
+      popupWidth: w,
+      popupHeight: Math.max(180, (opts.options?.length || 0) * 40 + 28),
       offset: 4,
     });
-    if (next?.placement) setPosition(next.placement);
+    if (next?.placement) setPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
   };
 
   const display = pill ? (
@@ -157,7 +166,7 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
       zIndex={10000}
       content={() => (
         <DialogContentContainer>
-          <div className={styles.decMenu}>
+          <div className={styles.decMenu} style={{ width: menuWidth + 20 }}>
             {(opts.options || []).map((opt) => (
               <button
                 key={opt.id}
@@ -346,6 +355,7 @@ function DecisionRow({
             selected={affected}
             onChange={(people) => onAffected(decision.id, people)}
             boardKey="decisions"
+            accountWide
           />
         ) : (
           <PersonList people={affected} size="sm" showNames={false} max={3} />
@@ -577,7 +587,9 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   // Groups carry { key, label, color, items } — status groups key by the stable
   // label id and resolve label/color via useStatusOptions; decider groups key by
   // the sorted person-id set. (Same shape as the Tasks / Previous tabs.)
-  const grouped = useMemo(() => {
+  // Right-click a group header → shared color palette (round 77).
+  const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
+  const groupedRaw = useMemo(() => {
     if (groupBy === 'status') {
       const groups = new Map();
       filteredDecisions.forEach((d) => {
@@ -592,7 +604,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         color: g.statusId == null ? null : (statusOpts.colorById[g.statusId] || null),
         items: g.items,
       }));
-      return sortGroupsByOrder(list, { order: groupOrder, orderById: statusOpts.orderById, noKey: NO_STATUS });
+      return ensureGroupColors(sortGroupsByOrder(list, { order: groupOrder, orderById: statusOpts.orderById, noKey: NO_STATUS }));
     }
     if (groupBy === 'decider') {
       const groups = new Map();
@@ -604,10 +616,12 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         groups.get(key).label = label;
         groups.get(key).items.push(d);
       });
-      return sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_DECIDER });
+      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_DECIDER }));
     }
     return [{ key: '__all__', label: '', color: null, items: filteredDecisions }];
   }, [filteredDecisions, groupBy, groupOrder, statusOpts.labelById, statusOpts.colorById, statusOpts.orderById]);
+  // Apply the shared per-header color overrides as a final pass.
+  const grouped = useMemo(() => ensureGroupColors(groupedRaw, colorsByKey), [groupedRaw, colorsByKey]);
 
   const allCollapsed = grouped.length > 0 && grouped.every((g) => collapsed[g.key]);
   const toggleAll = () => {
@@ -932,6 +946,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
 
   return (
     <div ref={rootRef} className={styles.decisionsRoot}>
+      {groupColorMenu}
       <div className={styles.decToolbar}>
         <div className={styles.decToolbarLeft}>
           {canCreateDecision && (
@@ -1018,6 +1033,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
             <div key={grp.key} className={styles.decGroup}>
               {grp.label && (
                 <button type="button" onClick={() => setCollapsed((p) => ({ ...p, [grp.key]: !p[grp.key] }))}
+                  onContextMenu={(e) => openMenuFor(grp.key, e)}
                   className={styles.decGroupHeader}>
                   <DropdownChevronDown
                     className={`${styles.decGroupChevron} ${collapsed[grp.key] ? styles.decGroupChevronCollapsed : ''}`}

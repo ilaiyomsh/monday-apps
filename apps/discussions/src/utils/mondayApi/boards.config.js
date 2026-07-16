@@ -1,3 +1,5 @@
+import logger from '../logger.js';
+
 /*
  * ============================================================================
  *  BOARD & COLUMN SCHEMA — alias scaffold ONLY (NO monday ids)
@@ -41,6 +43,10 @@ export const PREVIOUS_TASKS_MODES = {
 };
 export const DEFAULT_PREFERENCES = {
   previousTasksMode: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION,
+  // round108 — owner-set logo shown at the top-right of the discussion header
+  // (parallel to the title). Stored as a small downscaled data-URI (self-contained,
+  // no asset hosting); null = no logo. Set only by owners in Settings → העדפות.
+  logoUrl: null,
   // Whether the top-level "המשימות שלי" (My Tasks) view toggle is shown. Default
   // OFF so existing instances keep their current behavior (the tab is opt-in per
   // instance, enabled by the owner in Settings → העדפות).
@@ -50,7 +56,46 @@ export const DEFAULT_PREFERENCES = {
   // of these statuses. null (not []) = unset: fall back to the status column's
   // own is_done label.
   delayedDoneStatusIds: null,
+  // Item 18 (2026-07-14): when true, EVERY new decision's מחליט (decider)
+  // defaults to the discussion's מנהל דיון (lead) instead of the current user —
+  // across ALL discussions, regardless of type. A per-type template can enable
+  // the same behavior selectively (deciderIsLead on the type template). The
+  // decider stays freely replaceable inline after creation.
+  defaultDeciderLead: false,
+  // Round 78 (2026-07-14): which DISCUSSION-board ROLE columns auto-fill each
+  // tasks-board ACCESS column when a task is created from a discussion. Keyed by
+  // the tasks access-column alias; each value is a list of discussion role
+  // aliases whose people are UNIONED into that column. Owner-configurable in
+  // Settings → מיפוי (under each access column). The default reproduces the
+  // prior hardcoded behavior: participants → יכולת צפייה, lead + coordinator +
+  // creator → יכולת עריכה. An unset/empty list means "don't auto-fill".
+  accessRoleSources: {
+    taskViewersID: ['participantsID'],
+    taskEditorsID: ['discussionLeadID', 'discussionCoordinatorID', 'discussionCreatorID'],
+  },
 };
+
+// The discussion-board roles selectable as auto-fill sources for the tasks
+// access columns (round 78). `alias` is the discussions COLUMN_SCHEMA alias;
+// `label` is the Hebrew fallback shown when the live column title is unknown.
+export const ACCESS_ROLE_SOURCE_OPTIONS = [
+  { alias: 'discussionLeadID', label: 'מנהל דיון' },
+  { alias: 'discussionCoordinatorID', label: 'מרכז דיון' },
+  { alias: 'discussionCreatorID', label: 'יוצר הדיון' },
+  { alias: 'participantsID', label: 'משתתפים' },
+];
+
+// Union the people off a discussion record for the given role aliases, deduped
+// by id, preserving first-seen order (round 78 access auto-fill). Pure — used by
+// DiscussionCard to build a new task's viewers/editors from the configured roles.
+export function resolveAccessPeople(discussion, aliases) {
+  const byId = new Map();
+  (Array.isArray(aliases) ? aliases : []).forEach((alias) => {
+    const list = Array.isArray(discussion?.[alias]) ? discussion[alias] : [];
+    list.forEach((p) => { if (p?.id != null && !byId.has(String(p.id))) byId.set(String(p.id), p); });
+  });
+  return [...byId.values()];
+}
 
 /*
  * ============================================================================
@@ -182,7 +227,10 @@ export const DEFAULT_PERMISSIONS = {
 // reorderColumns to 'owner'.)
 export const CAPABILITY_DEFAULTS = {
   // ---- discussion tier ----
-  viewDiscussion: 'all',
+  // item 20 (2026-07-14): view is ROLE-GATED — participants view via the seed;
+  // a user in no people column of the discussion is denied. The resolver keeps
+  // two safety valves (unready discussion / unseeded roles map → allow).
+  viewDiscussion: 'creatorLeadOwner',
   editDiscussionFields: 'creatorLeadOwner',
   editSummary: 'creatorLeadOwner',
   exportDocs: 'creatorLeadOwner',
@@ -269,7 +317,9 @@ export const CAPABILITIES = [
  */
 export const PERMISSION_ROLE_SOURCES = {
   discussions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID', 'participantsID'],
-  tasks: ['taskCreatorID', 'responsibilityID'],
+  // item 19: יכולת צפייה (viewers, read-only) + יכולת עריכה (editors, full
+  // edit) — auto-filled at task creation from the parent discussion's people.
+  tasks: ['taskCreatorID', 'responsibilityID', 'taskViewersID', 'taskEditorsID'],
   // decisions: creator + decider + "מושפעים" (affected). `affectedID` is a
   // first-class role source (not just data) so a user listed in the decision's
   // affected people column is recognized as the "מושפעים" role by the resolver.
@@ -382,6 +432,30 @@ export const DEFAULT_PERMISSION_SEED = {
       deleteTask: false,
     },
   },
+  // item 19 — יכולת עריכה (editors): full task edit incl. delete.
+  'tasks:taskEditorsID': {
+    capabilities: {
+      editTaskStatus: true,
+      editTaskPriority: true,
+      editTaskDeadline: true,
+      editTaskAssignee: true,
+      editTaskName: true,
+      deleteTask: true,
+    },
+  },
+  // item 19 — יכולת צפייה (viewers): STRICTLY read-only. The explicit `false`s
+  // matter: they also veto the item-tier default bucket, so a viewer-only user
+  // can never inherit edit through isItemSelfRole.
+  'tasks:taskViewersID': {
+    capabilities: {
+      editTaskStatus: false,
+      editTaskPriority: false,
+      editTaskDeadline: false,
+      editTaskAssignee: false,
+      editTaskName: false,
+      deleteTask: false,
+    },
+  },
   // decision creator → ALL decision caps true (incl. deleteDecision)
   'decisions:decisionCreatorID': {
     capabilities: {
@@ -475,6 +549,9 @@ export const COLUMN_SCHEMA = {
 
   tasks: {
     taskCreatorID: { type: 'people', title: 'יוצר' },
+    // round115 — stamped automatically with TODAY when a task is created in
+    // the app (any create path); owner maps it to a date column ("תאריך יצירה").
+    taskCreationDateID: { type: 'date', title: 'תאריך יצירה' },
     responsibilityID: { type: 'people', title: 'אחריות' },
     deadlineID: { type: 'date', title: 'דד ליין' },
     statusID: { type: 'status', title: 'סטאטוס' },
@@ -495,6 +572,13 @@ export const COLUMN_SCHEMA = {
     // texts; the "Previous tasks by discussion type" view bridges by TEXT →
     // taskTypeID label id and filters server-side (any_of).
     taskTypeID: { type: 'dropdown', title: 'סוג דיון' },
+    // ---- access columns (item 19, 2026-07-14) ----
+    // Auto-filled at task creation from the parent discussion: participants →
+    // viewers (read-only role), the single-person discussion roles (lead/
+    // coordinator/creator) → editors (full-edit role). Mapped by the owner in
+    // Settings; also usable for monday board-level column permissions.
+    taskViewersID: { type: 'people', title: 'יכולת צפייה' },
+    taskEditorsID: { type: 'people', title: 'יכולת עריכה' },
     topicsLinkID: { type: 'board_relation', title: 'link to נושאים לדיון1' },
     // ---- read-only display field ----
     phaseID: { type: 'text', title: 'שלב' },
@@ -502,6 +586,8 @@ export const COLUMN_SCHEMA = {
 
   topics: {
     topicCreatorID: { type: 'people', title: 'יוצר נושא' },
+    // round115 — stamped automatically with TODAY at topic creation.
+    topicCreationDateID: { type: 'date', title: 'תאריך יצירה' },
     // Per-topic priority — a status column on the topics board (item-level only,
     // NOT on the points/subitems). Label text + colors come from the column.
     topicPriorityID: { type: 'status', title: 'עדיפות' },
@@ -518,6 +604,9 @@ export const COLUMN_SCHEMA = {
     // Per-point creator (avatar) — a people column on the SUBITEMS board. Written
     // with the current user when a point is created; read back to show the avatar.
     pointCreatorID: { type: 'people', title: 'יוצר נקודה', subitems: true },
+    // round115 — per-POINT creation date on the SUBITEMS board, stamped with
+    // TODAY when a point is created.
+    pointCreationDateID: { type: 'date', title: 'תאריך יצירה (נקודה)', subitems: true },
     // Free-text responses/comments per POINT — a long_text column on the SUBITEMS
     // board, inline-editable in the topics table (mirrors the tasks notes column).
     pointResponsesID: { type: 'long_text', title: 'התייחסויות (נקודה)', subitems: true },
@@ -659,7 +748,7 @@ export function buildEmptyConfig() {
 export function resolveColumn(boardKey, alias) {
   const col = COLUMN_SCHEMA[boardKey] && COLUMN_SCHEMA[boardKey][alias];
   if (!col) {
-    console.warn(`[boards.config] no schema for alias "${alias}" on board "${boardKey}"`);
+    logger.warn('boards.config', `no schema for alias "${alias}" on board "${boardKey}"`);
   }
   return col || null;
 }

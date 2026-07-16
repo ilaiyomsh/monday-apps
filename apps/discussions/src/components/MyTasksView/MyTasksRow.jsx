@@ -8,6 +8,7 @@ import { isValidStatus } from '@generated/constants/statusConfig';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
+import { HighlightedText } from '@generated/components/HighlightedText';
 import { getTaskDiscussion } from './grouping.js';
 import grid from './MyTasksTable.module.css';
 import row from '../TaskTableRow/TaskTableRow.module.css';
@@ -33,8 +34,11 @@ const stop = (e) => e.stopPropagation();
 function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLabel, onChange }) {
   const [open, setOpen] = useState(false);
   // Label picker opens UPWARD by default (video feedback #4) — used for both the
-  // status and priority columns; flips down only if there's no room above.
-  const [position, setPosition] = useState('top-start');
+  // Status picker opens DOWNWARD and CENTERED on the cell (monday parity, round 94);
+  // flips up only if there's no room below.
+  const [position, setPosition] = useState('bottom');
+  // round98: picker width tracks the column label (cell) width, not a fixed 206px.
+  const [menuWidth, setMenuWidth] = useState(206);
   const triggerRef = useRef(null);
 
   const show = isValidStatus(value) && labelById[value] != null;
@@ -58,14 +62,16 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
   const updatePosition = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const w = Math.round(rect.width);
+    setMenuWidth(w);
     const next = computeFloatingPosition({
       anchorRect: rect,
-      preferred: 'top-start',
-      popupWidth: 184,
-      popupHeight: Math.max(180, options.length * 46 + 24),
+      preferred: 'bottom-start',
+      popupWidth: w,
+      popupHeight: Math.max(180, options.length * 40 + 28),
       offset: 4,
     });
-    if (next?.placement) setPosition(next.placement);
+    if (next?.placement) setPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
   };
 
   return (
@@ -82,7 +88,7 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
         zIndex={10000}
         content={() => (
           <DialogContentContainer>
-            <div className={row.statusMenu}>
+            <div className={row.statusMenu} style={{ width: menuWidth + 20 }}>
               {options.map((opt) => (
                 <button
                   key={opt.id}
@@ -115,7 +121,7 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
   );
 }
 
-export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, rowStyle, showDeadline = true, showPriority = true, showNotes = true, selectable = false, selected = false, onToggleSelect }) {
+export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, rowStyle, showDeadline = true, showPriority = true, showNotes = true, selectable = false, selected = false, onToggleSelect, searchTerm = '' }) {
   const { t } = useTranslation();
   // Inline rename (permission-gated: the pencil shows only when onRenameTask is
   // provided). Clicking the NAME itself still opens the item card — rename is a
@@ -180,7 +186,7 @@ export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, on
               title={task.name}
               onClick={(e) => { e.stopPropagation(); openItemCard(task.id); }}
             >
-              {task.name}
+              <HighlightedText text={task.name} query={searchTerm} />
             </button>
             {onRenameTask && (
               <button

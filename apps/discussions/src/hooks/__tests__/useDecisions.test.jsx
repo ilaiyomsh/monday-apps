@@ -375,4 +375,36 @@ describe('useDecisions — a created decision reloads via the DECISION-side link
     await waitFor(() => expect(second.result.current.loading).toBe(false));
     expect(second.result.current.items.map((i) => String(i.id))).toContain('9001');
   });
+
+  it('createDecision fires NO write against the DISCUSSIONS board (the reflection mirror was removed — 2026-07-14 incident)', async () => {
+    // discussions.decisionsBoardLinkID is monday's REFLECTION of the decision-side
+    // link: it auto-fills and REJECTS direct writes ("Graphql validation errors"
+    // toast on every create). Even with the column mapped, the hook must not
+    // touch the discussions board on create.
+    setActiveConfig({
+      boards: { discussions: { id: 'disc-board' }, decisions: { id: 'dec-board' } },
+      columns: {
+        discussions: { decisionsBoardLinkID: { id: 'disc_link', type: 'board_relation' } },
+        decisions: { discussionLinkID: { id: 'dec_disc_link', type: 'board_relation' } },
+      },
+    });
+    api.mockImplementation(async (query) => {
+      if (query.includes('create_item')) return { create_item: { id: '9002' } };
+      if (query.includes('change_multiple_column_values')) return { change_multiple_column_values: { id: 'ok' } };
+      if (query.includes('items_page')) return { boards: [{ items_page: { cursor: null, items: [] } }] };
+      return {};
+    });
+
+    const { result } = renderHook(() => useDecisions('4001'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => { await result.current.createDecision('החלטה'); });
+
+    // The decision-side link write DID run...
+    expect(api.mock.calls.some(([q, v]) =>
+      q.includes('change_multiple_column_values') && String(v.boardId) === 'dec-board')).toBe(true);
+    // ...and NOTHING was written to the discussions board.
+    const discussionSideWrite = api.mock.calls.find(([q, v]) =>
+      q.includes('change_multiple_column_values') && String(v.boardId) === 'disc-board');
+    expect(discussionSideWrite).toBeUndefined();
+  });
 });

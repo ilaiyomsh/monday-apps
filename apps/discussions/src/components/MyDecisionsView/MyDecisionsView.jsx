@@ -20,7 +20,8 @@ import { toPipelineRows } from './decisionPipeline.js';
 // Shared My-Tasks machinery, imported (NOT duplicated): the grouping/pipeline
 // helpers are alias-generic (decisionPipeline derives statusID/priorityID/
 // deadlineID onto each row) and the builder controls are pure chrome.
-import { groupMyTasks } from '../MyTasksView/grouping.js';
+import { groupMyTasks, ensureGroupColors } from '../MyTasksView/grouping.js';
+import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { BuilderControl } from '../MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '../MyTasksView/controls/Segment.jsx';
 import { BuilderIcon } from '../MyTasksView/controls/BuilderIcon.jsx';
@@ -197,7 +198,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
 
   const {
     items, loading, loadingMore, hasMore, error, configured, loadMore,
-    updateDecisionStatus, updateDecisionPriority, updateDecisionDate, updateDecisionName, softDeleteDecisions,
+    updateDecisionStatus, updateDecisionPriority, updateDecisionDate, updateDecisionDecider, updateDecisionAffected, updateDecisionName, softDeleteDecisions,
   } = useMyDecisions(subTab, { currentUser, context, search: debouncedSearch });
 
   // Branded splash for the initial decisions load. useMinSplash arms when
@@ -234,6 +235,10 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   const applyStatus = useCallback((id, status) => resolveTargetIds(id, 'editDecisionStatus').forEach((t) => updateDecisionStatus(t, status)), [resolveTargetIds, updateDecisionStatus]);
   const applyPriority = useCallback((id, value) => resolveTargetIds(id, 'editDecisionPriority').forEach((t) => updateDecisionPriority(t, value)), [resolveTargetIds, updateDecisionPriority]);
   const applyDate = useCallback((id, date) => resolveTargetIds(id, 'editDecisionDate').forEach((t) => updateDecisionDate(t, date)), [resolveTargetIds, updateDecisionDate]);
+  // מחליט + מושפעים share the single editDecisionAffected capability (same
+  // gate as the in-discussion DecisionsTab editors).
+  const applyDecider = useCallback((id, people) => resolveTargetIds(id, 'editDecisionAffected').forEach((t) => updateDecisionDecider(t, people)), [resolveTargetIds, updateDecisionDecider]);
+  const applyAffected = useCallback((id, people) => resolveTargetIds(id, 'editDecisionAffected').forEach((t) => updateDecisionAffected(t, people)), [resolveTargetIds, updateDecisionAffected]);
   // Only the selected decisions the user may delete (mixed selection → the
   // allowed subset). The action bar's delete is disabled when none qualify.
   const deletableSelectedIds = useMemo(
@@ -297,8 +302,10 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     () => sortTasks(filteredItems, sort, { orderById, labelById, priorityOrderById, priorityLabelById }),
     [filteredItems, sort, orderById, labelById, priorityOrderById, priorityLabelById]
   );
+  // Right-click a group header → shared color palette (round 77).
+  const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
   const grouped = useMemo(
-    () => groupMyTasks(sortedItems, group.col, {
+    () => ensureGroupColors(groupMyTasks(sortedItems, group.col, {
       labelById, colorById, orderById,
       priorityLabelById, priorityColorById, priorityOrderById,
       isValidStatus,
@@ -309,8 +316,8 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
       noDiscussionLabel: 'ללא דיון',
       noDateLabel: 'ללא תאריך',
       allTasksLabel: 'החלטות',
-    }),
-    [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById]
+    }), colorsByKey),
+    [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, colorsByKey]
   );
 
   // ---- sort handlers ----
@@ -542,6 +549,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
 
   return (
     <div className={styles.root} ref={rootRef}>
+      {groupColorMenu}
       {needDiscDates ? <DiscussionDates onLoaded={setDiscDateMap} /> : null}
 
       {/* View title (round 40 typography; round 41 left-aligned) with a compact
@@ -581,6 +589,20 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
 
         {showSearch ? (
           <div className={styles.searchPill}>
+            {/* clear-X pinned to the pill's LEFT edge (LTR toolbar → first child).
+                mousedown-preventDefault keeps the input focused through the click
+                so clearing never collapses the pill via the input's blur. */}
+            {search ? (
+              <button
+                type="button"
+                className={styles.searchClear}
+                aria-label="נקה חיפוש"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => setSearch('')}
+              >
+                <CloseSmall size={16} />
+              </button>
+            ) : null}
             <Search className={styles.pillIcon} aria-hidden="true" />
             <input
               className={styles.searchInput}
@@ -687,6 +709,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
                 <button
                   type="button"
                   onClick={() => setCollapsed((p) => ({ ...p, [grp.key]: !p[grp.key] }))}
+                  onContextMenu={(e) => openMenuFor(grp.key, e)}
                   className={styles.groupHeader}
                 >
                   <DropdownChevronDown
@@ -708,9 +731,12 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
                     canManageSettings={canManageSettings}
                     hiddenColumns={hiddenColumns}
                     canDecision={canDecision}
+                    searchTerm={debouncedSearch}
                     onStatusChange={applyStatus}
                     onPriorityChange={applyPriority}
                     onDateChange={applyDate}
+                    onDeciderChange={applyDecider}
+                    onAffectedChange={applyAffected}
                     onRenameDecision={updateDecisionName}
                     selectable
                     selectedIds={selectedIds}

@@ -1,11 +1,14 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
 import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
-import { MoveArrowLeft, Link, Info } from '@vibe/icons';
+import { MoveArrowLeft, Info } from '@vibe/icons';
 import { דיונים1Board } from '@api/BoardSDK.js';
 import { useTasks } from '@generated/hooks/useTasks';
 import { useDecisions } from '@generated/hooks/useDecisions';
 import { useDiscussionDetails } from '@generated/hooks/useDiscussions';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
+import { useSettings } from '@generated/contexts/SettingsContext.jsx';
+import { DEFAULT_PREFERENCES, resolveAccessPeople } from '@api/boards.config.js';
+import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { usePermissions } from '@generated/hooks/usePermission.js';
 import { PersonList } from '@generated/components/PersonAvatar';
@@ -59,7 +62,6 @@ export function DiscussionCard({
   onShowLoading,
   onDismissToast,
   onUpdated,
-  onCopyDiscussionLink,
   initialTab = null,
   initialTabDiscussionId = null,
   canManageSettings = false,
@@ -126,6 +128,10 @@ export function DiscussionCard({
   const titleRowRef = useRef(null);
   const participantsRef = useRef(null);
   const [hideMeta, setHideMeta] = useState(false);
+  // round111 — the header roles/participants row is collapsed by default behind
+  // a chevron next to the date/time; reset to closed per selected discussion.
+  const [metaOpen, setMetaOpen] = useState(false);
+  useEffect(() => { setMetaOpen(false); }, [discussion?.id]);
   const hideMetaRef = useRef(false);
   const metaNeededWidthRef = useRef(0);
   useLayoutEffect(() => {
@@ -198,7 +204,9 @@ export function DiscussionCard({
   // (permissions.enabled === false) every cap resolves via the legacy creator/
   // lead/owner path, so each granular boolean equals the old canEdit — behavior
   // is unchanged.
-  const { can, canEdit } = usePermissions(data, { canManageSettings, currentUser });
+  const { can, canEdit, ready: permsReady } = usePermissions(data, { canManageSettings, currentUser });
+  const { settings } = useSettings();
+  const { typeTemplates } = useTemplates();
 
   // Granular discussion-tier caps (each defaults to the legacy creator/lead/owner
   // gate while the feature is off). The two task tabs both edit tasks *of this
@@ -219,6 +227,41 @@ export function DiscussionCard({
   // product decision, not dead code) so a future responses cell can re-consume it.
   const editResponses = can('editResponses');
   const editDiscussionFields = can('editDiscussionFields');
+  // Hide/show a topic or point (owner decision 2026-07-14, item 10): ONLY the
+  // discussion lead (מנהל דיון) or coordinator (מרכז דיון) — plus the board
+  // owner — may toggle visibility. Deliberately NOT a matrix capability: the
+  // owner asked for a fixed rule, independent of the editTopicOrPoint grants.
+  const holdsRole = (people) =>
+    Array.isArray(people) && people.some((p) => String(p?.id) === String(currentUser?.id));
+  const canHideTopicOrPoint =
+    canManageSettings || holdsRole(data?.discussionLeadID) || holdsRole(data?.discussionCoordinatorID);
+
+  // Item 19 / round 78 — access-column payload for every task created FROM this
+  // discussion. Which discussion ROLES fill each tasks access column is
+  // owner-configurable (settings.preferences.accessRoleSources); the default
+  // reproduces the original behavior — participants → יכולת צפייה (viewers),
+  // lead + coordinator + creator → יכולת עריכה (editors). People from the
+  // configured roles are UNIONED (deduped by id). useTasks writes them only
+  // when the owner mapped the columns.
+  const accessRoleSources = settings?.preferences?.accessRoleSources || DEFAULT_PREFERENCES.accessRoleSources;
+  // round108 — owner-set logo (data-URI) shown at the top-right of the header.
+  const logoUrl = settings?.preferences?.logoUrl || null;
+  const taskAccess = useMemo(() => ({
+    viewers: resolveAccessPeople(data, accessRoleSources?.taskViewersID),
+    editors: resolveAccessPeople(data, accessRoleSources?.taskEditorsID),
+  }), [accessRoleSources, data]);
+
+  // Item 18 — default decider (מחליט) for NEW decisions: the discussion lead,
+  // when enabled globally (settings.preferences.defaultDeciderLead) or on this
+  // discussion type's template (deciderIsLead). Falls back to the hook default
+  // (current user) when off / no lead. Always replaceable inline afterwards.
+  const defaultDecider = useMemo(() => {
+    const globalOn = settings?.preferences?.defaultDeciderLead === true;
+    const typeTpl = (typeTemplates || []).find((t) => t?.discussionType === data?.discussionTypeID);
+    const on = globalOn || typeTpl?.deciderIsLead === true;
+    const lead = Array.isArray(data?.discussionLeadID) ? data.discussionLeadID : [];
+    return on && lead.length ? lead[0] : null;
+  }, [settings?.preferences?.defaultDeciderLead, typeTemplates, data?.discussionTypeID, data?.discussionLeadID]);
   // Phase 4: task-tier caps are resolved PER-TASK (each task's own creator/
   // responsible person). `canTask(cap, task)` binds the task as the item so the
   // task tabs can gate each field/delete granularly. While the feature is off
@@ -270,7 +313,6 @@ export function DiscussionCard({
   // Inline editing of the title (double-click to edit).
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
-  const [linkCopied, setLinkCopied] = useState(false);
 
   // Prefetch the discussion's tasks once at the card level and share them with
   // both the Tasks and Effectiveness tabs (no duplicate query, instant switch).
@@ -296,7 +338,11 @@ export function DiscussionCard({
     const id = discussion?.id;
     if (!id) { setPointItemsByPoint({}); return undefined; }
     let cancelled = false;
-    loadPointItems(id).then((m) => { if (!cancelled) setPointItemsByPoint(m); });
+    loadPointItems(id)
+      .then((m) => { if (!cancelled) setPointItemsByPoint(m); })
+      // loadPointItems resolves {} on storage failures; this catch is the
+      // defensive last line so a future rejection can never float silently.
+      .catch((err) => logger.warn('DiscussionCard', 'טעינת קישורי נקודה נכשלה', err));
     return () => { cancelled = true; };
   }, [discussion?.id]);
   // Once BOTH lists have loaded, prune stored ids that no longer exist. Stale ids
@@ -322,12 +368,6 @@ export function DiscussionCard({
     const nextTab = normalizeTabName(initialTab);
     if (nextTab) setActiveTab(nextTab);
   }, [discussion?.id, initialTab, initialTabDiscussionId]);
-
-  useEffect(() => {
-    if (!linkCopied) return undefined;
-    const timer = setTimeout(() => setLinkCopied(false), 1600);
-    return () => clearTimeout(timer);
-  }, [linkCopied]);
 
   if (!discussion) {
     return (
@@ -392,11 +432,8 @@ export function DiscussionCard({
     const t = titleDraft.trim();
     if (t && t !== data.name) persistField('name', t);
   };
-  const handleCopyLink = async () => {
-    if (!discussion?.id) return;
-    const copied = await onCopyDiscussionLink?.(discussion.id, activeTab);
-    if (copied) setLinkCopied(true);
-  };
+  // round114 — the header copy-link icon moved into the discussions-list row
+  // menu ("לינק לדיון"); the card no longer copies links itself.
   const openNewTaskModal = (defaults = {}) => {
     setNewTaskDefaults(defaults);
     setNewTaskOpen(true);
@@ -412,7 +449,7 @@ export function DiscussionCard({
   // surface via the logger → UI sink.
   const handleCreateTask = async (name, opts) => {
     if (!createTask) return; // guard: only roles granted createTask may create tasks
-    await tasksData.createTask(name, { ...(opts || {}), prepend: true });
+    await tasksData.createTask(name, { ...(opts || {}), ...taskAccess, prepend: true });
   };
 
   // Inline add (Tasks tab add-row): create with just a name (+ the group's seed
@@ -421,7 +458,7 @@ export function DiscussionCard({
   // only). deadline/assignee stay optional and are filled inline afterward.
   const handleInlineCreateTask = async (name, opts) => {
     if (!createTask) return;
-    await tasksData.createTask(name, opts || {});
+    await tasksData.createTask(name, { ...(opts || {}), ...taskAccess });
   };
 
   // Inline add (Decisions tab add-row): create with just a name. Defaults match
@@ -432,6 +469,9 @@ export function DiscussionCard({
     if (!canCreateDecision) return;
     await decisionsData.createDecision(name, {
       affected: Array.isArray(data.participantsID) ? data.participantsID : [],
+      // item 18 — default decider = discussion lead when the preference is on
+      // (null keeps the hook's current-user default).
+      ...(defaultDecider ? { decider: defaultDecider } : {}),
     });
   };
 
@@ -440,15 +480,19 @@ export function DiscussionCard({
   //   'topButton' → the Decisions tab's blue "החלטה חדשה" (PREPEND the new item)
   //   'point'     → the per-point "+" in Topics (fires the ✓ success flash)
   //   'fab'/null  → the floating quick-create (silent, appended — current behavior)
-  const openQuickCreate = (mode, point = null, source = null) => setQuickCreate({ mode, point, source });
+  // `anchor` (item 12): the clicked "+" button's DOMRect — when present the
+  // quick-create box opens right BELOW the +, centered on it, instead of at
+  // the overlay's default spot.
+  const openQuickCreate = (mode, point = null, source = null, anchor = null) =>
+    setQuickCreate({ mode, point, source, anchor });
   const closeQuickCreate = () => setQuickCreate(null);
   // Per-point "+" — opens the modal scoped to the point (mode forced, toggle
   // hidden per the modal contract). Guarded per kind: a stale control can't
   // open a create flow the user's role doesn't grant.
-  const handleCreateFromPoint = (kind, point) => {
+  const handleCreateFromPoint = (kind, point, anchor = null) => {
     const isDecision = kind === 'decision';
     if (isDecision ? !canCreateDecision : !createTask) return;
-    openQuickCreate(isDecision ? 'decision' : 'task', point, 'point');
+    openQuickCreate(isDecision ? 'decision' : 'task', point, 'point', anchor);
   };
   // The modal fires this and closes immediately (fire-and-forget). ONE code path
   // for scoped + unscoped creates: when a point is present the task links to the
@@ -491,6 +535,7 @@ export function DiscussionCard({
         assignee: person || [],
         deadline,
         topicId: point?.topicId || null,
+        ...taskAccess,
         prepend,
       });
       if (created) { recordPointItem(created.id); if (statusKey) setPointCreateState(statusKey, 'success'); }
@@ -501,14 +546,31 @@ export function DiscussionCard({
     const created = await decisionsData.createDecision(text, {
       // Round 52: the quick-create decision form no longer collects a status or a
       // decider — they're set later from the Decisions view. Defaults per product
-      // spec: affected = the discussion's participants; the decider defaults
-      // inside the hook to the current user; date omitted → today (hook default).
+      // spec: affected = the discussion's participants; the decider defaults to
+      // the discussion lead when the item-18 preference is on, else to the
+      // current user (hook default); date omitted → today (hook default).
       affected: Array.isArray(data.participantsID) ? data.participantsID : [],
+      ...(defaultDecider ? { decider: defaultDecider } : {}),
       prepend,
     });
     if (created) { recordPointItem(created.id); if (statusKey) setPointCreateState(statusKey, 'success'); }
     else if (statusKey) setPointCreateState(statusKey, 'error');
   };
+
+  // Item 20 — viewDiscussion gate: once the people columns have loaded, a user
+  // who holds NO role on this discussion (and isn't the owner) sees a blocked
+  // state instead of the discussion content. While loading (or on an unseeded
+  // instance) the resolver stays permissive, so there is never a flash.
+  if (permsReady && !can('viewDiscussion')) {
+    return (
+      <div className={styles.root}>
+        <div style={{ padding: '64px 24px', textAlign: 'center', color: 'var(--secondary-text-color, #676879)', direction: 'rtl' }}>
+          <div style={{ fontSize: 18, marginBottom: 8 }}>אין לך הרשאת צפייה בדיון זה</div>
+          <div style={{ fontSize: 14 }}>רק משתתפי הדיון ובעלי התפקידים שלו יכולים לצפות בפרטיו.</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.root}>
@@ -523,6 +585,11 @@ export function DiscussionCard({
               ariaLabel="חזרה"
             />
           </span>
+          {logoUrl && (
+            /* round108 — owner-set brand logo, pinned to the top-right (RTL start)
+               of the header at the title's height. Owner uploads it in Settings. */
+            <img className={styles.ownerLogo} src={logoUrl} alt="לוגו" />
+          )}
           <div className={styles.titleBlock}>
             {editingTitle ? (
               <input
@@ -545,21 +612,6 @@ export function DiscussionCard({
                 >
                   {data.name}
                 </h1>
-                {!isMobile && (
-                  <IconButton
-                    kind={"tertiary"}
-                    size={"small"}
-                    icon={Link}
-                    onClick={handleCopyLink}
-                    ariaLabel="העתק לינק לדיון ולטאב הנוכחי"
-                    className={styles.copyLinkButton}
-                  />
-                )}
-                {!isMobile && linkCopied && (
-                  <span className={styles.copyLinkCopied} aria-live="polite">
-                    הועתק
-                  </span>
-                )}
               </div>
             )}
           </div>
@@ -607,6 +659,10 @@ export function DiscussionCard({
                  editors, clickable — date opens the shared calendar popover, time
                  opens a half-hour menu; both persist to the discussion item. */
               <div ref={participantsRef} dir="rtl" className={`${styles.participants} ${reserveSettingsSpace ? styles.participantsReserve : ''} ${hideMeta ? styles.participantsNarrow : ''}`}>
+                {/* round112 — ONE row again (the round111 second-row layout was
+                    reverted by the owner): date + time, then a LEFT-pointing
+                    chevron, and — when opened — the role/participants groups
+                    inline to its left, exactly like the pre-round111 layout. */}
                 {data.discussionDateID && (
                   <div className={`${styles.peopleGroup} ${styles.dateGroup}`}>
                     {editDiscussionFields ? (
@@ -666,7 +722,22 @@ export function DiscussionCard({
                     )}
                   </div>
                 )}
-                {headerPeopleGroups.map((g) => {
+                {headerPeopleGroups.length > 0 && (
+                  /* In this dir=rtl row the chevron sits LEFT of the time; the
+                     glyphs: ‹ (points left) = open the roles, › = close them. */
+                  <button
+                    type="button"
+                    className={styles.metaToggle}
+                    onClick={() => setMetaOpen((o) => !o)}
+                    aria-expanded={metaOpen}
+                    aria-label={metaOpen ? 'הסתר בעלי תפקידים' : 'הצג בעלי תפקידים'}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      {metaOpen ? <path d="M9 18l6-6-6-6" /> : <path d="M15 18l-6-6 6-6" />}
+                    </svg>
+                  </button>
+                )}
+                {metaOpen && headerPeopleGroups.map((g) => {
                   // מנהל (lead) + רשם דיון (coordinator) — and any future single
                   // role — are one-person fields: cap them at a single person and
                   // CLOSE the picker right after a pick (exactly like the decision/
@@ -719,7 +790,7 @@ export function DiscussionCard({
         </div>
         <div className={activeTab === 'topics' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'topics' ? undefined : 'none' }}>
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast}
-            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
             decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus} />
         </div>
@@ -745,20 +816,24 @@ export function DiscussionCard({
         )}
       </div>
 
-      {/* Quick-create FAB — on EVERY tab (per the approved mockup), with a
-          discussion selected. Hidden while either create modal is open, and
-          entirely absent when the user can create neither tasks nor decisions.
-          On the "החלטות" tab it opens in decision mode, elsewhere in task mode
-          (the modal clamps to an allowed side via allowTask/allowDecision). */}
-      {(createTask || canCreateDecision) && !newTaskOpen && !quickCreate && (
+      {/* Quick-create FAB — ONLY on the summary + effectiveness tabs (owner
+          decision 2026-07-14; the other tabs have their own inline/toolbar
+          create affordances). Hidden while either create modal is open, and
+          entirely absent when the user can create neither tasks nor decisions. */}
+      {(activeTab === 'summary' || activeTab === 'effectiveness') &&
+        (createTask || canCreateDecision) && !newTaskOpen && !quickCreate && (
         <QuickCreateFab
-          compact={activeTab === 'previous' || activeTab === 'topics'}
-          onClick={() => openQuickCreate(activeTab === 'decisions' ? 'decision' : 'task', null, 'fab')}
+          onClick={() => openQuickCreate('task', null, 'fab')}
         />
       )}
       <QuickCreateModal
         open={!!quickCreate}
         initialMode={quickCreate?.mode || 'task'}
+        anchor={quickCreate?.anchor || null}
+        // Opened from the Decisions tab (top button / add-row) → dead-center of
+        // the screen (owner request 2026-07-14); point-anchored opens keep the
+        // under-the-+ placement, the FAB keeps the round-57 spot.
+        centered={quickCreate?.source === 'topButton'}
         scopedPoint={quickCreate?.point || null}
         discussion={data}
         participants={Array.isArray(data.participantsID) ? data.participantsID : []}

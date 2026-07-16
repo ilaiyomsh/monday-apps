@@ -72,12 +72,18 @@ export function TaskTableRow({
   dragProps,
 }) {
   const [statusOpen, setStatusOpen] = useState(false);
-  // Label pickers open UPWARD by default (video feedback #4); computeFloatingPosition
-  // still flips down if there's no room above.
-  const [statusPosition, setStatusPosition] = useState('top-start');
+  // Label pickers open DOWNWARD and CENTERED on the cell (monday parity, round 94:
+  // @vibe 'bottom'/'top' center the popover under/над the trigger). computeFloatingPosition
+  // still decides the flip; we map its result to the centered variant.
+  const [statusPosition, setStatusPosition] = useState('bottom');
+  // round98: the picker matches the COLUMN label width — measured from the
+  // trigger cell so the open labels are as wide as the cell's fill (not a fixed
+  // 206px). Defaults to 206 until first measured.
+  const [statusMenuWidth, setStatusMenuWidth] = useState(206);
   const statusTriggerRef = useRef(null);
   const [priorityOpen, setPriorityOpen] = useState(false);
-  const [priorityPosition, setPriorityPosition] = useState('top-start');
+  const [priorityPosition, setPriorityPosition] = useState('bottom');
+  const [priorityMenuWidth, setPriorityMenuWidth] = useState(206);
   const priorityTriggerRef = useRef(null);
   const [editingName, setEditingName] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
@@ -132,26 +138,31 @@ export function TaskTableRow({
   const updateStatusPosition = () => {
     const rect = statusTriggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const w = Math.round(rect.width);
+    setStatusMenuWidth(w);
     const next = computeFloatingPosition({
       anchorRect: rect,
-      preferred: 'top-start',
-      popupWidth: 184,
-      popupHeight: Math.max(180, statusOptions.length * 46 + 24),
+      preferred: 'bottom-start',
+      popupWidth: w,
+      popupHeight: Math.max(180, statusOptions.length * 40 + 28),
       offset: 4,
     });
-    if (next?.placement) setStatusPosition(next.placement);
+    // Centered variant: keep only the vertical (bottom/top); @vibe centers it.
+    if (next?.placement) setStatusPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
   };
   const updatePriorityPosition = () => {
     const rect = priorityTriggerRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const w = Math.round(rect.width);
+    setPriorityMenuWidth(w);
     const next = computeFloatingPosition({
       anchorRect: rect,
-      preferred: 'top-start',
-      popupWidth: 184,
-      popupHeight: Math.max(180, (priorityOpts.options?.length || 0) * 46 + 24),
+      preferred: 'bottom-start',
+      popupWidth: w,
+      popupHeight: Math.max(180, (priorityOpts.options?.length || 0) * 40 + 28),
       offset: 4,
     });
-    if (next?.placement) setPriorityPosition(next.placement);
+    if (next?.placement) setPriorityPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
   };
 
   const cellByKey = {
@@ -353,7 +364,7 @@ export function TaskTableRow({
             zIndex={10000}
             content={() => (
               <DialogContentContainer>
-                <div className={styles.statusMenu}>
+                <div className={styles.statusMenu} style={{ width: statusMenuWidth + 20 }}>
                   {statusOptions.map((opt) => (
                     <button
                       key={opt.id}
@@ -404,7 +415,7 @@ export function TaskTableRow({
               zIndex={10000}
               content={() => (
                 <DialogContentContainer>
-                  <div className={styles.statusMenu}>
+                  <div className={styles.statusMenu} style={{ width: priorityMenuWidth + 20 }}>
                     {(priorityOpts.options || []).map((opt) => (
                       <button
                         key={opt.id}

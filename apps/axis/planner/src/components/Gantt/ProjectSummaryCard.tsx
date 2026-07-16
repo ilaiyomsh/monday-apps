@@ -8,6 +8,7 @@ import { useSettings } from '../../contexts/SettingsContext';
 import { useLocale } from '../../hooks/useLocale';
 import { mondayService } from '../../services/mondayService';
 import { logger } from '../../utils/Logger';
+import { CONFIG } from '../../utils/constants';
 export { Avatar } from './Avatar';
 
 interface ProjectSummaryCardProps {
@@ -83,7 +84,7 @@ const ProjectTypeBadge: React.FC<{ projectType?: string; projectTypeColor?: stri
         ref={badgeRef}
         onClick={() => setIsOpen(!isOpen)}
         disabled={isUpdating || availableProjectTypes.length === 0}
-        className="px-3 py-1.5 rounded-full text-sm font-bold text-white truncate max-w-[150px] cursor-pointer hover:opacity-80 transition-all duration-150 hover:scale-105 hover:shadow-md disabled:cursor-default disabled:opacity-100"
+        className="px-2.5 py-0.5 rounded-full text-xs font-semibold text-white truncate max-w-[130px] cursor-pointer hover:opacity-80 transition-all duration-150 hover:scale-105 hover:shadow-md disabled:cursor-default disabled:opacity-100"
         style={{ backgroundColor: displayColor || 'var(--project-color-fallback)' }}
         title={displayLabel || t('projectSummary.selectType')}
       >
@@ -114,14 +115,17 @@ const formatHours = (value: number | null | undefined): string => {
   return String(Math.round(value));
 };
 
-const SKELETON = <span className="h-4 w-10 rounded bg-bg-hover animate-pulse" aria-hidden="true" />;
+const SKELETON = <span className="h-3.5 w-8 rounded bg-bg-hover animate-pulse" aria-hidden="true" />;
 
-// Shared cell layout: a value (or skeleton) above a muted label, centered.
-const MetricCell: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => (
-  <div className="flex flex-col items-center text-center min-w-0">
+// Shared cell layout: a muted label and its value on ONE line, small text to
+// match the timeline ruler's month labels. The caller supplies the auto-margin
+// (ml-auto / mr-auto — physical, dir-independent) that flushes the pair to the
+// outer edge of its half-cell so the two metrics sit symmetrically.
+const MetricCell: React.FC<{ label: string; className?: string; children: React.ReactNode }> = ({ label, className = '', children }) => (
+  <span className={`flex items-center gap-1.5 min-w-0 max-w-full ${className}`}>
+    <span className="text-xs text-text-muted truncate">{label}</span>
     {children}
-    <span className="text-sm text-text-muted mt-0.5 truncate max-w-full">{label}</span>
-  </div>
+  </span>
 );
 
 // Editable planned-hours cell. Click the number to edit; the value is written
@@ -220,19 +224,30 @@ const ProjectMetricsRow: React.FC<{ projectId: string }> = ({ projectId }) => {
 
   const staticValue = (value: number) =>
     projectMetricsReady ? (
-      <span className="text-sm font-bold text-text-primary tabular-nums leading-tight">{formatHours(value)}</span>
+      <span className="text-xs font-bold text-text-primary tabular-nums leading-tight">{formatHours(value)}</span>
     ) : SKELETON;
 
   return (
-    <div dir="ltr" className="grid grid-cols-3 gap-2 pt-2 mt-1 border-t border-border-subtle">
-      <EditablePlannedCell
-        projectId={projectId}
-        value={metrics?.planned ?? null}
-        ready={projectMetricsReady}
-        label={t('projectSummary.plannedHours')}
-      />
-      <MetricCell label={t('projectSummary.allocatedHours')}>{staticValue(metrics?.allocated ?? 0)}</MetricCell>
-      <MetricCell label={t('projectSummary.actualHours')}>{staticValue(metrics?.reported ?? 0)}</MetricCell>
+    // Planned-hours cell is intentionally HIDDEN for now (owner, 2026-07-14): the
+    // card shows only ACTUAL + ALLOCATED, each as an inline "label number" pair
+    // split by a vertical divider. The Settings mapping (projectPlannedHoursColumnId)
+    // is deliberately left in place, and the EditablePlannedCell component below is
+    // kept ready for future use — to bring planned back, add a third <MetricCell/>
+    // (value={metrics?.planned ?? null}, label={t('projectSummary.plannedHours')})
+    // with another divider.
+    // Two equal-width cells (flex-1 halves), no dividers. The metrics flush to
+    // the OUTER edges — actual to the right (ml-auto), allocated to the left
+    // (mr-auto) — so they sit symmetrically under the type/PM pair above. Height
+    // pinned to CONFIG.rowHeight (px) — NOT Tailwind h-12: :root font-size is 20px
+    // (index.css), so h-12 (3rem) renders 60px and drifts the card off the 48px
+    // px-based track grid (the drift compounds per row). See BUGS.md.
+    <div className="flex items-stretch" style={{ height: CONFIG.rowHeight }}>
+      <div className="flex-1 min-w-0 px-3 flex items-center">
+        <MetricCell className="ml-auto" label={t('projectSummary.actualHours')}>{staticValue(metrics?.reported ?? 0)}</MetricCell>
+      </div>
+      <div className="flex-1 min-w-0 px-3 flex items-center">
+        <MetricCell className="mr-auto" label={t('projectSummary.allocatedHours')}>{staticValue(metrics?.allocated ?? 0)}</MetricCell>
+      </div>
     </div>
   );
 };
@@ -248,7 +263,12 @@ export const ProjectSummaryCard = memo<ProjectSummaryCardProps>(({
   const locale = useLocale();
   return (
     <div className="flex flex-col" dir={locale.dir}>
-      <div className="flex items-center justify-between gap-3">
+      {/* Row 1 — project-type badge flush to one edge, PM to the other
+          (justify-between), symmetric with the two hour metrics below. Type is
+          first (right in RTL); PM is last so it sits on the LEFT. Height pinned
+          to CONFIG.rowHeight (px), NOT h-12 — see the metrics row below for why
+          rem-based heights drift off the 48px track grid. */}
+      <div className="flex items-center justify-between gap-2" style={{ height: CONFIG.rowHeight }}>
         <ProjectTypeBadge
           projectType={summary.projectType}
           projectTypeColor={summary.projectTypeColor}

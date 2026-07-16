@@ -24,6 +24,7 @@ import { prefetchMyTasks } from './hooks/useMyTasks.js';
 import { prefetchMyDecisions } from './hooks/useMyDecisions.js';
 import { prefetchDiscussions } from './hooks/useDiscussions.js';
 import logger from './utils/logger.js';
+import { installChromeNarrowWatcher } from './utils/chromeNarrow.js';
 import { ToastContainer } from './components/Toast';
 import { ErrorDetailsModal } from './components/ErrorDetailsModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -60,8 +61,20 @@ function readSavedAppView() {
   try {
     const saved = window.localStorage.getItem(APP_VIEW_KEY);
     return saved === 'myTasks' || saved === 'myDecisions' ? saved : 'discussions';
-  } catch {
+  } catch (err) {
+    logger.warn('App', 'localStorage לא זמין — תצוגת ברירת המחדל נטענת', err);
     return 'discussions';
+  }
+}
+
+// Has the user EVER chosen a view themselves (any value persisted)? Drives the
+// member first-visit default below — an explicit choice always wins over it.
+function hasSavedAppView() {
+  try {
+    return window.localStorage.getItem(APP_VIEW_KEY) != null;
+  } catch (err) {
+    logger.warn('App', 'localStorage לא זמין — אין תצוגה שמורה', err);
+    return false;
   }
 }
 
@@ -71,7 +84,8 @@ function readSavedWidth(key, maxW, minW = SIDEBAR_MIN_W) {
     const n = raw == null ? NaN : Number(raw);
     if (!Number.isFinite(n)) return null;
     return Math.min(maxW, Math.max(minW, n));
-  } catch {
+  } catch (err) {
+    logger.warn('App', 'localStorage לא זמין — רוחב סרגל ברירת מחדל', err);
     return null;
   }
 }
@@ -79,7 +93,8 @@ function readSavedWidth(key, maxW, minW = SIDEBAR_MIN_W) {
 function readSavedViewMode() {
   try {
     return window.localStorage.getItem(VIEW_MODE_KEY) === 'calendar' ? 'calendar' : 'list';
-  } catch {
+  } catch (err) {
+    logger.warn('App', 'localStorage לא זמין — מצב תצוגת רשימה נטען', err);
     return 'list';
   }
 }
@@ -126,7 +141,8 @@ function readLaunchParamsFromUrl(urlValue) {
     const base = typeof window !== 'undefined' ? window.location.origin : 'https://monday.com';
     const url = new URL(String(urlValue), base);
     return readLaunchParamsFromSearch(url.search);
-  } catch {
+  } catch (err) {
+    logger.warn('App', 'ניתוח URL של פרמטרי פתיחה נכשל — נופל לניתוח query גולמי', err);
     const query = String(urlValue).split('?')[1] || '';
     return readLaunchParamsFromSearch(query ? `?${query}` : '');
   }
@@ -228,7 +244,7 @@ export default function App() {
   const [appView, setAppView] = useState(readSavedAppView);
   const handleAppViewChange = useCallback((view) => {
     setAppView(view);
-    try { window.localStorage.setItem(APP_VIEW_KEY, view); } catch { /* storage unavailable */ }
+    try { window.localStorage.setItem(APP_VIEW_KEY, view); } catch (err) { logger.warn('App', 'localStorage לא זמין — בחירת התצוגה לא נשמרה', err); }
   }, []);
   // "המשימות שלי" is always reachable now (a dedicated button in the discussions
   // header + a "דיונים" back-button in the My Tasks toolbar drive `appView`), so
@@ -269,6 +285,11 @@ export default function App() {
       setDiscReturnArm((n) => n + 1);
     }
   }, [effectiveView]);
+  // round103 — while monday's item-card (updates) panel is open it docks and
+  // shrinks the iframe; watch for that width drop and toggle body[data-chrome-narrow]
+  // so each view hides its non-essential chrome (header details / battery / toolbar)
+  // instead of letting it slide left. Mounted once for the whole app.
+  useEffect(() => installChromeNarrowWatcher(), []);
   // active=false: this is a pure TRANSITION replay armed by the token — never a
   // real loading flag. The card pane runs its own data loading after it reveals.
   const discussionsRightSplash = useMinSplash(false, MIN_SPLASH_MS, discReturnArm);
@@ -357,6 +378,11 @@ export default function App() {
         const owners = data?.boards?.[0]?.owners || [];
         const isOwner = owners.some((owner) => String(owner.id) === String(userId));
         if (!cancelled) setCanManageSettings(isOwner);
+        // MEMBER first-visit default (owner decision 2026-07-14): a non-owner
+        // who never chose a view themselves lands straight in "המשימות שלי".
+        // Deliberately NOT persisted — it stays a default; the user's first
+        // explicit navigation persists their choice and wins from then on.
+        if (!cancelled && !isOwner && !hasSavedAppView()) setAppView('myTasks');
       } catch (err) {
         if (cancelled) return;
         // Fail closed for management, but make the failure visible instead of
@@ -435,7 +461,10 @@ export default function App() {
       settle(prefetchDiscussions()),
       settle(prefetchMyTasks({ currentUser, context })),
       settle(prefetchMyDecisions('decider', { currentUser, context })),
-    ]).then(reveal);
+    ]).then(reveal)
+      // settle() maps every fetch to a resolved void, so only reveal() itself
+      // could reject here — log it; the BOOT_MAX_WAIT_MS timer still reveals.
+      .catch((err) => logger.error('App', 'חשיפת האפליקציה אחרי הטעינה נכשלה', err));
     // SAFETY: never leave the user stuck on the loader — reveal after the hard
     // timeout regardless of the fetches.
     const timer = setTimeout(reveal, BOOT_MAX_WAIT_MS);
@@ -482,6 +511,11 @@ export default function App() {
   const handleSelect = (discussion) => {
     setSelectedDiscussion(discussion);
     setShowList(false);
+    // round111 — picking a discussion auto-collapses the discussions column
+    // (animated in CSS) so the card gets the full width; the existing edge
+    // handle re-expands it. Desktop only: on mobile the panes swap via
+    // showList, and a sticky `collapsed` would blank the list on "back".
+    if (!isMobile) setCollapsed(true);
   };
 
   const handleBack = () => {
@@ -638,8 +672,9 @@ export default function App() {
           if (w != null) {
             try {
               window.localStorage.setItem(storageKey, String(w));
-            } catch {
-              /* storage unavailable (private mode / local dev) — width stays for the session */
+            } catch (err) {
+              // storage unavailable (private mode / local dev) — width stays for the session
+              logger.warn('App', 'localStorage לא זמין — רוחב הסרגל לא נשמר', err);
             }
           }
           return w;
@@ -659,8 +694,9 @@ export default function App() {
     setViewMode(mode);
     try {
       window.localStorage.setItem(VIEW_MODE_KEY, mode);
-    } catch {
-      /* storage unavailable — mode stays for the session */
+    } catch (err) {
+      // storage unavailable — mode stays for the session
+      logger.warn('App', 'localStorage לא זמין — מצב התצוגה לא נשמר', err);
     }
     if (mode === 'calendar') {
       const t = new Date();
@@ -782,6 +818,7 @@ export default function App() {
           selectedId={selectedDiscussion?.id}
           onCreateNew={() => setShowCreate(true)}
           onEdit={(d) => setEditDiscussion(d)}
+          onCopyLink={(d) => handleCopyDiscussionLink(d.id, 'topics')}
           onDuplicate={(d) => setDuplicateFrom(d)}
           onExport={handleExport}
           onDelete={handleDeleteDiscussion}
@@ -814,7 +851,6 @@ export default function App() {
             onShowLoading={notifyLoading}
             onDismissToast={dismissNotice}
             onUpdated={handleSaved}
-            onCopyDiscussionLink={handleCopyDiscussionLink}
             initialTab={launchParams.tab}
             initialTabDiscussionId={launchParams.discussionId}
             canManageSettings={canManageSettings}

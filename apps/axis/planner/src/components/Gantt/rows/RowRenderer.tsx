@@ -20,9 +20,10 @@ export const RowRenderer: React.FC<RowRendererProps> = memo(({ row }) => {
     case 'GROUP': {
       const groupRow = row as GroupHeaderRowType;
       return (
-        <GroupHeaderRow 
-          group={groupRow.data} 
-          isExpanded={groupRow.isExpanded} 
+        <GroupHeaderRow
+          group={groupRow.data}
+          isExpanded={groupRow.isExpanded}
+          dimmed={groupRow.dimmed}
         />
       );
     }
@@ -53,6 +54,7 @@ export const RowRenderer: React.FC<RowRendererProps> = memo(({ row }) => {
           isExpanded={section.isExpanded}
           count={section.count}
           accentColor={section.accentColor}
+          dimmed={section.dimmed}
         />
       );
     }

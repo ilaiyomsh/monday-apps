@@ -120,17 +120,22 @@ export const PROVISION_SPEC = {
     name: 'נושאים לדיון',
     columns: [
       { alias: 'topicCreatorID', type: 'people', title: 'יוצר' },
+      { alias: 'topicCreationDateID', type: 'date', title: 'תאריך יצירה' }, // round115
       { alias: 'topicNotForDiscussionID', type: 'checkbox', title: 'האם להציג' },
     ],
     // discussionLinkID (back-link to discussions) is created as the reflection of
     // discussions.topicsBoardLinkID — see above.
     relations: [],
-    subitems: [{ alias: 'pointNotForDiscussionID', type: 'checkbox', title: 'האם להציג' }],
+    subitems: [
+      { alias: 'pointNotForDiscussionID', type: 'checkbox', title: 'האם להציג' },
+      { alias: 'pointCreationDateID', type: 'date', title: 'תאריך יצירה' }, // round115
+    ],
   },
   tasks: {
     name: 'משימות',
     columns: [
       { alias: 'taskCreatorID', type: 'people', title: 'יוצר' },
+      { alias: 'taskCreationDateID', type: 'date', title: 'תאריך יצירה' }, // round115
       { alias: 'responsibilityID', type: 'people', title: 'אחריות' },
       { alias: 'deadlineID', type: 'date', title: 'דד ליין' },
       { alias: 'statusID', type: 'status', title: 'סטאטוס', defaults: STATUS_DEFAULTS },

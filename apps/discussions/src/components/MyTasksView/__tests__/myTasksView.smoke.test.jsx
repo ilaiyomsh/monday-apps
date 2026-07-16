@@ -23,7 +23,7 @@ vi.mock('@generated/hooks/useMyTasks.js', () => ({
 }));
 vi.mock('@generated/hooks/useDiscussions.js', () => ({ useDiscussions: () => ({ items: [], loading: false }) }));
 vi.mock('@generated/hooks/useViewport.js', () => ({ useViewport: () => ({ isMobile: vp.mobile, isTablet: false, isDesktop: !vp.mobile }) }));
-vi.mock('@generated/contexts/MondayContext.jsx', () => ({ useMondayContext: () => ({ context: {}, currentUser: { id: '1' } }) }));
+vi.mock('@generated/contexts/MondayContext.jsx', async (importOriginal) => ({ ...(await importOriginal()), useMondayContext: () => ({ context: {}, currentUser: { id: '1' } }) }));
 vi.mock('@generated/hooks/useStatusOptions', () => ({
   useStatusOptions: (_b, alias) => (alias === 'priorityID'
     ? { options: [{ id: 'p1', label: 'דחוף', color: '#df2f4a' }], labelById: { p1: 'דחוף' }, colorById: { p1: '#df2f4a' }, orderById: { p1: 0 } }

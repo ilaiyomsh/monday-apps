@@ -99,11 +99,17 @@ export const ProjectSummaryBar: React.FC<{ group: Group }> = memo(({ group }) =>
 
   if (!summary) return null;
 
+  const isSelected = selectedProjectId !== null && String(selectedProjectId) === String(group.id);
+
   const left = getXByDate(summary.minStart);
   const width = Math.max(getWidthByDates(summary.minStart, summary.maxEnd), pixelsPerDay);
-  const barHeight = CONFIG.rowHeight - 12;
-
-  const isSelected = selectedProjectId !== null && String(selectedProjectId) === String(group.id);
+  // Default height matches an individual allocation bar (TaskBar = rowHeight-12
+  // = 36px, top 6px), so every project's summary bar reads as a PEER of the
+  // allocations when nothing is focused. Selecting a project promotes ONLY its
+  // summary bar to rowHeight-4 = 44px (top 2px) — then it becomes the dominant
+  // "parent" bar over its own allocations. Focus is what earns the emphasis.
+  const barHeight = isSelected ? CONFIG.rowHeight - 4 : CONFIG.rowHeight - 12;
+  const barTop = (CONFIG.rowHeight - barHeight) / 2;
 
   // Clicking the summary bar focuses the project — identical to clicking the
   // project name in the sidebar (toggle off when it's already focused).
@@ -119,7 +125,7 @@ export const ProjectSummaryBar: React.FC<{ group: Group }> = memo(({ group }) =>
         left: `${left}px`,
         width: `${width}px`,
         height: `${barHeight}px`,
-        top: '6px',
+        top: `${barTop}px`,
         borderRadius: `${barHeight / 2}px`,
         backgroundColor: fillColor,
       }}

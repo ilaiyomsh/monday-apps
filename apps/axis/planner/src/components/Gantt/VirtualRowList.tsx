@@ -275,6 +275,22 @@ export const VirtualRowList: React.FC = () => {
 
             // Allow overflow for GROUP rows to show floating ProjectSummaryCard
             const isGroupRow = row.type === 'GROUP';
+            // Separator space reserved on this row (already part of virtualRow.size).
+            // Rendered as SOLID spacers (not row-level opacity, which would make the
+            // sticky sidebar translucent and bleed the timeline through). Each spacer
+            // is filled to BLEND with its neighbour surface — never a contrasting
+            // stripe — so separation reads from the shadow, not a colour band.
+            const gapTop = row.gapTop ?? 0;
+            const gapBottom = row.gapBottom ?? 0;
+            // The focused block floats above its (dimmed) neighbours like a hovered
+            // allocation bar: a strong drop shadow on its top (header) and bottom
+            // (last track) edges, plus the uniform translateY lift below.
+            const focusShadow =
+              row.focusEdge === 'top'
+                ? '0 -13px 26px -6px rgba(0,0,0,0.30)'
+                : row.focusEdge === 'bottom'
+                ? '0 13px 26px -6px rgba(0,0,0,0.30)'
+                : undefined;
             return (
               <div
                 key={virtualRow.key}
@@ -286,6 +302,8 @@ export const VirtualRowList: React.FC = () => {
                   width: '100%',
                   height: virtualRow.size,
                   overflow: isGroupRow ? 'visible' : undefined,
+                  display: 'flex',
+                  flexDirection: 'column',
                   // Lift the focused block above its neighbours so its shadow
                   // reads correctly. The GROUP row must stay ABOVE its own track
                   // rows — it hosts the floating ProjectSummaryCard (z-60 within
@@ -294,27 +312,35 @@ export const VirtualRowList: React.FC = () => {
                   //   focused track rows: 36  (above neighbours, below the card)
                   //   normal group row  : 35
                   zIndex: isGroupRow ? (row.focusBlock ? 37 : 35) : row.focusBlock ? 36 : undefined,
-                  // NOTE: focus no longer dims non-focused rows via opacity — a
-                  // row-level opacity made the sticky projects column 10%
-                  // translucent (bars bled through). Focus is now conveyed solely
-                  // by lifting + shadowing the focused block (below). `row.dimmed`
-                  // is retained on the data model but intentionally not applied.
-                  // Projects focus mode: the focused block floats like a hovered
-                  // allocation bar — a small uniform lift (translateY on every
-                  // block row) plus a soft shadow on its top (header) and bottom
-                  // (last track) edges. No accent border.
-                  boxSizing: 'border-box',
-                  boxShadow:
-                    row.focusEdge === 'top'
-                      ? '0 -6px 14px -5px rgba(0,0,0,0.22)'
-                      : row.focusEdge === 'bottom'
-                      ? '0 6px 14px -5px rgba(0,0,0,0.22)'
-                      : undefined,
-                  transform: row.focusBlock ? 'translateY(-2px)' : undefined,
+                  transform: row.focusBlock ? 'translateY(-3px)' : undefined,
                   transition: 'opacity 150ms ease, transform 150ms ease, box-shadow 150ms ease',
                 }}
               >
-                <RowRenderer row={row} />
+                {gapTop > 0 && (
+                  <div style={{ height: gapTop, flexShrink: 0, background: row.gapTopColor }} />
+                )}
+                {/* Content box — the soft focus shadow hugs THIS edge (the real
+                    block boundary), not the blended spacer.
+                    position:relative + zIndex lifts the content (and its
+                    box-shadow) ABOVE its sibling gap spacers, which are opaque
+                    and — being later in DOM order — would otherwise paint over
+                    the BOTTOM shadow and hide it. Without this the bottom edge
+                    reads flat while the top edge (whose spacer precedes it) casts
+                    a visible shadow: the two edges must be symmetric. */}
+                <div
+                  style={{
+                    flex: '1 1 auto',
+                    minHeight: 0,
+                    boxShadow: focusShadow,
+                    position: focusShadow ? 'relative' : undefined,
+                    zIndex: focusShadow ? 1 : undefined,
+                  }}
+                >
+                  <RowRenderer row={row} />
+                </div>
+                {gapBottom > 0 && (
+                  <div style={{ height: gapBottom, flexShrink: 0, background: row.gapBottomColor }} />
+                )}
               </div>
             );
           })}

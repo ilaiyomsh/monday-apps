@@ -26,7 +26,8 @@
   position: relative;
 }
 .bPill:hover { background: var(--primary-background-hover-color, #f0f1f3); }
-.bPillIcon { flex-shrink: 0; width: 20px; height: 20px; color: currentColor; }
+/* monday toolbar icons read GRAY (not the darker label color). */
+.bPillIcon { flex-shrink: 0; width: 20px; height: 20px; color: var(--secondary-text-color, #676879); }
 .bPillCount { margin-inline-start: 2px; opacity: 0.85; }
 /* Applied/selected pill: light-blue fill but BLACK text (per request). */
 .bPillApplied { background: var(--primary-selected-color, #e6f1ff); color: var(--primary-text-color, #323338); }

@@ -173,7 +173,7 @@ function SortableTopicSection({
   // Granular discussion-tier caps (each equals the legacy canEdit while the
   // feature is off). add → add topic/point; edit → rename/priority/drag-reorder;
   // del → delete/hide; check → "נידונה" toggle.
-  canAdd = true, canEditTopic = true, canDelete = true, canCheck = true,
+  canAdd = true, canEditTopic = true, canHideTopic = true, canDelete = true, canCheck = true,
   priorityMapped = false, priorityOptions, priorityLabelById, priorityColorById, updateTopicPriority,
   // Decisions/tasks-from-point wiring (threaded from TopicsTab).
   onCreatePointDecision, onCreatePointTask, onOpenPointItems,
@@ -344,9 +344,9 @@ function SortableTopicSection({
         )}
 
         {/* Eye toggle — hide/show the topic, placed at the right edge of the
-            name. Single click toggles the not-for-discussion flag (replaces the
-            old kebab \"הסתר/הצג\"). */}
-        {canEditTopic && (
+            name. Single click toggles the not-for-discussion flag. Gated by
+            canHideTopic (lead/coordinator/owner only — item 10). */}
+        {canHideTopic && (
           <button
             type="button"
             className={styles.eyeBtn}
@@ -459,6 +459,7 @@ function SortableTopicSection({
                   onRename={renamePoint}
                   onRetryCreate={onRetryCreate}
                   canEditPoint={canEditTopic}
+                  canHidePoint={canHideTopic}
                   canCheck={canCheck}
                   decisionCount={getPointItemIds(pointItemsByPoint, point._realId || point.id, 'decision')
                     .filter((id) => decisionIdSet.has(String(id))).length}
@@ -466,8 +467,8 @@ function SortableTopicSection({
                     .filter((id) => taskIdSet.has(String(id))).length}
                   // Stamp the parent topic id onto the scoped point — the
                   // quick-create task flow links the new task to the topic too.
-                  onCreateDecision={onCreatePointDecision ? () => onCreatePointDecision({ ...point, topicId: topic.id }) : undefined}
-                  onCreateTask={onCreatePointTask ? () => onCreatePointTask({ ...point, topicId: topic.id }) : undefined}
+                  onCreateDecision={onCreatePointDecision ? (p, anchor) => onCreatePointDecision({ ...point, topicId: topic.id }, anchor) : undefined}
+                  onCreateTask={onCreatePointTask ? (p, anchor) => onCreatePointTask({ ...point, topicId: topic.id }, anchor) : undefined}
                   onOpenDecisions={(p) => onOpenPointItems('decision', p)}
                   onOpenTasks={(p) => onOpenPointItems('task', p)}
                   selectable={selectable}
@@ -532,6 +533,10 @@ export function TopicsTab({
   // grant some and not others.
   addTopicOrPoint = true, editTopicOrPoint = true, deleteTopicOrPoint = true,
   checkPoint = true, editResponses = true, // editResponses kept for prop compat (התייחסויות column removed from display)
+  // Hide/show a topic or point (item 10) — a FIXED rule (discussion lead /
+  // coordinator / owner), computed by DiscussionCard, independent of
+  // editTopicOrPoint. Defaults true for back-compat in tests/harnesses.
+  canHide = true,
   // Owners (can('reorderColumns')) may drag-resize the topics columns; the
   // widths persist per-instance under the shared 'topics' tableId (all users).
   canReorderColumns = false,
@@ -663,8 +668,9 @@ export function TopicsTab({
     onNotify?.(msg, 'success', 6000, { label: 'בטל', onClick: undo });
   };
   // Bulk hide — set every selected point's "not for discussion" flag.
+  // Gated by canHide (lead/coordinator/owner only — item 10).
   const hideSelectedPoints = () => {
-    if (!editTopicOrPoint || selectedPoints.length === 0) return;
+    if (!canHide || selectedPoints.length === 0) return;
     const pts = selectedPoints;
     clearPointSelection();
     pts.forEach((p) => { if (p.notForDiscussion !== true) togglePointNotForDiscussion(p, true); });
@@ -839,11 +845,12 @@ export function TopicsTab({
 
   // Create-from-point callbacks — rendered only when the parent provided the
   // handler (the parent gates by the createDecision/createTask capabilities).
+  // `anchor` = the clicked "+" button's rect, so the create box opens under it.
   const onCreatePointDecision = typeof onCreateFromPoint === 'function'
-    ? (point) => onCreateFromPoint('decision', point)
+    ? (point, anchor) => onCreateFromPoint('decision', point, anchor)
     : undefined;
   const onCreatePointTask = typeof onCreateFromPoint === 'function'
-    ? (point) => onCreateFromPoint('task', point)
+    ? (point, anchor) => onCreateFromPoint('task', point, anchor)
     : undefined;
   const onOpenPointItems = (kind, point) => setPopup({ kind, point });
 
@@ -916,7 +923,7 @@ export function TopicsTab({
             <Text type={"text2"} element="span">{selectedPointIds.size} נבחרו</Text>
           </div>
           <div className={styles.actionBarCenter}>
-            {editTopicOrPoint && (
+            {canHide && (
               <Button kind={"secondary"} size={"small"} onClick={hideSelectedPoints}>הסתרה</Button>
             )}
             {deleteTopicOrPoint && (
@@ -954,6 +961,7 @@ export function TopicsTab({
               columns={visibleKeys}
               canAdd={addTopicOrPoint}
               canEditTopic={editTopicOrPoint}
+              canHideTopic={canHide}
               canDelete={deleteTopicOrPoint}
               canCheck={checkPoint}
               priorityMapped={priorityMapped}

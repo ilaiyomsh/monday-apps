@@ -16,7 +16,9 @@ export function TaskCard({ task, onStatusChange, onAssigneeChange, onDeadlineCha
   const deadline = task.deadlineID;
   const isOverdue = deadline && deadline < new Date() && doneId != null && task.statusID !== doneId;
   const [statusOpen, setStatusOpen] = useState(false);
-  const [statusPosition, setStatusPosition] = useState('bottom-end');
+  // Status picker opens DOWNWARD and CENTERED on the trigger (monday parity,
+  // round 94); flips up only if there's no room below.
+  const [statusPosition, setStatusPosition] = useState('bottom');
   const statusTriggerRef = useRef(null);
 
   const updateStatusPosition = () => {
@@ -24,12 +26,12 @@ export function TaskCard({ task, onStatusChange, onAssigneeChange, onDeadlineCha
     if (!rect) return;
     const next = computeFloatingPosition({
       anchorRect: rect,
-      preferred: 'bottom-end',
-      popupWidth: 180,
-      popupHeight: Math.max(160, statusOptions.length * 34 + 20),
+      preferred: 'bottom-start',
+      popupWidth: 206,
+      popupHeight: Math.max(180, statusOptions.length * 40 + 28),
       offset: 4,
     });
-    if (next?.placement) setStatusPosition(next.placement);
+    if (next?.placement) setStatusPosition(next.placement.startsWith('top') ? 'top' : 'bottom');
   };
 
   const statusBadge = (

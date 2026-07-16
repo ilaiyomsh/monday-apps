@@ -195,10 +195,86 @@ describe('resolveCan — feature on, additive role union', () => {
     }
   });
 
-  it('a user who holds no role is denied edit (default-deny) but can still view', () => {
+  it('decision tier: creator/decider who are ALSO listed as affected keep editing decider+affected (union over the affected deny)', () => {
+    // The reported bug: the seed's affectedID role carries editDecisionAffected:false,
+    // and a decision's creator/decider are usually also in the affected column —
+    // deny-wins stripped the ability their own roles explicitly grant.
+    const asCreator = {
+      boardKey: 'decisions',
+      item: decision({ creator: [person(ME)], decider: [person(OTHER)], affected: [person(ME)] }),
+      currentUserId: ME,
+    };
+    const asDecider = {
+      boardKey: 'decisions',
+      item: decision({ creator: [person(OTHER)], decider: [person(ME)], affected: [person(ME)] }),
+      currentUserId: ME,
+    };
+    expect(resolveCan('editDecisionAffected', asCreator, opts)).toBe(true);
+    expect(resolveCan('editDecisionAffected', asDecider, opts)).toBe(true);
+  });
+
+  it('decision tier: an affected-only user still cannot edit decider+affected', () => {
+    const ctx = {
+      boardKey: 'decisions',
+      item: decision({ creator: [person(OTHER)], decider: [person(OTHER)], affected: [person(ME)] }),
+      currentUserId: ME,
+    };
+    expect(resolveCan('editDecisionAffected', ctx, opts)).toBe(false);
+  });
+
+  it('item 13: editSummary matrix-granted to participants (multi-person) is IGNORED — only single-person discussion roles may write the summary', () => {
+    const grantedToParticipants = {
+      permissions: {
+        enabled: true,
+        version: 1,
+        roles: { 'discussions:participantsID': { capabilities: { editSummary: true } } },
+      },
+      canManageSettings: false,
+    };
+    const ctx = { discussion: disc({ participants: [person(ME)] }), currentUserId: ME };
+    expect(resolveCan('editSummary', ctx, grantedToParticipants)).toBe(false);
+    // ...but the same explicit grant on the (single-person) lead role works.
+    const grantedToLead = {
+      permissions: {
+        enabled: true,
+        version: 1,
+        roles: { 'discussions:discussionLeadID': { capabilities: { editSummary: true } } },
+      },
+      canManageSettings: false,
+    };
+    expect(resolveCan('editSummary', { discussion: disc({ lead: [person(ME)] }), currentUserId: ME }, grantedToLead)).toBe(true);
+  });
+
+  it('item 21: the discussion lead/coordinator can EDIT any decision of their discussion — but not delete it', () => {
+    const ctx = {
+      item: decision({ creator: [person(OTHER)], decider: [person(OTHER)], affected: [] }),
+      discussion: disc({ lead: [person(ME)] }),
+      currentUserId: ME,
+    };
+    expect(resolveCan('editDecisionName', ctx, opts)).toBe(true);
+    expect(resolveCan('editDecisionAffected', ctx, opts)).toBe(true);
+    expect(resolveCan('deleteDecision', ctx, opts)).toBe(false);
+  });
+
+  it('item 20: viewDiscussion is role-gated — participants and role-holders view, a stranger is denied', () => {
+    expect(resolveCan('viewDiscussion', { discussion: disc({ participants: [person(ME)] }), currentUserId: ME }, opts)).toBe(true);
+    expect(resolveCan('viewDiscussion', { discussion: disc({ lead: [person(ME)] }), currentUserId: ME }, opts)).toBe(true);
+    expect(resolveCan('viewDiscussion', { discussion: disc({ creator: [person(OTHER)] }), currentUserId: ME }, opts)).toBe(false);
+  });
+
+  it('item 20 safety valves: an UNREADY discussion and an UNSEEDED roles map both keep view allow-all', () => {
+    // unready — people columns not loaded yet: never flash a "no access" state
+    expect(resolveCan('viewDiscussion', { discussion: unloadedDisc, currentUserId: ME }, opts)).toBe(true);
+    // roles map with no discussions:* rows (owner never opened the permissions
+    // tab): keep today's allow-all rather than locking everyone out
+    const unseeded = { permissions: { enabled: true, version: 1, roles: {} }, canManageSettings: false };
+    expect(resolveCan('viewDiscussion', { discussion: disc({ creator: [person(OTHER)] }), currentUserId: ME }, unseeded)).toBe(true);
+  });
+
+  it('a user who holds no role is denied edit (default-deny) AND — item 20 — denied view on a seeded instance', () => {
     const ctx = { discussion: disc({ creator: [person(OTHER)] }), currentUserId: ME };
     expect(resolveCan('editDiscussionFields', ctx, opts)).toBe(false);
-    expect(resolveCan('viewDiscussion', ctx, opts)).toBe(true);
+    expect(resolveCan('viewDiscussion', ctx, opts)).toBe(false);
   });
 
   it('global manageTemplates is allow-all; reorderColumns owner-only even when feature on', () => {
@@ -295,42 +371,63 @@ describe('A. fail-open (enabled:false) snapshot — unchanged after Stage 1', ()
   });
 });
 
-// --- B. Revoke — deny-wins per-role veto -------------------------------------
-describe('B. revoke (feature on) — explicit false vetoes grants from other held roles', () => {
-  it('role A grants editSummary, user holds only A → ALLOW', () => {
-    const opts = { permissions: enabledRoles({ 'discussions:participantsID': { capabilities: { editSummary: true } } }) };
+// --- B. Revoke — union semantics (owner decision 2026-07-14): an explicit
+// grant from ANY held role WINS; an explicit false only revokes inherited
+// defaults. Rationale: PermissionsTab writes explicit false for every
+// UNCHECKED box, so deny-wins collapsed multi-role users to the INTERSECTION
+// of their roles' checkboxes (e.g. a decision creator who is also listed as
+// affected lost editDecisionAffected). Union restores "roles add abilities".
+describe('B. revoke (feature on) — explicit grant wins; explicit false only kills defaults', () => {
+  it('role A grants addTopicOrPoint, user holds only A → ALLOW', () => {
+    const opts = { permissions: enabledRoles({ 'discussions:participantsID': { capabilities: { addTopicOrPoint: true } } }) };
     const ctx = { discussion: disc({ participants: [person(ME)] }), currentUserId: ME };
-    expect(resolveCan('editSummary', ctx, opts)).toBe(true);
+    expect(resolveCan('addTopicOrPoint', ctx, opts)).toBe(true);
   });
 
-  it('role A grants + role B denies (both held) → DENY (deny-wins veto)', () => {
-    // participants grants editSummary, lead denies it, user holds BOTH. The user
-    // is the lead, so the creator/lead override would normally win — set
-    // strictCreatorLead:true to push the override below the veto and isolate the
-    // deny-wins scan.
+  it('role A grants + role B denies (both held) → ALLOW (union: the grant survives)', () => {
+    // participants grants editSummary, lead denies it, user holds BOTH.
+    // strictCreatorLead:true removes the creator/lead override from the
+    // picture and isolates the role scan itself.
     const opts = {
       permissions: enabledRoles(
         {
-          'discussions:participantsID': { capabilities: { editSummary: true } },
-          'discussions:discussionLeadID': { capabilities: { editSummary: false } },
+          'discussions:participantsID': { capabilities: { addTopicOrPoint: true } },
+          'discussions:discussionLeadID': { capabilities: { addTopicOrPoint: false } },
         },
         { strictCreatorLead: true }
       ),
     };
     const ctx = { discussion: disc({ participants: [person(ME)], lead: [person(ME)] }), currentUserId: ME };
-    expect(resolveCan('editSummary', ctx, opts)).toBe(false);
+    expect(resolveCan('addTopicOrPoint', ctx, opts)).toBe(true);
+  });
+
+  it('explicit false on a held role still kills an INHERITED default from another held role', () => {
+    // Neither role explicitly grants; the creator role would inherit the
+    // creatorLeadOwner default (grant), but participants carries an explicit
+    // false → the default-grant is vetoed. strict mode isolates the scan.
+    const opts = {
+      permissions: enabledRoles(
+        {
+          'discussions:participantsID': { capabilities: { addTopicOrPoint: false } },
+          'discussions:discussionCreatorID': { capabilities: {} },
+        },
+        { strictCreatorLead: true }
+      ),
+    };
+    const ctx = { discussion: disc({ creator: [person(ME)], participants: [person(ME)] }), currentUserId: ME };
+    expect(resolveCan('addTopicOrPoint', ctx, opts)).toBe(false);
   });
 
   it('role A grants + role B undefined→default → ALLOW (no explicit false present)', () => {
     const opts = {
       permissions: enabledRoles({
-        'discussions:participantsID': { capabilities: { editSummary: true } },
+        'discussions:participantsID': { capabilities: { addTopicOrPoint: true } },
         'discussions:discussionLeadID': { capabilities: {} },
       }),
     };
     // user holds participants only → single grant, no veto.
     const ctx = { discussion: disc({ participants: [person(ME)] }), currentUserId: ME };
-    expect(resolveCan('editSummary', ctx, opts)).toBe(true);
+    expect(resolveCan('addTopicOrPoint', ctx, opts)).toBe(true);
   });
 
   it('role with explicit false, user holds only it, not creator/lead → DENY', () => {
@@ -616,7 +713,7 @@ describe('resolveCan — task ctx without a discussion (My Tasks)', () => {
     }
   });
 
-  it('feature on: an explicit false on a held role vetoes a grant from another held role', () => {
+  it('feature on: an explicit grant on one held role survives an explicit false on another (union)', () => {
     const perms = {
       enabled: true,
       version: 1,
@@ -626,7 +723,10 @@ describe('resolveCan — task ctx without a discussion (My Tasks)', () => {
       },
     };
     const ctx = { item: task({ creator: [person(ME)], responsible: [person(ME)] }), currentUserId: ME };
-    expect(resolveCan('editTaskDeadline', ctx, { permissions: perms, canManageSettings: false })).toBe(false);
+    expect(resolveCan('editTaskDeadline', ctx, { permissions: perms, canManageSettings: false })).toBe(true);
+    // the explicit false still fully denies a user who holds ONLY that role
+    const onlyResponsible = { item: task({ creator: [person(OTHER)], responsible: [person(ME)] }), currentUserId: ME };
+    expect(resolveCan('editTaskDeadline', onlyResponsible, { permissions: perms, canManageSettings: false })).toBe(false);
   });
 });
 
@@ -691,7 +791,7 @@ describe('resolveCan — decision tier', () => {
     expect(resolveCan('deleteDecision', ctx, on)).toBe(false);
   });
 
-  it('feature on: an explicit false on a held decision role vetoes a grant from another held role', () => {
+  it('feature on: an explicit grant on one held decision role survives an explicit false on another (union)', () => {
     const perms = {
       enabled: true,
       version: 1,
@@ -701,7 +801,10 @@ describe('resolveCan — decision tier', () => {
       },
     };
     const ctx = { item: decision({ creator: [person(ME)], decider: [person(ME)] }), currentUserId: ME };
-    expect(resolveCan('editDecisionDate', ctx, { permissions: perms, canManageSettings: false })).toBe(false);
+    expect(resolveCan('editDecisionDate', ctx, { permissions: perms, canManageSettings: false })).toBe(true);
+    // the explicit false still fully denies a user who holds ONLY the decider role
+    const onlyDecider = { item: decision({ creator: [person(OTHER)], decider: [person(ME)] }), currentUserId: ME };
+    expect(resolveCan('editDecisionDate', onlyDecider, { permissions: perms, canManageSettings: false })).toBe(false);
   });
 
   it('createDecision resolves at the DISCUSSION tier like createTask (seed grants it to participants)', () => {
@@ -752,11 +855,15 @@ describe('resolveCan — decision "affected" (מושפעים) role', () => {
     expect(resolveCan('editDecisionStatus', strangerCtx, on)).toBe(false);
   });
 
-  it('deny-wins: affected (editDecisionName:false) vetoes the decider grant when a user holds BOTH', () => {
+  it('union: the decider grant (editDecisionName:true) survives the affected revoke when a user holds BOTH', () => {
+    // The reported bug (item 5, 2026-07-14): decider/creator are usually also
+    // listed as affected; the old deny-wins veto stripped their own grants.
     const ctx = { item: decision({ decider: [person(ME)], affected: [person(ME)] }), currentUserId: ME };
-    // decider grants editDecisionName but affected revokes it → deny-wins veto.
-    expect(resolveCan('editDecisionName', ctx, on)).toBe(false);
-    // status is granted by BOTH roles → allowed (no veto).
+    expect(resolveCan('editDecisionName', ctx, on)).toBe(true);
+    // status is granted by BOTH roles → allowed either way.
     expect(resolveCan('editDecisionStatus', ctx, on)).toBe(true);
+    // affected-only user: the seed's explicit false still denies.
+    const onlyAffected = { item: decision({ decider: [person(OTHER)], affected: [person(ME)] }), currentUserId: ME };
+    expect(resolveCan('editDecisionName', onlyAffected, on)).toBe(false);
   });
 });

@@ -54,30 +54,62 @@ describe('parseTypedDate (round 47 manual entry)', () => {
   });
 });
 
-describe('DatePickerPopover — manual date input (round 47)', () => {
-  const field = () => screen.getByLabelText('הקלדת תאריך');
+describe('DatePickerPopover — segmented DD/MM/YY manual entry (round 71)', () => {
+  const group = () => screen.getByLabelText('הקלדת תאריך');
+  const dd = () => screen.getByLabelText('יום');
+  const mm = () => screen.getByLabelText('חודש');
+  const yy = () => screen.getByLabelText('שנה');
 
-  it('pre-fills the field with the current value (DD/MM/YYYY)', async () => {
+  it('renders the static slashes and pre-fills segments with the current value (2-digit year)', async () => {
     render(<DatePickerPopover value={new Date(2025, 2, 15)} onChange={vi.fn()} />);
-    await waitFor(() => expect(field().value).toBe('15/03/2025'));
+    await waitFor(() => expect(dd().value).toBe('15'));
+    expect(mm().value).toBe('03');
+    expect(yy().value).toBe('25');
+    // the two separators are always in the DOM, independent of typing
+    expect(group().textContent.match(/\//g)).toHaveLength(2);
   });
 
-  it('commits a valid typed date on Enter via onChange', () => {
+  it('auto-commits once day+month+year are filled (digits land per segment)', () => {
     const onChange = vi.fn();
     render(<DatePickerPopover value={null} onChange={onChange} />);
-    fireEvent.change(field(), { target: { value: '20/06/2026' } });
-    fireEvent.keyDown(field(), { key: 'Enter' });
+    fireEvent.change(dd(), { target: { value: '20' } });
+    fireEvent.change(mm(), { target: { value: '06' } });
+    expect(onChange).not.toHaveBeenCalled(); // year still empty — nothing committed
+    fireEvent.change(yy(), { target: { value: '26' } });
     expect(onChange).toHaveBeenCalledTimes(1);
     const d = onChange.mock.calls[0][0];
     expect([d.getFullYear(), d.getMonth() + 1, d.getDate()]).toEqual([2026, 6, 20]);
   });
 
-  it('does NOT commit an invalid entry and flags the invalid state', () => {
+  it('zero-pads an unambiguous first digit (day 4 → 04)', () => {
+    render(<DatePickerPopover value={null} onChange={vi.fn()} />);
+    fireEvent.change(dd(), { target: { value: '4' } });
+    expect(dd().value).toBe('04');
+  });
+
+  it('commits a day/month-only entry on Enter, defaulting the year', () => {
     const onChange = vi.fn();
     render(<DatePickerPopover value={null} onChange={onChange} />);
-    fireEvent.change(field(), { target: { value: '31/02/2026' } });
-    fireEvent.keyDown(field(), { key: 'Enter' });
+    fireEvent.change(dd(), { target: { value: '20' } });
+    fireEvent.change(mm(), { target: { value: '06' } });
+    fireEvent.keyDown(mm(), { key: 'Enter' });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].getFullYear()).toBe(new Date().getFullYear());
+  });
+
+  it('does NOT commit an impossible date and flags the invalid state', () => {
+    const onChange = vi.fn();
+    render(<DatePickerPopover value={null} onChange={onChange} />);
+    fireEvent.change(dd(), { target: { value: '31' } });
+    fireEvent.change(mm(), { target: { value: '02' } });
+    fireEvent.change(yy(), { target: { value: '26' } }); // 31/02 does not exist
     expect(onChange).not.toHaveBeenCalled();
-    expect(field().getAttribute('aria-invalid')).toBe('true');
+    expect(group().getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('strips non-digit input inside a segment', () => {
+    render(<DatePickerPopover value={null} onChange={vi.fn()} />);
+    fireEvent.change(dd(), { target: { value: '1a' } });
+    expect(dd().value).toBe('1');
   });
 });

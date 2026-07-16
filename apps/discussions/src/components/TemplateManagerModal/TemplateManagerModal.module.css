@@ -623,7 +623,12 @@
   flex-direction: column;
   gap: 6px;
   margin: 8px 0 4px;
-  padding-inline-start: 6px;
+  /* Item 9 + round109: the points under a topic are indented deeper than the
+     topic row so the topic→points hierarchy is visible at a glance. NOTE the
+     edit panel is dir="ltr" (line ~531 in the JSX), so inline-start = LEFT
+     here; round109 deepened it 24px → 44px per the owner ("שהנקודות יתחילו
+     עוד קצת ימינה"). */
+  padding-inline-start: 44px;
 }
 
 .pointRow {
@@ -678,4 +683,32 @@
     max-height: calc(100vh - 16px);
     border-radius: 12px 12px 0 0;
   }
+}
+
+/* Item 18 checkbox row — prominent per owner request (2026-07-14): RTL,
+   bold readable label, larger accent-colored checkbox. Sits between the
+   role-holder pickers and the "נושאים קבועים" section. */
+.deciderDefaultRow {
+  display: flex;
+  direction: rtl;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  margin: 12px 0;
+}
+
+.deciderDefaultCheckbox {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--primary-color, #0073ea);
+  cursor: pointer;
+}
+
+.deciderDefaultLabel {
+  font-family: var(--font-family);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--primary-text-color, #323338);
 }

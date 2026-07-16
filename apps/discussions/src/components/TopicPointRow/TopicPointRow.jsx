@@ -153,8 +153,9 @@ export function TopicPointRow({
   onRetryCreate,
   // Granular discussion-tier caps. Each equals the legacy canEdit while the
   // permissions feature is off, so behavior is unchanged. point edit (rename +
-  // whole-row drag + hide), check ("נידונה" toggle).
-  canEditPoint = true, canCheck = true,
+  // whole-row drag), check ("נידונה" toggle). Hiding is a SEPARATE fixed rule
+  // (item 10): only the discussion lead/coordinator/owner get canHidePoint.
+  canEditPoint = true, canHidePoint = true, canCheck = true,
   // Decisions/tasks link counters (linked ids length, from pointDecisionsLinkID /
   // pointTasksLinkID; 0 when the columns are unmapped).
   decisionCount = 0, taskCount = 0,
@@ -174,6 +175,10 @@ export function TopicPointRow({
 }) {
   const discussed = point.discussed === true;
   const excluded = point.notForDiscussion === true;
+  // Item 11: a HIDDEN point is fully inert — no rename/drag/check/create/open —
+  // so nothing can be done "through" a hidden row. The ONLY live controls are
+  // the eye (to re-show it) and the selection checkbox (bulk actions).
+  const inert = excluded;
   // Background create failed: keep the point + show a clear error + retry.
   const failed = point._createFailed === true;
   const [editingName, setEditingName] = useState(false);
@@ -201,7 +206,7 @@ export function TopicPointRow({
   // on the ROW itself when the point is editable — no six-dot grip. The
   // PointerSensor's activation distance (TopicsTab) keeps a plain click editing
   // the cell; interactive cells stopPropagation so their clicks don't start a drag.
-  const dragProps = canEditPoint ? { ...attributes, ...listeners } : {};
+  const dragProps = canEditPoint && !inert ? { ...attributes, ...listeners } : {};
 
   return (
     <div
@@ -248,14 +253,14 @@ export function TopicPointRow({
           <span
             className={styles.name}
             title={point.name}
-            onDoubleClick={canEditPoint ? () => { setNameDraft(point.name || ''); setEditingName(true); } : undefined}
+            onDoubleClick={canEditPoint && !inert ? () => { setNameDraft(point.name || ''); setEditingName(true); } : undefined}
           >
             {point.name}
           </span>
         )}
         {/* Hover rename pencil — the same inline rename as double-clicking the
             name, made explicit + discoverable (mirrors the tasks pencil). */}
-        {canEditPoint && !editingName && (
+        {canEditPoint && !inert && !editingName && (
           <button
             type="button"
             className={styles.renameBtn}
@@ -282,9 +287,10 @@ export function TopicPointRow({
         )}
         {/* Secondary controls revealed on ROW HOVER (mirrors the Tasks name cell's
             hover trash) — no longer a persistent kebab. hide(eye) toggles the
-            not-for-discussion flag; delete uses an inline confirm. Both
-            stopPropagation so a click never starts a whole-row drag. */}
-        {canEditPoint && (
+            not-for-discussion flag; gated by canHidePoint (lead/coordinator/
+            owner — item 10) and DELIBERATELY stays live on a hidden row so it
+            can be re-shown. stopPropagation so a click never starts a drag. */}
+        {canHidePoint && (
           <button
             type="button"
             className={styles.hideBtn}
@@ -307,35 +313,42 @@ export function TopicPointRow({
         )}
         {/* monday "updates" speech-bubble icon — kept LAST so it is the trailing
             (right-most) element of the name cell (opens the point's item card on
-            the Updates pane). */}
+            the Updates pane). Inert on a hidden row (item 11). */}
         <button
           type="button"
           className={styles.updatesBtn}
           title="עדכונים"
           aria-label="פתח עדכונים"
-          onClick={(e) => { e.stopPropagation(); openItemCard(point.id); }}
+          disabled={inert}
+          onClick={(e) => { e.stopPropagation(); if (!inert) openItemCard(point.id); }}
         >
           <Update size={18} />
         </button>
       </div>
 
-      {/* האם נידונה — checkbox (round 47: hideable via the columns set) */}
+      {/* האם נידונה — monday checkbox COLUMN (round 99): the whole cell is the
+          click target; empty when unchecked, a borderless green ✓ when checked.
+          Clicking toggles (hover on an empty cell shows a faint ✓ hint, like
+          monday). Disabled on a hidden row (item 11) / without the cap. */}
       {showCol('check') && (
-        <div className={styles.checkCell} onClick={stop}>
+        <div className={styles.checkCell} onClick={stop} onPointerDown={stop}>
           <button
             type="button"
-            className={`${styles.check} ${discussed ? styles.checkOn : ''}`}
-            onClick={canCheck ? () => onToggle?.(point, !discussed) : undefined}
-            aria-label={discussed ? 'נידונה' : 'לא נידונה'}
-            aria-disabled={!canCheck}
+            className={styles.checkBtn}
+            onClick={canCheck && !inert ? () => onToggle?.(point, !discussed) : undefined}
+            disabled={!canCheck || inert}
+            aria-pressed={discussed}
+            aria-label={discussed ? 'נידונה — בטל סימון' : 'סמן כנידונה'}
             title={discussed ? 'נידונה' : 'סמן כנידונה'}
           >
-            {discussed && <Check size={13} className={styles.checkMark} />}
+            <Check size={18} className={`${styles.checkGlyph} ${discussed ? styles.checkGlyphOn : ''}`} />
           </button>
         </div>
       )}
 
-      {/* החלטות — dashed create + counter pill (round 47: hideable) */}
+      {/* החלטות — dashed create + counter pill (round 47: hideable). The "+"
+          passes its own rect so the create box opens right under it (item 12);
+          both buttons are unclickable on a hidden row (item 11). */}
       {showCol('decisions') && (
         <div className={`${styles.linkCell} ${styles.decisionsCell}`} onClick={stop}>
           {onCreateDecision && (
@@ -344,7 +357,8 @@ export function TopicPointRow({
               className={`${styles.createBtn} ${styles.createDecision}`}
               title="החלטה חדשה"
               aria-label="החלטה חדשה מהנקודה"
-              onClick={() => onCreateDecision(point)}
+              disabled={inert}
+              onClick={(e) => onCreateDecision(point, e.currentTarget.getBoundingClientRect())}
             >
               +
             </button>
@@ -354,6 +368,7 @@ export function TopicPointRow({
             className={`${styles.counter} ${decisionCount > 0 ? styles.counterDecisionOn : ''}`}
             title="הצג החלטות"
             aria-label="הצג החלטות מהנקודה"
+            disabled={inert}
             onClick={() => onOpenDecisions?.(point)}
           >
             {decisionCount}
@@ -362,7 +377,8 @@ export function TopicPointRow({
         </div>
       )}
 
-      {/* משימות — dashed create + counter pill (round 47: hideable) */}
+      {/* משימות — dashed create + counter pill (round 47: hideable). Same
+          anchor-pass + hidden-row inertness as the decisions cell. */}
       {showCol('tasks') && (
         <div className={`${styles.linkCell} ${styles.tasksCell}`} onClick={stop}>
           {onCreateTask && (
@@ -371,7 +387,8 @@ export function TopicPointRow({
               className={`${styles.createBtn} ${styles.createTask}`}
               title="משימה חדשה"
               aria-label="משימה חדשה מהנקודה"
-              onClick={() => onCreateTask(point)}
+              disabled={inert}
+              onClick={(e) => onCreateTask(point, e.currentTarget.getBoundingClientRect())}
             >
               +
             </button>
@@ -381,6 +398,7 @@ export function TopicPointRow({
             className={`${styles.counter} ${taskCount > 0 ? styles.counterTaskOn : ''}`}
             title="הצג משימות"
             aria-label="הצג משימות מהנקודה"
+            disabled={inert}
             onClick={() => onOpenTasks?.(point)}
           >
             {taskCount}

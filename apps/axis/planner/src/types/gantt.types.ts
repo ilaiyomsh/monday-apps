@@ -78,6 +78,15 @@ export interface BaseFlatRow {
   // tracks + summary). VirtualRowList lifts the whole block uniformly (a small
   // translateY) so it floats like a hovered allocation bar. Set by the flattener.
   focusBlock?: boolean;
+  // Separator space (px) reserved at the top / bottom of the row and rendered by
+  // VirtualRowList as a solid spacer (so the sticky sidebar stays opaque). Already
+  // INCLUDED in `height`. gap*Color is the spacer FILL — it blends with the
+  // adjacent surface (never a contrasting stripe); separation comes from shadow.
+  // Set by the flattener.
+  gapTop?: number;
+  gapBottom?: number;
+  gapTopColor?: string;
+  gapBottomColor?: string;
 }
 
 // Group Header Row

@@ -94,8 +94,10 @@ describe('CAPABILITY_DEFAULTS', () => {
   });
 
   it('matches the spec fallbacks', () => {
-    // view + createDiscussion + manageTemplates = all
-    expect(CAPABILITY_DEFAULTS.viewDiscussion).toBe('all');
+    // item 20 (2026-07-14): view is now ROLE-GATED (participants view via the
+    // seed; strangers are denied) — no longer 'all'.
+    expect(CAPABILITY_DEFAULTS.viewDiscussion).toBe('creatorLeadOwner');
+    // createDiscussion + manageTemplates = all
     expect(CAPABILITY_DEFAULTS.createDiscussion).toBe('all');
     expect(CAPABILITY_DEFAULTS.manageTemplates).toBe('all');
     // reorderColumns + addDiscussionTypes + saveViewDefaults = owner
@@ -113,7 +115,10 @@ describe('PERMISSION_ROLE_SOURCES', () => {
   it('lists the people-column role aliases per board', () => {
     expect(PERMISSION_ROLE_SOURCES).toEqual({
       discussions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID', 'participantsID'],
-      tasks: ['taskCreatorID', 'responsibilityID'],
+      // item 19 (2026-07-14): the tasks board gained יכולת צפייה (viewers) +
+      // יכולת עריכה (editors) people columns, auto-filled at task creation and
+      // acting as first-class roles (viewers = read-only, editors = full edit).
+      tasks: ['taskCreatorID', 'responsibilityID', 'taskViewersID', 'taskEditorsID'],
       // decisions now includes affectedID ("מושפעים") as a first-class role source.
       decisions: ['decisionCreatorID', 'deciderID', 'affectedID'],
     });
@@ -171,6 +176,13 @@ describe('DEFAULT_PERMISSION_SEED (LOCKED defaults)', () => {
     expect(caps.editTaskAssignee).toBe(false);
     expect(caps.editTaskName).toBe(false);
     expect(caps.deleteTask).toBe(false);
+  });
+
+  it('task editors (יכולת עריכה) grant ALL task caps; task viewers (יכולת צפייה) grant NONE (item 19)', () => {
+    const editors = DEFAULT_PERMISSION_SEED['tasks:taskEditorsID'].capabilities;
+    TASK_CAPS.forEach((id) => expect(editors[id]).toBe(true));
+    const viewers = DEFAULT_PERMISSION_SEED['tasks:taskViewersID'].capabilities;
+    TASK_CAPS.forEach((id) => expect(viewers[id]).toBe(false));
   });
 
   it('discussion creator + lead + coordinator + participants may create decisions', () => {

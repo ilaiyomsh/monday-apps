@@ -3,6 +3,9 @@ import { Button, Text, Dropdown } from '@vibe/core';
 import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+// Varied stable group-title colors (owner request 2026-07-14) — shared engine.
+import { ensureGroupColors } from '@generated/components/MyTasksView/grouping.js';
+import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BuilderControl } from '@generated/components/MyTasksView/controls/BuilderControl.jsx';
@@ -27,6 +30,10 @@ import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
+// Quick-filter status battery (round 81) — shared buckets + presentation chip.
+import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
+import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
+import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
 import logger from '@generated/utils/logger.js';
 import styles from './PreviousTasksTab.module.css';
 
@@ -109,7 +116,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const [picking, setPicking] = useState(false);
   const [discussionOptions, setDiscussionOptions] = useState([]);
   const [savingPrev, setSavingPrev] = useState(false);
-  const { colorById, labelById, orderById, options: statusOptions } = useStatusOptions();
+  const { colorById, labelById, orderById, doneId, options: statusOptions } = useStatusOptions();
   const { isMobile } = useViewport();
   // Show the read-only priority column only when the owner mapped priorityID.
   const showPriority = !!getColumns('tasks').priorityID?.id;
@@ -746,17 +753,29 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
   }, [tasks]);
 
+  // Quick-filter battery (round 81): open / done / delayed counts over ALL loaded
+  // tasks + a one-click bucket filter folded into the client pipeline.
+  const doneStatusIds = useMemo(() => resolveDoneStatusIds(undefined, doneId), [doneId]);
+  const todayStart = useMemo(() => startOfToday(), []);
+  const bucketCounts = useMemo(() => countBuckets(tasks, doneStatusIds, todayStart), [tasks, doneStatusIds, todayStart]);
+  const [quickStatus, setQuickStatus] = useState(null);
+
   // Client pipeline: filter -> sort (both instant, over the loaded tasks). An
   // inactive sort returns the list unchanged, so default order is untouched.
   const filteredTasks = useMemo(
-    () => sortTasks(filterTasks(tasks, filter), sort, { orderById, labelById }),
-    [tasks, filter, sort, orderById, labelById]
+    () => {
+      const base = sortTasks(filterTasks(tasks, filter), sort, { orderById, labelById });
+      return quickStatus ? base.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : base;
+    },
+    [tasks, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart]
   );
 
   // Groups carry { key, label, color, items } — status groups key by the stable
   // label id (string) and resolve label/color via useStatusOptions; person groups
   // key by name. (See TasksTab for the same shape.)
-  const grouped = useMemo(() => {
+  // Right-click a group header → shared color palette (round 77).
+  const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
+  const groupedRaw = useMemo(() => {
     if (groupBy === 'status') {
       const groups = new Map();
       filteredTasks.forEach(t => {
@@ -771,7 +790,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         color: g.statusId == null ? null : (colorById[g.statusId] || null),
         items: g.items,
       }));
-      return sortGroupsByOrder(list, { order: groupOrder, orderById, noKey: NO_STATUS });
+      return ensureGroupColors(sortGroupsByOrder(list, { order: groupOrder, orderById, noKey: NO_STATUS }));
     }
     if (groupBy === 'person') {
       const groups = new Map();
@@ -782,7 +801,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         groups.get(key).label = label;
         groups.get(key).items.push(t);
       });
-      return sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_ASSIGNEE });
+      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_ASSIGNEE }));
     }
     if (groupBy === 'discussion') {
       // Group by the task's source discussion(s) (discussionLinkID). A task can
@@ -796,10 +815,12 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         groups.get(key).label = label;
         groups.get(key).items.push(t);
       });
-      return sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_DISCUSSION });
+      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_DISCUSSION }));
     }
     return [{ key: '__all__', label: '', color: null, items: filteredTasks }];
   }, [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById]);
+  // Apply the shared per-header color overrides as a final pass.
+  const grouped = useMemo(() => ensureGroupColors(groupedRaw, colorsByKey), [groupedRaw, colorsByKey]);
 
   const allCollapsed = grouped.length > 0 && grouped.every((g) => collapsed[g.key]);
   const toggleAll = () => {
@@ -953,6 +974,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
 
   return (
     <div ref={rootRef} className={styles.root}>
+      {groupColorMenu}
       <div className={styles.toolbar}>
         {/* One left-aligned cluster (like My Tasks): the discussion-type/source chip, then filter + group-by + collapse-all. */}
         <div className={styles.prevChip} dir="rtl">
@@ -1007,6 +1029,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
             <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
           )}
         </div>
+        {/* Quick-filter battery (round 81) — last flex child + auto start-margin
+            pushes it to the RIGHT edge (LTR layout); the rest stay on the left. */}
+        <div className={styles.batterySlot}>
+          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
+        </div>
       </div>
 
       {selectedIds.size > 0 && (
@@ -1056,6 +1083,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
             <div key={grp.key}>
               {groupBy !== 'none' && grp.label && (
                 <button type="button" onClick={() => setCollapsed(p => ({ ...p, [grp.key]: !p[grp.key] }))}
+                  onContextMenu={(e) => openMenuFor(grp.key, e)}
                   className={styles.groupHeader}>
                   <DropdownChevronDown
                     className={`${styles.groupChevron} ${collapsed[grp.key] ? styles.groupChevronCollapsed : ''}`}

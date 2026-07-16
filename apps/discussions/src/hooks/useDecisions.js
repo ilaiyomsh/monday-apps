@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useContext, useRef } from 'react';
 import { החלטות1Board } from '@api/BoardSDK.js';
 import { api, formatValue } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
+import { ensureSubscribers } from '../utils/mondayApi/subscribers.js';
 import { MondayContext } from '@generated/contexts/MondayContext.jsx';
 import logger from '../utils/logger';
 import { useOptimisticRows, isTempId, isRealId, nextTempId } from './useOptimisticRows.js';
@@ -136,43 +137,15 @@ const linkDecisionToPoint = (pointId, decisionId, existingLinkedIds = []) =>
 export const linkTaskToPoint = (pointId, taskId, existingLinkedIds = []) =>
   linkItemToPoint('pointTasksLinkID', pointId, taskId, existingLinkedIds);
 
-// BEST-EFFORT mirror of the link onto the DISCUSSION side — the discussions
-// board's `decisionsBoardLinkID` board_relation. Kept for completeness (so the
-// discussions board shows the relation where it IS mapped), but the reload NO
-// LONGER depends on it: fetchDecisionsByDiscussion reads the DECISION side
-// (decisions.discussionLinkID) — see its comment.
-//
-// History (the "decisions vanish on re-entry" bug): the decisions board is
-// mapped MANUALLY in Settings, so decisions.discussionLinkID and
-// discussions.decisionsBoardLinkID are two INDEPENDENT one-way relations (no
-// bidirectional reflection like the wizard-created tasks relation). The
-// decision-side write does NOT populate the discussion side, so this
-// discussion-side column is typically EMPTY — reading it is exactly what made
-// created decisions disappear on remount. The load now reads the (populated)
-// decision side; this write is a harmless extra. board_relation writes REPLACE,
-// so the caller passes the FULL current linked-id set (existing + the new
-// decision). Goes through api() → assertNoGraphQLErrors. No-ops (graceful
-// degrade) when the board/column is unmapped.
-async function linkDecisionsToDiscussion(discussionId, linkedDecisionIds) {
-  const discussionsBoardId = getBoardId('discussions');
-  const linkColId = getColumns('discussions')?.decisionsBoardLinkID?.id;
-  if (!discussionsBoardId || !linkColId) {
-    warnUnmappedOnce({ discussionId, action: 'linkDecisionsToDiscussion', discussionsBoardId: discussionsBoardId || null, linkColId: linkColId || null });
-    return;
-  }
-  const ids = [...new Set((linkedDecisionIds || []).map(String))];
-  await api(
-    `mutation ($boardId: ID!, $itemId: ID!, $cv: JSON!) {
-      change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $cv) { id }
-    }`,
-    {
-      boardId: String(discussionsBoardId),
-      itemId: String(discussionId),
-      cv: JSON.stringify({ [linkColId]: formatValue('board_relation', { linkedItems: ids.map((id) => ({ id })) }) }),
-    },
-    'useDecisions.linkDecisionsToDiscussion'
-  );
-}
+// REMOVED (2026-07-14, production incident): the old best-effort mirror write
+// onto discussions.decisionsBoardLinkID. That column is the REFLECTION (two-way
+// pair) of the decisions board's discussionLinkID — monday auto-fills it from
+// the decision-side write and REJECTS direct writes to the reflected side
+// (surfacing through the seamless iframe as a detail-stripped "Graphql
+// validation errors" toast on EVERY decision create; see the monday-api skill,
+// board-relation.md Rule 4). The reload never read this column, so the write
+// bought nothing and only produced the error. Decision→discussion linking is
+// fully covered by the decision-side discussionLinkID write in runCreateDecision.
 
 export function useDecisions(discussionId) {
   const [items, setItems] = useState([]);
@@ -204,22 +177,17 @@ export function useDecisions(discussionId) {
   // can FLUSH queued edits through the SAME mutations a committed row uses
   // (assigned each render, just before the hook returns).
   const flushersRef = useRef({});
+  // tempId -> already-created real id. create_item and the follow-up link writes
+  // are separate steps; if a LINK write fails, the decision already exists on the
+  // board. Remembering its id lets a retry RESUME from the link writes instead of
+  // calling create_item again (which would leave a duplicate, unlinked decision).
+  const createdRealIdRef = useRef(new Map());
 
-  // Reload-persistence (Task 1): the authoritative set of REAL decision ids
-  // linked to THIS discussion. Seeded from the load (the decisions already
-  // linked) and kept current as decisions are created/deleted, so a create's
-  // discussion-side write (linkDecisionsToDiscussion) sends the FULL set and
-  // never clobbers siblings. `linkWriteChainRef` SERIALIZES those writes per
-  // hook so concurrent creates apply in order (board_relation writes REPLACE).
-  const linkedIdsRef = useRef(new Set());
-  const linkWriteChainRef = useRef(Promise.resolve());
+  // (The old linkedIdsRef/linkWriteChainRef mechanism fed ONLY the removed
+  // discussion-side mirror write — see the REMOVED note above runCreateDecision.)
 
   useEffect(() => {
-    if (!discussionId) { setItems([]); setLoading(false); linkedIdsRef.current = new Set(); return; }
-    // Fresh discussion → reset the link set; the fetch below UNIONS the server's
-    // linked decisions into it (union, not replace, so a decision created during
-    // the initial load isn't dropped from the set).
-    linkedIdsRef.current = new Set();
+    if (!discussionId) { setItems([]); setLoading(false); return; }
     let cancelled = false;
     async function fetch() {
       try {
@@ -227,9 +195,6 @@ export function useDecisions(discussionId) {
         const fetchedItems = await fetchDecisionsByDiscussion(discussionId);
         if (!cancelled) {
           setItems(fetchedItems);
-          // Seed the discussion-link set with the decisions ALREADY linked, so a
-          // create appends to (never clobbers) them. Union — see the effect note.
-          fetchedItems.forEach((i) => linkedIdsRef.current.add(String(i.id)));
           logger.info('useDecisions', 'Decisions fetch completed', { discussionId, count: fetchedItems.length });
         }
       } catch (err) {
@@ -259,9 +224,6 @@ export function useDecisions(discussionId) {
     if (!discussionId) return;
     try {
       const fetchedItems = await fetchDecisionsByDiscussion(discussionId);
-      // Keep the discussion-link set comprehensive (union server ids); deletes
-      // prune it, so a later create's discussion-side write reflects the truth.
-      fetchedItems.forEach((i) => linkedIdsRef.current.add(String(i.id)));
       setItems((current) => mergeServerList(current, fetchedItems));
     } catch (err) {
       logger.error('useDecisions', 'Error refreshing decisions', { discussionId, err });
@@ -331,8 +293,12 @@ export function useDecisions(discussionId) {
     });
     if (!isRealId(decisionId)) { enqueueEdit(decisionId, 'affectedID', people); return; }
     try {
+      const ids = (people || []).map((p) => Number(p.id)).filter(Number.isFinite);
+      // round104: pre-subscribe the assignees — monday rejects assigning a
+      // non-subscriber to a people column (מושפעים is account-wide, round79).
+      await ensureSubscribers(getBoardId('decisions'), ids);
       const b = new החלטות1Board();
-      await b.item(decisionId).update({ affectedID: (people || []).map((p) => Number(p.id)) }).execute();
+      await b.item(decisionId).update({ affectedID: ids }).execute();
     } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
   };
 
@@ -347,15 +313,16 @@ export function useDecisions(discussionId) {
     });
     if (!isRealId(decisionId)) { enqueueEdit(decisionId, 'deciderID', people); return; }
     try {
+      const ids = (people || []).map((p) => Number(p.id)).filter(Number.isFinite);
+      await ensureSubscribers(getBoardId('decisions'), ids); // round104 (see updateDecisionAffected)
       const b = new החלטות1Board();
-      await b.item(decisionId).update({ deciderID: (people || []).map((p) => Number(p.id)) }).execute();
+      await b.item(decisionId).update({ deciderID: ids }).execute();
     } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
   };
 
   const deleteDecision = useCallback(async (decisionId) => {
     if (!decisionId) return false;
     forgetCreated(decisionId); // so a later create's refresh can't resurrect it
-    linkedIdsRef.current.delete(String(decisionId)); // drop from the discussion-link set (no re-link on a later create)
     const prev = [...items];
     setItems((current) => current.filter((i) => i.id !== decisionId));
     // A temp row never reached the board — local removal is enough.
@@ -388,10 +355,6 @@ export function useDecisions(discussionId) {
     const timer = setTimeout(() => {
       if (cancelled) return;
       idList.forEach((id) => {
-        // Now really gone: drop it from the discussion-link set so a later create
-        // doesn't re-link a deleted decision. (Kept in the set until here so an
-        // undo — or a create during the grace window — leaves the link intact.)
-        linkedIdsRef.current.delete(String(id));
         // Temp rows never reached the board — just drop their bookkeeping.
         if (isTempId(id)) { forgetRow(id); return; }
         api(`mutation ($itemId: ID!) { delete_item(item_id: $itemId) { id } }`, { itemId: id }, 'useDecisions.softDeleteDecisions')
@@ -430,6 +393,11 @@ export function useDecisions(discussionId) {
     try {
       const b = new החלטות1Board();
       const decisionCols = getColumns('decisions') || {};
+      // RESUME GUARD: on a retry where create_item already succeeded (only a link
+      // write failed), reuse the existing real id instead of creating a second
+      // item — otherwise a link-step failure duplicates the decision on the board.
+      let realId = createdRealIdRef.current.get(tempId) || null;
+      if (!realId) {
       // monday's create_item IGNORES board_relation values, so the discussion
       // link (discussionLinkID) — and the point link — are set AFTER creation
       // via change_multiple_column_values (the verified write path).
@@ -449,8 +417,19 @@ export function useDecisions(discussionId) {
         data.affectedID = affected.map((p) => Number(p?.id ?? p));
       }
       if (effectiveDate) data.decisionDateID = formatDate(effectiveDate);
+      // round104: pre-subscribe everyone assigned to a people column (creator /
+      // decider / affected) — monday rejects assigning a non-subscriber.
+      await ensureSubscribers(getBoardId('decisions'), [
+        ...(data.decisionCreatorID || []),
+        ...(data.deciderID || []),
+        ...(data.affectedID || []),
+      ]);
       const created = await b.item().create(data, { createLabelsIfMissing: true }).execute();
-      const realId = created.id;
+      realId = created.id;
+      // Remember it so a failure in a link write below lets retry resume here
+      // instead of re-creating (see createdRealIdRef).
+      createdRealIdRef.current.set(tempId, realId);
+      }
       // PROTECT the real id IMMEDIATELY — before ANY of the awaited link writes
       // below — so a CONCURRENT create's fire-and-forget refresh() can never
       // evict this just-created decision during the eventually-consistent
@@ -462,22 +441,10 @@ export function useDecisions(discussionId) {
       //     create_item ignores board_relation values, so it's set here via the
       //     verified change_multiple_column_values path.
       await b.item(realId).update({ discussionLinkID: { linkedItems: [{ id: discussionId }] } }).execute();
-      // (2) DISCUSSION-side link (BEST-EFFORT): mirror onto
-      //     discussions.decisionsBoardLinkID. The decisions board is mapped
-      //     manually (no reflection column), so (1) does NOT populate it; the
-      //     reload NO LONGER reads it (it reads the decision side above) — we
-      //     still write it where mapped for a consistent discussions board.
-      //     Serialize the write per hook (board_relation writes REPLACE) so
-      //     concurrent creates don't clobber each other, sending the FULL
-      //     linked-id set. Awaited so a hard failure still flags the row (retryable).
-      linkedIdsRef.current.add(String(realId));
-      {
-        const myWrite = linkWriteChainRef.current
-          .catch(() => {}) // ignore a PRIOR create's failure so the chain survives
-          .then(() => linkDecisionsToDiscussion(discussionId, [...linkedIdsRef.current]));
-        linkWriteChainRef.current = myWrite.catch(() => {}); // keep chain alive for the next create
-        await myWrite; // MY rejection → this try's catch (retryable row)
-      }
+      // (2) DISCUSSION-side mirror write REMOVED (2026-07-14): the
+      //     discussions.decisionsBoardLinkID column is the REFLECTION of (1),
+      //     so monday fills it automatically — and rejects direct writes to it
+      //     (the production "Graphql validation errors" toast on every create).
       // (3) POINT-side link (optional): append the decision to the topic point's
       //     pointDecisionsLinkID relation so the per-point counter reflects it.
       if (pointId) await linkDecisionToPoint(pointId, realId, existingLinkedIds);
@@ -512,6 +479,7 @@ export function useDecisions(discussionId) {
         await Promise.allSettled(jobs);
       }
       forgetRow(tempId);
+      createdRealIdRef.current.delete(tempId); // fully committed — drop the resume marker
       // Silent refresh so the list reflects the authoritative server state —
       // fire-and-forget so it doesn't delay the caller or flash a loader. `.catch`
       // guarantees a floating refresh promise can never surface as an unhandled

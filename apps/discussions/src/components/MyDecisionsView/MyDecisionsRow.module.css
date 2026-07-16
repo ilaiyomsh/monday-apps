@@ -41,7 +41,8 @@
   font-size: 14px;
   line-height: 36px; /* match native row height */
   font-family: var(--font-family);
-  text-align: start;
+  direction: rtl;
+  text-align: left;
   /* reset button chrome — it's a clickable text label */
   border: none;
   background: transparent;
@@ -81,6 +82,8 @@
   font-size: 14px;
   font-family: var(--font-family);
   background: var(--primary-background-color, #fff);
+  direction: rtl;
+  text-align: left;
 }
 .nameInput:focus-visible {
   outline: none;
@@ -182,22 +185,42 @@
   min-width: 0;
 }
 .sourceChip {
+  position: relative;
+  display: inline-block;
   flex: 1 1 auto;
   min-width: 0;
-  text-align: start;
-  padding: 4px 8px;
+  max-width: 100%;
+  /* round107 — matched pixel-by-pixel to the owner's monday screenshot:
+     32px box, centered gray 13px text, extra start padding clears the bar */
+  height: 32px;
+  line-height: 30px;
+  padding: 0 12px 0 16px;
+  text-align: center;
   border: 1px solid var(--ui-border-color, #d0d4e4);
-  border-inline-start: 3px solid var(--decisions-accent, #6b4ee6);
   border-radius: 4px;
   background: #ffffff;
-  color: var(--primary-text-color, #323338);
+  color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
   font-size: 13px;
-  line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+}
+/* round107: SHORT inset accent bar on the leading (left) edge, vertically
+   centered, monday's light blue — measured rgb(102,171,242) in the owner's
+   reference screenshot. The round102 decisions-purple full-height bar was
+   dropped for exact monday fidelity (all Connected chips share one look). */
+.sourceChip::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: #66abf2;
 }
 .sourceChip:hover {
   background: var(--primary-background-hover-color, #f5f6f8);

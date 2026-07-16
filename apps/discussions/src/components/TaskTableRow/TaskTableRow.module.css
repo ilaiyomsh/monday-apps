@@ -172,6 +172,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-family);
+  direction: rtl;
+  text-align: left;
 }
 .nameBtn {
   display: block;
@@ -181,7 +183,7 @@
   background: transparent;
   padding: 0;
   cursor: pointer;
-  text-align: start;
+  text-align: left;
 }
 .nameInput {
   width: 100%;
@@ -194,6 +196,8 @@
   color: var(--primary-text-color, #323338);
   box-sizing: border-box;
   font-family: var(--font-family);
+  direction: rtl;
+  text-align: left;
 }
 .nameInput:focus-visible {
   outline: none;
@@ -341,7 +345,9 @@
   border-radius: 0;
   padding: 0 8px;
   color: var(--text-color-on-primary, #fff);
-  font-weight: var(--font-weight-medium, 500);
+  /* round98: same weight as the task name (normal, NOT bold) + white, so the
+     label text reads identically to the name column. */
+  font-weight: var(--font-weight-normal, 400);
   font-size: 14px;
   font-family: var(--font-family);
 }
@@ -361,37 +367,61 @@
 }
 
 /* source discussion — monday connected-board-style chip ("by type" view).
-   The chip fills the cell width (uniform across rows), not sized to the text. */
+   The chip is CENTERED in its cell (owner decision 2026-07-14), sized to its
+   text and only shrinking (ellipsis) when the column is narrower. */
 .sourceCell {
-  justify-content: stretch;
+  justify-content: center;
   gap: 6px;
   overflow: hidden;
 }
 .sourceChips {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   width: 100%;
   min-width: 0;
 }
 .sourceChip {
+  position: relative;
+  display: inline-block;
+  /* round110 — the chip always FILLS the cell width (flex-grow), so every
+     Connected chip is the same width regardless of how long its text is. */
   flex: 1 1 auto;
   min-width: 0;
-  text-align: start;
-  padding: 4px 8px;
-  /* the connected-board look: a colored leading bar + white rounded chip */
+  max-width: 100%;
+  /* round107 — matched pixel-by-pixel to the owner's monday screenshot:
+     32px box, centered gray 13px text, extra start padding clears the bar */
+  height: 32px;
+  line-height: 30px;
+  padding: 0 12px 0 16px;
+  text-align: center;
+  /* monday connected-item chip: uniform light border all around */
   border: 1px solid var(--ui-border-color, #d0d4e4);
-  border-inline-start: 3px solid var(--primary-color, #0073ea);
   border-radius: 4px;
   background: #ffffff;
-  color: var(--primary-text-color, #323338);
+  color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
   font-size: 13px;
-  line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+}
+/* round107: SHORT inset accent bar on the leading (left) edge, vertically
+   centered at ~45% of the chip height, monday's light blue — measured
+   rgb(102,171,242) in the reference screenshot (round102 had a near-full-height
+   saturated #0073ea bar). */
+.sourceChip::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: #66abf2;
 }
 .sourceChip:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
@@ -416,19 +446,23 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 172px;
-  padding: 4px;
+  width: 206px;
+  /* round101: 10px side padding so the labels sit at the column width with a
+     white margin around them (the JS adds +20px to the menu width to match). */
+  padding: 10px;
 }
 .statusOption {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 36px;
-  padding: 0 10px;
+  height: 34px;
+  padding: 0 12px;
   border: none;
   border-radius: var(--border-radius-small, 4px);
   color: var(--text-color-on-primary, #fff);
-  font-weight: var(--font-weight-medium, 500);
+  /* round98: match the task-name font exactly — NORMAL weight (not bold), white,
+     14px, same family — so the picker labels read like the name column. */
+  font-weight: var(--font-weight-normal, 400);
   font-size: 14px;
   font-family: var(--font-family);
   cursor: pointer;

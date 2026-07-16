@@ -7,6 +7,10 @@
      shell never grows a second/outer scrollbar when the iframe narrows. */
   min-height: 0;
   background-color: var(--primary-background-color, #ffffff);
+  /* round112 — monday-style content surface: the white card's TOP-LEFT corner
+     is slightly rounded against the gray pane behind it (App .main paints the
+     gray). overflow stays visible — only the corner paint rounds. */
+  border-top-left-radius: 8px;
 }
 
 .empty {
@@ -43,24 +47,34 @@
   background-color: var(--primary-background-color, #ffffff);
   /* Tab row sits flush on the inset rule below (monday-style active indicator). */
   padding: var(--spacing-medium, 16px) var(--spacing-large, 24px) 0;
-  padding-inline-start: calc(var(--spacing-large, 24px) + 12px);
+  /* round112 — the shared white gutter (was 24px+12px): header, tabs and the
+     table tabs all start at the same 52px so the left margin reads as one
+     clean white band. */
+  padding-inline-start: var(--content-gutter-start, 52px);
 }
 .header::after {
   content: '';
   position: absolute;
   bottom: 0;
-  inset-inline: var(--section-rule-inset-wide, 24px);
+  /* round116 — the rule STOPS exactly on the table's left edge line (the shared
+     52px gutter): it must not overhang left of the table below. The right side
+     keeps the original 24px inset. */
+  inset-inline-start: var(--content-gutter-start, 52px);
+  inset-inline-end: var(--section-rule-inset-wide, 24px);
   height: 1px;
   background: var(--ui-border-color, #d0d4e4);
   pointer-events: none;
   z-index: 0;
 }
 
-/* Tab row — nudged right; Vibe tab underlines sit on the inset rule above. */
+/* Tab row — round114: the first tab ("הנחיות קודמות") sits EXACTLY on the
+   shared 52px gutter line, flush with the tables' left edge below (the header
+   already pads to --content-gutter-start, so no extra nudge here; the first
+   tab's own internal leading padding is zeroed just below). */
 .tabsRow {
   position: relative;
   z-index: 1;
-  margin-inline-start: 12px;
+  margin-inline-start: 0;
   /* Round 70 — keep the tab strip a FIXED-HEIGHT SINGLE ROW that scrolls
      horizontally, so it never grows taller when monday docks its native Updates
      panel and narrows the app iframe. Before this the vibe tab labels (e.g.
@@ -101,6 +115,14 @@
 }
 .tabsRow :global([role="tab"]) * {
   white-space: nowrap;
+}
+/* round114 — zero the FIRST tab's internal leading padding so its label (and
+   active underline) start exactly on the gutter line, aligned with the table
+   edge below; the other tabs keep their spacing to its right. Covers both the
+   vibe li[role=tab] and its inner anchor/button, wherever the padding lives. */
+.tabsRow :global([role="tab"]:first-child),
+.tabsRow :global([role="tab"]:first-child) > * {
+  padding-inline-start: 0;
 }
 
 .titleRow {
@@ -172,6 +194,22 @@
 }
 
 /* Mobile-only back affordance (original `md:hidden`). */
+/* round108 — owner brand logo in the header. First visible child of .titleRow,
+   so in the RTL row it pins to the far-right corner at the title's height. */
+.ownerLogo {
+  flex-shrink: 0;
+  height: 32px;
+  max-width: 140px;
+  object-fit: contain;
+  align-self: center;
+  margin-inline-start: 8px;
+}
+/* The phone header is tight (title wraps next to an info button) — keep the
+   logo to the desktop layout only. */
+:global(.mobile-app) .ownerLogo {
+  display: none;
+}
+
 .backButton {
   display: none;
 }
@@ -266,17 +304,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
 }
 
-.copyLinkButton {
-  flex-shrink: 0;
-}
 
-.copyLinkCopied {
-  font-size: var(--font-size-subtext, 12px);
-  color: var(--positive-color, #258750);
-  white-space: nowrap;
-}
 
 /* Discussion description (long_text column16), shown small under the title. */
 .description {
@@ -360,17 +392,42 @@
      docked Updates panel keeps the header wider than that); round 51 hides them by
      REAL overflow instead, so it triggers whenever the panel docks, at any size. */
   flex-shrink: 0;
+  /* round112 — back to the ONE-line row layout (round111's two-row variant was
+     reverted by the owner): date · time · chevron · (roles, when opened). */
   display: flex;
   flex-direction: row;
   align-items: center;
   flex-wrap: nowrap;
   overflow-x: clip;
   overflow-y: visible;
-  /* Column spacing between groups comes from each group's padding (see
-     .peopleGroup), so the vertical separators sit centered between fields. With the
-     fields on a single non-wrapping line the row-gap is now moot but kept harmless. */
-  row-gap: 4px;
-  column-gap: 0;
+}
+
+/* A touch more breathing room around the date and the time (kept from
+   round111's approved spacing; was 12px+12px). */
+.participants .dateGroup {
+  padding-inline: 16px;
+}
+
+/* round111/112 — circular toggle for the role/participants groups; sits LEFT
+   of the time (last-ordered among the date/time items in this RTL row) and
+   the roles expand inline to its left. */
+.metaToggle {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  margin-inline: 4px 8px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 50%;
+  background: var(--primary-background-color, #ffffff);
+  color: var(--secondary-text-color, #676879);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.metaToggle:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
 }
 
 /* One labeled group: BOLD label to the RIGHT (dir=rtl → label is the first child)
@@ -483,6 +540,11 @@
    ::before is not rendered), so no stray separators remain. Desktop-only in
    effect: the mobile phone layout renders the info popover, not this row. */
 .participantsNarrow .peopleGroupAvatars {
+  display: none;
+}
+/* round112 — the narrow (docked updates panel) state also drops the roles
+   toggle, keeping only date + time like before. */
+.participantsNarrow .metaToggle {
   display: none;
 }
 
@@ -601,6 +663,14 @@
      ONE bounded vertical scroll region inside the fixed card height (rather than
      growing the card and spawning a second/outer scrollbar). */
   min-height: 0;
+  /* Round 95 — paint the scroll region white on its OWN box (not just inheriting
+     from .root behind it). The sticky header and the sticky per-tab toolbar each
+     paint their own white box, so the 24px band BETWEEN them (this .body's
+     padding-block top) was the only strip with no background of its own — in the
+     monday iframe it showed the themed backdrop through, reading as a transparent
+     gap. An explicit white background here makes the whole column — tabs → band →
+     toolbar → rows — uniformly white. */
+  background: var(--primary-background-color, #ffffff);
   /* Vertical scroll here is the single intended scroll region; overflow-x:hidden
      guarantees NO app/view-level horizontal scrollbar — each data table owns its
      OWN inner horizontal scroll (TasksTab .board, DecisionsTab .decBoard,
@@ -690,4 +760,30 @@
   15%  { opacity: 1; }
   75%  { opacity: 1; }
   100% { opacity: 0; }
+}
+
+/* round103 — hide this chrome while monday's item-card panel is open (iframe narrows). */
+:global(body[data-chrome-narrow="1"]) .participants { display: none !important; }
+
+/* round116 — the tabs strip's own horizontal scrollbar disappears entirely
+   while the updates panel narrows the pane (scrolling still works by drag/
+   wheel); base state keeps the round70 thin-bar behavior. */
+:global(body[data-chrome-narrow="1"]) .tabsRow {
+  scrollbar-width: none;
+}
+:global(body[data-chrome-narrow="1"]) .tabsRow::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
+
+/* round113 — while monday's item-card / updates panel is open (chrome-narrow,
+   see round103's detector) the narrowed pane must show NO scrollbars at all
+   (owner request): scrolling itself still works (wheel/trackpad/drag), only
+   the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
+   ::-webkit-scrollbar pseudo. */
+:global(body[data-chrome-narrow="1"]) .body {
+  scrollbar-width: none;
+}
+:global(body[data-chrome-narrow="1"]) .body::-webkit-scrollbar {
+  display: none;
 }

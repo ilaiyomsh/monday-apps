@@ -263,6 +263,9 @@ export function TemplateManagerModal() {
   const [typeCoordinator, setTypeCoordinator] = useState([]);
   const [typeParticipants, setTypeParticipants] = useState([]);
   const [typeColorDraft, setTypeColorDraft] = useState(null); // a monday color NAME
+  // Item 18 — per-type default decider: when true, NEW decisions in discussions
+  // of this type default their מחליט to the discussion's מנהל דיון.
+  const [typeDeciderIsLead, setTypeDeciderIsLead] = useState(false);
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -309,6 +312,7 @@ export function TemplateManagerModal() {
     setTypeCoordinator([]);
     setTypeParticipants([]);
     setTypeColorDraft(null);
+    setTypeDeciderIsLead(false);
     setIsNew(false);
     setConfirmDeleteId(null);
     setTypeSearch('');
@@ -341,6 +345,7 @@ export function TemplateManagerModal() {
     setTypeCoordinator(existing?.coordinator || []);
     setTypeParticipants(existing?.participants || []);
     setTypeColorDraft(typeColorName(typeName));
+    setTypeDeciderIsLead(existing?.deciderIsLead === true);
     setIsNew(!existing);
     setView('edit');
   };
@@ -352,6 +357,7 @@ export function TemplateManagerModal() {
     setTypeCoordinator([]);
     setTypeParticipants([]);
     setTypeColorDraft(null);
+    setTypeDeciderIsLead(false);
     setIsNew(false);
   };
 
@@ -445,6 +451,8 @@ export function TemplateManagerModal() {
           lead: typeLead,
           coordinator: typeCoordinator,
           participants: typeParticipants,
+          // item 18 — per-type default decider (מחליט = מנהל הדיון)
+          deciderIsLead: typeDeciderIsLead,
         });
         // Persist the chosen color for this type.
         if (typeColorDraft) await setTypeColor(draft.discussionType, typeColorDraft);
@@ -871,6 +879,19 @@ export function TemplateManagerModal() {
                 </div>
               )}
             </div>
+
+            {/* Item 18 — per-type default decider toggle. Prominent (owner
+                request 2026-07-14): RTL row between the role pickers and the
+                topics template, bold label + a bigger accent checkbox. */}
+            <label className={styles.deciderDefaultRow}>
+              <input
+                type="checkbox"
+                className={styles.deciderDefaultCheckbox}
+                checked={typeDeciderIsLead}
+                onChange={(e) => setTypeDeciderIsLead(e.target.checked)}
+              />
+              <span className={styles.deciderDefaultLabel}>בהחלטה חדשה, המחליט כברירת מחדל הוא מנהל הדיון</span>
+            </label>
 
             <Text type="text2" className={styles.sectionLabel}>נושאים קבועים</Text>
             <div className={styles.topicsWrap}>

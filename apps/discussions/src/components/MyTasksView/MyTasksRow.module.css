@@ -66,8 +66,8 @@
   font-size: 14px;
   line-height: 36px; /* match native row height */
   font-family: var(--font-family);
-  text-align: right;
   direction: rtl;
+  text-align: left;
   /* reset button chrome — it's a clickable text label */
   border: none;
   background: transparent;
@@ -87,7 +87,7 @@
   font-family: var(--font-family);
   background: var(--primary-background-color, #fff);
   direction: rtl;
-  text-align: right;
+  text-align: left;
 }
 .nameInput:focus-visible {
   outline: none;
@@ -154,34 +154,56 @@
    Previous-tasks tab (TaskTableRow.module.css): white rounded chip with a colored
    leading bar, clickable to open the discussion item card. */
 .sourceCell {
-  justify-content: stretch;
+  justify-content: center;
   gap: 6px;
   overflow: hidden;
 }
 .sourceChips {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   width: 100%;
   min-width: 0;
 }
 .sourceChip {
+  position: relative;
+  display: inline-block;
+  /* round110 — the chip always FILLS the cell width (flex-grow), so every
+     Connected chip is the same width regardless of how long its text is. */
   flex: 1 1 auto;
   min-width: 0;
-  text-align: start;
-  padding: 4px 8px;
+  max-width: 100%;
+  /* round107 — matched pixel-by-pixel to the owner's monday screenshot:
+     32px box, centered gray 13px text, extra start padding clears the bar */
+  height: 32px;
+  line-height: 30px;
+  padding: 0 12px 0 16px;
+  text-align: center;
   border: 1px solid var(--ui-border-color, #d0d4e4);
-  border-inline-start: 3px solid var(--primary-color, #0073ea);
   border-radius: 4px;
   background: #ffffff;
-  color: var(--primary-text-color, #323338);
+  color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
   font-size: 13px;
-  line-height: 1.4;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+}
+/* round107: SHORT inset accent bar on the leading (left) edge, vertically
+   centered, monday's light blue — measured rgb(102,171,242) in the reference
+   screenshot (round102 had a near-full-height saturated #0073ea bar). */
+.sourceChip::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: #66abf2;
 }
 .sourceChip:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
