@@ -698,6 +698,15 @@
   flex-wrap: nowrap !important;
   overflow: hidden;
 }
+/* round130 — the hidden slot must be EXACTLY the visible row's height: nowrap
+   stopped flex-line wrapping, but chip TEXT still wrapped inside its own box
+   on the narrow iframe and inflated the "one row" to 2-3 text lines (the gap
+   above the first group grew when the updates panel opened). Locking every
+   descendant to a single text line pins the hidden height to the visible one. */
+:global(body[data-chrome-narrow="1"]) .decToolbar,
+:global(body[data-chrome-narrow="1"]) .decToolbar * {
+  white-space: nowrap !important;
+}
 
 /* round113 — while monday's item-card / updates panel is open (chrome-narrow,
    see round103's detector) the narrowed pane must show NO scrollbars at all

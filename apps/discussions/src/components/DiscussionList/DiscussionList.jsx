@@ -508,9 +508,8 @@ export function DiscussionList({
 
   return (
     <div className={styles.root}>
-      {/* Vibrant header with gradient accent (mockup: 4px multi-color bar) */}
+      {/* round131 — the 4px gradient accent bar was removed (owner request). */}
       <div className={styles.header}>
-        <div className={styles.gradientBar} />
         <div className={styles.headerInner}>
           {/* Mockup buttons row: personal-view nav (outline) at inline-start,
               chrome (gear + view toggle) and the primary "חדש" at inline-end. */}

@@ -180,7 +180,8 @@
   line-height: 30px;
   padding: 0 12px 0 16px;
   text-align: center;
-  border: 1px solid var(--ui-border-color, #d0d4e4);
+  /* round131 — no frame: just the text and the blue bar (owner request). */
+  border: none;
   border-radius: 4px;
   background: #ffffff;
   color: var(--secondary-text-color, #676879);
