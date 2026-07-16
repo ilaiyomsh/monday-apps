@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { memo, useRef, useState } from 'react';
 import { Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
 import { CloseSmall, Update, Edit } from '@vibe/icons';
 import { Trash2, Check, X } from 'lucide-react';
@@ -6,7 +6,6 @@ import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { PersonList } from '@generated/components/PersonAvatar';
 import { isValidStatus } from '@generated/constants/statusConfig';
-import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import grid from '../TaskTable/TaskTable.module.css';
@@ -38,8 +37,17 @@ function formatCreatedAt(nativeCreatedAt) {
   return `${dd}/${mm}`;
 }
 
-export function TaskTableRow({
+// round136 (perf audit stage 3) — the row is MEMOIZED: with the tab-level
+// handlers stabilized (useStableHandler) and the status/priority option maps
+// hoisted to TaskTable, a selection toggle / search keystroke / single-row
+// edit no longer re-renders every other row in the table.
+export const TaskTableRow = memo(function TaskTableRow({
   task,
+  // Status/priority option state, hoisted to TaskTable (ONE hook pair per
+  // table instead of two per row — round136). The objects are the hook's
+  // state values, so their identity is stable between option loads.
+  statusOpts,
+  priorityOpts,
   onStatusChange,
   onPriorityChange,
   onAssigneeChange,
@@ -96,10 +104,7 @@ export function TaskTableRow({
   // a clear error + retry/dismiss affordance instead of a blocked/faded row.
   const failed = task._createFailed === true;
   const deadline = task.deadlineID;
-  const { options: statusOptions, colorById, labelById, doneId } = useStatusOptions();
-  // Priority is a second status column (priorityID); read-only here. Its maps are
-  // empty when the column isn't mapped, but the cell only renders when showPriority.
-  const priorityOpts = useStatusOptions('tasks', 'priorityID');
+  const { options: statusOptions, colorById, labelById, doneId } = statusOpts;
   // Status is the stable label id. "Done" is the is_done label (doneId); only
   // flag overdue when we actually know the done id, otherwise stay safe.
   const isOverdue = deadline && deadline < new Date() && doneId != null && task.statusID !== doneId;
@@ -498,6 +503,6 @@ export function TaskTableRow({
       {orderedKeys.map((k) => cellByKey[k]).filter(Boolean)}
     </div>
   );
-}
+});
 
 export default TaskTableRow;

@@ -30,11 +30,28 @@ function formatDate(date) {
 }
 
 // How many decision items to pull per page while scanning the decisions board
-// for those linked to this discussion (mirrors useMyDecisions / the aggregate paging).
+// for those linked to this discussion (mirrors useMyDecisions).
 const DECISIONS_PAGE_SIZE = 100;
-// Hard stop on pagination so a huge/misconfigured board can't loop forever
-// (mirrors BoardSDK.AggregateBuilder's guard — up to DECISIONS_PAGE_GUARD pages).
+// Hard stop on pagination so a huge/misconfigured board can't loop forever.
 const DECISIONS_PAGE_GUARD = 20;
+
+// round135 (perf audit) — session cache of the per-discussion scan result.
+// The reload path scans the WHOLE decisions board (monday can't server-filter
+// a board_relation by id — see fetchDecisionsByDiscussion), so re-opening a
+// discussion used to repeat up to 20 sequential API pages. The cache makes a
+// re-open instant: seed from the cached rows, and only re-scan when the entry
+// is older than CACHE_FRESH_MS (stale-while-revalidate — the revalidation is
+// silent and MERGES, so optimistic rows are never clobbered). Mutations keep
+// the cached rows in sync via the items-sync effect in the hook.
+// Staleness tradeoff (accepted in the audit): a decision edited DIRECTLY in
+// monday (outside the app) can be up to CACHE_FRESH_MS stale on re-open.
+const CACHE_FRESH_MS = 60_000;
+const decisionsScanCache = new Map(); // discussionId -> { items, at }
+
+// Test hook: module state survives between tests otherwise.
+export function _resetDecisionsScanCache() {
+  decisionsScanCache.clear();
+}
 
 // Load the decisions linked to THIS discussion by reading the DECISIONS board
 // and filtering on the DECISION-side link (decisions.discussionLinkID) — the
@@ -147,7 +164,13 @@ export const linkTaskToPoint = (pointId, taskId, existingLinkedIds = []) =>
 // bought nothing and only produced the error. Decision→discussion linking is
 // fully covered by the decision-side discussionLinkID write in runCreateDecision.
 
-export function useDecisions(discussionId) {
+// round135 — `enabled` (default true, back-compat): when false the hook stays
+// DORMANT — no board scan fires on mount. DiscussionCard arms it only when a
+// tab that actually shows decisions (החלטות / נושאים) is first visited, so
+// merely clicking through discussions no longer scans the decisions board.
+// All mutation functions work regardless of `enabled` (a create's silent
+// refresh() fetches on demand and seeds the cache).
+export function useDecisions(discussionId, { enabled = true } = {}) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -188,12 +211,38 @@ export function useDecisions(discussionId) {
 
   useEffect(() => {
     if (!discussionId) { setItems([]); setLoading(false); return; }
+    if (!enabled) return undefined; // round135 — dormant until a decisions-consuming tab arms it
     let cancelled = false;
+    const key = String(discussionId);
+
+    // round135 — seed from the session cache when available: the re-open is
+    // instant, and the expensive board re-scan runs only when the entry has
+    // gone stale (then silently, merged so optimistic rows survive).
+    const cached = decisionsScanCache.get(key);
+    if (cached) {
+      setItems(cached.items);
+      setLoading(false);
+      if (Date.now() - cached.at < CACHE_FRESH_MS) return () => { cancelled = true; };
+      (async () => {
+        try {
+          const fetchedItems = await fetchDecisionsByDiscussion(discussionId);
+          if (!cancelled) {
+            decisionsScanCache.set(key, { items: fetchedItems, at: Date.now() });
+            setItems((current) => mergeServerList(current, fetchedItems));
+          }
+        } catch (err) {
+          logger.error('useDecisions', 'Error revalidating decisions', { discussionId, err });
+        }
+      })();
+      return () => { cancelled = true; };
+    }
+
     async function fetch() {
       try {
         setLoading(true);
         const fetchedItems = await fetchDecisionsByDiscussion(discussionId);
         if (!cancelled) {
+          decisionsScanCache.set(key, { items: fetchedItems, at: Date.now() });
           setItems(fetchedItems);
           logger.info('useDecisions', 'Decisions fetch completed', { discussionId, count: fetchedItems.length });
         }
@@ -204,7 +253,24 @@ export function useDecisions(discussionId) {
     }
     fetch();
     return () => { cancelled = true; };
-  }, [discussionId]);
+    // mergeServerList is a stable useOptimisticRows callback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discussionId, enabled]);
+
+  // round135 — keep the cached rows in sync with in-app mutations (create /
+  // edit / delete update `items` optimistically): only REAL rows are cached,
+  // and the entry's freshness stamp (`at`) is preserved — content sync, not a
+  // fetch marker.
+  useEffect(() => {
+    if (!discussionId) return;
+    const entry = decisionsScanCache.get(String(discussionId));
+    if (entry) {
+      decisionsScanCache.set(String(discussionId), {
+        ...entry,
+        items: items.filter((i) => isRealId(i.id)),
+      });
+    }
+  }, [items, discussionId]);
 
   // Silent refetch — re-pulls the discussion's decisions WITHOUT toggling
   // `loading` (no skeleton flash). Used after a create so the list reflects the
@@ -224,6 +290,8 @@ export function useDecisions(discussionId) {
     if (!discussionId) return;
     try {
       const fetchedItems = await fetchDecisionsByDiscussion(discussionId);
+      // round135 — a refresh is an authoritative scan: reseed the session cache.
+      decisionsScanCache.set(String(discussionId), { items: fetchedItems, at: Date.now() });
       setItems((current) => mergeServerList(current, fetchedItems));
     } catch (err) {
       logger.error('useDecisions', 'Error refreshing decisions', { discussionId, err });

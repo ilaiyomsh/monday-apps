@@ -13,7 +13,7 @@ import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx'
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
 import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
 import {
-  filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter, sortTasks,
+  filterTasks, filterCount, serializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
 } from '@generated/components/MyTasksView/controls/controls.js';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -21,6 +21,9 @@ import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
+import { useStableHandler } from '@generated/hooks/useStableHandler.js';
+import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { isValidStatus } from '@generated/constants/statusConfig';
 import { getColumns } from '@api/board-config-store.js';
@@ -115,44 +118,19 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   });
 
   // ---- Filter (client-side, over the loaded tasks; same engine as My Tasks /
-  // Previous tasks). status + deadline + person columns. ----
-  const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
-  // Filter opens with a default STATUS row (empty values ⇒ shows all) when no
-  // saved view exists; a saved view's own rows win (incl. an explicitly empty set).
-  const [filterRows, setFilterRows] = useState(() => (
-    Array.isArray(savedView?.filterRows)
-      ? savedView.filterRows.filter((k) => TASKS_FILTER_COLUMNS.some((c) => c.key === k))
-      : ['status']
-  ));
+  // Previous tasks). status + deadline + person columns. Opens with a default
+  // STATUS row (empty values ⇒ shows all) when no saved view exists; a saved
+  // view's own rows win (incl. an explicitly empty set). State + mutators come
+  // from the shared builder state machine (round137).
+  const {
+    filter, filterRows, setFilterOp, toggleFilterVal, setDeadlineRange, setDeadlineDate,
+    addFilterRow, removeFilterRow, retargetFilterRow, clearFilter,
+  } = useFilterBuilder({ columns: TASKS_FILTER_COLUMNS, defaultRows: ['status'], savedView });
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [deleting, setDeleting] = useState(false);
   const { colorById, labelById, orderById, doneId, options: statusOptions } = useStatusOptions();
   const { isMobile } = useViewport();
 
-  // Filter mutators (mirror PreviousTasksTab).
-  const resetCol = (col) => (col === 'deadline' ? { op: 'within', range: null, date: null } : { op: 'is', values: new Set() });
-  const setFilterOp = (col, op) => setFilter((f) => ({ ...f, [col]: { ...f[col], op } }));
-  const toggleFilterVal = (col, id) => setFilter((f) => {
-    const next = new Set(f[col].values);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return { ...f, [col]: { ...f[col], values: next } };
-  });
-  const setDeadlineRange = (range) => setFilter((f) => ({ ...f, deadline: { op: 'within', range, date: null } }));
-  const setDeadlineDate = (date) => setFilter((f) => ({ ...f, deadline: { ...f.deadline, date } }));
-  const addFilterRow = () => setFilterRows((rows) => {
-    const next = TASKS_FILTER_COLUMNS.map((c) => c.key).find((k) => !rows.includes(k));
-    return next ? [...rows, next] : rows;
-  });
-  const removeFilterRow = (col) => {
-    setFilterRows((rows) => rows.filter((k) => k !== col));
-    setFilter((f) => ({ ...f, [col]: resetCol(col) }));
-  };
-  const retargetFilterRow = (fromCol, toCol) => {
-    if (fromCol === toCol) return;
-    setFilterRows((rows) => rows.map((k) => (k === fromCol ? toCol : k)));
-    setFilter((f) => ({ ...f, [fromCol]: resetCol(fromCol), [toCol]: resetCol(toCol) }));
-  };
-  const clearFilter = () => { setFilter(emptyFilter()); setFilterRows(['status']); };
   const fc = filterCount(filter);
   // Sort handlers (session-only until an owner hits Save, like the other builders).
   const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstSortDir(col), active: true });
@@ -219,14 +197,22 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   const [quickStatus, setQuickStatus] = useState(null);
   // round132 — toolbar Search (shared SearchPill): client-side name "contains",
   // folded into the same pipeline as the filter/sort/battery.
+  // round135 — debounced (300ms, like DiscussionList/MyTasksView) so every
+  // keystroke doesn't re-run the full sort+filter+group pipeline over the
+  // whole loaded page.
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
   const filteredTasks = useMemo(
     () => {
       let base = sortTasks(filterTasks(items, filter), sort, { orderById, labelById });
-      if (search.trim()) base = base.filter((tk) => matchesSearch(tk.name, search));
+      if (debouncedSearch) base = base.filter((tk) => matchesSearch(tk.name, debouncedSearch));
       return quickStatus ? base.filter((tk) => taskInBucket(tk, quickStatus, doneStatusIds, todayStart)) : base;
     },
-    [items, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, search]
+    [items, filter, sort, orderById, labelById, quickStatus, doneStatusIds, todayStart, debouncedSearch]
   );
 
   // Right-click a group header → shared color palette (round 77).
@@ -278,34 +264,16 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     if (allCollapsed) { setCollapsed({}); }
     else { const c = {}; grouped.forEach((g) => { c[g.key] = true; }); setCollapsed(c); }
   };
-  const toggleSelect = (id, checked) =>
-    setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
+  // round136 — stable identity (useStableHandler) so the memoized rows don't
+  // thaw whenever this tab re-renders (selection/search/grouping churn).
+  const toggleSelect = useStableHandler((id, checked) =>
+    setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; }));
   const clearSelection = () => setSelectedIds(new Set());
-  // ESC clears this tab's multi-selection. The document-level listener is live
-  // ONLY while something is selected, and it no-ops unless THIS view is actually
-  // visible (offsetParent is null when a tab is hidden behind another) — so it
-  // never clears a different tab's selection. ESC still closes an open editor /
-  // overlay first: we bail when the event was already handled, when the user is
-  // typing in a text field (inline rename / people-picker search), or when a
-  // dialog / listbox / menu (status / date / person picker) is open.
+  // ESC clears this tab's multi-selection (shared hook — round135; guards:
+  // visible view only, not while typing, not while an overlay is open).
   const rootRef = useRef(null);
   const hasSelection = selectedIds.size > 0;
-  useEffect(() => {
-    if (!hasSelection) return undefined;
-    const onKeyDown = (e) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (!rootRef.current || rootRef.current.offsetParent === null) return;
-      const el = e.target;
-      const tag = el && el.tagName;
-      const typing = tag === 'TEXTAREA' || (el && el.isContentEditable)
-        || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset)$/.test(el.type || ''));
-      if (typing) return;
-      if (document.querySelector('[role="dialog"],[role="listbox"],[role="menu"]')) return;
-      setSelectedIds(new Set());
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [hasSelection]);
+  useEscToClearSelection(rootRef, hasSelection, clearSelection);
   const itemById = useMemo(() => {
     const m = new Map();
     items.forEach((t) => m.set(String(t.id), t));
@@ -324,7 +292,10 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     const base = selectedIds.size > 1 && selectedIds.has(originTaskId) ? [...selectedIds] : [originTaskId];
     return cap ? base.filter((id) => allow(cap, id)) : base;
   };
-  const applyStatusChange = async (taskId, status) => {
+  // round136 — the apply* handlers are wrapped in useStableHandler: one frozen
+  // identity per handler for the memoized rows, while each call still reads the
+  // LATEST selection/permission state through the wrapper.
+  const applyStatusChange = useStableHandler(async (taskId, status) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskStatus');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1 && updateTasksStatusBatch) {
@@ -332,12 +303,12 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
       return;
     }
     for (const id of targetIds) await updateTaskStatus(id, status);
-  };
+  });
   // Priority has no batch endpoint; apply to each selected target sequentially.
-  const applyPriorityChange = async (taskId, priority) => {
+  const applyPriorityChange = useStableHandler(async (taskId, priority) => {
     for (const id of resolveTargetIds(taskId, 'editTaskPriority')) await updateTaskPriority(id, priority);
-  };
-  const applyAssigneeChange = async (taskId, people) => {
+  });
+  const applyAssigneeChange = useStableHandler(async (taskId, people) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskAssignee');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1 && updateTasksAssigneeBatch) {
@@ -345,8 +316,8 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
       return;
     }
     for (const id of targetIds) await updateTaskAssignee(id, people);
-  };
-  const applyDeadlineChange = async (taskId, date) => {
+  });
+  const applyDeadlineChange = useStableHandler(async (taskId, date) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskDeadline');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1 && updateTasksDeadlineBatch) {
@@ -354,11 +325,15 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
       return;
     }
     for (const id of targetIds) await updateTaskDeadline(id, date);
-  };
-  const applyRename = async (taskId, name) => {
+  });
+  const applyRename = useStableHandler(async (taskId, name) => {
     if (!allow('editTaskName', taskId)) return;
     await updateTaskName(taskId, name);
-  };
+  });
+  // Stable wrappers for the remaining row-facing handlers coming from the data
+  // hook (their identities change per DiscussionCard render otherwise).
+  const stableRetryCreate = useStableHandler((...a) => retryCreate?.(...a));
+  const stableDismissRow = useStableHandler((...a) => dismissRow?.(...a));
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -490,9 +465,10 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     onAssigneeChange: applyAssigneeChange,
     onDeadlineChange: applyDeadlineChange,
     onRenameTask: applyRename,
-    // Optimistic-create error recovery (temp row whose create failed).
-    onRetryCreate: retryCreate,
-    onDismissRow: dismissRow,
+    // Optimistic-create error recovery (temp row whose create failed) —
+    // round136: stable wrappers so the memoized rows stay frozen.
+    onRetryCreate: stableRetryCreate,
+    onDismissRow: stableDismissRow,
   };
   const TASK_EDIT_CAPS = ['editTaskStatus', 'editTaskPriority', 'editTaskDeadline', 'editTaskAssignee', 'editTaskName', 'deleteTask'];
   const canSelect = items.some((t) => TASK_EDIT_CAPS.some((cap) => canTask(cap, t)));

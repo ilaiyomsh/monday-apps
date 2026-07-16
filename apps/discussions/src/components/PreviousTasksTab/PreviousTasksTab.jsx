@@ -14,10 +14,13 @@ import { Segment } from '@generated/components/MyTasksView/controls/Segment.jsx'
 import { BuilderIcon } from '@generated/components/MyTasksView/controls/BuilderIcon.jsx';
 import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
 import {
-  filterTasks, filterCount, emptyFilter, serializeFilter, deserializeFilter, sortTasks,
+  filterTasks, filterCount, serializeFilter, sortTasks,
   FILTER_COLUMNS, FILTER_COLUMN_PERSON, OP_LABEL, DEADLINE_RANGES,
 } from '@generated/components/MyTasksView/controls/controls.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
+import { useStableHandler } from '@generated/hooks/useStableHandler.js';
+import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { api, parseValue, cvSelection } from '../../utils/mondayApi/monday-client.js';
@@ -524,34 +527,15 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   };
 
   // ---- multi-select + carry-forward to the current ("next") discussion ----
-  const toggleSelect = (id, checked) =>
-    setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
+  // round136 — stable identity so the memoized rows don't thaw on tab re-renders.
+  const toggleSelect = useStableHandler((id, checked) =>
+    setSelectedIds(prev => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; }));
   const clearSelection = () => setSelectedIds(new Set());
-  // ESC clears this tab's multi-selection. The document-level listener is live
-  // ONLY while something is selected, and it no-ops unless THIS view is actually
-  // visible (offsetParent is null when a tab is hidden behind another) — so it
-  // never clears a different tab's selection. ESC still closes an open editor /
-  // overlay first: we bail when the event was already handled, when the user is
-  // typing in a text field (inline rename / people-picker search), or when a
-  // dialog / listbox / menu (status / date / person picker) is open.
+  // ESC clears this tab's multi-selection (shared hook — round135; guards:
+  // visible view only, not while typing, not while an overlay is open).
   const rootRef = useRef(null);
   const hasSelection = selectedIds.size > 0;
-  useEffect(() => {
-    if (!hasSelection) return undefined;
-    const onKeyDown = (e) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (!rootRef.current || rootRef.current.offsetParent === null) return;
-      const el = e.target;
-      const tag = el && el.tagName;
-      const typing = tag === 'TEXTAREA' || (el && el.isContentEditable)
-        || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset)$/.test(el.type || ''));
-      if (typing) return;
-      if (document.querySelector('[role="dialog"],[role="listbox"],[role="menu"]')) return;
-      setSelectedIds(new Set());
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [hasSelection]);
+  useEscToClearSelection(rootRef, hasSelection, clearSelection);
   const itemById = useMemo(() => {
     const m = new Map();
     tasks.forEach((t) => m.set(String(t.id), t));
@@ -568,7 +552,10 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     const base = selectedIds.size > 1 && selectedIds.has(originTaskId) ? [...selectedIds] : [originTaskId];
     return cap ? base.filter((id) => allow(cap, id)) : base;
   };
-  const applyStatusChange = async (taskId, status) => {
+  // round136 — the apply* handlers are wrapped in useStableHandler: one frozen
+  // identity per handler for the memoized rows; each call reads the LATEST
+  // selection/permission state through the wrapper.
+  const applyStatusChange = useStableHandler(async (taskId, status) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskStatus');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1) {
@@ -576,12 +563,12 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       return;
     }
     for (const id of targetIds) await updateStatus(id, status);
-  };
+  });
   // Priority has no batch endpoint; apply to each selected target sequentially.
-  const applyPriorityChange = async (taskId, priority) => {
+  const applyPriorityChange = useStableHandler(async (taskId, priority) => {
     for (const id of resolveTargetIds(taskId, 'editTaskPriority')) await updatePriority(id, priority);
-  };
-  const applyAssigneeChange = async (taskId, people) => {
+  });
+  const applyAssigneeChange = useStableHandler(async (taskId, people) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskAssignee');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1) {
@@ -589,8 +576,8 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       return;
     }
     for (const id of targetIds) await updateAssignee(id, people);
-  };
-  const applyDeadlineChange = async (taskId, date) => {
+  });
+  const applyDeadlineChange = useStableHandler(async (taskId, date) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskDeadline');
     if (targetIds.length === 0) return;
     if (targetIds.length > 1) {
@@ -598,7 +585,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       return;
     }
     for (const id of targetIds) await updateDeadline(id, date);
-  };
+  });
 
   // Carry the selected previous-discussion tasks forward into the current
   // discussion. board_relation writes REPLACE the whole linked set, so we send
@@ -712,36 +699,12 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     if (!s || !s.active || !SORT_OPTIONS.some((o) => o.value === s.col)) return { col: null, dir: null, active: false };
     return { col: s.col, dir: s.dir || firstSortDir(s.col), active: true };
   });
-  const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
-  const [filterRows, setFilterRows] = useState(() => {
-    // Default STATUS row when nothing saved; a saved view's own rows win.
-    return Array.isArray(savedView?.filterRows)
-      ? savedView.filterRows.filter((k) => PREV_FILTER_COLUMNS.some((c) => c.key === k))
-      : ['status'];
-  });
-  const resetCol = (col) => (col === 'deadline' ? { op: 'within', range: null, date: null } : { op: 'is', values: new Set() });
-  const setFilterOp = (col, op) => setFilter((f) => ({ ...f, [col]: { ...f[col], op } }));
-  const toggleFilterVal = (col, id) => setFilter((f) => {
-    const next = new Set(f[col].values);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return { ...f, [col]: { ...f[col], values: next } };
-  });
-  const setDeadlineRange = (range) => setFilter((f) => ({ ...f, deadline: { op: 'within', range, date: null } }));
-  const setDeadlineDate = (date) => setFilter((f) => ({ ...f, deadline: { ...f.deadline, date } }));
-  const addFilterRow = () => setFilterRows((rows) => {
-    const next = PREV_FILTER_COLUMNS.map((c) => c.key).find((k) => !rows.includes(k));
-    return next ? [...rows, next] : rows;
-  });
-  const removeFilterRow = (col) => {
-    setFilterRows((rows) => rows.filter((k) => k !== col));
-    setFilter((f) => ({ ...f, [col]: resetCol(col) }));
-  };
-  const retargetFilterRow = (fromCol, toCol) => {
-    if (fromCol === toCol) return;
-    setFilterRows((rows) => rows.map((k) => (k === fromCol ? toCol : k)));
-    setFilter((f) => ({ ...f, [fromCol]: resetCol(fromCol), [toCol]: resetCol(toCol) }));
-  };
-  const clearFilter = () => { setFilter(emptyFilter()); setFilterRows(['status']); };
+  // Default STATUS row when nothing saved; a saved view's own rows win.
+  // State + mutators come from the shared builder state machine (round137).
+  const {
+    filter, filterRows, setFilterOp, toggleFilterVal, setDeadlineRange, setDeadlineDate,
+    addFilterRow, removeFilterRow, retargetFilterRow, clearFilter,
+  } = useFilterBuilder({ columns: PREV_FILTER_COLUMNS, defaultRows: ['status'], savedView });
   const fc = filterCount(filter);
   // Sort handlers (session-only until an owner hits Save, like the other builders).
   const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstSortDir(col), active: true });

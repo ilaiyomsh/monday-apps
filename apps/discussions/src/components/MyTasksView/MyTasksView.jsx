@@ -25,11 +25,14 @@ import { Segment } from './controls/Segment.jsx';
 import { BuilderIcon } from './controls/BuilderIcon.jsx';
 import { HideColumnsControl } from './controls/HideColumnsControl.jsx';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
+import { useStableHandler } from '@generated/hooks/useStableHandler.js';
+import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import { getColumns } from '@api/board-config-store.js';
 import {
   SORT_COLUMNS, GROUP_COLUMNS, FILTER_COLUMNS, OP_LABEL, DEADLINE_RANGES,
-  sortTasks, filterTasks, filterCount, emptyFilter, DEFAULT_SORT, DEFAULT_GROUP,
-  serializeFilter, deserializeFilter,
+  sortTasks, filterTasks, filterCount, DEFAULT_SORT, DEFAULT_GROUP,
+  serializeFilter,
 } from './controls/controls.js';
 import styles from './MyTasksView.module.css';
 import bs from './controls/builder.module.css';
@@ -89,13 +92,12 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     if (!g || !GROUP_COLUMNS.some((c) => c.key === g.col)) return { ...DEFAULT_GROUP };
     return { col: g.col, order: g.order || firstGroupOrder(g.col) };
   });
-  const [filter, setFilter] = useState(() => (savedView?.filter ? deserializeFilter(savedView.filter) : emptyFilter()));
-  const [filterRows, setFilterRows] = useState(() => { // visible "Where" rows (one column each)
-    // Empty default: no pre-seeded "Where" row — the panel offers "+ New filter".
-    return Array.isArray(savedView?.filterRows)
-      ? savedView.filterRows.filter((k) => FILTER_COLUMNS.some((c) => c.key === k))
-      : [];
-  });
+  // Filter state + mutators — the shared builder state machine (round137).
+  // Empty default: no pre-seeded "Where" row — the panel offers "+ New filter".
+  const {
+    filter, filterRows, setFilterOp, toggleFilterVal, setDeadlineRange, setDeadlineDate,
+    addFilterRow, removeFilterRow, retargetFilterRow, clearFilter,
+  } = useFilterBuilder({ columns: FILTER_COLUMNS, defaultRows: [], savedView });
 
   // --- Hide columns (round 46) ------------------------------------------------
   // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
@@ -144,8 +146,9 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const [newSeed, setNewSeed] = useState(null);
   const [newRowId, setNewRowId] = useState(null);
   const rootRef = useRef(null);
-  const toggleSelect = (id, checked) =>
-    setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
+  // round136 — stable identity so the memoized rows don't thaw on re-renders.
+  const toggleSelect = useStableHandler((id, checked) =>
+    setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; }));
   const clearSelection = () => setSelectedIds(new Set());
   // Bulk edit: when >1 rows are selected and the edited row is among them, the
   // change applies to the WHOLE selection (mirrors הנחיות קודמות). Otherwise it's
@@ -156,9 +159,13 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     const base = (selectedIds.size > 1 && selectedIds.has(originId)) ? [...selectedIds] : [originId];
     return cap ? base.filter((id) => allow(cap, id)) : base;
   };
-  const applyStatus = (taskId, status) => resolveTargetIds(taskId, 'editTaskStatus').forEach((id) => updateTaskStatus(id, status));
-  const applyPriority = (taskId, value) => resolveTargetIds(taskId, 'editTaskPriority').forEach((id) => updateTaskPriority(id, value));
-  const applyDeadline = (taskId, date) => resolveTargetIds(taskId, 'editTaskDeadline').forEach((id) => updateTaskDeadline(id, date));
+  // round136 — stable identities (useStableHandler) for the memoized rows; each
+  // call still reads the LATEST selection/permission state through the wrapper.
+  const applyStatus = useStableHandler((taskId, status) => resolveTargetIds(taskId, 'editTaskStatus').forEach((id) => updateTaskStatus(id, status)));
+  const applyPriority = useStableHandler((taskId, value) => resolveTargetIds(taskId, 'editTaskPriority').forEach((id) => updateTaskPriority(id, value)));
+  const applyDeadline = useStableHandler((taskId, date) => resolveTargetIds(taskId, 'editTaskDeadline').forEach((id) => updateTaskDeadline(id, date)));
+  const applyNotes = useStableHandler((taskId, notes) => updateTaskNotes(taskId, notes));
+  const applyRename = useStableHandler((taskId, name) => updateTaskName(taskId, name));
   const deleteSelected = () => {
     const ids = [...selectedIds].filter((id) => allow('deleteTask', id));
     if (ids.length === 0) return;
@@ -306,27 +313,10 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   // its natural position like any other task.
   useEffect(() => { setNewRowId(null); }, [group, sort, filter, debouncedSearch]);
 
-  // ESC clears the multi-selection. Live only while something is selected, and a
-  // no-op unless THIS view is actually visible (offsetParent) — it also yields to
-  // an open editor/overlay (typing field, or a dialog/listbox/menu open). Mirrors
-  // the in-discussion Tasks/Decisions tabs and MyDecisionsView.
+  // ESC clears the multi-selection (shared hook — round135; guards: visible
+  // view only, not while typing, not while an overlay is open).
   const hasSelection = selectedIds.size > 0;
-  useEffect(() => {
-    if (!hasSelection) return undefined;
-    const onKeyDown = (e) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (!rootRef.current || rootRef.current.offsetParent === null) return;
-      const el = e.target;
-      const tag = el && el.tagName;
-      const typing = tag === 'TEXTAREA' || (el && el.isContentEditable)
-        || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset)$/.test(el.type || ''));
-      if (typing) return;
-      if (document.querySelector('[role="dialog"],[role="listbox"],[role="menu"]')) return;
-      setSelectedIds(new Set());
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [hasSelection]);
+  useEscToClearSelection(rootRef, hasSelection, () => setSelectedIds(new Set()));
 
   // Prune selected ids that are no longer loaded (filter/search/pagination churn).
   useEffect(() => {
@@ -348,31 +338,6 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const setGroupCol = useCallback((col) => { setGroup({ col, order: firstGroupOrder(col) }); setCollapsed({}); }, []);
   const setGroupOrder = useCallback((order) => setGroup((g) => ({ ...g, order })), []);
   const clearGroup = useCallback(() => { setGroup({ col: 'none' }); setCollapsed({}); }, []);
-
-  // ---- filter handlers (immutable updates so the pipeline memo re-runs) ----
-  const resetCol = (col) => (col === 'deadline' ? { op: 'within', range: null, date: null } : { op: 'is', values: new Set() });
-  const setFilterOp = useCallback((col, op) => setFilter((f) => ({ ...f, [col]: { ...f[col], op } })), []);
-  const toggleFilterVal = useCallback((col, id) => setFilter((f) => {
-    const next = new Set(f[col].values);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return { ...f, [col]: { ...f[col], values: next } };
-  }), []);
-  const setDeadlineRange = useCallback((range) => setFilter((f) => ({ ...f, deadline: { op: 'within', range, date: null } })), []);
-  const setDeadlineDate = useCallback((date) => setFilter((f) => ({ ...f, deadline: { ...f.deadline, date } })), []);
-  const addFilterRow = useCallback(() => setFilterRows((rows) => {
-    const next = FILTER_COLUMNS.map((c) => c.key).find((k) => !rows.includes(k));
-    return next ? [...rows, next] : rows;
-  }), []);
-  const removeFilterRow = useCallback((col) => {
-    setFilterRows((rows) => rows.filter((k) => k !== col));
-    setFilter((f) => ({ ...f, [col]: resetCol(col) }));
-  }, []);
-  const retargetFilterRow = useCallback((fromCol, toCol) => {
-    if (fromCol === toCol) return;
-    setFilterRows((rows) => rows.map((k) => (k === fromCol ? toCol : k)));
-    setFilter((f) => ({ ...f, [fromCol]: resetCol(fromCol), [toCol]: resetCol(toCol) }));
-  }, []);
-  const clearFilter = useCallback(() => { setFilter(emptyFilter()); setFilterRows([]); }, []);
 
   const fc = filterCount(filter);
 
@@ -753,9 +718,9 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                     searchTerm={debouncedSearch}
                     onStatusChange={applyStatus}
                     onPriorityChange={applyPriority}
-                    onNotesChange={updateTaskNotes}
+                    onNotesChange={applyNotes}
                     onDeadlineChange={applyDeadline}
-                    onRenameTask={updateTaskName}
+                    onRenameTask={applyRename}
                     selectable
                     selectedIds={selectedIds}
                     onToggleSelect={toggleSelect}

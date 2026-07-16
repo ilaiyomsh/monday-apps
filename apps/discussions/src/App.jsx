@@ -684,21 +684,31 @@ export default function App() {
 
   // round129 — gutter tracking for the collapsed expand button (see the
   // gutterHover state above). Passive pointermove; state flips only on change.
+  // round135 — the root's left edge is CACHED (measured once on arm + on
+  // resize) instead of a getBoundingClientRect() forced-layout read on every
+  // pointer move (perf audit finding).
   useEffect(() => {
     if (!collapsed) {
       setGutterHover(false);
       return undefined;
     }
     const GUTTER_PX = 52; // --content-gutter-start
+    let rootLeft = rootRef.current?.getBoundingClientRect().left ?? 0;
+    const remeasure = () => {
+      rootLeft = rootRef.current?.getBoundingClientRect().left ?? 0;
+    };
     const onMove = (ev) => {
-      const rootLeft = rootRef.current?.getBoundingClientRect().left ?? 0;
       setGutterHover((prev) => {
         const next = ev.clientX - rootLeft < GUTTER_PX;
         return next === prev ? prev : next;
       });
     };
     window.addEventListener('pointermove', onMove, { passive: true });
-    return () => window.removeEventListener('pointermove', onMove);
+    window.addEventListener('resize', remeasure);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('resize', remeasure);
+    };
   }, [collapsed]);
 
   // Drag the divider to resize the discussions column at the expense of the
@@ -872,8 +882,11 @@ export default function App() {
         onMouseEnter={() => setListHover(true)}
         onMouseLeave={() => setListHover(false)}
       >
+        {/* round136 — refreshToken replaces the old key={refreshKey} remount:
+            a save now refreshes the list IN PLACE (silent refetch, no teardown,
+            search/filter/scroll preserved). */}
         <DiscussionList
-          key={refreshKey}
+          refreshToken={refreshKey}
           onSelect={handleSelect}
           selectedId={selectedDiscussion?.id}
           onCreateNew={() => setShowCreate(true)}

@@ -4,11 +4,9 @@
  *
  * @module mondayApi/client
  *
- * אחרי Wave 4.1.5 הקובץ מכיל אך ורק תשתית — כל פונקציות השליפה/מוטציה
- * חיות ב-items.js / boards.js / columns.js / mirror.js, וכולן קוראות
- * דרך safeApi (שמשתפת את executeWithRetry עם תוצאת Wave 3.1.1).
- * wrapMondayApiCall נמחקה לאחר מיגרציית 27 הקריאות הפנימיות (F013 closed,
- * F007 closed).
+ * הקובץ מכיל אך ורק תשתית — לוגיקת השליפה/מוטציה בפועל חיה ב-BoardSDK.js
+ * וב-monday-client.js, וכולה קוראת דרך safeApi (round135: תוקנה הפניה
+ * מיושנת לקבצים items.js/boards.js/columns.js/mirror.js שאינם קיימים).
  */
 
 import logger from '../logger';
@@ -278,10 +276,12 @@ export const safeApi = async (monday, callerName, query, options = {}) => {
                         enumerable: false,
                         configurable: true
                     });
-                // בליעה שקטה מכוונת: כשל defineProperty על תשובה קפואה רק מוותר על
-                // dedup downstream — ה-soft-error כבר נרשם למעלה.
-                // eslint-disable-next-line no-restricted-syntax
-                } catch { /* תשובה קפואה — לא חוסם */ }
+                } catch (tagErr) {
+                    // כשל defineProperty על תשובה קפואה רק מוותר על dedup
+                    // downstream — ה-soft-error כבר נרשם למעלה; מתעדים ברמת
+                    // warn כדי לא לאבד את העקבה (round135, error-guard).
+                    logger.warn('API', `${callerName} - סימון __softErrorLoggedId נכשל (תשובה קפואה); dedup downstream יוותר`, tagErr);
+                }
             }
         }
         return rawResponse;
@@ -325,10 +325,12 @@ export const safeApi = async (monday, callerName, query, options = {}) => {
                 Object.defineProperty(wrapped, 'correlationId', {
                     value: error.correlationId, enumerable: false, configurable: true, writable: true
                 });
-            // בליעה שקטה מכוונת: כשל defineProperty רק מוותר על dedup downstream —
-            // השגיאה המקורית כבר נרשמה למעלה וה-wrapped נזרק ממילא.
-            // eslint-disable-next-line no-restricted-syntax
-            } catch { /* לא חוסם */ }
+            } catch (tagErr) {
+                // כשל defineProperty רק מוותר על dedup downstream — השגיאה
+                // המקורית כבר נרשמה למעלה וה-wrapped נזרק ממילא; מתעדים ברמת
+                // warn כדי לא לאבד את העקבה (round135, error-guard).
+                logger.warn('API', `${callerName} - הורשת correlationId ל-wrapped נכשלה; dedup downstream יוותר`, tagErr);
+            }
         }
         throw wrapped;
     }

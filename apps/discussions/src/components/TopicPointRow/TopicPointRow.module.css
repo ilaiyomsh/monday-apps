@@ -207,7 +207,7 @@
   /* Space the trailing controls (hide / delete / updates) like the Tasks name
      cell's .nameInner gap:6px. */
   gap: 6px;
-  padding-inline-start: 14px;
+  padding-inline-start: 38px; /* round139 — 1cm from the name cell's start (approved mock) */
   padding-inline-end: 8px;
   border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, aligned with the header cells */
   /* FROZEN name column — pinned right after the 36px checkbox lead, opaque so

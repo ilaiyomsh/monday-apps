@@ -115,7 +115,7 @@
   margin-inline-start: 0;
 }
 .selectable .taskFirst {
-  padding-inline-start: 8px; /* name is no longer the leading cell */
+  padding-inline-start: 38px; /* round139 — the 1cm rule holds from the name column's start */
   left: 36px; /* pinned right after the frozen 36px checkbox */
   box-shadow: none; /* the group strip lives on the frozen checkbox instead */
 }
@@ -163,9 +163,10 @@
 .taskFirst {
   justify-content: flex-start;
   /* round133 (owner request, monday-native): the item NAME always starts at the
-     SAME fixed inset as the add-row text (18px = 6px strip + 12px gap), so the
-     names and "+ הוסף משימה" sit on one vertical line. */
-  padding-inline-start: 18px;
+     SAME fixed inset as the add-row text — round139 (approved mock): exactly
+     1cm (38px) from the column's left border, strip included — so the names
+     and "+ הוסף משימה" sit on one vertical line. */
+  padding-inline-start: 38px;
   /* FROZEN name column — pinned during horizontal scroll, opaque so scrolled cells
      don't bleed through; group-color strip as an inset shadow that travels with it.
      (Selection mode moves this after the frozen checkbox, see above.) */
@@ -204,14 +205,13 @@
   align-self: stretch;
   display: flex;
   align-items: center;
-  padding-inline-start: 18px;
+  padding-inline-start: 38px; /* round139 — matches the 1cm name inset */
   white-space: nowrap;
 }
-/* round133 — selection mode shifts the names after the 36px checkbox track
-   (36px + 8px cell inset = 44px): keep the add-row text on the SAME vertical
-   line as the item names. */
+/* round139 — selection mode: 36px checkbox track + the same 1cm (38px) cell
+   inset = 74px, keeping the add-row text on the item names' vertical line. */
 .selectable .addLabel {
-  padding-inline-start: 44px;
+  padding-inline-start: 74px;
 }
 .addLabel::before {
   content: '';

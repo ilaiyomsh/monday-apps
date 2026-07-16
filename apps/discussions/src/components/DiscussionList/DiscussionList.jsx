@@ -367,8 +367,14 @@ function DiscussionContextMenu({ item, x, y, actions, onClose }) {
 export function DiscussionList({
   onSelect, selectedId, onCreateNew, onEdit, onCopyLink, onDuplicate, onExport, onDelete,
   exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, onOpenMyDecisions, currentUser = null,
-  // Calendar view — nav state lives in App so it survives the refreshKey remount.
+  // Calendar view — nav state lives in App (predates round136's removal of the
+  // refreshKey remount; keeping it there is still correct).
   viewMode = 'list', onViewModeChange, calendarAnchor, calendarMode, onCalendarNavigate, onCreateAt,
+  // round136 (perf audit) — a bumped token triggers a SILENT refetch after a
+  // save. This replaced App's key={refreshKey} remount, which tore down and
+  // rebuilt the whole list (all rows + a full refetch + lost search/filter/
+  // scroll state) on every create/edit/duplicate.
+  refreshToken = 0,
 }) {
   const isCalendar = viewMode === 'calendar' && !!calendarAnchor;
   const [search, setSearch] = useState('');
@@ -402,7 +408,19 @@ export function DiscussionList({
     return f;
   }, [debouncedSearch, monthFilter, typeFilter, isCalendar, calendarMode, calendarAnchor]);
 
-  const { items, loading, refetching, loadingMore, cursor, loadMore, softDeleteDiscussion } = useDiscussions(filters);
+  const { items, loading, refetching, loadingMore, cursor, loadMore, softDeleteDiscussion, refetch } = useDiscussions(filters);
+
+  // round136 — a save bumps refreshToken (App.handleSaved): refresh the list
+  // IN PLACE (the hook's silent refetch — no unmount, no skeleton, search/
+  // filter/scroll preserved). Skip the mount value; only react to bumps.
+  const refreshSeenRef = useRef(refreshToken);
+  useEffect(() => {
+    if (refreshSeenRef.current === refreshToken) return;
+    refreshSeenRef.current = refreshToken;
+    refetch();
+    // refetch is re-created per render (hook return); the token is the trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshToken]);
 
   // NOTE (round 46): the LEFT discussions list intentionally shows NO branded
   // Meetings splash. The list is preloaded at boot (prefetchDiscussions), so its
@@ -474,7 +492,7 @@ export function DiscussionList({
   // months-with-discussions (one lean date-only fetch) ∪ {current}, newest-first.
   // The current month stays the DEFAULT selection (see monthFilter above), so the
   // initial load is unchanged; options just expand once the month set resolves.
-  const { months: monthsWithDiscussions } = useDiscussionMonths();
+  const { months: monthsWithDiscussions } = useDiscussionMonths(refreshToken);
   const monthOptions = useMemo(
     () => buildMonthOptions(monthsWithDiscussions),
     [monthsWithDiscussions]

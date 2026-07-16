@@ -5,7 +5,6 @@ import { Update, Edit, CloseSmall } from '@vibe/icons';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { NotesEditor } from '@generated/components/NotesEditor';
 import { isValidStatus } from '@generated/constants/statusConfig';
-import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { HighlightedText } from '@generated/components/HighlightedText';
@@ -121,16 +120,16 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
   );
 }
 
-export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, rowStyle, showDeadline = true, showPriority = true, showNotes = true, selectable = false, selected = false, onToggleSelect, searchTerm = '' }) {
+// round136 (perf audit stage 3) — memoized row + option maps hoisted to
+// MyTasksTable (ONE hook pair per table instead of two per row): a selection
+// toggle / keystroke / single-row edit no longer re-renders every row.
+export const MyTasksRow = React.memo(function MyTasksRow({ task, columns, statusOpts, priorityOpts, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, rowStyle, showDeadline = true, showPriority = true, showNotes = true, selectable = false, selected = false, onToggleSelect, searchTerm = '' }) {
   const { t } = useTranslation();
   // Inline rename (permission-gated: the pencil shows only when onRenameTask is
   // provided). Clicking the NAME itself still opens the item card — rename is a
   // separate affordance so the primary click behavior doesn't change.
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
-
-  const statusOpts = useStatusOptions('tasks', 'statusID');
-  const priorityOpts = useStatusOptions('tasks', 'priorityID');
 
   const deadline = task.deadlineID;
   const discussion = getTaskDiscussion(task);
@@ -311,6 +310,6 @@ export function MyTasksRow({ task, columns, onStatusChange, onPriorityChange, on
       {orderedKeys.map((k) => cellByKey[k]).filter(Boolean)}
     </div>
   );
-}
+});
 
 export default MyTasksRow;

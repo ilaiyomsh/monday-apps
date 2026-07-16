@@ -1,8 +1,9 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Checkbox } from '@vibe/core';
 import { MyTasksRow } from './MyTasksRow.jsx';
 import { getColumns } from '../../utils/mondayApi/board-config-store.js';
+import { useStatusOptions } from '../../hooks/useStatusOptions';
 import { useColumnWidths } from '../../hooks/useColumnWidths.js';
 import { useColumnOrder } from '../../hooks/useColumnOrder.js';
 import { useViewport } from '../../hooks/useViewport.js';
@@ -94,7 +95,18 @@ export function MyTasksTable({
   // measurement — never fed to useColumnOrder (so it can't be persisted or
   // reordered) and skipped by startResize (fixed defs are non-resizable).
   const selDef = selectable ? [{ key: 'sel', fixed: 36 }] : [];
-  const renderKeys = selectable ? ['sel', ...visibleOrder] : visibleOrder;
+  // round136 — memoized: passed to every memoized row as `columns`.
+  const renderKeys = useMemo(
+    () => (selectable ? ['sel', ...visibleOrder] : visibleOrder),
+    // visibleOrder derives from order+hidden; join is a cheap stable key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectable, visibleOrder.join('|')]
+  );
+
+  // round136 (perf audit) — ONE status/priority option hook pair per TABLE,
+  // passed to rows as props (was two hook instances per row).
+  const statusOpts = useStatusOptions('tasks', 'statusID');
+  const priorityOpts = useStatusOptions('tasks', 'priorityID');
 
   const { gridTemplate, startResize } = useColumnWidths('myTasks', [...selDef, ...defs]);
   // On phones, ignore the (desktop) resizable px widths and use a compact fixed
@@ -106,7 +118,11 @@ export function MyTasksTable({
     ...(selectable ? ['36px'] : []),
     ...defs.map((d) => (d.key === 'name' ? (M.name ?? '22vw') : M[d.key] ?? '140px')),
   ].join(' ');
-  const rowStyle = { gridTemplateColumns: isMobile ? mobileTemplate : gridTemplate };
+  // round136 — memoized for the memoized rows' referential stability.
+  const rowStyle = useMemo(
+    () => ({ gridTemplateColumns: isMobile ? mobileTemplate : gridTemplate }),
+    [isMobile, mobileTemplate, gridTemplate]
+  );
 
   // Owner-only, mouse-only resize + reorder (per the owner decision). Everyone
   // gets the stored widths/order applied; only owners on a non-touch viewport
@@ -188,6 +204,8 @@ export function MyTasksTable({
           <MyTasksRow
             key={task.id}
             task={task}
+            statusOpts={statusOpts}
+            priorityOpts={priorityOpts}
             columns={renderKeys}
             rowStyle={rowStyle}
             searchTerm={searchTerm}
