@@ -549,6 +549,9 @@ export const COLUMN_SCHEMA = {
 
   tasks: {
     taskCreatorID: { type: 'people', title: 'יוצר' },
+    // round115 — stamped automatically with TODAY when a task is created in
+    // the app (any create path); owner maps it to a date column ("תאריך יצירה").
+    taskCreationDateID: { type: 'date', title: 'תאריך יצירה' },
     responsibilityID: { type: 'people', title: 'אחריות' },
     deadlineID: { type: 'date', title: 'דד ליין' },
     statusID: { type: 'status', title: 'סטאטוס' },
@@ -583,6 +586,8 @@ export const COLUMN_SCHEMA = {
 
   topics: {
     topicCreatorID: { type: 'people', title: 'יוצר נושא' },
+    // round115 — stamped automatically with TODAY at topic creation.
+    topicCreationDateID: { type: 'date', title: 'תאריך יצירה' },
     // Per-topic priority — a status column on the topics board (item-level only,
     // NOT on the points/subitems). Label text + colors come from the column.
     topicPriorityID: { type: 'status', title: 'עדיפות' },
@@ -599,6 +604,9 @@ export const COLUMN_SCHEMA = {
     // Per-point creator (avatar) — a people column on the SUBITEMS board. Written
     // with the current user when a point is created; read back to show the avatar.
     pointCreatorID: { type: 'people', title: 'יוצר נקודה', subitems: true },
+    // round115 — per-POINT creation date on the SUBITEMS board, stamped with
+    // TODAY when a point is created.
+    pointCreationDateID: { type: 'date', title: 'תאריך יצירה (נקודה)', subitems: true },
     // Free-text responses/comments per POINT — a long_text column on the SUBITEMS
     // board, inline-editable in the topics table (mirrors the tasks notes column).
     pointResponsesID: { type: 'long_text', title: 'התייחסויות (נקודה)', subitems: true },

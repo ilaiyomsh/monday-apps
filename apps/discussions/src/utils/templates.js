@@ -147,7 +147,7 @@ export function sanitizeTypeTemplate(template, id) {
  *
  * @returns {Promise<{topics:number, points:number}>} how many were created.
  */
-export async function createTopicsFromTemplate(discussionId, template, { onProgress } = {}) {
+export async function createTopicsFromTemplate(discussionId, template, { onProgress, creatorId = null } = {}) {
   const clean = sanitizeTemplate(template);
   if (!discussionId || !clean.topics.length) return { topics: 0, points: 0 };
 
@@ -155,6 +155,13 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
   const relation = getColumns('topics')?.discussionLinkID; // board_relation: topic -> discussion
   const topicDispCol = getColumns('topics')?.topicNotForDiscussionID; // "האם להציג?" (item)
   const pointDispCol = getColumns('topics')?.pointNotForDiscussionID; // "האם להציג?" (subitem)
+  // round115 — creator + creation-date columns, stamped on every topic/point
+  // created from a template (mirrors useTopics.addTopic/addPoint). creatorId is
+  // passed by the caller (the user applying the template).
+  const topicCreatorCol = getColumns('topics')?.topicCreatorID;
+  const pointCreatorCol = getColumns('topics')?.pointCreatorID;
+  const topicCreatedCol = getColumns('topics')?.topicCreationDateID;
+  const pointCreatedCol = getColumns('topics')?.pointCreationDateID;
 
   let topicsCreated = 0;
   let pointsCreated = 0;
@@ -182,6 +189,12 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
     if (topicDispCol?.id) {
       columnValues[topicDispCol.id] = formatValue('checkbox', true);
     }
+    if (topicCreatorCol?.id && creatorId) {
+      columnValues[topicCreatorCol.id] = formatValue('people', [creatorId]);
+    }
+    if (topicCreatedCol?.id) {
+      columnValues[topicCreatedCol.id] = formatValue('date', new Date());
+    }
 
     const res = await api(
       `mutation ($boardId: ID!, $name: String!, $columnValues: JSON!) {
@@ -202,6 +215,12 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
     report();
 
     const pointCv = pointDispCol?.id ? { [pointDispCol.id]: formatValue('checkbox', true) } : {};
+    if (pointCreatorCol?.id && creatorId) {
+      pointCv[pointCreatorCol.id] = formatValue('people', [creatorId]);
+    }
+    if (pointCreatedCol?.id) {
+      pointCv[pointCreatedCol.id] = formatValue('date', new Date());
+    }
     for (const point of topic.points) {
       await api(
         `mutation ($parentId: ID!, $name: String!, $cv: JSON!) {

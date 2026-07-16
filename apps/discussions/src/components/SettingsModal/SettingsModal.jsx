@@ -378,6 +378,7 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
   ];
   const TASKS_SETTINGS_FIELDS = [
     'taskCreatorID',
+    'taskCreationDateID', // תאריך יצירה — auto-stamped with today at task creation (round115)
     'responsibilityID',
     'deadlineID',
     'statusID',
@@ -393,11 +394,13 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
   const TOPICS_SETTINGS_FIELDS = [
     'discussionLinkID', // 'דיון' — connection to the discussion
     'topicCreatorID', // 'יוצר נושא' — people column; avatar shown on the topic group header
+    'topicCreationDateID', // 'תאריך יצירה' — auto-stamped with today at topic creation (round115)
     'topicPriorityID', // per-topic priority (status column on the topics board)
     'topicNotForDiscussionID', // topic-level "not for discussion" checkbox (drives export filter)
     'pointNotForDiscussionID', // point-level "not for discussion" checkbox (on the subitems board)
     'pointCheckedID', // 'האם נידונה' — discussed checkbox on the SUBITEMS board (topics table)
     'pointCreatorID', // 'יוצר נקודה' — people column on the SUBITEMS board; avatar per point
+    'pointCreationDateID', // 'תאריך יצירה (נקודה)' — auto-stamped with today at point creation (round115)
     'pointDecisionsLinkID', // 'החלטות (נקודה)' — board_relation on the SUBITEMS board to decisions created from the point
     'pointTasksLinkID', // 'משימות (נקודה)' — board_relation on the SUBITEMS board to tasks created from the point
     // 'pointResponsesID' ('התייחסויות') intentionally NOT mapped here — the topics-table

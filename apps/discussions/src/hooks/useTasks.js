@@ -410,6 +410,11 @@ export function useTasks(discussionId, discussionTypeId = null) {
       if (currentUserId != null && getColumns('tasks')?.taskCreatorID?.id) {
         data.taskCreatorID = [Number(currentUserId)];
       }
+      // round115 — stamp the creation date (today) into the mapped date column;
+      // harmless no-op when the owner hasn't mapped taskCreationDateID.
+      if (getColumns('tasks')?.taskCreationDateID?.id) {
+        data.taskCreationDateID = new Date();
+      }
       if (assignee.length) data.responsibilityID = assignee.map(p => Number(p.id));
       // Item 19 — access columns, auto-filled from the parent discussion:
       // participants → יכולת צפייה (viewers), single-person discussion roles →

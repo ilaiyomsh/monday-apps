@@ -210,7 +210,12 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     const sid = String(maybeTempId);
     if (!sid.startsWith('temp-')) return sid;
     const pending = pendingCreates.current.get(sid);
-    if (pending) { try { return await pending; } catch { return null; } }
+    if (pending) {
+      try { return await pending; } catch (err) {
+        if (!err?.__loggedId) logger.error('useTopics', 'המתנה ליצירת פריט נכשלה', err);
+        return null;
+      }
+    }
     for (const t of itemsRef.current) {
       if (String(t.id) === sid) return t._realId ? String(t._realId) : null;
       for (const s of (t._subitems || [])) {
@@ -270,6 +275,11 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
         if (creatorCol?.id && creatorId) {
           columnValues[creatorCol.id] = formatValue('people', [creatorId]);
         }
+        // round115 — stamp the creation date (today) into the mapped date column.
+        const topicCreatedCol = getColumns('topics')?.topicCreationDateID;
+        if (topicCreatedCol?.id) {
+          columnValues[topicCreatedCol.id] = formatValue('date', new Date());
+        }
         const created = await api(
           `mutation ($boardId: ID!, $name: String!, $columnValues: JSON!) {
             create_item(board_id: $boardId, item_name: $name, column_values: $columnValues) { id }
@@ -302,7 +312,8 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
         // is raised via the logger sink and the row exposes retry/delete.
         setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, _pending: false, _createFailed: true } : t)));
       })
-      .finally(() => { pendingCreates.current.delete(tempId); });
+      .finally(() => { pendingCreates.current.delete(tempId); })
+      .catch((err) => { if (!err?.__loggedId) logger.error('useTopics', 'טיפול בתוצאת יצירת נושא נכשל', err); });
   }, [discussionId, forgetRow]);
 
   // Add a new TOPIC (item) linked to the discussion. Fully optimistic: the row
@@ -341,6 +352,11 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
       if (creatorCol?.id && creatorId) {
         cv[creatorCol.id] = formatValue('people', [creatorId]);
       }
+      // round115 — stamp the point's creation date (today) on the SUBITEMS board.
+      const pointCreatedCol = getColumns('topics')?.pointCreationDateID;
+      if (pointCreatedCol?.id) {
+        cv[pointCreatedCol.id] = formatValue('date', new Date());
+      }
       const res = await api(
         `mutation ($parentId: ID!, $name: String!, $cv: JSON!) {
           create_subitem(parent_item_id: $parentId, item_name: $name, column_values: $cv) { id board { id } }
@@ -374,7 +390,8 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
             : topic
         )));
       })
-      .finally(() => { pendingCreates.current.delete(tempId); });
+      .finally(() => { pendingCreates.current.delete(tempId); })
+      .catch((err) => { if (!err?.__loggedId) logger.error('useTopics', 'טיפול בתוצאת יצירת נקודה נכשל', err); });
   }, [resolveRealId, currentUser, forgetRow]);
 
   // Add a discussion POINT = a subitem under the topic. Fully optimistic: the
