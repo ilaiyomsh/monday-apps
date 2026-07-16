@@ -1,0 +1,73 @@
+/* round132 — shared Search pill, visually identical to the My Tasks toolbar's
+   Search (pill → inline input). Kept in its own module so the four tab
+   toolbars (tasks / previous / topics / decisions) share one source. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pill:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.pillIcon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  /* monday toolbar icons read GRAY (not the darker label color). */
+  color: var(--secondary-text-color, #676879);
+}
+
+/* Search, expanded into an inline input but keeping the pill shape. */
+.searchPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--secondary-text-color, #676879);
+}
+.searchInput {
+  width: 160px;
+  max-width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  font-family: var(--font-family);
+}
+.searchInput:focus-visible {
+  outline: none;
+}
+
+/* Clear-X inside the search pill — first flex child, so it sits on the pill's
+   LEFT edge in the dir="ltr" toolbars. Shown only while a value exists. */
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.searchClear:hover {
+  background: var(--primary-background-color, #ffffff);
+  color: var(--primary-text-color, #323338);
+}
