@@ -37,9 +37,10 @@
   grid-template-columns: 220px minmax(140px, 1fr) 120px 130px 160px minmax(160px, 1.2fr);
   align-items: stretch;
   min-height: 36px;
-  /* Row separators are drawn PER-CELL (see .taskCell / .taskFirst::after) so they
-     start AFTER the group-color strip and never cut across it — the strip stays a
-     continuous bar like monday's. */
+  /* round129 — the ROW border is the single separator source, exactly like the
+     Decisions table (the owner-approved reference): no per-cell borders, no
+     ::after line layers. */
+  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
   position: relative;
 }
 /* No add-row → the last row sits on the table's own bottom border: drop the row
@@ -47,23 +48,6 @@
    overlap the rounded corner and stick out past the radius). */
 .taskRow:last-child {
   border-bottom: none;
-}
-/* round112 — monday-style trailing filler: extend each row separator across the
-   empty zone right of the last column (starts after the 6px group strip; over
-   the cells it coincides with their own borders). See TaskTable.module.css. */
-.taskRow::after {
-  content: '';
-  position: absolute;
-  left: 6px;
-  right: 0;
-  bottom: 0;
-  height: 1px;
-  background: var(--ui-border-color, #d0d4e4);
-  pointer-events: none;
-  z-index: 0;
-}
-.taskRow:last-child::after {
-  display: none;
 }
 
 .taskHead {
@@ -94,14 +78,11 @@
   padding: 0 8px;
   min-height: 36px;
   border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
-  /* round124: NO per-cell bottom border — the row-level ::after is the single
-     separator source (the old cell border doubled it at fractional row heights,
-     reading as darker/uneven lines and a white sliver under full-bleed labels). */
+  /* No per-cell bottom border — the ROW border is the single separator (round129). */
   overflow: hidden;
   color: var(--primary-text-color, #323338);
   font-size: 14px;
 }
-.taskRow:last-child .taskCell { border-bottom: none; }
 /* The rightmost column KEEPS its right border so it stays bounded in the body
    too. With fixed-px columns the table can be narrower than its container, so the
    last column's right edge sits mid-table — border-inline-end:none used to leave
@@ -122,41 +103,8 @@
   background: #ffffff;
   box-shadow: inset 6px 0 0 var(--group-color, hsl(var(--status-default)));
 }
-/* The frozen leading cell carries the continuous color strip, so its row
-   separator must NOT span the full width (that line is what used to chop the
-   strip). Drop the full border and draw an inset ::after starting after the 6px
-   strip — it lives on the frozen cell so it stays pinned during horizontal scroll. */
-.taskFirst { border-bottom: none; }
-.taskFirst::after {
-  content: '';
-  position: absolute;
-  inset-inline-start: 6px;
-  inset-inline-end: 0;
-  bottom: 0;
-  height: 1px;
-  background: var(--ui-border-color, #d0d4e4);
-  pointer-events: none;
-}
-.taskRow:last-child .taskFirst::after { display: none; }
-/* Selection mode: the strip lives on the frozen checkbox (.selectCell), so IT
-   gets the inset separator and .taskFirst reverts to a normal bordered cell. */
-.selectable .taskFirst {
-  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
-}
-.selectable .taskRow:last-child .taskFirst { border-bottom: none; }
-.selectable .taskFirst::after { display: none; }
-.selectable .selectCell { border-bottom: none; }
-.selectable .selectCell::after {
-  content: '';
-  position: absolute;
-  inset-inline-start: 6px;
-  inset-inline-end: 0;
-  bottom: 0;
-  height: 1px;
-  background: var(--ui-border-color, #d0d4e4);
-  pointer-events: none;
-}
-.selectable .taskRow:last-child .selectCell::after { display: none; }
+/* round129 — the row border is the only separator (Decisions model): the old
+   frozen-cell ::after copies and per-mode cell borders are gone. */
 .taskHead .taskFirst {
   z-index: 3;
 }
