@@ -34,6 +34,7 @@ import {
   removeTeamFromBoard,
   inviteUsersToAccount,
   ACCOUNT_ROLES,
+  _resetEnsuredSubscribersCache,
 } from '../subscribers.js';
 import logger from '../../logger.js';
 
@@ -280,7 +281,29 @@ describe('getAccountSlug', () => {
 });
 
 describe('ensureSubscribers — round104 pre-subscribe before people-column assign', () => {
-  beforeEach(() => { apiMock.mockReset(); });
+  // round135 — ensureSubscribers now keeps a per-board session cache of ids it
+  // already ensured (skips the redundant mutation on repeat writes). Reset it
+  // per test so each test exercises the real mutation path.
+  beforeEach(() => { apiMock.mockReset(); _resetEnsuredSubscribersCache(); });
+
+  it('round135 — a SECOND ensure for an already-ensured id skips the mutation (session cache)', async () => {
+    apiMock.mockResolvedValue({ add_users_to_board: [{ id: '58649006' }] });
+    await ensureSubscribers(BOARD_ID, [58649006]);
+    await ensureSubscribers(BOARD_ID, [58649006]);
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    // a NEW id still fires (only the missing one is sent)
+    await ensureSubscribers(BOARD_ID, [58649006, 777]);
+    expect(apiMock).toHaveBeenCalledTimes(2);
+    expect(apiMock.mock.calls[1][0]).toContain('user_ids: [777]');
+  });
+
+  it('round135 — a FAILED ensure is NOT cached: the next write retries the mutation', async () => {
+    apiMock.mockRejectedValueOnce(new Error('no permission'));
+    await ensureSubscribers(BOARD_ID, [58649006]);
+    apiMock.mockResolvedValueOnce({ add_users_to_board: [{ id: '58649006' }] });
+    await ensureSubscribers(BOARD_ID, [58649006]);
+    expect(apiMock).toHaveBeenCalledTimes(2);
+  });
 
   it('adds the users as SUBSCRIBERS (kind: subscriber) to the board', async () => {
     apiMock.mockResolvedValue({ add_users_to_board: [{ id: '58649006' }] });

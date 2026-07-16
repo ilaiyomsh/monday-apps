@@ -25,6 +25,7 @@ import { Segment } from './controls/Segment.jsx';
 import { BuilderIcon } from './controls/BuilderIcon.jsx';
 import { HideColumnsControl } from './controls/HideColumnsControl.jsx';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { getColumns } from '@api/board-config-store.js';
 import {
   SORT_COLUMNS, GROUP_COLUMNS, FILTER_COLUMNS, OP_LABEL, DEADLINE_RANGES,
@@ -306,27 +307,10 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   // its natural position like any other task.
   useEffect(() => { setNewRowId(null); }, [group, sort, filter, debouncedSearch]);
 
-  // ESC clears the multi-selection. Live only while something is selected, and a
-  // no-op unless THIS view is actually visible (offsetParent) — it also yields to
-  // an open editor/overlay (typing field, or a dialog/listbox/menu open). Mirrors
-  // the in-discussion Tasks/Decisions tabs and MyDecisionsView.
+  // ESC clears the multi-selection (shared hook — round135; guards: visible
+  // view only, not while typing, not while an overlay is open).
   const hasSelection = selectedIds.size > 0;
-  useEffect(() => {
-    if (!hasSelection) return undefined;
-    const onKeyDown = (e) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (!rootRef.current || rootRef.current.offsetParent === null) return;
-      const el = e.target;
-      const tag = el && el.tagName;
-      const typing = tag === 'TEXTAREA' || (el && el.isContentEditable)
-        || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset)$/.test(el.type || ''));
-      if (typing) return;
-      if (document.querySelector('[role="dialog"],[role="listbox"],[role="menu"]')) return;
-      setSelectedIds(new Set());
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [hasSelection]);
+  useEscToClearSelection(rootRef, hasSelection, () => setSelectedIds(new Set()));
 
   // Prune selected ids that are no longer loaded (filter/search/pagination churn).
   useEffect(() => {

@@ -120,9 +120,9 @@ Flow:
 ### Domain model — three related boards
 `discussions` (root) → `topics` (linked via a `board_relation`) → `tasks`; `tasks` also link back
 to a discussion. The data hooks `useDiscussions` / `useTopics` / `useTasks` (in `src/hooks/`) drive
-a `*Board` class each. `useTasks` notably has **three fallback layers** (direct relation query →
-client-side relation scan → resolve via topics) to tolerate misconfigured relation columns —
-expect that complexity to be intentional.
+a `*Board` class each. `useTasks` is a SINGLE narrowed relation read (one `items(ids:[discussionId])`
+query reading `linked_items` off `tasksBoardLinkID` with a lean column selection) — the old
+"three fallback layers" description was stale and was corrected in round135.
 
 ### "My Tasks" tab + per-discussion edit permission
 A top-level **`appView`** toggle in `App.jsx` (`'discussions' | 'myTasks'`, persisted to

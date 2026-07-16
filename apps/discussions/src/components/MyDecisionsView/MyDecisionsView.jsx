@@ -7,6 +7,7 @@ import { usePermission } from '@generated/hooks/usePermission.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDiscussions } from '@generated/hooks/useDiscussions.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
+import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { useMinSplash } from '@generated/hooks/useMinSplash.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
@@ -254,26 +255,10 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     onNotify?.(msg, 'success', 6000, { label: 'בטל', onClick: undo });
   };
 
-  // ESC clears the multi-selection. Live only while something is selected, and
-  // a no-op unless THIS view is actually visible (offsetParent) — it also yields
-  // to an open editor/overlay (typing field, or a dialog/listbox/menu open).
+  // ESC clears the multi-selection (shared hook — round135; guards: visible
+  // view only, not while typing, not while an overlay is open).
   const hasSelection = selectedIds.size > 0;
-  useEffect(() => {
-    if (!hasSelection) return undefined;
-    const onKeyDown = (e) => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
-      if (!rootRef.current || rootRef.current.offsetParent === null) return;
-      const el = e.target;
-      const tag = el && el.tagName;
-      const typing = tag === 'TEXTAREA' || (el && el.isContentEditable)
-        || (tag === 'INPUT' && !/^(checkbox|radio|button|submit|reset)$/.test(el.type || ''));
-      if (typing) return;
-      if (document.querySelector('[role="dialog"],[role="listbox"],[role="menu"]')) return;
-      setSelectedIds(new Set());
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [hasSelection]);
+  useEscToClearSelection(rootRef, hasSelection, () => setSelectedIds(new Set()));
   // Drop selected ids no longer loaded (filter/search/pagination/sub-tab churn).
   useEffect(() => {
     setSelectedIds((current) => {
