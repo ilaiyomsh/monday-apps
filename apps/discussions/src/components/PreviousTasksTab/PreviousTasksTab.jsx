@@ -232,7 +232,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
 
     resolvePreviousDiscussion();
     return () => { cancelled = true; };
-  }, [discussion?.id, byType]);
+    // round127 — __savedAt: re-resolve after an edit-save of the SAME
+    // discussion (the link may have changed; without this the chip and task
+    // list kept the pre-edit previous discussion until a full reload).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discussion?.id, discussion?.__savedAt, byType]);
 
   // By-type resolution: map the current discussion's "סוג" label -> the TASKS
   // board taskTypeID label id to filter on. Runs only in by-type mode; waits for

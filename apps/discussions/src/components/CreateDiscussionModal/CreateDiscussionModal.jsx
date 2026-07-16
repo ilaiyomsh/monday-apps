@@ -417,7 +417,12 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // topic/point the picked template will create (refined live by
       // createTopicsFromTemplate's onProgress, which knows the sanitized total).
       const pickedTemplate = templates.find((t) => t.id === templateId);
-      const plannedTopics = pickedTemplate?.topics || (typeTopics?.length ? typeTopics : []);
+      // round127 — duplicate: read the source topics BEFORE creating the item so
+      // plannedSteps counts every clone step (the bar used to fake 100% after
+      // the item save, seconds before the clone even started).
+      const duplicateTemplate = isDuplicate ? await readDiscussionTopicsAsTemplate(duplicateFrom.id) : null;
+      const plannedTopics = pickedTemplate?.topics
+        || (typeTopics?.length ? typeTopics : (duplicateTemplate?.topics || []));
       const plannedSteps = 1 + plannedTopics.reduce((n, t) => n + 1 + (t.points?.length || 0), 0);
       setCreateProgress({ done: 0, total: plannedSteps });
       const onTemplateProgress = ({ done, total }) =>
@@ -510,11 +515,21 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         await createTopicsFromTemplate(savedId, { topics: typeTopics }, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
       }
 
-      // Duplicate: clone the source discussion's topics + points onto the new one.
-      if (savedId && isDuplicate) {
-        const topicsTemplate = await readDiscussionTopicsAsTemplate(duplicateFrom.id);
-        if (topicsTemplate.topics.length) {
-          await createTopicsFromTemplate(savedId, topicsTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
+      // Duplicate: clone the source discussion's topics + points onto the new
+      // one (round127: from the PRE-READ template — no second read), then WAIT
+      // until the clone is actually READABLE before handing the card off:
+      // monday reads lag writes, and opening the card early is what showed an
+      // empty discussion "filling in slowly".
+      if (savedId && isDuplicate && duplicateTemplate?.topics?.length) {
+        await createTopicsFromTemplate(savedId, duplicateTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
+        for (let attempt = 0; attempt < 10; attempt += 1) {
+          try {
+            const readBack = await readDiscussionTopicsAsTemplate(savedId);
+            if ((readBack?.topics?.length || 0) >= duplicateTemplate.topics.length) break;
+          } catch (err) {
+            if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי השכפול נכשלה — ממשיך להמתין', err);
+          }
+          await new Promise((resolve) => { setTimeout(resolve, 1000); });
         }
       }
 
@@ -549,6 +564,12 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         discussionLeadID: lead,
         discussionCoordinatorID: coordinator,
         participantsID: participants,
+        // round127 — carry the just-saved link so the refreshed card doesn't
+        // keep showing the pre-edit previous discussion (the write succeeded;
+        // only the hand-back omitted it).
+        previousDiscussionID: previousDiscussionId && previousDiscussionId !== 'none'
+          ? { linkedItems: [{ id: previousDiscussionId }] }
+          : { linkedItems: [] },
       } : {
         id: savedId,
         name: name.trim(),
@@ -673,10 +694,16 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                   <button
                     type="button"
                     className={styles.dropdownTrigger}
+                    /* round127 — stop pointerdown too: the window-level closer fires on
+                       pointerdown BEFORE click, so without this a second click on an open
+                       trigger closed the menu and the click's toggle instantly reopened it. */
+                    onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                       e.stopPropagation();
                       setIsTypeDropdownOpen((prev) => !prev);
                       setIsPreviousDropdownOpen(false);
+                      setIsTimeDropdownOpen(false);
+                      setIsParticipantTemplateMenuOpen(false);
                       setIsAddingType(false);
                       setTypeSearch('');
                     }}
@@ -803,11 +830,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                       <button
                         type="button"
                         className={styles.dropdownTrigger}
+                        onPointerDown={(e) => e.stopPropagation()} /* round127 — see the type trigger */
                         onClick={(e) => {
                           e.stopPropagation();
                           setIsTimeDropdownOpen((prev) => !prev);
                           setIsPreviousDropdownOpen(false);
                           setIsTypeDropdownOpen(false);
+                          setIsParticipantTemplateMenuOpen(false);
                         }}
                         aria-expanded={isTimeDropdownOpen}
                         aria-haspopup="listbox"
@@ -873,10 +902,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                       <button
                         type="button"
                         className={styles.templateChip}
+                        onPointerDown={(e) => e.stopPropagation()} /* round127 — see the type trigger */
                         onClick={(e) => {
                           e.stopPropagation();
                           setIsParticipantTemplateMenuOpen((prev) => !prev);
                           setIsPreviousDropdownOpen(false);
+                          setIsTypeDropdownOpen(false);
+                          setIsTimeDropdownOpen(false);
                         }}
                         aria-haspopup="listbox"
                         aria-expanded={isParticipantTemplateMenuOpen}
@@ -923,10 +955,14 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                     type="button"
                     className={styles.dropdownTrigger}
                     disabled={loadingDiscussions}
+                    onPointerDown={(e) => e.stopPropagation()} /* round127 — see the type trigger */
                     onClick={(e) => {
                       e.stopPropagation();
                       setPreviousSearch('');
                       setIsPreviousDropdownOpen((prev) => !prev);
+                      setIsTypeDropdownOpen(false);
+                      setIsTimeDropdownOpen(false);
+                      setIsParticipantTemplateMenuOpen(false);
                     }}
                     aria-expanded={isPreviousDropdownOpen}
                     aria-haspopup="listbox"
@@ -1019,7 +1055,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
             <div style={{ marginTop: 10 }}>
               <PartyProgress
                 value={createProgress.done / Math.max(1, createProgress.total)}
-                label={celebrate ? '🎉 הדיון נוצר!' : (isEdit ? 'שומר את השינויים...' : 'יוצר את הדיון...')}
+                label={celebrate ? '🎉 הדיון נוצר!' : (isEdit ? 'שומר את השינויים...' : (isDuplicate ? 'משכפל את הדיון...' : 'יוצר את הדיון...'))} /* round127 */
               />
             </div>
           )}
