@@ -62,7 +62,6 @@
   bottom: 0;
   height: 1px;
   background: var(--ui-border-color, #d0d4e4);
-  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045);
   pointer-events: none;
   z-index: 0;
 }
@@ -208,7 +207,6 @@
   bottom: 0;
   height: 1px;
   background: var(--ui-border-color, #d0d4e4);
-  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045);
   pointer-events: none;
 }
 .taskRow:last-child .taskFirst::after { display: none; }
@@ -216,7 +214,6 @@
    gets the inset separator and .taskFirst reverts to a normal bordered cell. */
 .selectable .taskFirst {
   border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
-  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045); /* round124: same soft shading as the other separators */
 }
 .selectable .taskRow:last-child .taskFirst { border-bottom: none; }
 .selectable .taskFirst::after { display: none; }
@@ -229,7 +226,6 @@
   bottom: 0;
   height: 1px;
   background: var(--ui-border-color, #d0d4e4);
-  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045);
   pointer-events: none;
 }
 .selectable .taskRow:last-child .selectCell::after { display: none; }
