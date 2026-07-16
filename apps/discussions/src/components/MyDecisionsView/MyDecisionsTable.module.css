@@ -30,14 +30,11 @@
   align-items: stretch;
   min-height: 36px;
   border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
-  /* round123 — monday-style soft shading under each horizontal rule. */
-  box-shadow: 0 1px 1px rgba(29, 37, 64, 0.045);
   position: relative;
 }
 /* Last row sits on the table's own bottom border. */
 .taskRow:last-child {
   border-bottom: none;
-  box-shadow: none;
 }
 
 .taskHead {
