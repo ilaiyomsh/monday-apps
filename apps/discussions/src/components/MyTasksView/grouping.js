@@ -1,3 +1,6 @@
+import { sortGroupsByOrder } from '../GroupByBuilder/groupOrders.js';
+import { isValidStatus } from '../../constants/statusConfig.js';
+
 /*
  * Pure grouping helpers for the "My Tasks" view. Kept separate from the React
  * component so the bucketing rules can be unit-tested without rendering.
@@ -320,4 +323,88 @@ export function groupMyTasks(tasks, mode, opts = {}) {
   })();
   // Every labeled group leaves here with a color (semantic colors preserved).
   return ensureGroupColors(buckets);
+}
+
+// ---------------------------------------------------------------- round142 --
+// Shared grouping engine for the discussion task TABS (TasksTab +
+// PreviousTasksTab) — stubs, implemented behind the TDD gate.
+export const NO_ASSIGNEE = '__unassigned__';
+export const TAB_NO_DISCUSSION = '__nodiscussion__';
+
+/*
+ * One person-group bucket for a task (TasksTab semantics, now shared): key by
+ * the SORTED person ids (stable regardless of assignment order) with a
+ * 'people:' prefix, label by the same-sorted names, and carry an `assignee`
+ * seed so a task created inside the group inherits its people.
+ */
+export function buildPersonGroup(task) {
+  const people = Array.isArray(task?.responsibilityID) ? task.responsibilityID : [];
+  if (people.length === 0) return { key: NO_ASSIGNEE, label: 'לא הוקצה', assignee: [] };
+  const normalized = people
+    .map((p) => ({ id: String(p.id), name: p.name || '' }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  return {
+    key: `people:${normalized.map((p) => p.id).join('|')}`,
+    label: normalized.map((p) => p.name).join(', '),
+    assignee: normalized.map((p) => ({ id: p.id, kind: 'person', name: p.name })),
+  };
+}
+
+/*
+ * The tabs' grouping engine (extracted from the byte-similar groupedRaw blocks
+ * in TasksTab and PreviousTasksTab):
+ *   by      — 'status' | 'person' | 'discussion' | anything else = ungrouped
+ *   order   — sortGroupsByOrder key (labelAsc/labelDesc/azAsc/azDesc); the
+ *             "no value" bucket always stays FIRST (existing tab behavior)
+ *   labelById/colorById/orderById — the mapped status column's maps ('status')
+ * Group shape matches the tabs: { key, label, color, status, assignee?, items }.
+ * Every labeled group leaves with a color (ensureGroupColors), and the callers
+ * still apply their user overrides as a second ensureGroupColors pass.
+ */
+export function groupTabTasks(tasks, { by = 'none', order = 'azAsc', labelById = {}, colorById = {}, orderById = {} } = {}) {
+  const list = Array.isArray(tasks) ? tasks : [];
+
+  if (by === 'status') {
+    const groups = new Map();
+    list.forEach((t) => {
+      const id = isValidStatus(t.statusID) && labelById[t.statusID] != null ? t.statusID : null;
+      const key = id == null ? NO_STATUS : String(id);
+      if (!groups.has(key)) groups.set(key, { key, statusId: id, items: [] });
+      groups.get(key).items.push(t);
+    });
+    const out = [...groups.values()].map((g) => ({
+      key: g.key,
+      label: g.statusId == null ? 'ללא סטאטוס' : (labelById[g.statusId] ?? 'ללא סטאטוס'),
+      color: g.statusId == null ? null : (colorById[g.statusId] || null),
+      status: g.statusId,
+      items: g.items,
+    }));
+    return ensureGroupColors(sortGroupsByOrder(out, { order, orderById, noKey: NO_STATUS }));
+  }
+
+  if (by === 'person') {
+    const groups = new Map();
+    list.forEach((t) => {
+      const pg = buildPersonGroup(t);
+      if (!groups.has(pg.key)) {
+        groups.set(pg.key, { key: pg.key, label: pg.label, color: null, status: undefined, assignee: pg.assignee, items: [] });
+      }
+      groups.get(pg.key).items.push(t);
+    });
+    return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order, noKey: NO_ASSIGNEE }));
+  }
+
+  if (by === 'discussion') {
+    const groups = new Map();
+    list.forEach((t) => {
+      const linked = t.discussionLinkID?.linkedItems || [];
+      const key = linked.map((d) => String(d.id)).sort().join('|') || TAB_NO_DISCUSSION;
+      const label = linked.map((d) => d.name || d.id).join(', ') || 'ללא דיון מקור';
+      if (!groups.has(key)) groups.set(key, { key, label, color: null, status: undefined, items: [] });
+      groups.get(key).items.push(t);
+    });
+    return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order, noKey: TAB_NO_DISCUSSION }));
+  }
+
+  return [{ key: ALL_TASKS, label: '', color: null, status: undefined, items: list }];
 }

@@ -2,9 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Button, Text, Dropdown } from '@vibe/core';
 import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
-import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS } from '@generated/components/GroupByBuilder';
 // Varied stable group-title colors (owner request 2026-07-14) — shared engine.
-import { ensureGroupColors } from '@generated/components/MyTasksView/grouping.js';
+import { ensureGroupColors, groupTabTasks } from '@generated/components/MyTasksView/grouping.js';
 import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { SortByBuilder, SORT_STATUS_DIRS, SORT_DATE_DIRS, SORT_TEXT_DIRS } from '@generated/components/SortByBuilder';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -33,7 +33,6 @@ import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
-import { isValidStatus } from '@generated/constants/statusConfig';
 // Quick-filter status battery (round 81) — shared buckets + presentation chip.
 import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
 import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
@@ -61,9 +60,6 @@ const firstSortDir = (col) => (SORT_OPTIONS.find((o) => o.value === col) || SORT
 // Group-by source discussion — only meaningful in the "by type" view (where
 // tasks span multiple discussions), so it's appended to the options there only.
 const GROUP_OPTION_DISCUSSION = { value: 'discussion', label: 'דיון מקור', icon: 'relation', orders: GROUP_AZ_ORDERS };
-const NO_STATUS = '__none__';
-const NO_ASSIGNEE = '__unassigned__';
-const NO_DISCUSSION = '__nodiscussion__';
 // Undo window for deferred deletion — matches the delete toast auto-hide.
 const DELETE_GRACE_MS = 6000;
 
@@ -746,50 +742,14 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // key by name. (See TasksTab for the same shape.)
   // Right-click a group header → shared color palette (round 77).
   const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
-  const groupedRaw = useMemo(() => {
-    if (groupBy === 'status') {
-      const groups = new Map();
-      filteredTasks.forEach(t => {
-        const id = isValidStatus(t.statusID) && labelById[t.statusID] != null ? t.statusID : null;
-        const key = id == null ? NO_STATUS : String(id);
-        if (!groups.has(key)) groups.set(key, { key, statusId: id, items: [] });
-        groups.get(key).items.push(t);
-      });
-      const list = [...groups.values()].map(g => ({
-        key: g.key,
-        label: g.statusId == null ? 'ללא סטאטוס' : (labelById[g.statusId] ?? 'ללא סטאטוס'),
-        color: g.statusId == null ? null : (colorById[g.statusId] || null),
-        items: g.items,
-      }));
-      return ensureGroupColors(sortGroupsByOrder(list, { order: groupOrder, orderById, noKey: NO_STATUS }));
-    }
-    if (groupBy === 'person') {
-      const groups = new Map();
-      filteredTasks.forEach(t => {
-        const key = (t.responsibilityID || []).map(p => String(p.id)).sort().join('|') || NO_ASSIGNEE;
-        const label = (t.responsibilityID || []).map(p => p.name).join(', ') || 'לא הוקצה';
-        if (!groups.has(key)) groups.set(key, { key, label: key, color: null, items: [] });
-        groups.get(key).label = label;
-        groups.get(key).items.push(t);
-      });
-      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_ASSIGNEE }));
-    }
-    if (groupBy === 'discussion') {
-      // Group by the task's source discussion(s) (discussionLinkID). A task can
-      // link to more than one — key by the sorted id set, label by names.
-      const groups = new Map();
-      filteredTasks.forEach(t => {
-        const linked = t.discussionLinkID?.linkedItems || [];
-        const key = linked.map(d => String(d.id)).sort().join('|') || NO_DISCUSSION;
-        const label = linked.map(d => d.name || d.id).join(', ') || 'ללא דיון מקור';
-        if (!groups.has(key)) groups.set(key, { key, label: key, color: null, items: [] });
-        groups.get(key).label = label;
-        groups.get(key).items.push(t);
-      });
-      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: groupOrder, noKey: NO_DISCUSSION }));
-    }
-    return [{ key: '__all__', label: '', color: null, items: filteredTasks }];
-  }, [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById]);
+  // round142 (audit stage 4) — the grouping engine is shared with TasksTab via
+  // grouping.js (groupTabTasks). NOTE: person-group keys are now the unified
+  // 'people:<sorted ids>' format (was a bare id list here), so saved header
+  // colors for person groups in THIS tab reset once.
+  const groupedRaw = useMemo(
+    () => groupTabTasks(filteredTasks, { by: groupBy, order: groupOrder, labelById, colorById, orderById }),
+    [filteredTasks, groupBy, groupOrder, labelById, colorById, orderById]
+  );
   // Apply the shared per-header color overrides as a final pass.
   const grouped = useMemo(() => ensureGroupColors(groupedRaw, colorsByKey), [groupedRaw, colorsByKey]);
 
