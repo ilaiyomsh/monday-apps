@@ -489,8 +489,10 @@
   width: 100%;
   box-sizing: border-box;
   /* extra right padding reserves the far-right slot for the hover kebab so it
-     never overlaps the (now always-visible) date/time */
-  padding: 10px 34px 10px 12px;
+     never overlaps the (now always-visible) date/time. round121: the LEFT
+     padding matches it, so the name's gap off the 6px color rail echoes the
+     date's gap off the right edge (owner request — symmetric breathing room). */
+  padding: 10px 34px;
   background: var(--primary-background-color, #fff);
   border: 0.5px solid var(--ui-border-color, #d0d4e4);
   border-radius: 10px;
