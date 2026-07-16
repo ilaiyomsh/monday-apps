@@ -56,7 +56,11 @@
   content: '';
   position: absolute;
   bottom: 0;
-  inset-inline: var(--section-rule-inset-wide, 24px);
+  /* round116 — the rule STOPS exactly on the table's left edge line (the shared
+     52px gutter): it must not overhang left of the table below. The right side
+     keeps the original 24px inset. */
+  inset-inline-start: var(--content-gutter-start, 52px);
+  inset-inline-end: var(--section-rule-inset-wide, 24px);
   height: 1px;
   background: var(--ui-border-color, #d0d4e4);
   pointer-events: none;
@@ -760,6 +764,17 @@
 
 /* round103 — hide this chrome while monday's item-card panel is open (iframe narrows). */
 :global(body[data-chrome-narrow="1"]) .participants { display: none !important; }
+
+/* round116 — the tabs strip's own horizontal scrollbar disappears entirely
+   while the updates panel narrows the pane (scrolling still works by drag/
+   wheel); base state keeps the round70 thin-bar behavior. */
+:global(body[data-chrome-narrow="1"]) .tabsRow {
+  scrollbar-width: none;
+}
+:global(body[data-chrome-narrow="1"]) .tabsRow::-webkit-scrollbar {
+  display: none;
+  height: 0;
+}
 
 /* round113 — while monday's item-card / updates panel is open (chrome-narrow,
    see round103's detector) the narrowed pane must show NO scrollbars at all
