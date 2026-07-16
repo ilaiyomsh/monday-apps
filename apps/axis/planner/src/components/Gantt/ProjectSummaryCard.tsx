@@ -241,7 +241,7 @@ const ProjectMetricsRow: React.FC<{ projectId: string }> = ({ projectId }) => {
     // pinned to CONFIG.rowHeight (px) — NOT Tailwind h-12: :root font-size is 20px
     // (index.css), so h-12 (3rem) renders 60px and drifts the card off the 48px
     // px-based track grid (the drift compounds per row). See BUGS.md.
-    <div className="flex items-stretch" style={{ height: CONFIG.rowHeight }}>
+    <div data-testid="summary-card-row2" className="flex items-stretch" style={{ height: CONFIG.rowHeight }}>
       <div className="flex-1 min-w-0 px-3 flex items-center">
         <MetricCell className="ml-auto" label={t('projectSummary.actualHours')}>{staticValue(metrics?.reported ?? 0)}</MetricCell>
       </div>
@@ -268,7 +268,7 @@ export const ProjectSummaryCard = memo<ProjectSummaryCardProps>(({
           first (right in RTL); PM is last so it sits on the LEFT. Height pinned
           to CONFIG.rowHeight (px), NOT h-12 — see the metrics row below for why
           rem-based heights drift off the 48px track grid. */}
-      <div className="flex items-center justify-between gap-2" style={{ height: CONFIG.rowHeight }}>
+      <div data-testid="summary-card-row1" className="flex items-center justify-between gap-2" style={{ height: CONFIG.rowHeight }}>
         <ProjectTypeBadge
           projectType={summary.projectType}
           projectTypeColor={summary.projectTypeColor}

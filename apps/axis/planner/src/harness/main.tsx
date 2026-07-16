@@ -6,7 +6,15 @@
 // is served by the dev server only. See harness.html.
 //
 // Usage:  pnpm server   →   http://localhost:8301/harness.html
-//         window.__measure()  logs card-row vs track-row offsets.
+//         ?tracks=1|2|3  picks the allocation count (default 2).
+//         window.__measure()  → { verdict:'PASS'|'FAIL', offsets, missing, rows }.
+//
+// The measurement is SELF-VERIFYING and FAILS LOUD: if a card row / track / panel
+// cannot be found (e.g. a refactor renamed a class), verdict is 'FAIL' with the
+// missing selectors listed — it never silently returns "aligned". This is the
+// lesson from the #122→#174 saga: the old harness queried `.h-12`, #174 removed
+// `.h-12`, so the offset check was silently skipped and every session read a
+// FALSE pass. Selectors are now stable data-testids on the real components.
 import { StrictMode, useRef, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { DndContext } from '@dnd-kit/core'
@@ -33,26 +41,29 @@ const getXByDate = (d: Date | string) => idx(d) * PPD
 const getDateByX = (x: number) => { const d = new Date(START); d.setDate(d.getDate() + Math.round(x / PPD)); return d }
 const getWidthByDates = (s: Date | string, e: Date | string) => Math.max(PPD, (idx(e) - idx(s) + 1) * PPD)
 
-// ── mock project: 2 time-overlapping allocations → 2 packed tracks (like "אסדן") ──
-const tasks: Task[] = [
-  { id: 't1', name: 'עידו פיוטרקובסקי', projectId: 'p1', employeeId: 'e1', role: 'מפתח',
-    startDate: iso(2026, 3, 5), endDate: iso(2026, 7, 20), hoursPerDay: 4, totalHours: 300, reportedHours: 200, color: '#00854d' } as unknown as Task,
-  { id: 't2', name: 'עילי שלם', projectId: 'p1', employeeId: 'e2', role: 'מנהל',
-    startDate: iso(2026, 4, 1), endDate: iso(2026, 8, 15), hoursPerDay: 4, totalHours: 200, reportedHours: 120, color: '#0073ea' } as unknown as Task,
-]
+// ── scenario: N time-OVERLAPPING allocations → N packed tracks ───────────────
+// ?tracks=1|2|3 (default 2). All start on the same day so they never share a
+// track — packTasksIntoTracks yields exactly N tracks, exercising 1-, 2- and
+// 3-row focused blocks (card content is always 2 rows; a 3-track block adds a
+// blank card row over track 2 — this catches drift that only shows past row 2).
+const TRACKS = Math.min(3, Math.max(1, Number(new URLSearchParams(location.search).get('tracks')) || 2))
+const NAMES = ['עידו פיוטרקובסקי', 'עילי שלם', 'דנה כהן']
+const COLORS = ['#00854d', '#0073ea', '#a25ddc']
+const tasks: Task[] = Array.from({ length: TRACKS }, (_, i) => ({
+  id: `t${i + 1}`, name: NAMES[i], projectId: 'p1', employeeId: `e${i + 1}`, role: 'מפתח',
+  startDate: iso(2026, 3, 5), endDate: iso(2026, 7 + i, 20), hoursPerDay: 4,
+  totalHours: 300, reportedHours: 200, color: COLORS[i],
+}) as unknown as Task)
 
 const group = {
-  id: 'p1', name: 'אסדן (HARNESS)', tasks, color: '#00854d',
+  id: 'p1', name: `אסדן (HARNESS · tracks=${TRACKS})`, tasks, color: '#00854d',
   projectSummary: {
     totalPlannedHours: 350, totalReportedHours: 320, totalCost: 0, costPerHour: 0,
     managerName: 'עידו פיוטרקובסקי', projectType: 'שעות גמיש', projectTypeColor: '#e2a600', currency: '₪',
   },
 } as unknown as Group
 
-const employees = [
-  { id: 'e1', name: 'עידו פיוטרקובסקי', role: 'מפתח', capabilities: [], allocationPercentage: 100 },
-  { id: 'e2', name: 'עילי שלם', role: 'מנהל', capabilities: [], allocationPercentage: 100 },
-] as any
+const employees = NAMES.map((name, i) => ({ id: `e${i + 1}`, name, role: 'מפתח', capabilities: [], allocationPercentage: 100 })) as any
 
 const settings = {
   projectsBoardId: '1', projectTypeColumnId: 'type', projectManagerColumnId: 'pm',
@@ -63,6 +74,9 @@ const settings = {
 const projectMetrics = new Map([['p1', { planned: 350, allocated: 500, reported: 320 }]])
 
 // ── measurement: card rows vs track rows, all via real getBoundingClientRect ──
+// Stable data-testid selectors on the real components (summary-card-panel,
+// summary-card-row1/2) — never fragile utility classes. Verdict is FAIL the
+// moment any required node is missing, so a broken selector can NEVER read as 0.
 function measure() {
   const box = (el: Element | null) => {
     if (!el) return null
@@ -73,16 +87,30 @@ function measure() {
   document.querySelectorAll('[data-track-index]').forEach((el: any) => {
     rows['track' + el.dataset.trackIndex] = box(el)
   })
-  const cardRow1 = box(document.querySelector('.gantt-group-row .justify-between.h-12')) // PM + type badge
-  const cardRow2 = box(document.querySelector('.gantt-group-row .items-stretch.h-12'))   // hours metrics
-  const cardPanel = box(document.querySelector('.gantt-group-row .absolute.bg-bg-surface')) // white card container
-  const out: any = {
-    rootFontSize: getComputedStyle(document.documentElement).fontSize,
-    cardPanel, cardRow1, cardRow2, ...rows,
+  const cardPanel = box(document.querySelector('[data-testid="summary-card-panel"]'))
+  const cardRow1 = box(document.querySelector('[data-testid="summary-card-row1"]')) // PM + type badge
+  const cardRow2 = box(document.querySelector('[data-testid="summary-card-row2"]')) // hours metrics
+
+  const missing: string[] = []
+  if (!cardPanel) missing.push('summary-card-panel')
+  if (!cardRow1) missing.push('summary-card-row1')
+  if (!cardRow2) missing.push('summary-card-row2')
+  if (!rows.track0) missing.push('track0')
+  if (TRACKS >= 2 && !rows.track1) missing.push('track1')
+
+  const offsets: Record<string, number | null> = {
+    row1_vs_track0: cardRow1 && rows.track0 ? cardRow1.center - rows.track0.center : null,
+    row2_vs_track1: cardRow2 && rows.track1 ? cardRow2.center - rows.track1.center : null,
   }
-  if (cardRow1 && rows.track0) out.OFFSET_row1_vs_track0 = cardRow1.center - rows.track0.center
-  if (cardRow2 && rows.track1) out.OFFSET_row2_vs_track1 = cardRow2.center - rows.track1.center
-  return out
+  // PASS only when nothing is missing AND every measurable offset is 0.
+  const measured = Object.values(offsets).filter((v): v is number => v !== null)
+  const verdict = missing.length === 0 && measured.every((v) => v === 0) ? 'PASS' : 'FAIL'
+
+  return {
+    verdict, tracks: TRACKS, missing,
+    rootFontSize: getComputedStyle(document.documentElement).fontSize,
+    offsets, cardPanel, cardRow1, cardRow2, ...rows,
+  }
 }
 
 function Harness() {
@@ -124,7 +152,11 @@ function Harness() {
 
   useEffect(() => {
     ;(window as any).__measure = measure
-    const t = setTimeout(() => console.log('[HARNESS_MEASURE] ' + JSON.stringify(measure())), 700)
+    const t = setTimeout(() => {
+      const m = measure()
+      const tag = m.verdict === 'PASS' ? '[HARNESS_MEASURE PASS]' : '[HARNESS_MEASURE FAIL]'
+      console.log(tag + ' ' + JSON.stringify(m))
+    }, 700)
     return () => clearTimeout(t)
   }, [])
 

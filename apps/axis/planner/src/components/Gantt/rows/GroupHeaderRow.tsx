@@ -310,6 +310,7 @@ export const GroupHeaderRow: React.FC<GroupHeaderRowProps> = memo(({ group, isEx
             and always covers every allocation row. */}
         {showProjectCard && (
           <div
+            data-testid="summary-card-panel"
             className={`absolute left-0 w-full px-3 flex flex-col overflow-hidden bg-bg-surface ${locale.isRtl ? 'border-r' : 'border-l'} border-border-subtle`}
             style={{ zIndex: 60, top: CONFIG.groupHeaderHeight + SUMMARY_TRACKS_GAP, height: cardHeight }}
             onClick={(e) => e.stopPropagation()}

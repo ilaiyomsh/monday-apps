@@ -24,6 +24,23 @@ Order: newest first. Keep entries terse — one entry should fit on a screen.
 
 ---
 
+## 2026-07-16 — The focus-card verification harness lied "aligned" (stale `.h-12` selector → false PASS)
+
+**Symptom:** After #174 shipped the real fix (rem→px), the card-alignment "serious problem" was reported as STILL broken — a 6th+ report on the #122→#174 saga. Yet the code was already correct and force-deployed to LIVE (deploy-live-axis-planner run #4, sha `01ac4fc`, success 2026-07-16 05:53).
+
+**Root cause:** The dev harness `measure()` (`src/harness/main.tsx`) located the card rows with `document.querySelector('.gantt-group-row .justify-between.h-12')` — but #174's fix *removed* `h-12` (replaced with `style={{ height: CONFIG.rowHeight }}`). Post-fix the selector matched nothing → `cardRow1/cardRow2` were `null` → the offset math was guarded by `if (cardRow1 && rows.track0)` and **silently skipped**. `__measure()` returned an object with no `OFFSET_*` fields, which read as "aligned / 0". The harness — the one tool built to break the saga — reported a FALSE pass. The verification loop, not the layout, was the thing still broken.
+
+**Why it slipped:** The fragile selector (`.h-12`) was coupled to the exact class the fix deleted, so the fix guaranteed the verifier would stop measuring. A missing element degraded to "no offset" instead of "cannot verify" — silent skip, not loud fail. Real re-measurement with a corrected selector (via headless Chromium against the harness) gives **0/0 offset across tracks=1/2/3**, `rootFontSize 20px`, card row centers 150/198 == track centers 150/198.
+
+**Fix:** (a) Stable `data-testid`s on the real components — `summary-card-panel` (GroupHeaderRow), `summary-card-row1`/`summary-card-row2` (ProjectSummaryCard) — instead of utility classes. (b) `measure()` now returns a `verdict: 'PASS'|'FAIL'` plus a `missing` list and **FAILS LOUD** when any required node is absent (never silently 0), and accepts `?tracks=1|2|3` to exercise 1-, 2- and 3-row focused blocks.
+
+**Prevention:**
+- Rule: a verification probe MUST fail loud when its target is missing. "Element not found" is FAIL/cannot-verify, never a passing 0. Never key a probe on a utility class the code under test can delete.
+- The harness now self-reports PASS/FAIL in its startup log line (`[HARNESS_MEASURE PASS|FAIL]`), so a broken selector is visible immediately.
+- When a "still broken" report contradicts the code, verify the deployed build hash and re-measure with a *working* probe BEFORE touching layout — the trap in this saga was always the feedback loop (stale cache / broken tool), not the CSS.
+
+---
+
 ## 2026-07-15 — Focus-card rows drift below the allocation bars (rem `h-12` vs px 48-grid)
 
 **Symptom:** In projects view, focusing a project showed the summary card's content — the PM/type row, then the hours row — sitting progressively BELOW the allocation bars it must line up with (row 1 slightly low, row 2 more so). Five design PRs (#134→#165) chased it without converging; each "fix" in one place reappeared in another.
