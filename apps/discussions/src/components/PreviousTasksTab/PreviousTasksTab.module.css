@@ -81,6 +81,7 @@
   z-index: 20;
   background: var(--primary-background-color, #ffffff);
   padding-block: 4px;
+  font-size: 14px; /* round138 — pinned; identical toolbar row in all four tabs */
 }
 /* Cover the scroll container's (.body) top padding band above the pinned toolbar
    so scrolled rows can't peek above it (round93). */

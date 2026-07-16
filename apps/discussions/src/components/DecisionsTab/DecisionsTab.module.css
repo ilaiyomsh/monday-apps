@@ -41,6 +41,12 @@
   z-index: 20;
   background: var(--primary-background-color, #ffffff);
   padding-block: 4px;
+  /* round138 — identical toolbar rhythm in all four discussion tabs (owner
+     request): the decisions root gap is 8px (vs 16px in Tasks/Previous), so an
+     extra 8px margin lands the pills exactly 20px above the content below,
+     like the other tabs. Font pinned to the shared pills' 14px. */
+  font-size: 14px;
+  margin-block-end: 8px;
 }
 /* Cover the scroll container's (.body) top padding band above the pinned toolbar
    so scrolled rows can't peek above it (round93). */
@@ -277,9 +283,10 @@
 .decNameCell {
   justify-content: flex-start;
   gap: 6px;
-  /* round133 — same fixed inset as the add-row text (18px = 6px strip + 12px
-     gap): decision names and "+ הוסף החלטה" sit on one vertical line. */
-  padding-inline-start: 18px;
+  /* round133 — same fixed inset as the add-row text; round138 widened it
+     (30px = 6px strip + 24px gap): decision names and "+ הוסף החלטה" sit on
+     one vertical line. */
+  padding-inline-start: 30px;
   padding-inline-end: 8px;
   box-shadow: inset 6px 0 0 #6b4ee6;
   overflow: hidden;
@@ -536,7 +543,7 @@
   display: flex;
   align-items: center;
   flex: 1;
-  padding-inline-start: 18px;
+  padding-inline-start: 30px; /* round138 — matches the widened name inset */
   align-self: stretch;
   position: relative;
 }

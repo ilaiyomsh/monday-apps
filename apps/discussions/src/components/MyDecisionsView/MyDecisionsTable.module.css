@@ -68,9 +68,9 @@
    inset box-shadow so it travels with the frozen column. */
 .taskFirst {
   justify-content: flex-start;
-  /* round133 — unified fixed name inset across all tables (18px = 6px strip +
-     12px gap), matching the tasks/decisions tables and their add rows. */
-  padding-inline-start: 18px;
+  /* round133 — unified fixed name inset across all tables; round138 widened
+     it (30px = 6px strip + 24px gap), matching the tasks/decisions tables. */
+  padding-inline-start: 30px;
   position: sticky;
   left: 0;
   z-index: 2;
