@@ -94,9 +94,9 @@
 .taskFirst {
   justify-content: flex-start;
   /* round133 (owner request, monday-native): the item NAME always starts at the
-     SAME fixed inset as the add-row text (18px = 6px strip + 12px gap), so the
-     names and "+ הוסף משימה" sit on one vertical line. */
-  padding-inline-start: 18px;
+     SAME fixed inset as the add-row text; round138 widened the gap (30px =
+     6px strip + 24px gap), so the names and "+ הוסף משימה" sit on one vertical line. */
+  padding-inline-start: 30px;
   position: sticky;
   left: 0;
   z-index: 2;
@@ -166,7 +166,7 @@
   align-self: stretch;
   display: flex;
   align-items: center;
-  padding-inline-start: 18px;
+  padding-inline-start: 30px; /* round138 — matches the widened name inset */
   white-space: nowrap;
 }
 /* round133 — selection mode shifts the names after the 36px checkbox track

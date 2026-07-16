@@ -21,6 +21,15 @@
   justify-content: flex-start;
   gap: 8px;
   width: 100%;
+  /* round138 — identical toolbar rhythm in all four discussion tabs (owner
+     request): same 4px block padding as the Tasks/Previous/Decisions toolbars,
+     and margin so pills sit exactly 20px above the content below
+     (4px padding + 12px wrap gap + 4px margin), like the Tasks tab
+     (4px padding + 16px root gap). Pills are 14px via the shared components;
+     pinned here so the row can never drift per-tab. */
+  font-size: 14px;
+  padding-block: 4px;
+  margin-block-end: 4px;
 }
 /* Leading controls (new-topic + apply-template); the trailing collapse-all sits
    right after them in one left-aligned cluster (like the My Tasks toolbar). */
@@ -330,9 +339,10 @@
   width: 100%;
   min-height: 36px;
   /* round133 — align the "+" with the point NAMES: the points grid leads with a
-     fixed 36px checkbox cell and the name cell adds a 14px inset, so the names
-     start 50px from the row edge; the add-row text starts on the same line. */
-  padding: 0 12px 0 50px;
+     fixed 36px checkbox cell and the name cell adds a 28px inset (round138 —
+     widened from 14px), so the names start 64px from the row edge; the add-row
+     text starts on the same line. */
+  padding: 0 12px 0 64px;
   border: none;
   background: transparent;
   color: var(--placeholder-color, #9699a6);
