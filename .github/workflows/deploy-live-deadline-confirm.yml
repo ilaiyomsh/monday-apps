@@ -1,27 +1,18 @@
 name: Deploy LIVE - deadline-confirm
 
-# Release model (owner decision 2026-07-14, incident-verified — see
-# .claude/skills/monday-cicd/references/pipeline-model.md §4b):
-# every app keeps TWO standing versions with stable ids — the latest draft
-# (develop → deploy-draft) and the LIVE version (this workflow). Version
-# promotes are BANNED as a routine release mechanism (id churn needs
-# maintenance and lands badly in customer accounts); a promote is a rare,
-# deliberate, documented event (e.g. new scopes), never a routine release.
+# Spec section 7.2: merges into main auto-deploy to the app's LATEST LIVE
+# version via --force. This rebuilds from main and pushes straight to
+# production — there is no promote-the-tested-draft step. Correctness is
+# guaranteed only by the release-freeze rule (nothing merges into develop
+# while a develop->main PR is open), not by artifact identity.
 #
-# `code:push --force -a <app>` is NOT reliable for live: despite the CLI help
-# text, it resolves the app's LATEST version (usually the newer draft that
-# sits above live) — verified on deadline-confirm 2026-07-15, where a bare
-# `--force` push landed on the v3 DRAFT and left the live version on v2. So
-# this workflow resolves the LIVE version id at run time and pushes pinned
-# with -i, exactly like the other apps' live workflows.
+# main is protected (Gate 2: PR + 1 approval + required status checks +
+# no bypass, including admins) so this workflow only ever runs after a
+# reviewed, approved merge — never on a direct push.
 #
-# deadline-confirm is a SERVER (monday-code) app: the push has NO -c flag and
-# ships the app root (-d apps/deadline-confirm/.).
-#
-# main is protected (Gate 2: PR + 1 approval + required status checks) so this
-# workflow only ever runs after a reviewed, approved merge — never on a direct
-# push. If the app has no live version yet, the resolve step fails loudly:
-# first-ever go-live is a deliberate one-time promote, not this workflow.
+# When instantiating this template for a real app, rename the file to:
+#   deploy-live-deadline-confirm.yml
+# and replace all deadline-confirm / . / APP_DEADLINE_CONFIRM_ID placeholders.
 
 on:
   push:
@@ -67,6 +58,9 @@ jobs:
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
 
+      # `code:push --force -a <app>` resolves the app's NEWEST version (the
+      # draft above live), not live — incident-verified 2026-07-15. Resolve
+      # the LIVE version id and push pinned with -i.
       - name: Resolve LIVE version id (pin the target)
         id: live
         run: |
@@ -74,7 +68,7 @@ jobs:
           LIVE_ID="$(mapps app-version:list -i "$APP_ID" 2>/dev/null \
             | awk -F'│' '$7 ~ /live/ { gsub(/[^0-9]/, "", $3); print $3; exit }')"
           if [ -z "$LIVE_ID" ]; then
-            echo "::error::app $APP_ID has no LIVE version — first go-live is a deliberate promote (see pipeline-model.md §4b); this workflow only refreshes an existing live version."
+            echo "::error::app $APP_ID has no LIVE version — first go-live is a deliberate promote (pipeline-model.md §4b); this workflow only refreshes an existing live version."
             exit 1
           fi
           echo "Resolved LIVE version id: $LIVE_ID"
@@ -83,11 +77,22 @@ jobs:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
           APP_ID: ${{ secrets.APP_DEADLINE_CONFIRM_ID }}
 
+      # Server app: no -c, ships the app root. Retry once on the transient
+      # "Unexpected error ... communicating with the remote server" (it failed
+      # the first live run 2026-07-15 with no retry).
       - name: "🚨 FORCE push to LIVE version (pinned id) 🚨"
-        # Server app: no -c, ship the app root.
-        run: >
-          mapps code:push --force
-          -d apps/deadline-confirm/.
-          -i "${{ steps.live.outputs.live_id }}"
+        run: |
+          set -uo pipefail
+          for attempt in 1 2; do
+            if mapps code:push --force \
+                 -d apps/deadline-confirm/. \
+                 -i "${{ steps.live.outputs.live_id }}"; then
+              exit 0
+            fi
+            echo "push attempt $attempt failed; retrying once in 15s (transient remote error)…"
+            sleep 15
+          done
+          echo "::error::code:push to live version ${{ steps.live.outputs.live_id }} failed after retry"
+          exit 1
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}

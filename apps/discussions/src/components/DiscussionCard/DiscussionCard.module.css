@@ -762,7 +762,9 @@
   100% { opacity: 0; }
 }
 
-/* round103 — hide this chrome while monday's item-card panel is open (iframe narrows). */
+/* round103 — hide this chrome while monday's item-card panel is open (iframe narrows).
+   round117: visibility (not display) so the row keeps its space and the layout
+   below does not jump up when the panel opens. */
 :global(body[data-chrome-narrow="1"]) .participants { display: none !important; }
 
 /* round116 — the tabs strip's own horizontal scrollbar disappears entirely

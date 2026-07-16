@@ -352,3 +352,33 @@
 .taskRow:last-child .taskFirst,
 .taskRow:last-child .selectCell { border-end-start-radius: 6px; /* round100: rounded strip corner (matches bottom, contained in 6px strip = no notch) */ }
 .addRow::before { border-end-start-radius: 6px; /* round100: rounded strip corner (matches bottom, contained in 6px strip = no notch) */ }
+
+/* round118 — the strip's rounded ends are REAL ::before bars (like the add-row's):
+   an inset box-shadow clipped by a rounded corner smears a color sliver rightward
+   along the horizontal edge (the owner's "chupchik"). The rounded end-cells drop
+   the shadow and paint the 6px bar themselves; middle rows keep the plain shadow
+   (no radius = nothing to smear). */
+.taskHead .taskFirst,
+.taskRow:last-child .taskFirst,
+.selectable .taskHead .selectCell,
+.selectable .taskRow:last-child .selectCell { box-shadow: none; }
+.taskHead .taskFirst::before,
+.taskRow:last-child .taskFirst::before,
+.selectable .taskHead .selectCell::before,
+.selectable .taskRow:last-child .selectCell::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: var(--group-color, hsl(var(--status-default)));
+  pointer-events: none;
+}
+/* Selection mode: the strip lives ONLY on the frozen checkbox cell. */
+.selectable .taskHead .taskFirst::before,
+.selectable .taskRow:last-child .taskFirst::before { content: none; }
+.taskHead .taskFirst::before,
+.selectable .taskHead .selectCell::before { border-start-start-radius: 6px; }
+.taskRow:last-child .taskFirst::before,
+.selectable .taskRow:last-child .selectCell::before { border-end-start-radius: 6px; }
