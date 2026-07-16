@@ -207,19 +207,18 @@
   text-overflow: ellipsis;
   cursor: pointer;
 }
-/* round107: SHORT inset accent bar on the leading (left) edge, vertically
-   centered, monday's light blue — measured rgb(102,171,242) in the owner's
-   reference screenshot. The round102 decisions-purple full-height bar was
-   dropped for exact monday fidelity (all Connected chips share one look). */
 .sourceChip::before {
   content: '';
   position: absolute;
-  left: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 14px;
-  border-radius: 2px;
+  /* round122 — proportioned to the owner's monday reference (LTU chip): a 6px
+     bar shaped exactly like the items' group strip (quarter-round LEFT corners,
+     straight right edge), nearly full chip height (3px insets), 3px off the
+     chip's left border, monday's light blue. */
+  left: 3px;
+  top: 3px;
+  bottom: 3px;
+  width: 6px;
+  border-radius: 6px 0 0 6px;
   background: #66abf2;
 }
 .sourceChip:hover {
