@@ -1,6 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
 import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
-import { MoveArrowLeft, Link, Info } from '@vibe/icons';
+import { MoveArrowLeft, Info } from '@vibe/icons';
 import { דיונים1Board } from '@api/BoardSDK.js';
 import { useTasks } from '@generated/hooks/useTasks';
 import { useDecisions } from '@generated/hooks/useDecisions';
@@ -62,7 +62,6 @@ export function DiscussionCard({
   onShowLoading,
   onDismissToast,
   onUpdated,
-  onCopyDiscussionLink,
   initialTab = null,
   initialTabDiscussionId = null,
   canManageSettings = false,
@@ -129,6 +128,10 @@ export function DiscussionCard({
   const titleRowRef = useRef(null);
   const participantsRef = useRef(null);
   const [hideMeta, setHideMeta] = useState(false);
+  // round111 — the header roles/participants row is collapsed by default behind
+  // a chevron next to the date/time; reset to closed per selected discussion.
+  const [metaOpen, setMetaOpen] = useState(false);
+  useEffect(() => { setMetaOpen(false); }, [discussion?.id]);
   const hideMetaRef = useRef(false);
   const metaNeededWidthRef = useRef(0);
   useLayoutEffect(() => {
@@ -241,6 +244,8 @@ export function DiscussionCard({
   // configured roles are UNIONED (deduped by id). useTasks writes them only
   // when the owner mapped the columns.
   const accessRoleSources = settings?.preferences?.accessRoleSources || DEFAULT_PREFERENCES.accessRoleSources;
+  // round108 — owner-set logo (data-URI) shown at the top-right of the header.
+  const logoUrl = settings?.preferences?.logoUrl || null;
   const taskAccess = useMemo(() => ({
     viewers: resolveAccessPeople(data, accessRoleSources?.taskViewersID),
     editors: resolveAccessPeople(data, accessRoleSources?.taskEditorsID),
@@ -308,7 +313,6 @@ export function DiscussionCard({
   // Inline editing of the title (double-click to edit).
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState('');
-  const [linkCopied, setLinkCopied] = useState(false);
 
   // Prefetch the discussion's tasks once at the card level and share them with
   // both the Tasks and Effectiveness tabs (no duplicate query, instant switch).
@@ -364,12 +368,6 @@ export function DiscussionCard({
     const nextTab = normalizeTabName(initialTab);
     if (nextTab) setActiveTab(nextTab);
   }, [discussion?.id, initialTab, initialTabDiscussionId]);
-
-  useEffect(() => {
-    if (!linkCopied) return undefined;
-    const timer = setTimeout(() => setLinkCopied(false), 1600);
-    return () => clearTimeout(timer);
-  }, [linkCopied]);
 
   if (!discussion) {
     return (
@@ -434,13 +432,8 @@ export function DiscussionCard({
     const t = titleDraft.trim();
     if (t && t !== data.name) persistField('name', t);
   };
-  const handleCopyLink = async () => {
-    if (!discussion?.id) return;
-    // The copied link ALWAYS lands on the topics tab (owner decision
-    // 2026-07-14, item 15) — regardless of which tab is active when copying.
-    const copied = await onCopyDiscussionLink?.(discussion.id, 'topics');
-    if (copied) setLinkCopied(true);
-  };
+  // round114 — the header copy-link icon moved into the discussions-list row
+  // menu ("לינק לדיון"); the card no longer copies links itself.
   const openNewTaskModal = (defaults = {}) => {
     setNewTaskDefaults(defaults);
     setNewTaskOpen(true);
@@ -592,6 +585,11 @@ export function DiscussionCard({
               ariaLabel="חזרה"
             />
           </span>
+          {logoUrl && (
+            /* round108 — owner-set brand logo, pinned to the top-right (RTL start)
+               of the header at the title's height. Owner uploads it in Settings. */
+            <img className={styles.ownerLogo} src={logoUrl} alt="לוגו" />
+          )}
           <div className={styles.titleBlock}>
             {editingTitle ? (
               <input
@@ -614,21 +612,6 @@ export function DiscussionCard({
                 >
                   {data.name}
                 </h1>
-                {!isMobile && (
-                  <IconButton
-                    kind={"tertiary"}
-                    size={"small"}
-                    icon={Link}
-                    onClick={handleCopyLink}
-                    ariaLabel="העתק לינק לדיון ולטאב הנוכחי"
-                    className={styles.copyLinkButton}
-                  />
-                )}
-                {!isMobile && linkCopied && (
-                  <span className={styles.copyLinkCopied} aria-live="polite">
-                    הועתק
-                  </span>
-                )}
               </div>
             )}
           </div>
@@ -676,6 +659,10 @@ export function DiscussionCard({
                  editors, clickable — date opens the shared calendar popover, time
                  opens a half-hour menu; both persist to the discussion item. */
               <div ref={participantsRef} dir="rtl" className={`${styles.participants} ${reserveSettingsSpace ? styles.participantsReserve : ''} ${hideMeta ? styles.participantsNarrow : ''}`}>
+                {/* round112 — ONE row again (the round111 second-row layout was
+                    reverted by the owner): date + time, then a LEFT-pointing
+                    chevron, and — when opened — the role/participants groups
+                    inline to its left, exactly like the pre-round111 layout. */}
                 {data.discussionDateID && (
                   <div className={`${styles.peopleGroup} ${styles.dateGroup}`}>
                     {editDiscussionFields ? (
@@ -735,7 +722,22 @@ export function DiscussionCard({
                     )}
                   </div>
                 )}
-                {headerPeopleGroups.map((g) => {
+                {headerPeopleGroups.length > 0 && (
+                  /* In this dir=rtl row the chevron sits LEFT of the time; the
+                     glyphs: ‹ (points left) = open the roles, › = close them. */
+                  <button
+                    type="button"
+                    className={styles.metaToggle}
+                    onClick={() => setMetaOpen((o) => !o)}
+                    aria-expanded={metaOpen}
+                    aria-label={metaOpen ? 'הסתר בעלי תפקידים' : 'הצג בעלי תפקידים'}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      {metaOpen ? <path d="M9 18l6-6-6-6" /> : <path d="M15 18l-6-6 6-6" />}
+                    </svg>
+                  </button>
+                )}
+                {metaOpen && headerPeopleGroups.map((g) => {
                   // מנהל (lead) + רשם דיון (coordinator) — and any future single
                   // role — are one-person fields: cap them at a single person and
                   // CLOSE the picker right after a pick (exactly like the decision/

@@ -24,6 +24,7 @@ export function toggleAccessRoleSource(preferences, accessAlias, roleAlias) {
 import { api } from '../../utils/mondayApi/monday-client.js';
 import { detectManagedColumnId } from '../../utils/mondayApi/managedColumns.js';
 import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js';
+import { fileToLogoDataUrl } from '../../utils/imageLogo.js';
 import SearchablePicker from './SearchablePicker';
 import PermissionsTab from './PermissionsTab.jsx';
 import ExportTemplateTab from './ExportTemplateTab.jsx';
@@ -176,6 +177,7 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
   // configured — never during the first-run forced modal.
   const [showTopUp, setShowTopUp] = useState(false);
   const fileInputRef = useRef(null);
+  const logoInputRef = useRef(null); // round108 — hidden picker for the header logo
 
   // re-seed local draft from the live settings whenever the modal opens
   useEffect(() => {
@@ -376,6 +378,7 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
   ];
   const TASKS_SETTINGS_FIELDS = [
     'taskCreatorID',
+    'taskCreationDateID', // תאריך יצירה — auto-stamped with today at task creation (round115)
     'responsibilityID',
     'deadlineID',
     'statusID',
@@ -391,11 +394,13 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
   const TOPICS_SETTINGS_FIELDS = [
     'discussionLinkID', // 'דיון' — connection to the discussion
     'topicCreatorID', // 'יוצר נושא' — people column; avatar shown on the topic group header
+    'topicCreationDateID', // 'תאריך יצירה' — auto-stamped with today at topic creation (round115)
     'topicPriorityID', // per-topic priority (status column on the topics board)
     'topicNotForDiscussionID', // topic-level "not for discussion" checkbox (drives export filter)
     'pointNotForDiscussionID', // point-level "not for discussion" checkbox (on the subitems board)
     'pointCheckedID', // 'האם נידונה' — discussed checkbox on the SUBITEMS board (topics table)
     'pointCreatorID', // 'יוצר נקודה' — people column on the SUBITEMS board; avatar per point
+    'pointCreationDateID', // 'תאריך יצירה (נקודה)' — auto-stamped with today at point creation (round115)
     'pointDecisionsLinkID', // 'החלטות (נקודה)' — board_relation on the SUBITEMS board to decisions created from the point
     'pointTasksLinkID', // 'משימות (נקודה)' — board_relation on the SUBITEMS board to tasks created from the point
     // 'pointResponsesID' ('התייחסויות') intentionally NOT mapped here — the topics-table
@@ -589,6 +594,21 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
     } catch (err) {
       logger.error('SettingsModal', 'ייבוא קובץ הגדרות נכשל', err);
       setImportMsg({ ok: false, text: 'ייבוא נכשל — ודאו שזהו קובץ JSON תקין של הגדרות (boards + columns).' });
+    }
+  };
+
+  // round108 — owner uploads a brand logo shown at the top-right of the
+  // discussion header. We downscale it to a small data-URI (self-contained, no
+  // asset hosting) and stash it on preferences.logoUrl; "שמור" persists it.
+  const handleLogoFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-picking the same file
+    if (!file) return;
+    try {
+      const dataUrl = await fileToLogoDataUrl(file, { maxPx: 320 });
+      setPreferences((p) => ({ ...p, logoUrl: dataUrl }));
+    } catch (err) {
+      logger.error('SettingsModal', 'טעינת הלוגו נכשלה', err);
     }
   };
 
@@ -941,6 +961,48 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
                         />
                         <Text type={"text2"}>בכל הדיונים, ללא תלות בסוג</Text>
                       </label>
+                    </div>
+                  </div>
+                  {/* round108 — brand logo shown at the top-right of every discussion
+                      header. Owner-only (this whole modal is owner-gated). Stored as
+                      a downscaled data-URI on preferences.logoUrl; "שמור" persists it. */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>לוגו בכותרת הדיון</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <Flex align="center" gap={12} wrap>
+                        {preferences.logoUrl && (
+                          <img
+                            src={preferences.logoUrl}
+                            alt="תצוגה מקדימה של הלוגו"
+                            style={{ height: 32, maxWidth: 140, objectFit: 'contain', border: '1px solid var(--ui-border-color, #d0d4e4)', borderRadius: 4, padding: 2 }}
+                          />
+                        )}
+                        <Button
+                          kind="secondary"
+                          size="small"
+                          onClick={() => logoInputRef.current?.click()}
+                        >
+                          {preferences.logoUrl ? 'החלף לוגו' : 'העלה לוגו'}
+                        </Button>
+                        {preferences.logoUrl && (
+                          <Button
+                            kind="tertiary"
+                            size="small"
+                            onClick={() => setPreferences((p) => ({ ...p, logoUrl: null }))}
+                          >
+                            הסר
+                          </Button>
+                        )}
+                        <input
+                          ref={logoInputRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={handleLogoFile}
+                        />
+                      </Flex>
                     </div>
                   </div>
                 </div>

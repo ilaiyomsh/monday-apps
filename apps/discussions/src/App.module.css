@@ -151,13 +151,21 @@
 }
 
 /* When collapsed there is no divider — pin the handle to the very edge as a
-   thin visible vertical strip so the user can always reopen the list. */
+   hover zone. round112: INVISIBLE by default (no strip line, no shadow — the
+   left margin stays clean white per the owner); the strip + arrow materialize
+   only when the cursor reaches the edge. */
 :global(.is-desktop) .dividerHandleCollapsed {
   inset-inline-start: 0;
   transform: translateX(0);
   width: 14px;
+  background: transparent;
+  border-inline-end: 1px solid transparent;
+  box-shadow: none;
+  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+:global(.is-desktop) .dividerHandleCollapsed:hover {
   background: #fff;
-  border-inline-end: 1px solid var(--ui-border-color, #e6e9ef);
+  border-inline-end-color: var(--ui-border-color, #e6e9ef);
   box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
 }
 
@@ -177,7 +185,15 @@
   left: auto;
   inset-inline-start: 3px;
   transform: none;
-  opacity: 1; /* expand arrow is always visible while collapsed */
+  /* round112 — the expand arrow is now HIDDEN while collapsed too; it reveals
+     only when the cursor reaches the edge strip (the strip itself keeps
+     pointer-events so :hover below fires), or on keyboard focus. */
+  opacity: 0;
+  pointer-events: none;
+}
+:global(.is-desktop) .dividerHandleCollapsed:hover .collapseBtn,
+:global(.is-desktop) .dividerHandleCollapsed .collapseBtn:focus-visible {
+  opacity: 1;
   pointer-events: auto;
 }
 /* Reveal the collapse arrow whenever the cursor is anywhere over the
@@ -198,6 +214,11 @@
 .main {
   flex: 1;
   min-width: 0;
+  /* round112 — monday-style gray page backdrop behind the white discussion
+     card, so the card's rounded top-left corner (DiscussionCard .root) is
+     actually visible as a corner. Only the corner sliver of this gray ever
+     shows — the card fills the pane. */
+  background: var(--allgrey-background-color, #f6f7fb);
 }
 
 /* mobile: panes toggle via .hiddenMobile; both show side-by-side on md+ */
@@ -213,6 +234,13 @@
 }
 :global(.is-desktop) .sidebar {
   width: var(--sidebar-w, 340px);
+  /* round111 — animate open↔collapsed (see .collapsed below). */
+  transition: width 0.3s ease;
+}
+/* No width transition while the user drags the divider — the inline --sidebar-w
+   updates every mousemove and a lagging transition would fight the drag. */
+:global(.is-desktop) .resizing .sidebar {
+  transition: none;
 }
 :global(.is-desktop) .hiddenMobile {
   display: block;
@@ -230,17 +258,27 @@
 }
 
 /* Collapsed state — hide the discussions column so the card takes the full width.
-   Declared last so it wins over the responsive `.sidebar`/`.hiddenMobile` rules. */
+   Declared last so it wins over the responsive `.sidebar`/`.hiddenMobile` rules.
+   Mobile keeps the instant display:none (panes swap via showList there). */
 .collapsed {
   display: none;
 }
 
-/* When a discussion is open, `showList=false` also adds `.hiddenMobile`, whose
-   desktop rule (`display: block`, specificity 0,2,0) would otherwise override the
-   single-class `.collapsed` and keep the column visible. Match its specificity —
-   declared later in source so it wins the tie — so collapse works with a card open. */
+/* round111 — DESKTOP collapse is ANIMATED: the column slides shut (width → 0)
+   in ~0.3s instead of vanishing, both when the user clicks the edge handle and
+   when selecting a discussion auto-collapses it. display:block beats the mobile
+   rule above; the width transition lives on the base .sidebar rule below.
+   (Previously this was display:none — declared at .hiddenMobile's specificity so
+   collapse keeps working with a card open; that constraint still holds.) */
 :global(.is-desktop) .collapsed {
-  display: none;
+  display: block;
+  width: 0;
+  overflow: hidden;
+}
+/* Keep the list at its natural width while the column shuts, so the content is
+   CLIPPED by the sliding edge rather than squashed mid-animation. */
+:global(.is-desktop) .collapsed > * {
+  min-width: var(--sidebar-w, 340px);
 }
 
 .mainFull {

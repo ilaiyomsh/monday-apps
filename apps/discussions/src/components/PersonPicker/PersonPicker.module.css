@@ -46,9 +46,8 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: #ffffff;
-  border: 1px solid #d0d4e4;
-  color: #a5a9b5;
+  /* round112: the ring is drawn by EmptyPersonGlyph's SVG itself (monday-exact
+     clipped-bust glyph) — no CSS border/background here anymore. */
 }
 
 /* Popover portaled to document.body (escapes table overflow / sticky headers). */

@@ -4,8 +4,9 @@
   bottom: 24px;
   right: 24px; /* explicit RIGHT — ancestors are dir="ltr"; do NOT use inset-inline-end */
   z-index: 900; /* below the 1000 cluster (settings/divider/dialogs) and below the Vibe Modal */
-  width: 56px;
-  height: 56px;
+  /* round114 — 30% smaller (was 56px; icon 28px→20px below) per the owner. */
+  width: 39px;
+  height: 39px;
   border-radius: 50%;
   border: none;
   background: var(--primary-color, #0073ea);
@@ -27,8 +28,8 @@
 }
 
 .fab :global(svg) {
-  width: 28px;
-  height: 28px;
+  width: 20px;
+  height: 20px;
 }
 
 /* Compact variant — used via the `compact` prop ONLY on the Previous-tasks and

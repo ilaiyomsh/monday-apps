@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { collapseMapForView } from '@generated/utils/collapsePref.js';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@vibe/core';
 import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
@@ -390,14 +389,6 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     if (allCollapsed) setCollapsed({});
     else { const c = {}; grouped.forEach((g) => { c[g.key] = true; }); setCollapsed(c); }
   };
-  // round105 — apply the saved collapse-all default ONCE, when groups first load.
-  const collapseAppliedRef = useRef(false);
-  useEffect(() => {
-    if (collapseAppliedRef.current || grouped.length === 0) return;
-    collapseAppliedRef.current = true;
-    const m = collapseMapForView(savedView, grouped);
-    if (m) setCollapsed(m);
-  }, [savedView, grouped]);
 
   // Blue toolbar button ("משימה חדשה"): open an inline draft row at the VERY TOP
   // of the view (first row of the topmost group) with its name in edit mode —
@@ -694,11 +685,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
           />
         )}
 
-        <CollapseAllButton
-          collapsed={allCollapsed}
-          onClick={toggleAll}
-          onSave={canSaveView ? () => { saveView({ collapseAll: allCollapsed }); notifySaved(); } : null}
-        />
+        <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
 
         {/* Quick-filter battery (round 81) — pushed to the far (right) end of the
             toolbar, monday-battery style: open / done / delayed counts + filter. */}

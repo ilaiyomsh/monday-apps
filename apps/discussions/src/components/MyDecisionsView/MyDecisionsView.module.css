@@ -26,6 +26,7 @@
   flex-wrap: wrap;
   gap: var(--spacing-small, 8px);
   padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+  padding-inline-start: var(--content-gutter-start, 52px); /* round114 — align on the table edge line */
 }
 
 /* View title (round 40 typography; round 41 left-aligned) — matches the
@@ -59,6 +60,7 @@
   gap: var(--spacing-small, 8px);
   direction: ltr;
   padding: var(--spacing-medium, 16px) var(--spacing-medium, 16px) 0;
+  padding-inline-start: var(--content-gutter-start, 52px); /* round114 — align on the table edge line */
 }
 
 /* Compact, borderless back-arrow icon button — monday-style subtle hover,
@@ -148,6 +150,7 @@
   flex: none;
   background: var(--primary-background-color, #ffffff);
   padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
+  padding-inline-start: var(--content-gutter-start, 52px); /* round114 — first pill on the table edge line */
   /* Round 90 — keep the toolbar frozen at the top on scroll (it already sits
      above the scrolling .board; sticky guards against any view-level scroll). */
   position: sticky;
@@ -162,7 +165,7 @@
   min-height: 0;
   overflow: auto;
   direction: ltr;
-  margin-inline-start: 28px;
+  margin-inline-start: var(--content-gutter-start, 52px); /* round114 — shared white gutter */
   margin-inline-end: 0;
 }
 /* Shared horizontal extent: as wide as the widest group table, never narrower
@@ -407,3 +410,15 @@
 
 /* round103 — hide this chrome while monday's item-card panel is open (iframe narrows). */
 :global(body[data-chrome-narrow="1"]) .toolbar { display: none !important; }
+
+/* round113 — while monday's item-card / updates panel is open (chrome-narrow,
+   see round103's detector) the narrowed pane must show NO scrollbars at all
+   (owner request): scrolling itself still works (wheel/trackpad/drag), only
+   the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
+   ::-webkit-scrollbar pseudo. */
+:global(body[data-chrome-narrow="1"]) .board {
+  scrollbar-width: none;
+}
+:global(body[data-chrome-narrow="1"]) .board::-webkit-scrollbar {
+  display: none;
+}
