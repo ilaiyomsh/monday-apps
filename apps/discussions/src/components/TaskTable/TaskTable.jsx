@@ -15,6 +15,7 @@ import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
 import { TASKS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
+import { useColumnRenameMenu } from '@generated/components/ColumnRenameMenu';
 import styles from './TaskTable.module.css';
 
 // Header titles per column key (name has none — it's the frozen first column).
@@ -151,6 +152,10 @@ export function TaskTable({
   // Prefer the explicit board-permissions gate when supplied; else legacy owner.
   const canReorder = (canReorderColumns ?? canManageSettings) && !isMobile;
   const canResize = canReorder;
+  // round140 — owner-only column display names: hover a header → "⋯" → rename
+  // for all users (stored in the shared settings, like saved views).
+  const { titles: colTitles, dots: renameDots, menu: renameMenu } =
+    useColumnRenameMenu('tasks', TITLE, { canManageSettings, dotsClassName: styles.renameDots });
   const movableIds = visibleOrder.filter((k) => k !== 'name' && k !== 'sel');
   // Non-first header cells need a positioning context for the absolute handle;
   // the frozen .taskFirst is already sticky (a containing block), so it doesn't.
@@ -174,12 +179,13 @@ export function TaskTable({
     if (key === 'name') {
       return (
         <div key="name" className={`${styles.taskCell} ${styles.taskFirst} ${styles.nameHead}`}>
-          {TITLE.name}
+          {colTitles.name}
+          {renameDots('name')}
           {handle('name')}
         </div>
       );
     }
-    const inner = (<>{TITLE[key]}{handle(key)}</>);
+    const inner = (<>{colTitles[key]}{renameDots(key)}{handle(key)}</>);
     return canReorder ? (
       <SortableHeaderCell key={key} id={key} className={styles.taskCell} style={relStyle}>{inner}</SortableHeaderCell>
     ) : (
@@ -190,10 +196,11 @@ export function TaskTable({
   const tableClass = `${styles.taskTable} ${selectable ? styles.selectable : ''}`;
   return (
     <div className={styles.taskTableScroll}>
+      {renameMenu}
       <div className={tableClass} dir="ltr" style={color ? { '--group-color': color } : undefined}>
         {/* header */}
         <div className={`${styles.taskRow} ${styles.taskHead}`} style={rowStyle}>
-          <ColumnHeaderDnd enabled={canReorder} ids={movableIds} labels={TITLE} onReorder={reorder}>
+          <ColumnHeaderDnd enabled={canReorder} ids={movableIds} labels={colTitles} onReorder={reorder}>
             {visibleOrder.map(renderHeaderCell)}
           </ColumnHeaderDnd>
         </div>

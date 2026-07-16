@@ -10,6 +10,7 @@ import { useViewport } from '../../hooks/useViewport.js';
 import { ResizeHandle } from '../ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '../SortableColumnHeader';
 import { MY_TASKS_COLUMN_WIDTHS as W, MY_TASKS_MOBILE_WIDTHS as M } from '../../constants/columnWidths.js';
+import { useColumnRenameMenu } from '@generated/components/ColumnRenameMenu';
 import styles from './MyTasksTable.module.css';
 
 // "My Tasks" table — like TaskTable but with extra columns (notes, discussion).
@@ -143,6 +144,9 @@ export function MyTasksTable({
     notes: t('myTasks.colNotes'),
     discussion: t('myTasks.colDiscussion'),
   };
+  // round140 — owner-only column display names (shared per-instance overrides).
+  const { titles: colTitles, dots: renameDots, menu: renameMenu } =
+    useColumnRenameMenu('myTasks', TITLE, { canManageSettings, dotsClassName: styles.renameDots });
   // Movable column ids = every VISIBLE column except the frozen, pinned-first
   // name column (hidden columns aren't rendered, so they can't be dragged).
   const movableIds = visibleOrder.filter((k) => k !== 'name');
@@ -162,12 +166,13 @@ export function MyTasksTable({
     if (key === 'name') {
       return (
         <div key="name" className={`${styles.taskCell} ${styles.taskFirst} ${styles.nameHead}`}>
-          {TITLE.name}
+          {colTitles.name}
+          {renameDots('name')}
           {handle('name')}
         </div>
       );
     }
-    const inner = (<>{TITLE[key]}{handle(key)}</>);
+    const inner = (<>{colTitles[key]}{renameDots(key)}{handle(key)}</>);
     return canReorder ? (
       <SortableHeaderCell key={key} id={key} className={styles.taskCell} style={relStyle}>
         {inner}
@@ -179,13 +184,14 @@ export function MyTasksTable({
 
   return (
     <div className={styles.taskTableScroll}>
+      {renameMenu}
       <div
         className={`${styles.taskTable} ${selectable ? styles.selectable : ''}`}
         dir="ltr"
         style={color ? { '--group-color': color } : undefined}
       >
         <div className={`${styles.taskRow} ${styles.taskHead}`} style={rowStyle}>
-          <ColumnHeaderDnd enabled={canReorder} ids={movableIds} labels={TITLE} onReorder={reorder}>
+          <ColumnHeaderDnd enabled={canReorder} ids={movableIds} labels={colTitles} onReorder={reorder}>
             {renderKeys.map(renderHeaderCell)}
           </ColumnHeaderDnd>
         </div>

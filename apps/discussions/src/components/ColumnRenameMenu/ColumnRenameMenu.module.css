@@ -1,0 +1,40 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 998;
+  background: transparent;
+}
+.card {
+  position: fixed;
+  z-index: 999;
+  width: 240px;
+  padding: 12px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-text-color, #323338);
+}
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.resetLink {
+  margin-inline-start: auto;
+  background: none;
+  border: none;
+  padding: 2px;
+  font-size: 12px;
+  color: var(--primary-color, #0073ea);
+  cursor: pointer;
+  font-family: var(--font-family);
+}
+.resetLink:hover { text-decoration: underline; }
