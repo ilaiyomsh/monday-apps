@@ -418,8 +418,8 @@
   left: 3px;
   top: 3px;
   bottom: 3px;
-  width: 6px;
-  border-radius: 6px 0 0 6px;
+  width: 4.8px; /* round128 — 20% narrower (owner request; was 6px) */
+  border-radius: 4.8px 0 0 4.8px;
   background: #66abf2;
 }
 .sourceChip:hover {

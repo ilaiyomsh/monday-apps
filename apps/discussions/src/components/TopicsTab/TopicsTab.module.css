@@ -440,7 +440,11 @@
   font-size: 14px;
   font-weight: 400;
   color: var(--primary-text-color, #323338);
-  border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
+  /* round128 — PHYSICAL right border: this cell is direction:rtl, so the old
+     border-inline-end landed on its LEFT while the (ltr) body cells drew on the
+     RIGHT — 1px-offset verticals, a doubled line at the lead boundary and no
+     closing line after the last column. Physical = same side everywhere. */
+  border-right: 1px solid var(--ui-border-color, #d0d4e4);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -462,7 +466,7 @@
   border-start-start-radius: 6px;
   /* Close the lead (checkbox/accent) column with a right rule, matching the
      Tasks table's frozen `.selectCell` separator (TaskTable `.taskCell`). */
-  border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
+  border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, see .colHeadCell */
 }
 /* Select-all-in-topic checkbox centered in the column-header lead cell (mirrors
    TaskTable's `.selectCell > label`): reset the vibe Checkbox wrapper margins and
