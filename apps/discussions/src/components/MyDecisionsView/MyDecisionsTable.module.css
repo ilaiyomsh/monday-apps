@@ -68,9 +68,9 @@
    inset box-shadow so it travels with the frozen column. */
 .taskFirst {
   justify-content: flex-start;
-  /* round133 — unified fixed name inset across all tables; round138 widened
-     it (30px = 6px strip + 24px gap), matching the tasks/decisions tables. */
-  padding-inline-start: 30px;
+  /* round133 — unified fixed name inset across all tables; round139 (approved
+     mock): exactly 1cm (38px) from the column's left border, strip included. */
+  padding-inline-start: 38px;
   position: sticky;
   left: 0;
   z-index: 2;
@@ -103,7 +103,7 @@
 }
 .selectable .selectCell > label { margin: 0; transform: translateX(2px); }
 .selectable .selectCell > label > :last-child { margin-inline-start: 0; }
-.selectable .taskFirst { padding-inline-start: 8px; left: 36px; box-shadow: none; }
+.selectable .taskFirst { padding-inline-start: 38px; left: 36px; box-shadow: none; } /* round139 — 1cm rule holds in select mode */
 .taskHead .selectCell, .taskHead .taskFirst { z-index: 3; }
 
 /* round118 — the strip's rounded ends are REAL ::before bars (like the add-row's):
