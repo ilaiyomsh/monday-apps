@@ -535,9 +535,21 @@
   align-items: center;
   flex: 1;
   padding-inline-start: 18px;
-  box-shadow: inset 6px 0 0 rgba(107, 78, 230, 0.5);
   align-self: stretch;
-  border-end-start-radius: 6px; /* round100: rounded strip corner (matches bottom, contained in 6px strip = no notch) */
+  position: relative;
+}
+/* round118 — real ::before bar instead of a radius-clipped inset shadow (the
+   shadow smeared a color sliver along the bottom edge — the "chupchik"). */
+.decAddRowInner::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: rgba(107, 78, 230, 0.5);
+  border-end-start-radius: 6px;
+  pointer-events: none;
 }
 /* Inline add-row: leading + icon and a borderless, transparent text input that
    inherits the row font (native monday "add item" feel). */
@@ -690,3 +702,29 @@
 :global(body[data-chrome-narrow="1"]) .decBoard::-webkit-scrollbar {
   display: none;
 }
+
+/* round118 — the strip's rounded ends are REAL ::before bars (like the add-row's):
+   an inset box-shadow clipped by a rounded corner smears a color sliver rightward
+   along the horizontal edge (the owner's "chupchik"). The rounded end-cells drop
+   the shadow and paint the 6px bar themselves; middle rows keep the plain shadow. */
+.decNameHead,
+.decRow:last-child .decNameCell,
+.decSelectable .decHead .decSelectCell { box-shadow: none; }
+.decNameHead::before,
+.decRow:last-child .decNameCell::before,
+.decSelectable .decHead .decSelectCell::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: #6b4ee6;
+  pointer-events: none;
+}
+/* Selection mode: the strip lives ONLY on the frozen checkbox cell. */
+.decSelectable .decNameHead::before,
+.decSelectable .decRow:last-child .decNameCell::before { content: none; }
+.decNameHead::before,
+.decSelectable .decHead .decSelectCell::before { border-start-start-radius: 6px; }
+.decRow:last-child .decNameCell::before { border-end-start-radius: 6px; }

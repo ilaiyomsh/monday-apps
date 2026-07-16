@@ -446,8 +446,8 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
-  border-start-start-radius: 6px; /* round100: 8px on the 6px box-shadow strip curled a notch to the right; 6px = strip width rounds cleanly (matches bottom) */
+  position: relative;
+  border-start-start-radius: 6px;
   /* Close the lead (checkbox/accent) column with a right rule, matching the
      Tasks table's frozen `.selectCell` separator (TaskTable `.taskCell`). */
   border-inline-end: 0.625px solid var(--ui-border-color, #d0d4e4);
@@ -608,4 +608,19 @@
 }
 :global(body[data-chrome-narrow="1"]) .sectionScroll::-webkit-scrollbar {
   display: none;
+}
+
+/* round118 — real ::before bar on the rounded header cell instead of a
+   radius-clipped inset shadow (the shadow smeared a color sliver rightward
+   along the top edge — the "chupchik"). */
+.colHeadLead::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: var(--topic-accent, hsl(var(--status-default)));
+  border-start-start-radius: 6px;
+  pointer-events: none;
 }
