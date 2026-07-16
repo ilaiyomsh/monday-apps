@@ -82,6 +82,13 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
   const showTasksSection = !isTopUp || !tasksMapped;
   const secondaryLabel = isTopUp ? 'חזרה' : 'מיפוי ידני';
   const handleSecondary = isTopUp ? (onDone || onManual || (() => {})) : onManual;
+  // round141b — custom-object install (owner report): the app can run as a
+  // standalone custom object, where there is no meaningful host board to
+  // extend. Detect it from the context (a non-board app-feature type, or no
+  // boardId at all) and have provisioning CREATE a real "דיונים" board.
+  const featureType = String(context?.appFeature?.type || '');
+  const isCustomObject = !context?.boardId || /object/i.test(featureType);
+
   const [phase, setPhase] = useState('idle'); // idle | running | error
   // round141 — progress carries a BOARD-level narration (boardPhase) from
   // provisionAllBoards; the fine-grained label is kept for logs only.
@@ -193,6 +200,7 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
       const config = await provisionAllBoards({
         discussionsBoardId: context?.boardId,
         workspaceId: context?.workspaceId,
+        createDiscussionsBoard: isCustomObject,
         tasks: { mode: tasksMode, boardId: tasksBoardId, columnMap },
         // null on first-run (behaves exactly as before); the current mapping in
         // top-up so provisioning reuses mapped boards + completes only what's missing.
@@ -241,12 +249,13 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
                 <div className={styles.rolesStatus}>
                   {SETUP_ROLE_ORDER.map((key) => {
                     const mapped = roleMapped(key);
-                    // round141 — the discussions "board" is never created: it is
-                    // always the CURRENT board (this is a board-view app). Say
-                    // so instead of the misleading "יתווסף".
+                    // round141 — in a BOARD VIEW the discussions "board" is never
+                    // created (it is the current board) — say so instead of the
+                    // misleading "יתווסף". In a custom-object install (round141b)
+                    // a real דיונים board IS created, so "יתווסף" is accurate.
                     const stateText = mapped
                       ? 'כבר מחובר'
-                      : key === 'discussions' ? 'הלוח הנוכחי (יחובר)' : 'יתווסף';
+                      : key === 'discussions' && !isCustomObject ? 'הלוח הנוכחי (יחובר)' : 'יתווסף';
                     return (
                       <div key={key} className={styles.roleRow}>
                         <span className={styles.roleName}>{SETUP_ROLE_LABELS[key]}</span>
@@ -267,7 +276,11 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
                   לחיצה על <b>"צור לוחות אוטומטית"</b> תקים הכול בשבילך:
                 </p>
                 <ul className={styles.introList}>
-                  <li><b>הלוח הנוכחי</b> — שבו האפליקציה מותקנת — יהפוך ללוח הדיונים (יתווספו אליו העמודות הנדרשות; לא נוצר לוח דיונים חדש).</li>
+                  {isCustomObject ? (
+                    <li>ייווצר <b>לוח דיונים</b> חדש עם כל העמודות הנדרשות.</li>
+                  ) : (
+                    <li><b>הלוח הנוכחי</b> — שבו האפליקציה מותקנת — יהפוך ללוח הדיונים (יתווספו אליו העמודות הנדרשות; לא נוצר לוח דיונים חדש).</li>
+                  )}
                   <li>ייווצרו לוחות חדשים ל<b>נושאים לדיון</b> ול<b>החלטות</b>, עם כל העמודות והקישורים.</li>
                   <li>עבור <b>המשימות</b> — בחרו למטה: לוח חדש, או חיבור לוח קיים מהחשבון.</li>
                 </ul>

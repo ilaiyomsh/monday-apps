@@ -80,6 +80,9 @@ const DECISION_STATUS_DEFAULTS = JSON.stringify({
 export const PROVISION_SPEC = {
   discussions: {
     isCurrentBoard: true,
+    // round141b — used ONLY when createDiscussionsBoard is set (custom-object
+    // install, where there is no meaningful host board to extend).
+    name: 'דיונים',
     columns: [
       { alias: 'discussionCreatorID', type: 'people', title: 'יוצר' },
       { alias: 'discussionLeadID', type: 'people', title: 'מוביל דיון' },
@@ -163,13 +166,16 @@ export const PROVISION_SPEC = {
 const BOARD_ORDER = ['discussions', 'topics', 'tasks', 'decisions'];
 
 // Count every unit of work so the wizard can show a real progress bar.
-function countSteps(tasks) {
+function countSteps(tasks, createDiscussionsBoard = false) {
   let n = 0;
   for (const key of BOARD_ORDER) {
     const spec = PROVISION_SPEC[key];
-    // create_board — skipped for the current board (discussions), and for tasks
-    // when connecting an existing board instead of creating a new one.
-    if (!spec.isCurrentBoard && !(key === 'tasks' && tasks?.mode === 'connect')) n += 1;
+    // create_board — skipped for the current board (discussions, unless a
+    // custom-object install creates it too), and for tasks when connecting an
+    // existing board instead of creating a new one.
+    if (spec.isCurrentBoard) {
+      if (createDiscussionsBoard) n += 1;
+    } else if (!(key === 'tasks' && tasks?.mode === 'connect')) n += 1;
     n += spec.columns.length;
     n += (spec.relations || []).length;
     if (spec.subitems) n += 1 + spec.subitems.length; // enable subitems + its columns
@@ -382,15 +388,17 @@ async function mapReflection(sourceBoardId, targetBoardId, title) {
  * clobbered. When `existingConfig` is null/undefined the behavior is identical to
  * first-run (every skip below is guarded behind its presence).
  */
-export async function provisionAllBoards({ discussionsBoardId, workspaceId, onProgress, tasks = { mode: 'create' }, existingConfig = null } = {}) {
-  if (!discussionsBoardId) {
+export async function provisionAllBoards({ discussionsBoardId, workspaceId, onProgress, tasks = { mode: 'create' }, existingConfig = null, createDiscussionsBoard = false } = {}) {
+  // round141b — custom-object install: there is no meaningful host board, so a
+  // real "דיונים" board is CREATED below instead of extending the current one.
+  if (!discussionsBoardId && !createDiscussionsBoard) {
     throw new Error('לא זוהה הלוח הנוכחי — יש לפתוח את האפליקציה מתוך לוח דיונים');
   }
   if (tasks?.mode === 'connect' && !tasks?.boardId) {
     throw new Error('לא נבחר לוח משימות קיים לחיבור');
   }
 
-  const total = countSteps(tasks);
+  const total = countSteps(tasks, createDiscussionsBoard);
   let step = 0;
   // round141 — the wizard narrates BOARD-level phases (owner request): every
   // tick also reports the current phase ("יוצר את לוח המשימות…"), while `label`
@@ -407,12 +415,22 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
     }
   };
 
-  logger.info(MODULE, 'התחלת הקמת לוחות אוטומטית', { total, discussionsBoardId });
+  logger.info(MODULE, 'התחלת הקמת לוחות אוטומטית', { total, discussionsBoardId, createDiscussionsBoard });
+  const hasIdEarly = (v) => Boolean(v && v.id && String(v.id).trim());
 
   // discussions = the current board; topics + decisions are always created, and
   // tasks is either created (mode 'create') or an existing board is connected
   // (mode 'connect'), in which case its columns are still ensured/reused below.
-  const boardIds = { discussions: String(discussionsBoardId) };
+  const boardIds = {};
+  if (createDiscussionsBoard && !(existingConfig && hasIdEarly(existingConfig.boards?.discussions))) {
+    setPhase('מקים את לוח הדיונים…');
+    boardIds.discussions = await createBoard(PROVISION_SPEC.discussions.name, workspaceId);
+    tick('נוצר לוח: דיונים');
+  } else {
+    boardIds.discussions = String(
+      (existingConfig && existingConfig.boards?.discussions?.id) || discussionsBoardId
+    );
+  }
   // TOP-UP MODE (existingConfig provided): start the column accumulator from a
   // DEEP CLONE of the existing mapping so untouched roles/columns/aliases —
   // including ones this wizard never provisions (formula/mirror, priority, notes,
@@ -461,7 +479,9 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
   // CURRENT board — no board named דיונים is ever created (this is a board-view
   // app); say so explicitly instead of implying a new board appeared.
   const PHASE_LABELS = {
-    discussions: 'מוסיף את עמודות הדיונים ללוח הנוכחי (הוא לוח הדיונים)…',
+    discussions: createDiscussionsBoard
+      ? 'מקים את לוח הדיונים…'
+      : 'מוסיף את עמודות הדיונים ללוח הנוכחי (הוא לוח הדיונים)…',
     topics: 'מקים את לוח הנושאים לדיון…',
     tasks: tasks?.mode === 'connect' ? 'מחבר ומשלים את לוח המשימות הקיים…' : 'מקים את לוח המשימות…',
     decisions: 'מקים את לוח ההחלטות…',
