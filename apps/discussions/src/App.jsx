@@ -298,6 +298,11 @@ export default function App() {
   const [showList, setShowList] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   const [listHover, setListHover] = useState(false);
+  // round129 — while the sidebar is collapsed, reveal the expand button
+  // whenever the pointer is LEFT of the item tables' edge line (the 52px white
+  // gutter), not only on the thin edge strip. JS-driven (window pointermove):
+  // a CSS overlay wide enough for this swallowed the button's clicks (round128).
+  const [gutterHover, setGutterHover] = useState(false);
   // 'list' | 'calendar' — persisted; drives the sidebar width regime and which
   // body DiscussionList renders. Calendar nav state (anchor + month/week) lives
   // HERE so it survives the refreshKey remount of DiscussionList after saves.
@@ -646,6 +651,25 @@ export default function App() {
     }
   };
 
+  // round129 — gutter tracking for the collapsed expand button (see the
+  // gutterHover state above). Passive pointermove; state flips only on change.
+  useEffect(() => {
+    if (!collapsed) {
+      setGutterHover(false);
+      return undefined;
+    }
+    const GUTTER_PX = 52; // --content-gutter-start
+    const onMove = (ev) => {
+      const rootLeft = rootRef.current?.getBoundingClientRect().left ?? 0;
+      setGutterHover((prev) => {
+        const next = ev.clientX - rootLeft < GUTTER_PX;
+        return next === prev ? prev : next;
+      });
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    return () => window.removeEventListener('pointermove', onMove);
+  }, [collapsed]);
+
   // Drag the divider to resize the discussions column at the expense of the
   // card pane. The layout is dir="ltr" (sidebar on the left), so the new width
   // is the cursor's x relative to the root's left edge, clamped to [min, max].
@@ -796,7 +820,7 @@ export default function App() {
       <div
         className={`${styles.dividerHandle} ${collapsed ? styles.dividerHandleCollapsed : ''} ${
           !collapsed && (listHover || resizing) ? styles.dividerHandleHover : ''
-        } ${!collapsed ? styles.dividerHandleResizable : ''}`}
+        } ${collapsed && gutterHover ? styles.dividerHandleGutterHover : ''} ${!collapsed ? styles.dividerHandleResizable : ''}`}
         onMouseDown={startResize}
         role={collapsed ? undefined : 'separator'}
         aria-orientation="vertical"
