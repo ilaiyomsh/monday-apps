@@ -174,7 +174,7 @@ function countSteps(tasks) {
     n += (spec.relations || []).length;
     if (spec.subitems) n += 1 + spec.subitems.length; // enable subitems + its columns
   }
-  n += 1; // discussions managed type column ("סוג דיון" — account-level managed dropdown)
+  n += 2; // managed type column "סוג דיון": account-level dropdown on discussions + the SAME column attached to tasks (round126)
   return n;
 }
 
@@ -230,18 +230,21 @@ async function ensureColumn(boardId, existing, title, columnType, defaults) {
  * Retry-safe: if a dropdown titled "סוג דיון"/"סוג" already exists on the board,
  * reuse it (managedColumnId unknown → null; the app can detect/persist it later).
  */
-async function ensureManagedTypeColumn(boardId, existing) {
+export async function ensureManagedTypeColumn(boardId, existing, knownManagedId = null) {
   const hit = (existing || []).find(
     (c) => c.type === 'dropdown' && (c.title === 'סוג דיון' || c.title === 'סוג')
   );
-  if (hit) return { id: String(hit.id), managedColumnId: null };
-  const created = await api(
-    `mutation ($t: String!) { create_dropdown_managed_column(title: $t) { id } }`,
-    { t: 'סוג דיון' },
-    'create_dropdown_managed_column'
-  );
-  const managedColumnId = created?.create_dropdown_managed_column?.id;
-  if (!managedColumnId) throw new Error('create_dropdown_managed_column לא החזיר מזהה');
+  if (hit) return { id: String(hit.id), managedColumnId: knownManagedId };
+  let managedColumnId = knownManagedId;
+  if (!managedColumnId) {
+    const created = await api(
+      `mutation ($t: String!) { create_dropdown_managed_column(title: $t) { id } }`,
+      { t: 'סוג דיון' },
+      'create_dropdown_managed_column'
+    );
+    managedColumnId = created?.create_dropdown_managed_column?.id;
+    if (!managedColumnId) throw new Error('create_dropdown_managed_column לא החזיר מזהה');
+  }
   const attached = await api(
     `mutation ($b: ID!, $mc: ID!) { attach_dropdown_managed_column(board_id: $b, managed_column_id: $mc) { id } }`,
     { b: String(boardId), mc: String(managedColumnId) },
@@ -266,7 +269,8 @@ async function ensureSubitemsBoard(parentBoardId) {
     if (!c) return null;
     try {
       return JSON.parse(c.settings_str || '{}')?.boardIds?.[0] || null;
-    } catch {
+    } catch (err) {
+      if (!err?.__loggedId) logger.warn(MODULE, 'settings_str של עמודת subtasks אינו JSON תקין', err);
       return null;
     }
   };
@@ -305,7 +309,8 @@ function settingsPointTo(col, targetBoardId) {
   try {
     const ids = JSON.parse(col.settings_str || '{}')?.boardIds || [];
     return ids.map(String).includes(String(targetBoardId));
-  } catch {
+  } catch (err) {
+    if (!err?.__loggedId) logger.warn(MODULE, 'settings_str של עמודת קישור אינו JSON תקין', err);
     return false;
   }
 }
@@ -391,8 +396,9 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
     step += 1;
     try {
       onProgress?.(step, total, label);
-    } catch {
+    } catch (err) {
       /* progress callback must never break provisioning */
+      if (!err?.__loggedId) logger.warn(MODULE, 'onProgress callback זרק שגיאה — ממשיך', err);
     }
   };
 
@@ -474,6 +480,31 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       id: t.id, type: 'dropdown', title: 'סוג דיון', verified: true, managedColumnId: t.managedColumnId,
     };
     tick('עמודת סוג דיון (managed dropdown)');
+  }
+
+  // round126 — attach the SAME account-level managed column to the TASKS board
+  // (taskTypeID). One managed column on both boards keeps the type labels
+  // identical automatically (the by-text bridge stays as a fallback for
+  // accounts whose columns predate this). Works for created AND connected
+  // tasks boards. The managed UUID comes from this run's create, or from the
+  // persisted mapping; without one we still create a PLAIN dropdown so the
+  // by-text bridge works, and log it.
+  if (!(existingConfig && hasId(existingConfig.columns?.tasks?.taskTypeID))) {
+    const knownManagedId =
+      columns.discussions.discussionTypeID?.managedColumnId ||
+      existingConfig?.columns?.discussions?.discussionTypeID?.managedColumnId ||
+      null;
+    let tt;
+    if (knownManagedId) {
+      tt = await ensureManagedTypeColumn(boardIds.tasks, existingByBoard.tasks, knownManagedId);
+    } else {
+      logger.warn(MODULE, 'UUID של עמודת הסוג המנוהלת לא ידוע — נוצרת עמודת dropdown רגילה במשימות (גישור לפי טקסט)');
+      tt = { id: await ensureColumn(boardIds.tasks, existingByBoard.tasks, 'סוג דיון', 'dropdown'), managedColumnId: null };
+    }
+    columns.tasks.taskTypeID = {
+      id: tt.id, type: 'dropdown', title: 'סוג דיון', verified: true, managedColumnId: tt.managedColumnId,
+    };
+    tick('עמודת סוג דיון במשימות (אותה עמודה מנוהלת)');
   }
 
   // 3) subitems (topics): enable + add its checkbox columns

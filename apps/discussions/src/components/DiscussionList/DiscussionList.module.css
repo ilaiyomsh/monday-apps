@@ -263,34 +263,50 @@
 .scroll {
   flex: 1 1 auto;
   overflow-y: auto;
-  /* round117 — hover-only scrollbar (owner request): the bar's slot keeps its
-     width (stable layout, gutter always reserved) but thumb+track paint only
-     while the pointer is inside the list. Firefox has no ::-webkit-scrollbar:
-     scrollbar-color transparent/visible is the equivalent toggle. */
-  scrollbar-width: thin;
-  scrollbar-color: transparent transparent;
 }
-.scroll:hover {
-  scrollbar-color: var(--ui-border-color, #c3c6d4) transparent;
-}
+/* round117/round125 — hover-only scrollbar, no stepper arrows (owner request).
+   round125 rewrite: in Chromium, setting the STANDARD scrollbar-width/color
+   properties DISABLES all ::-webkit-scrollbar customization — which is why the
+   arrows survived and the bar vanished under the pointer. So Chromium gets the
+   webkit pseudos ONLY, and the standard properties are scoped to engines
+   without ::-webkit-scrollbar (Firefox) via @supports. */
 .scroll::-webkit-scrollbar {
   width: 10px;
+}
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+  width: 0;
 }
 .scroll::-webkit-scrollbar-thumb {
   background: transparent;
   border-radius: 5px;
 }
-.scroll:hover::-webkit-scrollbar-thumb {
+/* Reveal while the pointer is anywhere in the LIST (not just the scroll box —
+   the resize divider overlaps the bar's zone and stole the hover), and keep it
+   painted while hovering/dragging the thumb itself. */
+.root:hover .scroll::-webkit-scrollbar-thumb,
+.scroll::-webkit-scrollbar-thumb:hover,
+.scroll::-webkit-scrollbar-thumb:active {
   background: var(--ui-border-color, #c3c6d4);
 }
-.scroll::-webkit-scrollbar-track {
-  background: transparent;
+.scroll::-webkit-scrollbar-thumb:hover,
+.scroll::-webkit-scrollbar-thumb:active {
+  background: #a8adbd; /* slightly darker under the pointer, monday-style */
 }
-/* round117 — no stepper arrows at the bar's ends (owner request). */
-.scroll::-webkit-scrollbar-button {
-  display: none;
-  height: 0;
-  width: 0;
+@supports not selector(::-webkit-scrollbar) {
+  /* Firefox: no scrollbar buttons by default; thin bar, transparent until the
+     list is hovered. */
+  .scroll {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .root:hover .scroll {
+    scrollbar-color: var(--ui-border-color, #c3c6d4) transparent;
+  }
 }
 
 .refetching {
