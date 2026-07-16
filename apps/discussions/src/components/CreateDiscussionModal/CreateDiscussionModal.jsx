@@ -114,6 +114,10 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const previousTasksMode =
     settings?.preferences?.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION;
   const [name, setName] = useState('');
+  // round129 — while the edit/duplicate SOURCE record is being fetched, the
+  // form is hidden behind a loading bar (the owner saw an "empty card filling
+  // in slowly"); the fields appear only fully populated.
+  const [prefillLoading, setPrefillLoading] = useState(false);
   const [date, setDate] = useState('');
   const [time, setTime] = useState(''); // optional "HH:MM"; '' = date-only
   const [lead, setLead] = useState([]);
@@ -253,6 +257,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     // from it (falling back to whatever the lean object already carries).
     const srcId = isEdit ? editDiscussion?.id : duplicateFrom?.id;
     const base = isEdit ? editDiscussion : duplicateFrom;
+    setPrefillLoading(Boolean(srcId));
 
     (async () => {
       let full = base || null;
@@ -289,6 +294,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         setDiscussionType(src?.discussionTypeID || null);
         // The source discussion is the continuation's "previous discussion".
         setPreviousDiscussionId(src ? String(src.id) : 'none');
+        setPrefillLoading(false);
         return;
       }
 
@@ -304,6 +310,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
 
       // Resolve the current "previous discussion" link so the dropdown reflects it.
       resolvePreviousDiscussion(full.id, (id) => { if (!cancelled) setPreviousDiscussionId(id); });
+      setPrefillLoading(false);
     })();
 
     return () => { cancelled = true; };
@@ -685,7 +692,15 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
           </button>
         </div>
         <div className={styles.content}>
-          <Flex direction="column" gap={16} align="stretch" className={styles.form}>
+          {prefillLoading && (
+            <div style={{ padding: '28px 8px' }}>
+              <PartyProgress
+                value={null}
+                label={isDuplicate ? 'טוען את פרטי הדיון לשכפול...' : 'טוען את פרטי הדיון...'}
+              />
+            </div>
+          )}
+          <Flex direction="column" gap={16} align="stretch" className={styles.form} style={prefillLoading ? { display: 'none' } : undefined}>
             {/* Row 1: סוג דיון — full-width, on its own row. */}
             <div className={`${styles.row} ${styles.rowSingle}`}>
               <div className={styles.field}>
@@ -1044,7 +1059,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
               <Button kind={"tertiary"} onClick={onClose} disabled={creating}>
                 ביטול
               </Button>
-              <Button onClick={handleSubmit} loading={creating && !celebrate} disabled={creating || !name.trim() || !date || !time}>
+              <Button onClick={handleSubmit} loading={creating && !celebrate} disabled={creating || prefillLoading || !name.trim() || !date || !time}>
                 {isEdit ? 'שמור שינויים' : 'צור דיון'}
               </Button>
             </Flex>

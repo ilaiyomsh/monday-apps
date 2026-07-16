@@ -163,18 +163,20 @@
   box-shadow: none;
   transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
 }
-/* round128 — widen the HOVER ZONE (not the visible strip) to the full white
-   gutter, in the TOP band where the expand button lives (owner request:
-   entering the gutter anywhere near the top reveals the button). A pseudo box
-   extends the element's hit-test area; kept to the top 96px so it never blocks
-   the group kebabs floating in the gutter further down. */
-:global(.is-desktop) .dividerHandleCollapsed::after {
-  content: '';
-  position: absolute;
-  inset-inline-start: 0;
-  top: 0;
-  width: var(--content-gutter-start, 52px);
-  height: 96px;
+/* round129 — the round128 ::after hit-zone is GONE: the pseudo painted on top
+   of the expand button and swallowed its clicks (owner: "החץ לא עובד"). The
+   wide reveal zone is now JS-driven — App tracks pointer position and adds
+   .dividerHandleGutterHover whenever the cursor is LEFT of the item tables'
+   edge line (the full-height 52px gutter), which reveals the button without
+   any overlay that could block clicks. */
+:global(.is-desktop) .dividerHandleGutterHover {
+  background: #fff;
+  border-inline-end-color: var(--ui-border-color, #e6e9ef);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+}
+:global(.is-desktop) .dividerHandleGutterHover .collapseBtn {
+  opacity: 1;
+  pointer-events: auto;
 }
 :global(.is-desktop) .dividerHandleCollapsed:hover {
   background: #fff;
