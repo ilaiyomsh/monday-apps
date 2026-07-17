@@ -28,12 +28,17 @@
  * re-enter the logger (recursion hazard).
  */
 /* global globalThis */
-import { createAxiomBrowserTransport } from '@axis/app-core';
+import { createAxiomBrowserTransport, scrubMessage } from '@axis/app-core';
 import logger from './logger';
 
 // §4.2 rank table — DEBUG < INFO < WARN < ERROR
 const RANK = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
 const REMOTE_LEVEL_KEY = 'axis:remoteLogLevel';
+
+// Tracker's rendering `kind` → the unified DOMAIN discriminator shipped as ev.kind
+// (matches @axis/app-core: error | usage | health). Boot-lifecycle renders are health;
+// everything else defaults to 'error'. track()/health() set record.domainKind directly.
+const RENDER_TO_DOMAIN = { init: 'health', initSummary: 'health' };
 
 // ============================================
 // §4.1 — gate + transport construction (module scope)
@@ -93,6 +98,8 @@ try {
  */
 export function shouldShip(record, remoteLevel) {
     if (!record) return false;
+    if (record.duplicate === true) return false;   // duplicates never ship (checked first)
+    if (record.alwaysShip === true) return true;    // usage/health (INFO) bypass the level policy (D3/D5)
     const rank = RANK[String(record.level ?? '').toUpperCase()];
     const remoteRank = remoteLevel != null ? RANK[String(remoteLevel).toUpperCase()] : undefined;
     if (remoteRank !== undefined) {
@@ -107,7 +114,6 @@ export function shouldShip(record, remoteLevel) {
     } else {
         return false; // DEBUG (and unknown levels) never ship by default
     }
-    if (record.duplicate === true) return false;
     return true;
 }
 
@@ -126,7 +132,10 @@ function firstStackFrame(stack) {
     let sigilLine;
     for (const line of stack.split('\n')) {
         if (/^\s*at /.test(line)) return line.trim();
-        if (sigilLine === undefined && line.includes('@')) sigilLine = line;
+        // Anchored Firefox/Safari frame `name@url:line[:col]` — REQUIRE no whitespace before
+        // '@'. A prose message that merely contains '@' (an email), even one ending in
+        // ':<digits>', is never mistaken for a frame and can never leak error.message.
+        if (sigilLine === undefined && /^\s*\S*@\S+:\d+(?::\d+)?\s*$/.test(line)) sigilLine = line;
     }
     return sigilLine === undefined ? undefined : sigilLine.trim();
 }
@@ -145,7 +154,8 @@ export function mapRecordToEvent(record) {
         tag: String(r.module || 'app').toLowerCase(),
         message: r.message, // as-is (stable English event id); transport truncates at 300
     };
-    if (r.kind != null) ev.kind = r.kind;                            // pass-through (allowlisted, §3.3)
+    // DOMAIN discriminator (matches @axis/app-core): NEVER ship tracker's rendering `kind`.
+    ev.kind = r.domainKind ?? RENDER_TO_DOMAIN[r.kind] ?? 'error';
     if (r.correlationId != null) ev.corr = String(r.correlationId);  // key OMITTED when absent
     const err = r.error;
     if (err != null) {
@@ -154,6 +164,8 @@ export function mapRecordToEvent(record) {
         if (code != null) ev.err_code = String(code);
         const stack1 = firstStackFrame(err.stack);
         if (stack1 !== undefined) ev.stack1 = stack1;                // transport truncates at 400
+        // error.message ships ONLY scrubbed, as err_msg (D2) — single source scrubMessage from @axis/app-core
+        if (typeof err.message === 'string' && err.message !== '') ev.err_msg = scrubMessage(err.message);
     }
     const ctx = r.context;
     if (ctx != null && typeof ctx === 'object') {

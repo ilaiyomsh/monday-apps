@@ -136,6 +136,12 @@ describe('shouldShip — level policy first, duplicate second (§4.2)', () => {
         expect(shouldShip({ level: 'INFO', kind: 'simple', module: 'X', message: 'm' }, null)).toBe(false);
         expect(shouldShip({ level: 'INFO', kind: 'init', module: 'INIT', message: 'm' }, null)).toBe(true);
     });
+
+    it('S5b: alwaysShip records ship at INFO/DEBUG (usage/health); duplicates still drop first', () => {
+        expect(shouldShip({ level: 'INFO', alwaysShip: true, domainKind: 'usage', module: 'usage', message: 'view_open' })).toBe(true);
+        expect(shouldShip({ level: 'DEBUG', alwaysShip: true, module: 'health', message: 'boot_ok' })).toBe(true);
+        expect(shouldShip({ level: 'INFO', alwaysShip: true, duplicate: true, module: 'usage', message: 'x' })).toBe(false);
+    });
 });
 
 // =========================================================================
@@ -174,10 +180,11 @@ describe('mapRecordToEvent — §4.3 mapping table, nothing else copied', () => 
             level: 'error',
             tag: 'api',
             message: 'fetchProjectsForUser',
-            kind: 'apiError',
+            kind: 'error',                              // v2: DOMAIN discriminator (was rendering 'apiError')
             corr: 'log_7',
             err_name: 'MondayApiError',
             err_code: 'ComplexityException',
+            err_msg: 'complexity budget exhausted',     // v2: scrubbed error.message (no PII here)
             stack1: 'at safeApi (client.js:120:5)',
         });
         // belt-and-braces absence assertions (toEqual above already pins the exact key set)
@@ -223,7 +230,7 @@ describe('mapRecordToEvent — §4.3 mapping table, nothing else copied', () => 
             level: 'WARN', kind: 'simple', module: 'X', message: 'm',
             data: { name: 'דנה', email: 'x@y.z' },
         });
-        expect(ev).toEqual({ level: 'warn', tag: 'x', message: 'm', kind: 'simple' });
+        expect(ev).toEqual({ level: 'warn', tag: 'x', message: 'm', kind: 'error' }); // v2: rendering 'simple' → domain 'error'
         expect(JSON.stringify(ev)).not.toContain('דנה');
         expect(JSON.stringify(ev)).not.toContain('x@y.z');
     });
@@ -273,14 +280,42 @@ describe('mapRecordToEvent — §4.3 mapping table, nothing else copied', () => 
         expect(JSON.stringify(ev)).not.toContain('undefined');
     });
 
-    it('S13: malformed records map without throwing; kind passes through', () => {
+    it('S13: malformed records map without throwing; kind maps to the domain discriminator', () => {
         expect(() => mapRecordToEvent({})).not.toThrow();
         expect(() => mapRecordToEvent(null)).not.toThrow();
         expect(() => mapRecordToEvent(undefined)).not.toThrow();
         expect(() => mapRecordToEvent({ error: 'not an Error object', context: 'not an object' })).not.toThrow();
         expect(() => mapRecordToEvent({ level: 5, module: 3, message: null, context: { step: 'one' } })).not.toThrow();
         expect(mapRecordToEvent({}).tag).toBe('app');
-        expect(mapRecordToEvent({ level: 'INFO', kind: 'init', module: 'INIT', message: 'm' }).kind).toBe('init');
+        expect(mapRecordToEvent({}).kind).toBe('error'); // default domain kind
+        expect(mapRecordToEvent({ level: 'INFO', kind: 'init', module: 'INIT', message: 'm' }).kind).toBe('health');
+    });
+
+    it('S13b: envelope kind is the DOMAIN discriminator, never tracker rendering kind', () => {
+        // v2 reconciliation: rendering kinds all collapse to 'error'…
+        for (const k of ['simple', 'error', 'api', 'apiResponse', 'apiError']) {
+            expect(mapRecordToEvent({ level: 'ERROR', kind: k, module: 'X', message: 'm' }).kind).toBe('error');
+        }
+        // …boot lifecycle → health…
+        expect(mapRecordToEvent({ level: 'INFO', kind: 'init', module: 'INIT', message: 'm' }).kind).toBe('health');
+        expect(mapRecordToEvent({ level: 'INFO', kind: 'initSummary', module: 'INIT', message: 'm' }).kind).toBe('health');
+        // …and explicit domainKind (track/health) wins.
+        expect(mapRecordToEvent({ level: 'INFO', kind: 'simple', domainKind: 'usage', module: 'usage', message: 'view_open' }).kind).toBe('usage');
+        expect(mapRecordToEvent({ level: 'INFO', kind: 'simple', domainKind: 'health', module: 'health', message: 'boot_ok' }).kind).toBe('health');
+    });
+
+    it('S13c: error.message ships ONLY scrubbed, as err_msg (email/token/digits redacted)', () => {
+        const err = new Error('login failed for admin@corp.com token abcdef0123456789ABCD id 12345678');
+        err.name = 'AuthError';
+        err.stack = 'AuthError: boom\n    at f (a.js:1:1)';
+        const ev = mapRecordToEvent({ level: 'ERROR', kind: 'error', module: 'X', message: 'm', error: err });
+        expect(ev.err_msg).toContain('[email]');
+        expect(ev.err_msg).toContain('[redacted]');
+        expect(ev.err_msg).toContain('[num]');
+        const json = JSON.stringify(ev);
+        expect(json).not.toContain('admin@corp.com');
+        expect(json).not.toContain('abcdef0123456789ABCD');
+        expect(json).not.toContain('12345678');
     });
 });
 
@@ -298,7 +333,7 @@ describe('attachAxiomSink — registration + ring-buffer replay (§4.4)', () => 
             level: 'info',
             tag: 'init',
             message: 'Bundle loaded',
-            kind: 'init',
+            kind: 'health', // v2: boot lifecycle → DOMAIN discriminator (was rendering 'init')
             step: 1,
         });
         // live record after attach ships exactly once (replay and addSink never overlap)
