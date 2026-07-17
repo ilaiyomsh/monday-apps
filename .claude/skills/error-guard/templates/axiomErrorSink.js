@@ -16,10 +16,12 @@
  * degrades to a no-op.
  *
  * PRIVACY: the sink NEVER copies record.data, context.query/variables/response/
- * rawResponse, error.message, or any Hebrew userMessage. The transport's exact-key
- * allowlist would drop them anyway — this is defense in depth. What ships per
- * error: level, tag (module), message (stable English event id), kind, corr,
- * err_name, err_code, first stack frame, and numeric timings.
+ * rawResponse, or any Hebrew userMessage. error.message ships ONLY scrubbed, as
+ * err_msg (scrubMessage: emails / tokens&hex>=16 / digit-runs>=7 redacted, capped
+ * 200) — the raw message is never handed over; the transport's exact-key allowlist
+ * backstops it. What ships per error: level, tag (module), message (stable English
+ * event id), kind (domain discriminator), corr, err_name, err_code, err_msg
+ * (scrubbed), first stack frame, and numeric timings.
  *
  * ESLint: no-console must be OFF for this file (standard sink-file exemption) —
  * the console.error breadcrumbs are the operator surface and must never re-enter
@@ -78,20 +80,19 @@ try {
 // ============================================
 
 /**
- * Level policy FIRST (cheapest check — logger.js has NO pre-emit gate; sinks receive
- * ALL levels including the prod DEBUG firehose), then duplicate:true → false
- * (redundant defense: logger.js already withholds duplicates from sinks — kept as
- * one cheap line).
+ * Duplicate FIRST (logger.js already withholds duplicates from sinks — kept as one
+ * cheap line), then alwaysShip (usage/health INFO records bypass the level policy,
+ * D3/D5), then the level policy: ERROR/WARN ship, everything else stays local.
+ * Incident mode (setRemoteLevel) overrides with a pure rank comparison.
  *
- * Default policy: ERROR/WARN ship, everything else stays local. Incident mode
- * (setRemoteLevel) overrides with a pure rank comparison.
- *
- * @param {Object} record - logger.js record ({level, module, message, kind, ...})
+ * @param {Object} record - logger.js record ({level, module, message, kind, alwaysShip, ...})
  * @param {string|null} [remoteLevel] - incident override; ship iff rank(level) >= rank(remoteLevel)
  * @returns {boolean}
  */
 export function shouldShip(record, remoteLevel) {
     if (!record) return false;
+    if (record.duplicate === true) return false;   // duplicates never ship (checked first)
+    if (record.alwaysShip === true) return true;    // usage/health (INFO) bypass the level policy (D3/D5)
     const rank = RANK[String(record.level ?? '').toUpperCase()];
     const remoteRank = remoteLevel != null ? RANK[String(remoteLevel).toUpperCase()] : undefined;
     if (remoteRank !== undefined) {
@@ -100,7 +101,6 @@ export function shouldShip(record, remoteLevel) {
     } else if (rank !== RANK.ERROR && rank !== RANK.WARN) {
         return false; // default policy: only ERROR/WARN ship
     }
-    if (record.duplicate === true) return false;
     return true;
 }
 
@@ -109,19 +109,51 @@ export function shouldShip(record, remoteLevel) {
 // ============================================
 
 /**
- * First stack-frame line. Frame lines are `/^\s*at /` (V8) or '@'-containing
- * (Safari/Firefox). V8 frames are preferred over any earlier '@'-containing line:
- * a V8 message line like "Error: mail admin@x.co bounced" contains '@' but is NOT
- * a frame — returning it would leak error.message content (on the NEVER list).
+ * First stack-frame line. Prefers V8 frames (`/^\s*at /`); falls back to a real
+ * Firefox/Safari `name@url:line[:col]` frame — anchored, with NO space before '@'
+ * and a trailing `:line[:col]`. A prose message that merely contains '@' (an email)
+ * has whitespace before the '@', so even one that happens to end in ':<digits>'
+ * (a status code / port / timestamp) can never be mistaken for a frame and leak
+ * error.message content into stack1 (the app-core 0.1 privacy fix).
  */
 function firstStackFrame(stack) {
     if (typeof stack !== 'string' || stack === '') return undefined;
     let sigilLine;
     for (const line of stack.split('\n')) {
         if (/^\s*at /.test(line)) return line.trim();
-        if (sigilLine === undefined && line.includes('@')) sigilLine = line;
+        // Anchored frame shape: `name@url:line[:col]`, no whitespace before '@' or in the url.
+        if (sigilLine === undefined && /^\s*\S*@\S+:\d+(?::\d+)?\s*$/.test(line)) sigilLine = line;
     }
     return sigilLine === undefined ? undefined : sigilLine.trim();
+}
+
+// ============================================
+// scrubMessage — privacy-scrub error.message before it ships as err_msg (D2)
+// ============================================
+
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const TOKEN_RE = /[A-Za-z0-9_-]{16,}/g;
+const DIGITS_RE = /\d{7,}/g;
+const MSG_PRECAP = 1000;
+const MSG_MAXLEN = 200;
+
+/**
+ * Redact PII/secrets from an error message so it can ship as `err_msg` (D2). Order matters:
+ * emails FIRST (their local part would otherwise be eaten by the token rule), then long
+ * token/hex runs (>=16), then digit-runs (>=7). Pre-capped at 1000 to bound regex work, final
+ * slice 200. Accepted trade-off: redacts a rare 16+ char all-letter word. Identical spec across
+ * app-core, this template, and tracker (which imports it from app-core to avoid drift).
+ *
+ * @param {*} raw - error.message (any type; non-strings return '')
+ * @returns {string}
+ */
+export function scrubMessage(raw) {
+    if (typeof raw !== 'string' || raw === '') return '';
+    let s = raw.slice(0, MSG_PRECAP);
+    s = s.replace(EMAIL_RE, '[email]');
+    s = s.replace(TOKEN_RE, '[redacted]');
+    s = s.replace(DIGITS_RE, '[num]');
+    return s.slice(0, MSG_MAXLEN);
 }
 
 /**
@@ -138,7 +170,9 @@ export function mapRecordToEvent(record) {
         tag: String(r.module || 'app').toLowerCase(),
         message: r.message, // as-is (stable English event id); transport truncates
     };
-    if (r.kind != null) ev.kind = r.kind;                            // pass-through (allowlisted)
+    // DOMAIN discriminator (matches the transport allowlist + app-core): error (default) |
+    // usage | health. track()/health() set record.domainKind; NEVER ship the rendering `kind`.
+    ev.kind = r.domainKind ?? 'error';
     if (r.correlationId != null) ev.corr = String(r.correlationId);  // key OMITTED when absent
     const err = r.error;
     if (err != null) {
@@ -147,6 +181,8 @@ export function mapRecordToEvent(record) {
         if (code != null) ev.err_code = String(code);
         const stack1 = firstStackFrame(err.stack);
         if (stack1 !== undefined) ev.stack1 = stack1;                // transport truncates
+        // error.message ships ONLY scrubbed, as err_msg (D2) — the raw message is never handed over
+        if (typeof err.message === 'string' && err.message !== '') ev.err_msg = scrubMessage(err.message);
     }
     const ctx = r.context;
     if (ctx != null && typeof ctx === 'object') {
