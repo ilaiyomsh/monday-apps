@@ -13,7 +13,7 @@
 export { bootstrapApp, polyfillGlobal, type BootstrapOptions } from './bootstrap';
 
 // logging
-export { createLogger, type Logger, type LogRecord, type LogSink, type LogLevelName, type LoggerOptions } from './logger';
+export { createLogger, encodeDims, type Logger, type LogRecord, type LogSink, type LogLevelName, type LoggerOptions } from './logger';
 
 // monday context
 export { MondayProvider, useMondayContext, type MondayContextValue, type MondayProviderProps } from './monday/MondayContext';
@@ -43,8 +43,12 @@ export {
   setRemoteLevel,
   shouldShip,
   mapRecordToEvent,
+  scrubMessage,
   type AxiomSinkOptions,
 } from './errors/axiomSink';
+
+// usage / view tracking (D3)
+export { createViewTracker, useViewTracking, type ViewTracker } from './usage/viewTracking';
 
 // api queue + storage
 export { createApiQueue } from './apiQueue';

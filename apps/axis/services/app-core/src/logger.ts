@@ -19,6 +19,10 @@ export interface LogRecord {
   correlationId?: number;
   duplicate?: boolean;
   context?: Record<string, unknown>;
+  /** Domain discriminator for the Axiom envelope: 'error' (default) | 'usage' | 'health'. */
+  kind?: string;
+  /** Bypass the default WARN/ERROR ship policy — usage/health records ship at INFO. */
+  alwaysShip?: boolean;
 }
 
 export type LogSink = (record: LogRecord) => void;
@@ -32,6 +36,24 @@ export interface LoggerOptions {
 
 const LEVELS: Record<Exclude<LogLevelName, 'NONE'>, number> = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 };
 
+/**
+ * Fold categorical/measured dims into a stable, queryable message suffix:
+ * `base key1=v1 key2=v2` with keys sorted. Only string/bool/finite-number values are
+ * included (objects, functions, NaN/Infinity dropped) so the shipped message stays flat
+ * and APL-parseable. Used by track()/health() to encode usage/health dims per decision D4.
+ */
+export function encodeDims(base: string, dims?: Record<string, unknown>): string {
+  if (!dims) return base;
+  const parts: string[] = [];
+  for (const key of Object.keys(dims).sort()) {
+    const v = dims[key];
+    if (typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) {
+      parts.push(`${key}=${v}`);
+    }
+  }
+  return parts.length ? `${base} ${parts.join(' ')}` : base;
+}
+
 export function createLogger(options: LoggerOptions) {
   const isProd = typeof import.meta !== 'undefined' && (import.meta as { env?: { PROD?: boolean } }).env?.PROD;
   const ringSize = options.ringBufferSize ?? 150;
@@ -41,11 +63,17 @@ export function createLogger(options: LoggerOptions) {
   const ring: LogRecord[] = [];
   const sinks = new Set<LogSink>();
 
-  const emit =(level: LogRecord['level'], module: string, message: string, payload?: unknown, context?: Record<string, unknown>) => {
+  const emit = (
+    level: LogRecord['level'], module: string, message: string,
+    payload?: unknown, context?: Record<string, unknown>,
+    opts?: { kind?: string; alwaysShip?: boolean },
+  ) => {
     const isError = payload instanceof Error || (payload && typeof payload === 'object' && 'stack' in (payload as object));
     const record: LogRecord = {
       level, module, message, timestamp: Date.now(), timestampISO: new Date().toISOString(), context,
       ...(isError ? { error: payload } : { data: payload }),
+      ...(opts?.kind !== undefined ? { kind: opts.kind } : {}),
+      ...(opts?.alwaysShip !== undefined ? { alwaysShip: opts.alwaysShip } : {}),
     };
 
     // log-once dedup: stamp the error object so downstream catches don't re-display
@@ -76,6 +104,12 @@ export function createLogger(options: LoggerOptions) {
     api: (fn: string, query?: unknown, variables?: unknown) => emit('DEBUG', 'API', `→ ${fn}`, { query, variables }),
     apiResponse: (fn: string, durationMs: number) => emit('DEBUG', 'API', `← ${fn} (${Math.round(durationMs)}ms)`),
     apiError: (fn: string, error: unknown, context?: Record<string, unknown>) => emit('ERROR', 'API', `✕ ${fn}`, error, context),
+    /** Usage telemetry (D3): an INFO record, kind='usage', shipped regardless of level. Dims fold into the message (D4). */
+    track: (event: string, dims?: Record<string, unknown>) =>
+      emit('INFO', 'usage', encodeDims(event, dims), undefined, undefined, { kind: 'usage', alwaysShip: true }),
+    /** Health signal (D5): an INFO record, kind='health', shipped regardless of level. Metrics fold into the message (D4). */
+    health: (signal: string, metrics?: Record<string, unknown>) =>
+      emit('INFO', 'health', encodeDims(signal, metrics), undefined, undefined, { kind: 'health', alwaysShip: true }),
     addSink: (s: LogSink) => { sinks.add(s); return () => sinks.delete(s); },
     getBuffer: () => [...ring],
     setLevel: (name: LogLevelName) => { currentLevel = name === 'NONE' ? 99 : LEVELS[name]; },

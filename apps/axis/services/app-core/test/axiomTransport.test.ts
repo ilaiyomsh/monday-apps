@@ -605,6 +605,16 @@ describe('sanitizer (T29-T35)', () => {
     expect(e.err_code).toBe('404'); // allowlist String-coerces
   });
 
+  it('T32b: err_msg is allowlisted and capped at 200 (v2 scrubbed error.message)', async () => {
+    const h = harness();
+    h.t.enqueue(ev({ err_msg: 'z'.repeat(500), kind: 'usage' }));
+    h.t.flush('manual');
+    await tick();
+    const e = allEvents(h.calls)[0];
+    expect((e.err_msg as string).length).toBe(200);
+    expect(e.kind).toBe('usage');
+  });
+
   it('T33: finite numerics pass; NaN/Infinity drop; deny-named numeric drops; 13th numeric extra drops', async () => {
     const h = harness();
     h.t.enqueue(

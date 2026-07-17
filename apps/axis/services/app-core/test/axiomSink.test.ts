@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
   shouldShip,
   mapRecordToEvent,
+  scrubMessage,
   attachAxiomSink,
   setAxiomContext,
   setRemoteLevel,
@@ -80,6 +81,13 @@ describe('shouldShip — level policy', () => {
     expect(shouldShip(rec({ level: 'DEBUG' }), 'INFO')).toBe(false);
     expect(shouldShip(rec({ level: 'DEBUG' }), 'DEBUG')).toBe(true);
   });
+  it('alwaysShip records ship even at INFO/DEBUG (usage/health)', () => {
+    expect(shouldShip(rec({ level: 'INFO', alwaysShip: true }))).toBe(true);
+    expect(shouldShip(rec({ level: 'DEBUG', alwaysShip: true }))).toBe(true);
+  });
+  it('alwaysShip never overrides the duplicate drop', () => {
+    expect(shouldShip(rec({ level: 'INFO', alwaysShip: true, duplicate: true }))).toBe(false);
+  });
 });
 
 describe('mapRecordToEvent — allowlisted mapping', () => {
@@ -136,6 +144,25 @@ describe('mapRecordToEvent — allowlisted mapping', () => {
       stack: 'run@https://app.example.com/main.js:12:34\nload@https://app.example.com/main.js:5:6',
     });
     expect(mapRecordToEvent(rec({ error: err })).stack1).toBe('run@https://app.example.com/main.js:12:34');
+  });
+  it('stamps kind — default "error", or the record kind (usage/health)', () => {
+    expect(mapRecordToEvent(rec()).kind).toBe('error');
+    expect(mapRecordToEvent(rec({ level: 'INFO', kind: 'usage' })).kind).toBe('usage');
+    expect(mapRecordToEvent(rec({ level: 'INFO', kind: 'health' })).kind).toBe('health');
+  });
+  it('ships error.message ONLY scrubbed, as err_msg (email/token/digits redacted)', () => {
+    const err = Object.assign(
+      new Error('login failed for admin@corp.com token abcdef0123456789ABCD id 12345678'),
+      { stack: 'Error: ...\n    at f (a.js:1:1)' },
+    );
+    const ev = mapRecordToEvent(rec({ error: err }));
+    expect(ev.err_msg).toContain('[email]');
+    expect(ev.err_msg).toContain('[redacted]');
+    expect(ev.err_msg).toContain('[num]');
+    const s = JSON.stringify(ev);
+    expect(s).not.toContain('admin@corp.com');
+    expect(s).not.toContain('abcdef0123456789ABCD');
+    expect(s).not.toContain('12345678');
   });
 });
 
@@ -207,5 +234,22 @@ describe('setAxiomContext', () => {
     const { t, contexts } = fakeTransport();
     setAxiomContext({ boardId: 3 }, { transport: t });
     expect(contexts[0]).toMatchObject({ obj: 3, board: 3 });
+  });
+});
+
+describe('scrubMessage', () => {
+  it('redacts emails, long token/hex runs (>=16), and digit-runs (>=7)', () => {
+    expect(scrubMessage('contact admin@corp.com now')).toBe('contact [email] now');
+    expect(scrubMessage('key abcdef0123456789XYZ done')).toBe('key [redacted] done');
+    expect(scrubMessage('id 1234567 ok')).toBe('id [num] ok');
+  });
+  it('runs email before token so the whole address collapses to one [email]', () => {
+    expect(scrubMessage('verylonglocalpart1234@example.com')).toBe('[email]');
+  });
+  it('caps at 200 chars and returns "" for non-strings', () => {
+    expect(scrubMessage('word '.repeat(100)).length).toBe(200); // words break token/digit runs
+    expect(scrubMessage(undefined)).toBe('');
+    expect(scrubMessage(123 as unknown)).toBe('');
+    expect(scrubMessage('')).toBe('');
   });
 });

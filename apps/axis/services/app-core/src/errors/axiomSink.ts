@@ -15,10 +15,10 @@
  * passes them in). Dev server, tunnel, and vitest are structurally inert: the
  * transport is an inert handle and `attachAxiomSink()` degrades to a no-op.
  *
- * PRIVACY (defense in depth): the sink NEVER copies `record.data`,
- * `record.context.query/variables/response/rawResponse`, or `error.message` — only
- * the allowlisted envelope fields below. The transport's own exact-key allowlist
- * would drop them anyway, but the sink refuses to hand them over in the first place.
+ * PRIVACY (defense in depth): the sink NEVER copies `record.data` or
+ * `record.context.query/variables/response/rawResponse`. `error.message` ships ONLY as
+ * `err_msg` via `scrubMessage` (emails / tokens&hex>=16 / digit-runs>=7 redacted, capped
+ * 200) — the raw message is never handed over. The transport's exact-key allowlist backstops it.
  */
 import { createAxiomBrowserTransport, type AxiomTransport, type AxiomEventInput } from '../axiomTransport';
 import type { Logger, LogRecord } from '../logger';
@@ -53,12 +53,14 @@ export interface AxiomSinkOptions {
 // ============================================
 
 /**
- * Default policy: ERROR/WARN ship, everything else is dropped. `remoteLevel` is the
- * incident override — when set, ship iff rank(level) >= rank(remoteLevel). Duplicate
- * records never ship (logger.ts already withholds them from sinks; kept as one cheap line).
+ * Default policy: ERROR/WARN ship, everything else is dropped — EXCEPT records flagged
+ * `alwaysShip` (usage/health at INFO), which ship regardless of level. `remoteLevel` is the
+ * incident override — when set, ship iff rank(level) >= rank(remoteLevel). Duplicates never ship.
  */
 export function shouldShip(record: LogRecord, remoteLevel?: string | null): boolean {
   if (!record) return false;
+  if (record.duplicate === true) return false;   // duplicates never ship (checked first)
+  if (record.alwaysShip === true) return true;    // usage/health (INFO) bypass the level policy (D3/D5)
   const rank = RANK[String(record.level ?? '').toUpperCase()];
   const remoteRank = remoteLevel != null ? RANK[String(remoteLevel).toUpperCase()] : undefined;
   if (remoteRank !== undefined) {
@@ -66,7 +68,6 @@ export function shouldShip(record: LogRecord, remoteLevel?: string | null): bool
   } else if (rank !== RANK.ERROR && rank !== RANK.WARN) {
     return false; // default policy: WARN/ERROR only
   }
-  if (record.duplicate === true) return false;
   return true;
 }
 
@@ -93,10 +94,36 @@ function firstStackFrame(stack: unknown): string | undefined {
   return sigilLine === undefined ? undefined : sigilLine.trim();
 }
 
+// ============================================
+// scrubMessage — privacy-scrub error.message before it ships as err_msg (D2)
+// ============================================
+
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const TOKEN_RE = /[A-Za-z0-9_-]{16,}/g;
+const DIGITS_RE = /\d{7,}/g;
+const MSG_PRECAP = 1000;
+const MSG_MAXLEN = 200;
+
 /**
- * Maps EXACTLY the allowlisted fields — never `record.data`, `record.context`
- * query/response, or `error.message`. The transport stamps `_time` at enqueue and
- * enriches app/env/ver/sess + acc/usr/obj/board at flush.
+ * Redact PII/secrets from an error message so it can ship as `err_msg` (D2). Order matters:
+ * emails FIRST (their local part would otherwise be eaten by the token rule), then long
+ * token/hex runs (>=16), then digit-runs (>=7). Pre-capped at 1000 to bound regex work, final
+ * slice 200. Accepted trade-off: redacts a rare 16+ char all-letter word. Identical spec across
+ * app-core, the error-guard templates, and tracker (which imports this to avoid drift).
+ */
+export function scrubMessage(raw: unknown): string {
+  if (typeof raw !== 'string' || raw === '') return '';
+  let s = raw.slice(0, MSG_PRECAP);
+  s = s.replace(EMAIL_RE, '[email]');
+  s = s.replace(TOKEN_RE, '[redacted]');
+  s = s.replace(DIGITS_RE, '[num]');
+  return s.slice(0, MSG_MAXLEN);
+}
+
+/**
+ * Maps EXACTLY the allowlisted fields — never `record.data` or `record.context`
+ * query/response; `error.message` only as scrubbed `err_msg`. The transport stamps `_time`
+ * at enqueue and enriches app/env/ver/sess + acc/usr/obj/board at flush.
  */
 export function mapRecordToEvent(record: LogRecord): AxiomEventInput {
   const r = record || ({} as LogRecord);
@@ -104,15 +131,17 @@ export function mapRecordToEvent(record: LogRecord): AxiomEventInput {
     level: String(r.level ?? '').toLowerCase(),
     tag: String(r.module || 'app').toLowerCase(),
     message: r.message, // stable English event id; transport truncates at 300
+    kind: String(r.kind ?? 'error'), // domain discriminator: error (default) | usage | health
   };
   if (r.correlationId != null) ev.corr = String(r.correlationId);
-  const err = r.error as { name?: unknown; errorCode?: unknown; status?: unknown; code?: unknown; stack?: unknown } | undefined;
+  const err = r.error as { name?: unknown; errorCode?: unknown; status?: unknown; code?: unknown; stack?: unknown; message?: unknown } | undefined;
   if (err != null && typeof err === 'object') {
     if (err.name != null) ev.err_name = String(err.name);
     const code = err.errorCode ?? err.status ?? err.code; // MondayApiError.errorCode / HTTP status
     if (code != null) ev.err_code = String(code);
     const stack1 = firstStackFrame(err.stack);
     if (stack1 !== undefined) ev.stack1 = stack1; // transport truncates at 400
+    if (typeof err.message === 'string' && err.message !== '') ev.err_msg = scrubMessage(err.message); // scrubbed (D2)
   }
   const ctx = r.context;
   if (ctx != null && typeof ctx === 'object') {
