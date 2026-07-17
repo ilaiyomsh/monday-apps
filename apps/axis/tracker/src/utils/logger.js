@@ -57,6 +57,10 @@
  * - לוגים שצריך להשאיר בקוד (לצורך דיבוג עתידי) יש להעיר עם הערה
  */
 
+// Shared v2 message encoder — single source of truth (@axis/app-core), so tracker's
+// track()/health() wire format matches app-core and the templates (no drift).
+import { encodeDims } from '@axis/app-core';
+
 // נקודת ייחוס לתזמון Init Flow — נקבעת פעם אחת עם טעינת הבאנדל
 if (typeof window !== 'undefined' && !window.__appInitStart) {
     window.__appInitStart = performance.now();
@@ -513,6 +517,39 @@ const logger = {
       // אם error אינו instance של Error (למשל אובייקט/מחרוזת) — נשמר כ-data לרינדור/sink
       data: error instanceof Error ? undefined : error,
       consoleEnabled: currentLevel <= LOG_LEVELS.ERROR
+    });
+  },
+
+  /**
+   * track — טלמטריית שימוש (D3). רשומת INFO עם kind דומיין 'usage' (domainKind), נשלחת
+   * תמיד (alwaysShip) בלי קשר למדיניות WARN/ERROR. הממדים מקודדים לתוך ה-message (D4)
+   * דרך encodeDims המשותף. ה-kind של הרינדור נשאר 'simple' לקונסול.
+   */
+  track: (event, dims = null) => {
+    emit({
+      kind: 'simple',
+      domainKind: 'usage',
+      alwaysShip: true,
+      level: 'INFO',
+      module: 'usage',
+      message: encodeDims(event, dims),
+      consoleEnabled: currentLevel <= LOG_LEVELS.INFO
+    });
+  },
+
+  /**
+   * health — אות בריאות (D5). רשומת INFO עם kind דומיין 'health', נשלחת תמיד. המדדים
+   * מקודדים לתוך ה-message (D4).
+   */
+  health: (signal, metrics = null) => {
+    emit({
+      kind: 'simple',
+      domainKind: 'health',
+      alwaysShip: true,
+      level: 'INFO',
+      module: 'health',
+      message: encodeDims(signal, metrics),
+      consoleEnabled: currentLevel <= LOG_LEVELS.INFO
     });
   },
 
