@@ -160,7 +160,7 @@
 .decRow {
   display: grid;
   align-items: stretch;
-  min-height: 36px;
+  min-height: var(--table-row-h, 36px);
   border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
   position: relative;
 }
@@ -246,7 +246,7 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  min-height: 36px;
+  min-height: var(--table-row-h, 36px);
   padding: 0 8px;
   border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
   font-size: 14px;
@@ -309,7 +309,7 @@
   flex: 1;
   min-width: 0;
   font-size: 14px;
-  line-height: 36px; /* match row height */
+  line-height: var(--table-row-h, 36px); /* match row height */
   color: var(--primary-text-color, #323338);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -420,7 +420,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 36px;
+  min-height: var(--table-row-h, 36px);
   color: #ffffff;
   font-size: 14px;
   /* round98: normal weight (like the task name), not bold. */
@@ -508,7 +508,7 @@
 .decEmptyRow {
   display: flex;
   align-items: center;
-  min-height: 36px;
+  min-height: var(--table-row-h, 36px);
   padding: 0 14px;
   color: var(--secondary-text-color, #676879);
   font-size: 14px;
@@ -526,7 +526,7 @@
   display: flex;
   align-items: stretch;
   width: 100%;
-  min-height: 36px;
+  min-height: var(--table-row-h, 36px);
   padding: 0;
   border: none;
   background: transparent;
@@ -731,8 +731,15 @@
   color: var(--secondary-text-color, #676879);
   padding: 1px 4px;
   border-radius: 4px;
-  margin-inline-start: 2px;
   transition: opacity 0.12s ease;
+  /* round151 — pinned to the header cell's PHYSICAL right edge so the
+     centered column title stays truly centered (owner request). */
+  position: absolute;
+  right: 8px; /* clears the 6px resize-handle strip at the edge */
+  top: 50%;
+  transform: translateY(-50%);
 }
+/* round151 — anchor for the absolutely-positioned rename dots. */
+.decHeadCell, .decNameHead { position: relative; }
 .renameDots:hover { background: var(--primary-background-hover-color, #eceff8); }
 .decHeadCell:hover .renameDots, .decNameHead:hover .renameDots { opacity: 1; }

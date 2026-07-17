@@ -264,8 +264,15 @@
   color: var(--secondary-text-color, #676879);
   padding: 1px 4px;
   border-radius: 4px;
-  margin-inline-start: 2px;
   transition: opacity 0.12s ease;
+  /* round151 — pinned to the header cell's PHYSICAL right edge so the
+     centered column title stays truly centered (owner request). */
+  position: absolute;
+  right: 8px; /* clears the 6px resize-handle strip at the edge */
+  top: 50%;
+  transform: translateY(-50%);
 }
+/* round151 — anchor for the absolutely-positioned rename dots. */
+.taskHead .taskCell, .taskHead .taskFirst { position: relative; }
 .renameDots:hover { background: var(--primary-background-hover-color, #eceff8); }
 .taskHead .taskCell:hover .renameDots, .taskHead .taskFirst:hover .renameDots { opacity: 1; }
