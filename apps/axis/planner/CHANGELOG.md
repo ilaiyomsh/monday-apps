@@ -2,6 +2,18 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2.2.0 — 2026-07-17
+
+- **Axiom logging v2 telemetry** — created the client Axiom stack from scratch for this app (TS).
+  - `src/utils/Logger.ts`: added the v2 primitives additively — `encodeDims`, `track` (domainKind `usage`), `health` (domainKind `health`), both emitting INFO records with `alwaysShip:true` and the rendering `kind` left as `simple`. Added a sink registry (`addSink`/`removeSink`/`getBuffer`) + ring buffer, and routed the existing variadic `warn`/`error`/`labeled` (WARN/ERROR) through the new record fan-out so errors ship. The window.AppLogger control API, localStorage config, and every existing variadic method signature are preserved (all 26 call sites untouched).
+  - `src/utils/axiomBrowserTransport.ts`: TS port of the browser transport — exact-key allowlist (incl. `err_msg` cap 200), sanitizer, batching, dedup, session cap, circuit breaker, keepalive hidden-flush. Inert unless injected/gated.
+  - `src/utils/axiomErrorSink.ts`: TS port of the sink — `scrubMessage` (emails / tokens&hex>=16 / digit-runs>=7, precap 1000 / cap 200), `shouldShip` (duplicate->false, alwaysShip->true, then WARN/ERROR policy), `mapRecordToEvent` (`ev.kind = domainKind ?? 'error'`, err_msg scrubbed-only), anchored browser `firstStackFrame`. `attachAxiomSink()` replays the ring buffer then registers; gated to PROD + `VITE_AXIOM_*`.
+  - `src/main.tsx`: `attachAxiomSink()` runs synchronously before `createRoot`.
+  - `src/utils/viewTracking.ts` + wiring: `view_open` once per session per view — `gantt` (GanttChart), `settings` (SettingsDialog, on first open), `welcome` (App unconfigured screen). Ref-based dims, React 19 StrictMode-safe.
+  - Boot health: one-shot `logger.health('boot_ok', { configured, ms })` at the App `[LOAD_FLOW] [5/5]` init-done point.
+  - API-latency health: `logger.health('api_latency', { bucket, ok })` at the single `apiQueue` retry funnel, bucketed and emitted on terminal outcomes only (retries folded in) so the transport dedups it.
+  - Tests: `src/utils/__tests__/telemetry-v2.test.ts` locks encodeDims / track / health / scrubMessage / shouldShip / mapRecordToEvent + a transport sanitizer/allowlist round-trip. Suite 315 -> 328 green; app typecheck + production build green.
+
 ## 2026-06
 
 ### 🐛 Bug Fixes

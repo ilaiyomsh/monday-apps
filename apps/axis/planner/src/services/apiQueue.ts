@@ -74,6 +74,31 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Coarse latency buckets (D5) so repeated api_latency health signals dedup at the transport
+// instead of shipping a distinct message per call (this is a hot path). Measured over the whole
+// retry sequence, so retried calls land in the slower buckets.
+function latencyBucket(ms: number): string {
+  if (ms < 200) return 'fast';
+  if (ms < 1000) return 'ok';
+  if (ms < 3000) return 'slow';
+  return 'very_slow';
+}
+
+// API-latency health (D5): wraps the retry funnel so exactly ONE bucketed health signal is
+// emitted per top-level API call, on the terminal outcome only (retries are folded into the
+// measured round-trip, never emitted individually). Inert until the Axiom sink is active.
+async function runWithTelemetry(item: QueueItem): Promise<any> {
+  const t0 = Date.now();
+  try {
+    const result = await executeWithRetry(item);
+    logger.health('api_latency', { bucket: latencyBucket(Date.now() - t0), ok: true });
+    return result;
+  } catch (err) {
+    logger.health('api_latency', { bucket: latencyBucket(Date.now() - t0), ok: false });
+    throw err;
+  }
+}
+
 async function executeWithRetry(item: QueueItem): Promise<any> {
   let response: any;
   try {
@@ -142,7 +167,7 @@ async function processMutationQueue() {
   while (mutationQueue.length > 0) {
     const item = mutationQueue.shift()!;
     try {
-      const result = await executeWithRetry(item);
+      const result = await runWithTelemetry(item);
       item.resolve(result);
     } catch (err) {
       item.reject(err);
@@ -159,7 +184,7 @@ function processReadQueue() {
   while (readQueue.length > 0 && activeReads < MAX_READ_CONCURRENCY) {
     const item = readQueue.shift()!;
     activeReads++;
-    executeWithRetry(item)
+    runWithTelemetry(item)
       .then(result => {
         item.resolve(result);
       })

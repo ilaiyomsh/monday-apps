@@ -18,6 +18,8 @@ import { findOverlappingAllocations } from '../../utils/overlapUtils';
 import { FreeFallLoader } from '../ui';
 import { SNAP_DAYS } from '../../utils/constants';
 import { useLocale } from '../../hooks/useLocale';
+import { logger } from '../../utils/Logger';
+import { useViewTracking } from '../../utils/viewTracking';
 
 // Lazy-load SettingsDialog - only loaded when user clicks settings
 const SettingsDialog = lazy(() =>
@@ -45,6 +47,8 @@ const SCROLL_BUFFER_DAYS: Record<ZoomLevel, number> = {
 export const GanttChart: React.FC = () => {
   const { t } = useTranslation();
   const locale = useLocale();
+  // Usage telemetry (D3): report the gantt view once per session (StrictMode-safe).
+  useViewTracking(logger, 'gantt');
   const {
     zoomLevel,
     setZoomLevel,
