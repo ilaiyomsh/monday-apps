@@ -27,6 +27,7 @@ import { HideColumnsControl } from './controls/HideColumnsControl.jsx';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { useStableHandler } from '@generated/hooks/useStableHandler.js';
+import { useBatchTargets } from '@generated/hooks/useBatchTargets.js';
 import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import { getColumns } from '@api/board-config-store.js';
 import {
@@ -153,12 +154,6 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   // Bulk edit: when >1 rows are selected and the edited row is among them, the
   // change applies to the WHOLE selection (mirrors הנחיות קודמות). Otherwise it's
   // a single-row edit. Notes stays single-row (bulk notes is meaningless).
-  // Bulk targets are filtered per capability: a mixed selection (allowed +
-  // disallowed) applies ONLY to the allowed subset (mirrors TasksTab).
-  const resolveTargetIds = (originId, cap) => {
-    const base = (selectedIds.size > 1 && selectedIds.has(originId)) ? [...selectedIds] : [originId];
-    return cap ? base.filter((id) => allow(cap, id)) : base;
-  };
   // round136 — stable identities (useStableHandler) for the memoized rows; each
   // call still reads the LATEST selection/permission state through the wrapper.
   const applyStatus = useStableHandler((taskId, status) => resolveTargetIds(taskId, 'editTaskStatus').forEach((id) => updateTaskStatus(id, status)));
@@ -208,6 +203,11 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const canTask = useCallback((cap, task) => can(cap, { boardKey: 'tasks', item: task }), [can]);
   const itemById = useMemo(() => new Map(items.map((t) => [String(t.id), t])), [items]);
   const allow = useCallback((cap, taskId) => canTask(cap, itemById.get(String(taskId))), [canTask, itemById]);
+  // Bulk targets are filtered per capability: a mixed selection (allowed +
+  // disallowed) applies ONLY to the allowed subset (mirrors TasksTab).
+  // round143 — shared resolver; declared here (after `allow`) — the hook call
+  // evaluates its args immediately, unlike the old inline closure.
+  const resolveTargetIds = useBatchTargets(selectedIds, allow);
 
   const {
     options: priorityOptions,

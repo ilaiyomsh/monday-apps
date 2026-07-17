@@ -20,6 +20,7 @@ import {
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { useStableHandler } from '@generated/hooks/useStableHandler.js';
+import { useBatchTargets } from '@generated/hooks/useBatchTargets.js';
 import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
 import { useViewport } from '@generated/hooks/useViewport.js';
@@ -544,10 +545,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     (cap, taskId) => canTask(cap, itemById.get(String(taskId))),
     [canTask, itemById]
   );
-  const resolveTargetIds = (originTaskId, cap) => {
-    const base = selectedIds.size > 1 && selectedIds.has(originTaskId) ? [...selectedIds] : [originTaskId];
-    return cap ? base.filter((id) => allow(cap, id)) : base;
-  };
+  const resolveTargetIds = useBatchTargets(selectedIds, allow); // round143 — shared resolver
   // round136 — the apply* handlers are wrapped in useStableHandler: one frozen
   // identity per handler for the memoized rows; each call reads the LATEST
   // selection/permission state through the wrapper.
