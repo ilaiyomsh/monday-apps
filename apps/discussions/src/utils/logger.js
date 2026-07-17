@@ -348,6 +348,33 @@ const emit = (record) => {
   }
 };
 
+// ============================================
+// encodeDims — usage/health message encoder (D4)
+// ============================================
+
+/**
+ * קיפול dims קטגוריים/נמדדים לסיומת message יציבה וניתנת-לשאילתה:
+ * `base key1=v1 key2=v2` כשהמפתחות ממויינים. רק ערכי string/bool/finite-number
+ * נכללים (אובייקטים/פונקציות/NaN/Infinity מושמטים) כדי שה-message שנשלח יישאר שטוח
+ * וניתן ל-APL parse. משמש את track()/health() לקידוד dims של usage/health (D4).
+ * מפרט זהה על פני app-core, תבניות error-guard, ו-tracker (מקור יחיד לפורמט ה-wire).
+ *
+ * @param {string} base - שם האירוע/האות
+ * @param {Object} [dims] - dims קטגוריים/נמדדים
+ * @returns {string}
+ */
+export function encodeDims(base, dims) {
+  if (!dims) return base;
+  const parts = [];
+  for (const key of Object.keys(dims).sort()) {
+    const v = dims[key];
+    if (typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) {
+      parts.push(`${key}=${v}`);
+    }
+  }
+  return parts.length ? `${base} ${parts.join(' ')}` : base;
+}
+
 const logger = {
   /**
    * הגדרת רמת לוג
@@ -513,6 +540,44 @@ const logger = {
       // אם error אינו instance של Error (למשל אובייקט/מחרוזת) — נשמר כ-data לרינדור/sink
       data: error instanceof Error ? undefined : error,
       consoleEnabled: currentLevel <= LOG_LEVELS.ERROR
+    });
+  },
+
+  /**
+   * track — טלמטריית usage (D3). רשומת INFO הנושאת את ה-DOMAIN kind 'usage'
+   * (כ-domainKind — ה-sink מיישב אותו ל-ev.kind) ו-alwaysShip:true, כך שהיא נשלחת
+   * ללא תלות במדיניות WARN/ERROR. ה-dims מקופלים ל-message דרך encodeDims (D4).
+   * ה-rendering kind נשאר 'simple' (שורת INFO רגילה בקונסול).
+   * @param {string} event - מזהה אירוע יציב (למשל 'view_open', 'settings_saved')
+   * @param {Object} [dims] - dims קטגוריים/נמדדים המקופלים ל-message
+   */
+  track: (event, dims = null) => {
+    emit({
+      kind: 'simple',
+      domainKind: 'usage',
+      alwaysShip: true,
+      level: 'INFO',
+      module: 'usage',
+      message: encodeDims(event, dims),
+      consoleEnabled: currentLevel <= LOG_LEVELS.INFO
+    });
+  },
+
+  /**
+   * health — אות בריאות (D5). רשומת INFO, DOMAIN kind 'health', alwaysShip:true.
+   * ה-metrics מקופלים ל-message דרך encodeDims (D4).
+   * @param {string} signal - מזהה אות יציב (למשל 'boot', 'api_latency')
+   * @param {Object} [metrics] - metrics נמדדים המקופלים ל-message
+   */
+  health: (signal, metrics = null) => {
+    emit({
+      kind: 'simple',
+      domainKind: 'health',
+      alwaysShip: true,
+      level: 'INFO',
+      module: 'health',
+      message: encodeDims(signal, metrics),
+      consoleEnabled: currentLevel <= LOG_LEVELS.INFO
     });
   },
 

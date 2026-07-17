@@ -7,6 +7,8 @@ import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { useDashboardData } from '@generated/hooks/useDashboardData.js';
 import { aggregateDashboard } from './dashboardAgg.js';
+import logger from '@generated/utils/logger.js';
+import { useViewTracking } from '@generated/utils/viewTracking.js';
 import styles from './DiscussionsDashboard.module.css';
 
 const RANGE_LABELS = [
@@ -48,6 +50,8 @@ function peopleOptions(discussions, key) {
 }
 
 export function DiscussionsDashboard({ onBackToDiscussions }) {
+  // v2 usage telemetry: one view_open per session for the dashboard view (D3).
+  useViewTracking(logger, 'dashboard');
   const { data, loading, error } = useDashboardData();
 
   const [preset, setPreset] = useState('month');

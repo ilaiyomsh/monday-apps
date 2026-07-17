@@ -31,6 +31,7 @@ import { QuickCreateModal } from '@generated/components/QuickCreateModal';
 import { fmtTimeLabel, composeLocalDate, localYmd, toDateInput, toTimeInput } from '@generated/utils/dateTime.js';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import logger from '@generated/utils/logger.js';
+import { useViewTracking } from '@generated/utils/viewTracking.js';
 import { loadPointItems, addPointItem, mergePointItemIn, prunePointItems } from '@generated/utils/pointItems.js';
 import styles from './DiscussionCard.module.css';
 
@@ -75,6 +76,8 @@ export function DiscussionCard({
   canManageSettings = false,
 }) {
   const { currentUser } = useMondayContext();
+  // v2 usage telemetry: one view_open per session for the discussion view (D3).
+  useViewTracking(logger, 'discussion');
   const [activeTab, setActiveTab] = useState('previous');
   const [newTaskOpen, setNewTaskOpen] = useState(false);
   const [newTaskDefaults, setNewTaskDefaults] = useState({});
