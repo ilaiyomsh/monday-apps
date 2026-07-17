@@ -175,11 +175,12 @@ describe('CreateDiscussionModal', () => {
     expect(screen.getByLabelText('ניקוי שם')).toBeTruthy();
   });
 
-  it('shows a clear button on the date field when a date is set and clears it', async () => {
+  it('shows a clear button on the date field (preset since round148) and clears it', async () => {
     await renderOpen();
     const date = document.querySelector('input[type="date"]');
-    expect(screen.queryByLabelText('ניקוי תאריך')).toBeNull();
-    fireEvent.change(date, { target: { value: '2026-07-01' } });
+    // round148: the card opens with today's date already set, so the clear
+    // affordance is present from the start.
+    expect(date.value).not.toBe('');
     const clear = screen.getByLabelText('ניקוי תאריך');
     fireEvent.click(clear);
     expect(date.value).toBe('');
@@ -206,14 +207,14 @@ describe('CreateDiscussionModal', () => {
     expect(screen.getByText('+ הוסף סוג דיון חדש')).toBeTruthy();
   });
 
-  it('keeps the submit button disabled while date/time are unset', async () => {
+  it('disables the submit button when the (preset) date is cleared', async () => {
     await renderOpen();
     const submit = screen.getByText('צור דיון').closest('button');
+    // round148: name, date AND time are all preset on open -> submit enabled.
     // @vibe/core Button reflects disabled via aria-disabled (not the DOM attr).
-    // name is prefilled but date+time are empty -> still disabled
-    expect(submit.getAttribute('aria-disabled')).toBe('true');
-    // setting a date alone is not enough (time still required)
-    fireEvent.change(document.querySelector('input[type="date"]'), { target: { value: '2026-07-01' } });
+    expect(submit.getAttribute('aria-disabled')).toBe('false');
+    // clearing the required date disables it again.
+    fireEvent.click(screen.getByLabelText('ניקוי תאריך'));
     expect(submit.getAttribute('aria-disabled')).toBe('true');
   });
 });
