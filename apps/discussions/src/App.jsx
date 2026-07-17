@@ -468,6 +468,13 @@ export default function App() {
     const reveal = () => {
       if (settled) return;
       settled = true;
+      // v2 boot health (D5): one-shot at the app's interactive point — total time
+      // from bundle load (window.__appInitStart, set in logger.js). alwaysShip so it
+      // ships regardless of level policy; inert until the Axiom sink is active.
+      const totalMs = typeof window !== 'undefined' && window.__appInitStart
+        ? Math.round(performance.now() - window.__appInitStart)
+        : Date.now() - bootStart;
+      logger.health('boot', { total_ms: totalMs });
       const wait = Math.max(0, MIN_SPLASH_MS - (Date.now() - bootStart));
       if (wait === 0) setBootDataReady(true);
       else minTimer = setTimeout(() => setBootDataReady(true), wait);

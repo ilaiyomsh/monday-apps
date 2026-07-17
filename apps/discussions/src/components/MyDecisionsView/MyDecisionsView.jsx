@@ -35,6 +35,8 @@ import {
   sortTasks, filterTasks, filterCount, DEFAULT_SORT,
   serializeFilter,
 } from '../MyTasksView/controls/controls.js';
+import logger from '@generated/utils/logger.js';
+import { useViewTracking } from '@generated/utils/viewTracking.js';
 import styles from './MyDecisionsView.module.css';
 import bs from '../MyTasksView/controls/builder.module.css';
 
@@ -116,6 +118,8 @@ function DiscussionDates({ onLoaded }) {
 }
 
 export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions, onNotify }) {
+  // v2 usage telemetry: one view_open per session for the my_decisions view (D3).
+  useViewTracking(logger, 'my_decisions');
   const { context, currentUser } = useMondayContext();
   const { isMobile } = useViewport();
 

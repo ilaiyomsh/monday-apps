@@ -2,6 +2,30 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2.2.0 — 2026-07-17
+
+- **Axiom logging v2 telemetry.** Ported the v2 usage/health/privacy contract into
+  this app (identical wire schema to app-core / tracker / team-people-column).
+- `logger.js` gains `encodeDims(base, dims)` (sorted `key=value`, string/bool/finite-
+  number only), `logger.track(event, dims)` and `logger.health(signal, metrics)` —
+  both emit INFO records carrying `domainKind` `usage`/`health` + `alwaysShip:true`
+  (rendering `kind` stays `simple`; the Hebrew simple/error/api/init kinds untouched).
+- New `axiomBrowserTransport.js` + `axiomErrorSink.js` (created from the error-guard
+  templates): inline `scrubMessage` (emails / tokens & hex ≥16 / digit-runs ≥7 redacted,
+  precap 1000 / cap 200), `mapRecordToEvent` (`ev.kind = domainKind ?? 'error'`, ships
+  `error.message` ONLY scrubbed as `err_msg`), `shouldShip` order (duplicate → alwaysShip
+  → level policy), anchored browser `firstStackFrame`, and an `err_msg` transport allowlist.
+- `attachAxiomSink()` wired in `index.jsx` right after `setupGlobalErrorHandlers()` and
+  before `createRoot` — idempotent (globalThis guard) so StrictMode's double-invoke never
+  double-registers; inert unless PROD + `VITE_AXIOM_*` are baked in. Shares the existing
+  `logger.addSink` fan-out with `useUiErrorSink`; log-once (correlationId) prevents double-ship.
+- `view_open` usage tracking (once per session per view) via a ref-based `viewTracking.js`,
+  wired on `DiscussionCard` (`discussion`), `MyTasksView` (`my_tasks`), `MyDecisionsView`
+  (`my_decisions`), and `DiscussionsDashboard` (`dashboard`).
+- Boot health at the app's interactive point (`App.jsx` reveal — total time from bundle load)
+  and bucketed `api_latency` health at the `safeApi` data-layer funnel (dedup-safe, never per-call).
+- Added `src/utils/__tests__/telemetry-v2.test.js` locking the new primitives (9 tests).
+
 ## 2.1.16 — 2026-07-17
 
 - round152: **דשבורד דיונים (פיצ'ר חדש).** כפתור חדש עם אייקון גרף לצד
