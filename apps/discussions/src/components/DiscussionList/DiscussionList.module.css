@@ -445,6 +445,10 @@
 /* Inline delete confirmation (replaces window.confirm). */
 .menuConfirm {
   padding: 8px 10px;
+  /* round151 — the delete-confirm popup is Hebrew: fully right-aligned, both
+     direction (question mark lands on the LEFT of the text) and alignment. */
+  direction: rtl;
+  text-align: right;
 }
 .menuConfirmText {
   display: block;

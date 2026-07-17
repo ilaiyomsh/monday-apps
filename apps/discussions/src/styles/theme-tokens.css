@@ -1,6 +1,12 @@
 @reference "../index.css";
 
 :root {
+  /* round149 — shared component heights (audit stage 4). Values are the exact
+     literals they replace, so this is a pure token extraction (no visual
+     change). Consumers keep a same-value fallback for isolated renders. */
+  --table-row-h: 36px;    /* monday-style table row min-height (tasks/decisions) */
+  --toolbar-pill-h: 32px; /* toolbar pill/control height (Search/Filter/Sort/Group, native select) */
+
   --radius: 0.75rem;
   --radius-sm: 0.5rem;
   --radius-md: 0.625rem;

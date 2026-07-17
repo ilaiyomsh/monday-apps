@@ -237,9 +237,13 @@ wired yet).
 - Domain colors come from `src/styles/theme-tokens.css` (`--status-*`, `--dept-*`), consumed inline
   (e.g. `hsl(var(--status-done))`) and keyed off **hardcoded Hebrew** status/department strings
   (`constants/deptConfig.js`) — a board schema label change breaks the color mapping.
-- i18n (`react-i18next`, `he` default) is **scaffolded but mostly unused** — most UI strings are
-  inline Hebrew; only error/toast/network screens call `t()`. Use `useStableT()` (memoized `t`)
-  when `t` is in a hook's dependency array.
+- i18n (`react-i18next`, `he` default) — **deliberate scope, decided by the owner 2026-07-17
+  (round150, closes audit stage 4's i18n item):** the app is Hebrew-first BY DESIGN and no full
+  i18n migration is planned. The scaffold stays and serves ONLY the error/toast/network layer
+  (ErrorDetailsModal, Toast, NetworkErrorScreen, My Tasks strings) — keep those going through
+  `t()`; every other UI string is written as inline Hebrew, on purpose. Don't "helpfully" migrate
+  inline strings to `t()`. Use `useStableT()` (memoized `t`) when `t` is in a hook's dependency
+  array.
 - Multi-select UX in task lists is intentionally monday-like and duplicated in both
   `src/components/TasksTab/TasksTab.jsx` and `src/components/PreviousTasksTab/PreviousTasksTab.jsx`:
   a floating selection bar (`left: selected count`, `center: actions`, `right: close/X`) plus
