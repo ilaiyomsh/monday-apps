@@ -1,5 +1,10 @@
 # Changelog - tracker
 
+## 2.2.1 — 2026-07-17
+
+- Telemetry hardening (Fable verification): the api-latency health signal ships a coarse latency
+  BUCKET (fast/ok/slow/very_slow) instead of raw ms, so the transport can dedup it — an unbucketed
+  ms was a distinct message per call that could burn the session ship-cap and starve real errors.
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
 ## 2.2.0 — 2026-07-17

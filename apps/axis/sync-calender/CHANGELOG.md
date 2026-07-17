@@ -1,5 +1,11 @@
 # Changelog - sync-calender
 
+## 2.2.1 — 2026-07-17
+
+- Telemetry hardening (Fable verification): errors regain their content on Axiom — the server sink
+  now allowlists the `stage` field and ships the failure `cause` (many call sites pass
+  cause: err.message) ONLY scrubbed, as err_msg. Previously stage/cause were dropped, so these
+  errors shipped near-contentless.
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
 ## 2.2.0 — 2026-07-17

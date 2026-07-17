@@ -13,7 +13,7 @@ describe('safeApi api-latency health (v2 call sites)', () => {
     logger.health.mockClear();
   });
 
-  it('emits health("api_ok", {tag, ms}) on a successful call', async () => {
+  it('emits health("api_ok", {tag, bucket}) on a successful call', async () => {
     const monday = { api: vi.fn().mockResolvedValue({ data: { ok: true } }) };
     await safeApi(monday, 'lockOkCall', 'query { me { id } }');
 
@@ -21,12 +21,13 @@ describe('safeApi api-latency health (v2 call sites)', () => {
     expect(okCall).toBeTruthy();
     expect(okCall[0]).toBe('api_ok');
     expect(okCall[1]).toEqual(expect.objectContaining({ tag: 'lockOkCall' }));
-    expect(typeof okCall[1].ms).toBe('number');
+    // latency is a coarse bucket (not raw ms) so the transport can dedup it
+    expect(['fast', 'ok', 'slow', 'very_slow']).toContain(okCall[1].bucket);
     // never api_fail on the success path
     expect(logger.health.mock.calls.some(([s]) => s === 'api_fail')).toBe(false);
   });
 
-  it('emits health("api_fail", {tag, ms, err_code}) on a terminal (non-retryable) failure', async () => {
+  it('emits health("api_fail", {tag, bucket, err_code}) on a terminal (non-retryable) failure', async () => {
     const boom = Object.assign(new Error('boom'), { errorCode: 'TEST_CODE' });
     const monday = { api: vi.fn().mockRejectedValue(boom) };
 
@@ -35,7 +36,7 @@ describe('safeApi api-latency health (v2 call sites)', () => {
     const failCall = logger.health.mock.calls.find(([signal]) => signal === 'api_fail');
     expect(failCall).toBeTruthy();
     expect(failCall[1]).toEqual(expect.objectContaining({ tag: 'lockFailCall', err_code: 'TEST_CODE' }));
-    expect(typeof failCall[1].ms).toBe('number');
+    expect(['fast', 'ok', 'slow', 'very_slow']).toContain(failCall[1].bucket);
   });
 });
 

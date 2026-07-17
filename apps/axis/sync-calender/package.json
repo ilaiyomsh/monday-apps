@@ -1,6 +1,6 @@
 {
   "name": "sync-calender",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "One-way sync from Google Calendar to monday.com board",
   "type": "module",
   "engines": {
