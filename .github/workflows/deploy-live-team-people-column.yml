@@ -57,6 +57,11 @@ jobs:
         env:
           VITE_BUILD_SHA: ${{ github.sha }}
           VITE_IS_RELEASE: "true"
+          # Axiom activation gate (error-guard remote-monitoring): the ingest token is the
+          # only secret; dataset/app are literals; inert/fail-soft when the secret is unset.
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: team-people-column
         run: pnpm --filter "./apps/team-people-column" build
 
       - name: Install monday.com apps CLI
