@@ -3,6 +3,15 @@ import logger from '../utils/logger';
 
 const monday = mondaySdk();
 
+// Coarse latency buckets (D5) so repeated api_latency health signals dedup at the
+// transport instead of shipping a distinct message per call (query() is a hot path).
+function latencyBucket(ms) {
+  if (ms < 200) return 'fast';
+  if (ms < 1000) return 'ok';
+  if (ms < 3000) return 'slow';
+  return 'very_slow';
+}
+
 // monday.storage.setItem resolves even when the write did not persist — the
 // failure is in-band ({ data: { success:false }, errorMessage }). Treating a
 // resolved promise as success would confirm a failed save to the user, so we
@@ -80,12 +89,23 @@ const mondayService = {
     // the platform iframe monday.api() runs against the version the PARENT app
     // negotiates and ignores a client-set pin, so hardcoding one would be a fake
     // pin, not a real guarantee. (A server-side / monday-code call WOULD pin.)
-    const response = await monday.api(query, { variables });
+    const t0 = Date.now();
+    let response;
+    try {
+      response = await monday.api(query, { variables });
+    } catch (e) {
+      // network/SDK throw (not a GraphQL error response) — record latency + rethrow
+      logger.health('api_latency', { bucket: latencyBucket(Date.now() - t0), ok: false });
+      throw e;
+    }
 
     if (response.errors) {
+      logger.health('api_latency', { bucket: latencyBucket(Date.now() - t0), ok: false });
       throw new Error(response.errors[0]?.message || 'GraphQL query failed');
     }
 
+    // API-latency health (D5): bucketed so it dedups; ships as kind='health' (inert until active).
+    logger.health('api_latency', { bucket: latencyBucket(Date.now() - t0), ok: true });
     return response.data;
   },
 
