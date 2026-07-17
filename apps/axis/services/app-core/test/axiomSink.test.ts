@@ -111,6 +111,32 @@ describe('mapRecordToEvent — allowlisted mapping', () => {
     const err = Object.assign(new Error('x'), { stack: 'Error: mail a@b.co\n    at run (z.js:2:3)' });
     expect(mapRecordToEvent(rec({ error: err })).stack1).toBe('at run (z.js:2:3)');
   });
+  it('does NOT treat an @-message line as a frame when there is no real frame (no leak)', () => {
+    // stackTraceLimit=0 / wrapped-error style: an email in the message, NO `at ` frame and
+    // NO `name@url:line:col` frame → stack1 must be undefined and never echo error.message.
+    const err = Object.assign(new Error('contact admin@corp.com to reset'), {
+      stack: 'Error: contact admin@corp.com to reset',
+    });
+    const ev = mapRecordToEvent(rec({ error: err }));
+    expect(ev.stack1).toBeUndefined();
+    expect(JSON.stringify(ev)).not.toContain('admin@corp.com');
+  });
+  it('does NOT leak a frame-less @-message that ends in :<digits> (status code / port)', () => {
+    // The subtle case: an email in the message AND a trailing ':500'. Still rejected because a
+    // real frame has NO whitespace before '@' (regression for the incomplete first fix).
+    const err = Object.assign(new Error('fetch to api@v2.example.com failed with status:500'), {
+      stack: 'TypeError: fetch to api@v2.example.com failed with status:500',
+    });
+    const ev = mapRecordToEvent(rec({ error: err }));
+    expect(ev.stack1).toBeUndefined();
+    expect(JSON.stringify(ev)).not.toContain('api@v2.example.com');
+  });
+  it('accepts a Firefox/Safari name@url:line:col frame as stack1', () => {
+    const err = Object.assign(new Error('boom'), {
+      stack: 'run@https://app.example.com/main.js:12:34\nload@https://app.example.com/main.js:5:6',
+    });
+    expect(mapRecordToEvent(rec({ error: err })).stack1).toBe('run@https://app.example.com/main.js:12:34');
+  });
 });
 
 describe('attachAxiomSink', () => {
@@ -155,6 +181,19 @@ describe('attachAxiomSink', () => {
     expect(() => emit(rec({ message: 'x' }))).not.toThrow();
     spy.mockRestore();
     off();
+  });
+
+  it('teardown does NOT dispose a borrowed (injected) transport', () => {
+    // options.transport is a shared/test seam whose lifecycle the caller owns — the sink
+    // constructed nothing, so it must not dispose it. (Owned-transport disposal is covered
+    // in axiomSink.attach-guard.test.ts, which exercises the constructor path.)
+    const { t } = fakeTransport();
+    const disposed = vi.fn();
+    t.dispose = disposed;
+    const { logger } = fakeLogger();
+    const off = attachAxiomSink(logger, { app: 'a', active: true, transport: t });
+    off();
+    expect(disposed).not.toHaveBeenCalled();
   });
 });
 

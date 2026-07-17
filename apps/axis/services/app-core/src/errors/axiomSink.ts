@@ -75,16 +75,20 @@ export function shouldShip(record: LogRecord, remoteLevel?: string | null): bool
 // ============================================
 
 /**
- * First stack-frame line. V8 frames (`/^\s*at /`) are preferred over any earlier
- * '@'-containing line so a message line like "Error: mail a@b.co bounced" (which
- * contains '@' but is NOT a frame) can never leak error.message content.
+ * First stack-frame line. Prefers V8 frames (`/^\s*at /`); falls back to a real
+ * Firefox/Safari `name@url:line[:col]` frame — anchored, with NO space before '@'
+ * and a trailing `:line[:col]`. A prose message that merely contains '@' (an email)
+ * has whitespace before the '@', so even one that happens to end in ':<digits>'
+ * (a status code / port / timestamp) can never be mistaken for a frame and leak
+ * error.message content into stack1.
  */
 function firstStackFrame(stack: unknown): string | undefined {
   if (typeof stack !== 'string' || stack === '') return undefined;
   let sigilLine: string | undefined;
   for (const line of stack.split('\n')) {
     if (/^\s*at /.test(line)) return line.trim();
-    if (sigilLine === undefined && line.includes('@')) sigilLine = line;
+    // Anchored frame shape: `name@url:line[:col]`, no whitespace before '@' or in the url.
+    if (sigilLine === undefined && /^\s*\S*@\S+:\d+(?::\d+)?\s*$/.test(line)) sigilLine = line;
   }
   return sigilLine === undefined ? undefined : sigilLine.trim();
 }
@@ -151,7 +155,17 @@ export function attachAxiomSink(logger: Logger, options: AxiomSinkOptions): () =
   const active = options.active ?? (isProd() && Boolean(dataset) && Boolean(token));
   if (!active) return () => {};
 
+  // Check the attach guard BEFORE building the transport. createAxiomBrowserTransport
+  // disposes any transport already registered for this app, so a second attach that
+  // reached the constructor would tear down the live transport and then hit the guard and
+  // no-op — orphaning the new transport and leaving activeTransport on a dead handle.
+  // Bailing out here keeps the first, live transport intact.
+  const g: { __AXIS_AXIOM_SINK_ATTACHED__?: boolean } =
+    typeof globalThis !== 'undefined' ? (globalThis as typeof g) : {};
+  if (g.__AXIS_AXIOM_SINK_ATTACHED__) return () => {}; // survives HMR module re-eval
+
   let transport: AxiomTransport | null = options.transport ?? null;
+  const ownsTransport = transport === null; // true iff WE construct it below (never dispose a borrowed one)
   if (!transport) {
     try {
       transport = createAxiomBrowserTransport({
@@ -169,10 +183,7 @@ export function attachAxiomSink(logger: Logger, options: AxiomSinkOptions): () =
     }
   }
 
-  const g: { __AXIS_AXIOM_SINK_ATTACHED__?: boolean } =
-    typeof globalThis !== 'undefined' ? (globalThis as typeof g) : {};
-  if (g.__AXIS_AXIOM_SINK_ATTACHED__) return () => {}; // survives HMR module re-eval
-  g.__AXIS_AXIOM_SINK_ATTACHED__ = true; // set BEFORE replay
+  g.__AXIS_AXIOM_SINK_ATTACHED__ = true; // set once we own a transport, before replay
 
   activeTransport = transport;
 
@@ -200,6 +211,9 @@ export function attachAxiomSink(logger: Logger, options: AxiomSinkOptions): () =
 
   return () => {
     unsubscribe();
+    // Only dispose a transport WE constructed — never a borrowed one injected via options.transport
+    // (a shared/test seam whose lifecycle the caller owns).
+    if (ownsTransport) transport!.dispose(); // stop flush timer + visibility/pagehide listeners; deregister REG[app]
     g.__AXIS_AXIOM_SINK_ATTACHED__ = false;
     if (activeTransport === transport) activeTransport = null;
   };
