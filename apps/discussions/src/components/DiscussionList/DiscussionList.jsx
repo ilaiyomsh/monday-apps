@@ -159,7 +159,7 @@ function DiscussionMenuBody({ item, actions, confirmDel, setConfirmDel, onClose 
   };
   if (confirmDel) {
     return (
-      <div className={styles.menuConfirm}>
+      <div className={styles.menuConfirm} dir="rtl">
         <span className={styles.menuConfirmText}>למחוק את הדיון?</span>
         <div className={styles.menuConfirmActions}>
           <button type="button" className={`${styles.menuConfirmBtn} ${styles.menuConfirmYes}`} onClick={run(actions.onDelete)} role="menuitem">

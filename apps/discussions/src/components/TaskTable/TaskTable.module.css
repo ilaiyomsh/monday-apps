@@ -34,7 +34,7 @@
   display: grid;
   grid-template-columns: minmax(180px, 1.6fr) 140px 150px 170px;
   align-items: stretch;
-  min-height: 36px;
+  min-height: var(--table-row-h, 36px);
   /* round129 — the ROW border is the single separator source, exactly like the
      Decisions table (the owner-approved reference): no per-cell borders, no
      ::after line layers. Sticky frozen cells sit in the content box, so the
@@ -149,7 +149,7 @@
   align-items: center;
   justify-content: center;
   padding: 0 8px;
-  min-height: 36px;
+  min-height: var(--table-row-h, 36px);
   border-inline-end: 1px solid var(--ui-border-color, #d0d4e4);
   /* No per-cell bottom border — the ROW border is the single separator (round129). */
   overflow: hidden;
@@ -185,7 +185,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 36px;
+  min-height: var(--table-row-h, 36px);
   padding: 0 12px 0 0;
   border: none;
   background: transparent;
@@ -352,8 +352,15 @@
   color: var(--secondary-text-color, #676879);
   padding: 1px 4px;
   border-radius: 4px;
-  margin-inline-start: 2px;
   transition: opacity 0.12s ease;
+  /* round151 — pinned to the header cell's PHYSICAL right edge so the
+     centered column title stays truly centered (owner request). */
+  position: absolute;
+  right: 8px; /* clears the 6px resize-handle strip at the edge */
+  top: 50%;
+  transform: translateY(-50%);
 }
+/* round151 — anchor for the absolutely-positioned rename dots. */
+.taskHead .taskCell, .taskHead .taskFirst { position: relative; }
 .renameDots:hover { background: var(--primary-background-hover-color, #eceff8); }
 .taskHead .taskCell:hover .renameDots, .taskHead .taskFirst:hover .renameDots { opacity: 1; }
