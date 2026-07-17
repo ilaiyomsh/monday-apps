@@ -8,21 +8,44 @@ function operationName(query) {
   return m ? m[1] : 'UnknownOp';
 }
 
+// Coarse latency buckets (D5) so repeated monday_api_latency health signals stay
+// low-cardinality per op instead of a distinct message per call (mondayQuery is
+// the data-layer funnel). Mirrors the tpc bucket helper.
+function latencyBucket(ms) {
+  if (ms < 200) return 'fast';
+  if (ms < 1000) return 'ok';
+  if (ms < 3000) return 'slow';
+  return 'very_slow';
+}
+
 export async function mondayQuery(token, query, variables = {}) {
   const op = operationName(query);
   logger.debug('api request', TAG, { op, variables });
 
-  const res = await fetch(MONDAY_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: token,
-      'API-Version': '2026-04',
-    },
-    body: JSON.stringify({ query, variables }),
-  });
+  const t0 = Date.now();
+  let res;
+  try {
+    res = await fetch(MONDAY_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token,
+        'API-Version': '2026-04',
+      },
+      body: JSON.stringify({ query, variables }),
+    });
+  } catch (netErr) {
+    // Network/transport failure (no HTTP status) — record latency health + rethrow.
+    logger.health('monday_api_latency', { op, status: 'network_error', bucket: latencyBucket(Date.now() - t0), ok: false });
+    throw netErr;
+  }
 
   const response = await res.json();
+
+  // API-latency health (D5): bucketed so it stays cheap on this hot funnel;
+  // ships as kind='health' (inert until the Axiom sink is active).
+  const ok = !response.errors;
+  logger.health('monday_api_latency', { op, status: res.status, bucket: latencyBucket(Date.now() - t0), ok });
 
   if (response.errors) {
     // Surface the most actionable bits without dumping the full error array.
