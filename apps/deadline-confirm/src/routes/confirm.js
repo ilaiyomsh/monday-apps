@@ -22,7 +22,7 @@ import express from 'express';
 import { secretEquals } from '../services/secret.js';
 import { performAction } from '../services/confirm-service.js';
 import { successPage, invalidPage, badRequestPage, confirmLandingPage } from '../helpers/pages.js';
-import { logAttempt, logError } from '../helpers/logger.js';
+import { logAttempt, logError, track } from '../helpers/logger.js';
 
 const ITEM_ID_RE = /^\d{1,20}$/;
 const ACCOUNT_ID_RE = /^\d{1,20}$/;
@@ -117,6 +117,8 @@ export function createConfirmRouter({ storage, api, rateLimiter }) {
         btnId: passed.btn,
       });
       logAttempt({ ip: passed.ip, itemId: passed.itemId, outcome: result.outcome });
+      // Usage telemetry (D3): the confirmation outcome, no PII (dims fold into message).
+      track('confirm', { outcome: result.outcome, method: 'POST' });
 
       if (result.outcome === 'ok' || result.outcome === 'already_done') {
         sendHtml(res, 200, successPage(result.button?.targetLabel ?? ''));

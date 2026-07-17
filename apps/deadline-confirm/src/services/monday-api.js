@@ -9,8 +9,16 @@
 // - Never-set columns read as: status index null, people text "",
 //   date "" (empty string) — see monday-api skill column-formats.md.
 
+import { health } from '../helpers/logger.js';
+
 export const API_VERSION = '2026-07';
 export const MONDAY_API_URL = 'https://api.monday.com/v2';
+
+/** Best-effort operation name from a GraphQL document (for api_latency dims). */
+function opName(query) {
+  const m = /(?:query|mutation)\s+(\w+)/.exec(String(query ?? ''));
+  return m ? m[1] : 'anon';
+}
 
 const GET_ITEM_QUERY = `query GetItem($itemIds: [ID!], $columnIds: [String!]) {
   items(ids: $itemIds) {
@@ -66,7 +74,22 @@ export class MondayApiError extends Error {
 export function createMondayApi({ fetchImpl, url = MONDAY_API_URL } = {}) {
   const doFetch = fetchImpl ?? globalThis.fetch;
 
-  async function graphql({ token, query, variables }) {
+  // Timing wrapper: every funnelled call emits an api_latency health signal
+  // (D5) — op + ms + ok — so slow/failing monday calls are queryable in Axiom.
+  async function graphql(args) {
+    const started = Date.now();
+    const op = opName(args?.query);
+    try {
+      const data = await runGraphql(args);
+      health('api_latency', { op, ms: Date.now() - started, ok: true });
+      return data;
+    } catch (err) {
+      health('api_latency', { op, ms: Date.now() - started, ok: false });
+      throw err;
+    }
+  }
+
+  async function runGraphql({ token, query, variables }) {
     let res;
     try {
       res = await doFetch(url, {

@@ -2,6 +2,34 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.4.0 — 2026-07-17
+
+- Axiom logging v2 telemetry ported into the **server** (load-bearing part of this hybrid app).
+- `src/helpers/logger.js`: added the shared v2 primitives — a single sink pipeline
+  (`emit` → `beforeSend` → fan-out with log-once dedup), `encodeDims`, `track` (usage/D3),
+  `health` (D5), `addSink`/`removeSink`/`setBeforeSend`, and a logger-shaped default export.
+  The locked line writers `logAttempt`/`logError`/`logInfo` keep their byte-exact stdout/stderr
+  JSON (tests/core-output.test.js stays green) and now also feed the sink pipeline.
+- `src/helpers/axiomServerSink.js` (new): ships records to Axiom via `@axiomhq/js`. Inline
+  `scrubMessage` (emails / tokens&hex≥16 / digit-runs≥7 redacted, precap 1000 / cap 200);
+  `mapRecordToEvent` sets `ev.kind = domainKind ?? 'error'` and ships `error.message` ONLY
+  scrubbed as `err_msg`; `shouldShip` order = !record→false, duplicate→false, alwaysShip→true,
+  then WARN/ERROR level policy. Server-only `firstStackFrame` (V8 `/^\s*at /`).
+- `src/index.js`: attach the sink gated on `AXIOM_TOKEN`/`AXIOM_DATASET`/`AXIOM_APP_NAME`
+  read through `EnvironmentVariablesManager` (not `process.env`); a `beforeSend` that strips the
+  `/confirm` client `ip` from attempt records (PII) before they reach any sink; boot health
+  (`health('boot', {version, port})`) after `app.listen`; Axiom flush on SIGTERM/SIGINT.
+- `src/services/monday-api.js`: wrapped the GraphQL funnel to emit
+  `health('api_latency', {op, ms, ok})` per call.
+- `src/routes/confirm.js`: `track('confirm', {outcome, method})` usage event on POST confirmations.
+- `tests/telemetry-v2.test.js` (new): 13 lock tests for the new primitives (encodeDims / track /
+  health / emit+beforeSend ip-scrub / scrubMessage / mapRecordToEvent / shouldShip).
+- Dependency: `@axiomhq/js@^1.3.1` (already in the workspace via sync-calender).
+- **Deferred (flagged):** the client admin-SPA telemetry (client `logger.ts` + browser sink +
+  transport + `useViewTracking` + client boot/api-latency health). The strict-TS admin app has a
+  `tsc --noEmit` gate and the reference browser logger/sink/transport exist only as untyped `.js`;
+  porting them cleanly is a separate, non-trivial unit deferred to keep the verified server port safe.
+
 ## 2026-07
 
 ### ✨ New Features
