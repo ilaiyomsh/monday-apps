@@ -140,7 +140,7 @@ export function resolveMultiColView(typedOptions, selectedIds, colTitles = {}) {
  * alias→real-column-id mapping that the SDK reads, then persist via
  * SettingsContext.updateSettings (monday.storage, per instance).
  */
-export function SettingsModal({ isOpen, onClose, onNotify }) {
+export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false }) {
   const { settings, updateSettings, isConfigured } = useSettings();
   const { context } = useMondayContext();
   // settings is null until a mapping is stored; seed the editable draft from an
@@ -613,6 +613,38 @@ export function SettingsModal({ isOpen, onClose, onNotify }) {
   };
 
   if (!isOpen) return null;
+
+  // round147 — templates-only mode: a super member ("חבר-על") opens the gear to
+  // manage templates and NOTHING else — no mapping, no preferences, no
+  // permissions. TemplatesPanel persists itself to monday.storage, so the
+  // settings save/footer machinery is deliberately absent here.
+  if (templatesOnly) {
+    return (
+      <div className={styles.overlay} onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}>
+        <div
+          className={`${styles.modal} ${styles.modalFixed}`}
+          onClick={(e) => e.stopPropagation()}
+          role="dialog"
+          aria-modal="true"
+          aria-label="ניהול תבניות"
+        >
+          <div className={styles.header}>
+            <button type="button" className={styles.closeButton} onClick={onClose} aria-label="סגירה">
+              ×
+            </button>
+            <Heading type="h4">ניהול תבניות</Heading>
+          </div>
+          <div className={styles.content}>
+            <div className={styles.body}>
+              <TemplatesPanel />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // TOP-UP: replace the whole Settings surface with the reusable SetupWizard in
   // config-aware mode — reusing mapped boards, creating only missing ones, and

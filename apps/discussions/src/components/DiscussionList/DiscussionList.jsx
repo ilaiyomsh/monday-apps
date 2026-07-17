@@ -11,7 +11,7 @@ import { rangeForView } from '@generated/utils/calendarDates.js';
 import { discussionAccentColor } from '@generated/constants/discussionColors.js';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
-import { usePermission } from '@generated/hooks/usePermission.js';
+import { usePermission, useIsSuperMember } from '@generated/hooks/usePermission.js';
 import styles from './DiscussionList.module.css';
 
 /* List-row subtitle: short weekday + "DD/MM", plus " · HH:MM" when the date
@@ -437,6 +437,9 @@ export function DiscussionList({
   // COARSE boolean per row so the edit/delete kebab gate is byte-for-byte
   // identical to the legacy creator/lead/owner gate while the feature is off.
   const can = usePermission({ canManageSettings, currentUser });
+  // round147 — super members get the gear too, in templates-only mode (the
+  // modal itself narrows what they see; App passes templatesOnly for non-owners).
+  const isSuper = useIsSuperMember({ currentUser });
   const canEditItem = useCallback(
     (item) => can('editDiscussionFields', { discussion: item }),
     [can]
@@ -546,12 +549,12 @@ export function DiscussionList({
               )}
             </div>
             <div className={styles.titleActions}>
-              {canManageSettings && (
+              {(canManageSettings || isSuper) && (
                 <IconButton
                   icon={Settings}
                   size={"small"}
                   kind={"tertiary"}
-                  ariaLabel="הגדרות"
+                  ariaLabel={canManageSettings ? 'הגדרות' : 'ניהול תבניות'}
                   onClick={onOpenSettings}
                 />
               )}

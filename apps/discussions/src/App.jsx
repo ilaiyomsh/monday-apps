@@ -942,7 +942,9 @@ export default function App() {
         canManageSettings={canManageSettings}
       />
 
-      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} onNotify={notify} />
+      {/* round147 — a super member (not an owner) gets the gear in
+          templates-only mode: manage templates, nothing else. */}
+      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} onNotify={notify} templatesOnly={!canManageSettings} />
     </div>
       {/* round132 — deep-link splash: the app keeps rendering (and loading)
           UNDERNEATH this opaque overlay, so the branded loader plays until the
