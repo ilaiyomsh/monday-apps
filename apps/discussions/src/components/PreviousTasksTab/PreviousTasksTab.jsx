@@ -25,14 +25,13 @@ import { useBatchTargets } from '@generated/hooks/useBatchTargets.js';
 import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import bs from '@generated/components/MyTasksView/controls/builder.module.css';
 import { useViewport } from '@generated/hooks/useViewport.js';
-import { api, parseValue, cvSelection } from '../../utils/mondayApi/monday-client.js';
+import { api } from '../../utils/mondayApi/monday-client.js';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { getColumns } from '../../utils/mondayApi/board-config-store.js';
-import { משימות1Board, דיונים1Board } from '@api/BoardSDK.js';
+import { משימות1Board } from '@api/BoardSDK.js';
 import { TaskTable } from '@generated/components/TaskTable';
 import { PreviousTasksSkeleton } from '@generated/components/PreviousTasksSkeleton';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
-import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
 // Quick-filter status battery (round 81) — shared buckets + presentation chip.
@@ -40,6 +39,8 @@ import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
 import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
 import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
 import logger from '@generated/utils/logger.js';
+import { usePreviousTasksData } from './usePreviousTasksData.js';
+import { createTaskUpdaters } from './taskUpdaters.js';
 import styles from './PreviousTasksTab.module.css';
 
 // Column-name style options (nouns, no "לפי" prefix) + per-column order sets, so
@@ -79,26 +80,8 @@ const PREV_COL_NAME = { status: 'סטטוס', deadline: 'דד ליין', person:
 const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'Choose a date range';
 const rangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
 
-// Map a linked task item (from the discussion-side relation query) into the
-// app-facing task shape TaskTable/TaskTableRow render: { id, name, responsibilityID,
-// deadlineID, statusID, ... } via parseValue using the configured tasks columns.
-function mapTaskItems(linkedItems = [], taskColumns = {}) {
-  return linkedItems.map((item) => {
-    const byId = {};
-    (item.column_values || []).forEach((cv) => { byId[cv.id] = cv; });
-
-    const mapped = { id: String(item.id), name: item.name, created_at: item.created_at };
-    Object.entries(taskColumns).forEach(([alias, col]) => {
-      if (!col?.id) return;
-      mapped[alias] = parseValue(col.type, byId[col.id]);
-    });
-    return mapped;
-  });
-}
 
 export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUndo, onNotify, onNotifyLoading, onDismissToast, canTask = () => true, canCreateTask = true, canEditDiscussion = true, canReorderColumns, canManageSettings = false }) {
-  const [tasks, setTasks] = useState([]);
-  const [tasksLoading, setTasksLoading] = useState(false);
   // Load-time grouping/filter = the shared saved view (empty default otherwise);
   // in-session changes are local until someone with permission hits Save.
   const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('previousTasks', { canManageSettings });
@@ -110,14 +93,6 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [carrying, setCarrying] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [previousDiscussionID, setPreviousDiscussion] = useState({ id: null, name: null });
-  // Resolve the previous-discussion link first; show a loader until we know
-  // whether one exists (avoids flashing "no previous discussion" on every open).
-  const [resolving, setResolving] = useState(true);
-  // Picker for setting a previous discussion when none is defined.
-  const [picking, setPicking] = useState(false);
-  const [discussionOptions, setDiscussionOptions] = useState([]);
-  const [savingPrev, setSavingPrev] = useState(false);
   const { colorById, labelById, orderById, doneId, options: statusOptions } = useStatusOptions();
   const { isMobile } = useViewport();
   // Show the read-only priority column only when the owner mapped priorityID.
@@ -135,6 +110,21 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const byType =
     mode === PREVIOUS_TASKS_MODES.DISCUSSION_TYPE
     || (mode === PREVIOUS_TASKS_MODES.AUTO && !!discussion?.discussionTypeID);
+
+  // Data layer (round146 split): mode-resolved task list + previous-discussion
+  // link/picker plumbing live in usePreviousTasksData; the optimistic update
+  // handlers live in taskUpdaters.js. Behavior unchanged.
+  const {
+    tasks, setTasks, tasksLoading,
+    resolving, picking, setPicking, discussionOptions, savingPrev, setPrevious,
+    previousDiscussionId, previousDiscussionLabel,
+    typeFilter, typeMapsLoading,
+  } = usePreviousTasksData(discussion, byType, { onResetSelection: () => setSelectedIds(new Set()) });
+  const {
+    updateName, updateStatus, updatePriority, updateAssignee, updateDeadline,
+    updateStatusBatch, updateAssigneeBatch, updateDeadlineBatch,
+  } = useMemo(() => createTaskUpdaters(setTasks), [setTasks]);
+
 
   // --- Hide columns (round 47) ------------------------------------------------
   // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
@@ -167,352 +157,10 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     saveView({ hiddenColumns: [...hiddenColumns] });
     onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
   }, [saveView, hiddenColumns, onNotify]);
-  // The discussion's "סוג" is a DROPDOWN value = the label TEXT directly. taskTypeID
-  // is ALSO a dropdown on the tasks board; bridge the text -> its label id and
-  // filter server-side (any_of by id — exact match, same as task creation writes).
-  const { options: taskTypeOptions, loading: taskTypeLoading } = useDropdownOptions('tasks', 'taskTypeID');
-  // True while the taskType map is still loading and the discussion HAS a type —
-  // avoids briefly flashing "no tasks of this type" before resolution completes.
-  const typeMapsLoading = byType && !!discussion?.discussionTypeID && taskTypeLoading;
-  // { taskTypeId, label } for the current discussion's type; taskTypeId is the
-  // TASKS-board label id to filter on (null when no type / no text match / unmapped).
-  const [typeFilter, setTypeFilter] = useState({ taskTypeId: null, label: null });
 
-  // Resolve the previous discussion via the TYPED board_relation field on the
-  // current discussion (linked_items[0] — ONE back only, no recursion).
-  useEffect(() => {
-    let cancelled = false;
 
-    async function resolvePreviousDiscussion() {
-      setResolving(true);
-      setPicking(false);
-      setSelectedIds(new Set()); // a discussion switch clears any pending selection
-      // By-type mode resolves via a separate effect (below) — don't touch the
-      // previous-discussion link here.
-      if (byType) { setResolving(false); return; }
-      if (!discussion?.id) {
-        setPreviousDiscussion({ id: null, name: null });
-        setResolving(false);
-        return;
-      }
 
-      const discussionsColumns = getColumns('discussions');
-      const previousDiscussionColId = discussionsColumns?.previousDiscussionID?.id;
-      if (!previousDiscussionColId) {
-        setPreviousDiscussion({ id: null, name: null });
-        setResolving(false);
-        return;
-      }
 
-      try {
-        const data = await api(
-          `query ($discussionId: ID!, $relationCol: [String!]) {
-            items(ids: [$discussionId]) {
-              column_values(ids: $relationCol) { ${cvSelection(['board_relation'])} }
-            }
-          }`,
-          { discussionId: String(discussion.id), relationCol: [previousDiscussionColId] },
-          'PreviousTasksTab.resolvePreviousDiscussion'
-        );
-
-        const cv = data?.items?.[0]?.column_values?.[0];
-        const relation = parseValue('board_relation', cv);
-        const prev = relation?.linkedItems?.[0] || null;
-        if (!cancelled) {
-          setPreviousDiscussion({
-            id: prev?.id ? String(prev.id) : null,
-            name: prev?.name || relation?.text || null,
-          });
-        }
-      } catch (err) {
-        logger.error('PreviousTasksTab', 'Failed to resolve previous discussion link', err);
-        if (!cancelled) setPreviousDiscussion({ id: null, name: null });
-      } finally {
-        if (!cancelled) setResolving(false);
-      }
-    }
-
-    resolvePreviousDiscussion();
-    return () => { cancelled = true; };
-    // round127 — __savedAt: re-resolve after an edit-save of the SAME
-    // discussion (the link may have changed; without this the chip and task
-    // list kept the pre-edit previous discussion until a full reload).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [discussion?.id, discussion?.__savedAt, byType]);
-
-  // By-type resolution: map the current discussion's "סוג" label -> the TASKS
-  // board taskTypeID label id to filter on. Runs only in by-type mode; waits for
-  // the status-option maps (loaded async) before resolving.
-  useEffect(() => {
-    if (!byType) { setTypeFilter({ taskTypeId: null, label: null }); return; }
-    setSelectedIds(new Set());
-    const text = discussion?.discussionTypeID || null;
-    if (!text) { setTypeFilter({ taskTypeId: null, label: null }); return; }
-    const match = (taskTypeOptions || []).find((o) => o.label === text);
-    setTypeFilter({ taskTypeId: match ? match.id : null, label: text });
-  }, [byType, discussion?.id, discussion?.discussionTypeID, taskTypeOptions]);
-
-  // Load the discussions list (id + name) for the "set previous discussion"
-  // picker, lazily on first use. Excludes the current discussion.
-  useEffect(() => {
-    if (!picking || discussionOptions.length > 0) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const result = await new דיונים1Board().items()
-          .withColumns(['discussionDateID'])
-          .orderBy({ column: 'discussionDateID', direction: 'desc' })
-          .withPagination({ limit: 100 })
-          .execute();
-        const opts = (result.items || [])
-          .filter((d) => String(d.id) !== String(discussion?.id))
-          .map((d) => ({ value: String(d.id), label: d.name }));
-        if (!cancelled) setDiscussionOptions(opts);
-      } catch (err) {
-        logger.error('PreviousTasksTab', 'Failed to load discussions for picker', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [picking, discussionOptions.length, discussion?.id]);
-
-  // Write the chosen previous-discussion link onto the current discussion, then
-  // reflect it locally so the tasks load.
-  const setPrevious = async (id, name) => {
-    if (!id || !discussion?.id) return;
-    try {
-      setSavingPrev(true);
-      await new דיונים1Board().item(discussion.id)
-        .update({ previousDiscussionID: { linkedItems: [{ id }] } })
-        .execute();
-      setPreviousDiscussion({ id: String(id), name });
-      setPicking(false);
-    } catch (err) {
-      logger.error('PreviousTasksTab', 'Failed to set previous discussion', err);
-    } finally {
-      setSavingPrev(false);
-    }
-  };
-
-  const previousDiscussionId = previousDiscussionID?.id || null;
-  const previousDiscussionLabel = previousDiscussionID?.name || null;
-
-  // Fetch the previous discussion's tasks the SAME discussion-side way as
-  // useTasks: read them off the discussion's tasksBoardLinkID relation column.
-  useEffect(() => {
-    if (byType) return; // by-type mode loads via its own effect below
-    if (!previousDiscussionId) { setTasks([]); return; }
-    let cancelled = false;
-
-    async function load() {
-      const discussionsColumns = getColumns('discussions');
-      const tasksBoardLinkId = discussionsColumns?.tasksBoardLinkID?.id;
-      const taskColumns = getColumns('tasks') || {};
-      const RENDERED = ['responsibilityID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID']; // assignee, deadline, status, priority (read-only), discussion links
-      const taskCols = RENDERED.map((alias) => taskColumns?.[alias]?.id).filter(Boolean);
-      const taskCv = cvSelection(RENDERED.map((alias) => taskColumns?.[alias]?.type));
-
-      if (!tasksBoardLinkId) { setTasks([]); return; }
-
-      try {
-        setTasksLoading(true);
-        const data = await api(
-          `query ($discussionId: ID!, $relationCol: [String!], $taskCols: [String!]) {
-            items(ids: [$discussionId]) {
-              column_values(ids: $relationCol) {
-                ... on BoardRelationValue {
-                  linked_items {
-                    id
-                    name
-                    created_at
-                    column_values(ids: $taskCols) { ${taskCv} }
-                  }
-                }
-              }
-            }
-          }`,
-          {
-            discussionId: String(previousDiscussionId),
-            relationCol: [tasksBoardLinkId],
-            taskCols,
-          },
-          'PreviousTasksTab.loadPreviousTasks'
-        );
-
-        const linkedTasks = data?.items?.[0]?.column_values?.[0]?.linked_items || [];
-        if (!cancelled) setTasks(mapTaskItems(linkedTasks, taskColumns));
-      } catch (err) {
-        logger.error('PreviousTasksTab', 'Failed to load previous-discussion tasks', err);
-        if (!cancelled) setTasks([]);
-      } finally {
-        if (!cancelled) setTasksLoading(false);
-      }
-    }
-
-    load();
-    return () => { cancelled = true; };
-  }, [previousDiscussionId, byType]);
-
-  // By-type tasks loader: server-side filter the TASKS board by taskTypeID =
-  // the current discussion's mapped type label id (BoardSDK formats the status
-  // any_of rule). Returns ALL tasks of that type across discussions.
-  useEffect(() => {
-    if (!byType) return;
-    const taskTypeId = typeFilter.taskTypeId;
-    if (taskTypeId == null) { setTasks([]); return; }
-    let cancelled = false;
-
-    async function load() {
-      try {
-        setTasksLoading(true);
-        const result = await new משימות1Board().items()
-          .where({ taskTypeID: taskTypeId })
-          .withColumns(['responsibilityID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID', 'taskTypeID'])
-          .withPagination({ limit: 200 })
-          .execute();
-        if (!cancelled) setTasks(result.items || []);
-      } catch (err) {
-        logger.error('PreviousTasksTab', 'Failed to load tasks by discussion type', err);
-        if (!cancelled) setTasks([]);
-      } finally {
-        if (!cancelled) setTasksLoading(false);
-      }
-    }
-
-    load();
-    return () => { cancelled = true; };
-  }, [byType, typeFilter.taskTypeId]);
-
-  // Updates go through BoardSDK (same as useTasks) so board_id + the column-value
-  // formatting are handled in one place — change_multiple_column_values requires board_id.
-  // Optimistic inline rename (mirrors updateStatus). Writes the item name via
-  // BoardSDK's { name } key; reverts on error. Per-task permission gating is
-  // applied by TaskTable (onRenameTask is withheld when canTask('editTaskName')
-  // is false for that row).
-  const updateName = async (id, name) => {
-    const trimmed = (name || '').trim();
-    if (!trimmed) return;
-    let prev = [];
-    setTasks((current) => {
-      prev = current;
-      return current.map((t) => (t.id === id ? { ...t, name: trimmed } : t));
-    });
-    try { await new משימות1Board().item(id).update({ name: trimmed }).execute(); }
-    catch (err) { logger.error('PreviousTasksTab', 'שגיאה בעדכון משימה', err); setTasks(prev); }
-  };
-  const updateStatus = async (id, s) => {
-    let prev = [];
-    setTasks((current) => {
-      prev = current;
-      return current.map((t) => (t.id === id ? { ...t, statusID: s } : t));
-    });
-    try { await new משימות1Board().item(id).update({ statusID: s }).execute(); }
-    catch (err) { logger.error('PreviousTasksTab', 'שגיאה בעדכון משימה', err); setTasks(prev); }
-  };
-  const updatePriority = async (id, s) => {
-    let prev = [];
-    setTasks((current) => {
-      prev = current;
-      return current.map((t) => (t.id === id ? { ...t, priorityID: s } : t));
-    });
-    try { await new משימות1Board().item(id).update({ priorityID: s }).execute(); }
-    catch (err) { logger.error('PreviousTasksTab', 'שגיאה בעדכון משימה', err); setTasks(prev); }
-  };
-  const updateAssignee = async (id, p) => {
-    let prev = [];
-    setTasks((current) => {
-      prev = current;
-      return current.map((t) => (t.id === id ? { ...t, responsibilityID: p } : t));
-    });
-    try { await new משימות1Board().item(id).update({ responsibilityID: p.map(x => Number(x.id)) }).execute(); }
-    catch (err) { logger.error('PreviousTasksTab', 'שגיאה בעדכון משימה', err); setTasks(prev); }
-  };
-  const updateDeadline = async (id, d) => {
-    let prev = [];
-    setTasks((current) => {
-      prev = current;
-      return current.map((t) => (t.id === id ? { ...t, deadlineID: d } : t));
-    });
-    try {
-      const f = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null;
-      await new משימות1Board().item(id).update({ deadlineID: f }).execute();
-    } catch (err) { logger.error('PreviousTasksTab', 'שגיאה בעדכון משימה', err); setTasks(prev); }
-  };
-
-  const updateStatusBatch = async (taskIds, status) => {
-    const ids = [...new Set((taskIds || []).map((id) => String(id)).filter(Boolean))];
-    if (ids.length === 0) return;
-    const idsSet = new Set(ids);
-    let prev = [];
-    setTasks((current) => {
-      prev = current;
-      return current.map((t) => (idsSet.has(String(t.id)) ? { ...t, statusID: status } : t));
-    });
-    try {
-      const board = new משימות1Board();
-      const results = await Promise.allSettled(ids.map((id) => board.item(id).update({ statusID: status }).execute()));
-      const failedIds = ids.filter((id, idx) => results[idx].status === 'rejected');
-      if (failedIds.length === 0) return;
-      logger.error('PreviousTasksTab', 'Batch status update partially failed', { failedIds, total: ids.length });
-      const prevById = new Map(prev.map((t) => [String(t.id), t]));
-      const failedSet = new Set(failedIds);
-      setTasks((current) => current.map((t) => (failedSet.has(String(t.id)) ? (prevById.get(String(t.id)) || t) : t)));
-    } catch (err) {
-      logger.error('PreviousTasksTab', 'Batch status update failed', err);
-      setTasks(prev);
-    }
-  };
-
-  const updateAssigneeBatch = async (taskIds, people) => {
-    const ids = [...new Set((taskIds || []).map((id) => String(id)).filter(Boolean))];
-    if (ids.length === 0) return;
-    const idsSet = new Set(ids);
-    let prev = [];
-    setTasks((current) => {
-      prev = current;
-      return current.map((t) => (idsSet.has(String(t.id)) ? { ...t, responsibilityID: people } : t));
-    });
-    try {
-      const board = new משימות1Board();
-      const peopleIds = (people || []).map((p) => Number(p.id));
-      const results = await Promise.allSettled(ids.map((id) => board.item(id).update({ responsibilityID: peopleIds }).execute()));
-      const failedIds = ids.filter((id, idx) => results[idx].status === 'rejected');
-      if (failedIds.length === 0) return;
-      logger.error('PreviousTasksTab', 'Batch assignee update partially failed', { failedIds, total: ids.length });
-      const prevById = new Map(prev.map((t) => [String(t.id), t]));
-      const failedSet = new Set(failedIds);
-      setTasks((current) => current.map((t) => (failedSet.has(String(t.id)) ? (prevById.get(String(t.id)) || t) : t)));
-    } catch (err) {
-      logger.error('PreviousTasksTab', 'Batch assignee update failed', err);
-      setTasks(prev);
-    }
-  };
-
-  const updateDeadlineBatch = async (taskIds, date) => {
-    const ids = [...new Set((taskIds || []).map((id) => String(id)).filter(Boolean))];
-    if (ids.length === 0) return;
-    const idsSet = new Set(ids);
-    let prev = [];
-    setTasks((current) => {
-      prev = current;
-      return current.map((t) => (idsSet.has(String(t.id)) ? { ...t, deadlineID: date } : t));
-    });
-    try {
-      const board = new משימות1Board();
-      const formatted = date
-        ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-        : null;
-      const results = await Promise.allSettled(ids.map((id) => board.item(id).update({ deadlineID: formatted }).execute()));
-      const failedIds = ids.filter((id, idx) => results[idx].status === 'rejected');
-      if (failedIds.length === 0) return;
-      logger.error('PreviousTasksTab', 'Batch deadline update partially failed', { failedIds, total: ids.length });
-      const prevById = new Map(prev.map((t) => [String(t.id), t]));
-      const failedSet = new Set(failedIds);
-      setTasks((current) => current.map((t) => (failedSet.has(String(t.id)) ? (prevById.get(String(t.id)) || t) : t)));
-    } catch (err) {
-      logger.error('PreviousTasksTab', 'Batch deadline update failed', err);
-      setTasks(prev);
-    }
-  };
 
   // Clicking a task's name opens ITS item card on the Updates pane — same
   // affordance as the My Tasks tab (kind: 'updates'). Opens the task, not the
