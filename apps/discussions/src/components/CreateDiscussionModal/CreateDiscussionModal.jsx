@@ -22,7 +22,7 @@ import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { PartyProgress } from '@generated/components/PartyProgress';
 import { ConfettiBurst } from '@generated/components/ConfettiBurst';
-import { toDateInput, toTimeInput, composeLocalDate } from '@generated/utils/dateTime.js';
+import { toDateInput, toTimeInput, composeLocalDate, nowDateTimeInputs } from '@generated/utils/dateTime.js';
 import { LayoutTemplate } from 'lucide-react';
 import logger from '@generated/utils/logger.js';
 import styles from './CreateDiscussionModal.module.css';
@@ -279,10 +279,14 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         // same participants + topics, a clean date, the source itself set as the
         // "previous discussion", and a "דיון המשך - {name}" title.
         setName(src ? `דיון המשך - ${src.name || ''}` : NEW_DISCUSSION_NAME);
-        // Duplicate always starts with a clean date; a plain create may carry a
-        // calendar-slot prefill (date + hour).
-        setDate(src ? '' : (prefill?.date || ''));
-        setTime(src ? '' : (prefill?.time || ''));
+        // round148 — a new-discussion card opens stamped with the MOMENT it
+        // was opened (today + the current time), immediately editable. An
+        // explicit calendar-slot prefill (the user clicked a specific hour)
+        // still wins. Applies to duplicate ("דיון המשך") too, which previously
+        // opened with an empty date.
+        const nowInputs = nowDateTimeInputs();
+        setDate(!src && prefill?.date ? prefill.date : nowInputs.date);
+        setTime(!src && prefill?.time ? prefill.time : nowInputs.time);
         setLead(
           src?.discussionLeadID?.length
             ? src.discussionLeadID
