@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next';
 import { Button } from '@vibe/core';
 import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
+import { SelectionActionBar } from '@generated/components/SelectionActionBar';
 import { ArrowLeft } from 'lucide-react';
 import { useMyTasks } from '@generated/hooks/useMyTasks.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
@@ -659,21 +660,9 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         </div>
       </div>
 
-      {selectedIds.size > 0 && (
-        <div className={styles.actionBar} role="region" aria-label="פעולות על משימות נבחרות">
-          <div className={styles.actionBarLeft}>
-            <span>{selectedIds.size} נבחרו</span>
-          </div>
-          <div className={styles.actionBarCenter}>
-            <Button kind={"secondary"} size={"small"} onClick={deleteSelected}>מחיקה</Button>
-          </div>
-          <div className={styles.actionBarRight}>
-            <button type="button" className={styles.closeSelectionBtn} onClick={clearSelection} aria-label="בטל בחירה">
-              <CloseSmall size={18} />
-            </button>
-          </div>
-        </div>
-      )}
+      <SelectionActionBar count={selectedIds.size} onClear={clearSelection} ariaLabel="פעולות על משימות נבחרות">
+        <Button kind={"secondary"} size={"small"} onClick={deleteSelected}>מחיקה</Button>
+      </SelectionActionBar>
 
       <div className={styles.board}>
       {(loading || splash) ? (
