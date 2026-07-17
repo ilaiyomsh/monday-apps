@@ -86,6 +86,7 @@ const DEFAULT_CAPS: AxiomTransportCaps = {
 const DEFAULT_ENDPOINT = 'https://api.axiom.co/v1/datasets';
 const DEDUP_MAP_MAX = 500;
 const KIND_MAX_LEN = 32;
+const ERR_MSG_MAX_LEN = 200; // scrubbed error.message (see errors/axiomSink.ts scrubMessage)
 
 // §3.3 rule 2 — deny substring on every non-allowlisted key, regardless of value type.
 const DENY_RE = /(name|title|summary|text|label|email|token|secret|password)/i;
@@ -124,6 +125,7 @@ function buildAllowlist(caps: AxiomTransportCaps): Record<string, number> {
   allow.kind = KIND_MAX_LEN;
   allow.err_name = f;
   allow.err_code = f;
+  allow.err_msg = ERR_MSG_MAX_LEN;
   allow.stack1 = caps.stackMaxLen;
   return allow;
 }
