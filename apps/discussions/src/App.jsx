@@ -6,6 +6,7 @@ import { DiscussionCard } from '@generated/components/DiscussionCard';
 import { CreateDiscussionModal } from '@generated/components/CreateDiscussionModal';
 import { MyTasksView } from '@generated/components/MyTasksView';
 import { MyDecisionsView } from '@generated/components/MyDecisionsView';
+import { DiscussionsDashboard } from '@generated/components/DiscussionsDashboard';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { useToast } from './hooks/useToast';
 import { useUiErrorSink } from './hooks/useUiErrorSink';
@@ -265,6 +266,7 @@ export default function App() {
   const splash = useMinSplash(context == null, MIN_SPLASH_MS, effectiveView);
   const openMyTasks = useCallback(() => handleAppViewChange('myTasks'), [handleAppViewChange]);
   const openMyDecisions = useCallback(() => handleAppViewChange('myDecisions'), [handleAppViewChange]);
+  const openDashboard = useCallback(() => handleAppViewChange('dashboard'), [handleAppViewChange]);
   const backToDiscussions = useCallback(() => handleAppViewChange('discussions'), [handleAppViewChange]);
 
   // Round 46 — RIGHT-PANE discussions splash. The branded loader must show in the
@@ -845,6 +847,17 @@ export default function App() {
     );
   }
 
+  if (effectiveView === 'dashboard') {
+    return (
+      <div className={`${styles.appShell} ${layoutClass}`}>
+        <div className={styles.appShellBody} dir="rtl">
+          <DiscussionsDashboard onBackToDiscussions={backToDiscussions} />
+        </div>
+        {overlays}
+      </div>
+    );
+  }
+
   return (
     <div className={`${styles.appShell} ${layoutClass}`}>
     <div
@@ -901,6 +914,7 @@ export default function App() {
           onOpenSettings={() => setShowSettings(true)}
           onOpenMyTasks={openMyTasks}
           onOpenMyDecisions={openMyDecisions}
+          onOpenDashboard={openDashboard}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           calendarAnchor={calNav.anchor}

@@ -4,7 +4,7 @@ import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscuss
 import { Button, Text, IconButton } from '@vibe/core';
 import { Calendar, CloseSmall, Search, Settings } from '@vibe/icons';
 import { HighlightedText } from '@generated/components/HighlightedText';
-import { Check, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { BarChart3, Check, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
 import { fmtTimeLabel, buildMonthOptions } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
@@ -366,7 +366,7 @@ function DiscussionContextMenu({ item, x, y, actions, onClose }) {
 
 export function DiscussionList({
   onSelect, selectedId, onCreateNew, onEdit, onCopyLink, onDuplicate, onExport, onDelete,
-  exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, onOpenMyDecisions, currentUser = null,
+  exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, onOpenMyDecisions, onOpenDashboard, currentUser = null,
   // Calendar view — nav state lives in App (predates round136's removal of the
   // refreshKey remount; keeping it there is still correct).
   viewMode = 'list', onViewModeChange, calendarAnchor, calendarMode, onCalendarNavigate, onCreateAt,
@@ -545,6 +545,13 @@ export function DiscussionList({
               {onOpenMyDecisions && (
                 <Button kind={"secondary"} size={"small"} onClick={onOpenMyDecisions}>
                   ההחלטות שלי
+                </Button>
+              )}
+              {/* round152 — entry to the discussions dashboard, alongside the
+                  personal-view nav (owner request: graph icon by "ההחלטות שלי"). */}
+              {onOpenDashboard && (
+                <Button kind={"secondary"} size={"small"} leftIcon={BarChart3} onClick={onOpenDashboard}>
+                  דשבורד
                 </Button>
               )}
             </div>
