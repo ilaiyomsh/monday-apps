@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Button } from '@vibe/core';
 import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
+import { SelectionActionBar } from '@generated/components/SelectionActionBar';
 import { ArrowLeft } from 'lucide-react';
 import { useMyDecisions } from '@generated/hooks/useMyDecisions.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
@@ -617,26 +618,14 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
       </div>
 
-      {/* Floating bulk-action bar — count + delete + close (mirrors the
-          in-discussion Decisions tab). Batch status/priority/date edits happen
-          inline on any selected row (they cascade to the whole selection). */}
-      {selectedIds.size > 0 && (
-        <div className={styles.actionBar} role="region" aria-label="פעולות על החלטות נבחרות">
-          <div className={styles.actionBarLeft}>
-            <span>{selectedIds.size} נבחרו</span>
-          </div>
-          <div className={styles.actionBarCenter}>
-            <Button kind={"secondary"} size={"small"} disabled={deletableSelectedIds.length === 0} onClick={deleteSelected}>
-              מחיקה
-            </Button>
-          </div>
-          <div className={styles.actionBarRight}>
-            <button type="button" className={styles.closeSelectionBtn} onClick={clearSelection} aria-label="בטל בחירה">
-              <CloseSmall size={18} />
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Floating bulk-action bar — count + delete + close. Batch
+          status/priority/date edits happen inline on any selected row
+          (they cascade to the whole selection). */}
+      <SelectionActionBar count={selectedIds.size} onClear={clearSelection} ariaLabel="פעולות על החלטות נבחרות">
+        <Button kind={"secondary"} size={"small"} disabled={deletableSelectedIds.length === 0} onClick={deleteSelected}>
+          מחיקה
+        </Button>
+      </SelectionActionBar>
 
       <div className={styles.board}>
       {(loading || splash) ? (

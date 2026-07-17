@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Skeleton, Button, Dialog, DialogContentContainer, Checkbox, Text } from '@vibe/core';
-import { DropdownChevronDown, Filter, CloseSmall, Update, Edit } from '@vibe/icons';
+import { Skeleton, Button, Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
+import { DropdownChevronDown, Filter, Update, Edit } from '@vibe/icons';
+import { SelectionActionBar } from '@generated/components/SelectionActionBar';
 import {
   DndContext, closestCenter, PointerSensor, useSensor, useSensors,
 } from '@dnd-kit/core';
@@ -971,25 +972,11 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         </div>
       </div>
 
-      {/* Floating bulk-action bar (Round 7) — mirrors TasksTab's action bar:
-          left = selected count, center = actions (delete), right = close/X. */}
-      {selectedIds.size > 0 && (
-        <div className={styles.decActionBar} role="region" aria-label="פעולות על החלטות נבחרות">
-          <div className={styles.decActionBarLeft}>
-            <Text type={"text2"} element="span">{selectedIds.size} נבחרו</Text>
-          </div>
-          <div className={styles.decActionBarCenter}>
-            <Button kind={"secondary"} size={"small"} disabled={deletableSelectedIds.length === 0} onClick={deleteSelected}>
-              מחיקה
-            </Button>
-          </div>
-          <div className={styles.decActionBarRight}>
-            <button type="button" className={styles.decCloseSelectionBtn} onClick={clearSelection} aria-label="בטל בחירה">
-              <CloseSmall size={18} />
-            </button>
-          </div>
-        </div>
-      )}
+      <SelectionActionBar count={selectedIds.size} onClear={clearSelection} ariaLabel="פעולות על החלטות נבחרות">
+        <Button kind={"secondary"} size={"small"} disabled={deletableSelectedIds.length === 0} onClick={deleteSelected}>
+          מחיקה
+        </Button>
+      </SelectionActionBar>
 
       <div className={styles.decBoard}>
         {items.length === 0 && !canCreateDecision ? (
