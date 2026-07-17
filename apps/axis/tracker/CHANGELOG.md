@@ -2,6 +2,15 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2.2.0 — 2026-07-17
+
+- Axiom logging v2 telemetry — call sites (logger primitives already v2 from Phase 1c).
+- View-tracking: `useViewTracking(logger, 'calendar')` in `MondayCalendar.jsx` and `useViewTracking(logger, 'dashboard')` in `Dashboard.jsx` — one `view_open` usage event per view per session.
+- Boot health: `logger.health('boot_ok', { ms })` fired alongside `initSummary` at "Calendar fully interactive", reusing the same elapsed.
+- API-latency health at the `safeApi()` funnel: `logger.health('api_ok', { tag, ms })` on success and `logger.health('api_fail', { tag, ms, err_code })` on terminal failure (transport dedups; no double-log alongside apiResponse/apiError).
+- Test infra: global logger mock (`setupTests.js`) now exposes `track()`/`health()` mirroring the real v2 wire shape; added a focused lock test for the new call sites (`mondayApi/__tests__/telemetry-callsites.test.js`).
+- Telemetry stays inert until the Axiom sink is active; wire schema matches `@axis/app-core` (shared `encodeDims`).
+
 ## 2026-07
 
 ### ✨ New Features

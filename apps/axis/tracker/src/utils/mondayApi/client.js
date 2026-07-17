@@ -250,6 +250,8 @@ export const safeApi = async (monday, callerName, query, options = {}) => {
         lastRawResponse = rawResponse;
         const duration = Date.now() - lastStartTime;
         logger.apiResponse(callerName, rawResponse, duration);
+        // v2 api-latency health — success funnel (inert until Axiom sink active; transport dedups)
+        logger.health('api_ok', { tag: callerName, ms: duration });
 
         // לוג GraphQL errors ברמת ERROR — אבל לא זורק (אין retry על soft errors).
         // נרשם כ-apiError עם rawResponse ב-context כדי שה-UI sink יחלץ הודעה ספציפית
@@ -300,6 +302,9 @@ export const safeApi = async (monday, callerName, query, options = {}) => {
             duration,
             queryWarnings
         });
+        // v2 api-latency health — terminal failure funnel (inert until Axiom sink active; transport dedups)
+        const err_code = error.errorCode || error.data?.errors?.[0]?.extensions?.code;
+        logger.health('api_fail', { tag: callerName, ms: duration, err_code });
         // עטיפה ב-MondayApiError כדי לשמור את הקשר הקריאה (query, response) להצגה ב-ErrorDetailsModal
         if (error instanceof MondayApiError) throw error;
         const wrapped = new MondayApiError(error.message || 'Unknown error', {

@@ -20,6 +20,7 @@ import StopwatchLoader from '../StopwatchLoader/StopwatchLoader';
 import loaderStyles from '../StopwatchLoader/StopwatchLoader.module.css';
 import styles from './Dashboard.module.css';
 import logger from '../../utils/logger';
+import { useViewTracking } from '@axis/app-core';
 
 /**
  * ברירת מחדל: תחילת וסוף החודש הנוכחי בפורמט YYYY-MM-DD
@@ -43,6 +44,9 @@ const Dashboard = ({ monday, onSwitchToCalendar, onOpenSettings, isOwner, hasInc
     const { dateFnsLocale } = useLocale();
     const { customSettings } = useSettings();
     const { context } = useMondayContext();
+
+    // v2 usage telemetry — view_open once per session for the dashboard view (inert until Axiom sink active)
+    useViewTracking(logger, 'dashboard');
 
     const effectiveBoardId = useMemo(() =>
         getEffectiveBoardId(customSettings, context),
