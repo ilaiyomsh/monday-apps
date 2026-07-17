@@ -23,6 +23,7 @@ import { useViewport } from '@generated/hooks/useViewport.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { useStableHandler } from '@generated/hooks/useStableHandler.js';
+import { useBatchTargets } from '@generated/hooks/useBatchTargets.js';
 import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { getColumns } from '@api/board-config-store.js';
@@ -240,10 +241,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   // Resolve the set of tasks an action applies to, then keep only those the user
   // is permitted to act on for `cap`. A mixed selection (allowed + disallowed)
   // applies ONLY to the allowed subset (silently skips the rest).
-  const resolveTargetIds = (originTaskId, cap) => {
-    const base = selectedIds.size > 1 && selectedIds.has(originTaskId) ? [...selectedIds] : [originTaskId];
-    return cap ? base.filter((id) => allow(cap, id)) : base;
-  };
+  const resolveTargetIds = useBatchTargets(selectedIds, allow); // round143 — shared resolver
   // round136 — the apply* handlers are wrapped in useStableHandler: one frozen
   // identity per handler for the memoized rows, while each call still reads the
   // LATEST selection/permission state through the wrapper.

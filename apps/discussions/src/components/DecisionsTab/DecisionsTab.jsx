@@ -33,6 +33,7 @@ import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
+import { useBatchTargets } from '@generated/hooks/useBatchTargets.js';
 import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
@@ -681,10 +682,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   // only that row, selected) is unchanged. Applied per-row via the existing
   // optimistic single-row updaters (decisions have no dedicated batch endpoint,
   // same as TasksTab's priority path).
-  const resolveDecisionTargets = (originId, cap) => {
-    const base = selectedIds.size > 1 && selectedIds.has(originId) ? [...selectedIds] : [originId];
-    return cap ? base.filter((id) => canDecision(cap, decById.get(String(id)))) : base;
-  };
+  // round143 — shared resolver; canDecision takes the ITEM, so adapt id→item.
+  const resolveDecisionTargets = useBatchTargets(selectedIds, (cap, id) => canDecision(cap, decById.get(String(id))));
   const applyDecisionStatus = async (id, status) => {
     for (const t of resolveDecisionTargets(id, 'editDecisionStatus')) await updateDecisionStatus(t, status);
   };
