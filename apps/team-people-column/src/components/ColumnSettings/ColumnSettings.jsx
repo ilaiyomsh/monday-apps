@@ -11,6 +11,7 @@ import {
 } from '../../domain/columnClassifiers';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
+import { useViewTracking } from '../../utils/viewTracking';
 import { getVersionLabel } from '../../utils/versionLabel.js';
 import LoadingState from '../shared/LoadingState';
 import ErrorState from '../shared/ErrorState';
@@ -103,6 +104,8 @@ function SelectField({ label, ariaLabel, placeholder, options, value, onChange, 
 }
 
 function ColumnSettings({ context }) {
+  // Usage telemetry (D3): one view_open per session for this view (inert until the sink is active).
+  useViewTracking(logger, 'column_settings');
   const boardId = context?.boardId;
 
   const {
