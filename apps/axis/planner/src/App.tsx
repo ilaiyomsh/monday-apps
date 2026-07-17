@@ -9,7 +9,11 @@ import { FreeFallLoader } from './components/ui';
 import { useLanguageSync } from './hooks/useLanguageSync';
 import { useLocale } from './hooks/useLocale';
 import { logger } from './utils/Logger';
+import { useViewTracking } from './utils/viewTracking';
 import './App.css';
+
+// Boot health (D5) fires exactly once per page load, at the app's init-done point.
+let bootHealthSent = false;
 
 // Lazy-load SettingsDialog - only loaded when needed
 const SettingsDialog = lazy(() =>
@@ -90,6 +94,12 @@ const ConfiguredContent: React.FC = () => {
   const { isResolved: languageResolved } = useLanguageSync();
   const [showSettings, setShowSettings] = useState(false);
 
+  // Usage telemetry (D3): report the welcome (unconfigured) screen once per session — fires
+  // only once settings+language resolve without error and the app is NOT configured. Passing ''
+  // otherwise is ignored by the tracker, so navigating in/out never re-ships.
+  const welcomeShown = !settingsLoading && languageResolved && !settingsError && !isConfigured;
+  useViewTracking(logger, welcomeShown ? 'welcome' : '');
+
   // Auto-open settings if not configured and user has permissions
   useEffect(() => {
     if (!settingsLoading && !isConfigured && permissions?.canEditSettings) {
@@ -113,6 +123,15 @@ const ConfiguredContent: React.FC = () => {
     logger.info(isConfigured
       ? '[LOAD_FLOW] [5/5] Mounting GanttProvider — app fully loaded'
       : '[LOAD_FLOW] [5/5] Not configured — showing welcome screen');
+    // Boot health (D5): one-shot per page load, at the init-done point (settings + language
+    // resolved). ms = time-to-ready since navigation start; ships as domainKind='health'.
+    if (!bootHealthSent) {
+      bootHealthSent = true;
+      logger.health('boot_ok', {
+        configured: isConfigured,
+        ms: Math.round(typeof performance !== 'undefined' ? performance.now() : 0),
+      });
+    }
   }, [loadReady, settingsError, settingsErrorKind, isConfigured]);
 
   if (settingsLoading || !languageResolved) {

@@ -33,6 +33,67 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 const STORAGE_KEY = 'planner_logger_config';
 
+// Ring buffer capacity — retains the most recent records for sink replay (see attachAxiomSink).
+const RING_BUFFER_SIZE = 150;
+
+// ============================================
+// Axiom logging v2 — record shape + primitives
+// ============================================
+
+/**
+ * DOMAIN discriminator (travels on record.domainKind — NEVER the rendering kind).
+ * error (default) | usage (track) | health (health). The Axiom sink reads this to
+ * set ev.kind; the rendering kind stays 'simple' | 'error'.
+ */
+export type DomainKind = 'usage' | 'health' | 'error';
+
+/**
+ * Structured record fanned out to sinks (the Axiom sink maps it to the wire schema).
+ * Built by track()/health() (usage/health INFO records) and by warn()/error() (error
+ * records). The transport/sink only ever read this exact shape.
+ */
+export interface LogRecord {
+  /** rendering kind (stays 'simple'/'error'); the DOMAIN discriminator is domainKind */
+  kind: 'simple' | 'error';
+  level: LogLevel;
+  module: string;
+  message: string;
+  domainKind?: DomainKind;
+  /** usage/health INFO records bypass the WARN/ERROR ship policy (D3/D5) */
+  alwaysShip?: boolean;
+  error?: Error;
+  /** numeric timings the sink may forward (duration → ms, totalMs, step) */
+  context?: { duration?: number; totalMs?: number; step?: number };
+  correlationId?: string;
+  duplicate?: boolean;
+  timestamp?: number;
+  timestampISO?: string;
+}
+
+export type LogSink = (record: LogRecord) => void;
+
+/**
+ * encodeDims — usage/health message encoder (D4). Folds categorical/measured dims into a
+ * stable, queryable suffix: `base key1=v1 key2=v2` with keys sorted. Only string/bool/finite
+ * number values are included (objects, functions, NaN/Infinity dropped) so the shipped message
+ * stays flat and APL-parseable. Identical spec across app-core, the template, and every app.
+ */
+export function encodeDims(base: string, dims?: Record<string, unknown> | null): string {
+  if (!dims) return base;
+  const parts: string[] = [];
+  for (const key of Object.keys(dims).sort()) {
+    const v = dims[key];
+    if (
+      typeof v === 'string' ||
+      typeof v === 'boolean' ||
+      (typeof v === 'number' && Number.isFinite(v))
+    ) {
+      parts.push(`${key}=${v}`);
+    }
+  }
+  return parts.length ? `${base} ${parts.join(' ')}` : base;
+}
+
 interface LoggerConfig {
   level: LogLevel;
   enabled: boolean;
@@ -54,6 +115,12 @@ declare global {
 
 class Logger {
   private config: LoggerConfig;
+
+  // v2 sink infrastructure (additive — the console pipeline above is untouched).
+  // The console is rendered directly by each method; these sinks are ADDITIONAL
+  // fan-out targets (the Axiom sink attaches here in main.tsx).
+  private sinks = new Set<LogSink>();
+  private ringBuffer: LogRecord[] = [];
 
   constructor() {
     this.config = this.loadConfig();
@@ -215,6 +282,148 @@ class Logger {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // v2 sink infrastructure (addSink / getBuffer / emit) + telemetry
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Register an additional sink that receives every non-duplicate record via fan-out.
+   * Returns an unsubscribe fn. The Axiom sink registers here (attachAxiomSink).
+   */
+  addSink(fn: LogSink): () => void {
+    if (typeof fn !== 'function') return () => {};
+    this.sinks.add(fn);
+    return () => {
+      this.sinks.delete(fn);
+    };
+  }
+
+  /** Remove a registered sink. */
+  removeSink(fn: LogSink): void {
+    this.sinks.delete(fn);
+  }
+
+  /** Shallow copy of the ring buffer (FIFO, cap = RING_BUFFER_SIZE) — for sink replay. */
+  getBuffer(): LogRecord[] {
+    return this.ringBuffer.slice();
+  }
+
+  /**
+   * The single record choke-point for sink fan-out: timestamp → ring buffer → sinks.
+   * Console rendering is NOT done here (each public method still owns its console output,
+   * so the existing variadic call-surface is untouched). Duplicate records are buffered
+   * but skipped from sinks. Each sink runs in its own try/catch (a failing sink can never
+   * throw back or recurse).
+   */
+  private emit(record: LogRecord): void {
+    const ts = Date.now();
+    record.timestamp = ts;
+    record.timestampISO = new Date(ts).toISOString();
+    this.ringBuffer.push(record);
+    if (this.ringBuffer.length > RING_BUFFER_SIZE) {
+      this.ringBuffer.shift();
+    }
+    if (record.duplicate) return;
+    for (const sink of this.sinks) {
+      try {
+        sink(record);
+      } catch (sinkError) {
+        // A failing sink must not throw back nor be re-logged through the logger
+        // (that would recurse). Raw console.error so the failure is not lost.
+        console.error('[Logger] sink threw and was suppressed:', sinkError);
+      }
+    }
+  }
+
+  /**
+   * Build a structured record from the variadic call-surface (logger.error('[tag] msg', obj)).
+   * message = first string arg (the stable English event id); error = first Error found in args;
+   * module = an explicit label, else a leading `[tag]` parsed from the message, else 'app'.
+   */
+  private buildRecord(level: LogLevel, module: string | undefined, args: unknown[]): LogRecord {
+    let error: Error | undefined;
+    for (const a of args) {
+      if (a instanceof Error) {
+        error = a;
+        break;
+      }
+    }
+    let message = '';
+    const first = args[0];
+    if (typeof first === 'string') {
+      message = first;
+    } else if (first instanceof Error) {
+      message = first.message;
+    } else if (first !== undefined && first !== null) {
+      try {
+        message = String(first);
+      } catch {
+        message = '';
+      }
+    }
+    let mod = module;
+    if (!mod) {
+      const m = /^\s*\[([^\]]+)\]/.exec(message);
+      mod = m ? m[1] : 'app';
+    }
+    return {
+      kind: error ? 'error' : 'simple',
+      level,
+      module: mod,
+      message,
+      error,
+    };
+  }
+
+  /**
+   * track — usage telemetry (D3). Emits an INFO record carrying domainKind 'usage' +
+   * alwaysShip:true, so it ships regardless of the WARN/ERROR policy. Dims fold into the
+   * message via encodeDims (D4). The rendering kind stays 'simple'. Inert until a sink attaches.
+   */
+  track(event: string, dims?: Record<string, unknown> | null): void {
+    const message = encodeDims(event, dims);
+    this.emit({
+      kind: 'simple',
+      domainKind: 'usage',
+      alwaysShip: true,
+      level: 'INFO',
+      module: 'usage',
+      message,
+    });
+    if (this.shouldLog('INFO')) {
+      console.info(
+        `%c${this.getTimestamp()} %c[usage]`,
+        'color: #64748b',
+        'color: #22c55e',
+        message
+      );
+    }
+  }
+
+  /**
+   * health — health signal (D5). Emits an INFO record, domainKind 'health', alwaysShip:true.
+   * Metrics fold into the message via encodeDims (D4). Inert until a sink attaches.
+   */
+  health(signal: string, metrics?: Record<string, unknown> | null): void {
+    const message = encodeDims(signal, metrics);
+    this.emit({
+      kind: 'simple',
+      domainKind: 'health',
+      alwaysShip: true,
+      level: 'INFO',
+      module: 'health',
+      message,
+    });
+    if (this.shouldLog('INFO')) {
+      console.info(
+        `%c${this.getTimestamp()} %c[health]`,
+        'color: #64748b',
+        'color: #22c55e',
+        message
+      );
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // Logging Methods
   // ─────────────────────────────────────────────────────────────
 
@@ -258,6 +467,8 @@ class Logger {
         ...args
       );
     }
+    // WARN is forwarded to sinks even when the console is muted (production).
+    this.emit(this.buildRecord('WARN', undefined, args));
   }
 
   /**
@@ -272,6 +483,8 @@ class Logger {
         ...args
       );
     }
+    // ERROR is forwarded to sinks even when the console is muted (production).
+    this.emit(this.buildRecord('ERROR', undefined, args));
   }
 
   /**
@@ -295,6 +508,10 @@ class Logger {
         `color: ${colors[level]}`,
         ...args
       );
+    }
+    // WARN/ERROR labeled records ship too (module = the label). INFO/DEBUG stay console-only.
+    if (level === 'WARN' || level === 'ERROR') {
+      this.emit(this.buildRecord(level, label, args));
     }
   }
 

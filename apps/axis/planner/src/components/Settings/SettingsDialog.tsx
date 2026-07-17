@@ -14,6 +14,7 @@ import { extractStatusLabels } from '../../utils/statusLabelUtils';
 import { useLocale } from '../../hooks/useLocale';
 import { useDisplayUnit } from '../../hooks/useDisplayUnit';
 import { logger } from '../../utils/Logger';
+import { useViewTracking } from '../../utils/viewTracking';
 import { versionLabel } from '../../utils/versionLabel';
 
 interface SettingsDialogProps {
@@ -29,6 +30,9 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
 }) => {
   const { t } = useTranslation();
   const locale = useLocale();
+  // Usage telemetry (D3): report the settings view once per session, the first time it opens.
+  // Passing '' while closed is ignored by the tracker, so this fires only on the first open.
+  useViewTracking(logger, isOpen ? 'settings' : '');
   const { unit: displayUnit, setUnit: setDisplayUnit } = useDisplayUnit();
   const { settings, updateSettings: commitSettings } = useSettings();
   const [draftSettings, setDraftSettings] = useState<PlannerSettings | null>(null);
