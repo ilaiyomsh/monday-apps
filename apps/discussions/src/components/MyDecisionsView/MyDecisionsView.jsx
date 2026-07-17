@@ -8,6 +8,7 @@ import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useDiscussions } from '@generated/hooks/useDiscussions.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
+import { useBatchTargets } from '@generated/hooks/useBatchTargets.js';
 import { useMinSplash } from '@generated/hooks/useMinSplash.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
@@ -229,10 +230,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   // A column change on a SELECTED row applies to EVERY selected row (monday
   // behavior); otherwise it's a single-row edit. Targets are filtered per
   // capability so a mixed selection applies only to the allowed subset.
-  const resolveTargetIds = useCallback((originId, cap) => {
-    const base = (selectedIds.size > 1 && selectedIds.has(originId)) ? [...selectedIds] : [originId];
-    return cap ? base.filter((id) => allow(cap, id)) : base;
-  }, [selectedIds, allow]);
+  const resolveTargetIds = useBatchTargets(selectedIds, allow); // round143 — shared resolver
   const applyStatus = useCallback((id, status) => resolveTargetIds(id, 'editDecisionStatus').forEach((t) => updateDecisionStatus(t, status)), [resolveTargetIds, updateDecisionStatus]);
   const applyPriority = useCallback((id, value) => resolveTargetIds(id, 'editDecisionPriority').forEach((t) => updateDecisionPriority(t, value)), [resolveTargetIds, updateDecisionPriority]);
   const applyDate = useCallback((id, date) => resolveTargetIds(id, 'editDecisionDate').forEach((t) => updateDecisionDate(t, date)), [resolveTargetIds, updateDecisionDate]);

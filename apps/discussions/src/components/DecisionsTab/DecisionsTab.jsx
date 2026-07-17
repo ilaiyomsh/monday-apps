@@ -33,6 +33,7 @@ import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
+import { useBatchTargets } from '@generated/hooks/useBatchTargets.js';
 import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
@@ -41,6 +42,7 @@ import { isValidStatus } from '@generated/constants/statusConfig';
 import { getBoardId } from '@api/board-config-store.js';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
+import { useColumnRenameMenu } from '@generated/components/ColumnRenameMenu';
 import styles from './DecisionsTab.module.css';
 
 // Open a decision's item card on the Updates pane — identical affordance to the
@@ -680,10 +682,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   // only that row, selected) is unchanged. Applied per-row via the existing
   // optimistic single-row updaters (decisions have no dedicated batch endpoint,
   // same as TasksTab's priority path).
-  const resolveDecisionTargets = (originId, cap) => {
-    const base = selectedIds.size > 1 && selectedIds.has(originId) ? [...selectedIds] : [originId];
-    return cap ? base.filter((id) => canDecision(cap, decById.get(String(id)))) : base;
-  };
+  // round143 — shared resolver; canDecision takes the ITEM, so adapt id→item.
+  const resolveDecisionTargets = useBatchTargets(selectedIds, (cap, id) => canDecision(cap, decById.get(String(id))));
   const applyDecisionStatus = async (id, status) => {
     for (const t of resolveDecisionTargets(id, 'editDecisionStatus')) await updateDecisionStatus(t, status);
   };
@@ -812,6 +812,9 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
 
   // Header title per column key (name/decider/affected/status/date; 'sel' has none).
   const DEC_TITLE = { name: 'החלטה', decider: 'מחליט', affected: 'מושפעים', status: 'סטאטוס', date: 'תאריך' };
+  // round140 — owner-only column display names (shared per-instance overrides).
+  const { titles: decTitles, dots: decRenameDots, menu: decRenameMenu } =
+    useColumnRenameMenu('decisions', DEC_TITLE, { canManageSettings, dotsClassName: styles.renameDots });
   const decRelStyle = canResize ? { position: 'relative' } : undefined;
   const decHandle = (key) => (canResize && key !== 'sel' ? <ResizeHandle onMouseDown={(e) => startResize(key, e)} /> : null);
   // Movable header cells = every VISIBLE column except the pinned name (+ sel).
@@ -848,12 +851,13 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
       // horizontal scroll AND hosts the resize handle (like TaskTable .taskFirst).
       return (
         <div key="name" className={`${styles.decCell} ${styles.decHeadCell} ${styles.decNameHead}`}>
-          {DEC_TITLE.name}
+          {decTitles.name}
+          {decRenameDots('name')}
           {decHandle('name')}
         </div>
       );
     }
-    const inner = (<>{DEC_TITLE[key]}{decHandle(key)}</>);
+    const inner = (<>{decTitles[key]}{decRenameDots(key)}{decHandle(key)}</>);
     return canReorderCols ? (
       <SortableHeaderCell key={key} id={key} className={`${styles.decCell} ${styles.decHeadCell}`} style={decRelStyle}>{inner}</SortableHeaderCell>
     ) : (
@@ -867,7 +871,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   const renderDecisionTable = (list, showAddRow, scopeKey) => (
     <div className={`${styles.decTable} ${canSelect ? styles.decSelectable : ''}`}>
       <div className={`${styles.decRow} ${styles.decHead}`} style={rowStyle}>
-        <ColumnHeaderDnd enabled={canReorderCols} ids={movableColIds} labels={DEC_TITLE} onReorder={reorder}>
+        <ColumnHeaderDnd enabled={canReorderCols} ids={movableColIds} labels={decTitles} onReorder={reorder}>
           {visibleOrder.map((k) => renderHeadCell(k, list))}
         </ColumnHeaderDnd>
       </div>
@@ -909,6 +913,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   return (
     <div ref={rootRef} className={styles.decisionsRoot}>
       {groupColorMenu}
+      {decRenameMenu}
       <div className={styles.decToolbar}>
         <div className={styles.decToolbarLeft}>
           {canCreateDecision && (

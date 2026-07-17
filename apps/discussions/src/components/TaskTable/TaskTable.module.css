@@ -339,3 +339,21 @@
 .selectable .taskHead .selectCell::before { border-start-start-radius: 6px; }
 .taskRow:last-child .taskFirst::before,
 .selectable .taskRow:last-child .selectCell::before { border-end-start-radius: 6px; }
+
+/* round140 — owner-only "rename column" dots: hidden until the header cell is
+   hovered; sits right after the column title text. */
+.renameDots {
+  opacity: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--secondary-text-color, #676879);
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin-inline-start: 2px;
+  transition: opacity 0.12s ease;
+}
+.renameDots:hover { background: var(--primary-background-hover-color, #eceff8); }
+.taskHead .taskCell:hover .renameDots, .taskHead .taskFirst:hover .renameDots { opacity: 1; }

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button, Heading, Text, Flex, Loader, Dropdown, RadioButton } from '@vibe/core';
+import { PartyProgress } from '@generated/components/PartyProgress';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
 import { provisionAllBoards } from '../../utils/mondayApi/provisionBoards.js';
@@ -81,8 +82,17 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
   const showTasksSection = !isTopUp || !tasksMapped;
   const secondaryLabel = isTopUp ? 'חזרה' : 'מיפוי ידני';
   const handleSecondary = isTopUp ? (onDone || onManual || (() => {})) : onManual;
+  // round141b — custom-object install (owner report): the app can run as a
+  // standalone custom object, where there is no meaningful host board to
+  // extend. Detect it from the context (a non-board app-feature type, or no
+  // boardId at all) and have provisioning CREATE a real "דיונים" board.
+  const featureType = String(context?.appFeature?.type || '');
+  const isCustomObject = !context?.boardId || /object/i.test(featureType);
+
   const [phase, setPhase] = useState('idle'); // idle | running | error
-  const [progress, setProgress] = useState({ step: 0, total: 0, label: '' });
+  // round141 — progress carries a BOARD-level narration (boardPhase) from
+  // provisionAllBoards; the fine-grained label is kept for logs only.
+  const [progress, setProgress] = useState({ step: 0, total: 0, boardPhase: '' });
   const [errorMsg, setErrorMsg] = useState('');
 
   // Tasks board choice: create a brand-new "משימות" board, or connect an existing
@@ -185,16 +195,18 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
   const handleCreate = useCallback(async () => {
     setPhase('running');
     setErrorMsg('');
-    setProgress({ step: 0, total: 0, label: 'מתחיל…' });
+    setProgress({ step: 0, total: 0, boardPhase: 'מתחיל…' });
     try {
       const config = await provisionAllBoards({
         discussionsBoardId: context?.boardId,
         workspaceId: context?.workspaceId,
+        createDiscussionsBoard: isCustomObject,
         tasks: { mode: tasksMode, boardId: tasksBoardId, columnMap },
         // null on first-run (behaves exactly as before); the current mapping in
         // top-up so provisioning reuses mapped boards + completes only what's missing.
         existingConfig,
-        onProgress: (step, total, label) => setProgress({ step, total, label }),
+        onProgress: (step, total, label, boardPhase) =>
+          setProgress({ step, total, boardPhase: boardPhase || label }),
       });
       await updateSettings(config);
       // TOP-UP: the caller closes the panel (settings already refreshed). FIRST-RUN:
@@ -207,9 +219,6 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
     }
   }, [context, updateSettings, tasksMode, tasksBoardId, columnMap, existingConfig, onDone]);
 
-  const pct =
-    progress.total > 0 ? Math.round((progress.step / progress.total) * 100) : 0;
-
   return (
     <div dir="rtl" className={isTopUp ? styles.rootEmbedded : styles.root}>
       <Flex direction="column" align="center" gap={16} className={styles.card}>
@@ -219,13 +228,14 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
         {!isTopUp && <Heading type="h2">{title || 'הגדרת האפליקציה'}</Heading>}
 
         {phase === 'running' ? (
-          <Flex direction="column" align="center" gap={12} className={styles.section}>
-            <Loader size={32} />
-            <Text type="text1">מקים לוחות ועמודות… ({progress.step}/{progress.total})</Text>
-            <div className={styles.barTrack}>
-              <div className={styles.barFill} style={{ width: `${pct}%` }} />
-            </div>
-            <Text type="text2" color="secondary">{progress.label}</Text>
+          <Flex direction="column" align="center" gap={14} className={styles.section}>
+            {/* round141 — same creation experience as a new discussion: the
+                branded PartyProgress bar, narrating BOARDS (not columns). */}
+            <Text type="text1" weight="bold">מקים את המערכת עבורך…</Text>
+            <PartyProgress
+              value={progress.total > 0 ? progress.step / progress.total : null}
+              label={progress.boardPhase}
+            />
           </Flex>
         ) : (
           <Flex direction="column" align="center" gap={16} className={styles.section}>
@@ -239,11 +249,18 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
                 <div className={styles.rolesStatus}>
                   {SETUP_ROLE_ORDER.map((key) => {
                     const mapped = roleMapped(key);
+                    // round141 — in a BOARD VIEW the discussions "board" is never
+                    // created (it is the current board) — say so instead of the
+                    // misleading "יתווסף". In a custom-object install (round141b)
+                    // a real דיונים board IS created, so "יתווסף" is accurate.
+                    const stateText = mapped
+                      ? 'כבר מחובר'
+                      : key === 'discussions' && !isCustomObject ? 'הלוח הנוכחי (יחובר)' : 'יתווסף';
                     return (
                       <div key={key} className={styles.roleRow}>
                         <span className={styles.roleName}>{SETUP_ROLE_LABELS[key]}</span>
                         <span className={`${styles.roleState} ${mapped ? styles.roleStateOn : styles.roleStateOff}`}>
-                          {mapped ? 'כבר מחובר' : 'יתווסף'}
+                          {stateText}
                         </span>
                       </div>
                     );
@@ -251,12 +268,24 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
                 </div>
               </div>
             ) : (
-              <Text type="text1" align="center">
-                נראה שזו ההפעלה הראשונה. לחיצה על "צור לוחות אוטומטית" תוסיף את עמודות
-                הדיונים <b>ללוח הנוכחי</b> (לוח הדיונים), ותיצור את לוחות הנושאים
-                וההחלטות עם כל העמודות והקישורים. עבור <b>המשימות</b> אפשר ליצור לוח
-                חדש או לחבר לוח קיים שתבחרו. לחלופין אפשר למפות לוחות קיימים ידנית.
-              </Text>
+              <div className={styles.intro}>
+                <p className={styles.introLead}>
+                  ברוכים הבאים! נראה שזו ההפעלה הראשונה של האפליקציה.
+                </p>
+                <p className={styles.introBody}>
+                  לחיצה על <b>"צור לוחות אוטומטית"</b> תקים הכול בשבילך:
+                </p>
+                <ul className={styles.introList}>
+                  {isCustomObject ? (
+                    <li>ייווצר <b>לוח דיונים</b> חדש עם כל העמודות הנדרשות.</li>
+                  ) : (
+                    <li><b>הלוח הנוכחי</b> — שבו האפליקציה מותקנת — יהפוך ללוח הדיונים (יתווספו אליו העמודות הנדרשות; לא נוצר לוח דיונים חדש).</li>
+                  )}
+                  <li>ייווצרו לוחות חדשים ל<b>נושאים לדיון</b> ול<b>החלטות</b>, עם כל העמודות והקישורים.</li>
+                  <li>עבור <b>המשימות</b> — בחרו למטה: לוח חדש, או חיבור לוח קיים מהחשבון.</li>
+                </ul>
+                <p className={styles.introFoot}>לחלופין, אפשר למפות לוחות קיימים ידנית.</p>
+              </div>
             )}
 
             {phase === 'error' && (
@@ -286,10 +315,13 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
               </Flex>
               {tasksMode === 'connect' && (
                 <div className={styles.boardPicker}>
+                  {/* round141 — searchable: typing filters the account's boards
+                      by name instead of scrolling the whole list. */}
                   <Dropdown
                     dir="rtl"
                     size="small"
-                    placeholder="בחר לוח משימות"
+                    searchable
+                    placeholder="חפשו לוח לפי שם או בחרו מהרשימה"
                     options={boardOptions}
                     loading={boardsLoading}
                     value={boardOptions.find((o) => o.value === tasksBoardId) || null}

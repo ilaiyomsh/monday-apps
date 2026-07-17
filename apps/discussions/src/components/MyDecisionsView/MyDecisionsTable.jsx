@@ -7,6 +7,7 @@ import { useColumnOrder } from '../../hooks/useColumnOrder.js';
 import { useViewport } from '../../hooks/useViewport.js';
 import { ResizeHandle } from '../ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '../SortableColumnHeader';
+import { useColumnRenameMenu } from '@generated/components/ColumnRenameMenu';
 import styles from './MyDecisionsTable.module.css';
 
 // "ההחלטות שלי" board-style table — mirrors MyTasksTable / TaskTable: a frozen
@@ -138,6 +139,9 @@ export function MyDecisionsTable({
   // order applied; only owners on a non-touch viewport see handles + can drag).
   const canResize = canManageSettings && !isMobile;
   const canReorder = canManageSettings && !isMobile;
+  // round140 — owner-only column display names (shared per-instance overrides).
+  const { titles: colTitles, dots: renameDots, menu: renameMenu } =
+    useColumnRenameMenu('myDecisions', TITLE, { canManageSettings, dotsClassName: styles.renameDots });
   // Non-first header cells need a positioning context for the absolute handle;
   // the frozen .taskFirst is already sticky (a containing block), so it doesn't.
   const relStyle = canResize ? { position: 'relative' } : undefined;
@@ -165,12 +169,13 @@ export function MyDecisionsTable({
     if (key === 'name') {
       return (
         <div key="name" className={`${styles.taskCell} ${styles.taskFirst} ${styles.nameHead}`}>
-          {TITLE.name}
+          {colTitles.name}
+          {renameDots('name')}
           {handle('name')}
         </div>
       );
     }
-    const inner = (<>{TITLE[key]}{handle(key)}</>);
+    const inner = (<>{colTitles[key]}{renameDots(key)}{handle(key)}</>);
     return canReorder ? (
       <SortableHeaderCell key={key} id={key} className={styles.taskCell} style={relStyle}>
         {inner}
@@ -182,6 +187,7 @@ export function MyDecisionsTable({
 
   return (
     <div className={styles.taskTableScroll}>
+      {renameMenu}
       <div
         className={`${styles.taskTable} ${selectable ? styles.selectable : ''}`}
         dir="ltr"
@@ -190,7 +196,7 @@ export function MyDecisionsTable({
         style={{ '--group-color': color || 'var(--decisions-accent, #6b4ee6)' }}
       >
         <div className={`${styles.taskRow} ${styles.taskHead}`} style={rowStyle}>
-          <ColumnHeaderDnd enabled={canReorder} ids={movableIds} labels={TITLE} onReorder={reorder}>
+          <ColumnHeaderDnd enabled={canReorder} ids={movableIds} labels={colTitles} onReorder={reorder}>
             {renderKeys.map(renderHeaderCell)}
           </ColumnHeaderDnd>
         </div>

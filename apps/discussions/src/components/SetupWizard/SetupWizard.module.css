@@ -5,6 +5,8 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
+  /* round141 — a soft app-toned backdrop instead of a bare white page. */
+  background: var(--allgrey-background-color, #f6f7fb);
 }
 
 /* Embedded variant for TOP-UP mode (rendered inside the Settings modal, not
@@ -121,19 +123,39 @@
   color: var(--negative-color, #d83a52);
 }
 
-.barTrack {
-  width: 100%;
-  height: 8px;
-  border-radius: 4px;
-  background: var(--ui-background-color, #e6e9ef);
-  overflow: hidden;
-}
+/* round141 — the running state uses the shared PartyProgress bar (the same
+   creation experience as a new discussion); the old plain barTrack/barFill
+   pair is gone. */
 
-.barFill {
-  height: 100%;
-  border-radius: 4px;
-  background: var(--primary-color, #0073ea);
-  transition: width 0.25s ease;
+/* First-run intro copy (round141): the old vibe <Text> rendered as a single
+   unwrapped line that overflowed the card — this block wraps properly, reads
+   RTL, and breaks the promise into a scannable list. */
+.intro {
+  width: 100%;
+  text-align: right;
+  color: var(--primary-text-color, #323338);
+  font-size: 14px;
+  line-height: 1.7;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.intro p { margin: 0; }
+.introLead {
+  font-weight: 600;
+  font-size: 15px;
+}
+.introList {
+  margin: 0;
+  padding-inline-start: 0;
+  padding-inline-end: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.introFoot {
+  color: var(--secondary-text-color, #676879);
+  font-size: 13px;
 }
 
 .tasksChoice {

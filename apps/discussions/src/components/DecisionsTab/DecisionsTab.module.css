@@ -769,3 +769,21 @@
 .decNameHead::before,
 .decSelectable .decHead .decSelectCell::before { border-start-start-radius: 6px; }
 .decRow:last-child .decNameCell::before { border-end-start-radius: 6px; }
+
+/* round140 — owner-only "rename column" dots: hidden until the header cell is
+   hovered; sits right after the column title text. */
+.renameDots {
+  opacity: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--secondary-text-color, #676879);
+  padding: 1px 4px;
+  border-radius: 4px;
+  margin-inline-start: 2px;
+  transition: opacity 0.12s ease;
+}
+.renameDots:hover { background: var(--primary-background-hover-color, #eceff8); }
+.decHeadCell:hover .renameDots, .decNameHead:hover .renameDots { opacity: 1; }
