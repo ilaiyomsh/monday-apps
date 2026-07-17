@@ -2,6 +2,13 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2.2.0 — 2026-07-17
+
+- Axiom logging v2: refactored `src/services/logger.js` to a single `emit()` choke-point with sink fan-out (`addSink`/`removeSink`/`setBeforeSend`), log-once error correlation (`__loggedId`/`correlationId`), and new `encodeDims` + `track` (domainKind `usage`) + `health` (domainKind `health`) primitives. Kept the `(message, tag, context)` signature and the exported `flush`/`maskEmail`/`shortId` helpers, so all existing call sites are untouched.
+- Moved the inline Axiom transport out of the logger into a dedicated `src/services/axiomServerSink.js` (`attachAxiomServerSink`/`shouldShip`/`mapRecordToEvent`/`flushAxiom` + `scrubMessage`). Privacy-hardened wire schema: `ev.kind` carries the domain discriminator (`error`/`usage`/`health`), `error.message` ships ONLY scrubbed as `err_msg` (emails / hex&tokens≥16 / digit-runs≥7 redacted, capped 200), and a `CTX_ALLOW` allowlist ships only short ids/counters (`acc`/`usr`/`obj`/`cfg`/`prv`/`item`/`ev` + `created`/`updated`/`deleted`/`skipped`/… ) — emails, event titles, links and GraphQL bodies never leave the process.
+- Wired the sink in `src/index.js` (attach right after the logger import; graceful-shutdown drain now calls `flushAxiom()`), emitted a boot `logger.health('server_boot', { port, version })` after `server.listen`, and added bucketed API-latency health `logger.health('monday_api_latency', { op, status, bucket, ok })` at the `mondayQuery` data-layer funnel.
+- Deferred: client admin view-tracking (no logger in `src/client/admin` today) and a vitest lock test (no test infra in this app) — verified the new primitives via a runtime smoke instead. Version 2.1.0 → 2.2.0.
+
 ## 2026-06
 
 ### 🐛 Bug Fixes

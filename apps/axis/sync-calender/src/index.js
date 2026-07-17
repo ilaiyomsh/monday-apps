@@ -7,6 +7,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { getPort } from './helpers/environment.js';
 import logger from './services/logger.js';
+import { attachAxiomServerSink, flushAxiom } from './services/axiomServerSink.js';
 import webhookRoutes from './routes/webhook.js';
 import webhookMicrosoftRoutes from './routes/webhook-microsoft.js';
 import schedulerRoutes from './routes/scheduler.js';
@@ -23,6 +24,10 @@ import migrationRoutes from './routes/migration.js';
 // truth for the server's own version, logged at boot alongside the deployed
 // commit SHA (CI sets BUILD_SHA; unset locally).
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+
+// Register the Axiom v2 sink on the logger. No-op unless AXIOM_TOKEN +
+// AXIOM_DATASET are configured (local dev stays console-only).
+attachAxiomServerSink(logger);
 
 const app = express();
 app.use(express.json());
@@ -84,6 +89,8 @@ const port = getPort();
 const server = app.listen(port, () => {
   logger.info('server_boot', 'server', { port, level: process.env.LOG_LEVEL || 'INFO' });
   logger.info(`${pkg.name} v${pkg.version} (sha ${process.env.BUILD_SHA || 'unknown'})`, 'server');
+  // v2 boot health signal (D5): one INFO record, domainKind 'health', alwaysShip.
+  logger.health('server_boot', { port, version: pkg.version });
 });
 
 // Graceful shutdown — drain the Axiom buffer before exit. Race the flush
@@ -99,7 +106,7 @@ async function shutdown(signal) {
     server.close();
   } catch { /* server may already be closing */ }
   await Promise.race([
-    logger.flush(),
+    flushAxiom(),
     new Promise((resolve) => setTimeout(resolve, 2000)),
   ]);
   process.exit(0);
