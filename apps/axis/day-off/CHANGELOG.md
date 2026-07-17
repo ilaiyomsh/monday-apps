@@ -2,6 +2,13 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2.2.0 — 2026-07-17
+
+- Axiom logging v2 telemetry call sites (app-core primitives; no logger port).
+- View-tracking: `useViewTracking(logger, …)` at the top of each tab view — `mine` (EmployeeView), `approvals` (ApprovalsView), `team` (TeamView), `dashboard` (DashboardView). One `view_open` per view per session.
+- Boot health: one-shot `logger.health('boot_ok', { year, requests, configured })` at the first init-done in DayOffDataProvider, guarded by a ref so year-change reloads don't re-ship.
+- API-latency health: `logger.health('api_call', { ms, ok: true })` on terminal success and `logger.health('api_call', { ok: false, code })` on terminal failure in `mondayApi.query()`, outside the retry loop; ms bucketed (rounded to 250ms) so the transport dedups on a hot path.
+
 ## 2026-07
 
 ### 🔒 Security
