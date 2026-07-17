@@ -2,6 +2,12 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2026-07
+
+### 🧪 Tests
+
+- **2026-07-17** — v2.1.5: high-scale test round — `fetchCriticalBundle` scale suite (1,200-allocation cursor drain, reported-hours aggregate 500-group-cap characterization #90, >100-project id chunking) backed by the new `@axis/scale-fixtures` deterministic generators; no runtime changes `04a96e6`
+
 ## 2026-06
 
 ### 🐛 Bug Fixes

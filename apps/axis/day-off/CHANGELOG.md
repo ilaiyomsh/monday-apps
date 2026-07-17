@@ -2,6 +2,12 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2026-07
+
+### 🧪 Tests
+
+- **2026-07-17** — v2.1.1: high-scale test round — `computeBalance`/`pendingDaysFor` 30×4×1000 reference sweep with cross-year boundary pins, and `listEntries` multi-page drain + window rules + client overlap backstop; no runtime changes `04a96e6`
+
 ## 2026-06
 
 ### 🐛 Bug Fixes
