@@ -39,6 +39,7 @@ export { useErrorHandler } from './errors/useErrorHandler';
 export {
   attachAxiomSink,
   setAxiomContext,
+  isAxiomSinkActive,
   setRemoteLevel,
   shouldShip,
   mapRecordToEvent,

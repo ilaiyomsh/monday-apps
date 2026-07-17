@@ -218,6 +218,15 @@ export function setAxiomContext(
 }
 
 /**
+ * True once `attachAxiomSink` has attached an active transport (prod build with a
+ * dataset + token present). Gates optional identity-resolution API calls so telemetry
+ * never costs an API round-trip when the sink is structurally inert (dev / tunnel / tests).
+ */
+export function isAxiomSinkActive(): boolean {
+  return activeTransport !== null;
+}
+
+/**
  * Incident mode: override the default WARN/ERROR ship policy at runtime.
  * setRemoteLevel('DEBUG') ships everything; persists across reload via localStorage;
  * setRemoteLevel(null) restores the default policy.
