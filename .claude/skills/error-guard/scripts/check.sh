@@ -190,7 +190,14 @@ jq \
 # false-failed the gate on every edit to such a file (2026-07-14); (b) it also
 # means inline comments can never silence the error-guard rules themselves.
 OUT="$TMPDIR_EG/out.json"
-"$ESLINT_BIN" --no-eslintrc --no-inline-config --config "$CONFIG" \
+# ESLINT_USE_FLAT_CONFIG=false: ESLint 9 defaults to flat config and rejects the
+# eslintrc-mode flags below (--no-eslintrc / --resolve-plugins-relative-to) — the
+# invocation errored, produced no JSON, and the gate FAILED OPEN on every v9 app
+# (rules silently unenforced). Forcing eslintrc mode keeps this minimal rule kit
+# working on v8 AND v9 with no other change (v8 is unaffected; it already used
+# eslintrc). NOTE: eslintrc support is removed in ESLint v10 — migrate this to a
+# generated flat config before any app upgrades to v10.
+ESLINT_USE_FLAT_CONFIG=false "$ESLINT_BIN" --no-eslintrc --no-inline-config --config "$CONFIG" \
   --resolve-plugins-relative-to "$RESOLVE_DIR" \
   --format json "${SURVIVORS[@]}" > "$OUT" 2>"$TMPDIR_EG/err.txt" || true
 

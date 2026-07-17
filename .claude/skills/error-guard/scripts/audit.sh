@@ -162,7 +162,14 @@ else
         "$TEMPLATE" > "$CONFIG"
 
       OUT="$TMPDIR_EG/out.json"
-      "$ESLINT_BIN" --no-eslintrc --config "$CONFIG" \
+      # ESLINT_USE_FLAT_CONFIG=false — force eslintrc mode so this rule kit works on
+      # ESLint v9 (which defaults to flat config and rejects --no-eslintrc, making the
+      # gate fail open) as well as v8. Migrate to a flat config before ESLint v10, which
+      # removes eslintrc support. (Same fix as scripts/check.sh.)
+      # --no-inline-config: parity with check.sh (6414c5e) — an app file's own
+      # eslint-disable comments can name rules this minimal config doesn't define, which
+      # ESLint then reports as ruleId-bearing messages that false-fail the gate.
+      ESLINT_USE_FLAT_CONFIG=false "$ESLINT_BIN" --no-eslintrc --no-inline-config --config "$CONFIG" \
         --resolve-plugins-relative-to "$RESOLVE_DIR" \
         --format json "${LINT_FILES[@]}" > "$OUT" 2>"$TMPDIR_EG/err.txt" || true
 
