@@ -3,6 +3,8 @@
  * rejected) with collapsible accordion sections.
  */
 import { Fragment, useState } from 'react';
+import { useViewTracking } from '@axis/app-core';
+import { logger } from '../../core';
 import { Avatar, Icon, MiniLoader, Rng, StatusBadge, TypeChip } from '../ui';
 import { ABSENCE_TYPES } from '../../domain/absence';
 import { workdaysBetween } from '../../domain/dates';
@@ -148,6 +150,7 @@ export function ApprovalsView({
   onApproveAll,
   approvingId,
 }: ApprovalsViewProps) {
+  useViewTracking(logger, 'approvals');
   const { t } = useL10n();
   const { requests, teams, teamsOf, statusColor } = useDayOffData();
 
