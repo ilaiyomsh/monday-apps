@@ -14,6 +14,7 @@ import {
   getVersion as getPeopleColumnsVersion,
 } from '../../utils/mondayApi/peopleColumns.js';
 import BoardPeoplePicker from './BoardPeoplePicker.jsx';
+import { PersonPicker } from '@generated/components/PersonPicker';
 import styles from './PermissionsTab.module.css';
 
 // Inline eye / eye-off glyphs for the per-role "hide" toggle (no eye icon in
@@ -343,6 +344,38 @@ export default function PermissionsTab({ permissions, setPermissions, columns, s
               {isRoleHidden(selectedKey) && (
                 <div className={styles.hiddenNote} dir="rtl">
                   העמודה הזו מוסתרת — ההרשאות שלה לא נאכפות. לחץ על אייקון העין בסרגל כדי להפעיל מחדש.
+                </div>
+              )}
+
+              {/* round147 — "חברי-על": a shared people list on the permissions
+                  blob. A super member is a REGULAR user plus exactly two extra
+                  abilities — adding discussion types and managing templates
+                  (they also get the gear in templates-only mode). Deliberately
+                  ACTIVE even while the matrix switch is off — like board
+                  membership, it isn't a matrix capability. */}
+              {selectedRole.tier.id === 'system' && (
+                <div className={styles.card} dir="rtl">
+                  <div className={styles.cardHead}>
+                    <span className={styles.cardIcon} aria-hidden="true"><Settings size={20} /></span>
+                    <Text type="text1" weight="medium">חברי-על</Text>
+                  </div>
+                  <div className={styles.capRows}>
+                    <Text type="text3" color="secondary">
+                      משתמשים רגילים עם שתי יכולות נוספות בלבד: הוספת סוגי דיון וניהול תבניות.
+                      פעיל גם כשמתג ההרשאות כבוי.
+                    </Text>
+                    <PersonPicker
+                      selected={permissions?.superMembers || []}
+                      onChange={(people) =>
+                        setPermissions((prev) => ({
+                          ...prev,
+                          superMembers: (people || []).map((p) => ({ id: String(p.id), name: p.name })),
+                        }))
+                      }
+                      accountWide
+                      bordered
+                    />
+                  </div>
                 </div>
               )}
 

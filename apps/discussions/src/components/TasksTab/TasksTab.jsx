@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { Skeleton, Button, Text } from '@vibe/core';
-import { DropdownChevronDown, CloseSmall, Filter } from '@vibe/icons';
+import { Skeleton, Button } from '@vibe/core';
+import { DropdownChevronDown, Filter } from '@vibe/icons';
+import { SelectionActionBar } from '@generated/components/SelectionActionBar';
 import { TaskTable } from '@generated/components/TaskTable';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS } from '@generated/components/GroupByBuilder';
@@ -489,23 +490,11 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
         </div>
       </div>
 
-      {selectedIds.size > 0 && (
-        <div className={styles.actionBar} role="region" aria-label="פעולות על משימות נבחרות">
-          <div className={styles.actionBarLeft}>
-            <Text type={"text2"} element="span">{selectedIds.size} נבחרו</Text>
-          </div>
-          <div className={styles.actionBarCenter}>
-            <Button kind={"secondary"} size={"small"} loading={deleting} disabled={deleting || deletableSelectedIds.length === 0} onClick={deleteSelectedTasks}>
-              מחיקה
-            </Button>
-          </div>
-          <div className={styles.actionBarRight}>
-            <button type="button" className={styles.closeSelectionBtn} onClick={clearSelection} aria-label="בטל בחירה">
-              <CloseSmall size={18} />
-            </button>
-          </div>
-        </div>
-      )}
+      <SelectionActionBar count={selectedIds.size} onClear={clearSelection} ariaLabel="פעולות על משימות נבחרות">
+        <Button kind={"secondary"} size={"small"} loading={deleting} disabled={deleting || deletableSelectedIds.length === 0} onClick={deleteSelectedTasks}>
+          מחיקה
+        </Button>
+      </SelectionActionBar>
 
       <div className={styles.board}>
       <div className={styles.groupScrollInner}>

@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Box, Button, Skeleton } from '@vibe/core';
 import { CloseSmall } from '@vibe/icons';
+import { SelectionActionBar } from '@generated/components/SelectionActionBar';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, Tooltip } from 'recharts';
 import { TaskTable } from '@generated/components/TaskTable';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
@@ -330,21 +331,9 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
               סגור
             </Button>
           </div>
-          {selectedIds.size > 0 && (
-            <div className={styles.actionBar} role="region" aria-label="פעולות על משימות נבחרות">
-              <div className={styles.actionBarLeft}>
-                <span>{selectedIds.size} נבחרו</span>
-              </div>
-              <div className={styles.actionBarCenter}>
-                <Button kind={"secondary"} size={"small"} onClick={deleteSelected}>מחיקה</Button>
-              </div>
-              <div className={styles.actionBarRight}>
-                <button type="button" className={styles.closeSelectionBtn} onClick={clearSelection} aria-label="בטל בחירה">
-                  <CloseSmall size={18} />
-                </button>
-              </div>
-            </div>
-          )}
+          <SelectionActionBar count={selectedIds.size} onClear={clearSelection} ariaLabel="פעולות על משימות נבחרות">
+            <Button kind={"secondary"} size={"small"} onClick={deleteSelected}>מחיקה</Button>
+          </SelectionActionBar>
           <div className={styles.taskStack}>
             {/* Same row component as the Tasks board; multi-select drives bulk
                 status/assignee/deadline edits (edit one selected row → all) + delete. */}

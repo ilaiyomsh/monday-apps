@@ -141,6 +141,23 @@ function isCreatorOrLead(discussion, myId) {
   );
 }
 
+// round147 — "חברי-על" (owner spec 2026-07-17): a super member is a regular
+// user plus exactly TWO extra abilities — adding discussion types and managing
+// topic templates. Nothing else: no content-edit bypass, no other system caps,
+// no settings access. The list lives on the permissions blob
+// (permissions.superMembers, entries {id, name} or bare ids) and is honored in
+// BOTH permission modes, so the grant sits above the fail-open/feature-on fork
+// and above the matrix (an explicit system-role revoke does not strip a super
+// member of the two defining caps — remove them from the list instead).
+const SUPER_MEMBER_CAPS = new Set(['addDiscussionTypes', 'manageTemplates']);
+
+export function isSuperMember(permissions, userId) {
+  const id = String(userId ?? '');
+  if (!id) return false;
+  const list = permissions?.superMembers;
+  return Array.isArray(list) && list.some((p) => String(p?.id ?? p) === id);
+}
+
 // Resolve a CAPABILITY_DEFAULTS fallback bucket against the held-role context.
 //   'all'              → every member (allow)
 //   'owner'            → owners/admins only (already handled by bypass → deny)
@@ -190,6 +207,9 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
   // 1. Owner bypass — unrestricted. Account admins are NOT auto-bypassed: an
   // admin who wants access makes themselves an OBJECT owner (native subscribers).
   if (canManageSettings) return true;
+
+  // 1b. Super-member grant (round147) — see SUPER_MEMBER_CAPS above.
+  if (SUPER_MEMBER_CAPS.has(capability) && isSuperMember(permissions, myId)) return true;
 
   // `ready` gate: until the discussion's people columns load we can't know the
   // user's role, so edit caps stay read-only. (Applies in BOTH the fail-open
@@ -401,6 +421,19 @@ export function usePermission(extra = {}) {
       );
     return can;
   }, [permissions, canManageSettings, defaultUserId, peopleColumnsVersion]);
+}
+
+/**
+ * useIsSuperMember — is the CURRENT user on the instance's super-members list
+ * (round147)? Drives super-only entry points (the templates-only settings
+ * gear); the capability checks themselves go through `can(...)` as usual.
+ */
+export function useIsSuperMember(extra = {}) {
+  const { permissions } = useSettings();
+  const ctxApi = useContext(MondayContext);
+  const currentUser = extra.currentUser ?? ctxApi?.currentUser;
+  const id = String(currentUser?.id ?? ctxApi?.context?.user?.id ?? '');
+  return isSuperMember(permissions, id);
 }
 
 /**
