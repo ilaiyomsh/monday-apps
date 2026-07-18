@@ -266,14 +266,19 @@ const logger = {
     domainKind: 'health', alwaysShip: true, consoleEnabled: currentLevel >= LOG_LEVELS.INFO
   }),
 
-  /** Express access-log helpers (used by request-logger middleware). */
+  /**
+   * Express access-log helpers (used by request-logger middleware).
+   * PRIVACY: log req.path, NOT req.originalUrl — the latter carries the query string,
+   * which can hold tokens/emails; a 4xx/5xx access log would then ship them via the
+   * sink's `url` allowlist. req.path is the route only, safe to ship.
+   */
   request: (req) => {
-    logger.debug('request_received', 'http', { method: req.method, url: req.originalUrl });
+    logger.debug('request_received', 'http', { method: req.method, url: req.path });
   },
   response: (req, statusCode, duration) => {
     const fn = statusCode >= 500 ? logger.error : statusCode >= 400 ? logger.warn : logger.debug;
     fn('request_completed', 'http', {
-      method: req.method, url: req.originalUrl, status: statusCode, ms: duration
+      method: req.method, url: req.path, status: statusCode, ms: duration
     });
   },
 
