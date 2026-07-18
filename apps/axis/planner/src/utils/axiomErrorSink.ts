@@ -22,6 +22,11 @@ import { createAxiomBrowserTransport } from './axiomBrowserTransport';
 import type { AxiomBrowserTransport } from './axiomBrowserTransport';
 import logger from './Logger';
 import type { LogRecord } from './Logger';
+// scrubMessage now lives in its own module (shared with Logger.ts, which scrubs Error-derived
+// record.message). Re-exported here so `import { scrubMessage } from './axiomErrorSink'` and the
+// D2 privacy spec's canonical home in this file are both preserved.
+import { scrubMessage } from './scrubMessage';
+export { scrubMessage } from './scrubMessage';
 
 // Build-time version constant injected by vite.config.ts `define` (mirrored to a literal in
 // vitest.config.ts). Declared module-locally so this file typechecks under BOTH tsconfig.app
@@ -143,29 +148,10 @@ function firstStackFrame(stack: unknown): string | undefined {
 }
 
 // ============================================
-// scrubMessage — privacy-scrub error.message before it ships as err_msg (D2)
+// scrubMessage — privacy-scrub error.message before it ships as err_msg (D2).
+// Spec + implementation now live in ./scrubMessage (imported + re-exported at the top of this
+// file) so Logger.ts can also scrub Error-derived messages without a circular import.
 // ============================================
-
-const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-const TOKEN_RE = /[A-Za-z0-9_-]{16,}/g;
-const DIGITS_RE = /\d{7,}/g;
-const MSG_PRECAP = 1000;
-const MSG_MAXLEN = 200;
-
-/**
- * Redact PII/secrets from an error message so it can ship as `err_msg` (D2). Order matters:
- * emails FIRST (their local part would otherwise be eaten by the token rule), then long
- * token/hex runs (>=16), then digit-runs (>=7). Pre-capped at 1000 to bound regex work, final
- * slice 200. Identical spec across app-core, the template, and every app.
- */
-export function scrubMessage(raw: unknown): string {
-  if (typeof raw !== 'string' || raw === '') return '';
-  let s = raw.slice(0, MSG_PRECAP);
-  s = s.replace(EMAIL_RE, '[email]');
-  s = s.replace(TOKEN_RE, '[redacted]');
-  s = s.replace(DIGITS_RE, '[num]');
-  return s.slice(0, MSG_MAXLEN);
-}
 
 // ============================================
 // mapRecordToEvent(record) — pure function (unit-test seam)

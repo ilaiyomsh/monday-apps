@@ -108,7 +108,9 @@ async function executeWithRetry(item: QueueItem): Promise<any> {
     // transient server error so the same retry/backoff applies.
     if (isThrownNetworkError(err) && item.retries < MAX_RETRIES) {
       const backoffMs = INITIAL_BACKOFF_MS * Math.pow(2, item.retries);
-      logger.warn(`[apiQueue] Transport error, retrying in ${backoffMs}ms (attempt ${item.retries + 1}/${MAX_RETRIES}): ${err instanceof Error ? err.message : String(err)}`);
+      // Pass the error as the error arg (NOT interpolated into the message) so its text ships
+      // ONLY scrubbed as err_msg — never raw in ev.message (D2). The message stays a stable id.
+      logger.warn(`[apiQueue] Transport error, retrying (attempt ${item.retries + 1}/${MAX_RETRIES})`, err);
       await delay(backoffMs);
       item.retries++;
       return executeWithRetry(item);
