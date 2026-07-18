@@ -58,6 +58,23 @@ describe('logger.track / logger.health', () => {
     expect(rec!.module).toBe('apiQueue'); // parsed from the leading [tag]
     expect(rec!.domainKind).toBeUndefined(); // sink defaults ev.kind to 'error'
   });
+
+  it('scrubs an Error-DERIVED record.message so a raw error.message can never reach ev.message (D2)', () => {
+    // No current call site passes an Error as the FIRST arg, but nothing enforces it. When one
+    // does, record.message is derived from error.message and MUST be scrubbed (same spec as the
+    // sink's err_msg) before it lands in ev.message via mapRecordToEvent.
+    const boom = new Error('leak admin@corp.co token ABCDEF0123456789ghij id 12345678');
+    const recs = capture(() => logger.error(boom));
+    const rec = recs.find((r) => r.level === 'ERROR');
+    expect(rec).toBeTruthy();
+    expect(rec!.error).toBe(boom); // the Error instance still travels for err_name/err_code/stack
+    expect(rec!.message).toBe('leak [email] token [redacted] id [num]');
+    // end-to-end: the scrubbed message survives into the wire envelope with no raw PII
+    const ev = mapRecordToEvent(rec as unknown as Parameters<typeof mapRecordToEvent>[0]);
+    expect(ev.message).toBe('leak [email] token [redacted] id [num]');
+    expect(String(ev.message)).not.toContain('@');
+    expect(String(ev.message)).not.toContain('12345678');
+  });
 });
 
 describe('scrubMessage (privacy D2)', () => {

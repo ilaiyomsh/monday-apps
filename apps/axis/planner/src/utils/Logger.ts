@@ -22,6 +22,8 @@
  *   window.AppLogger.reset()            // Reset to environment defaults
  */
 
+import { scrubMessage } from './scrubMessage';
+
 export type LogLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
 const LOG_LEVELS: Record<LogLevel, number> = {
@@ -347,15 +349,20 @@ class Logger {
         break;
       }
     }
+    // A developer-supplied string LITERAL is the stable English event id and ships raw. Any
+    // message DERIVED from a value we did not author (an Error's .message, or a stringified
+    // object — including a cross-realm Error that fails `instanceof` and stringifies to
+    // "Error: <msg>") is untrusted free text and is scrubbed with the SAME scrubMessage the
+    // sink applies to err_msg, so a raw error.message can never reach ev.message. (D2)
     let message = '';
     const first = args[0];
     if (typeof first === 'string') {
       message = first;
     } else if (first instanceof Error) {
-      message = first.message;
+      message = scrubMessage(first.message);
     } else if (first !== undefined && first !== null) {
       try {
-        message = String(first);
+        message = scrubMessage(String(first));
       } catch {
         message = '';
       }
