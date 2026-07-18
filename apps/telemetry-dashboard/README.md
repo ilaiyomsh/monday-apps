@@ -1,0 +1,135 @@
+# telemetry-dashboard
+
+An **access-controlled** monday-code app that visualizes **usage** and **error**
+telemetry from the Axiom **`app-errors`** dataset — broken down **by account** and
+**by app** — for the operator's own monday users.
+
+It is a hybrid app in the mold of `apps/deadline-confirm` and
+`apps/axis/sync-calender`: an Express server (monday-code) that serves a built
+Vite + React 18 + Recharts dashboard at `/` and exposes a single authenticated
+data endpoint.
+
+## What it shows (12 panels)
+
+- **Filter bar** — app multi-select, account multi-select, kind, time window
+  (24h / 7d / 30d / 90d), theme toggle (light / dark / system), refresh + freshness stamp.
+- **KPI row** — total / errors / usage / health / distinct accounts / distinct apps / error rate.
+- **Errors by app** (sorted bar) and **Errors by account** (sorted bar, top 15 + Other).
+- **Errors over time** (stacked area by app).
+- **Top errors** table (name / message / count / apps affected; click a row to cross-filter).
+- **Usage by app** and **Usage by account**.
+- **Top usage events** (view_open vs track).
+- **Boot health** (p50 → p95 dot-range per app).
+- **API latency** (100% stacked per app across fast / ok / slow / very_slow — status palette).
+- **App × Account volume heatmap** (single-hue sequential).
+
+The categorical palette (7 apps + Other), the status palette, and light/dark
+chrome come from the validated data-viz reference palette; charts are sorted,
+directly labeled, legended, and theme-aware.
+
+## Security model — access-controlled, NOT public
+
+This app serves **real per-account telemetry only through an authenticated
+endpoint**. It is private by construction:
+
+- **`GET /api/telemetry?window=<24h|7d|30d|90d>`** verifies the caller's **monday
+  session token first** (JWT signed with the app's Client Secret; identity under
+  `dat.account_id` / `dat.user_id`). Missing/invalid token → **401**, no data. An
+  optional `ALLOWED_ACCOUNT_IDS` allowlist further restricts which accounts may read
+  (**403** otherwise). The client obtains the token via the monday SDK
+  (`monday.get('sessionToken')`) and sends it in `Authorization`.
+- The **Axiom read token + org + dataset live only in server env** (read via the
+  SDK's `EnvironmentVariablesManager` / `process.env`). They are **never** in the
+  client bundle, **never** committed, **never** logged.
+- **No public publishing.** No GitHub Pages, no committed real-data JSON. The only
+  committed data is the **synthetic seed** (`src/client/data/seed.js`) — a
+  generated demo dataset with **no real account identifiers** — used as a
+  dev/demo fallback.
+- Access control is structural: the dashboard runs **inside monday**, behind
+  monday auth, behind the session-token gate.
+
+### Seed / demo mode
+
+When `AXIOM_QUERY_TOKEN` is unset, `GET /api/telemetry` returns `200 { seed:true }`
+(still behind the auth gate) and the client renders the bundled synthetic seed
+(~4000 records across the 7 apps, 8 fake accounts, and 3 kinds over 30 days). The
+same client-side `aggregate.js` that powers seed mode also re-filters live data,
+so every control stays responsive. This lets the app run and demo **before**
+Axiom is wired up.
+
+## Server
+
+- `src/index.js` — reads env (via `EnvironmentVariablesManager`), wires the
+  telemetry service, listens.
+- `src/app.js` — Express factory: `/health`, the gated `/api/telemetry`, and the
+  static SPA at `/`.
+- `src/middlewares/session-token.js` — the monday session-token gate.
+- `src/server/queries.js` — the 11 APL queries (see below).
+- `src/server/axiom.js` — Axiom `_apl` tabular query client.
+- `src/server/telemetry-service.js` — runs the 11 queries, assembles one JSON
+  payload, and caches per window (~5 min) so repeated loads don't hammer Axiom.
+
+### The 11 APL queries
+
+`kpi_summary`, `errors_by_app`, `errors_by_account`, `errors_over_time`,
+`top_errors`, `usage_by_app`, `usage_by_account`, `top_usage_events`,
+`health_boot`, `health_api_latency`, `app_account_crosstab` — each over
+`['app-errors'] | where _time between (_startTime .. _endTime)` (the client binds
+`_startTime` / `_endTime` from the requested window and passes the same window in
+the request body).
+
+## Local development
+
+```bash
+pnpm --filter ./apps/telemetry-dashboard dev   # server (8080) + vite (5174, proxies /api)
+```
+
+Copy `.env.example` → `.env`. Without `AXIOM_QUERY_TOKEN` the app runs in seed
+mode. `MONDAY_CLIENT_SECRET` is required for the session-token gate to accept
+real monday tokens (local dev outside monday simply falls back to the seed).
+
+## Environment variables (server-only)
+
+| var | purpose |
+|-----|---------|
+| `MONDAY_CLIENT_SECRET` | verifies the monday session token (Client Secret from Developer Center) |
+| `ALLOWED_ACCOUNT_IDS` | optional comma-separated account allowlist (empty = any authenticated account) |
+| `AXIOM_QUERY_TOKEN` | Axiom **read** token; unset → seed mode |
+| `AXIOM_DATASET` | dataset name (default `app-errors`) |
+| `AXIOM_ORG_ID` | optional Axiom org id header |
+
+None of these are ever shipped to the browser.
+
+## Deploy
+
+Server-side (monday-code) app — `mapps code:push` **without** `-c`. Two
+path-filtered workflows (`apps/telemetry-dashboard/**`):
+
+- `.github/workflows/deploy-draft-telemetry-dashboard.yml` — merge to `develop` →
+  latest **draft**.
+- `.github/workflows/deploy-live-telemetry-dashboard.yml` — merge to `main` →
+  force-deploy to latest **live**.
+
+> These workflows **cannot run until** the monday app exists and the
+> `APP_TELEMETRY_DASHBOARD_ID` secret is added (see activation).
+
+## Activation steps
+
+1. **Create the monday-code app** in the Developer Center to obtain an **App ID**
+   (and note its **Client Secret** for the session-token gate).
+2. **Add the GitHub secret** `APP_TELEMETRY_DASHBOARD_ID` = that App ID
+   (`MONDAY_TOKEN` already exists org-wide).
+3. **Set the server env on the platform** (never committed):
+   ```bash
+   mapps code:env -i <APP_ID> -k MONDAY_CLIENT_SECRET -v <client_secret>
+   mapps code:env -i <APP_ID> -k AXIOM_QUERY_TOKEN     -v <axiom_read_token>
+   mapps code:env -i <APP_ID> -k AXIOM_DATASET         -v app-errors
+   # optional:
+   mapps code:env -i <APP_ID> -k ALLOWED_ACCOUNT_IDS   -v <acc1,acc2>
+   mapps code:env -i <APP_ID> -k AXIOM_ORG_ID          -v <org_id>
+   ```
+4. **Deploy**: merge this app to `develop` (draft) — the draft workflow builds the
+   client and pushes; then promote `develop` → `main` for live.
+
+Until step 3's `AXIOM_QUERY_TOKEN` is set, the deployed app runs in **seed mode**
+(synthetic demo data) — still fully access-controlled.
