@@ -4,6 +4,9 @@
 
 ## 2.2.0 — 2026-07-17
 
+- Telemetry hardening: the api-latency health signal ships a coarse latency bucket
+  (fast/ok/slow/very_slow) instead of raw ms, so the transport can dedup it — an unbucketed
+  ms would burn the session ship-cap and starve real error records.
 - Axiom logging v2 telemetry — call sites (logger primitives already v2 from Phase 1c).
 - View-tracking: `useViewTracking(logger, 'calendar')` in `MondayCalendar.jsx` and `useViewTracking(logger, 'dashboard')` in `Dashboard.jsx` — one `view_open` usage event per view per session.
 - Boot health: `logger.health('boot_ok', { ms })` fired alongside `initSummary` at "Calendar fully interactive", reusing the same elapsed.
