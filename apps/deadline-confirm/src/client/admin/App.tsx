@@ -12,10 +12,15 @@ import { BoardConfigSection } from './components/BoardConfigSection';
 import { ButtonsSection } from './components/ButtonsSection';
 import { TemplatesSection } from './components/TemplatesSection';
 import { SecretSection } from './components/SecretSection';
+import logger from './utils/logger';
+import { useViewTracking } from './utils/viewTracking';
 
 type SaveStatus = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved' } | { kind: 'error'; message: string };
 
 export function App() {
+  // Usage telemetry (D3): the admin settings screen is reported once per session.
+  useViewTracking(logger, 'admin_settings');
+
   const [state, setState] = useState<AppState | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,7 +53,7 @@ export function App() {
         await loadState({ initDraft: true });
         setBoards(await fetchBoards());
       } catch (err) {
-        console.error('admin boot failed', err);
+        logger.error('admin', 'boot_failed', err);
         setBootError('טעינת ההגדרות נכשלה. ודאו שאתם פותחים את המסך מתוך monday ונסו לרענן.');
       }
     })();
@@ -74,7 +79,7 @@ export function App() {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        console.error('columns load failed', err);
+        logger.error('admin', 'columns_load_failed', err);
         setPickersError('טעינת עמודות הלוח נכשלה. נסו לרענן.');
       })
       .finally(() => {
@@ -123,7 +128,7 @@ export function App() {
       setSaveStatus({ kind: 'saved' });
       await loadState({ initDraft: false });
     } catch (err) {
-      console.error('config save failed', err);
+      logger.error('admin', 'config_save_failed', err);
       const message =
         err instanceof ApiError && err.field
           ? `השמירה נכשלה — שדה לא תקין: ${err.field}`
@@ -139,7 +144,7 @@ export function App() {
       setRotatedSecret(res.secret);
       await loadState({ initDraft: false });
     } catch (err) {
-      console.error('secret rotate failed', err);
+      logger.error('admin', 'secret_rotate_failed', err);
       setSaveStatus({ kind: 'error', message: 'יצירת מפתח חדש נכשלה. נסו שוב.' });
     } finally {
       setRotating(false);
@@ -151,7 +156,7 @@ export function App() {
     try {
       await loadState({ initDraft: false });
     } catch (err) {
-      console.error('state refresh failed', err);
+      logger.error('admin', 'state_refresh_failed', err);
       setBootError('רענון הסטטוס נכשל. נסו שוב.');
     } finally {
       setRefreshing(false);

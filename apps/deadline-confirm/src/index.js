@@ -52,6 +52,7 @@ attachAxiomServerSink(logger, {
   dataset: readEnv('AXIOM_DATASET'),
   app: readEnv('AXIOM_APP_NAME'),
   env: readEnv('NODE_ENV') || 'production',
+  ver: APP_VERSION, // stamped as ev.ver — release correlation (Fable #6)
   shipLevel: readEnv('LOG_SHIP_LEVEL'),
 });
 

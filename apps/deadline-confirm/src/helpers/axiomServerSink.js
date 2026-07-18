@@ -70,7 +70,7 @@ export function scrubMessage(raw) {
  * record → flat Axiom event. Pure function (unit-test seam). Reads config from
  * the passed context so it stays testable without env.
  * @param {object} record
- * @param {{ app?: string, env?: string }} [cfg]
+ * @param {{ app?: string, env?: string, ver?: string, sess?: string }} [cfg]
  */
 export function mapRecordToEvent(record, cfg = {}) {
   const r = record || {};
@@ -82,6 +82,12 @@ export function mapRecordToEvent(record, cfg = {}) {
     app: cfg.app ?? null,
     env: cfg.env ?? 'production',
   };
+  // ver (app version) + sess (per-process id) — parity with the browser transport, which
+  // always stamps them (Fable #6: server events previously shipped without either, so error
+  // dashboards couldn't correlate a server event to a release or a process instance). Omitted
+  // when absent so the pure-function tests (no cfg) stay unaffected.
+  if (cfg.ver != null) ev.ver = String(cfg.ver).slice(0, FIELD_MAX);
+  if (cfg.sess != null) ev.sess = String(cfg.sess).slice(0, FIELD_MAX);
   // DOMAIN discriminator (matches the client + app-core): error (default) | usage | health.
   // track()/health() set record.domainKind; NEVER ship a rendering kind.
   ev.kind = r.domainKind ?? 'error';
@@ -129,7 +135,7 @@ export function shouldShip(record, shipLevel = RANK.WARN) {
  * Inert (returns a no-op) unless token+dataset+app are all present.
  *
  * @param {{ addSink: (fn: (r: object) => void) => (() => void) }} logger
- * @param {{ token?: string, dataset?: string, app?: string, env?: string, shipLevel?: string }} [opts]
+ * @param {{ token?: string, dataset?: string, app?: string, env?: string, ver?: string, shipLevel?: string }} [opts]
  * @returns {() => void} unsubscribe (no-op when gated off)
  */
 export function attachAxiomServerSink(logger, opts = {}) {
@@ -137,6 +143,10 @@ export function attachAxiomServerSink(logger, opts = {}) {
   const dataset = opts.dataset || null;
   const app = opts.app || null;
   const env = opts.env || 'production';
+  const ver = opts.ver || null;
+  // Per-process session id — stamped on every event so a burst of errors can be tied to
+  // one process instance across a restart (parity with the browser transport's `sess`).
+  const sess = Math.random().toString(36).slice(2, 10);
   const shipLevel = RANK[String(opts.shipLevel ?? '').toUpperCase()] ?? RANK.WARN;
 
   if (!token || !dataset || !app || !logger?.addSink) return () => {};
@@ -161,7 +171,7 @@ export function attachAxiomServerSink(logger, opts = {}) {
   return logger.addSink((record) => {
     // logger fan-out already isolates sink throws; keep the hot path lean.
     if (!shouldShip(record, shipLevel)) return;
-    client.ingest(dataset, [mapRecordToEvent(record, { app, env })]);
+    client.ingest(dataset, [mapRecordToEvent(record, { app, env, ver, sess })]);
   });
 }
 
