@@ -34,6 +34,12 @@ const APP = process.env.AXIOM_APP_NAME || null;
 const ENV_NAME = process.env.NODE_ENV || 'production';
 const SHIP_LEVEL = RANK[String(process.env.LOG_SHIP_LEVEL ?? '').toUpperCase()] ?? RANK.WARN;
 
+// Envelope enrichment — mirrors the client transport (axiomBrowserTransport.js): every
+// shipped event carries `ver` (app version) and `sess` (per-process id) so records can be
+// grouped by deploy and by process instance in the shared dataset.
+const VER = process.env.npm_package_version || process.env.APP_VERSION || '0.0.0';
+const SESS = Math.random().toString(36).slice(2, 10); // per process — generated once at module load
+
 const ACTIVE = Boolean(DATASET && TOKEN && APP);
 
 let client = null;
@@ -99,6 +105,8 @@ export function mapRecordToEvent(record) {
     message: String(r.message ?? '').slice(0, 300),
     app: APP,
     env: ENV_NAME,
+    ver: VER,
+    sess: SESS,
   };
   // DOMAIN discriminator (matches the client + app-core): error (default) | usage | health.
   // track()/health() set record.domainKind; NEVER ship a rendering kind.
