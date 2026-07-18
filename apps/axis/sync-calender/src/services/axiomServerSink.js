@@ -61,7 +61,7 @@ const CTX_ALLOW = new Set([
   'created', 'updated', 'deleted', 'skipped', 'total', 'total_ms', 'ms',
   // monday-api + http operation fields (short ids / enums / op names)
   'board', 'boardId', 'itemId', 'columnId', 'op', 'code', 'reason',
-  'status', 'method', 'path', 'url', 'step',
+  'status', 'method', 'path', 'url', 'step', 'stage',
 ]);
 const FIELD_MAX = 256;
 
@@ -120,7 +120,14 @@ export function mapRecordToEvent(record) {
   }
   const ctx = r.context;
   if (ctx && typeof ctx === 'object') {
+    // Many call sites carry the failure detail as context.cause = err.message (a string).
+    // Ship it ONLY scrubbed, as err_msg (never via the raw-string branch below), and only when
+    // a real Error hasn't already provided err_msg — otherwise these errors ship contentless.
+    if (ev.err_msg === undefined && typeof ctx.cause === 'string' && ctx.cause !== '') {
+      ev.err_msg = scrubMessage(ctx.cause);
+    }
     for (const [key, val] of Object.entries(ctx)) {
+      if (key === 'cause') continue;                 // handled above (scrubbed) — never ship raw
       if (!CTX_ALLOW.has(key)) continue;
       if (typeof val === 'number' && Number.isFinite(val)) ev[key] = val;
       else if (typeof val === 'string') ev[key] = val.slice(0, FIELD_MAX);
