@@ -547,12 +547,18 @@ export function DiscussionList({
                   ההחלטות שלי
                 </Button>
               )}
-              {/* round152 — entry to the discussions dashboard, alongside the
-                  personal-view nav (owner request: graph icon by "ההחלטות שלי"). */}
+              {/* round152/153 — entry to the discussions dashboard, alongside the
+                  personal-view nav. round153: icon-only square button (owner
+                  request — the graph glyph, no "דשבורד" label). */}
               {onOpenDashboard && (
-                <Button kind={"secondary"} size={"small"} leftIcon={BarChart3} onClick={onOpenDashboard}>
-                  דשבורד
-                </Button>
+                <IconButton
+                  icon={BarChart3}
+                  size={"small"}
+                  kind={"tertiary"}
+                  ariaLabel="דשבורד דיונים"
+                  tooltipContent="דשבורד דיונים"
+                  onClick={onOpenDashboard}
+                />
               )}
             </div>
             <div className={styles.titleActions}>

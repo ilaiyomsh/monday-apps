@@ -69,6 +69,26 @@ const DECISION_STATUS_DEFAULTS = JSON.stringify({
 });
 
 /*
+ * Decision TRACKING column (decisions.decisionTrackingID) — round153, per the
+ * owner's spec. Five labels in this display order, "התקבלה" first = the default
+ * a new decision gets (see useDecisions). Labels are read from the mapped column
+ * at runtime, so editing them on the board is reflected instantly; this default
+ * only shapes a freshly-provisioned board.
+ */
+const DECISION_TRACKING_DEFAULTS = JSON.stringify({
+  labels: { 0: 'התקבלה', 1: 'הועברה ליישום', 2: 'מיושמת חלקית', 3: 'מיושמת באופן מלא', 4: 'נבחנת מחדש' },
+  labels_positions_v2: { 0: 0, 1: 1, 2: 2, 3: 3, 4: 4 },
+  labels_colors: {
+    0: { color: '#c4c4c4', border: '#b0b0b0', var_name: 'grey' },
+    1: { color: '#579bfc', border: '#4387e8', var_name: 'bright-blue' },
+    2: { color: '#fdab3d', border: '#e99729', var_name: 'orange' },
+    3: { color: '#00c875', border: '#00b461', var_name: 'green-shadow' },
+    4: { color: '#007eb5', border: '#3db0df', var_name: 'blue-links' },
+  },
+  done_colors: [3],
+});
+
+/*
  * The confirmed, trimmed column set (matches the live boards + what the code
  * reads/writes). `type` is a monday ColumnType. Order = board layout order.
  * `relations` are created LAST (need the target board id). `subitems` columns
@@ -155,6 +175,7 @@ export const PROVISION_SPEC = {
       { alias: 'deciderID', type: 'people', title: 'מקבל ההחלטה' },
       { alias: 'affectedID', type: 'people', title: 'מושפעים' },
       { alias: 'decisionStatusID', type: 'status', title: 'סטאטוס', defaults: DECISION_STATUS_DEFAULTS },
+      { alias: 'decisionTrackingID', type: 'status', title: 'מעקב החלטה', defaults: DECISION_TRACKING_DEFAULTS },
       { alias: 'decisionDateID', type: 'date', title: 'תאריך' },
     ],
     // discussionLinkID (back-link to discussions) is the reflection of

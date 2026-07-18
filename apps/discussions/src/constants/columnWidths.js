@@ -83,5 +83,6 @@ export const DECISIONS_COLUMN_WIDTHS = {
   decider: { default: 130, min: 90, max: 260 },
   affected: { default: 150, min: 100, max: 320 },
   status: { default: 170, min: 110, max: 340 },
+  tracking: { default: 180, min: 120, max: 360 },
   date: { default: 120, min: 90, max: 240 },
 };
