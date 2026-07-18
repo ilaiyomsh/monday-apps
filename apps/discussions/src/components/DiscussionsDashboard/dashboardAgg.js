@@ -1,15 +1,15 @@
-// Pure aggregation for the discussions dashboard (round152). All of the
-// dashboard's business logic lives here — time-range bounds, dimension
-// filtering, the seven metrics, and the sum/avg/median toggle — so it is
-// unit-testable independently of recharts/React.
+// Pure aggregation for the discussions dashboard (round152; period model +
+// drill-down lists added round154). All of the dashboard's business logic lives
+// here — the time-period model, dimension filtering, the metrics, the
+// sum/avg/median toggle, and the per-bucket / per-type discussion lists that
+// drive click-to-drill-down — so it is unit-testable independently of recharts.
 //
 // Data shapes (produced by useDashboardData, kept parse-close to the boards):
 //   discussion: { id, name, date: Date|null, type: string|null,
 //                 lead: [{id,name}], participants: [{id,name}] }
 //   task:       { id, discussionId: string|null, statusID: number|null, deadlineID: Date|null }
 //   decision:   { id, discussionId: string|null }
-// `doneStatusIds` is the Set<number> of task-status label ids that count as done
-// (same definition the EffectivenessTab uses).
+// `doneStatusIds` is the Set<number> of task-status label ids that count as done.
 
 import { isDelayed, startOfToday } from '../EffectivenessTab/effectiveness.js';
 
@@ -18,33 +18,79 @@ export const AGG_MODES = ['sum', 'avg', 'median'];
 
 const MONTHS_HE = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
 
+// The time-pill picks BOTH the bar-chart granularity AND how many trailing
+// buckets are shown (owner spec round154: week→weeks, month→months, …; the
+// dashboard opens on 'week'). Custom buckets by month across the chosen range.
+export const PERIOD_CONFIG = {
+  week: { unit: 'week', count: 8, axis: 'לפי שבוע' },
+  month: { unit: 'month', count: 12, axis: 'לפי חודש' },
+  quarter: { unit: 'quarter', count: 8, axis: 'לפי רבעון' },
+  year: { unit: 'year', count: 5, axis: 'לפי שנה' },
+};
+
 function startOfDay(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; }
 function endOfDay(d) { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; }
+const pad = (n) => String(n).padStart(2, '0');
+
+// Start of the unit containing `d` (local). Week starts Sunday (he-IL).
+function startOfUnit(d, unit) {
+  const x = startOfDay(d);
+  if (unit === 'week') { x.setDate(x.getDate() - x.getDay()); return x; }
+  if (unit === 'month') return new Date(x.getFullYear(), x.getMonth(), 1);
+  if (unit === 'quarter') return new Date(x.getFullYear(), Math.floor(x.getMonth() / 3) * 3, 1);
+  if (unit === 'year') return new Date(x.getFullYear(), 0, 1);
+  return x;
+}
+function addUnits(d, unit, n) {
+  const x = new Date(d);
+  if (unit === 'week') x.setDate(x.getDate() + n * 7);
+  else if (unit === 'month') x.setMonth(x.getMonth() + n);
+  else if (unit === 'quarter') x.setMonth(x.getMonth() + n * 3);
+  else if (unit === 'year') x.setFullYear(x.getFullYear() + n);
+  return x;
+}
+function keyOf(d, unit) {
+  const s = startOfUnit(d, unit);
+  if (unit === 'week') return `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`;
+  if (unit === 'month') return `${s.getFullYear()}-${pad(s.getMonth() + 1)}`;
+  if (unit === 'quarter') return `${s.getFullYear()}-Q${Math.floor(s.getMonth() / 3) + 1}`;
+  return `${s.getFullYear()}`;
+}
+function labelOf(start, unit) {
+  const yy = String(start.getFullYear()).slice(2);
+  if (unit === 'week') return `${pad(start.getDate())}/${pad(start.getMonth() + 1)}`;
+  if (unit === 'month') return `${MONTHS_HE[start.getMonth()]} ${yy}`;
+  if (unit === 'quarter') return `Q${Math.floor(start.getMonth() / 3) + 1}/${yy}`;
+  return `${start.getFullYear()}`;
+}
 
 /**
- * Trailing-window bounds for a range preset, anchored to `now`. week = last 7
- * days (inclusive); month/quarter/year subtract 1/3/12 months. `custom` wins
- * when preset==='custom' and both ends are present. Returns { from, to } as
- * local Date bounds (from at 00:00, to at 23:59:59).
+ * The period model for a preset: { from, to, unit, buckets }. Each bucket is
+ * { key, label, start }. week/month/quarter/year show a trailing run of buckets
+ * (PERIOD_CONFIG.count) ending with the one containing `now`; 'custom' buckets by
+ * month across [custom.from, custom.to] (falling back to the trailing year).
  */
-export function rangeBounds(preset, now = new Date(), custom = null) {
-  const to = endOfDay(now);
+export function buildPeriods(preset, now = new Date(), custom = null) {
   if (preset === 'custom') {
-    if (custom?.from && custom?.to) return { from: startOfDay(custom.from), to: endOfDay(custom.to) };
-    // no valid custom range yet → fall back to the trailing month
-    preset = 'month';
+    const from = custom?.from ? startOfUnit(custom.from, 'month') : startOfUnit(addUnits(now, 'year', -1), 'month');
+    const toDate = custom?.to ? custom.to : now;
+    const buckets = [];
+    let cur = from;
+    const lastStart = startOfUnit(toDate, 'month');
+    while (cur <= lastStart) {
+      buckets.push({ key: keyOf(cur, 'month'), label: labelOf(cur, 'month'), start: cur });
+      cur = addUnits(cur, 'month', 1);
+    }
+    return { from, to: endOfDay(toDate), unit: 'month', buckets };
   }
-  const from = startOfDay(now);
-  if (preset === 'week') {
-    from.setDate(from.getDate() - 6);
-  } else if (preset === 'month') {
-    from.setMonth(from.getMonth() - 1);
-  } else if (preset === 'quarter') {
-    from.setMonth(from.getMonth() - 3);
-  } else if (preset === 'year') {
-    from.setFullYear(from.getFullYear() - 1);
+  const { unit, count } = PERIOD_CONFIG[preset] || PERIOD_CONFIG.month;
+  const anchor = startOfUnit(now, unit);
+  const buckets = [];
+  for (let i = count - 1; i >= 0; i -= 1) {
+    const start = addUnits(anchor, unit, -i);
+    buckets.push({ key: keyOf(start, unit), label: labelOf(start, unit), start });
   }
-  return { from, to };
+  return { from: buckets[0].start, to: endOfDay(now), unit, buckets };
 }
 
 /** sum / mean(1dp) / median of a numeric array, per the toggle. Empty → 0. */
@@ -67,33 +113,22 @@ function hasPerson(arr, id) {
   return Array.isArray(arr) && arr.some((p) => String(p?.id) === String(id));
 }
 
-// Continuous 'YYYY-MM' buckets spanning [from, to], each with a Hebrew label —
-// so the bar chart shows every month in range, zero-filled where empty.
-function monthBuckets(from, to) {
-  const out = [];
-  const cur = new Date(from.getFullYear(), from.getMonth(), 1);
-  const end = new Date(to.getFullYear(), to.getMonth(), 1);
-  while (cur <= end) {
-    const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`;
-    out.push({ key, label: `${MONTHS_HE[cur.getMonth()]} ${String(cur.getFullYear()).slice(2)}`, count: 0 });
-    cur.setMonth(cur.getMonth() + 1);
-  }
-  return out;
-}
+// A light discussion projection for the drill-down lists.
+const proj = (d) => ({ id: String(d.id), name: d.name, date: d.date });
 
 /**
- * The dashboard model. Filters discussions by range + lead + type + participant,
- * scopes tasks/decisions to the surviving discussions, and returns every metric
- * and chart series variant B renders.
+ * The dashboard model. Filters discussions by period + lead + type + participant,
+ * scopes tasks/decisions to the surviving discussions, and returns every metric,
+ * chart series, AND the discussion list behind each period bucket / type slice.
  */
 export function aggregateDashboard(raw = {}, opts = {}) {
   const { discussions = [], tasks = [], decisions = [], doneStatusIds = new Set() } = raw;
   const {
-    preset = 'month', now = new Date(), custom = null,
+    preset = 'week', now = new Date(), custom = null,
     leadId = null, typeValue = null, participantId = null, mode = 'sum',
   } = opts;
 
-  const { from, to } = rangeBounds(preset, now, custom);
+  const { from, to, unit, buckets } = buildPeriods(preset, now, custom);
   const inRange = (d) => d instanceof Date && !Number.isNaN(d.getTime()) && d >= from && d <= to;
 
   const scoped = discussions.filter((d) =>
@@ -124,40 +159,45 @@ export function aggregateDashboard(raw = {}, opts = {}) {
   const totalTasks = scopedTasks.length;
   const effectivenessPct = totalTasks ? Math.round((done / totalTasks) * 100) : 0;
 
-  // Bar chart — discussions per month, continuous & zero-filled.
-  const buckets = monthBuckets(from, to);
-  const byKey = Object.fromEntries(buckets.map((b) => [b.key, b]));
+  // Bar chart — discussions per period bucket, continuous & zero-filled, each
+  // carrying the discussion list that composes it (drill-down).
+  const bucketByKey = Object.fromEntries(buckets.map((b) => [b.key, { key: b.key, label: b.label, count: 0, items: [] }]));
   scoped.forEach((d) => {
-    const k = `${d.date.getFullYear()}-${String(d.date.getMonth() + 1).padStart(2, '0')}`;
-    if (byKey[k]) byKey[k].count += 1;
+    const b = bucketByKey[keyOf(d.date, unit)];
+    if (b) { b.count += 1; b.items.push(proj(d)); }
   });
+  const byPeriod = buckets.map((b) => bucketByKey[b.key]);
 
-  // Donut — discussions per type.
+  // Donut — discussions per type, each carrying its discussion list (drill-down).
   const typeMap = {};
-  scoped.forEach((d) => { const k = d.type || 'ללא סוג'; typeMap[k] = (typeMap[k] || 0) + 1; });
-  const byType = Object.entries(typeMap)
-    .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => b.count - a.count);
+  scoped.forEach((d) => {
+    const k = d.type || 'ללא סוג';
+    if (!typeMap[k]) typeMap[k] = { label: k, count: 0, items: [] };
+    typeMap[k].count += 1;
+    typeMap[k].items.push(proj(d));
+  });
+  const byType = Object.values(typeMap).sort((a, b) => b.count - a.count);
 
-  // Top participants — people by number of discussions attended (top 5 + Other).
+  // Top participants — people by number of discussions attended (top 5).
   const partMap = {};
   scoped.forEach((d) => (Array.isArray(d.participants) ? d.participants : []).forEach((p) => {
     const k = String(p.id);
     if (!partMap[k]) partMap[k] = { id: k, name: p.name || k, count: 0 };
     partMap[k].count += 1;
   }));
-  const rankedParticipants = Object.values(partMap).sort((a, b) => b.count - a.count);
-  const byParticipant = rankedParticipants.slice(0, 5);
+  const byParticipant = Object.values(partMap).sort((a, b) => b.count - a.count).slice(0, 5);
 
   return {
     range: { from, to },
+    unit,
+    axisLabel: (PERIOD_CONFIG[preset] || {}).axis || 'לפי חודש',
     mode,
     totalDiscussions: scoped.length,
     decisionsPerDiscussion: summarize(decCounts, mode),
     tasksPerDiscussion: summarize(taskCounts, mode),
     participations: summarize(partCounts, mode),
     effectiveness: { pct: effectivenessPct, done, delayed, total: totalTasks },
-    byMonth: buckets,
+    byPeriod,
     byType,
     byParticipant,
   };

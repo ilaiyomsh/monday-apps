@@ -56,6 +56,8 @@ describe('DiscussionsDashboard', () => {
     expect(screen.getByText('67%')).toBeTruthy();
     // total discussions tile
     expect(screen.getByText('סך דיונים')).toBeTruthy();
+    // effectiveness help affordance (item 7) renders next to the hero title
+    expect(screen.getByLabelText('איך מחושב ציון האפקטיביות')).toBeTruthy();
     // sum mode: total decisions = 2, total participations = 3
     expect(screen.getByText('סך החלטות')).toBeTruthy();
   });
@@ -67,10 +69,21 @@ describe('DiscussionsDashboard', () => {
     expect(screen.getByText('ממוצע החלטות לדיון')).toBeTruthy();
   });
 
-  it('back button calls the handler', () => {
+  it('clicking a type legend drills down to that type’s discussions', () => {
+    render(<DiscussionsDashboard onBackToDiscussions={() => {}} />);
+    // the donut legend rows are real buttons (outside recharts) — clicking the
+    // שבועי type opens the drill-down list of the discussions composing it.
+    expect(screen.queryByText('A')).toBeNull(); // no list before the click
+    fireEvent.click(screen.getByRole('button', { name: /שבועי/ }));
+    expect(screen.getByText('A')).toBeTruthy(); // discussion A (type שבועי) listed
+  });
+
+  it('back arrow calls the handler', () => {
     const onBack = vi.fn();
     render(<DiscussionsDashboard onBackToDiscussions={onBack} />);
-    fireEvent.click(screen.getByText('← דיונים'));
+    // round154 — the back control is now the icon button to the LEFT of the
+    // title (matching My-Tasks/My-Decisions), keyed by its aria-label.
+    fireEvent.click(screen.getByLabelText('בחזרה לתצוגת הדיונים'));
     expect(onBack).toHaveBeenCalledTimes(1);
   });
 });

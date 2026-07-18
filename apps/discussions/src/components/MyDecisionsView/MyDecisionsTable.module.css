@@ -156,7 +156,14 @@
   top: 50%;
   transform: translateY(-50%);
 }
-/* round151 — anchor for the absolutely-positioned rename dots. */
-.taskHead .taskCell, .taskHead .taskFirst { position: relative; }
+/* round151 — anchor for the absolutely-positioned rename dots. round154 — the
+   FROZEN leading cell(s) must stay STICKY: `position: sticky` is itself a
+   containing block for the absolute rename dots, so a blanket `relative` here
+   was unnecessary AND harmful — it out-specified `.taskFirst`/`.selectCell`'s
+   sticky ONLY in the header, so the header's frozen column scrolled away while
+   the body's stayed pinned (the "column split at the top" on horizontal scroll).
+   Give `relative` to the non-frozen header cells only; re-assert sticky after. */
+.taskHead .taskCell { position: relative; }
+.taskHead .taskFirst, .taskHead .selectCell { position: sticky; }
 .renameDots:hover { background: var(--primary-background-hover-color, #eceff8); }
 .taskHead .taskCell:hover .renameDots, .taskHead .taskFirst:hover .renameDots { opacity: 1; }

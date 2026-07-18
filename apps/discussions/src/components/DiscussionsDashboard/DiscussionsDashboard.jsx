@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, Tooltip, LabelList,
   PieChart, Pie,
@@ -6,6 +7,7 @@ import {
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { useDashboardData } from '@generated/hooks/useDashboardData.js';
+import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { aggregateDashboard } from './dashboardAgg.js';
 import logger from '@generated/utils/logger.js';
 import { useViewTracking } from '@generated/utils/viewTracking.js';
@@ -26,8 +28,17 @@ const MODE_LABELS = [
 const MODE_NOUN = { sum: 'סך', avg: 'ממוצע', median: 'חציון' };
 // Validated categorical palette (dataviz skill) — fixed order, never cycled.
 const SERIES = ['#0073ea', '#008300', '#e87ba4', '#c98500', '#4a3aa7'];
-const DONE_COLOR = '#00854d';
-const DELAYED_COLOR = '#d83a52';
+
+const pad2 = (n) => String(n).padStart(2, '0');
+function fmtDate(d) {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
+}
+// Trim long participant names so they don't collide with the bars (owner note).
+function truncate(s, n = 12) {
+  const str = String(s ?? '');
+  return str.length > n ? `${str.slice(0, n - 1)}…` : str;
+}
 
 function ChartTooltip({ active, payload, label, suffix = '' }) {
   if (!active || !payload?.length) return null;
@@ -36,6 +47,16 @@ function ChartTooltip({ active, payload, label, suffix = '' }) {
       <div style={{ fontWeight: 700 }}>{payload[0]?.payload?.label ?? label}</div>
       <div>{payload[0].value}{suffix}</div>
     </div>
+  );
+}
+
+// Custom Y-axis tick for the top-participants chart: right-anchored + truncated so
+// long Hebrew names get their own gutter instead of overlapping the bars.
+function ParticipantTick({ x, y, payload }) {
+  return (
+    <text x={x} y={y} dy={4} textAnchor="end" fontSize={11} fill="#676879">
+      {truncate(payload?.value)}
+    </text>
   );
 }
 
@@ -54,12 +75,17 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
   useViewTracking(logger, 'dashboard');
   const { data, loading, error } = useDashboardData();
 
-  const [preset, setPreset] = useState('month');
+  // round154 — the dashboard opens on the WEEK slice (owner spec): weekly buckets
+  // + a trailing-weeks window.
+  const [preset, setPreset] = useState('week');
   const [custom, setCustom] = useState({ from: null, to: null });
   const [leadId, setLeadId] = useState('');
   const [typeValue, setTypeValue] = useState('');
   const [participantId, setParticipantId] = useState('');
   const [mode, setMode] = useState('sum');
+  // Click-to-drill-down: which bar (period bucket) or donut slice (type) is open.
+  const [drill, setDrill] = useState(null); // { kind:'period'|'type', key } | null
+  const drillRef = useRef(null);
 
   const discussions = data?.discussions || [];
   const leadOpts = useMemo(() => peopleOptions(discussions, 'lead'), [discussions]);
@@ -77,6 +103,27 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
     participantId: participantId || null,
   }) : null), [data, preset, custom, mode, leadId, typeValue, participantId]);
 
+  // Toggle a bar/slice open; picking the same one again closes the list.
+  const pickDrill = (kind, key) => {
+    if (key == null) return;
+    setDrill((prev) => (prev && prev.kind === kind && prev.key === key ? null : { kind, key }));
+  };
+  // Changing what's IN scope invalidates a bucket/type selection — close it.
+  useEffect(() => { setDrill(null); }, [preset, custom, leadId, typeValue, participantId]);
+
+  // Resolve the open selection to its discussion list (drill-down).
+  const drillView = useMemo(() => {
+    if (!drill || !model) return null;
+    const src = drill.kind === 'period' ? model.byPeriod : model.byType;
+    const match = src.find((x) => (drill.kind === 'period' ? x.key : x.label) === drill.key);
+    if (!match || !match.items.length) return null;
+    return { title: match.label, items: match.items };
+  }, [drill, model]);
+
+  useEffect(() => {
+    if (drillView && drillRef.current) drillRef.current.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+  }, [drill]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const noun = MODE_NOUN[mode];
   const eff = model?.effectiveness;
   const doneW = eff?.total ? (eff.done / eff.total) * 100 : 0;
@@ -84,146 +131,212 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
 
   return (
     <div className={styles.root}>
-      <div className={styles.topBar}>
-        <button type="button" className={styles.backBtn} onClick={onBackToDiscussions}>← דיונים</button>
-        <span className={styles.title}>📊 דשבורד דיונים</span>
-      </div>
-
-      <div className={styles.filters}>
-        <div className={styles.pillGroup} role="group" aria-label="טווח זמן">
-          {RANGE_LABELS.map((r) => (
-            <button key={r.key} type="button" className={`${styles.pill} ${preset === r.key ? styles.on : ''}`} onClick={() => setPreset(r.key)}>
-              {r.label}
-            </button>
-          ))}
-        </div>
-        {preset === 'custom' && (
-          <span className={styles.customRange}>
-            <DatePickerPopover variant="field" value={custom.from} onChange={(d) => setCustom((c) => ({ ...c, from: d }))} />
-            <span className={styles.dash}>–</span>
-            <DatePickerPopover variant="field" value={custom.to} onChange={(d) => setCustom((c) => ({ ...c, to: d }))} />
-          </span>
+      {/* Header — same pattern as "המשימות שלי"/"ההחלטות שלי": LTR row so the
+          back arrow sits physically LEFT of the RTL title, on the shared gutter. */}
+      <div className={styles.viewHeader}>
+        {onBackToDiscussions && (
+          <button
+            type="button"
+            className={styles.backArrowBtn}
+            onClick={onBackToDiscussions}
+            aria-label="בחזרה לתצוגת הדיונים"
+            title="בחזרה לתצוגת הדיונים"
+          >
+            <ArrowLeft size={20} aria-hidden="true" />
+          </button>
         )}
-        <select className={styles.dim} value={leadId} onChange={(e) => setLeadId(e.target.value)} aria-label="מנהל דיון">
-          <option value="">מנהל דיון: הכל</option>
-          {leadOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <select className={styles.dim} value={typeValue} onChange={(e) => setTypeValue(e.target.value)} aria-label="סוג דיון">
-          <option value="">סוג דיון: הכל</option>
-          {typeOpts.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
-        <select className={styles.dim} value={participantId} onChange={(e) => setParticipantId(e.target.value)} aria-label="משתתף">
-          <option value="">משתתף: הכל</option>
-          {participantOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <span className={styles.spacer} />
-        <div className={styles.pillGroup} role="group" aria-label="צבירה">
-          {MODE_LABELS.map((m) => (
-            <button key={m.key} type="button" className={`${styles.pill} ${mode === m.key ? styles.on : ''}`} onClick={() => setMode(m.key)}>
-              {m.label}
-            </button>
-          ))}
-        </div>
+        <h1 className={styles.viewTitle}>דשבורד דיונים</h1>
       </div>
 
-      {loading ? (
-        <BrandLoader />
-      ) : error ? (
-        <div className={styles.empty}>אירעה שגיאה בטעינת נתוני הדשבורד</div>
-      ) : (
-        <>
-          <div className={styles.heroRow}>
-            <div className={styles.hero}>
-              <span className={styles.heroLabel}>אפקטיביות דיונים</span>
-              <span className={styles.heroValue}>{eff.pct}%</span>
-              <span className={styles.heroSub}>{eff.done} משימות בוצעו · {eff.delayed} בעיכוב (עבר הדדליין וטרם בוצעו) · מתוך {eff.total}</span>
-              <div className={styles.effBar}>
-                <div style={{ width: `${doneW}%`, background: '#7fd8a9' }} />
-                <div style={{ width: 2, background: 'rgba(255,255,255,.6)' }} />
-                <div style={{ width: `${delayedW}%`, background: '#ffb3c0' }} />
-              </div>
-            </div>
-            <div className={styles.kpis}>
-              <div className={styles.kpi} style={{ '--accent': SERIES[0] }}>
-                <div className={styles.kLabel}>סך דיונים</div>
-                <div className={styles.kValue}>{model.totalDiscussions}</div>
-              </div>
-              <div className={styles.kpi} style={{ '--accent': SERIES[2] }}>
-                <div className={styles.kLabel}>{noun} השתתפויות{mode !== 'sum' ? ' לדיון' : ''}</div>
-                <div className={styles.kValue}>{model.participations}</div>
-              </div>
-              <div className={styles.kpi} style={{ '--accent': SERIES[4] }}>
-                <div className={styles.kLabel}>{noun} החלטות{mode !== 'sum' ? ' לדיון' : ''}</div>
-                <div className={styles.kValue}>{model.decisionsPerDiscussion}</div>
-              </div>
-              <div className={styles.kpi} style={{ '--accent': SERIES[3] }}>
-                <div className={styles.kLabel}>{noun} משימות{mode !== 'sum' ? ' לדיון' : ''}</div>
-                <div className={styles.kValue}>{model.tasksPerDiscussion}</div>
-              </div>
-            </div>
+      <div className={styles.scroll}>
+        <div className={styles.filters}>
+          <div className={styles.pillGroup} role="group" aria-label="טווח זמן">
+            {RANGE_LABELS.map((r) => (
+              <button key={r.key} type="button" className={`${styles.pill} ${preset === r.key ? styles.on : ''}`} onClick={() => setPreset(r.key)}>
+                {r.label}
+              </button>
+            ))}
           </div>
+          {preset === 'custom' && (
+            <span className={styles.customRange}>
+              <DatePickerPopover variant="field" value={custom.from} onChange={(d) => setCustom((c) => ({ ...c, from: d }))} />
+              <span className={styles.dash}>–</span>
+              <DatePickerPopover variant="field" value={custom.to} onChange={(d) => setCustom((c) => ({ ...c, to: d }))} />
+            </span>
+          )}
+          <select className={styles.dimSelect} value={leadId} onChange={(e) => setLeadId(e.target.value)} aria-label="מנהל דיון">
+            <option value="">מנהל דיון: הכל</option>
+            {leadOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select className={styles.dimSelect} value={typeValue} onChange={(e) => setTypeValue(e.target.value)} aria-label="סוג דיון">
+            <option value="">סוג דיון: הכל</option>
+            {typeOpts.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select className={styles.dimSelect} value={participantId} onChange={(e) => setParticipantId(e.target.value)} aria-label="משתתף">
+            <option value="">משתתף: הכל</option>
+            {participantOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <span className={styles.spacer} />
+          <div className={styles.pillGroup} role="group" aria-label="צבירה">
+            {MODE_LABELS.map((m) => (
+              <button key={m.key} type="button" className={`${styles.pill} ${mode === m.key ? styles.on : ''}`} onClick={() => setMode(m.key)}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
-          <div className={styles.grid}>
-            <div className={styles.card}>
-              <div className={styles.cardTitle}>דיונים לפי חודש</div>
-              {model.byMonth.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={model.byMonth} margin={{ top: 18, right: 8, left: 8, bottom: 4 }}>
-                    <CartesianGrid vertical={false} stroke="#edf0f6" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9699a6' }} axisLine={false} tickLine={false} />
-                    <YAxis hide />
-                    <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(0,115,234,.06)' }} />
-                    <Bar dataKey="count" fill={SERIES[0]} radius={[4, 4, 0, 0]} maxBarSize={46}>
-                      <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: '#323338', fontWeight: 600 }} />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            <div className={styles.card}>
-              <div className={styles.cardTitle}>התפלגות לפי סוג דיון</div>
-              {model.byType.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
-                <div className={styles.donutWrap}>
-                  <ResponsiveContainer width={150} height={150}>
-                    <PieChart>
-                      <Pie data={model.byType} dataKey="count" nameKey="label" innerRadius={42} outerRadius={68} paddingAngle={2} stroke="#fff" strokeWidth={2}>
-                        {model.byType.map((entry, i) => <Cell key={entry.label} fill={SERIES[i % SERIES.length]} />)}
-                      </Pie>
-                      <Tooltip content={<ChartTooltip />} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className={styles.legend}>
-                    {model.byType.map((entry, i) => (
-                      <span key={entry.label}>
-                        <span className={styles.sw} style={{ background: SERIES[i % SERIES.length] }} />
-                        {entry.label} · <b>{entry.count}</b>
-                      </span>
-                    ))}
-                  </div>
+        {loading ? (
+          <BrandLoader />
+        ) : error ? (
+          <div className={styles.empty}>אירעה שגיאה בטעינת נתוני הדשבורד</div>
+        ) : (
+          <>
+            <div className={styles.heroRow}>
+              <div className={styles.hero}>
+                <span className={styles.heroLabel}>
+                  אפקטיביות דיונים
+                  {/* round154 item 7 (owner-approved formula) — a "?" to the LEFT
+                      of the title with an RTL hover explanation of the score. */}
+                  <span className={styles.effHelp}>
+                    <button type="button" className={styles.effHelpIcon} aria-label="איך מחושב ציון האפקטיביות">?</button>
+                    <span className={styles.effTip} role="tooltip">
+                      ציון האפקטיביות = מספר המשימות שבוצעו מתוך סך כל המשימות של הדיונים שבטווח/בסינון הנוכחי (למשל 2 מתוך 26 = 8%). משימות בעיכוב — כאלה שעבר הדדליין שלהן וטרם בוצעו — מוצגות לצד המספר אך אינן נכנסות למכנה.
+                    </span>
+                  </span>
+                </span>
+                <span className={styles.heroValue}>{eff.pct}%</span>
+                <span className={styles.heroSub}>{eff.done} משימות בוצעו · {eff.delayed} בעיכוב (עבר הדדליין וטרם בוצעו) · מתוך {eff.total}</span>
+                <div className={styles.effBar}>
+                  <div style={{ width: `${doneW}%`, background: '#7fd8a9' }} />
+                  <div style={{ width: 2, background: 'rgba(255,255,255,.6)' }} />
+                  <div style={{ width: `${delayedW}%`, background: '#ffb3c0' }} />
                 </div>
-              )}
+              </div>
+              <div className={styles.kpis}>
+                <div className={styles.kpi} style={{ '--accent': SERIES[0] }}>
+                  <div className={styles.kLabel}>סך דיונים</div>
+                  <div className={styles.kValue}>{model.totalDiscussions}</div>
+                </div>
+                <div className={styles.kpi} style={{ '--accent': SERIES[2] }}>
+                  <div className={styles.kLabel}>{noun} משתתפים בדיונים{mode !== 'sum' ? ' לדיון' : ''}</div>
+                  <div className={styles.kValue}>{model.participations}</div>
+                </div>
+                <div className={styles.kpi} style={{ '--accent': SERIES[4] }}>
+                  <div className={styles.kLabel}>{noun} החלטות{mode !== 'sum' ? ' לדיון' : ''}</div>
+                  <div className={styles.kValue}>{model.decisionsPerDiscussion}</div>
+                </div>
+                <div className={styles.kpi} style={{ '--accent': SERIES[3] }}>
+                  <div className={styles.kLabel}>{noun} משימות{mode !== 'sum' ? ' לדיון' : ''}</div>
+                  <div className={styles.kValue}>{model.tasksPerDiscussion}</div>
+                </div>
+              </div>
             </div>
 
-            <div className={styles.card}>
-              <div className={styles.cardTitle}>השתתפויות — 5 מובילים</div>
-              {model.byParticipant.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart layout="vertical" data={model.byParticipant} margin={{ top: 4, right: 28, left: 8, bottom: 4 }}>
-                    <CartesianGrid horizontal={false} stroke="#edf0f6" />
-                    <XAxis type="number" hide />
-                    <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11, fill: '#676879' }} axisLine={false} tickLine={false} />
-                    <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(232,123,164,.08)' }} />
-                    <Bar dataKey="count" fill={SERIES[2]} radius={[0, 4, 4, 0]} maxBarSize={22}>
-                      <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: '#323338', fontWeight: 600 }} />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
+            <div className={styles.grid}>
+              <div className={styles.card}>
+                <div className={styles.cardTitle}>דיונים {model.axisLabel}</div>
+                {model.byPeriod.every((b) => b.count === 0) ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={model.byPeriod} margin={{ top: 18, right: 8, left: 8, bottom: 4 }}>
+                      <CartesianGrid vertical={false} stroke="#edf0f6" />
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9699a6' }} axisLine={false} tickLine={false} />
+                      <YAxis hide />
+                      <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(0,115,234,.06)' }} />
+                      <Bar
+                        dataKey="count"
+                        fill={SERIES[0]}
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={46}
+                        cursor="pointer"
+                        onClick={(d) => pickDrill('period', d?.payload?.key ?? d?.key)}
+                      >
+                        <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: '#323338', fontWeight: 600 }} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              <div className={styles.card}>
+                <div className={styles.cardTitle}>התפלגות לפי סוג דיון</div>
+                {model.byType.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+                  <div className={styles.donutWrap}>
+                    <ResponsiveContainer width={150} height={150}>
+                      <PieChart>
+                        <Pie
+                          data={model.byType}
+                          dataKey="count"
+                          nameKey="label"
+                          innerRadius={42}
+                          outerRadius={68}
+                          paddingAngle={2}
+                          stroke="#fff"
+                          strokeWidth={2}
+                          cursor="pointer"
+                          onClick={(d) => pickDrill('type', d?.label ?? d?.payload?.label)}
+                        >
+                          {model.byType.map((entry, i) => <Cell key={entry.label} fill={SERIES[i % SERIES.length]} />)}
+                        </Pie>
+                        <Tooltip content={<ChartTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className={styles.legend}>
+                      {model.byType.map((entry, i) => (
+                        <button
+                          key={entry.label}
+                          type="button"
+                          className={styles.legendRow}
+                          onClick={() => pickDrill('type', entry.label)}
+                        >
+                          <span className={styles.sw} style={{ background: SERIES[i % SERIES.length] }} />
+                          {entry.label} · <b>{entry.count}</b>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className={styles.card}>
+                <div className={styles.cardTitle}>משתתפים מובילים בדיונים</div>
+                {model.byParticipant.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart layout="vertical" data={model.byParticipant} margin={{ top: 4, right: 28, left: 8, bottom: 4 }}>
+                      <CartesianGrid horizontal={false} stroke="#edf0f6" />
+                      <XAxis type="number" hide />
+                      <YAxis type="category" dataKey="name" width={104} tick={<ParticipantTick />} axisLine={false} tickLine={false} />
+                      <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(232,123,164,.08)' }} />
+                      <Bar dataKey="count" fill={SERIES[2]} radius={[0, 4, 4, 0]} maxBarSize={22}>
+                        <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: '#323338', fontWeight: 600 }} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
             </div>
-          </div>
-        </>
-      )}
+
+            {/* Drill-down: the discussions that compose the clicked bar / slice
+                (mirrors the effectiveness-dashboard bar drill-down). */}
+            {drillView && (
+              <div className={styles.drill} ref={drillRef}>
+                <div className={styles.drillHeader}>
+                  <span className={styles.drillTitle}>דיונים · {drillView.title} · {drillView.items.length}</span>
+                  <button type="button" className={styles.drillClose} onClick={() => setDrill(null)}>סגור ✕</button>
+                </div>
+                <div className={styles.drillList}>
+                  {drillView.items.map((it) => (
+                    <button key={it.id} type="button" className={styles.drillItem} onClick={() => openOrToggleItemCard(it.id)}>
+                      <span className={styles.drillName}>{it.name}</span>
+                      <span className={styles.drillDate}>{fmtDate(it.date)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
