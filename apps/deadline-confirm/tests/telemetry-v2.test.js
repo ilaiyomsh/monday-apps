@@ -123,6 +123,18 @@ describe('mapRecordToEvent (wire schema)', () => {
     expect(ev.err_msg).toBe('mail [email] failed');
     expect(ev.err_name).toBe('Error');
   });
+  it('stamps ver/sess from cfg (Fable #6) and omits them when cfg lacks them', () => {
+    const withCfg = mapRecordToEvent(
+      { level: 'ERROR', tag: 'x', message: 'boom' },
+      { app: 'deadline-confirm', env: 'production', ver: '0.4.0', sess: 'abc123' },
+    );
+    expect(withCfg.ver).toBe('0.4.0');
+    expect(withCfg.sess).toBe('abc123');
+    const noCfg = mapRecordToEvent({ level: 'ERROR', tag: 'x', message: 'boom' });
+    expect('ver' in noCfg).toBe(false);
+    expect('sess' in noCfg).toBe(false);
+  });
+
   it('ships allow-listed context (itemId/outcome/op/ms/ok) but never ip', () => {
     const ev = mapRecordToEvent({
       level: 'INFO', tag: 'attempt', message: 'confirm_attempt',

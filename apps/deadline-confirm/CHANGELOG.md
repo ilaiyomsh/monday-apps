@@ -25,10 +25,15 @@
 - `tests/telemetry-v2.test.js` (new): 13 lock tests for the new primitives (encodeDims / track /
   health / emit+beforeSend ip-scrub / scrubMessage / mapRecordToEvent / shouldShip).
 - Dependency: `@axiomhq/js@^1.3.1` (already in the workspace via sync-calender).
-- **Deferred (flagged):** the client admin-SPA telemetry (client `logger.ts` + browser sink +
-  transport + `useViewTracking` + client boot/api-latency health). The strict-TS admin app has a
-  `tsc --noEmit` gate and the reference browser logger/sink/transport exist only as untyped `.js`;
-  porting them cleanly is a separate, non-trivial unit deferred to keep the verified server port safe.
+- **Follow-up (delivered):** the previously-deferred client admin-SPA telemetry landed, fully
+  TS-clean under the strict `tsc --noEmit` gate — new `src/client/admin/utils/{logger,axiomBrowserTransport,
+  axiomErrorSink,viewTracking,latency}.ts` (TS ports of the error-guard templates), `attachAxiomSink()`
+  in `main.tsx` before render + one-shot boot health, `useViewTracking(logger,'admin_settings')` in
+  `App.tsx`, every raw `console.error` catch (ErrorBoundary / App / services) replaced with `logger.*`,
+  and bucketed `api_latency` health in `services/api.ts` + `services/monday.ts`; sink stays inert unless
+  the `VITE_AXIOM_*` gate passes in a prod build. Also (Fable #6) the **server** sink now stamps `ev.ver`
+  (app version) + `ev.sess` (per-process id) for release/process correlation — the legacy line writers
+  stay byte-locked (tests/core-output.test.js green).
 
 ## 2026-07
 
