@@ -11,7 +11,7 @@
 // default. Incident mode: set LOG_SHIP_LEVEL=DEBUG (or INFO) in env to widen —
 // remember to unset it after the investigation.
 //
-// PRIVACY: ships level/tag/message/kind + err_name/err_code/err_msg (error.message
+// PRIVACY: ships level/tag/message/kind + static app/env/ver/sess dims + err_name/err_code/err_msg (error.message
 // ONLY scrubbed via scrubMessage: emails / tokens&hex>=16 / digit-runs>=7 redacted,
 // capped 200) + first stack frame + allow-listed short id/counter context fields.
 // Free-form payloads (emails, event titles, links, GraphQL bodies, tokens) are
@@ -20,6 +20,7 @@
 // This is a sink file — exempt from the no-console rule (breadcrumbs only,
 // never re-enters the logger: recursion hazard).
 
+import { readFileSync } from 'node:fs';
 import { Axiom } from '@axiomhq/js';
 
 const RANK = { ERROR: 3, WARN: 2, INFO: 1, DEBUG: 0 };
@@ -28,6 +29,17 @@ const DATASET = process.env.AXIOM_DATASET || null;
 const TOKEN = process.env.AXIOM_TOKEN || null;
 const APP = process.env.AXIOM_APP_NAME || 'calendar-sync';
 const ENV_NAME = process.env.NODE_ENV || 'production';
+
+// ver/sess — mirror the browser transport's envelope so server events carry the
+// same two dimensions (Fable #6). `ver` is the deployed app version (package.json
+// is the source of truth, exactly as index.js resolves it); `sess` is a random
+// per-process boot id so every event from one server instance/deploy groups
+// together. Both are static for the process lifetime.
+let VERSION = '0.0.0';
+try {
+  VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version || VERSION;
+} catch { /* keep the default — never block logging over a version lookup */ }
+const SESSION = Math.random().toString(36).slice(2, 10);
 const SHIP_LEVEL = RANK[String(process.env.LOG_SHIP_LEVEL ?? '').toUpperCase()] ?? RANK.WARN;
 
 // Preserve the prior activation gate: Axiom was enabled whenever TOKEN + DATASET
@@ -103,6 +115,8 @@ export function mapRecordToEvent(record) {
     message: String(r.message ?? '').slice(0, 300),
     app: APP,
     env: ENV_NAME,
+    ver: VERSION,
+    sess: SESSION,
   };
   // DOMAIN discriminator (matches the client + app-core): error (default) | usage | health.
   // track()/health() set record.domainKind; NEVER ship a rendering kind.
