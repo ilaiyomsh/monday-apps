@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Pencil, Check, RotateCcw, EyeOff, GripVertical } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Pencil, Check, RotateCcw, EyeOff, GripVertical } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, Tooltip, LabelList,
   PieChart, Pie,
@@ -235,11 +235,18 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
                 ))}
               </div>
               {preset === 'custom' && (
-                <span className={styles.customRange}>
-                  <DatePickerPopover variant="field" value={custom.from} onChange={(d) => setCustom((c) => ({ ...c, from: d }))} />
-                  <span className={styles.dash}>–</span>
-                  <DatePickerPopover variant="field" value={custom.to} onChange={(d) => setCustom((c) => ({ ...c, to: d }))} />
-                </span>
+                // round163 — start date on the LEFT, end date on the RIGHT, an
+                // arrow pointing toward the end, and explicit placeholders so it's
+                // clear which is which. Wraps (never clips) in a narrow filter.
+                <div className={styles.customRange}>
+                  <span className={styles.crField}>
+                    <DatePickerPopover variant="field" placeholder="תאריך התחלה" value={custom.from} onChange={(d) => setCustom((c) => ({ ...c, from: d }))} />
+                  </span>
+                  <ArrowRight size={16} className={styles.crArrow} aria-hidden="true" />
+                  <span className={styles.crField}>
+                    <DatePickerPopover variant="field" placeholder="תאריך סיום" value={custom.to} onChange={(d) => setCustom((c) => ({ ...c, to: d }))} />
+                  </span>
+                </div>
               )}
             </div>
             <div className={styles.fSection}>

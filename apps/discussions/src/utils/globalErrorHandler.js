@@ -82,6 +82,15 @@ export const setupGlobalErrorHandlers = () => {
     window.addEventListener('error', (event) => {
         const error = event.error;
 
+        // "ResizeObserver loop completed with undelivered notifications" — הדפדפן
+        // פולט את זה כשקולבק של ResizeObserver גורם ל-reflow נוסף (מקור נפוץ:
+        // ה-ResponsiveContainer של recharts). זו התראה שפירה, בלי אובייקט error
+        // (event.error === null), ואסור שתציג טוסט למשתמש. מתעלמים בשקט.
+        if (typeof event.message === 'string' && event.message.includes('ResizeObserver loop')) {
+            event.preventDefault();
+            return;
+        }
+
         // chunk-load failures (deploy חדש, רשת נופלת, MIME type) — refresh חד-פעמי
         if (handleGlobalChunkError(error)) {
             event.preventDefault();

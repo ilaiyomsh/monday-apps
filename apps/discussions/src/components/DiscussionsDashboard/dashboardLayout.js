@@ -37,19 +37,22 @@ export const WIDGET_IDS = WIDGETS.map((w) => w.id);
 // Default placement — approximates the round158/159 three-zone layout: filter
 // rail + logo on the left, effectiveness + four cubes in the middle, bar +
 // donut on the right, participants under the cubes.
-// In the fine 48-col / 12px-row grid, balanced so all three zones end on the
-// same row (~24): filter+logo on the left (8 cols), effectiveness + four cubes
-// in the middle (16 cols), bar + donut on the right (24 cols).
+// round163 — the owner's chosen arrangement, adopted as the default for every
+// instance (unless edited): filter rail on the left; a 2×2 block of number
+// cubes in the middle with the big effectiveness card to its right; the daily
+// bar chart across the bottom-middle and the type donut bottom-right. A small
+// logo sits top-left above the filter (visible for instances that upload one;
+// hideable). All zones end on the same bottom row (34).
 export const DEFAULT_LAYOUT = {
-  logo:             { x: 0,  y: 0,  w: 8,  h: 8 },
-  filter:           { x: 0,  y: 8,  w: 8,  h: 16 },
-  effectiveness:    { x: 8,  y: 0,  w: 16, h: 8 },
-  cubeParticipants: { x: 8,  y: 8,  w: 8,  h: 8 },
-  cubeDiscussions:  { x: 16, y: 8,  w: 8,  h: 8 },
-  cubeTasks:        { x: 8,  y: 16, w: 8,  h: 8 },
-  cubeDecisions:    { x: 16, y: 16, w: 8,  h: 8 },
-  bar:              { x: 24, y: 0,  w: 24, h: 11 },
-  donut:            { x: 24, y: 11, w: 24, h: 13 },
+  logo:             { x: 0,  y: 0,  w: 12, h: 5 },
+  filter:           { x: 0,  y: 5,  w: 12, h: 29 },
+  cubeParticipants: { x: 13, y: 0,  w: 7,  h: 6 },
+  cubeDiscussions:  { x: 20, y: 0,  w: 7,  h: 6 },
+  cubeTasks:        { x: 13, y: 6,  w: 7,  h: 7 },
+  cubeDecisions:    { x: 20, y: 6,  w: 7,  h: 7 },
+  effectiveness:    { x: 27, y: 0,  w: 21, h: 13 },
+  bar:              { x: 13, y: 13, w: 22, h: 21 },
+  donut:            { x: 35, y: 13, w: 13, h: 21 },
 };
 
 const clampInt = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(n)));
