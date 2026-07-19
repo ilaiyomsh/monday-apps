@@ -91,7 +91,7 @@ export async function fetchBoardColumns(boardId: string): Promise<BoardColumn[]>
   }>(
     `query AdminColumns($boardIds: [ID!]) {
       boards(ids: $boardIds) {
-        columns(types: [status, people, date]) { id title type settings }
+        columns(types: [status, people, date, email]) { id title type settings }
       }
     }`,
     { boardIds: [boardId] }

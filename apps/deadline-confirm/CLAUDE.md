@@ -37,16 +37,22 @@ src/
 │   ├── confirm.js            # HEAD + GET (landing page) + POST (action) — header comment = the contract
 │   ├── oauth.js              # /oauth/start + /oauth/callback (§8)
 │   └── admin-api.js          # /api/state|config|secret/rotate|snippet?btn|email-template?tpl
+│                             # + v4: /api/digest/preview|send (guards → board reads → render → send)
 ├── middlewares/session-token.js  # JWT (client secret) + optional allowlist → 401/403; verifySessionToken export
 ├── services/
 │   ├── monday-api.js         # THE GraphQL funnel; API-Version pinned; soft errors thrown
+│   │                         # + v4 getBoardItems (items_page→next_items_page, truncated surfaced)
 │   ├── confirm-service.js    # resolveButton / configIsComplete / performAction (v2 outcomes)
+│   ├── digest-service.js     # v4 PURE core: users-board matching + pending classification
+│   ├── email-sender.js       # v4 Resend funnel (RESEND_API_KEY + DIGEST_FROM; absent → 409)
 │   ├── storage.js            # SecureStorage wrapper + 60s read cache + nonce lifecycle
 │   └── secret.js             # generate / constant-time compare / mask
 ├── helpers/                  # pages (3 static + landing + oauth), rate-limit, snippet (per-button),
-│                             # email-template (full email renderer), logger, environment
+│                             # email-template (full email renderer), digest-email (v4 digest renderer),
+│                             # logger, environment
 ├── storage/                  # secure-storage-backend (prod) / memory-backend (dev+tests)
 └── client/admin/             # React 19 + Vite 7 + @vibe/core SPA → built to public/admin/
+                              # v4: two tabs — "הגדרות" (v2 flow) + "מייל מסכם" (DigestSection)
 ```
 
 ## Non-obvious semantics (bugs waiting to happen)
@@ -82,7 +88,17 @@ src/
   revoked → admin shows `broken` + reconnect; /confirm answers generic
   invalid.
 - The three /confirm pages are the ENTIRE response space (plus plain 429) —
-  no item/account data ever (only the config-derived target label).
+  no item/account data ever (only the config-derived target label). v4: the
+  SUCCESS page (alone) auto-closes after 2s via one inline script.
+- **v4 digest (phase 1, manual-only):** recipients come from a dedicated
+  USERS BOARD (people column → person ids, email column → address); matching
+  is person-id intersection with the tasks board's `peopleColumnId`. Pending
+  = date < today (strict, Asia/Jerusalem) AND status ≠ the section button's
+  target label id — an UNSET status is pending, label id 0 is valid. Rows
+  without email/person are skipped+reported, duplicate emails merge. Board
+  reads paginate items_page→next_items_page with a page cap that is SURFACED
+  (`truncated`), never silent. NOTE: getBoardItems shapes await a sandbox
+  probe (fixtures README) before release.
 
 ## Env & deploy
 
@@ -90,7 +106,9 @@ Env (platform: `mapps code:env -i 11704868`; local: `.env`): `MONDAY_CLIENT_ID`,
 `MONDAY_CLIENT_SECRET` (also verifies sessionTokens), `ALLOWED_ACCOUNT_IDS`
 (optional comma-separated allowlist; empty = any installing account; legacy
 single `ALLOWED_ACCOUNT_ID` is merged in), `BASE_URL` (stable liveUrl),
-`PORT` (8080), `USE_LOCAL_STORAGE` (dev/tests only).
+`PORT` (8080), `USE_LOCAL_STORAGE` (dev/tests only), and v4:
+`RESEND_API_KEY` + `DIGEST_FROM` (both optional — without them
+`/api/digest/send` answers 409 `email_not_configured`).
 
 Deploys ONLY via the pipeline (root CLAUDE.md): merge to `develop` → draft,
 merge to `main` → live. Server-type app: the workflow pushes the app root

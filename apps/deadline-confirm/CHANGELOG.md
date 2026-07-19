@@ -2,6 +2,34 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.5.0 — 2026-07-19 — v4 phase 1: per-user digest email (manual)
+
+- **Digest email per user** (spec V4 Amendment Phase 1; design log
+  `docs/v4-digest-decisions.md`): one email per user with all their pending
+  tasks, replacing per-task email fatigue. Recipients from a dedicated USERS
+  BOARD (people column ↔ email column); tasks matched by person-id
+  intersection with the tasks board's people column. Pending = date passed
+  (strict, Asia/Jerusalem) + status not at the section button's target.
+- **Server**: `services/digest-service.js` (pure matching/classification),
+  `services/email-sender.js` (Resend funnel; `RESEND_API_KEY`+`DIGEST_FROM`),
+  `helpers/digest-email.js` (email-safe RTL renderer, REAL v3 `/confirm`
+  links per task), `monday-api.js#getBoardItems` (items_page cursor
+  pagination, truncation surfaced), admin routes
+  `GET /api/digest/preview` + `POST /api/digest/send` (manual-only phase 1).
+- **Admin UI**: two tabs — "הגדרות" (unchanged v2 flow) + new "מייל מסכם"
+  (enable toggle, users-board mapping, section rules, saved-config preview
+  iframe, two-step manual send with per-recipient results). Nothing removed.
+- **Success page auto-close**: `/confirm` success page closes itself ~2s
+  after render (visible fallback); invalid/bad-request pages stay JS-free
+  (spec §7 amended).
+- **Tests**: 8 new gated test files (red→green + 16 killed mutations, 0
+  survivors); full suite 436 green. Two existing tests amended to the new
+  pinned contract (success-page script allowance; config normalizes
+  `digest: null`).
+- **Pre-release gate (owner, local)**: sandbox probe of `getBoardItems`
+  shapes + `/monday-api check` — authored in a tokenless cloud session; see
+  `tests/fixtures/README.md`.
+
 ## 0.4.0 — 2026-07-17
 
 - Axiom logging v2 telemetry ported into the **server** (load-bearing part of this hybrid app).

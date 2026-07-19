@@ -1,10 +1,11 @@
-// The single admin screen — v2: connection → board → action buttons →
-// email templates → secret → save. No routing, no state library.
+// The admin screen — v4: two tabs. "הגדרות" carries the v2 flow (connection →
+// board → action buttons → email templates → secret); "מייל מסכם" carries the
+// digest config + preview + manual send. One shared save footer, one draft.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Loader } from '@vibe/core';
+import { Button, Loader, Tab, TabList, TabPanel, TabPanels, TabsContext } from '@vibe/core';
 import type { ActionButton, AppState, Board, BoardColumn, EmailTemplate } from './types';
-import { type ConfigDraft, draftFromConfig, draftToConfig } from './draft';
+import { type ConfigDraft, type DigestDraft, draftFromConfig, draftToConfig } from './draft';
 import { apiFetch, ApiError } from './services/api';
 import { fetchBoards, fetchBoardColumns } from './services/monday';
 import { ConnectionSection } from './components/ConnectionSection';
@@ -12,6 +13,7 @@ import { BoardConfigSection } from './components/BoardConfigSection';
 import { ButtonsSection } from './components/ButtonsSection';
 import { TemplatesSection } from './components/TemplatesSection';
 import { SecretSection } from './components/SecretSection';
+import { DigestSection } from './components/DigestSection';
 import logger from './utils/logger';
 import { useViewTracking } from './utils/viewTracking';
 
@@ -104,6 +106,11 @@ export function App() {
           targetIndex: -1,
           targetLabel: '',
         }));
+        // Digest section date columns live on the tasks board too.
+        next.digest = {
+          ...next.digest,
+          sections: next.digest.sections.map((s) => ({ ...s, dateColumnId: null })),
+        };
       }
       return next;
     });
@@ -111,6 +118,8 @@ export function App() {
 
   const onButtonsChange = (buttons: ActionButton[]) => onDraftChange({ buttons });
   const onTemplatesChange = (templates: EmailTemplate[]) => onDraftChange({ templates });
+  const onDigestChange = (patch: Partial<DigestDraft>) =>
+    onDraftChange({ digest: { ...draft.digest, ...patch } });
 
   const payload = draftToConfig(draft);
 
@@ -182,34 +191,59 @@ export function App() {
   return (
     <div className="dc-page">
       <h1 style={{ margin: 0, fontSize: 20 }}>Deadline Confirm — הגדרות</h1>
-      <ConnectionSection oauth={state.oauth} onRefresh={onRefresh} refreshing={refreshing} />
-      <BoardConfigSection
-        boards={boards}
-        columns={columns}
-        columnsLoading={columnsLoading}
-        draft={draft}
-        onChange={onDraftChange}
-      />
-      {pickersError && <div className="dc-error">{pickersError}</div>}
-      <ButtonsSection
-        columns={columns}
-        columnsLoading={columnsLoading}
-        buttons={draft.buttons}
-        dirty={dirty}
-        onChange={onButtonsChange}
-      />
-      <TemplatesSection
-        templates={draft.templates}
-        buttons={draft.buttons}
-        dirty={dirty}
-        onChange={onTemplatesChange}
-      />
-      <SecretSection
-        maskedSecret={state.secret}
-        rotatedSecret={rotatedSecret}
-        rotating={rotating}
-        onRotate={onRotate}
-      />
+      <TabsContext>
+        <TabList>
+          <Tab>הגדרות</Tab>
+          <Tab>מייל מסכם</Tab>
+        </TabList>
+        <TabPanels>
+          <TabPanel>
+            <div className="dc-tab-panel">
+              <ConnectionSection oauth={state.oauth} onRefresh={onRefresh} refreshing={refreshing} />
+              <BoardConfigSection
+                boards={boards}
+                columns={columns}
+                columnsLoading={columnsLoading}
+                draft={draft}
+                onChange={onDraftChange}
+              />
+              {pickersError && <div className="dc-error">{pickersError}</div>}
+              <ButtonsSection
+                columns={columns}
+                columnsLoading={columnsLoading}
+                buttons={draft.buttons}
+                dirty={dirty}
+                onChange={onButtonsChange}
+              />
+              <TemplatesSection
+                templates={draft.templates}
+                buttons={draft.buttons}
+                dirty={dirty}
+                onChange={onTemplatesChange}
+              />
+              <SecretSection
+                maskedSecret={state.secret}
+                rotatedSecret={rotatedSecret}
+                rotating={rotating}
+                onRotate={onRotate}
+              />
+            </div>
+          </TabPanel>
+          <TabPanel>
+            <div className="dc-tab-panel">
+              <DigestSection
+                boards={boards}
+                tasksColumns={columns}
+                tasksColumnsLoading={columnsLoading}
+                buttons={draft.buttons}
+                digest={draft.digest}
+                dirty={dirty}
+                onChange={onDigestChange}
+              />
+            </div>
+          </TabPanel>
+        </TabPanels>
+      </TabsContext>
       <section className="dc-section">
         <h2>שמירה</h2>
         <div className="dc-footer">

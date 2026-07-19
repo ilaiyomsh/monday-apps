@@ -23,5 +23,10 @@ export function getEnv() {
     oauthAppVersionId: process.env.MONDAY_APP_VERSION_ID || '',
     port: Number(process.env.PORT || 8080),
     useLocalStorage: process.env.USE_LOCAL_STORAGE === 'true',
+    // v4 digest (phase 1): Resend sender. Both optional — when either is
+    // missing the app runs without outbound email and /api/digest/send
+    // answers 409 email_not_configured.
+    resendApiKey: process.env.RESEND_API_KEY || '',
+    digestFrom: process.env.DIGEST_FROM || '',
   };
 }
