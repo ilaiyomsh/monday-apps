@@ -92,17 +92,25 @@ real monday tokens (local dev outside monday simply falls back to the seed).
 
 | var | purpose |
 |-----|---------|
-| `MONDAY_CLIENT_SECRET` | verifies the monday session token (Client Secret from Developer Center) |
+| `MONDAY_CLIENT_SECRET` | verifies the monday session token (Client Secret from Developer Center); also used as the OAuth token-exchange `client_secret` (see below) |
 | `ALLOWED_ACCOUNT_IDS` | optional comma-separated account allowlist (empty = any authenticated account) |
 | `AXIOM_QUERY_TOKEN` | Axiom **read** token; unset → seed mode |
 | `AXIOM_DATASET` | dataset name (default `app-errors`) |
 | `AXIOM_ORG_ID` | optional Axiom org id header |
 
+OAuth app-identity token (Change #143 continuation — replaces the need for a
+personal `MONDAY_API_TOKEN`; see "Lifecycle events → monday board" below):
+
+| var | purpose |
+|-----|---------|
+| `MONDAY_CLIENT_ID` | monday app Client ID — used for the `GET /oauth/start` authorize redirect |
+| `BASE_URL` | this app's own stable base URL; builds the OAuth `redirect_uri` (`<BASE_URL>/oauth/callback`) — must match the redirect URI registered in the Developer Center OAuth config exactly |
+
 Lifecycle-events additions (all optional — unset keeps the feature inert):
 
 | var | purpose |
 |-----|---------|
-| `MONDAY_API_TOKEN` | monday API token used to **write** items on the events board |
+| `MONDAY_API_TOKEN` | **optional fallback** — a personal monday API token used to **write** items on the events board only when the owner has not yet authorized via `/oauth/start` (or for local dev). The OAuth-issued token (SecureStorage) always takes priority when present. |
 | `MONDAY_API_URL` | GraphQL endpoint override (tests only; default `https://api.monday.com/v2`) |
 | `LIFECYCLE_BOARD_ID` | target board id (from `create-events-board.mjs`) |
 | `LIFECYCLE_BOARD_COLUMNS` | JSON map logical key → column id (from `create-events-board.mjs`) |
@@ -129,6 +137,21 @@ Privacy: webhook payload details go **only** to the board (owner's private
 monday account); logger/Axiom ever see ids and enums only. Auth is
 fail-closed: no secrets configured → 401 (only the challenge echo is open).
 A dead board/token/monday outage can never 5xx a webhook.
+
+**Write token — app-identity OAuth (Change #143 continuation):** board writes
+(`create_item` / `create_group`) need a write-scoped monday credential.
+Instead of a personal `MONDAY_API_TOKEN`, the owner authorizes this app's own
+identity **once**: `GET /oauth/start` redirects to monday's consent screen;
+`GET /oauth/callback` exchanges the returned code for an access token (scopes
+`boards:read boards:write me:read`) and stores it in SecureStorage
+(`owner:oauth_token`, `src/services/storage.js`). `src/services/monday-api.js`
+resolves the write token **per call**: the stored OAuth token first, the
+optional `MONDAY_API_TOKEN` env var as a fallback — so the events board can be
+configured (`LIFECYCLE_BOARD_ID`) before the owner has authorized; writes
+simply fail soft until then. If `ALLOWED_ACCOUNT_IDS` is set, `/oauth/callback`
+checks the authorizing account via `me { account { id } }` and **rejects (403,
+does not store)** an account outside the allowlist. Both routes are mounted at
+`/oauth` with no session-token gate — the code exchange is the auth.
 
 ### Scripts (`scripts/`)
 
@@ -159,18 +182,26 @@ Token resolution for the first two: `MONDAY_API_TOKEN` env var, else
    printed `LIFECYCLE_BOARD_ID` / `LIFECYCLE_BOARD_COLUMNS` lines.
 4. **Set the platform env** (never committed):
    ```bash
-   mapps code:env -i <APP_ID> -k MONDAY_API_TOKEN            -v <write_token>
+   mapps code:env -i <APP_ID> -k MONDAY_CLIENT_ID            -v <client_id>
+   mapps code:env -i <APP_ID> -k MONDAY_CLIENT_SECRET        -v <client_secret>
+   mapps code:env -i <APP_ID> -k BASE_URL                    -v <stable_base_url>
    mapps code:env -i <APP_ID> -k LIFECYCLE_BOARD_ID          -v <board_id>
    mapps code:env -i <APP_ID> -k LIFECYCLE_BOARD_COLUMNS     -v '<minified json>'
    mapps code:env -i <APP_ID> -k LIFECYCLE_SIGNING_SECRETS   -v '{"axis-planner":"<signing secret>", ...}'
    mapps code:env -i <APP_ID> -k APP_EVENTS_CLIENT_SECRETS   -v '{"axis-planner":"<client secret>", ...}'
    ```
-5. **Register feature-level subscriptions**: fill `webhookBaseUrl` +
+5. **Authorize the app's write identity — once**: as the owner, visit
+   `<BASE_URL>/oauth/start` in a browser and approve the consent screen. This
+   stores an app-identity OAuth token (SecureStorage) that
+   `services/monday-api.js` uses for all board writes — no personal
+   `MONDAY_API_TOKEN` required. `MONDAY_API_TOKEN` remains available as an
+   **optional fallback** (local dev, or before this step has been done).
+6. **Register feature-level subscriptions**: fill `webhookBaseUrl` +
    `appSlug`/`featureSlug` in `scripts/lifecycle-apps.config.json` (Developer
    Center → the feature's URL slug), then
    `node scripts/register-lifecycle-subscriptions.mjs --dry-run` and re-run
    without the flag.
-6. **App-level webhooks (Developer Center → Webhooks), all 7 apps** —
+7. **App-level webhooks (Developer Center → Webhooks), all 7 apps** —
    discussions, axis-planner, axis-tracker, axis-day-off, axis-sync-calender,
    team-people-column, deadline-confirm — point each app's webhook URL at
    `<base>/api/webhooks/app-events` and subscribe to the install /
