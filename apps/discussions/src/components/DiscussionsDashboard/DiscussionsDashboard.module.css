@@ -196,7 +196,10 @@
 /* ROW 1, right cell — bar chart; the chart body fills the row height so the
    card bottom lines up with the bottom of the cubes. */
 .barCard { display: flex; flex-direction: column; }
-.chartFill { flex: 1; min-height: 250px; }
+/* round161 — the chart body fills whatever height the widget has (min-height:0
+   lets it shrink below its content); recharts' ResponsiveContainer then redraws
+   the bars + both axes to scale, so shrinking never clips the structure. */
+.chartFill { flex: 1; min-height: 0; }
 
 /* ROW 2 — participants (left) + donut (right), locked to equal height. */
 .partCard { display: flex; flex-direction: column; }
@@ -218,7 +221,10 @@
 .partCount { flex-shrink: 0; width: 22px; text-align: left; font-size: 12.5px; font-weight: 700; color: var(--primary-text-color, #323338); }
 
 .donutCard { display: flex; flex-direction: column; }
-.donutWrap { flex: 1; display: flex; align-items: center; justify-content: center; gap: 24px; }
+/* round161 — donut scales with the widget: the pie area flexes and the ring is
+   sized in % of it, so shrinking keeps the ring + legend intact and proportional. */
+.donutWrap { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 20px; }
+.donutChart { flex: 1; min-width: 0; min-height: 0; height: 100%; }
 .legend { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; color: var(--primary-text-color, #323338); }
 .legendRow {
   display: inline-flex; align-items: center; gap: 4px;

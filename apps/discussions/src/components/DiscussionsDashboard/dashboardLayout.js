@@ -8,9 +8,17 @@
 // LTR (x = 0 is the visual LEFT); the canvas sets `direction: ltr` for placement
 // while each widget's own content stays RTL.
 
-export const GRID_COLS = 12;
-export const ROW_H = 36;    // px per row unit
-export const GRID_GAP = 12; // px between cells
+// round161 — a fine grid (48 cols / 12px rows) so drag & resize move in small
+// steps rather than big jumps. Placement is still whole-cell (snapped), but the
+// cells are small (~1/4 the round160 step).
+export const GRID_COLS = 48;
+export const ROW_H = 12;   // px per row unit
+export const GRID_GAP = 8; // px between cells
+
+// Bump whenever the grid UNITS change (cols / row height), so a layout saved
+// against the old units auto-resets to the new default instead of rendering
+// mis-scaled. Stored layouts carry `__v`; a mismatch is treated as "unset".
+export const LAYOUT_VERSION = 2;
 
 // The movable/resizable/hideable widgets. `label` is shown in the "hidden" tray.
 export const WIDGETS = [
@@ -30,17 +38,20 @@ export const WIDGET_IDS = WIDGETS.map((w) => w.id);
 // Default placement — approximates the round158/159 three-zone layout: filter
 // rail + logo on the left, effectiveness + four cubes in the middle, bar +
 // donut on the right, participants under the cubes.
+// In the fine 48-col / 12px-row grid: filter+logo on the left (8 cols), the
+// effectiveness + four cubes in the middle (16 cols), bar + donut on the right
+// (24 cols), participants under the cubes.
 export const DEFAULT_LAYOUT = {
-  logo:             { x: 0, y: 0, w: 2, h: 3 },
-  filter:           { x: 0, y: 3, w: 2, h: 14 },
-  effectiveness:    { x: 2, y: 0, w: 4, h: 3 },
-  cubeParticipants: { x: 2, y: 3, w: 2, h: 2 },
-  cubeDiscussions:  { x: 4, y: 3, w: 2, h: 2 },
-  cubeTasks:        { x: 2, y: 5, w: 2, h: 2 },
-  cubeDecisions:    { x: 4, y: 5, w: 2, h: 2 },
-  participants:     { x: 2, y: 7, w: 4, h: 8 },
-  bar:              { x: 6, y: 0, w: 6, h: 7 },
-  donut:            { x: 6, y: 7, w: 6, h: 8 },
+  logo:             { x: 0,  y: 0,  w: 8,  h: 9 },
+  filter:           { x: 0,  y: 9,  w: 8,  h: 42 },
+  effectiveness:    { x: 8,  y: 0,  w: 16, h: 9 },
+  cubeParticipants: { x: 8,  y: 9,  w: 8,  h: 6 },
+  cubeDiscussions:  { x: 16, y: 9,  w: 8,  h: 6 },
+  cubeTasks:        { x: 8,  y: 15, w: 8,  h: 6 },
+  cubeDecisions:    { x: 16, y: 15, w: 8,  h: 6 },
+  participants:     { x: 8,  y: 21, w: 16, h: 24 },
+  bar:              { x: 24, y: 0,  w: 24, h: 21 },
+  donut:            { x: 24, y: 21, w: 24, h: 24 },
 };
 
 const clampInt = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(n)));
@@ -78,7 +89,8 @@ export function resizeRect(rect, dir, dCols, dRows, cols = GRID_COLS) {
 // known widget is present, unknown keys are dropped, each rect is clamped, and
 // `hidden` is coerced to a boolean.
 export function resolveLayout(stored, cols = GRID_COLS) {
-  const src = stored && typeof stored === 'object' ? stored : null;
+  // Ignore a layout saved against older grid units (no / mismatched __v).
+  const src = stored && typeof stored === 'object' && stored.__v === LAYOUT_VERSION ? stored : null;
   const out = {};
   for (const id of WIDGET_IDS) {
     const d = DEFAULT_LAYOUT[id];

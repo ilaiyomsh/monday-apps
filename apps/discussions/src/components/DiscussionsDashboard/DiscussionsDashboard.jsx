@@ -13,7 +13,7 @@ import { useUsers } from '@api/hooks/use-users';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { aggregateDashboard } from './dashboardAgg.js';
 import {
-  WIDGET_IDS, WIDGETS, ROW_H, GRID_GAP,
+  WIDGET_IDS, WIDGETS, ROW_H, GRID_GAP, LAYOUT_VERSION,
   resolveLayout, moveRect, resizeRect, rectToPx, pxDeltaToCells, layoutRows,
 } from './dashboardLayout.js';
 import logger from '@generated/utils/logger.js';
@@ -24,7 +24,6 @@ const RANGE_LABELS = [
   { key: 'day', label: 'יום' },
   { key: 'week', label: 'שבוע' },
   { key: 'month', label: 'חודש' },
-  { key: 'quarter', label: 'רבעון' },
   { key: 'year', label: 'שנה' },
   { key: 'custom', label: 'טווח מותאם' },
 ];
@@ -168,7 +167,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
   }, [loading, error, editing]);
 
   const toStored = useCallback((l) => {
-    const out = {};
+    const out = { __v: LAYOUT_VERSION };
     WIDGET_IDS.forEach((id) => {
       const it = l[id];
       out[id] = { x: it.x, y: it.y, w: it.w, h: it.h, hidden: !!it.hidden };
@@ -341,25 +340,27 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
             <div className={styles.cardTitle}>התפלגות לפי סוג דיון</div>
             {model.byType.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
               <div className={styles.donutWrap}>
-                <ResponsiveContainer width={150} height={150}>
-                  <PieChart>
-                    <Pie
-                      data={model.byType}
-                      dataKey="count"
-                      nameKey="label"
-                      innerRadius={42}
-                      outerRadius={68}
-                      paddingAngle={2}
-                      stroke="#fff"
-                      strokeWidth={2}
-                      cursor="pointer"
-                      onClick={(d) => pickDrill('type', d?.label ?? d?.payload?.label)}
-                    >
-                      {model.byType.map((entry, i) => <Cell key={entry.label} fill={SERIES[i % SERIES.length]} />)}
-                    </Pie>
-                    <Tooltip content={<ChartTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div className={styles.donutChart}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={model.byType}
+                        dataKey="count"
+                        nameKey="label"
+                        innerRadius="55%"
+                        outerRadius="88%"
+                        paddingAngle={2}
+                        stroke="#fff"
+                        strokeWidth={2}
+                        cursor="pointer"
+                        onClick={(d) => pickDrill('type', d?.label ?? d?.payload?.label)}
+                      >
+                        {model.byType.map((entry, i) => <Cell key={entry.label} fill={SERIES[i % SERIES.length]} />)}
+                      </Pie>
+                      <Tooltip content={<ChartTooltip />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
                 <div className={styles.legend}>
                   {model.byType.map((entry, i) => (
                     <button
