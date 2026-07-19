@@ -273,6 +273,7 @@ function DecisionRow({
             single
             closeOnSelect
             boardKey="decisions"
+            accountWide
             {...(deciderPickerProps || {})}
           />
         ) : deciderPeople.length > 0 ? (

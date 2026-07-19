@@ -128,6 +128,7 @@ export function NewTaskModal({ open, onClose, onCreate, defaults = {} }) {
                   closeOnSelect
                   single
                   boardKey="tasks"
+                  accountWide
                 />
                 {errors.assignee && <Text type="text2" className={styles.fieldError}>{errors.assignee}</Text>}
               </div>
