@@ -258,9 +258,94 @@
 .drillName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drillDate { color: var(--secondary-text-color, #676879); font-size: 12px; flex-shrink: 0; }
 
-/* Narrow screens — stack the rail above a single-column grid. */
-@media (max-width: 1000px) {
-  .body { flex-direction: column; }
-  .colFilter { width: 100%; }
-  .main { grid-template-columns: 1fr; }
+/* =========================================================================
+   round160 — owner-editable free-form canvas (drag / resize / hide widgets).
+   ========================================================================= */
+.centerMsg { display: flex; align-items: center; justify-content: center; min-height: 320px; }
+
+/* Editor toolbar in the header (LTR row → margin-inline-start:auto pushes it to
+   the far side). */
+.dashTools { margin-inline-start: auto; display: inline-flex; gap: 8px; direction: rtl; }
+.toolBtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 32px; padding: 0 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--layout-border-color, #e6e9ef); background: #fff;
+  font-family: inherit; font-size: 13px; font-weight: 600; color: var(--primary-text-color, #323338);
+}
+.toolBtn:hover { background: #f0f1f3; }
+.toolBtnDone { background: var(--dash-s1); border-color: var(--dash-s1); color: #fff; }
+.toolBtnDone:hover { background: #005fc4; }
+
+/* Hidden-widgets tray (edit mode only). */
+.hiddenTray {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  background: #fff; border: 1px dashed var(--layout-border-color, #e6e9ef); border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 12px;
+}
+.trayLabel { font-size: 12.5px; font-weight: 600; color: var(--secondary-text-color, #676879); }
+.trayChip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--layout-border-color, #e6e9ef); background: #f6f7fb; border-radius: 20px;
+  padding: 5px 12px; font-family: inherit; font-size: 12.5px; color: var(--primary-text-color, #323338); cursor: pointer;
+}
+.trayChip:hover { background: #eef1f8; border-color: var(--dash-s1); color: var(--dash-s1); }
+
+/* The canvas positions each widget absolutely from its grid rect. direction:ltr
+   fixes placement (x=0 is the visual LEFT); each widget restores RTL. */
+.canvas { position: relative; width: 100%; direction: ltr; }
+.canvasEditing {
+  background-image: radial-gradient(rgba(0,115,234,.14) 1px, transparent 1px);
+  background-size: 24px 24px;
+  border-radius: 12px;
+}
+
+.widgetBox { position: absolute; box-sizing: border-box; }
+.widgetInner {
+  position: relative; direction: rtl; height: 100%; overflow: hidden; border-radius: 12px;
+}
+.widgetInner > * { height: 100%; box-sizing: border-box; }
+/* In edit mode the content is inert so drags don't trigger inner controls. */
+.widgetEditing .widgetInner { pointer-events: none; user-select: none; }
+.widgetEditing { outline: 1px dashed rgba(0,115,234,.45); outline-offset: 2px; border-radius: 12px; }
+.widgetActive { outline-color: var(--dash-s1); z-index: 5; box-shadow: 0 8px 24px rgba(0,0,0,.16); }
+
+/* Move handle (top-inline-start corner) + hide button (top-inline-end corner). */
+.moveHandle, .hideBtn {
+  position: absolute; top: 6px; z-index: 6;
+  width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 6px; border: none; background: rgba(255,255,255,.92); color: var(--primary-text-color, #323338);
+  box-shadow: 0 1px 4px rgba(0,0,0,.2); cursor: pointer;
+}
+.moveHandle { inset-inline-start: 6px; cursor: grab; touch-action: none; }
+.hideBtn { inset-inline-end: 6px; }
+.hideBtn:hover { background: #ffe3e8; color: var(--dash-delayed); }
+
+/* Resize handles — 4 edges + one corner. */
+.rHandle { position: absolute; z-index: 6; background: transparent; touch-action: none; }
+.rhN { top: -3px; inset-inline-start: 12px; inset-inline-end: 12px; height: 8px; cursor: ns-resize; }
+.rhS { bottom: -3px; inset-inline-start: 12px; inset-inline-end: 12px; height: 8px; cursor: ns-resize; }
+.rhE { top: 12px; bottom: 12px; inset-inline-end: -3px; width: 8px; cursor: ew-resize; }
+.rhW { top: 12px; bottom: 12px; inset-inline-start: -3px; width: 8px; cursor: ew-resize; }
+.rhSE {
+  bottom: -4px; inset-inline-end: -4px; width: 16px; height: 16px; cursor: nwse-resize;
+  border-inline-end: 3px solid var(--dash-s1); border-bottom: 3px solid var(--dash-s1);
+  border-bottom-right-radius: 4px;
+}
+
+.logoEmpty {
+  border: 1px dashed var(--layout-border-color, #e6e9ef); border-radius: 12px;
+  color: var(--secondary-text-color, #676879); font-size: 13px; font-weight: 600;
+}
+
+/* Narrow screens — the absolute px canvas can't shrink to a phone; stack every
+   widget full-width in flow instead (overrides the inline placement). */
+@media (max-width: 768px) {
+  .canvas { height: auto !important; display: flex; flex-direction: column; gap: 12px; }
+  .canvasEditing { background-image: none; }
+  .widgetBox {
+    position: static !important; left: auto !important; top: auto !important;
+    width: 100% !important; height: auto !important;
+  }
+  .widgetInner, .widgetInner > * { height: auto !important; }
+  .chartFill { height: 240px; }
 }

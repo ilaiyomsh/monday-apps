@@ -858,7 +858,7 @@ export default function App() {
     return (
       <div className={`${styles.appShell} ${layoutClass}`}>
         <div className={styles.appShellBody} dir="rtl">
-          <DiscussionsDashboard onBackToDiscussions={backToDiscussions} />
+          <DiscussionsDashboard onBackToDiscussions={backToDiscussions} canManageSettings={canManageSettings} />
         </div>
         {overlays}
       </div>
