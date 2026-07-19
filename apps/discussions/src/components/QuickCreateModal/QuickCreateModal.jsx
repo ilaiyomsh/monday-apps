@@ -218,6 +218,7 @@ export function QuickCreateModal({
                   closeOnSelect
                   single
                   boardKey="tasks"
+                  accountWide
                 />
               </div>
               <div className={styles.field}>
