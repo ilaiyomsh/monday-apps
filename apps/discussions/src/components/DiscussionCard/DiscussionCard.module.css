@@ -194,21 +194,7 @@
 }
 
 /* Mobile-only back affordance (original `md:hidden`). */
-/* round108 — owner brand logo in the header. First visible child of .titleRow,
-   so in the RTL row it pins to the far-right corner at the title's height. */
-.ownerLogo {
-  flex-shrink: 0;
-  height: 32px;
-  max-width: 140px;
-  object-fit: contain;
-  align-self: center;
-  margin-inline-start: 8px;
-}
-/* The phone header is tight (title wraps next to an info button) — keep the
-   logo to the desktop layout only. */
-:global(.mobile-app) .ownerLogo {
-  display: none;
-}
+/* round108 — owner brand logo (moved to the dashboard's top-left in round158). */
 
 .backButton {
   display: none;
