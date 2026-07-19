@@ -134,6 +134,9 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
   const eff = model?.effectiveness;
   const doneW = eff?.total ? (eff.done / eff.total) * 100 : 0;
   const delayedW = eff?.total ? (eff.delayed / eff.total) * 100 : 0;
+  // round159 — hide empty period buckets from the bar chart (owner: a day / week
+  // / month with no discussions in it isn't drawn as an empty column).
+  const barData = model ? model.byPeriod.filter((b) => b.count > 0) : [];
 
   return (
     <div className={styles.root}>
@@ -224,25 +227,29 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
               <>
                 {/* row 1, left cell — effectiveness + 4 KPI cubes */}
                 <div className={styles.cellEff}>
+                  {/* round159 — the score sits on the LEFT of the widget (like the
+                      KPI cubes); the label + breakdown + bar stack on the right. */}
                   <div className={styles.hero}>
-                    <span className={styles.heroLabel}>
-                      אפקטיביות דיונים
-                      {/* round154 item 7 (owner-approved formula) — a "?" to the LEFT
-                          of the title with an RTL hover explanation of the score. */}
-                      <span className={styles.effHelp}>
-                        <button type="button" className={styles.effHelpIcon} aria-label="איך מחושב ציון האפקטיביות">?</button>
-                        <span className={styles.effTip} role="tooltip">
-                          ציון האפקטיביות = מספר המשימות שבוצעו מתוך סך כל המשימות של הדיונים שבטווח/בסינון הנוכחי (למשל 2 מתוך 26 = 8%). משימות בעיכוב — כאלה שעבר הדדליין שלהן וטרם בוצעו — מוצגות לצד המספר אך אינן נכנסות למכנה.
+                    <div className={styles.heroBody}>
+                      <span className={styles.heroLabel}>
+                        אפקטיביות דיונים
+                        {/* round154 item 7 (owner-approved formula) — a "?" to the LEFT
+                            of the title with an RTL hover explanation of the score. */}
+                        <span className={styles.effHelp}>
+                          <button type="button" className={styles.effHelpIcon} aria-label="איך מחושב ציון האפקטיביות">?</button>
+                          <span className={styles.effTip} role="tooltip">
+                            ציון האפקטיביות = מספר המשימות שבוצעו מתוך סך כל המשימות של הדיונים שבטווח/בסינון הנוכחי (למשל 2 מתוך 26 = 8%). משימות בעיכוב — כאלה שעבר הדדליין שלהן וטרם בוצעו — מוצגות לצד המספר אך אינן נכנסות למכנה.
+                          </span>
                         </span>
                       </span>
-                    </span>
-                    <span className={styles.heroValue}>{eff.pct}%</span>
-                    <span className={styles.heroSub}>{eff.done} משימות בוצעו · {eff.delayed} בעיכוב (עבר הדדליין וטרם בוצעו) · מתוך {eff.total}</span>
-                    <div className={styles.effBar}>
-                      <div style={{ width: `${doneW}%`, background: '#7fd8a9' }} />
-                      <div style={{ width: 2, background: 'rgba(255,255,255,.6)' }} />
-                      <div style={{ width: `${delayedW}%`, background: '#ffb3c0' }} />
+                      <span className={styles.heroSub}>{eff.done} משימות בוצעו · {eff.delayed} בעיכוב (עבר הדדליין וטרם בוצעו) · מתוך {eff.total}</span>
+                      <div className={styles.effBar}>
+                        <div style={{ width: `${doneW}%`, background: '#7fd8a9' }} />
+                        <div style={{ width: 2, background: 'rgba(255,255,255,.6)' }} />
+                        <div style={{ width: `${delayedW}%`, background: '#ffb3c0' }} />
+                      </div>
                     </div>
+                    <span className={styles.heroValue}>{eff.pct}%</span>
                   </div>
                   <div className={styles.kpis}>
                     <div className={styles.kpi} style={{ '--accent': SERIES[0] }}>
@@ -267,10 +274,10 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
                 {/* row 1, right cell — daily bar chart (each bar its own color) */}
                 <div className={`${styles.card} ${styles.barCard}`}>
                   <div className={styles.cardTitle}>דיונים {model.axisLabel}</div>
-                  {model.byPeriod.every((b) => b.count === 0) ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+                  {barData.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
                     <div className={styles.chartFill}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={model.byPeriod} margin={{ top: 18, right: 8, left: 8, bottom: 4 }}>
+                        <BarChart data={barData} margin={{ top: 18, right: 8, left: 8, bottom: 4 }}>
                           <CartesianGrid vertical={false} stroke="#edf0f6" />
                           <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9699a6' }} axisLine={false} tickLine={false} />
                           <YAxis hide />
@@ -282,7 +289,7 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
                             cursor="pointer"
                             onClick={(d) => pickDrill('period', d?.payload?.key ?? d?.key)}
                           >
-                            {model.byPeriod.map((entry, i) => <Cell key={entry.key} fill={SERIES[i % SERIES.length]} />)}
+                            {barData.map((entry, i) => <Cell key={entry.key} fill={SERIES[i % SERIES.length]} />)}
                             <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: '#323338', fontWeight: 600 }} />
                           </Bar>
                         </BarChart>
