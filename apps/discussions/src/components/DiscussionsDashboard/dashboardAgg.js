@@ -13,15 +13,17 @@
 
 import { isDelayed, startOfToday } from '../EffectivenessTab/effectiveness.js';
 
-export const RANGE_PRESETS = ['week', 'month', 'quarter', 'year', 'custom'];
+export const RANGE_PRESETS = ['day', 'week', 'month', 'quarter', 'year', 'custom'];
 export const AGG_MODES = ['sum', 'avg', 'median'];
 
 const MONTHS_HE = ['ינו׳', 'פבר׳', 'מרץ', 'אפר׳', 'מאי', 'יוני', 'יולי', 'אוג׳', 'ספט׳', 'אוק׳', 'נוב׳', 'דצמ׳'];
 
 // The time-pill picks BOTH the bar-chart granularity AND how many trailing
 // buckets are shown (owner spec round154: week→weeks, month→months, …; the
-// dashboard opens on 'week'). Custom buckets by month across the chosen range.
+// dashboard opens on 'day' since round158). Custom buckets by month across the
+// chosen range.
 export const PERIOD_CONFIG = {
+  day: { unit: 'day', count: 7, axis: 'לפי יום' },
   week: { unit: 'week', count: 8, axis: 'לפי שבוע' },
   month: { unit: 'month', count: 12, axis: 'לפי חודש' },
   quarter: { unit: 'quarter', count: 8, axis: 'לפי רבעון' },
@@ -43,7 +45,8 @@ function startOfUnit(d, unit) {
 }
 function addUnits(d, unit, n) {
   const x = new Date(d);
-  if (unit === 'week') x.setDate(x.getDate() + n * 7);
+  if (unit === 'day') x.setDate(x.getDate() + n);
+  else if (unit === 'week') x.setDate(x.getDate() + n * 7);
   else if (unit === 'month') x.setMonth(x.getMonth() + n);
   else if (unit === 'quarter') x.setMonth(x.getMonth() + n * 3);
   else if (unit === 'year') x.setFullYear(x.getFullYear() + n);
@@ -51,14 +54,14 @@ function addUnits(d, unit, n) {
 }
 function keyOf(d, unit) {
   const s = startOfUnit(d, unit);
-  if (unit === 'week') return `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`;
+  if (unit === 'day' || unit === 'week') return `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`;
   if (unit === 'month') return `${s.getFullYear()}-${pad(s.getMonth() + 1)}`;
   if (unit === 'quarter') return `${s.getFullYear()}-Q${Math.floor(s.getMonth() / 3) + 1}`;
   return `${s.getFullYear()}`;
 }
 function labelOf(start, unit) {
   const yy = String(start.getFullYear()).slice(2);
-  if (unit === 'week') return `${pad(start.getDate())}/${pad(start.getMonth() + 1)}`;
+  if (unit === 'day' || unit === 'week') return `${pad(start.getDate())}/${pad(start.getMonth() + 1)}`;
   if (unit === 'month') return `${MONTHS_HE[start.getMonth()]} ${yy}`;
   if (unit === 'quarter') return `Q${Math.floor(start.getMonth() / 3) + 1}/${yy}`;
   return `${start.getFullYear()}`;
@@ -124,7 +127,7 @@ const proj = (d) => ({ id: String(d.id), name: d.name, date: d.date });
 export function aggregateDashboard(raw = {}, opts = {}) {
   const { discussions = [], tasks = [], decisions = [], doneStatusIds = new Set() } = raw;
   const {
-    preset = 'week', now = new Date(), custom = null,
+    preset = 'day', now = new Date(), custom = null,
     leadId = null, typeValue = null, participantId = null, mode = 'sum',
   } = opts;
 

@@ -255,8 +255,8 @@ export function DiscussionCard({
   // configured roles are UNIONED (deduped by id). useTasks writes them only
   // when the owner mapped the columns.
   const accessRoleSources = settings?.preferences?.accessRoleSources || DEFAULT_PREFERENCES.accessRoleSources;
-  // round108 — owner-set logo (data-URI) shown at the top-right of the header.
-  const logoUrl = settings?.preferences?.logoUrl || null;
+  // round108 — owner-set logo (data-URI). round158 relocated it to the dashboard's
+  // top-left corner; it no longer renders in the discussion-view header.
   const taskAccess = useMemo(() => ({
     viewers: resolveAccessPeople(data, accessRoleSources?.taskViewersID),
     editors: resolveAccessPeople(data, accessRoleSources?.taskEditorsID),
@@ -630,11 +630,6 @@ export function DiscussionCard({
               ariaLabel="חזרה"
             />
           </span>
-          {logoUrl && (
-            /* round108 — owner-set brand logo, pinned to the top-right (RTL start)
-               of the header at the title's height. Owner uploads it in Settings. */
-            <img className={styles.ownerLogo} src={logoUrl} alt="לוגו" />
-          )}
           <div className={styles.titleBlock}>
             {editingTitle ? (
               <input
