@@ -6,6 +6,7 @@ import { DiscussionCard } from '@generated/components/DiscussionCard';
 import { CreateDiscussionModal } from '@generated/components/CreateDiscussionModal';
 import { MyTasksView } from '@generated/components/MyTasksView';
 import { MyDecisionsView } from '@generated/components/MyDecisionsView';
+import { DiscussionsDashboard } from '@generated/components/DiscussionsDashboard';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { useToast } from './hooks/useToast';
 import { useUiErrorSink } from './hooks/useUiErrorSink';
@@ -265,6 +266,7 @@ export default function App() {
   const splash = useMinSplash(context == null, MIN_SPLASH_MS, effectiveView);
   const openMyTasks = useCallback(() => handleAppViewChange('myTasks'), [handleAppViewChange]);
   const openMyDecisions = useCallback(() => handleAppViewChange('myDecisions'), [handleAppViewChange]);
+  const openDashboard = useCallback(() => handleAppViewChange('dashboard'), [handleAppViewChange]);
   const backToDiscussions = useCallback(() => handleAppViewChange('discussions'), [handleAppViewChange]);
 
   // Round 46 — RIGHT-PANE discussions splash. The branded loader must show in the
@@ -466,6 +468,13 @@ export default function App() {
     const reveal = () => {
       if (settled) return;
       settled = true;
+      // v2 boot health (D5): one-shot at the app's interactive point — total time
+      // from bundle load (window.__appInitStart, set in logger.js). alwaysShip so it
+      // ships regardless of level policy; inert until the Axiom sink is active.
+      const totalMs = typeof window !== 'undefined' && window.__appInitStart
+        ? Math.round(performance.now() - window.__appInitStart)
+        : Date.now() - bootStart;
+      logger.health('boot', { total_ms: totalMs });
       const wait = Math.max(0, MIN_SPLASH_MS - (Date.now() - bootStart));
       if (wait === 0) setBootDataReady(true);
       else minTimer = setTimeout(() => setBootDataReady(true), wait);
@@ -845,6 +854,17 @@ export default function App() {
     );
   }
 
+  if (effectiveView === 'dashboard') {
+    return (
+      <div className={`${styles.appShell} ${layoutClass}`}>
+        <div className={styles.appShellBody} dir="rtl">
+          <DiscussionsDashboard onBackToDiscussions={backToDiscussions} />
+        </div>
+        {overlays}
+      </div>
+    );
+  }
+
   return (
     <div className={`${styles.appShell} ${layoutClass}`}>
     <div
@@ -901,6 +921,7 @@ export default function App() {
           onOpenSettings={() => setShowSettings(true)}
           onOpenMyTasks={openMyTasks}
           onOpenMyDecisions={openMyDecisions}
+          onOpenDashboard={openDashboard}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           calendarAnchor={calNav.anchor}
