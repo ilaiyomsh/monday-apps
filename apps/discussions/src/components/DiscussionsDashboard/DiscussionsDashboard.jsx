@@ -1,6 +1,5 @@
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowLeft, Pencil, Check, RotateCcw, EyeOff, GripVertical } from 'lucide-react';
-import { Avatar } from '@vibe/core';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, Tooltip, LabelList,
   PieChart, Pie,
@@ -9,11 +8,10 @@ import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { useDashboardData } from '@generated/hooks/useDashboardData.js';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { useUsers } from '@api/hooks/use-users';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { aggregateDashboard } from './dashboardAgg.js';
 import {
-  WIDGET_IDS, WIDGETS, ROW_H, GRID_GAP, LAYOUT_VERSION,
+  WIDGET_IDS, WIDGETS, GRID_COLS, GRID_GAP, LAYOUT_VERSION,
   resolveLayout, moveRect, resizeRect, rectToPx, pxDeltaToCells, layoutRows,
 } from './dashboardLayout.js';
 import logger from '@generated/utils/logger.js';
@@ -36,16 +34,18 @@ const MODE_NOUN = { sum: 'סך', avg: 'ממוצע', median: 'חציון' };
 // Validated categorical palette (dataviz skill) — fixed order, never cycled.
 const SERIES = ['#0073ea', '#008300', '#e87ba4', '#c98500', '#4a3aa7'];
 
+// round162 — the grid's row height scales gently with the canvas width so the
+// board keeps its proportions across screen sizes (clamped so text stays
+// readable). Both render and drag use this so snapping matches the visuals.
+function rowHeightFor(canvasW) {
+  return Math.max(10, Math.min(15, Math.round((canvasW || 1200) / 110)));
+}
+
 const pad2 = (n) => String(n).padStart(2, '0');
 function fmtDate(d) {
   if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
   return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
 }
-// First-letters fallback for an avatar with no photo (mirrors PersonAvatar).
-function initialsOf(name) {
-  return (name || '?').split(' ').map((n) => n[0]).join('').slice(0, 2);
-}
-
 function ChartTooltip({ active, payload, label, suffix = '' }) {
   if (!active || !payload?.length) return null;
   return (
@@ -103,14 +103,6 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
     typeValue: typeValue || null,
     participantId: participantId || null,
   }) : null), [data, preset, custom, mode, leadId, typeValue, participantId]);
-
-  // round156 — top-participants widget: resolve each leader's monday photo via
-  // the shared users cache (fetches on demand, re-renders when avatars arrive).
-  const topParticipants = model?.byParticipant || [];
-  const partIds = useMemo(() => topParticipants.map((p) => String(p.id)), [topParticipants]);
-  const { users: partUsers } = useUsers(partIds);
-  const usersById = useMemo(() => new Map(partUsers.map((u) => [String(u.id), u])), [partUsers]);
-  const maxPart = topParticipants.reduce((m, p) => Math.max(m, p.count), 0);
 
   // Toggle a bar/slice open; picking the same one again closes the list.
   const pickDrill = (kind, key) => {
@@ -194,7 +186,9 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
     gestureRef.current = g;
     setDrag({ id, rect: g.startRect });
     const nextRect = (ev) => {
-      const { dCols, dRows } = pxDeltaToCells(ev.clientX - g.startX, ev.clientY - g.startY, canvasW || 1);
+      const { dCols, dRows } = pxDeltaToCells(
+        ev.clientX - g.startX, ev.clientY - g.startY, canvasW || 1, GRID_COLS, rowHeightFor(canvasW || 1),
+      );
       return g.dir ? resizeRect(g.startRect, g.dir, dCols, dRows) : moveRect(g.startRect, dCols, dRows);
     };
     const onMove = (ev) => { if (gestureRef.current) setDrag({ id: g.id, rect: nextRect(ev) }); };
@@ -209,7 +203,8 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
   }, [editing, layout, canvasW, commitRect]);
 
   const viewLayout = drag ? { ...layout, [drag.id]: { ...layout[drag.id], ...drag.rect } } : layout;
-  const canvasHeight = layoutRows(viewLayout) * (ROW_H + GRID_GAP);
+  const rowH = rowHeightFor(canvasW);
+  const canvasHeight = layoutRows(viewLayout) * (rowH + GRID_GAP);
   const hiddenWidgets = WIDGETS.filter((w) => layout[w.id]?.hidden);
 
   // Content for one widget id. Only called in the loaded branch, so `model` and
@@ -378,31 +373,6 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
             )}
           </div>
         );
-      case 'participants':
-        return (
-          <div className={`${styles.card} ${styles.partCard}`}>
-            <div className={styles.cardTitle}>משתתפים מובילים בדיונים · טופ 5</div>
-            {model.byParticipant.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
-              <div className={styles.partList}>
-                {model.byParticipant.map((p) => {
-                  const u = usersById.get(String(p.id));
-                  const name = u?.name || p.name;
-                  const pct = maxPart ? Math.max(6, Math.round((p.count / maxPart) * 100)) : 0;
-                  return (
-                    <div key={p.id} className={styles.partRow}>
-                      <span className={styles.partAvatar} title={name}>
-                        <Avatar size="small" src={u?.photo_thumb || undefined} text={initialsOf(name)} type={u?.photo_thumb ? 'img' : 'text'} ariaLabel={name} />
-                      </span>
-                      <span className={styles.partName} title={name}>{name}</span>
-                      <span className={styles.partBar}><span className={styles.partBarFill} style={{ width: `${pct}%` }} /></span>
-                      <span className={styles.partCount}>{p.count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
       default:
         return null;
     }
@@ -473,7 +443,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
               {WIDGET_IDS.map((id) => {
                 const rect = viewLayout[id];
                 if (rect.hidden) return null;
-                const px = rectToPx(rect, Math.max(canvasW, 1));
+                const px = rectToPx(rect, Math.max(canvasW, 1), GRID_COLS, rowH);
                 return (
                   <div
                     key={id}

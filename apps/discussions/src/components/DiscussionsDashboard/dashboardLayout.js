@@ -31,27 +31,25 @@ export const WIDGETS = [
   { id: 'cubeTasks', label: 'סך משימות' },
   { id: 'bar', label: 'דיונים לפי יום' },
   { id: 'donut', label: 'התפלגות לפי סוג דיון' },
-  { id: 'participants', label: 'משתתפים מובילים בדיונים' },
 ];
 export const WIDGET_IDS = WIDGETS.map((w) => w.id);
 
 // Default placement — approximates the round158/159 three-zone layout: filter
 // rail + logo on the left, effectiveness + four cubes in the middle, bar +
 // donut on the right, participants under the cubes.
-// In the fine 48-col / 12px-row grid: filter+logo on the left (8 cols), the
-// effectiveness + four cubes in the middle (16 cols), bar + donut on the right
-// (24 cols), participants under the cubes.
+// In the fine 48-col / 12px-row grid, balanced so all three zones end on the
+// same row (~24): filter+logo on the left (8 cols), effectiveness + four cubes
+// in the middle (16 cols), bar + donut on the right (24 cols).
 export const DEFAULT_LAYOUT = {
-  logo:             { x: 0,  y: 0,  w: 8,  h: 9 },
-  filter:           { x: 0,  y: 9,  w: 8,  h: 42 },
-  effectiveness:    { x: 8,  y: 0,  w: 16, h: 9 },
-  cubeParticipants: { x: 8,  y: 9,  w: 8,  h: 6 },
-  cubeDiscussions:  { x: 16, y: 9,  w: 8,  h: 6 },
-  cubeTasks:        { x: 8,  y: 15, w: 8,  h: 6 },
-  cubeDecisions:    { x: 16, y: 15, w: 8,  h: 6 },
-  participants:     { x: 8,  y: 21, w: 16, h: 24 },
-  bar:              { x: 24, y: 0,  w: 24, h: 21 },
-  donut:            { x: 24, y: 21, w: 24, h: 24 },
+  logo:             { x: 0,  y: 0,  w: 8,  h: 8 },
+  filter:           { x: 0,  y: 8,  w: 8,  h: 16 },
+  effectiveness:    { x: 8,  y: 0,  w: 16, h: 8 },
+  cubeParticipants: { x: 8,  y: 8,  w: 8,  h: 8 },
+  cubeDiscussions:  { x: 16, y: 8,  w: 8,  h: 8 },
+  cubeTasks:        { x: 8,  y: 16, w: 8,  h: 8 },
+  cubeDecisions:    { x: 16, y: 16, w: 8,  h: 8 },
+  bar:              { x: 24, y: 0,  w: 24, h: 11 },
+  donut:            { x: 24, y: 11, w: 24, h: 13 },
 };
 
 const clampInt = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(n)));

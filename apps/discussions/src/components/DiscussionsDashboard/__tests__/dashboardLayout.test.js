@@ -70,12 +70,12 @@ describe('resolveLayout', () => {
 describe('layoutRows', () => {
   it('is the max y+h across VISIBLE widgets only', () => {
     const base = resolveLayout(null);
-    const rows = layoutRows(base);
-    // participants default is y21+h24 = 45; filter y9+h42 = 51 (tallest)
-    expect(rows).toBe(DEFAULT_LAYOUT.filter.y + DEFAULT_LAYOUT.filter.h); // 51
-    // hiding the tall filter lowers the needed rows to the next-tallest (45)
-    const hidden = resolveLayout({ __v: LAYOUT_VERSION, filter: { ...DEFAULT_LAYOUT.filter, hidden: true } });
-    expect(layoutRows(hidden)).toBe(DEFAULT_LAYOUT.participants.y + DEFAULT_LAYOUT.participants.h); // 45
+    const maxBottom = Math.max(...WIDGET_IDS.map((id) => DEFAULT_LAYOUT[id].y + DEFAULT_LAYOUT[id].h));
+    expect(layoutRows(base)).toBe(maxBottom);
+    // hiding every widget but the (short) logo leaves just the logo's bottom
+    const stored = { __v: LAYOUT_VERSION };
+    WIDGET_IDS.forEach((id) => { stored[id] = { ...DEFAULT_LAYOUT[id], hidden: id !== 'logo' }; });
+    expect(layoutRows(resolveLayout(stored))).toBe(DEFAULT_LAYOUT.logo.y + DEFAULT_LAYOUT.logo.h);
   });
 });
 
