@@ -1,14 +1,16 @@
-// Contract tests for src/services/events-board.js (lifecycle spec — Tests
-// bullet 3): column_values built with the EXACT configured column ids,
-// missing column id → key omitted, per-slug group cache (second call → no
-// extra getBoardGroups; createGroup only when the title is absent), and
-// fail-soft: any mondayApi failure → null return, never a throw, every
-// catch logs. mondayApi/logger are injected fakes — zero network, zero env.
+// Contract tests for src/services/events-board.js — the CONFIG-DRIVEN board
+// writer. Config (boardId, single groupId, logical→column-id map) is resolved
+// per event via the injected getConfig() (SecureStorage-backed at runtime).
+// Under test: column_values built with the EXACT configured column ids, the
+// single group used for every event (no per-app group), inert-when-unconfigured
+// (warn once, no API), and fail-soft (any failure → null, never a throw, every
+// catch logs). mondayApi/getConfig/logger are injected fakes — zero network.
 
 import { describe, it, expect, vi } from 'vitest';
 import { createEventsBoardService } from '../src/services/events-board.js';
 
 const BOARD_ID = '9988776655';
+const GROUP_ID = 'group_events_1';
 
 // Logical key → monday column id, full map (realistic monday-style ids).
 const COLUMNS = {
@@ -23,6 +25,8 @@ const COLUMNS = {
   event_id: 'text_eid1',
 };
 
+const CONFIG = { boardId: BOARD_ID, groupId: GROUP_ID, columns: COLUMNS };
+
 /** App-logger fake — `(message, tag, context)` shape, all levels spied. */
 function makeLogger() {
   return {
@@ -35,21 +39,21 @@ function makeLogger() {
   };
 }
 
-/** mondayApi fake: group 'axis-tracker' already exists, createItem succeeds. */
+/** mondayApi fake: createItem succeeds (the only method events-board calls now). */
 function makeMondayApi(overrides = {}) {
   return {
     createItem: vi.fn(async () => 'item-1'),
-    getBoardGroups: vi.fn(async () => [{ id: 'grp-tracker', title: 'axis-tracker' }]),
-    createGroup: vi.fn(async () => 'grp-created'),
     ...overrides,
   };
 }
 
-function makeService({ mondayApi = makeMondayApi(), columns = COLUMNS, logger = makeLogger() } = {}) {
+function makeService({ mondayApi = makeMondayApi(), config = CONFIG, logger = makeLogger() } = {}) {
+  const getConfig = typeof config === 'function' ? config : vi.fn(async () => config);
   return {
     mondayApi,
     logger,
-    service: createEventsBoardService({ mondayApi, boardId: BOARD_ID, columns, logger }),
+    getConfig,
+    service: createEventsBoardService({ mondayApi, getConfig, logger }),
   };
 }
 
@@ -69,7 +73,7 @@ function sampleEvent(overrides = {}) {
   };
 }
 
-describe('events-board — column mapping', () => {
+describe('events-board — column mapping (from config)', () => {
   it('builds column_values keyed by the EXACT configured column ids, with typed cell values', async () => {
     const { service, mondayApi } = makeService();
 
@@ -79,6 +83,7 @@ describe('events-board — column mapping', () => {
     expect(mondayApi.createItem).toHaveBeenCalledTimes(1);
     const call = mondayApi.createItem.mock.calls[0][0];
     expect(call.boardId).toBe(BOARD_ID);
+    expect(call.groupId).toBe(GROUP_ID);
     expect(call.itemName).toBe('AppFeatureBoardView:delete · axis-tracker');
     expect(call.columnValues).toEqual({
       date_evt1: { date: '2026-07-19', time: '12:34:56' }, // UTC, not the +03:00 wall clock
@@ -110,7 +115,9 @@ describe('events-board — column mapping', () => {
     delete partial.feature;
     delete partial.account_id;
     delete partial.event_id;
-    const { service, mondayApi } = makeService({ columns: partial });
+    const { service, mondayApi } = makeService({
+      config: { boardId: BOARD_ID, groupId: GROUP_ID, columns: partial },
+    });
 
     await service.recordEvent(sampleEvent());
 
@@ -127,7 +134,9 @@ describe('events-board — column mapping', () => {
   });
 
   it('still creates the item (with empty column_values) when the column map is empty', async () => {
-    const { service, mondayApi } = makeService({ columns: {} });
+    const { service, mondayApi } = makeService({
+      config: { boardId: BOARD_ID, groupId: GROUP_ID, columns: {} },
+    });
 
     const itemId = await service.recordEvent(sampleEvent());
 
@@ -144,56 +153,60 @@ describe('events-board — column mapping', () => {
     expect(text).toHaveLength(2000);
     expect(text.startsWith('{"blob":"xxx')).toBe(true);
   });
+
+  it('passes groupId null through when the config group is null (board default group)', async () => {
+    const { service, mondayApi } = makeService({
+      config: { boardId: BOARD_ID, groupId: null, columns: COLUMNS },
+    });
+
+    await service.recordEvent(sampleEvent());
+
+    expect(mondayApi.createItem.mock.calls[0][0].groupId).toBeNull();
+  });
+
+  it('resolves config PER EVENT (no boot-time snapshot) — a second event re-reads getConfig', async () => {
+    const { service, getConfig } = makeService();
+
+    await service.recordEvent(sampleEvent());
+    await service.recordEvent(sampleEvent({ eventId: 'evt-abc-2' }));
+
+    expect(getConfig).toHaveBeenCalledTimes(2);
+  });
 });
 
-describe('events-board — group cache', () => {
-  it('resolves an existing group by title and caches it: second event, same app → no extra getBoardGroups', async () => {
-    const { service, mondayApi } = makeService();
+describe('events-board — inert when unconfigured', () => {
+  it('returns null and does NOT call the API when getConfig yields null; warns exactly once across events', async () => {
+    const { service, mondayApi, logger } = makeService({ config: null });
 
-    await service.recordEvent(sampleEvent());
-    await service.recordEvent(sampleEvent({ eventId: 'evt-abc-2' }));
+    await expect(service.recordEvent(sampleEvent())).resolves.toBeNull();
+    await expect(service.recordEvent(sampleEvent({ eventId: 'e2' }))).resolves.toBeNull();
 
-    expect(mondayApi.getBoardGroups).toHaveBeenCalledTimes(1);
-    expect(mondayApi.getBoardGroups).toHaveBeenCalledWith(BOARD_ID);
-    expect(mondayApi.createGroup).not.toHaveBeenCalled();
-    const groupIds = mondayApi.createItem.mock.calls.map((c) => c[0].groupId);
-    expect(groupIds).toEqual(['grp-tracker', 'grp-tracker']);
+    expect(mondayApi.createItem).not.toHaveBeenCalled();
+    const notConfigured = logger.warn.mock.calls.filter((c) => c[0] === 'lifecycle_not_configured');
+    expect(notConfigured).toHaveLength(1); // throttled to once
   });
 
-  it('caches per app slug — a different app triggers its own group lookup', async () => {
-    const mondayApi = makeMondayApi({
-      getBoardGroups: vi.fn(async () => [
-        { id: 'grp-tracker', title: 'axis-tracker' },
-        { id: 'grp-disc', title: 'discussions' },
-      ]),
-    });
-    const { service } = makeService({ mondayApi });
+  it('treats a config object with no boardId as unconfigured (null return, no API)', async () => {
+    const { service, mondayApi } = makeService({ config: { groupId: GROUP_ID, columns: COLUMNS } });
 
-    await service.recordEvent(sampleEvent());
-    await service.recordEvent(sampleEvent({ appSlug: 'discussions' }));
-
-    expect(mondayApi.getBoardGroups).toHaveBeenCalledTimes(2);
-    const groupIds = mondayApi.createItem.mock.calls.map((c) => c[0].groupId);
-    expect(groupIds).toEqual(['grp-tracker', 'grp-disc']);
+    await expect(service.recordEvent(sampleEvent())).resolves.toBeNull();
+    expect(mondayApi.createItem).not.toHaveBeenCalled();
   });
 
-  it('creates the group when no group with the slug title exists, then reuses the created id from cache', async () => {
-    const mondayApi = makeMondayApi({
-      getBoardGroups: vi.fn(async () => [{ id: 'grp-other', title: 'discussions' }]),
+  it('a getConfig rejection fails soft: null return, logged, no API call', async () => {
+    const getConfig = vi.fn(async () => {
+      throw new Error('storage backend down');
     });
-    const { service } = makeService({ mondayApi });
+    const { service, mondayApi, logger } = makeService({ config: getConfig });
 
-    await service.recordEvent(sampleEvent());
-    await service.recordEvent(sampleEvent({ eventId: 'evt-abc-2' }));
+    await expect(service.recordEvent(sampleEvent())).resolves.toBeNull();
 
-    expect(mondayApi.createGroup).toHaveBeenCalledTimes(1);
-    expect(mondayApi.createGroup).toHaveBeenCalledWith({
-      boardId: BOARD_ID,
-      groupName: 'axis-tracker',
-    });
-    expect(mondayApi.getBoardGroups).toHaveBeenCalledTimes(1); // created id is cached too
-    const groupIds = mondayApi.createItem.mock.calls.map((c) => c[0].groupId);
-    expect(groupIds).toEqual(['grp-created', 'grp-created']);
+    expect(mondayApi.createItem).not.toHaveBeenCalled();
+    expect(logger.error).toHaveBeenCalledWith(
+      'board_config_resolve_failed',
+      'events_board',
+      expect.objectContaining({ error: expect.stringContaining('storage backend down') })
+    );
   });
 });
 
@@ -209,40 +222,11 @@ describe('events-board — fail-soft (failure → null, never a throw, every cat
 
     await expect(service.recordEvent(evt)).resolves.toBeNull();
 
-    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.error).toHaveBeenCalledWith('record_event_failed', 'events_board', expect.any(Object));
     // Privacy: the log carries ids/enums + error.message — never the details payload.
-    const logged = JSON.stringify(logger.error.mock.calls[0]);
+    const logged = JSON.stringify(logger.error.mock.calls);
     expect(logged).not.toContain('PRIVATE-BOARD-ONLY');
     expect(logged).toContain('axis-tracker');
-  });
-
-  it('group resolution failure is cosmetic: the item is still created UNGROUPED and its id returned', async () => {
-    const mondayApi = makeMondayApi({
-      getBoardGroups: vi.fn(async () => {
-        throw new Error('monday API HTTP 429');
-      }),
-    });
-    const { service, logger } = makeService({ mondayApi });
-
-    const itemId = await service.recordEvent(sampleEvent());
-
-    expect(itemId).toBe('item-1');
-    expect(mondayApi.createItem).toHaveBeenCalledTimes(1);
-    expect(mondayApi.createItem.mock.calls[0][0].groupId).toBeNull();
-    expect(logger.warn).toHaveBeenCalled(); // the catch logs
-  });
-
-  it('ensureGroupForApp returns null (no throw) when both lookup and create fail', async () => {
-    const mondayApi = makeMondayApi({
-      getBoardGroups: vi.fn(async () => []),
-      createGroup: vi.fn(async () => {
-        throw new Error('monday API error: budget exhausted');
-      }),
-    });
-    const { service, logger } = makeService({ mondayApi });
-
-    await expect(service.ensureGroupForApp('axis-tracker')).resolves.toBeNull();
-    expect(logger.warn).toHaveBeenCalled();
   });
 
   it('returns null and skips the API entirely for a non-object event', async () => {
@@ -251,6 +235,6 @@ describe('events-board — fail-soft (failure → null, never a throw, every cat
     await expect(service.recordEvent(null)).resolves.toBeNull();
 
     expect(mondayApi.createItem).not.toHaveBeenCalled();
-    expect(logger.warn).toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith('record_event_invalid', 'events_board', {});
   });
 });

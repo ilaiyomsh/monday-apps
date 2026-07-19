@@ -42,6 +42,17 @@ const CREATE_GROUP_MUTATION = `mutation CreateGroup($boardId: ID!, $groupName: S
   create_group(board_id: $boardId, group_name: $groupName) { id }
 }`;
 
+const CREATE_BOARD_MUTATION = `mutation CreateBoard($name: String!, $kind: BoardKind!, $workspaceId: ID) {
+  create_board(board_name: $name, board_kind: $kind, workspace_id: $workspaceId) {
+    id
+    groups { id title }
+  }
+}`;
+
+const CREATE_COLUMN_MUTATION = `mutation CreateColumn($boardId: ID!, $title: String!, $columnType: ColumnType!, $defaults: JSON) {
+  create_column(board_id: $boardId, title: $title, column_type: $columnType, defaults: $defaults) { id }
+}`;
+
 export class MondayApiError extends Error {
   /**
    * @param {string} message
@@ -176,6 +187,51 @@ export function createMondayApi({ getToken, url = MONDAY_API_URL, fetchImpl, log
       const data = await graphql(CREATE_GROUP_MUTATION, { boardId, groupName });
       const id = data.create_group?.id;
       return id == null ? null : String(id);
+    },
+
+    /**
+     * Create a board. Defaults to a PRIVATE board (the events board holds
+     * account identifiers — never public). workspaceId null → the default
+     * workspace. Returns the new board id plus its groups (a fresh board has
+     * exactly one default group, which the caller uses as the single events
+     * group).
+     * @param {{ name: string, kind?: 'private'|'public'|'share', workspaceId?: string|number|null }} args
+     * @returns {Promise<{ id: string, groups: Array<{ id: string, title: string }> }>}
+     */
+    async createBoard({ name, kind = 'private', workspaceId = null }) {
+      const data = await graphql(CREATE_BOARD_MUTATION, {
+        name,
+        kind,
+        workspaceId: workspaceId ?? null,
+      });
+      const board = data.create_board;
+      if (!board?.id) {
+        throw new MondayApiError('create_board returned no id', { status: 200 });
+      }
+      const groups = Array.isArray(board.groups)
+        ? board.groups.map((g) => ({ id: String(g.id), title: g.title ?? '' }))
+        : [];
+      return { id: String(board.id), groups };
+    },
+
+    /**
+     * Create a single column on a board.
+     * @param {{ boardId: string|number, title: string, columnType: string, defaults?: object|null }} args
+     * @returns {Promise<string>} created column id
+     */
+    async createColumn({ boardId, title, columnType, defaults = null }) {
+      const data = await graphql(CREATE_COLUMN_MUTATION, {
+        boardId,
+        title,
+        columnType,
+        // monday's JSON scalar wants a *string*; null when there are no defaults.
+        defaults: defaults == null ? null : JSON.stringify(defaults),
+      });
+      const id = data.create_column?.id;
+      if (id == null) {
+        throw new MondayApiError(`create_column returned no id for "${title}"`, { status: 200 });
+      }
+      return String(id);
     },
   };
 }

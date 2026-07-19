@@ -65,11 +65,11 @@ export function getEnv() {
     mondayApiToken: process.env.MONDAY_API_TOKEN || '',
     // Override for tests only — production uses the default endpoint.
     mondayApiUrl: process.env.MONDAY_API_URL || 'https://api.monday.com/v2',
-    // Target board id; empty = board recording disabled (webhooks still 202).
-    lifecycleBoardId: process.env.LIFECYCLE_BOARD_ID || '',
-    // JSON map: logical key (event_time, category, event_type, app, feature,
-    // account_id, user_id, details, event_id) → monday column id.
-    lifecycleBoardColumns: parseJsonObject(process.env.LIFECYCLE_BOARD_COLUMNS),
+    // NOTE: the events board id + column map are NO LONGER read from env. They
+    // are provisioned via the in-app Settings UI (POST /api/settings/board) and
+    // stored in SecureStorage (key lifecycle:board_config); events-board.js
+    // reads them per event. This removes the old LIFECYCLE_BOARD_ID /
+    // LIFECYCLE_BOARD_COLUMNS env vars entirely.
     // JSON map appSlug → Signing Secret (feature-level lifecycle webhooks).
     // Empty map = fail-closed 401 on POST /api/webhooks/lifecycle.
     lifecycleSigningSecrets: parseJsonObject(process.env.LIFECYCLE_SIGNING_SECRETS),
