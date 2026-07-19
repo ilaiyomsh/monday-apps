@@ -40,26 +40,47 @@ SANDBOX_WORKSPACE_ID = "16291824"
 
 def gql(q, v=None, apply=True):
     """Run a GraphQL op; dry-run skips mutations AND queries (token-free).
-    One retry with a 60s cooldown on complexity exhaustion."""
+
+    Resilience (both classes observed in the 2026-07-19 CI runs):
+      * complexity exhaustion  -> 60s cooldown, retry;
+      * transient non-JSON / empty / non-zero responses (e.g. an HTML 502
+        ~25 min into sustained bulk writes) -> backoff retry. NOTE a retried
+        batched mutation MAY duplicate items if the server processed the
+        original before the response got mangled — acceptable for WZ- scratch
+        load-test data, never reuse this helper for production writes.
+    """
     if not apply:
         return {"_dryrun": True}
     # The variables slot must ALWAYS be present (empty string when unused) —
     # otherwise the api-version arg shifts into $2 and mapps-api.sh crashes
     # trying to json-parse "2026-04" as variables (2026-07-19 CI incident).
     a = [API, q, (json.dumps(v, ensure_ascii=False) if v is not None else ""), APIV]
-    for attempt in (1, 2):
+    ATTEMPTS = 4
+    last = ""
+    for attempt in range(1, ATTEMPTS + 1):
         r = subprocess.run(a, capture_output=True, text=True)
-        if r.returncode != 0 or not r.stdout.strip():
-            raise SystemExit(f"mapps-api.sh failed (exit {r.returncode}): {r.stderr.strip()[:400]}")
-        out = json.loads(r.stdout)
-        errs = out.get("errors")
-        if not errs:
-            return out.get("data", {})
-        if attempt == 1 and "COMPLEXITY" in json.dumps(errs):
-            print("  complexity budget hit — cooling down 60s…", flush=True)
-            time.sleep(60)
-            continue
-        raise SystemExit("GQL ERROR: " + json.dumps(errs, ensure_ascii=False)[:700])
+        raw = r.stdout.strip()
+        out = None
+        if r.returncode == 0 and raw:
+            try:
+                out = json.loads(raw)
+            except json.JSONDecodeError:
+                out = None
+        if out is not None:
+            errs = out.get("errors")
+            if not errs:
+                return out.get("data", {})
+            if "COMPLEXITY" in json.dumps(errs) and attempt < ATTEMPTS:
+                print("  complexity budget hit — cooling down 60s…", flush=True)
+                time.sleep(60)
+                continue
+            raise SystemExit("GQL ERROR: " + json.dumps(errs, ensure_ascii=False)[:700])
+        last = (raw or r.stderr.strip())[:200]
+        if attempt < ATTEMPTS:
+            wait = 15 * attempt
+            print(f"  transient API failure (attempt {attempt}/{ATTEMPTS}): {last!r} — retrying in {wait}s", flush=True)
+            time.sleep(wait)
+    raise SystemExit(f"GQL ERROR: non-JSON/failed response after {ATTEMPTS} attempts: {last}")
 
 
 def cv(d):
