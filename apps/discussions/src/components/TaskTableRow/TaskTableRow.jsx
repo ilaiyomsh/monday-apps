@@ -321,6 +321,7 @@ export const TaskTableRow = memo(function TaskTableRow({
               closeOnSelect
               single
               boardKey="tasks"
+              accountWide
             />
           ) : (
             <PersonList people={task.responsibilityID} size="sm" showNames max={2} />
