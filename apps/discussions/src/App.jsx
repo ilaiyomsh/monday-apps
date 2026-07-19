@@ -869,7 +869,7 @@ export default function App() {
     <div className={`${styles.appShell} ${layoutClass}`}>
     <div
       ref={rootRef}
-      className={`${styles.root} ${resizing ? styles.resizing : ''}`}
+      className={`${styles.root} ${styles.appFrame} ${resizing ? styles.resizing : ''}`}
       style={rootStyle}
       dir="ltr"
     >

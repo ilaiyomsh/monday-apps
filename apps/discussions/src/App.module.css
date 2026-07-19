@@ -1,4 +1,10 @@
 /* Outer shell: a top view-toggle bar (Discussions ⇄ My Tasks) over the body. */
+/* round164 — "framed card" look (owner decision 2026-07-19): the whole app view
+   floats as a single rounded, bordered, shadowed card on a light-grey backdrop.
+   This is a PURELY OUTER frame — the shell provides the backdrop + padding, and
+   the content wrappers (`.root` for discussions; `.appShellBody` for the other
+   views) get the card chrome. Nothing inside (tables, dashboard, cards) changes.
+   Tunable via the `--frame-*` custom properties below. */
 .appShell {
   height: 100vh; /* fallback for browsers without small-viewport units */
   height: 100svh; /* avoids clipping under mobile browser chrome */
@@ -6,6 +12,34 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box;
+  --frame-pad: 14px;
+  --frame-radius: 16px;
+  --frame-border: var(--layout-border-color, #e6e9ef);
+  --frame-shadow: 0 8px 26px rgba(20, 30, 60, 0.10);
+  --frame-backdrop: #eceef3;
+  padding: var(--frame-pad);
+  background: var(--frame-backdrop);
+}
+/* The framed card itself — shared by every view's content wrapper. `overflow:
+   hidden` + the radius clip the inner content's square corners to the rounded
+   frame; the shadow lifts it off the backdrop. NOTE: CSS Modules here are
+   non-scoped, so `.root` is a shared class across many components — the
+   discussions branch carries a dedicated `.appFrame` class instead of relying
+   on its `.root`, and `.appShellBody` (unique to this module) frames the other
+   views directly. */
+.appShellBody,
+.appFrame {
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--frame-border);
+  border-radius: var(--frame-radius);
+  box-shadow: var(--frame-shadow);
+  overflow: hidden;
+}
+/* Real monday mobile app: tighten the frame so it doesn't eat scarce space. */
+:global(.mobile-app) .appShell {
+  --frame-pad: 6px;
+  --frame-radius: 12px;
 }
 .appViewBar {
   flex-shrink: 0;
