@@ -84,6 +84,12 @@
   width: 100%;
   display: flex;
   overflow: hidden;
+  /* round165 — anchor the desktop divider handle (below) to THIS box rather than
+     the viewport. round164's frame padding shifted the card inward, but the
+     handle was `position: fixed` (viewport-relative) so its resize line +
+     collapse chevron drifted ~14px off the real sidebar edge and fouled the
+     list's right-edge scrollbar. Absolute-in-relative tracks the padded frame. */
+  position: relative;
 }
 
 /* While dragging the divider, suppress text selection and keep the resize
@@ -146,7 +152,7 @@
 /* A thin transparent strip centered on the list/card divider; hovering it
    reveals the collapse button. */
 :global(.is-desktop) .dividerHandle {
-  position: fixed;
+  position: absolute;
   top: 0;
   /* Centered ON the divider line. The toggle is a plain always-clickable
      button (a fixed element on top of the sidebar), so the whole circle works
