@@ -98,7 +98,84 @@ real monday tokens (local dev outside monday simply falls back to the seed).
 | `AXIOM_DATASET` | dataset name (default `app-errors`) |
 | `AXIOM_ORG_ID` | optional Axiom org id header |
 
+Lifecycle-events additions (all optional — unset keeps the feature inert):
+
+| var | purpose |
+|-----|---------|
+| `MONDAY_API_TOKEN` | monday API token used to **write** items on the events board |
+| `MONDAY_API_URL` | GraphQL endpoint override (tests only; default `https://api.monday.com/v2`) |
+| `LIFECYCLE_BOARD_ID` | target board id (from `create-events-board.mjs`) |
+| `LIFECYCLE_BOARD_COLUMNS` | JSON map logical key → column id (from `create-events-board.mjs`) |
+| `LIFECYCLE_SIGNING_SECRETS` | JSON map `appSlug → Signing Secret` — verifies `/api/webhooks/lifecycle` |
+| `APP_EVENTS_CLIENT_SECRETS` | JSON map `appSlug → Client Secret` — verifies `/api/webhooks/app-events` |
+
+Server-side error/usage shipping (the logger's Axiom sink) is gated separately
+on `AXIOM_TOKEN` + `AXIOM_DATASET` + `AXIOM_APP_NAME` — unset = console-only.
+
 None of these are ever shipped to the browser.
+
+## Lifecycle events → monday board
+
+Architecture, in three lines: every fleet app's **feature-level lifecycle
+webhooks** (`POST /api/webhooks/lifecycle`, JWT signed with that app's Signing
+Secret) and **app-level install/subscription webhooks** (`POST
+/api/webhooks/app-events`, JWT signed with that app's Client Secret) land on
+this server, which identifies the sender by which configured secret verifies,
+acks `202` immediately (challenge handshakes echo `200` before auth), then
+fail-soft records each event as an item on a private monday board — one group
+per app, deduped by `X-Apps-Event-Id`.
+
+Privacy: webhook payload details go **only** to the board (owner's private
+monday account); logger/Axiom ever see ids and enums only. Auth is
+fail-closed: no secrets configured → 401 (only the challenge echo is open).
+A dead board/token/monday outage can never 5xx a webhook.
+
+### Scripts (`scripts/`)
+
+```bash
+# 1. Create the private events board (columns + one group per app); prints the
+#    two env lines ready for `mapps code:env`:
+node scripts/create-events-board.mjs [--name "App Lifecycle Events"] [--workspace <id>]
+
+# 2. Register feature-level lifecycle subscriptions for every app in
+#    scripts/lifecycle-apps.config.json (fill in appSlug/featureSlug first):
+node scripts/register-lifecycle-subscriptions.mjs [--dry-run] [--app <slug>]
+
+# 3. Verify a running server end-to-end (challenge echo / valid JWT / 401):
+node scripts/simulate-webhook.mjs --url <base> --kind challenge
+node scripts/simulate-webhook.mjs --url <base> --secret <s> --slug <appSlug> --kind lifecycle
+node scripts/simulate-webhook.mjs --url <base> --secret wrong --slug <appSlug> --kind lifecycle --expect-fail
+```
+
+Token resolution for the first two: `MONDAY_API_TOKEN` env var, else
+`~/.config/mapps/.mappsrc` (`accessToken`). Tokens are never printed.
+
+### Activation runbook
+
+1. **Create the monday app** (if not done yet — see "Activation steps" above)
+   and add the GitHub secret `APP_TELEMETRY_DASHBOARD_ID`.
+2. **Merge to `develop`** → draft deploy; note the server's stable base URL.
+3. **Create the board**: `node scripts/create-events-board.mjs` → copy the
+   printed `LIFECYCLE_BOARD_ID` / `LIFECYCLE_BOARD_COLUMNS` lines.
+4. **Set the platform env** (never committed):
+   ```bash
+   mapps code:env -i <APP_ID> -k MONDAY_API_TOKEN            -v <write_token>
+   mapps code:env -i <APP_ID> -k LIFECYCLE_BOARD_ID          -v <board_id>
+   mapps code:env -i <APP_ID> -k LIFECYCLE_BOARD_COLUMNS     -v '<minified json>'
+   mapps code:env -i <APP_ID> -k LIFECYCLE_SIGNING_SECRETS   -v '{"axis-planner":"<signing secret>", ...}'
+   mapps code:env -i <APP_ID> -k APP_EVENTS_CLIENT_SECRETS   -v '{"axis-planner":"<client secret>", ...}'
+   ```
+5. **Register feature-level subscriptions**: fill `webhookBaseUrl` +
+   `appSlug`/`featureSlug` in `scripts/lifecycle-apps.config.json` (Developer
+   Center → the feature's URL slug), then
+   `node scripts/register-lifecycle-subscriptions.mjs --dry-run` and re-run
+   without the flag.
+6. **App-level webhooks (Developer Center → Webhooks), all 7 apps** —
+   discussions, axis-planner, axis-tracker, axis-day-off, axis-sync-calender,
+   team-people-column, deadline-confirm — point each app's webhook URL at
+   `<base>/api/webhooks/app-events` and subscribe to the install /
+   subscription / trial events. The URL registration handshake (`challenge`)
+   is answered automatically.
 
 ## Deploy
 

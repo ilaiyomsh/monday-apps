@@ -666,6 +666,9 @@ importers:
 
   apps/telemetry-dashboard:
     dependencies:
+      '@axiomhq/js':
+        specifier: ^1.3.1
+        version: 1.8.0
       '@mondaycom/apps-sdk':
         specifier: ^0.1.4
         version: 0.1.4
@@ -715,6 +718,9 @@ importers:
       nodemon:
         specifier: ^3.0.0
         version: 3.1.14
+      supertest:
+        specifier: ^7.0.0
+        version: 7.2.2
       typescript:
         specifier: ^5.3.3
         version: 5.9.3
@@ -724,6 +730,9 @@ importers:
       vite:
         specifier: ^7.3.0
         version: 7.3.6(@types/node@25.9.4)(jiti@2.7.0)(lightningcss@1.32.0)(sass@1.101.0)(yaml@2.9.0)
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@25.9.4)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@1.8.0))(lightningcss@1.32.0)(sass@1.101.0)(yaml@2.9.0)
 
   packages/shared: {}
 
