@@ -24,22 +24,27 @@ const API_URL = process.env.MONDAY_API_URL || 'https://api.monday.com/v2';
 const API_VERSION = '2026-04';
 const CONFIG_URL = new URL('./lifecycle-apps.config.json', import.meta.url);
 
-// ALL lifecycle event actions per feature kind (monday API 2026-04).
+// ALL lifecycle event actions per feature kind. Live-verified against the
+// server enum on 2026-07-19 (probed via an invalid enum value, which echoes
+// the full accepted list in its error message) — the docs list was stale
+// for AppFeatureObject, missing `hard_delete` and `multiple_duplicate`.
 const EVENTS_BY_KIND = {
-  AppFeatureBoardView: ['delete', 'duplicate', 'restore'],
-  AppFeatureBoardColumnExtension: ['delete', 'duplicate', 'export'],
-  AppFeatureColumn: ['create', 'delete', 'board_deleted', 'board_restored'],
   AppFeatureObject: [
-    'archive',
     'create',
     'delete',
-    'duplicate',
-    'import',
-    'publish',
+    'hard_delete',
+    'archive',
     'restore',
-    'unpublish',
+    'duplicate',
+    'multiple_duplicate',
+    'import',
     'update_attributes',
+    'publish',
+    'unpublish',
   ],
+  AppFeatureBoardView: ['duplicate', 'delete', 'restore'],
+  AppFeatureBoardColumnExtension: ['duplicate', 'export', 'delete'],
+  AppFeatureColumn: ['create', 'delete', 'board_deleted', 'board_restored'],
 };
 
 const HELP = `register-lifecycle-subscriptions.mjs — register feature lifecycle webhooks
