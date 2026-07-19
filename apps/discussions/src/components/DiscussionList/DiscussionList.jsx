@@ -4,7 +4,7 @@ import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscuss
 import { Button, Text, IconButton } from '@vibe/core';
 import { Calendar, CloseSmall, Search, Settings } from '@vibe/icons';
 import { HighlightedText } from '@generated/components/HighlightedText';
-import { BarChart3, Check, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { Check, ChevronLeft, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
 import { fmtTimeLabel, buildMonthOptions } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
@@ -366,7 +366,7 @@ function DiscussionContextMenu({ item, x, y, actions, onClose }) {
 
 export function DiscussionList({
   onSelect, selectedId, onCreateNew, onEdit, onCopyLink, onDuplicate, onExport, onDelete,
-  exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, onOpenMyDecisions, onOpenDashboard, currentUser = null,
+  exportingId, canManageSettings, onOpenSettings, onOpenPersonal, currentUser = null,
   // Calendar view — nav state lives in App (predates round136's removal of the
   // refreshKey remount; keeping it there is still correct).
   viewMode = 'list', onViewModeChange, calendarAnchor, calendarMode, onCalendarNavigate, onCreateAt,
@@ -377,6 +377,8 @@ export function DiscussionList({
   refreshToken = 0,
 }) {
   const isCalendar = viewMode === 'calendar' && !!calendarAnchor;
+  const activeFilterCount =
+    (typeFilter !== 'all' ? 1 : 0) + (!isCalendar && monthFilter !== 'all' ? 1 : 0);
   const [search, setSearch] = useState('');
   // Default to the current month for fast initial load — fetching only this month's
   // discussions instead of all (up to PAGE_SIZE). "כל החודשים" is still selectable.
@@ -385,6 +387,11 @@ export function DiscussionList({
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' or a status label id (string)
+  // round170 — the two filter cells were consolidated into ONE "סינון" button
+  // that opens a small popover holding the type (+ month, in list view) selects.
+  const [filterOpen, setFilterOpen] = useState(false);
+  // Active-filter count for the button badge ('all' === unfiltered; the month
+  // filter only applies in list view, where it is offered).
   const [debouncedSearch, setDebouncedSearch] = useState('');
   // Right-click context menu (round 33) — {item, x, y} while open. A single
   // instance serves BOTH the list rows and the calendar chips (both live inside
@@ -534,148 +541,112 @@ export function DiscussionList({
         <div className={styles.headerInner}>
           {/* Mockup buttons row: personal-view nav (outline) at inline-start,
               chrome (gear + view toggle) and the primary "חדש" at inline-end. */}
+          {/* round170 — one "האזור האישי" entry (replaces המשימות שלי / ההחלטות
+              שלי / dashboard), then the calendar + settings icons, then the
+              primary "חדש". The row is dir=ltr, so DOM order = visual left→right. */}
           <div className={styles.titleRow}>
-            <div className={styles.titleActions}>
-              {/* round128 — "המשימות שלי" sits LEFT of "ההחלטות שלי" (owner request). */}
-              {onOpenMyTasks && (
-                <Button kind={"secondary"} size={"small"} onClick={onOpenMyTasks}>
-                  המשימות שלי
-                </Button>
-              )}
-              {onOpenMyDecisions && (
-                <Button kind={"secondary"} size={"small"} onClick={onOpenMyDecisions}>
-                  ההחלטות שלי
-                </Button>
-              )}
-              {/* round152/153 — entry to the discussions dashboard, alongside the
-                  personal-view nav. round153: icon-only square button (owner
-                  request — the graph glyph, no "דשבורד" label). */}
-              {onOpenDashboard && (
-                <IconButton
-                  icon={BarChart3}
-                  size={"small"}
-                  kind={"tertiary"}
-                  ariaLabel="דשבורד דיונים"
-                  tooltipContent="דשבורד דיונים"
-                  onClick={onOpenDashboard}
-                />
-              )}
+            {onOpenPersonal && (
+              <button type="button" className={styles.personalBtn} onClick={onOpenPersonal}>
+                <span>האזור האישי</span>
+                <ChevronLeft size={16} aria-hidden="true" />
+              </button>
+            )}
+            {onViewModeChange && (
+              <IconButton
+                icon={isCalendar ? List : Calendar}
+                size={"small"}
+                kind={"tertiary"}
+                ariaLabel={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
+                tooltipContent={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
+                onClick={() => onViewModeChange(isCalendar ? 'list' : 'calendar')}
+              />
+            )}
+            {(canManageSettings || isSuper) && (
+              <IconButton
+                icon={Settings}
+                size={"small"}
+                kind={"tertiary"}
+                ariaLabel={canManageSettings ? 'הגדרות' : 'ניהול תבניות'}
+                onClick={onOpenSettings}
+              />
+            )}
+            {canCreateDiscussion && (
+              <Button kind={"primary"} size={"small"} onClick={onCreateNew}>
+                חדש
+              </Button>
+            )}
+          </div>
+          {/* round170 — consolidated filter row: search on the RIGHT, one "סינון"
+              button on the LEFT opening a popover with the type (+ month, list
+              view only) selects. */}
+          <div className={styles.filterBar} data-testid="filter-bar">
+            <div className={styles.searchWrap}>
+              <Search className={styles.searchIcon} aria-hidden="true" />
+              <input
+                type="text"
+                className={styles.search}
+                aria-label="חיפוש דיון"
+                placeholder="חיפוש דיון"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {/* clear-X — pinned to the input's LEFT edge (inline-end in RTL) */}
+              {search ? (
+                <button
+                  type="button"
+                  className={styles.searchClear}
+                  aria-label="נקה חיפוש"
+                  onClick={() => setSearch('')}
+                >
+                  <CloseSmall size={16} />
+                </button>
+              ) : null}
             </div>
-            <div className={styles.titleActions}>
-              {(canManageSettings || isSuper) && (
-                <IconButton
-                  icon={Settings}
-                  size={"small"}
-                  kind={"tertiary"}
-                  ariaLabel={canManageSettings ? 'הגדרות' : 'ניהול תבניות'}
-                  onClick={onOpenSettings}
-                />
-              )}
-              {onViewModeChange && (
-                <IconButton
-                  icon={isCalendar ? List : Calendar}
-                  size={"small"}
-                  kind={"tertiary"}
-                  ariaLabel={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
-                  tooltipContent={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
-                  onClick={() => onViewModeChange(isCalendar ? 'list' : 'calendar')}
-                />
-              )}
-              {canCreateDiscussion && (
-                <Button kind={"primary"} size={"small"} onClick={onCreateNew}>
-                  חדש
-                </Button>
+            <div className={styles.filterAnchor}>
+              <button
+                type="button"
+                className={`${styles.filterBtn} ${filterOpen ? styles.filterBtnOpen : ''}`}
+                onClick={() => setFilterOpen((o) => !o)}
+                aria-haspopup="dialog"
+                aria-expanded={filterOpen}
+              >
+                <Filter size={15} aria-hidden="true" />
+                <span>סינון</span>
+                {activeFilterCount > 0 && <span className={styles.filterBadge}>{activeFilterCount}</span>}
+              </button>
+              {filterOpen && (
+                <>
+                  <div className={styles.filterBackdrop} onClick={() => setFilterOpen(false)} />
+                  <div className={styles.filterPanel} role="dialog" aria-label="סינון דיונים" dir="rtl">
+                    <div className={styles.filterField}>
+                      <div className={styles.filterFieldLabel}>סוג הדיון</div>
+                      <FilterSelect
+                        options={typeDropdownOptions}
+                        value={typeFilter}
+                        onChange={(val) => setTypeFilter(val ?? 'all')}
+                        ariaLabel="סינון לפי סוג"
+                        fieldLabel="סוג הדיון"
+                        icon={Filter}
+                        searchable
+                      />
+                    </div>
+                    {!isCalendar && (
+                      <div className={styles.filterField}>
+                        <div className={styles.filterFieldLabel}>חודש</div>
+                        <FilterSelect
+                          options={monthDropdownOptions}
+                          value={monthFilter}
+                          onChange={(val) => setMonthFilter(val ?? 'all')}
+                          ariaLabel="סינון לפי חודש"
+                          icon={Filter}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           </div>
-          {isCalendar ? (
-            <div className={styles.calendarFilterRow} data-testid="calendar-filter-row">
-              <div className={styles.searchWrap}>
-                <Search className={styles.searchIcon} aria-hidden="true" />
-                <input
-                  type="text"
-                  className={styles.search}
-                  aria-label="חיפוש דיון"
-                  placeholder="חיפוש דיון"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {/* clear-X — pinned to the input's LEFT edge (inline-end in RTL) */}
-                {search ? (
-                  <button
-                    type="button"
-                    className={styles.searchClear}
-                    aria-label="נקה חיפוש"
-                    onClick={() => setSearch('')}
-                  >
-                    <CloseSmall size={16} />
-                  </button>
-                ) : null}
-              </div>
-              <div className={styles.calendarTypeCell}>
-                <FilterSelect
-                  options={typeDropdownOptions}
-                  value={typeFilter}
-                  onChange={(val) => setTypeFilter(val ?? 'all')}
-                  ariaLabel="סינון לפי סוג"
-                  fieldLabel="סוג הדיון"
-                  icon={Filter}
-                  searchable
-                />
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className={styles.searchWrap}>
-                <Search className={styles.searchIcon} aria-hidden="true" />
-                <input
-                  type="text"
-                  className={styles.search}
-                  aria-label="חיפוש דיון"
-                  placeholder="חיפוש דיון"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {/* clear-X — pinned to the input's LEFT edge (inline-end in RTL) */}
-                {search ? (
-                  <button
-                    type="button"
-                    className={styles.searchClear}
-                    aria-label="נקה חיפוש"
-                    onClick={() => setSearch('')}
-                  >
-                    <CloseSmall size={16} />
-                  </button>
-                ) : null}
-              </div>
-              {/* Full-width filter chips (round 38): each stretches to fill half
-                  the row so together they span the search-input width above. Order
-                  (DOM = RTL): סוג הדיון on the right (start), month on the left
-                  (end). Both carry a funnel icon. */}
-              <div className={styles.filterRow}>
-                <div className={styles.filterCell}>
-                  <FilterSelect
-                    options={typeDropdownOptions}
-                    value={typeFilter}
-                    onChange={(val) => setTypeFilter(val ?? 'all')}
-                    ariaLabel="סינון לפי סוג"
-                    fieldLabel="סוג הדיון"
-                    icon={Filter}
-                    searchable
-                  />
-                </div>
-                <div className={styles.filterCell}>
-                  <FilterSelect
-                    options={monthDropdownOptions}
-                    value={monthFilter}
-                    onChange={(val) => setMonthFilter(val ?? 'all')}
-                    ariaLabel="סינון לפי חודש"
-                    icon={Filter}
-                  />
-                </div>
-              </div>
-            </>
-          )}
         </div>
       </div>
 

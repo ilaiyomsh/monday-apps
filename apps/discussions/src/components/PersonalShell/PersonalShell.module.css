@@ -1,0 +1,83 @@
+/* round170 — personal-area shell: back arrow pinned top-LEFT, 3-tab switcher
+   centered, the active view fills the rest. */
+.shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+.header {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
+  background: var(--primary-background-color, #fff);
+}
+/* physical LEFT (not inline-start) so it stays top-left in the RTL shell */
+.back {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: 8px;
+  background: var(--primary-background-color, #fff);
+  font-family: var(--font-family);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--primary-text-color, #323338);
+  cursor: pointer;
+}
+.back:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+.tabs {
+  display: inline-flex;
+  background: var(--primary-background-hover-color, #eef1f8);
+  border-radius: 11px;
+  padding: 4px;
+  gap: 3px;
+}
+.tab {
+  border: none;
+  background: transparent;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-family: var(--font-family);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab:hover {
+  color: var(--primary-text-color, #323338);
+}
+.tabActive {
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-color, #0073ea);
+  font-weight: 800;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+/* On a real mobile app the back label is dropped to save width (icon only). */
+:global(.mobile-app) .back span {
+  display: none;
+}
+:global(.mobile-app) .tab {
+  padding: 8px 12px;
+}

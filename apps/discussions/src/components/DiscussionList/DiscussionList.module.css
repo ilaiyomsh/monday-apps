@@ -6,19 +6,17 @@
   background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
 }
 
-/* Sticky header */
+/* round170 — the header (personal-area entry + create + consolidated filter) is
+   now its OWN card, visually separated from the discussion list below it by a
+   border + gap (owner request). It is a flex sibling above the scroll area, so
+   it already stays put; the old sticky + hairline rule are no longer needed. */
 .header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  flex: none;
+  margin: 10px 10px 0;
   background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
-}
-.header::after {
-  content: '';
-  display: block;
-  height: 1px;
-  background: var(--ui-border-color, #d0d4e4);
-  margin-inline: var(--section-rule-inset, 16px);
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(20, 30, 60, 0.06);
 }
 
 .headerInner {
@@ -33,11 +31,122 @@
 .titleRow {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  /* Two nav buttons + gear + view toggle + "חדש" can overrun the narrow
-     sidebar — degrade by wrapping instead of overflowing. */
+  gap: var(--spacing-small, 8px);
+  /* round170 — LTR so DOM order == visual order: [האזור האישי][יומן][הגדרות][חדש]. */
+  direction: ltr;
   flex-wrap: wrap;
   row-gap: var(--spacing-xs, 4px);
+}
+
+/* round170 — the "האזור האישי" entry button: wide, neutral (no coloured icon),
+   with a leading label and a trailing chevron. Fills the row's free space so the
+   icons + "חדש" sit to its right. */
+.personalBtn {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 8px;
+  background: var(--primary-background-color, #fff);
+  font-family: var(--font-family);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary-text-color, #323338);
+  cursor: pointer;
+}
+.personalBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+.personalBtn :global(svg) {
+  flex: none;
+  color: var(--secondary-text-color, #676879);
+}
+
+/* round170 — consolidated filter row: search (right) + one "סינון" button (left). */
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-small, 8px);
+}
+.filterBar .searchWrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.filterAnchor {
+  position: relative;
+  flex: none;
+}
+.filterBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 8px;
+  background: var(--primary-background-color, #fff);
+  font-family: var(--font-family);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--primary-text-color, #323338);
+  cursor: pointer;
+}
+.filterBtn:hover,
+.filterBtnOpen {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  border-color: var(--primary-color, #0073ea);
+}
+.filterBtn :global(svg) {
+  color: var(--secondary-text-color, #676879);
+}
+.filterBadge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 20px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.filterBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.filterPanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: 41;
+  width: 260px;
+  max-width: 78vw;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(20, 30, 60, 0.16);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.filterField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.filterFieldLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--secondary-text-color, #676879);
 }
 
 .title {
