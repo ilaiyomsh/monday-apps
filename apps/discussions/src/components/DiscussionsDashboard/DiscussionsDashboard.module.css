@@ -145,6 +145,25 @@
 .empty { color: var(--secondary-text-color, #676879); font-size: 13px; padding: 24px 0; text-align: center; }
 .chartScroll { overflow-x: auto; }
 
+/* round156 — top-participants list: [avatar] [name (flex, ellipsis)] [bar] [count],
+   RTL so the avatar sits to the RIGHT of the name and bars grow right→left. */
+.partList { display: flex; flex-direction: column; gap: 12px; padding: 8px 2px 4px; }
+.partRow { display: flex; align-items: center; gap: 8px; }
+.partAvatar { flex-shrink: 0; display: inline-flex; }
+.partName {
+  flex: 1; min-width: 0; font-size: 12.5px; color: var(--primary-text-color, #323338);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right;
+}
+.partBar {
+  flex-shrink: 0; width: 84px; height: 14px; background: #eef1f5;
+  border-radius: 7px; position: relative; overflow: hidden;
+}
+.partBarFill {
+  position: absolute; inset-inline-end: 0; top: 0; bottom: 0; min-width: 6px;
+  background: var(--dash-s3); border-radius: 7px;
+}
+.partCount { flex-shrink: 0; width: 20px; text-align: left; font-size: 12.5px; font-weight: 700; color: var(--primary-text-color, #323338); }
+
 .tooltip {
   background: #fff; border: 1px solid var(--layout-border-color, #e6e9ef); border-radius: 8px;
   padding: 6px 10px; font-size: 12.5px; box-shadow: 0 4px 14px rgba(0,0,0,.12); color: var(--primary-text-color,#323338);
