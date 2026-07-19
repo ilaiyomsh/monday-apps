@@ -301,17 +301,23 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
               <div className={styles.card}>
                 <div className={styles.cardTitle}>משתתפים מובילים בדיונים</div>
                 {model.byParticipant.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
-                  <ResponsiveContainer width="100%" height={200}>
-                    <BarChart layout="vertical" data={model.byParticipant} margin={{ top: 4, right: 28, left: 8, bottom: 4 }}>
-                      <CartesianGrid horizontal={false} stroke="#edf0f6" />
-                      <XAxis type="number" hide />
-                      <YAxis type="category" dataKey="name" width={104} tick={<ParticipantTick />} axisLine={false} tickLine={false} />
-                      <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(232,123,164,.08)' }} />
-                      <Bar dataKey="count" fill={SERIES[2]} radius={[0, 4, 4, 0]} maxBarSize={22}>
-                        <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: '#323338', fontWeight: 600 }} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                  // round155 — force an LTR context: inside the RTL dashboard the
+                  // horizontal bar chart mirrored (names landed ON the bars). LTR
+                  // puts the name gutter on the left, bars growing right, counts at
+                  // the bar ends — no collision. Hebrew names still shape RTL.
+                  <div dir="ltr" style={{ width: '100%' }}>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart layout="vertical" data={model.byParticipant} margin={{ top: 4, right: 30, left: 4, bottom: 4 }}>
+                        <CartesianGrid horizontal={false} stroke="#edf0f6" />
+                        <XAxis type="number" hide domain={[0, 'dataMax']} />
+                        <YAxis type="category" dataKey="name" width={112} tick={<ParticipantTick />} axisLine={false} tickLine={false} interval={0} />
+                        <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(232,123,164,.08)' }} />
+                        <Bar dataKey="count" fill={SERIES[2]} radius={[0, 4, 4, 0]} maxBarSize={22}>
+                          <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: '#323338', fontWeight: 600 }} />
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                 )}
               </div>
             </div>

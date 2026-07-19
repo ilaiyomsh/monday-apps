@@ -86,6 +86,25 @@ describe('decisions feature render smoke', () => {
     expect(screen.getByText('בתוקף')).toBeInTheDocument();
   });
 
+  it('DecisionsTab survives the loading→loaded transition (round155 — hooks-order #310 fix)', () => {
+    setActiveConfig({ boards: { decisions: { id: 'b-dec' } }, columns: { decisions: {} } });
+    const items = [{
+      id: 'd1', name: 'החלטה שנטענה', deciderID: [], affectedID: [],
+      decisionStatusID: 1, decisionPriorityID: null, decisionTrackingID: null, decisionDateID: '2026-07-07',
+    }];
+    // First render while the decisions are still loading (skeleton path); the
+    // useColumnRenameMenu hook must run on THIS render too, or the count changes
+    // when loading flips false and React throws #310 (the reported crash).
+    const { rerender } = render(
+      <DecisionsTab data={{ ...decisionsDataStub([]), loading: true }} onNewDecision={vi.fn()} onNotify={vi.fn()} canDecision={() => false} canCreateDecision={false} />
+    );
+    // Data arrives — this re-render must NOT throw, and the decision must show.
+    rerender(
+      <DecisionsTab data={decisionsDataStub(items)} onNewDecision={vi.fn()} onNotify={vi.fn()} canDecision={() => false} canCreateDecision={false} />
+    );
+    expect(screen.getByText('החלטה שנטענה')).toBeInTheDocument();
+  });
+
   it('QuickCreateModal toggles decision/task modes and fires onCreate with the typed text', () => {
     const onCreate = vi.fn();
     render(
