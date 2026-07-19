@@ -255,6 +255,7 @@ export function MyDecisionsRow({
             single
             closeOnSelect
             boardKey="decisions"
+            accountWide
           />
         ) : (
           <PersonList people={effectiveDecider} size="sm" showNames={false} max={2} />

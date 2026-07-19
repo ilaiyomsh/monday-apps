@@ -800,6 +800,7 @@ export function DiscussionCard({
                           single={singleRole}
                           closeOnSelect={singleRole}
                           boardKey="discussions"
+                          accountWide
                         />
                       ) : (
                         <PersonList people={g.people} size="sm" showNames={false} max={3} />
