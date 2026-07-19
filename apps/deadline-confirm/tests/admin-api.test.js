@@ -308,6 +308,9 @@ describe('PUT /api/config (v2 shape, v3 scoping)', () => {
             ],
           },
         ],
+        // v4: a config sent without a digest block normalizes to digest: null
+        // (the digest contract itself is pinned in admin-api-digest.test.js).
+        digest: null,
       },
     });
     // Generated id must not collide with the pre-generated one.

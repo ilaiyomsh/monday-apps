@@ -23,9 +23,10 @@ const ADMIN_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
  * @param {{ clientId: string, clientSecret: string, allowedAccountIds: string[], baseUrl: string, version?: string }} deps.env
  * @param {typeof fetch} [deps.fetchImpl]
  * @param {string} [deps.todayIso]
+ * @param {{ send(p: object): Promise<{ id: string }> }} [deps.emailSender] - v4 digest; absent → /api/digest/send answers 409
  * @returns {import('express').Express}
  */
-export function createApp({ storage, api, rateLimiter, env, fetchImpl, todayIso }) {
+export function createApp({ storage, api, rateLimiter, env, fetchImpl, todayIso, emailSender }) {
   const app = express();
   app.set('trust proxy', true); // monday code fronts the container — req.ip must be the client
   app.disable('x-powered-by');
@@ -41,7 +42,7 @@ export function createApp({ storage, api, rateLimiter, env, fetchImpl, todayIso 
     clientSecret: env.clientSecret,
     allowedAccountIds: env.allowedAccountIds,
   });
-  app.use(createAdminRouter({ storage, api, env, requireSession }));
+  app.use(createAdminRouter({ storage, api, env, requireSession, emailSender, todayIso }));
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true, version: env.version ?? 'dev' });

@@ -101,3 +101,16 @@ is allowed ONLY for shapes listed here, with a comment naming the entry.
 - **Trigger:** pilot agent reported the runbook/SKILL still described
   `check.sh`/`audit.sh` as not yet existing while using them as the acceptance gate.
 - **Fix:** wording removed from SKILL.md + retrofit-runbook.md same session.
+
+## Hook union selector misses the server `logError` convention (2026-07-19)
+
+`scripts/check.sh`'s UNION_SELECTOR accepts only `logger.*` member calls,
+`throw`, `showErrorWithDetails`, or `next(err)` inside a catch. deadline-confirm's
+server convention is the named import `logError(tag, msg, ctx)` from
+`helpers/logger.js` — semantically the same funnel — so the PostToolUse hook
+flags EVERY such catch (including long-committed code like
+`confirm-service.js`), while the app's own ESLint kit passes clean. Until the
+selector adds `:not(:has(CallExpression[callee.name='logError']))` (and the
+sibling `logAttempt`/`logInfo` names where appropriate), treat hook findings
+on `logError(...)`-handled catches in this app as false positives — verify
+with `npx eslint <file>` before "fixing".

@@ -13,6 +13,7 @@ const envManager = new EnvironmentVariablesManager({ updateProcessEnv: true });
 import { createApp } from './app.js';
 import { createAppStorage } from './services/storage.js';
 import { createMondayApi } from './services/monday-api.js';
+import { createEmailSender } from './services/email-sender.js';
 import { createRateLimiter } from './helpers/rate-limit.js';
 import { createSecureStorageBackend } from './storage/secure-storage-backend.js';
 import { createMemoryBackend } from './storage/memory-backend.js';
@@ -61,7 +62,14 @@ const storage = createAppStorage({ backend });
 const api = createMondayApi();
 const rateLimiter = createRateLimiter();
 
-const app = createApp({ storage, api, rateLimiter, env });
+// v4 digest sender — wired only when BOTH env values exist; otherwise the
+// digest send endpoint answers 409 email_not_configured (admin shows a hint).
+const emailSender =
+  env.resendApiKey && env.digestFrom
+    ? createEmailSender({ apiKey: env.resendApiKey, from: env.digestFrom })
+    : undefined;
+
+const app = createApp({ storage, api, rateLimiter, env, emailSender });
 
 app.listen(env.port, () => {
   logInfo('server', 'deadline-confirm listening', { port: env.port, localStorage: env.useLocalStorage });

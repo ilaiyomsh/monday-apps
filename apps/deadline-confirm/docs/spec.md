@@ -396,3 +396,80 @@ segregated per APP only, so account isolation is the storage layer's job
   installing account is admitted (isolation is structural). The legacy
   variable, when still set, is merged into the list — existing deployments
   keep their lockdown until env is updated.
+
+# V4 Amendment, Phase 1 — Per-User Digest Email (owner decisions, 2026-07-19)
+
+Design log: `docs/v4-digest-decisions.md` (rev 3). Phase 1 deliberately keeps
+the v3 click mechanism (static shared secret, `/confirm` auto-POST landing)
+and adds a per-user summary email ON TOP of everything that exists. Nothing
+was removed: the per-task template editor + external workflow path keeps
+working unchanged. Interactive email (Adaptive Cards) is deferred — see the
+decision log §3.
+
+## Product behavior
+
+- The app composes and sends ONE email per user listing all their pending
+  tasks, replacing email-per-task fatigue (decision log §1 problem 4).
+- Recipients come from a dedicated USERS BOARD: a people column identifies
+  the user (person ids), an email column is the address. Task ↔ user matching
+  is person-id intersection with the tasks board's `peopleColumnId`.
+  Rows missing an email/person are reported as skipped, never guessed.
+  Duplicate emails merge (person ids united).
+- The digest is split into SECTIONS (1..4; default two, per the approved
+  mock). Each section = a date column on the tasks board + one action button.
+  **Pending rule:** date set AND date < today (strictly; Asia/Jerusalem) AND
+  the button's status column ≠ the button's target label id (unset status IS
+  pending; label id 0 handled). A recipient with zero pending tasks gets no
+  email; an empty section is omitted.
+- Each task row carries the button as a REAL v3 `/confirm` link
+  (`itemId + a + k + btn`) — one click, auto-POST, done.
+- **Phase 1 sending is MANUAL ONLY** — the "שלח עכשיו" button in the admin's
+  new "מייל מסכם" tab. A scheduler is a later phase.
+
+## §7 change — success page auto-close
+
+The success page (and only it) now carries ONE inline script: `window.close()`
+2s after render, with a visible fallback line ("אפשר לסגור את החלון…").
+Invalid/bad-request pages stay JS-free — a human should read them. This
+amends §7's "no JS" wording for the success page alone.
+
+## Storage & config schema (extends §4)
+
+`config.digest` (nullable; absent on old configs — normalized to `null`):
+
+```
+digest: {
+  usersBoardId: "222",                 // digits
+  usersPeopleColumnId: "people_u",
+  usersEmailColumnId: "email_u",
+  subject: "המשימות שלך — נדרש עדכון סטטוס",   // 1..120
+  sections: [ { id: "s_xxxxxxxx", title: "…", dateColumnId: "date_x",
+                buttonId: "b_xxxxxxxx" } ]     // 1..4, buttonId must exist
+}
+```
+
+A digest block requires `peopleColumnId` to be set (matching column).
+
+## Environment (extends §5)
+
+- `RESEND_API_KEY`, `DIGEST_FROM` — the Resend sender funnel
+  (`src/services/email-sender.js`). Both optional; when either is missing
+  `/api/digest/send` answers 409 `email_not_configured`.
+
+## Admin API (extends §9)
+
+- `GET /api/digest/preview[?recipient=<email>]` → 200
+  `{ recipients: [{email,name,taskCount}], skippedUsers, truncated, html }`;
+  409 `digest_not_configured` / `no_secret` / `not_connected`;
+  502 `monday_api_failed`.
+- `POST /api/digest/send` → same guards + 409 `email_not_configured`; sends
+  per recipient (per-recipient failures isolated), returns
+  `{ ok, results: [{email,name,taskCount,ok,error?}], skippedUsers, truncated }`.
+
+## GraphQL (extends §11)
+
+- `getBoardItems` — whole-board read, `items_page` → `next_items_page` cursor
+  pagination (page 100, cap 20 pages, `truncated` surfaced — never silent),
+  typed fragments Status/Date/People; people filtered to `kind: person`.
+  **Pre-release gate:** sandbox probe (WZ- board) + `/monday-api check` — the
+  cloud session that authored this had no token (see tests/fixtures/README.md).

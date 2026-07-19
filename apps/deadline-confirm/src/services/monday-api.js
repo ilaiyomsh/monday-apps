@@ -43,6 +43,57 @@ const ADD_UPDATE_MUTATION = `mutation AddUpdate($itemId: ID!, $body: String!) {
 
 const ME_QUERY = `query Me { me { id name } }`;
 
+// v4 digest board reads — cursor pagination: the FIRST page comes from
+// boards.items_page, every following page from root-level next_items_page
+// (platform contract). Typed value fragments per the monday-api skill
+// column-formats reference; PeopleValue.persons_and_teams filtered to
+// kind 'person' during normalization.
+const ITEM_FIELDS = `id
+        name
+        column_values(ids: $columnIds) {
+          id
+          text
+          ... on StatusValue { index }
+          ... on DateValue { date }
+          ... on PeopleValue { persons_and_teams { id kind } }
+        }`;
+
+const BOARD_ITEMS_QUERY = `query GetBoardItems($boardId: [ID!], $columnIds: [String!], $limit: Int!) {
+  boards(ids: $boardId) {
+    items_page(limit: $limit) {
+      cursor
+      items {
+        ${ITEM_FIELDS}
+      }
+    }
+  }
+}`;
+
+const NEXT_ITEMS_QUERY = `query NextBoardItems($cursor: String!, $columnIds: [String!], $limit: Int!) {
+  next_items_page(cursor: $cursor, limit: $limit) {
+    cursor
+    items {
+      ${ITEM_FIELDS}
+    }
+  }
+}`;
+
+/** Normalize one raw item to the app shape (never-set rules: see header). */
+function normalizeBoardItem(raw) {
+  const columns = {};
+  for (const cv of raw.column_values ?? []) {
+    columns[cv.id] = {
+      text: cv.text ?? '',
+      statusLabelId: cv.index ?? null,
+      date: cv.date ? cv.date : null, // "" (never set) → null
+      personIds: (cv.persons_and_teams ?? [])
+        .filter((p) => p?.kind === 'person')
+        .map((p) => String(p.id)),
+    };
+  }
+  return { id: String(raw.id), name: raw.name ?? '', columns };
+}
+
 export class MondayApiError extends Error {
   /**
    * @param {string} message
@@ -187,6 +238,42 @@ export function createMondayApi({ fetchImpl, url = MONDAY_API_URL } = {}) {
         query: ADD_UPDATE_MUTATION,
         variables: { itemId, body },
       });
+    },
+
+    /**
+     * v4 digest — read a whole board's items (cursor pagination via
+     * items_page → next_items_page), normalized to the app's column shape:
+     * { text, statusLabelId, date, personIds }. `truncated` reports a hit on
+     * the page cap (no silent truncation).
+     * @param {{ token: string, boardId: string, columnIds: string[], pageSize?: number, maxPages?: number }} p
+     * @returns {Promise<{ items: Array<object>, truncated: boolean }>}
+     */
+    async getBoardItems({ token, boardId, columnIds, pageSize = 100, maxPages = 20 }) {
+      const items = [];
+      let cursor = null;
+      let pages = 0;
+
+      while (pages < maxPages) {
+        const data = cursor
+          ? await graphql({
+              token,
+              query: NEXT_ITEMS_QUERY,
+              variables: { cursor, columnIds, limit: pageSize },
+            })
+          : await graphql({
+              token,
+              query: BOARD_ITEMS_QUERY,
+              variables: { boardId: [boardId], columnIds, limit: pageSize },
+            });
+        const page = cursor ? data.next_items_page : data.boards?.[0]?.items_page;
+        if (!page) break;
+        for (const raw of page.items ?? []) items.push(normalizeBoardItem(raw));
+        pages += 1;
+        cursor = page.cursor ?? null;
+        if (!cursor) break;
+      }
+
+      return { items, truncated: Boolean(cursor) };
     },
 
     /** OAuth identity + connection liveness probe (§8/§9). */
