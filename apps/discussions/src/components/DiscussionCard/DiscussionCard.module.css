@@ -687,11 +687,11 @@
   margin-inline: 0;
 }
 
-/* round168 — reveal the vertical tab scrollbar only while the pointer is in the
-   rightmost third of the screen (owner request). The `.barReveal` class is
-   toggled by `useRightEdgeReveal` (pointer tracking); pure CSS can't read the
-   pointer's x-position. */
-.body.barReveal::-webkit-scrollbar-thumb:vertical {
+/* round169 — the tab content's vertical scrollbar is visible from the first
+   moment (owner request), overriding the global transparent-until-hover default.
+   (The other views' vertical bars stay hover-revealed; these table views want it
+   always shown.) */
+.body::-webkit-scrollbar-thumb:vertical {
   background: var(--ui-border-color, #c3c6d4);
   background-clip: padding-box;
 }
