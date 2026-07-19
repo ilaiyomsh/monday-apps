@@ -11,6 +11,10 @@
 // All collaborators are injected — this module imports nothing.
 
 export const OWNER_TOKEN_KEY = 'owner:oauth_token';
+// The lifecycle events board config: { boardId, groupId, columns:{logical→id} }.
+// A SINGLE global key (no tenancy — one operator, mirroring the owner token).
+// Written by the Settings UI provisioning flow, read per-event by events-board.
+export const BOARD_CONFIG_KEY = 'lifecycle:board_config';
 
 /**
  * @typedef {object} StorageBackend - SecureStorage-compatible
@@ -25,16 +29,23 @@ export const OWNER_TOKEN_KEY = 'owner:oauth_token';
  * @param {object} opts.logger - app logger (`(message, tag, context)` shape)
  * @param {number} [opts.ttlMs=60000]
  * @param {() => number} [opts.now=Date.now]
- * @returns {{ getOwnerToken: () => Promise<string|null>, setOwnerToken: (token: string) => Promise<void> }}
+ * @returns {{
+ *   getOwnerToken: () => Promise<string|null>,
+ *   setOwnerToken: (token: string) => Promise<void>,
+ *   getBoardConfig: () => Promise<object|null>,
+ *   setBoardConfig: (config: object) => Promise<void>,
+ * }}
  */
 export function createStorageService({ backend, logger, ttlMs = 60_000, now = Date.now }) {
   /** @type {{ value: string|null, cachedAt: number } | null} */
-  let cached = null;
+  let cachedToken = null;
+  /** @type {{ value: object|null, cachedAt: number } | null} */
+  let cachedConfig = null;
 
   return {
     /** Cached read (60s TTL). Never throws — a backend failure degrades to null. */
     async getOwnerToken() {
-      if (cached && now() - cached.cachedAt < ttlMs) return cached.value;
+      if (cachedToken && now() - cachedToken.cachedAt < ttlMs) return cachedToken.value;
       let value = null;
       try {
         value = (await backend.get(OWNER_TOKEN_KEY)) ?? null;
@@ -42,14 +53,42 @@ export function createStorageService({ backend, logger, ttlMs = 60_000, now = Da
         logger.error('owner_token_read_failed', 'storage', { error: String(err?.message ?? err) });
         value = null;
       }
-      cached = { value, cachedAt: now() };
+      cachedToken = { value, cachedAt: now() };
       return value;
     },
 
     /** Write-through; updates the cache immediately (visible on the next read). */
     async setOwnerToken(token) {
       await backend.set(OWNER_TOKEN_KEY, token);
-      cached = { value: token, cachedAt: now() };
+      cachedToken = { value: token, cachedAt: now() };
+    },
+
+    /**
+     * The events-board config, cached (60s TTL). Never throws — a backend
+     * failure degrades to null so the webhook path stays fail-soft. A stored
+     * value that is not a plain object also degrades to null.
+     * @returns {Promise<object|null>}
+     */
+    async getBoardConfig() {
+      if (cachedConfig && now() - cachedConfig.cachedAt < ttlMs) return cachedConfig.value;
+      let value = null;
+      try {
+        const raw = await backend.get(BOARD_CONFIG_KEY);
+        value = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+      } catch (err) {
+        logger.error('board_config_read_failed', 'storage', {
+          error: String(err?.message ?? err),
+        });
+        value = null;
+      }
+      cachedConfig = { value, cachedAt: now() };
+      return value;
+    },
+
+    /** Write-through; updates the cache immediately (visible on the next read). */
+    async setBoardConfig(config) {
+      await backend.set(BOARD_CONFIG_KEY, config);
+      cachedConfig = { value: config, cachedAt: now() };
     },
   };
 }

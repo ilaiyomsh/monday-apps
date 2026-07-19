@@ -187,6 +187,79 @@ describe('createMondayApi — createItem request shape', () => {
   });
 });
 
+describe('createMondayApi — createBoard', () => {
+  it('creates a PRIVATE board by default and returns id + groups (normalized to strings)', async () => {
+    const { api, calls } = makeApi({
+      data: { create_board: { id: 555, groups: [{ id: 'grp1', title: 'Group Title' }] } },
+    });
+
+    const board = await api.createBoard({ name: 'App Lifecycle Events' });
+
+    const req = parsedRequest(calls[0]);
+    expect(req.body.query).toContain('create_board');
+    expect(req.body.variables.name).toBe('App Lifecycle Events');
+    expect(req.body.variables.kind).toBe('private'); // default is private, never public
+    expect(req.body.variables.workspaceId).toBeNull();
+    expect(board).toEqual({ id: '555', groups: [{ id: 'grp1', title: 'Group Title' }] });
+  });
+
+  it('forwards a workspaceId when given', async () => {
+    const { api, calls } = makeApi({ data: { create_board: { id: 1, groups: [] } } });
+
+    await api.createBoard({ name: 'x', workspaceId: 42 });
+
+    expect(parsedRequest(calls[0]).body.variables.workspaceId).toBe(42);
+  });
+
+  it('throws MondayApiError when create_board returns no id', async () => {
+    const { api } = makeApi({ data: { create_board: null } });
+
+    const err = await rejectionOf(api.createBoard({ name: 'x' }));
+
+    expect(err).toBeInstanceOf(MondayApiError);
+    expect(err.message).toContain('no id');
+  });
+});
+
+describe('createMondayApi — createColumn', () => {
+  it('sends defaults as a JSON *string* and returns the created column id', async () => {
+    const { api, calls } = makeApi({ data: { create_column: { id: 'status_1' } } });
+
+    const id = await api.createColumn({
+      boardId: BOARD_ID,
+      title: 'Category',
+      columnType: 'status',
+      defaults: { labels: { 1: 'Lifecycle' } },
+    });
+
+    const req = parsedRequest(calls[0]);
+    expect(req.body.query).toContain('create_column');
+    expect(req.body.variables.columnType).toBe('status');
+    expect(typeof req.body.variables.defaults).toBe('string');
+    expect(JSON.parse(req.body.variables.defaults)).toEqual({ labels: { 1: 'Lifecycle' } });
+    expect(id).toBe('status_1');
+  });
+
+  it('passes null defaults through as null (not the "null" string)', async () => {
+    const { api, calls } = makeApi({ data: { create_column: { id: 'text_1' } } });
+
+    await api.createColumn({ boardId: BOARD_ID, title: 'App', columnType: 'text' });
+
+    expect(parsedRequest(calls[0]).body.variables.defaults).toBeNull();
+  });
+
+  it('throws MondayApiError (naming the column) when create_column returns no id', async () => {
+    const { api } = makeApi({ data: { create_column: null } });
+
+    const err = await rejectionOf(
+      api.createColumn({ boardId: BOARD_ID, title: 'Event ID', columnType: 'text' })
+    );
+
+    expect(err).toBeInstanceOf(MondayApiError);
+    expect(err.message).toContain('Event ID');
+  });
+});
+
 describe('createMondayApi — api_latency health signal', () => {
   it('emits api_latency with op name, numeric ms and ok:true on success', async () => {
     const { api, logger } = makeApi({ data: { create_item: { id: '1' } } });

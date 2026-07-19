@@ -43,6 +43,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build deadline-confirm
+        # Axiom activation gate (error-guard remote-monitoring): the ingest token is the
+        # only secret; dataset/app are literals; inert/fail-soft when the secret is unset.
+        # Wires the client admin SPA's browser sink (src/client/admin/utils/axiomErrorSink.ts).
+        env:
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: deadline-confirm
         run: pnpm --filter "./apps/deadline-confirm" build
 
       - name: Install monday.com apps CLI

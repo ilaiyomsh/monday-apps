@@ -15,6 +15,7 @@ import { TopUsageEvents } from './components/charts/TopUsageEvents';
 import { HealthBoot } from './components/charts/HealthBoot';
 import { ApiLatency } from './components/charts/ApiLatency';
 import { Heatmap } from './components/charts/Heatmap';
+import { SettingsView } from './components/SettingsView';
 import { fetchTelemetry } from './lib/api';
 import { aggregateAll, applyLivePresentationFilters } from './lib/aggregate';
 import { SEED_RECORDS, SEED_NOW } from './data/seed';
@@ -33,7 +34,10 @@ const DEFAULT_FILTERS: Filters = {
   focusError: null,
 };
 
+type View = 'dashboard' | 'settings';
+
 export function App() {
+  const [view, setView] = useState<View>('dashboard');
   const [filters, setFilters] = useState<Filters>(DEFAULT_FILTERS);
   const [source, setSource] = useState<Source>({ kind: 'seed' });
   const [refreshing, setRefreshing] = useState(true);
@@ -102,8 +106,69 @@ export function App() {
             Usage &amp; error telemetry from the Axiom <code>app-errors</code> dataset — by account and by app.
           </p>
         </div>
+        <nav className="page__tabs">
+          <button
+            className={view === 'dashboard' ? 'page__tab page__tab--on' : 'page__tab'}
+            onClick={() => setView('dashboard')}
+          >
+            Dashboard
+          </button>
+          <button
+            className={view === 'settings' ? 'page__tab page__tab--on' : 'page__tab'}
+            onClick={() => setView('settings')}
+          >
+            Settings
+          </button>
+        </nav>
       </header>
 
+      {view === 'settings' ? (
+        <SettingsView />
+      ) : (
+        <DashboardBody
+          filters={filters}
+          updateFilters={updateFilters}
+          panels={panels}
+          availableApps={availableApps}
+          availableAccounts={availableAccounts}
+          seed={seed}
+          generatedAt={generatedAt}
+          refreshing={refreshing}
+          notice={notice}
+          onRefresh={() => load(filters.window)}
+        />
+      )}
+    </div>
+  );
+}
+
+interface DashboardBodyProps {
+  filters: Filters;
+  updateFilters: (patch: Partial<Filters>) => void;
+  panels: TelemetryPanels;
+  availableApps: string[];
+  availableAccounts: string[];
+  seed: boolean;
+  generatedAt: string;
+  refreshing: boolean;
+  notice: string | null;
+  onRefresh: () => void;
+}
+
+function DashboardBody({
+  filters,
+  updateFilters,
+  panels,
+  availableApps,
+  availableAccounts,
+  seed,
+  generatedAt,
+  refreshing,
+  notice,
+  onRefresh,
+}: DashboardBodyProps) {
+  return (
+    <>
       <FilterBar
         filters={filters}
         onChange={updateFilters}
@@ -112,7 +177,7 @@ export function App() {
         seed={seed}
         generatedAt={generatedAt}
         refreshing={refreshing}
-        onRefresh={() => load(filters.window)}
+        onRefresh={onRefresh}
       />
 
       {notice && <div className="notice">{notice}</div>}
@@ -171,6 +236,6 @@ export function App() {
         </span>
         <span className="page__ver">v{__APP_VERSION__} · {__BUILD_SHA__}</span>
       </footer>
-    </div>
+    </>
   );
 }

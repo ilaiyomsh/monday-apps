@@ -6,7 +6,11 @@
 // injected fake — zero SecureStorage, zero env.
 
 import { describe, it, expect, vi } from 'vitest';
-import { createStorageService, OWNER_TOKEN_KEY } from '../src/services/storage.js';
+import {
+  createStorageService,
+  OWNER_TOKEN_KEY,
+  BOARD_CONFIG_KEY,
+} from '../src/services/storage.js';
 
 function makeLogger() {
   return { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
@@ -114,6 +118,80 @@ describe('createStorageService — fail-soft reads', () => {
       'owner_token_read_failed',
       'storage',
       expect.objectContaining({ error: expect.stringContaining('storage backend down') })
+    );
+  });
+});
+
+describe('createStorageService — board config (separate key + cache)', () => {
+  const CONFIG = { boardId: '123', groupId: 'g1', columns: { app: 'text_1' } };
+
+  it('uses the single global key "lifecycle:board_config"', () => {
+    expect(BOARD_CONFIG_KEY).toBe('lifecycle:board_config');
+  });
+
+  it('getBoardConfig resolves null when nothing is stored', async () => {
+    const backend = makeBackend();
+    const storage = createStorageService({ backend, logger: makeLogger() });
+
+    await expect(storage.getBoardConfig()).resolves.toBeNull();
+    expect(backend.get).toHaveBeenCalledWith(BOARD_CONFIG_KEY);
+  });
+
+  it('setBoardConfig writes through and getBoardConfig reads it back', async () => {
+    const backend = makeBackend();
+    const storage = createStorageService({ backend, logger: makeLogger() });
+
+    await storage.setBoardConfig(CONFIG);
+
+    expect(backend.set).toHaveBeenCalledWith(BOARD_CONFIG_KEY, CONFIG);
+    await expect(storage.getBoardConfig()).resolves.toEqual(CONFIG);
+  });
+
+  it('caches for 60s (a cached read makes no backend call) and setBoardConfig updates the cache immediately', async () => {
+    const backend = makeBackend({ [BOARD_CONFIG_KEY]: CONFIG });
+    let now = 1_000_000;
+    const storage = createStorageService({ backend, logger: makeLogger(), now: () => now });
+
+    await storage.getBoardConfig();
+    expect(backend.get).toHaveBeenCalledTimes(1);
+    now += 59_000;
+    await storage.getBoardConfig();
+    expect(backend.get).toHaveBeenCalledTimes(1); // served from cache
+
+    await storage.setBoardConfig({ ...CONFIG, boardId: '999' });
+    await expect(storage.getBoardConfig()).resolves.toMatchObject({ boardId: '999' });
+    expect(backend.get).toHaveBeenCalledTimes(1); // cache, not backend
+  });
+
+  it('the board-config cache is INDEPENDENT of the owner-token cache', async () => {
+    const backend = makeBackend();
+    const storage = createStorageService({ backend, logger: makeLogger() });
+
+    await storage.setOwnerToken('tok-1');
+    await storage.setBoardConfig(CONFIG);
+
+    await expect(storage.getOwnerToken()).resolves.toBe('tok-1');
+    await expect(storage.getBoardConfig()).resolves.toEqual(CONFIG);
+  });
+
+  it('a non-object stored value degrades to null (defensive)', async () => {
+    const backend = makeBackend({ [BOARD_CONFIG_KEY]: 'corrupt-string' });
+    const storage = createStorageService({ backend, logger: makeLogger() });
+
+    await expect(storage.getBoardConfig()).resolves.toBeNull();
+  });
+
+  it('a backend.get rejection resolves to null and logs board_config_read_failed (never throws)', async () => {
+    const backend = makeBackend();
+    backend.get.mockRejectedValueOnce(new Error('config backend down'));
+    const logger = makeLogger();
+    const storage = createStorageService({ backend, logger });
+
+    await expect(storage.getBoardConfig()).resolves.toBeNull();
+    expect(logger.error).toHaveBeenCalledWith(
+      'board_config_read_failed',
+      'storage',
+      expect.objectContaining({ error: expect.stringContaining('config backend down') })
     );
   });
 });
