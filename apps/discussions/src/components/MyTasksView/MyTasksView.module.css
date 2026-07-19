@@ -478,6 +478,14 @@
    (owner request): scrolling itself still works (wheel/trackpad/drag), only
    the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
    ::-webkit-scrollbar pseudo. */
+/* round167 — reveal the vertical scrollbar whenever the cursor is anywhere over
+   the view (ancestor :hover; same mechanism as the discussions list), not only
+   when exactly on the bar. */
+.root:hover .board::-webkit-scrollbar-thumb:vertical {
+  background: var(--ui-border-color, #c3c6d4);
+  background-clip: padding-box;
+}
+
 :global(body[data-chrome-narrow="1"]) .board {
   scrollbar-width: none;
 }
