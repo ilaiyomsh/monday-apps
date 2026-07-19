@@ -687,12 +687,11 @@
   margin-inline: 0;
 }
 
-/* round167 — reveal the vertical tab scrollbar whenever the cursor is anywhere
-   over the card (not only when exactly on the bar). WebKit reveals a thumb via
-   an ANCESTOR's :hover (descendant combinator) — the same-element form in the
-   global rule does not fire reliably, which left it edge-only. Mirrors the
-   discussions-list reveal (.root:hover .scroll). */
-.root:hover .body::-webkit-scrollbar-thumb:vertical {
+/* round168 — reveal the vertical tab scrollbar only while the pointer is in the
+   rightmost third of the screen (owner request). The `.barReveal` class is
+   toggled by `useRightEdgeReveal` (pointer tracking); pure CSS can't read the
+   pointer's x-position. */
+.body.barReveal::-webkit-scrollbar-thumb:vertical {
   background: var(--ui-border-color, #c3c6d4);
   background-clip: padding-box;
 }
