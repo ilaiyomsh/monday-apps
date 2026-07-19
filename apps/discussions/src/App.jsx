@@ -7,6 +7,7 @@ import { CreateDiscussionModal } from '@generated/components/CreateDiscussionMod
 import { MyTasksView } from '@generated/components/MyTasksView';
 import { MyDecisionsView } from '@generated/components/MyDecisionsView';
 import { DiscussionsDashboard } from '@generated/components/DiscussionsDashboard';
+import { PersonalShell } from '@generated/components/PersonalShell';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { useToast } from './hooks/useToast';
 import { useUiErrorSink } from './hooks/useUiErrorSink';
@@ -264,9 +265,10 @@ export default function App() {
   // it (per-view behavior unchanged). Round 50: the min window is now ~2s
   // (MIN_SPLASH_MS) so the branded loader is clearly experienced on each switch.
   const splash = useMinSplash(context == null, MIN_SPLASH_MS, effectiveView);
-  const openMyTasks = useCallback(() => handleAppViewChange('myTasks'), [handleAppViewChange]);
-  const openMyDecisions = useCallback(() => handleAppViewChange('myDecisions'), [handleAppViewChange]);
-  const openDashboard = useCallback(() => handleAppViewChange('dashboard'), [handleAppViewChange]);
+  // round170 — the discussions list now has ONE "האזור האישי" entry point; the
+  // three personal modes (my tasks / my decisions / dashboard) live behind the
+  // PersonalShell switcher. Entering the personal area defaults to my-tasks.
+  const openPersonal = useCallback(() => handleAppViewChange('myTasks'), [handleAppViewChange]);
   const backToDiscussions = useCallback(() => handleAppViewChange('discussions'), [handleAppViewChange]);
 
   // Round 46 — RIGHT-PANE discussions splash. The branded loader must show in the
@@ -832,33 +834,25 @@ export default function App() {
     );
   }
 
-  if (effectiveView === 'myTasks') {
+  // round170 — the three personal modes render inside one PersonalShell (back
+  // arrow top-left + centered 3-tab switcher). Each view renders `embedded` so it
+  // drops its own back button + title; the shell owns that chrome. Modes still map
+  // to the existing appView values, so persistence/splash logic is unchanged.
+  if (effectiveView === 'myTasks' || effectiveView === 'myDecisions' || effectiveView === 'dashboard') {
     return (
       <div className={`${styles.appShell} ${layoutClass}`}>
         <div className={styles.appShellBody} dir="rtl">
-          <MyTasksView canManageSettings={canManageSettings} onBackToDiscussions={backToDiscussions} onNotify={notify} />
-        </div>
-        {overlays}
-      </div>
-    );
-  }
-
-  if (effectiveView === 'myDecisions') {
-    return (
-      <div className={`${styles.appShell} ${layoutClass}`}>
-        <div className={styles.appShellBody} dir="rtl">
-          <MyDecisionsView canManageSettings={canManageSettings} onBackToDiscussions={backToDiscussions} onNotify={notify} />
-        </div>
-        {overlays}
-      </div>
-    );
-  }
-
-  if (effectiveView === 'dashboard') {
-    return (
-      <div className={`${styles.appShell} ${layoutClass}`}>
-        <div className={styles.appShellBody} dir="rtl">
-          <DiscussionsDashboard onBackToDiscussions={backToDiscussions} canManageSettings={canManageSettings} />
+          <PersonalShell activeMode={effectiveView} onSelectMode={handleAppViewChange} onBack={backToDiscussions}>
+            {effectiveView === 'myTasks' && (
+              <MyTasksView embedded canManageSettings={canManageSettings} onNotify={notify} />
+            )}
+            {effectiveView === 'myDecisions' && (
+              <MyDecisionsView embedded canManageSettings={canManageSettings} onNotify={notify} />
+            )}
+            {effectiveView === 'dashboard' && (
+              <DiscussionsDashboard embedded canManageSettings={canManageSettings} />
+            )}
+          </PersonalShell>
         </div>
         {overlays}
       </div>
@@ -919,9 +913,7 @@ export default function App() {
           canManageSettings={canManageSettings}
           currentUser={currentUser}
           onOpenSettings={() => setShowSettings(true)}
-          onOpenMyTasks={openMyTasks}
-          onOpenMyDecisions={openMyDecisions}
-          onOpenDashboard={openDashboard}
+          onOpenPersonal={openPersonal}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           calendarAnchor={calNav.anchor}

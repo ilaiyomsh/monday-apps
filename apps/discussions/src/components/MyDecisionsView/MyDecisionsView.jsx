@@ -117,7 +117,7 @@ function DiscussionDates({ onLoaded }) {
   return null;
 }
 
-export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions, onNotify }) {
+export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions, onNotify, embedded = false }) {
   // v2 usage telemetry: one view_open per session for the my_decisions view (D3).
   useViewTracking(logger, 'my_decisions');
   const { context, currentUser } = useMondayContext();
@@ -521,10 +521,13 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
           left-arrow "back to discussions" icon button to its LEFT (round 53a,
           replacing the old text button that lived in the toolbar). The header is
           direction:ltr so the arrow sits on the left, the title to its right. */}
-      <div className={styles.viewHeader}>
-        {backArrow}
-        <h1 className={styles.viewTitle}>ההחלטות שלי</h1>
-      </div>
+      {/* round170 — embedded in PersonalShell → the shell owns back + title. */}
+      {!embedded && (
+        <div className={styles.viewHeader}>
+          {backArrow}
+          <h1 className={styles.viewTitle}>ההחלטות שלי</h1>
+        </div>
+      )}
 
       {/* Single toolbar row (round 35 baseline; round 41 flush-LEFT): dir="ltr"
           and flush-LEFT, reading (left→right)

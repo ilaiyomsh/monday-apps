@@ -61,7 +61,7 @@ function DiscussionDates({ onLoaded }) {
   return null;
 }
 
-export function MyTasksView({ canManageSettings = false, onBackToDiscussions, onNotify }) {
+export function MyTasksView({ canManageSettings = false, onBackToDiscussions, onNotify, embedded = false }) {
   const { t } = useTranslation();
   // v2 usage telemetry: one view_open per session for the my_tasks view (D3).
   useViewTracking(logger, 'my_tasks');
@@ -561,20 +561,24 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
           left-arrow "back to discussions" icon button to its LEFT (round 53a,
           replacing the old text button that lived in the toolbar). The header is
           direction:ltr so the arrow sits on the left, the title to its right. */}
-      <div className={styles.viewHeader}>
-        {onBackToDiscussions && (
-          <button
-            type="button"
-            className={styles.backArrowBtn}
-            onClick={onBackToDiscussions}
-            aria-label="בחזרה לתצוגת הדיונים"
-            title="בחזרה לתצוגת הדיונים"
-          >
-            <ArrowLeft size={20} aria-hidden="true" />
-          </button>
-        )}
-        <h1 className={styles.viewTitle}>המשימות שלי</h1>
-      </div>
+      {/* round170 — when embedded in the PersonalShell, the shell owns the back
+          arrow + the (tab) title, so this view drops its own header row. */}
+      {!embedded && (
+        <div className={styles.viewHeader}>
+          {onBackToDiscussions && (
+            <button
+              type="button"
+              className={styles.backArrowBtn}
+              onClick={onBackToDiscussions}
+              aria-label="בחזרה לתצוגת הדיונים"
+              title="בחזרה לתצוגת הדיונים"
+            >
+              <ArrowLeft size={20} aria-hidden="true" />
+            </button>
+          )}
+          <h1 className={styles.viewTitle}>המשימות שלי</h1>
+        </div>
+      )}
 
       {/* Single toolbar row (round 35 baseline; round 41 flush-LEFT): dir="ltr"
           and flush-LEFT, reading (left→right)

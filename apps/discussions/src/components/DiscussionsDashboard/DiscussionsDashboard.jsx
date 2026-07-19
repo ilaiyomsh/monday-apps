@@ -67,7 +67,7 @@ function peopleOptions(discussions, key) {
     .sort((a, b) => a.label.localeCompare(b.label, 'he'));
 }
 
-export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = false }) {
+export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = false, embedded = false }) {
   // v2 usage telemetry: one view_open per session for the dashboard view (D3).
   useViewTracking(logger, 'dashboard');
   const { data, loading, error } = useDashboardData();
@@ -390,8 +390,12 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
     <div className={styles.root}>
       {/* Header — same pattern as "המשימות שלי"/"ההחלטות שלי": LTR row so the
           back arrow sits physically LEFT of the RTL title, on the shared gutter. */}
+      {/* round170 — embedded in PersonalShell: drop the back arrow + title (the
+          shell owns them), but KEEP the owner-only layout-editor toolbar. The
+          header row is skipped entirely when embedded and there are no tools. */}
+      {(!embedded || (canEditLayout && ready)) && (
       <div className={styles.viewHeader}>
-        {onBackToDiscussions && (
+        {!embedded && onBackToDiscussions && (
           <button
             type="button"
             className={styles.backArrowBtn}
@@ -402,7 +406,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
             <ArrowLeft size={20} aria-hidden="true" />
           </button>
         )}
-        <h1 className={styles.viewTitle}>דשבורד דיונים</h1>
+        {!embedded && <h1 className={styles.viewTitle}>דשבורד דיונים</h1>}
         {/* round160 — owner-only layout editor controls. */}
         {canEditLayout && ready && (
           <div className={styles.dashTools}>
@@ -423,6 +427,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
           </div>
         )}
       </div>
+      )}
 
       <div className={styles.scroll}>
         {loading ? (
