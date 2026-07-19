@@ -18,6 +18,7 @@ import { BrandLoader } from '@generated/components/BrandLoader';
 import { MyTasksTable } from './MyTasksTable.jsx';
 import { groupMyTasks, ensureGroupColors, NO_DISCUSSION } from './grouping.js';
 import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
+import { useRightEdgeReveal } from '@generated/utils/scrollReveal.js';
 import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
 import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
 import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
@@ -152,6 +153,8 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const [newSeed, setNewSeed] = useState(null);
   const [newRowId, setNewRowId] = useState(null);
   const rootRef = useRef(null);
+  // round168 — reveal the scrollbar only while the pointer is in the right third.
+  const [boardScrollRef, barReveal] = useRightEdgeReveal();
   // round136 — stable identity so the memoized rows don't thaw on re-renders.
   const toggleSelect = useStableHandler((id, checked) =>
     setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; }));
@@ -668,7 +671,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         <Button kind={"secondary"} size={"small"} onClick={deleteSelected}>מחיקה</Button>
       </SelectionActionBar>
 
-      <div className={styles.board}>
+      <div ref={boardScrollRef} className={`${styles.board} ${barReveal ? styles.barReveal : ''}`}>
       {(loading || splash) ? (
         <BrandLoader />
       ) : error ? (

@@ -11,6 +11,7 @@ import { useViewport } from '@generated/hooks/useViewport.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { useBatchTargets } from '@generated/hooks/useBatchTargets.js';
 import { useMinSplash } from '@generated/hooks/useMinSplash.js';
+import { useRightEdgeReveal } from '@generated/utils/scrollReveal.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useFilterBuilder } from '@generated/hooks/useFilterBuilder.js';
 import { isValidStatus } from '@generated/constants/statusConfig';
@@ -194,6 +195,8 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   // delete, and ESC-to-clear. Mirrors the in-discussion Decisions tab.
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const rootRef = useRef(null);
+  // round168 — reveal the scrollbar only while the pointer is in the right third.
+  const [boardScrollRef, barReveal] = useRightEdgeReveal();
   const toggleSelect = (id, checked) =>
     setSelectedIds((prev) => { const n = new Set(prev); if (checked) n.add(id); else n.delete(id); return n; });
   const clearSelection = () => setSelectedIds(new Set());
@@ -633,7 +636,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
         </Button>
       </SelectionActionBar>
 
-      <div className={styles.board}>
+      <div ref={boardScrollRef} className={`${styles.board} ${barReveal ? styles.barReveal : ''}`}>
       {(loading || splash) ? (
         <BrandLoader />
       ) : !configured ? (
