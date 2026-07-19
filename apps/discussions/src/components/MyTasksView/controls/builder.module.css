@@ -13,7 +13,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
+  height: var(--toolbar-pill-h, 32px);
   padding: 0 10px;
   border: none;
   border-radius: 6px;
@@ -36,7 +36,7 @@
 /* phone: icon-only, with a dot when applied (mirrors MyTasksView mobile rule) */
 .bBadgeDot { position: absolute; top: 2px; inset-inline-end: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--primary-color, #0073ea); }
 /* Mobile-app only (gated on `.mobile-app`, not viewport width). */
-:global(.mobile-app) .bPill { width: 32px; height: 32px; padding: 0; gap: 0; justify-content: center; flex-shrink: 0; }
+:global(.mobile-app) .bPill { width: 32px; height: var(--toolbar-pill-h, 32px); padding: 0; gap: 0; justify-content: center; flex-shrink: 0; }
 
 /* ---- desktop panel (inside @vibe DialogContentContainer) ---- */
 .bPanel {

@@ -2,6 +2,17 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2.2.0 — 2026-07-17
+
+- Telemetry hardening: the server sink allowlists the `stage` field and ships the failure
+  `cause` (err.message at many call sites) ONLY scrubbed, as err_msg — errors keep their content
+  on Axiom instead of shipping near-contentless.
+- Axiom logging v2: refactored `src/services/logger.js` to a single `emit()` choke-point with sink fan-out (`addSink`/`removeSink`/`setBeforeSend`), log-once error correlation (`__loggedId`/`correlationId`), and new `encodeDims` + `track` (domainKind `usage`) + `health` (domainKind `health`) primitives. Kept the `(message, tag, context)` signature and the exported `flush`/`maskEmail`/`shortId` helpers, so all existing call sites are untouched.
+- Moved the inline Axiom transport out of the logger into a dedicated `src/services/axiomServerSink.js` (`attachAxiomServerSink`/`shouldShip`/`mapRecordToEvent`/`flushAxiom` + `scrubMessage`). Privacy-hardened wire schema: `ev.kind` carries the domain discriminator (`error`/`usage`/`health`), `error.message` ships ONLY scrubbed as `err_msg` (emails / hex&tokens≥16 / digit-runs≥7 redacted, capped 200), and a `CTX_ALLOW` allowlist ships only short ids/counters (`acc`/`usr`/`obj`/`cfg`/`prv`/`item`/`ev` + `created`/`updated`/`deleted`/`skipped`/… ) — emails, event titles, links and GraphQL bodies never leave the process.
+- Wired the sink in `src/index.js` (attach right after the logger import; graceful-shutdown drain now calls `flushAxiom()`), emitted a boot `logger.health('server_boot', { port, version })` after `server.listen`, and added bucketed API-latency health `logger.health('monday_api_latency', { op, status, bucket, ok })` at the `mondayQuery` data-layer funnel.
+- Follow-up: stood up a minimal client telemetry path for the React admin — `src/client/admin/lib/logger.ts` (`track`/`health` emit INFO records with `domainKind` `usage`/`health` + `alwaysShip`, message via `encodeDims`, sink fan-out, dev-only console breadcrumb) + `src/client/admin/lib/viewTracking.ts` (`createViewTracker`/`useViewTracking`, one `view_open` per view per session). Wired `useViewTracking` on the three top-level tabs (`UsersTab`→`users`, `SetupTab`→`setup`, `ConditionsTab`→`conditions`). The Axiom browser transport is intentionally deferred — attach later via `addSink`, no call-site change needed. Also added static `ver`/`sess` dims to the server sink `mapRecordToEvent` (Fable #6), mirroring the browser transport envelope. No version bump (unreleased).
+- Deferred: the client Axiom browser transport (view_open ships are inert until one is attached via `addSink`) and a vitest lock test (no test infra in this app) — verified the new primitives via tsc + build instead. Version 2.1.0 → 2.2.0.
+
 ## 2026-06
 
 ### 🐛 Bug Fixes

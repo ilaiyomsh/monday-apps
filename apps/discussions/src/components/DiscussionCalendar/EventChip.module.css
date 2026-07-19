@@ -171,6 +171,10 @@
 }
 .calHoverConfirm {
   padding: 4px 8px 8px;
+  /* round151 — same RTL fix as the list menu's delete-confirm (see
+     DiscussionList.module.css .menuConfirm). */
+  direction: rtl;
+  text-align: right;
 }
 .calHoverConfirmText {
   display: block;

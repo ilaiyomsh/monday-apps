@@ -3,6 +3,13 @@ import { createRoot } from 'react-dom/client';
 import '@vibe/core/tokens';
 import './styles.css';
 import { App } from './App';
+import logger from './utils/logger';
+import { attachAxiomSink } from './utils/axiomErrorSink';
+
+// Axiom logging v2: register the remote sink synchronously BEFORE createRoot().render —
+// the ring buffer at this instant holds only import-time records (no double-ship). Inert
+// (no-op) unless the VITE_AXIOM_* activation gate passed in a production build.
+attachAxiomSink();
 
 // Vibe tripwire (see sync-calender CLAUDE.md): components render unstyled
 // without a body app-theme class — set it synchronously before createRoot.
@@ -21,8 +28,10 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBounda
     return { error };
   }
 
-  componentDidCatch(error: Error, info: React.ErrorInfo): void {
-    console.error('admin view render error', error, info.componentStack);
+  componentDidCatch(error: Error): void {
+    // Stable English event id as the message (ships as-is); the Error rides record.error
+    // (scrubbed to err_msg by the sink). React's componentStack stays console-only.
+    logger.error('admin', 'render_error', error);
   }
 
   render(): React.ReactNode {
@@ -49,3 +58,7 @@ createRoot(rootEl).render(
     </ErrorBoundary>
   </React.StrictMode>
 );
+
+// Boot health (D5): one-shot after the root mounts. INFO/alwaysShip → dedups at the
+// transport; inert until the Axiom sink is active. version/sha are build-time constants.
+logger.health('boot', { version: __APP_VERSION__, sha: __BUILD_SHA__.slice(0, 7) });

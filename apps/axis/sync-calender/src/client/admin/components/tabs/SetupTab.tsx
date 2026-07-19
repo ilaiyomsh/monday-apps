@@ -11,6 +11,8 @@ import { useBoardColumns } from '../../hooks/useBoardColumns';
 import { useBoards } from '../../hooks/useBoards';
 import { useToast } from '../feedback/ToastProvider';
 import { deriveSetupProgress } from '../../lib/setupProgress';
+import logger from '../../lib/logger';
+import { useViewTracking } from '../../lib/viewTracking';
 import type { Column as BoardColumn, ColumnMapping, Policy, SyncConfig } from '../../types';
 
 interface Props {
@@ -69,6 +71,7 @@ function formatUpdatedAt(ts: number | null | undefined): string {
 }
 
 export function SetupTab({ policy, isOwner, tokenReady, configs, onPatch }: Props) {
+  useViewTracking(logger, 'setup');
   const toast = useToast();
   const [boardId, setBoardId] = useState<string | null>(policy?.boardId ?? null);
   const { columns, loading: colsLoading } = useBoardColumns(boardId);

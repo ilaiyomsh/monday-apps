@@ -35,6 +35,8 @@ import {
   sortTasks, filterTasks, filterCount, DEFAULT_SORT,
   serializeFilter,
 } from '../MyTasksView/controls/controls.js';
+import logger from '@generated/utils/logger.js';
+import { useViewTracking } from '@generated/utils/viewTracking.js';
 import styles from './MyDecisionsView.module.css';
 import bs from '../MyTasksView/controls/builder.module.css';
 
@@ -116,6 +118,8 @@ function DiscussionDates({ onLoaded }) {
 }
 
 export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions, onNotify }) {
+  // v2 usage telemetry: one view_open per session for the my_decisions view (D3).
+  useViewTracking(logger, 'my_decisions');
   const { context, currentUser } = useMondayContext();
   const { isMobile } = useViewport();
 
@@ -201,7 +205,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
 
   const {
     items, loading, loadingMore, hasMore, error, configured, loadMore,
-    updateDecisionStatus, updateDecisionPriority, updateDecisionDate, updateDecisionDecider, updateDecisionAffected, updateDecisionName, softDeleteDecisions,
+    updateDecisionStatus, updateDecisionTracking, updateDecisionPriority, updateDecisionDate, updateDecisionDecider, updateDecisionAffected, updateDecisionName, softDeleteDecisions,
   } = useMyDecisions(subTab, { currentUser, context, search: debouncedSearch });
 
   // Branded splash for the initial decisions load. useMinSplash arms when
@@ -233,6 +237,8 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   // capability so a mixed selection applies only to the allowed subset.
   const resolveTargetIds = useBatchTargets(selectedIds, allow); // round143 — shared resolver
   const applyStatus = useCallback((id, status) => resolveTargetIds(id, 'editDecisionStatus').forEach((t) => updateDecisionStatus(t, status)), [resolveTargetIds, updateDecisionStatus]);
+  // round153 — "מעקב החלטה" second status column; same batch-aware apply path.
+  const applyTracking = useCallback((id, tracking) => resolveTargetIds(id, 'editDecisionStatus').forEach((t) => updateDecisionTracking(t, tracking)), [resolveTargetIds, updateDecisionTracking]);
   const applyPriority = useCallback((id, value) => resolveTargetIds(id, 'editDecisionPriority').forEach((t) => updateDecisionPriority(t, value)), [resolveTargetIds, updateDecisionPriority]);
   const applyDate = useCallback((id, date) => resolveTargetIds(id, 'editDecisionDate').forEach((t) => updateDecisionDate(t, date)), [resolveTargetIds, updateDecisionDate]);
   // מחליט + מושפעים share the single editDecisionAffected capability (same
@@ -680,6 +686,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
                     canDecision={canDecision}
                     searchTerm={debouncedSearch}
                     onStatusChange={applyStatus}
+                    onTrackingChange={applyTracking}
                     onPriorityChange={applyPriority}
                     onDateChange={applyDate}
                     onDeciderChange={applyDecider}

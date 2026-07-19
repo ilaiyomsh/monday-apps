@@ -208,6 +208,13 @@ packages/shared                     EMPTY STUB — see below
 9. After your first draft deploy of an app: monday Developer Center → that app →
    "Set as active for me" (manual, per developer per app; no CLI exists for it).
 
+## Error handling & observability
+
+One unified standard, from catching an error to shipping it to Axiom:
+**`docs/ERROR-AXIOM-STANDARD.md`** (authority: the `error-guard` skill). Client apps
+ship through the single hardened transport in `@axis/app-core` via `attachAxiomSink` —
+never a raw fetch. Shared dataset `app-errors`, discriminated by `app`.
+
 ## Maintaining this file
 
 This file changes via PR into `develop` like everything else. Keep it short:

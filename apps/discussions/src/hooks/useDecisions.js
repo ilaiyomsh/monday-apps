@@ -326,6 +326,21 @@ export function useDecisions(discussionId, { enabled = true } = {}) {
     } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
   };
 
+  // round153 — second decisions status column "מעקב החלטה" (decisionTrackingID),
+  // mirrors updateDecisionStatus exactly (optimistic, temp-row queue, revert).
+  const updateDecisionTracking = async (decisionId, tracking) => {
+    let prev = [];
+    setItems((current) => {
+      prev = current;
+      return current.map((i) => (i.id === decisionId ? { ...i, decisionTrackingID: tracking } : i));
+    });
+    if (!isRealId(decisionId)) { enqueueEdit(decisionId, 'decisionTrackingID', tracking); return; }
+    try {
+      const b = new החלטות1Board();
+      await b.item(decisionId).update({ decisionTrackingID: tracking }).execute();
+    } catch (err) { logger.error('useDecisions', 'Error updating decision', err); setItems(prev); }
+  };
+
   const updateDecisionPriority = async (decisionId, priority) => {
     let prev = [];
     setItems((current) => {
@@ -455,7 +470,7 @@ export function useDecisions(discussionId, { enabled = true } = {}) {
   // row. Extracted from createDecision so a failed create can be retried against
   // the SAME temp row. `norm` = the normalized create fields (see createDecision).
   const runCreateDecision = useCallback(async (tempId, trimmed, norm) => {
-    const { status, priority, affected, effectiveDate, deciderId, pointId, existingLinkedIds } = norm;
+    const { status, tracking, priority, affected, effectiveDate, deciderId, pointId, existingLinkedIds } = norm;
     // Clear any prior error flag (retry path).
     setItems((prev) => prev.map((i) => (i.id === tempId ? { ...i, _createFailed: false } : i)));
     try {
@@ -471,6 +486,7 @@ export function useDecisions(discussionId, { enabled = true } = {}) {
       // via change_multiple_column_values (the verified write path).
       const data = { name: trimmed };
       if (status != null) data.decisionStatusID = status; // status is a label id; 0 is valid
+      if (tracking != null) data.decisionTrackingID = tracking; // round153 — tracking label id (default "התקבלה")
       if (priority != null) data.decisionPriorityID = priority;
       // Stamp the decision creator with the current user (drives the decision-tier
       // "creator" role for the permissions matrix). Skipped when unmapped / no user.
@@ -527,7 +543,7 @@ export function useDecisions(discussionId, { enabled = true } = {}) {
           return i;
         });
         if (!swapped && !next.some((i) => String(i.id) === String(realId))) {
-          next.push({ id: realId, name: trimmed, decisionStatusID: status, decisionPriorityID: priority, affectedID: affected, decisionDateID: effectiveDate, _createFailed: false });
+          next.push({ id: realId, name: trimmed, decisionStatusID: status, decisionTrackingID: tracking, decisionPriorityID: priority, affectedID: affected, decisionDateID: effectiveDate, _createFailed: false });
         }
         return next;
       });
@@ -540,6 +556,7 @@ export function useDecisions(discussionId, { enabled = true } = {}) {
         const jobs = [];
         if ('name' in edits) jobs.push(f.updateDecisionName(realId, edits.name));
         if ('decisionStatusID' in edits) jobs.push(f.updateDecisionStatus(realId, edits.decisionStatusID));
+        if ('decisionTrackingID' in edits) jobs.push(f.updateDecisionTracking(realId, edits.decisionTrackingID));
         if ('decisionPriorityID' in edits) jobs.push(f.updateDecisionPriority(realId, edits.decisionPriorityID));
         if ('decisionDateID' in edits) jobs.push(f.updateDecisionDate(realId, edits.decisionDateID));
         if ('affectedID' in edits) jobs.push(f.updateDecisionAffected(realId, edits.affectedID));
@@ -573,6 +590,11 @@ export function useDecisions(discussionId, { enabled = true } = {}) {
   const { options: decisionStatusOptions } = useStatusOptions('decisions', 'decisionStatusID');
   const defaultDecisionStatusId =
     decisionStatusOptions.find((o) => (o.label || '').trim() === 'בתוקף')?.id ?? null;
+  // round153 — a new decision's "מעקב החלטה" defaults to "התקבלה" (label resolved
+  // from the mapped column; null when unmapped or the label is absent → no stamp).
+  const { options: decisionTrackingOptions } = useStatusOptions('decisions', 'decisionTrackingID');
+  const defaultDecisionTrackingId =
+    decisionTrackingOptions.find((o) => (o.label || '').trim() === 'התקבלה')?.id ?? null;
 
   // Create a decision linked to this discussion, inserting an OPTIMISTIC row that
   // shows immediately AND is fully editable right away. `text` is the wording
@@ -600,7 +622,9 @@ export function useDecisions(discussionId, { enabled = true } = {}) {
     const deciderId = decider != null ? (decider?.id ?? decider) : currentUserId;
     // Default status → "בתוקף" unless the caller passed an explicit status.
     const effectiveStatus = status != null ? status : defaultDecisionStatusId;
-    const norm = { status: effectiveStatus, priority, affected, effectiveDate, deciderId, pointId, existingLinkedIds };
+    // round153 — default tracking → "התקבלה" (opts.tracking overrides).
+    const effectiveTracking = opts?.tracking != null ? opts.tracking : defaultDecisionTrackingId;
+    const norm = { status: effectiveStatus, tracking: effectiveTracking, priority, affected, effectiveDate, deciderId, pointId, existingLinkedIds };
 
     const tempId = nextTempId();
     stashCreateArgs(tempId, { trimmed, norm });
@@ -612,13 +636,14 @@ export function useDecisions(discussionId, { enabled = true } = {}) {
       id: tempId,
       name: trimmed,
       decisionStatusID: effectiveStatus,
+      decisionTrackingID: effectiveTracking,
       decisionPriorityID: priority,
       affectedID: affected,
       decisionDateID: effectiveDate,
     };
     setItems((prev) => (prepend ? [optimisticRow, ...prev] : [...prev, optimisticRow]));
     return runCreateDecision(tempId, trimmed, norm);
-  }, [discussionId, currentUserId, runCreateDecision, stashCreateArgs, defaultDecisionStatusId]);
+  }, [discussionId, currentUserId, runCreateDecision, stashCreateArgs, defaultDecisionStatusId, defaultDecisionTrackingId]);
 
   // Retry a failed create against the same optimistic row (row error affordance).
   const retryCreate = useCallback((tempId) => {
@@ -638,7 +663,7 @@ export function useDecisions(discussionId, { enabled = true } = {}) {
   // Expose the latest per-field update fns to the create-reconcile flush step
   // (read lazily at flush time — no stale closures, no createDecision churn).
   flushersRef.current = {
-    updateDecisionName, updateDecisionStatus, updateDecisionPriority,
+    updateDecisionName, updateDecisionStatus, updateDecisionTracking, updateDecisionPriority,
     updateDecisionDate, updateDecisionAffected, updateDecisionDecider,
   };
 
@@ -651,6 +676,7 @@ export function useDecisions(discussionId, { enabled = true } = {}) {
     dismissRow,
     updateDecisionName,
     updateDecisionStatus,
+    updateDecisionTracking,
     updateDecisionPriority,
     updateDecisionDate,
     updateDecisionAffected,

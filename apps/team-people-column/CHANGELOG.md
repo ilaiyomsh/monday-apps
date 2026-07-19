@@ -1,5 +1,19 @@
 # Changelog - team-people-column
 
+## 2.2.0 — 2026-07-17
+
+- Axiom logging v2 (Phase 3): the local logger/sink gain the shared v2 telemetry
+  primitives — `logger.track()` (usage) and `logger.health()` (health) at INFO with
+  `alwaysShip`, an inlined `encodeDims` wire encoder, and a privacy `scrubMessage`
+  that ships `error.message` only redacted as `err_msg`. The sink now stamps the
+  domain `kind` (error | usage | health) and its `firstStackFrame` is anchored so an
+  email can't leak into `stack1`. The transport allowlists `err_msg`.
+- Auto view-tracking: `view_open` usage events (once per session) on the on-click
+  picker (`onclick_picker`) and the column-settings (`column_settings`) views.
+- Health signals: a one-shot `boot` signal after context load, and a bucketed
+  `api_latency` signal on the monday GraphQL funnel.
+- All telemetry stays inert until the Axiom sink activates (prod build + baked token).
+
 ## 2.1.3 — 2026-07-14
 
 - Picker: removed the hover highlight on the assignee rows — the list stays

@@ -4,14 +4,14 @@ import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscuss
 import { Button, Text, IconButton } from '@vibe/core';
 import { Calendar, CloseSmall, Search, Settings } from '@vibe/icons';
 import { HighlightedText } from '@generated/components/HighlightedText';
-import { Check, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { BarChart3, Check, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
 import { fmtTimeLabel, buildMonthOptions } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
 import { discussionAccentColor } from '@generated/constants/discussionColors.js';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
-import { usePermission } from '@generated/hooks/usePermission.js';
+import { usePermission, useIsSuperMember } from '@generated/hooks/usePermission.js';
 import styles from './DiscussionList.module.css';
 
 /* List-row subtitle: short weekday + "DD/MM", plus " · HH:MM" when the date
@@ -159,7 +159,7 @@ function DiscussionMenuBody({ item, actions, confirmDel, setConfirmDel, onClose 
   };
   if (confirmDel) {
     return (
-      <div className={styles.menuConfirm}>
+      <div className={styles.menuConfirm} dir="rtl">
         <span className={styles.menuConfirmText}>למחוק את הדיון?</span>
         <div className={styles.menuConfirmActions}>
           <button type="button" className={`${styles.menuConfirmBtn} ${styles.menuConfirmYes}`} onClick={run(actions.onDelete)} role="menuitem">
@@ -366,7 +366,7 @@ function DiscussionContextMenu({ item, x, y, actions, onClose }) {
 
 export function DiscussionList({
   onSelect, selectedId, onCreateNew, onEdit, onCopyLink, onDuplicate, onExport, onDelete,
-  exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, onOpenMyDecisions, currentUser = null,
+  exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, onOpenMyDecisions, onOpenDashboard, currentUser = null,
   // Calendar view — nav state lives in App (predates round136's removal of the
   // refreshKey remount; keeping it there is still correct).
   viewMode = 'list', onViewModeChange, calendarAnchor, calendarMode, onCalendarNavigate, onCreateAt,
@@ -437,6 +437,9 @@ export function DiscussionList({
   // COARSE boolean per row so the edit/delete kebab gate is byte-for-byte
   // identical to the legacy creator/lead/owner gate while the feature is off.
   const can = usePermission({ canManageSettings, currentUser });
+  // round147 — super members get the gear too, in templates-only mode (the
+  // modal itself narrows what they see; App passes templatesOnly for non-owners).
+  const isSuper = useIsSuperMember({ currentUser });
   const canEditItem = useCallback(
     (item) => can('editDiscussionFields', { discussion: item }),
     [can]
@@ -544,14 +547,27 @@ export function DiscussionList({
                   ההחלטות שלי
                 </Button>
               )}
+              {/* round152/153 — entry to the discussions dashboard, alongside the
+                  personal-view nav. round153: icon-only square button (owner
+                  request — the graph glyph, no "דשבורד" label). */}
+              {onOpenDashboard && (
+                <IconButton
+                  icon={BarChart3}
+                  size={"small"}
+                  kind={"tertiary"}
+                  ariaLabel="דשבורד דיונים"
+                  tooltipContent="דשבורד דיונים"
+                  onClick={onOpenDashboard}
+                />
+              )}
             </div>
             <div className={styles.titleActions}>
-              {canManageSettings && (
+              {(canManageSettings || isSuper) && (
                 <IconButton
                   icon={Settings}
                   size={"small"}
                   kind={"tertiary"}
-                  ariaLabel="הגדרות"
+                  ariaLabel={canManageSettings ? 'הגדרות' : 'ניהול תבניות'}
                   onClick={onOpenSettings}
                 />
               )}

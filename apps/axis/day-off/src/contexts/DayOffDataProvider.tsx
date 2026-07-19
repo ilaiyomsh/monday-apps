@@ -161,6 +161,9 @@ export function DayOffDataProvider({ children }: { children: ReactNode }) {
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastIdRef = useRef(0);
+  // Boot health (v2 D5): ship logger.health('boot_ok', …) exactly once at the
+  // first init-done, so year-change reloads don't re-ship the boot signal.
+  const bootShippedRef = useRef(false);
 
   const today = useMemo(() => new Date(), []);
   const [monthDate, setMonthDate] = useState<Date>(() => new Date(today.getFullYear(), today.getMonth(), 1));
@@ -279,15 +282,16 @@ export function DayOffDataProvider({ children }: { children: ReactNode }) {
 
   // ---- loaders ----
   // One board read → split into personal requests + general company days.
-  const loadEntries = useCallback(async (): Promise<void> => {
+  const loadEntries = useCallback(async (): Promise<number> => {
     if (!vacCtx) {
       setRequests([]);
       setCompanyDays([]);
-      return;
+      return 0;
     }
     const { requests: reqs, companyDays: days } = await listEntries(vacCtx, year);
     setRequests(reqs);
     setCompanyDays(days);
+    return reqs.length;
   }, [vacCtx, year]);
 
   const loadTeam = useCallback(async () => {
@@ -316,20 +320,30 @@ export function DayOffDataProvider({ children }: { children: ReactNode }) {
   // ---- entries load (gates the app until the selected year's days are ready) ----
   useEffect(() => {
     let cancelled = false;
+    let loadedRequests = 0;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true);
     void loadEntries()
+      .then((n) => {
+        loadedRequests = n;
+      })
       .catch((err) => handleError(err, { operation: 'DayOffData.loadEntries' }))
       .finally(() => {
         if (!cancelled) {
           setLoading(false);
           setInitializing(false);
+          // Boot health (v2 D5): one-shot at the first init-done. Guarded by a
+          // ref so subsequent year-change reloads don't re-ship.
+          if (!bootShippedRef.current) {
+            bootShippedRef.current = true;
+            logger.health('boot_ok', { year, requests: loadedRequests, configured: !!vacCtx });
+          }
         }
       });
     return () => {
       cancelled = true;
     };
-  }, [loadEntries, handleError]);
+  }, [loadEntries, handleError, year, vacCtx]);
 
   // ---- team + current user (background; does not block the shell) ----
   useEffect(() => {

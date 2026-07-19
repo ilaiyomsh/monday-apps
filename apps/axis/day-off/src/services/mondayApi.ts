@@ -46,6 +46,11 @@ export interface MondayStatusColor {
 const MAX_RETRIES = 3;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// API-latency health (v2 D5): round ms to a coarse step so repeated api_call
+// health signals dedup at the transport instead of shipping a distinct message
+// per call (query() is a hot path).
+const roundMs = (ms: number): number => Math.round(ms / 250) * 250;
+
 function safeSerialize(value: unknown): string {
   try {
     return JSON.stringify(
@@ -177,6 +182,8 @@ async function query<T = unknown>(graphql: string, variables?: Record<string, un
         });
         throw new MondayApiError('GraphQL errors', { response: res.errors });
       }
+      // API-latency health (v2 D5): terminal success only — bucketed so it dedups.
+      logger.health('api_call', { ms: roundMs(performance.now() - t0), ok: true });
       return res.data as T;
     } catch (err) {
       const code = (err as { errorCode?: string })?.errorCode;
@@ -188,6 +195,8 @@ async function query<T = unknown>(graphql: string, variables?: Record<string, un
         await sleep(backoff);
         continue;
       }
+      // API-latency health (v2 D5): terminal failure only — outside the retry loop.
+      logger.health('api_call', { ok: false, code });
       logger.error('mondayApi', 'GraphQL request failed (full payload)', {
         graphql,
         variables: safeSerialize(variables ?? {}),

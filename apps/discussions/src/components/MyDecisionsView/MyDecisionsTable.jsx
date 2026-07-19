@@ -30,6 +30,7 @@ const W = {
   affected: { default: 140, min: 100, max: 280 },
   priority: { default: 130, min: 90, max: 240 },
   status: { default: 160, min: 100, max: 260 },
+  tracking: { default: 175, min: 110, max: 300 },
   date: { default: 130, min: 100, max: 220 },
   discussion: { default: 220, min: 120, max: 480 },
 };
@@ -40,6 +41,7 @@ const M = {
   affected: '110px',
   priority: '120px',
   status: '130px',
+  tracking: '140px',
   date: '110px',
   discussion: '160px',
 };
@@ -50,6 +52,7 @@ const TITLE = {
   affected: 'מושפעים',
   priority: 'עדיפות',
   status: 'סטאטוס',
+  tracking: 'מעקב החלטה',
   date: 'תאריך',
   discussion: 'דיון מקור',
 };
@@ -69,6 +72,7 @@ export function MyDecisionsTable({
   // Active name-search term — rows highlight where it matched inside the name.
   searchTerm = '',
   onStatusChange,
+  onTrackingChange,
   onPriorityChange,
   onDateChange,
   // People-cell handlers (round 74): decider (מחליט) + affected (מושפעים)
@@ -95,6 +99,7 @@ export function MyDecisionsTable({
   const showDecider = !!cols.deciderID?.id;
   const showAffected = !!cols.affectedID?.id;
   const showPriority = !!cols.decisionPriorityID?.id;
+  const showTracking = !!cols.decisionTrackingID?.id;
   const showDate = !!cols.decisionDateID?.id;
   const showDiscussion = !!cols.discussionLinkID?.id;
 
@@ -105,6 +110,7 @@ export function MyDecisionsTable({
     showAffected && { key: 'affected', ...W.affected },
     showPriority && { key: 'priority', ...W.priority },
     { key: 'status', ...W.status },
+    showTracking && { key: 'tracking', ...W.tracking },
     showDate && { key: 'date', ...W.date },
     showDiscussion && { key: 'discussion', ...W.discussion },
   ].filter(Boolean);
@@ -211,9 +217,11 @@ export function MyDecisionsTable({
             showDecider={showDecider}
             showAffected={showAffected}
             showPriority={showPriority}
+            showTracking={showTracking}
             showDate={showDate}
             showDiscussion={showDiscussion}
             onStatusChange={onStatusChange && canDecision('editDecisionStatus', decision) ? onStatusChange : undefined}
+            onTrackingChange={onTrackingChange && canDecision('editDecisionStatus', decision) ? onTrackingChange : undefined}
             onPriorityChange={onPriorityChange && canDecision('editDecisionPriority', decision) ? onPriorityChange : undefined}
             onDateChange={onDateChange && canDecision('editDecisionDate', decision) ? onDateChange : undefined}
             onDeciderChange={onDeciderChange && canDecision('editDecisionAffected', decision) ? onDeciderChange : undefined}

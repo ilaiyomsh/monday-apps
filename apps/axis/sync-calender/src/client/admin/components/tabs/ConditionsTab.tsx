@@ -4,6 +4,8 @@ import { Section } from '../layout/Section';
 import { ConditionalList } from '../conditionals/ConditionalList';
 import { useBoardColumns } from '../../hooks/useBoardColumns';
 import { useToast } from '../feedback/ToastProvider';
+import logger from '../../lib/logger';
+import { useViewTracking } from '../../lib/viewTracking';
 import type { Conditional, Policy, SyncConfig } from '../../types';
 
 interface Props {
@@ -14,6 +16,7 @@ interface Props {
 }
 
 export function ConditionsTab({ policy, myConfig, userName, onSaveConditionals }: Props) {
+  useViewTracking(logger, 'conditions');
   const toast = useToast();
   const boardId = policy?.boardId ?? null;
   const { columns, loading: colsLoading } = useBoardColumns(boardId);

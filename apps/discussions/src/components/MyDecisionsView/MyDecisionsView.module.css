@@ -184,7 +184,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
+  height: var(--toolbar-pill-h, 32px);
   padding: 0 10px;
   border: none;
   border-radius: 6px;
@@ -214,7 +214,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 32px;
+  height: var(--toolbar-pill-h, 32px);
   padding: 0 10px;
   border-radius: 6px;
   background: var(--primary-background-hover-color, #f0f1f3);
@@ -258,7 +258,7 @@
    not viewport width — same as MyTasksView). */
 :global(.mobile-app) .pill {
   width: 32px;
-  height: 32px;
+  height: var(--toolbar-pill-h, 32px);
   padding: 0;
   gap: 0;
   justify-content: center;

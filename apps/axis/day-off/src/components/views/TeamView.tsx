@@ -4,6 +4,8 @@
  * Data comes from useDayOffData(); dates/labels via useL10n().
  */
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useViewTracking } from '@axis/app-core';
+import { logger } from '../../core';
 import { useDayOffData } from '../../contexts/DayOffDataProvider';
 import { useL10n } from '../../domain/useL10n';
 import { absenceTypeMeta, TYPE_ORDER } from '../../domain/absence';
@@ -99,6 +101,7 @@ function TeamBar({
 }
 
 export function TeamView({ onOpenRequest }: TeamViewProps) {
+  useViewTracking(logger, 'team');
   const { monthDate, nav, requests, teamIds, myTeams, empById, holidaysOnKey } = useDayOffData();
   const { t, dayShort } = useL10n();
   // Group the Gantt by team only when the user belongs to more than one team.

@@ -44,6 +44,9 @@ export function useMondayContext() {
           boardId: ctx?.boardId,
           instanceId: ctx?.instanceId,
         });
+        // Boot health signal (D5): one-shot per init; ships as kind='health' (inert until the
+        // Axiom sink is active). The transport dedups repeats (e.g. dev StrictMode double-mount).
+        logger.health('boot', { placement: ctx?.placement });
         setLoading(false);
       } catch (err) {
         logger.error('useMondayContext', 'Failed to load context', err);

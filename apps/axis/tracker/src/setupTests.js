@@ -64,6 +64,22 @@ vi.mock('./utils/logger', () => {
         }
     });
 
+    // encodeDims replica (mirrors @axis/app-core encodeDims) so track()/health()
+    // produce the same wire message shape the real logger does (sorted key=value;
+    // only string/bool/finite-number). Inlined because vi.mock factories are hoisted
+    // and cannot reference module-scope imports.
+    const encodeDims = (base, dims) => {
+        if (!dims) return base;
+        const parts = [];
+        for (const key of Object.keys(dims).sort()) {
+            const v = dims[key];
+            if (typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v))) {
+                parts.push(`${key}=${v}`);
+            }
+        }
+        return parts.length ? `${base} ${parts.join(' ')}` : base;
+    };
+
     const mkSimple = (level) => vi.fn((module, message, data = null) => emit({
         kind: level === 'ERROR' ? 'error' : 'simple',
         level,
@@ -83,6 +99,24 @@ vi.mock('./utils/logger', () => {
             info: vi.fn(),
             warn: mkSimple('WARN'),
             error: mkSimple('ERROR'),
+            track: vi.fn((event, dims = null) => emit({
+                kind: 'simple',
+                domainKind: 'usage',
+                alwaysShip: true,
+                level: 'INFO',
+                module: 'usage',
+                message: encodeDims(event, dims),
+                consoleEnabled: false,
+            })),
+            health: vi.fn((signal, metrics = null) => emit({
+                kind: 'simple',
+                domainKind: 'health',
+                alwaysShip: true,
+                level: 'INFO',
+                module: 'health',
+                message: encodeDims(signal, metrics),
+                consoleEnabled: false,
+            })),
             api: vi.fn(),
             apiResponse: vi.fn(),
             apiError: vi.fn((functionName, error, context = null) => emit({

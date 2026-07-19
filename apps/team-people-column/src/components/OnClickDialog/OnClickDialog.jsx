@@ -3,6 +3,7 @@ import { AttentionBox, Avatar, Skeleton } from '@vibe/core';
 
 import mondayService from '../../services/mondayService';
 import logger from '../../utils/logger';
+import { useViewTracking } from '../../utils/viewTracking';
 import { UPDATE_COLUMN_VALUE } from '../../services/graphqlQueries';
 import { formatCellValue } from '../../domain/cellValue';
 import useColumnSettings from '../../hooks/useColumnSettings';
@@ -109,6 +110,8 @@ function TeamTitleRow({ result }) {
 }
 
 function OnClickDialog({ context }) {
+  // Usage telemetry (D3): one view_open per session for this view (inert until the sink is active).
+  useViewTracking(logger, 'onclick_picker');
   const { boardId, itemId, columnId, selectedItemIds } = context || {};
 
   const {

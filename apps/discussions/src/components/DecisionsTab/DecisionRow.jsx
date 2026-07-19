@@ -130,7 +130,7 @@ function LabelPickerCell({ value, opts, canEdit, onPick, pill = false, placehold
 }
 
 function DecisionRow({
-  decision, statusOpts, can, onRename, onStatus, onDate, onDecider, onAffected, rowStyle,
+  decision, statusOpts, trackingOpts, can, onRename, onStatus, onTracking, onDate, onDecider, onAffected, rowStyle,
   // Optimistic-create error affordance (a temp row whose create failed): retry
   // re-runs the create; dismiss removes the row locally.
   onRetryCreate, onDismissRow,
@@ -309,6 +309,18 @@ function DecisionRow({
         />
       </div>
     ),
+    // מעקב החלטה — second status column (round153); same inline picker as status.
+    tracking: (
+      <div key="tracking" className={`${styles.decCell} ${styles.decStatusCell}`}>
+        <LabelPickerCell
+          value={decision.decisionTrackingID}
+          opts={trackingOpts}
+          canEdit={can('editDecisionStatus', decision)}
+          onPick={(id) => onTracking(decision.id, id)}
+          placeholder="בחר מעקב"
+        />
+      </div>
+    ),
     // תאריך — dd/mm; DatePickerPopover when editable
     date: (
       <div key="date" className={styles.decCell} onClick={(e) => e.stopPropagation()}>
@@ -329,7 +341,7 @@ function DecisionRow({
 
   const orderedKeys = columns || [
     ...(selectable ? ['sel'] : []),
-    'name', 'decider', 'affected', 'status', 'date',
+    'name', 'decider', 'affected', 'status', 'tracking', 'date',
   ];
 
   return (
@@ -353,7 +365,7 @@ function DecisionRow({
  */
 function DecisionRows({
   list, scope, canReorderRows, columns, selectable, selectedIds, onToggleSelect,
-  statusOpts, canDecision, updateDecisionName, updateDecisionStatus, updateDecisionDate,
+  statusOpts, trackingOpts, canDecision, updateDecisionName, updateDecisionStatus, updateDecisionTracking, updateDecisionDate,
   updateDecisionDecider, updateDecisionAffected, rowStyle,
   onRetryCreate, onDismissRow,
 }) {
@@ -368,9 +380,11 @@ function DecisionRows({
       decision={d}
       columns={columns}
       statusOpts={statusOpts}
+      trackingOpts={trackingOpts}
       can={canDecision}
       onRename={updateDecisionName}
       onStatus={updateDecisionStatus}
+      onTracking={updateDecisionTracking}
       onDate={updateDecisionDate}
       onDecider={updateDecisionDecider}
       onAffected={updateDecisionAffected}

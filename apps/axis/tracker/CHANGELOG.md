@@ -2,6 +2,33 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2.2.0 — 2026-07-17
+
+- Telemetry hardening: the api-latency health signal ships a coarse latency bucket
+  (fast/ok/slow/very_slow) instead of raw ms, so the transport can dedup it — an unbucketed
+  ms would burn the session ship-cap and starve real error records.
+- Axiom logging v2 telemetry — call sites (logger primitives already v2 from Phase 1c).
+- View-tracking: `useViewTracking(logger, 'calendar')` in `MondayCalendar.jsx` and `useViewTracking(logger, 'dashboard')` in `Dashboard.jsx` — one `view_open` usage event per view per session.
+- Boot health: `logger.health('boot_ok', { ms })` fired alongside `initSummary` at "Calendar fully interactive", reusing the same elapsed.
+- API-latency health at the `safeApi()` funnel: `logger.health('api_ok', { tag, ms })` on success and `logger.health('api_fail', { tag, ms, err_code })` on terminal failure (transport dedups; no double-log alongside apiResponse/apiError).
+- Test infra: global logger mock (`setupTests.js`) now exposes `track()`/`health()` mirroring the real v2 wire shape; added a focused lock test for the new call sites (`mondayApi/__tests__/telemetry-callsites.test.js`).
+- Telemetry stays inert until the Axiom sink is active; wire schema matches `@axis/app-core` (shared `encodeDims`).
+
+## 2026-07
+
+### ✨ New Features
+
+- **2026-07-02** — Ship browser logs to Axiom: new hardened shared transport (axiomTransport.ts) in @axis/app-core + Tracker sink adapter (axiomSink.js); Tracker deploy doubles as the monday-CDN CSP canary
+  - _Why:_ Client-only apps have zero production observability — errors invisible outside the user's browser; enables incident triage by account/user id
+  - _Requested:_ Tracker: ship browser logs to Axiom via new shared hardened transport in @axis/app-core + sink adapter (execution of TRACKER-AXIOM-EXECUTION-PLAN.md Phases 1+2, Tracker is the monday-CDN CSP canary)
+
+### 🔒 Security
+
+- **2026-07-17** — Phase 1c — port the v2 Axiom telemetry primitives into tracker's local logger + sink: add track()/health() (usage/health), ship error.message only scrubbed as err_msg, reconcile the envelope kind to the shared domain discriminator, and close a stack-frame privacy leak. `e2a1a61`
+  - _Why:_ tracker runs its OWN logger + Axiom sink (deliberately not on @axis/app-core — test-locked), so the v2 wire format had to be authored here too. Before this, tracker shipped its RENDERING kind (simple/api/init/...) into the same app-errors dataset where app-core ships the domain kind (error/usage/health) — schema drift the #239 review flagged. tracker's firstStackFrame also had the same @-line leak app-core 0.1 fixed.
+  - _Requested:_ Phase 1c בתוכנית v2 — להביא את tracker לפורמט ה-wire של v2 (track/health, err_msg מסונן, kind דומייני) בלי לשבור את מאגר הטסטים הנעול.
+  - _Done:_ Added track()/health() to tracker's logger.js (INFO records with domainKind usage/health + alwaysShip, message via the shared encodeDims imported from @axis/app-core so the wire format can't drift). In axiomSink.js: imported scrubMessage from @axis/app-core and now ship error.message ONLY scrubbed, as err_msg (D2); reconciled the envelope kind to the DOMAIN discriminator (error default, init/initSummary to health, explicit domainKind wins) instead of tracker's rendering enum — closing the cross-app schema drift the PR #239 review flagged; let shouldShip bypass the WARN/ERROR policy for alwaysShip records (duplicates still drop first); and anchored firstStackFrame's Firefox @-frame match (no whitespace before @) so an email in error.message can never be mistaken for a frame and leak into stack1. Bumped 2.1.0 to 2.1.1. Verified: tracker suite 976 pass, +5 new tests, and the 10 pre-existing unrelated failures (RTL snapshots, an env flag, integration timeouts) are unchanged — no new failures introduced into the locked suite.
+
 ## 2026-07
 
 ### 🧪 Tests
@@ -9,6 +36,12 @@
 - **2026-07-17** — v2.1.1: high-scale test round — `aggregateAll` 5,000-event equivalence vs an independent reference (+anchors), granularity conservation, `consolidateBarData` cap, and un-chunked `fetchItemsStatus`/`fetchItemsLinkedIds` id-query characterization (FOLLOW-UPS F13); no runtime changes `04a96e6`
 
 ## 2026-06
+
+### 🐛 Bug Fixes
+
+- **2026-06-21** — Calendar auto-reloads (sometimes 2-3x in a row) after the app has already rendered. Root cause: preloadLazyModals background-prefetches 5 lazy modal chunks via lazyRetry-wrapped importers, and a transient chunk-load failure (network/CDN) calls window.location.reload() even for an unrequested background prefetch. Fix: (1) new prefetchLazy() in lazyRetry.js does a silent best-effort prefetch that never reloads; preloadLazyModals uses it. (2) global per-session auto-reload cap (MAX_AUTO_RELOADS) in lazyRetry so chunk reloads can't chain to 2-3. React.lazy still loads on demand; genuine failure surfaces via the ErrorBoundary chunk screen.
+  - _Why:_ User-reported bug: board blanks out and re-fetches on its own on every entry (intermittent, machine/network-specific). Reproduced via new lazyRetry unit tests; ruled out account-data, browser extension, and stale cache (still repros in Incognito).
+  - _Requested:_ משתמש דיווח שהאפליקציה עולה ואז הדף עושה ריפרש אוטומטי, לפעמים פעמיים-שלוש ברצף. לא קרה בכניסה דרך אותו משתמש במחשב אחר; קורה הרבה אבל לא 100%; קורה גם ב-Incognito.
 
 ### ✨ New Features
 

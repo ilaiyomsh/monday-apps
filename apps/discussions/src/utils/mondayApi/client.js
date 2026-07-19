@@ -12,6 +12,16 @@
 import logger from '../logger';
 import { extractOperationName } from '../errorHandler';
 
+// v2 health telemetry (D5): coarse latency buckets so repeated api_latency signals
+// dedup at the transport instead of shipping a distinct message per call — safeApi
+// is a hot path, so we bucket (never per-call track) to keep it cheap and flood-safe.
+const latencyBucket = (ms) => {
+    if (ms < 200) return 'fast';
+    if (ms < 1000) return 'ok';
+    if (ms < 3000) return 'slow';
+    return 'very_slow';
+};
+
 // ============================================
 // ולידציית שאילתות GraphQL לפני שליחה
 // ============================================
@@ -254,6 +264,9 @@ export const safeApi = async (monday, callerName, query, options = {}) => {
         lastRawResponse = rawResponse;
         const duration = Date.now() - lastStartTime;
         logger.apiResponse(callerName, rawResponse, duration);
+        // API-latency health (D5): bucketed so it dedups at the transport; ships as
+        // domainKind='health' (inert until the Axiom sink is active).
+        logger.health('api_latency', { bucket: latencyBucket(duration), ok: true });
 
         // לוג GraphQL errors ברמת ERROR — אבל לא זורק (אין retry על soft errors).
         // נרשם כ-apiError עם rawResponse ב-context כדי שה-UI sink יחלץ הודעה ספציפית
@@ -299,6 +312,8 @@ export const safeApi = async (monday, callerName, query, options = {}) => {
         });
     } catch (error) {
         const duration = Date.now() - lastStartTime;
+        // API-latency health (D5): bucketed failure signal (ok:false), dedup-safe.
+        logger.health('api_latency', { bucket: latencyBucket(duration), ok: false });
         logger.apiError(callerName, error, {
             query,
             variables: options.variables || null,

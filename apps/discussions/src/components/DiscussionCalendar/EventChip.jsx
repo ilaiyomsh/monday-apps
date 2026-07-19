@@ -44,7 +44,7 @@ function HoverCard({ item, anchor, actions, onLeave, onEnter, onAction }) {
       )}
       <div className={styles.calHoverDivider} />
       {confirmDel ? (
-        <div className={styles.calHoverConfirm}>
+        <div className={styles.calHoverConfirm} dir="rtl">
           <span className={styles.calHoverConfirmText}>למחוק את הדיון?</span>
           <div className={styles.calHoverConfirmActions}>
             <button type="button" className={`${styles.calHoverConfirmBtn} ${styles.calHoverConfirmYes}`} onClick={run(actions.onDelete)} role="menuitem">

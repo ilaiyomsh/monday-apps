@@ -1,0 +1,107 @@
+{
+  "_comment": "Config for register-lifecycle-subscriptions.mjs. Fill webhookBaseUrl with telemetry-dashboard's stable Live URL (mapps code:status liveUrl, no trailing slash). Fill each appSlug and featureSlug from the monday Developer Center: open the app -> the feature -> copy the URL slug. Apps with an empty featureSlug are skipped with a warning.",
+  "webhookBaseUrl": "https://d3ed7-service-14334098-f09ca9de.us.monday.app",
+  "apps": [
+    {
+      "name": "axis-day-off",
+      "appId": "11459177",
+      "appSlug": "",
+      "liveVersionId": "15465529",
+      "draftVersionId": "15901666",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug. liveVersionId discovered via app-version:list (v3, status live). draftVersionId is v4 (status draft).",
+      "features": [
+        {
+          "featureSlug": "",
+          "featureId": 22865946,
+          "draftFeatureId": 23902093,
+          "kind": "AppFeatureObject"
+        }
+      ]
+    },
+    {
+      "name": "axis-sync-calender",
+      "appId": "11666315",
+      "appSlug": "",
+      "liveVersionId": "15902356",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug. No live version exists yet (app has only v1 draft) — liveVersionId/featureId were discovered against that draft as the fallback.",
+      "features": [
+        {
+          "featureSlug": "",
+          "featureId": 24159570,
+          "kind": "AppFeatureObject"
+        }
+      ]
+    },
+    {
+      "name": "axis-tracker",
+      "appId": "10684862",
+      "appSlug": "",
+      "liveVersionId": "14244869",
+      "draftVersionId": "15901660",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug. liveVersionId discovered via app-version:list (v24, status live). App also has an AppFeatureObject feature (id 19856477) not tracked here — out of scope. draftVersionId is v25 (status draft); its AppFeatureBoardView draft feature id is 23902079 (draft also has an AppFeatureObject id 23902080, out of scope to match live).",
+      "features": [
+        {
+          "featureSlug": "",
+          "featureId": 19856476,
+          "draftFeatureId": 23902079,
+          "kind": "AppFeatureBoardView"
+        }
+      ]
+    },
+    {
+      "name": "axis-planner",
+      "appId": "10787117",
+      "appSlug": "",
+      "liveVersionId": "13082844",
+      "draftVersionId": "15901623",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug. liveVersionId discovered via app-version:list (v15, status live). kind corrected: the live version's only feature is actually AppFeatureObject, not AppFeatureBoardView as originally assumed. draftVersionId is v16 (status draft).",
+      "features": [
+        {
+          "featureSlug": "",
+          "featureId": 16901462,
+          "draftFeatureId": 23901991,
+          "kind": "AppFeatureObject"
+        }
+      ]
+    },
+    {
+      "name": "discussions",
+      "appId": "11457413",
+      "appSlug": "",
+      "liveVersionId": "16021677",
+      "draftVersionId": "16022833",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug. liveVersionId discovered via app-version:list (v8, status live). App also has an AppFeatureObject feature (id 24198897) not tracked here — out of scope. draftVersionId is v9 (status draft; app-level name shows as 'Meetings' at this version, but the feature itself is still named 'Discussions'). Draft also has an AppFeatureObject id 24201608, out of scope to match live.",
+      "features": [
+        {
+          "featureSlug": "",
+          "featureId": 24198896,
+          "draftFeatureId": 24201607,
+          "kind": "AppFeatureBoardView"
+        }
+      ]
+    },
+    {
+      "name": "team-people-column",
+      "appId": "11689948",
+      "appSlug": "",
+      "liveVersionId": "16006370",
+      "draftVersionId": "16067214",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug. liveVersionId discovered via app-version:list (v3, status live). kind kept as AppFeatureColumn: the manifest's real feature type is the more specific 'AppFeaturePeopleColumn', but the monday AppFeatureTypeE enum has no separate people-column value (only a generic COLUMN bucket), so AppFeatureColumn is the correct lifecycle kind. The app's other feature, 'Team People Dialog' (id 24160946, AppFeatureDialog), is a supporting UI dialog, not a lifecycle-tracked surface — out of scope. draftVersionId is v4 (status draft); its 'Team People' draft feature is typed AppFeaturePeopleColumn (id 24310172) in app-features:list, consistent with the manifest. Draft also has 'Team People Dialog' AppFeatureDialog id 24310174, out of scope.",
+      "features": [
+        {
+          "featureSlug": "",
+          "featureId": 24160945,
+          "draftFeatureId": 24310172,
+          "kind": "AppFeatureColumn"
+        }
+      ]
+    },
+    {
+      "name": "deadline-confirm",
+      "appId": "11704868",
+      "appSlug": "",
+      "_comment": "No board feature — app-level webhooks only (Developer Center -> Webhooks), so features stays empty.",
+      "features": []
+    }
+  ]
+}

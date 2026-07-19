@@ -174,6 +174,31 @@ describe('logger sink-ready', () => {
             expect(kinds).toContain('initSummary');
         });
 
+        it('track — usage record: INFO, domainKind usage, alwaysShip, dims folded into message', async () => {
+            const logger = await loadFreshLogger();
+            const spy = vi.fn();
+            logger.addSink(spy);
+            logger.track('settings_opened', { source: 'toolbar' });
+            expect(spy).toHaveBeenCalledTimes(1);
+            const rec = spy.mock.calls[0][0];
+            expect(rec).toMatchObject({
+                level: 'INFO', module: 'usage', domainKind: 'usage', alwaysShip: true,
+                message: 'settings_opened source=toolbar',
+            });
+        });
+
+        it('health — health record: INFO, domainKind health, alwaysShip', async () => {
+            const logger = await loadFreshLogger();
+            const spy = vi.fn();
+            logger.addSink(spy);
+            logger.health('boot_ok', { ms: 120 });
+            const rec = spy.mock.calls[0][0];
+            expect(rec).toMatchObject({
+                level: 'INFO', module: 'health', domainKind: 'health', alwaysShip: true,
+                message: 'boot_ok ms=120',
+            });
+        });
+
         it('functionStart/functionEnd — מגיעים ל-sink', async () => {
             const logger = await loadFreshLogger();
             const spy = vi.fn();

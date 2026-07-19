@@ -2,13 +2,14 @@
 // testable lives behind createApp (src/app.js).
 
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
 import { EnvironmentVariablesManager } from '@mondaycom/apps-sdk';
 // monday-code does NOT inject platform env vars into process.env — they live
 // in a mounted secrets file the SDK reads (verified in apps-sdk source +
 // live: containers saw empty MONDAY_CLIENT_ID/BASE_URL without this).
 // updateProcessEnv copies them in; locally the manager is a no-op over
 // process.env, so dotenv keeps working.
-new EnvironmentVariablesManager({ updateProcessEnv: true });
+const envManager = new EnvironmentVariablesManager({ updateProcessEnv: true });
 import { createApp } from './app.js';
 import { createAppStorage } from './services/storage.js';
 import { createMondayApi } from './services/monday-api.js';
@@ -16,9 +17,44 @@ import { createRateLimiter } from './helpers/rate-limit.js';
 import { createSecureStorageBackend } from './storage/secure-storage-backend.js';
 import { createMemoryBackend } from './storage/memory-backend.js';
 import { getEnv } from './helpers/environment.js';
-import { logInfo, logError } from './helpers/logger.js';
+import logger, { logInfo, logError, health } from './helpers/logger.js';
+import { attachAxiomServerSink, flushAxiom } from './helpers/axiomServerSink.js';
 
 const env = getEnv();
+
+// App version for boot health (read via fs so it works on plain node 20 without
+// JSON import attributes).
+let APP_VERSION = '0.0.0';
+try {
+  APP_VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+} catch {
+  // non-fatal — version is a breadcrumb, not load-bearing
+}
+
+// --- Axiom logging v2: PII scrub + remote sink (gated on AXIOM_* secrets) ---
+// Strip the /confirm client ip from attempt records before they reach any sink
+// (the local stdout line keeps it; the wire never does).
+logger.setBeforeSend((record) => {
+  if (record?.tag === 'attempt' && record.context && 'ip' in record.context) {
+    record.context = { ...record.context, ip: undefined };
+  }
+  return record;
+});
+
+// Read the Axiom config through the SDK manager (NOT process.env) — monday-code
+// injects platform secrets into the mounted file the manager reads.
+const readEnv = (key) => {
+  const v = envManager.get(key);
+  return typeof v === 'string' && v.length > 0 ? v : undefined;
+};
+attachAxiomServerSink(logger, {
+  token: readEnv('AXIOM_TOKEN'),
+  dataset: readEnv('AXIOM_DATASET'),
+  app: readEnv('AXIOM_APP_NAME'),
+  env: readEnv('NODE_ENV') || 'production',
+  ver: APP_VERSION, // stamped as ev.ver — release correlation (Fable #6)
+  shipLevel: readEnv('LOG_SHIP_LEVEL'),
+});
 
 const backend = env.useLocalStorage ? createMemoryBackend() : createSecureStorageBackend();
 const storage = createAppStorage({ backend });
@@ -29,8 +65,17 @@ const app = createApp({ storage, api, rateLimiter, env });
 
 app.listen(env.port, () => {
   logInfo('server', 'deadline-confirm listening', { port: env.port, localStorage: env.useLocalStorage });
+  // Boot health (D5): one INFO health record at the init-done point.
+  health('boot', { version: APP_VERSION, port: env.port });
 });
 
 process.on('unhandledRejection', (reason) => {
   logError('server', 'unhandled rejection', { reason: String(reason) });
 });
+
+// Drain the Axiom buffer on shutdown so the last records before exit are not lost.
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, () => {
+    flushAxiom().finally(() => process.exit(0));
+  });
+}

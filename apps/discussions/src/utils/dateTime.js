@@ -41,6 +41,16 @@ export function composeLocalDate(dateStr, timeStr) {
   return d;
 }
 
+/** The "now" pair for a new-discussion card (round148): today's local date +
+ *  the current local time, in the exact shapes the create form's inputs
+ *  consume ("yyyy-mm-dd" / "HH:MM"). */
+export function nowDateTimeInputs(now = new Date()) {
+  return {
+    date: localYmd(now),
+    time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+  };
+}
+
 /** Date -> "yyyy-mm-dd" for the native date input (local time, no UTC shift). */
 export function toDateInput(d) {
   if (!d) return '';

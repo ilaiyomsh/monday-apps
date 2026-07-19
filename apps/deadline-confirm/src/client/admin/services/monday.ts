@@ -5,6 +5,8 @@
 
 import mondaySdk from 'monday-sdk-js';
 import type { Board, BoardColumn, StatusLabel } from '../types';
+import logger from '../utils/logger';
+import { latencyBucket } from '../utils/latency';
 
 const monday = mondaySdk();
 
@@ -32,12 +34,29 @@ interface GraphQLResponse<T> {
 }
 
 async function seamlessApi<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-  const res = (await monday.api(query, variables ? { variables } : undefined)) as GraphQLResponse<T>;
+  const t0 = Date.now();
+  // API-latency health (D5): bucketed so repeated signals dedup; ships as kind='health'
+  // (inert until the Axiom sink is active).
+  const reportLatency = (ok: boolean): void =>
+    logger.health('api_latency', { bucket: latencyBucket(Date.now() - t0), ok });
+  let res: GraphQLResponse<T>;
+  try {
+    res = (await monday.api(query, variables ? { variables } : undefined)) as GraphQLResponse<T>;
+  } catch (err) {
+    // network/SDK throw (not a GraphQL error response) — record latency + rethrow
+    reportLatency(false);
+    throw err;
+  }
   // GraphQL soft errors arrive inside a resolved promise — throw at the funnel.
   if (res.errors?.length) {
+    reportLatency(false);
     throw new Error(`monday.api error: ${res.errors.map((e) => e.message).join('; ')}`);
   }
-  if (!res.data) throw new Error('monday.api returned no data');
+  if (!res.data) {
+    reportLatency(false);
+    throw new Error('monday.api returned no data');
+  }
+  reportLatency(true);
   return res.data;
 }
 
@@ -96,6 +115,6 @@ export async function openOauthTab(): Promise<void> {
     window.open(`/oauth/start?st=${encodeURIComponent(token)}`, '_blank', 'noopener');
   } catch (err) {
     // Without a sessionToken there is no account context to connect.
-    console.error('openOauthTab: sessionToken unavailable', err);
+    logger.error('monday', 'oauth_open_failed', err);
   }
 }
