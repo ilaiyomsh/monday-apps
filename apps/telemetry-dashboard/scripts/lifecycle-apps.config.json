@@ -1,6 +1,6 @@
 {
   "_comment": "Config for register-lifecycle-subscriptions.mjs. Fill webhookBaseUrl with telemetry-dashboard's stable Live URL (mapps code:status liveUrl, no trailing slash). Fill each appSlug and featureSlug from the monday Developer Center: open the app -> the feature -> copy the URL slug. Apps with an empty featureSlug are skipped with a warning.",
-  "webhookBaseUrl": "https://d3ed7-service-14334098-f09ca9de.us.monday.app",
+  "webhookBaseUrl": "https://live1-service-14334098-f09ca9de.us.monday.app",
   "apps": [
     {
       "name": "axis-day-off",
