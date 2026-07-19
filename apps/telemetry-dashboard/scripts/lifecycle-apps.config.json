@@ -1,0 +1,55 @@
+{
+  "_comment": "Config for register-lifecycle-subscriptions.mjs. Fill webhookBaseUrl with telemetry-dashboard's stable Live URL (mapps code:status liveUrl, no trailing slash). Fill each appSlug and featureSlug from the monday Developer Center: open the app -> the feature -> copy the URL slug. Apps with an empty featureSlug are skipped with a warning.",
+  "webhookBaseUrl": "",
+  "apps": [
+    {
+      "name": "axis-day-off",
+      "appId": "11459177",
+      "appSlug": "",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug",
+      "features": [{ "featureSlug": "", "kind": "AppFeatureObject" }]
+    },
+    {
+      "name": "axis-sync-calender",
+      "appId": "11666315",
+      "appSlug": "",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug",
+      "features": [{ "featureSlug": "", "kind": "AppFeatureObject" }]
+    },
+    {
+      "name": "axis-tracker",
+      "appId": "10684862",
+      "appSlug": "",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug",
+      "features": [{ "featureSlug": "", "kind": "AppFeatureBoardView" }]
+    },
+    {
+      "name": "axis-planner",
+      "appId": "10787117",
+      "appSlug": "",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug",
+      "features": [{ "featureSlug": "", "kind": "AppFeatureBoardView" }]
+    },
+    {
+      "name": "discussions",
+      "appId": "11457413",
+      "appSlug": "",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug",
+      "features": [{ "featureSlug": "", "kind": "AppFeatureBoardView" }]
+    },
+    {
+      "name": "team-people-column",
+      "appId": "11689948",
+      "appSlug": "",
+      "_comment": "appSlug + featureSlug: Developer Center -> app -> feature URL slug",
+      "features": [{ "featureSlug": "", "kind": "AppFeatureColumn" }]
+    },
+    {
+      "name": "deadline-confirm",
+      "appId": "11704868",
+      "appSlug": "",
+      "_comment": "No board feature — app-level webhooks only (Developer Center -> Webhooks), so features stays empty.",
+      "features": []
+    }
+  ]
+}

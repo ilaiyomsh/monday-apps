@@ -5,12 +5,21 @@
 // (401 for missing/invalid). Real per-account telemetry is served ONLY through
 // that authenticated endpoint. The built dashboard SPA is served statically at
 // /; it carries NO Axiom credentials and NO real data.
+//
+// Webhooks: POST /api/webhooks/{lifecycle,app-events} carry their OWN JWT
+// (verified against per-app Signing/Client Secret maps — fail-closed 401 when
+// no secrets are configured) and are mounted BEFORE the static/SPA block and
+// deliberately OUTSIDE the requireSession gate.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { createSessionTokenMiddleware } from './middlewares/session-token.js';
+import { createWebhookAuthMiddleware } from './middlewares/webhook-auth.js';
+import { createWebhooksRouter } from './routes/webhooks.js';
+import { createLifecycleService } from './services/lifecycle-service.js';
+import logger from './helpers/logger.js';
 
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
 
@@ -18,9 +27,15 @@ const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
  * @param {object} deps
  * @param {ReturnType<import('./server/telemetry-service.js').createTelemetryService>} deps.telemetry
  * @param {{ clientSecret: string, allowedAccountIds: string[], version?: string }} deps.env
+ * @param {{ service?: { handleFeatureEvent: Function, handleAppEvent: Function },
+ *           signingSecrets?: Record<string, string>,
+ *           clientSecrets?: Record<string, string> }} [deps.lifecycle]
+ *   Webhook wiring (index.js always provides it). Omitted deps degrade to the
+ *   inert-by-default posture: routes still mount, challenge echo works, auth
+ *   is fail-closed 401, nothing is recorded.
  * @returns {import('express').Express}
  */
-export function createApp({ telemetry, env }) {
+export function createApp({ telemetry, env, lifecycle = {} }) {
   const app = express();
   app.set('trust proxy', true);
   app.disable('x-powered-by');
@@ -29,6 +44,24 @@ export function createApp({ telemetry, env }) {
   app.get('/health', (_req, res) => {
     res.json({ ok: true, version: env.version ?? 'dev', axiom: telemetry.enabled });
   });
+
+  // --- Webhooks (own JWT auth — NOT behind requireSession) ---------------
+  const lifecycleService =
+    lifecycle.service ?? createLifecycleService({ eventsBoard: null, logger });
+  const lifecycleAuth = createWebhookAuthMiddleware({
+    secretsBySlug: lifecycle.signingSecrets ?? {},
+    logger,
+    tag: 'webhooks',
+  });
+  const appEventsAuth = createWebhookAuthMiddleware({
+    secretsBySlug: lifecycle.clientSecrets ?? {},
+    logger,
+    tag: 'webhooks',
+  });
+  app.use(
+    '/api/webhooks',
+    createWebhooksRouter({ lifecycleService, lifecycleAuth, appEventsAuth, logger })
+  );
 
   // --- Authenticated telemetry endpoint ---------------------------------
   const requireSession = createSessionTokenMiddleware({
@@ -41,7 +74,10 @@ export function createApp({ telemetry, env }) {
       const payload = await telemetry.getTelemetry(String(req.query.window ?? '7d'));
       res.json(payload);
     } catch (err) {
-      console.error('telemetry endpoint error:', String(err?.message ?? err));
+      logger.error('telemetry_endpoint_error', 'http', {
+        path: req.path,
+        error: err instanceof Error ? err : new Error(String(err)),
+      });
       res.status(502).json({ error: 'telemetry_unavailable' });
     }
   });
@@ -58,7 +94,10 @@ export function createApp({ telemetry, env }) {
 
   // Terminal error handler — never leak a stack to the client.
   app.use((err, req, res, _next) => {
-    console.error('unhandled middleware error:', req.path, String(err?.message ?? err));
+    logger.error('unhandled_middleware_error', 'http', {
+      path: req.path,
+      error: err instanceof Error ? err : new Error(String(err?.message ?? err)),
+    });
     if (res.headersSent) return;
     res.status(err?.type === 'entity.parse.failed' ? 400 : 500).json({ error: 'internal_error' });
   });
