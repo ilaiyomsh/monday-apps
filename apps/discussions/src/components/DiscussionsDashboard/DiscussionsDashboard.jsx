@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
+import { ArrowLeft, Pencil, Check, RotateCcw, EyeOff, GripVertical } from 'lucide-react';
 import { Avatar } from '@vibe/core';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, Tooltip, LabelList,
@@ -12,6 +12,10 @@ import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { useUsers } from '@api/hooks/use-users';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { aggregateDashboard } from './dashboardAgg.js';
+import {
+  WIDGET_IDS, WIDGETS, ROW_H, GRID_GAP,
+  resolveLayout, moveRect, resizeRect, rectToPx, pxDeltaToCells, layoutRows,
+} from './dashboardLayout.js';
 import logger from '@generated/utils/logger.js';
 import { useViewTracking } from '@generated/utils/viewTracking.js';
 import styles from './DiscussionsDashboard.module.css';
@@ -64,13 +68,13 @@ function peopleOptions(discussions, key) {
     .sort((a, b) => a.label.localeCompare(b.label, 'he'));
 }
 
-export function DiscussionsDashboard({ onBackToDiscussions }) {
+export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = false }) {
   // v2 usage telemetry: one view_open per session for the dashboard view (D3).
   useViewTracking(logger, 'dashboard');
   const { data, loading, error } = useDashboardData();
   // round158 — the owner-set brand logo (data-URI in settings) now anchors the
   // dashboard's top-left corner (moved here off the discussions-view header).
-  const { settings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const logoUrl = settings?.preferences?.logoUrl || null;
 
   // round158 — the dashboard opens on the DAY slice (owner spec): daily buckets
@@ -138,6 +142,273 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
   // / month with no discussions in it isn't drawn as an empty column).
   const barData = model ? model.byPeriod.filter((b) => b.count > 0) : [];
 
+  // ---- round160: owner-editable free-form widget layout ---------------------
+  // A stored { widgetId: {x,y,w,h,hidden} } map (settings.preferences, owner-only
+  // write) resolves over the default grid; in edit mode each widget can be
+  // dragged, edge/corner-resized, and hidden. Non-owners get the saved layout,
+  // read-only.
+  const storedLayout = settings?.preferences?.dashboardLayout;
+  const layout = useMemo(() => resolveLayout(storedLayout), [storedLayout]);
+  const canEditLayout = !!canManageSettings;
+  const [editing, setEditing] = useState(false);
+  const [drag, setDrag] = useState(null); // { id, rect } — live preview during a gesture
+  const gestureRef = useRef(null);
+  const canvasRef = useRef(null);
+  const [canvasW, setCanvasW] = useState(0);
+
+  const measureCanvas = useCallback((node) => {
+    if (node) { canvasRef.current = node; setCanvasW(node.clientWidth || 0); }
+  }, []);
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => setCanvasW(el.clientWidth || 0));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [loading, error, editing]);
+
+  const toStored = useCallback((l) => {
+    const out = {};
+    WIDGET_IDS.forEach((id) => {
+      const it = l[id];
+      out[id] = { x: it.x, y: it.y, w: it.w, h: it.h, hidden: !!it.hidden };
+    });
+    return out;
+  }, []);
+  const persistLayout = useCallback((stored) => {
+    if (canEditLayout) updateSettings({ preferences: { dashboardLayout: stored } });
+  }, [canEditLayout, updateSettings]);
+  const commitRect = useCallback((id, rect) => {
+    persistLayout(toStored({ ...layout, [id]: { ...layout[id], ...rect } }));
+  }, [layout, toStored, persistLayout]);
+  const toggleHidden = useCallback((id) => {
+    persistLayout(toStored({ ...layout, [id]: { ...layout[id], hidden: !layout[id].hidden } }));
+  }, [layout, toStored, persistLayout]);
+  const resetLayout = useCallback(() => { persistLayout({}); }, [persistLayout]);
+
+  // One pointer handler for both move (dir=null) and edge/corner resize.
+  const beginGesture = useCallback((e, id, dir) => {
+    if (!editing) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const g = { id, dir, startX: e.clientX, startY: e.clientY, startRect: layout[id] };
+    gestureRef.current = g;
+    setDrag({ id, rect: g.startRect });
+    const nextRect = (ev) => {
+      const { dCols, dRows } = pxDeltaToCells(ev.clientX - g.startX, ev.clientY - g.startY, canvasW || 1);
+      return g.dir ? resizeRect(g.startRect, g.dir, dCols, dRows) : moveRect(g.startRect, dCols, dRows);
+    };
+    const onMove = (ev) => { if (gestureRef.current) setDrag({ id: g.id, rect: nextRect(ev) }); };
+    const onUp = (ev) => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      if (gestureRef.current) { commitRect(g.id, nextRect(ev)); gestureRef.current = null; }
+      setDrag(null);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }, [editing, layout, canvasW, commitRect]);
+
+  const viewLayout = drag ? { ...layout, [drag.id]: { ...layout[drag.id], ...drag.rect } } : layout;
+  const canvasHeight = layoutRows(viewLayout) * (ROW_H + GRID_GAP);
+  const hiddenWidgets = WIDGETS.filter((w) => layout[w.id]?.hidden);
+
+  // Content for one widget id. Only called in the loaded branch, so `model` and
+  // `eff` are defined here.
+  const cube = (accent, label, value) => (
+    <div className={styles.kpi} style={{ '--accent': accent }}>
+      <div className={styles.kLabel}>{label}</div>
+      <div className={styles.kValue}>{value}</div>
+    </div>
+  );
+  const renderWidget = (id) => {
+    switch (id) {
+      case 'logo':
+        return logoUrl
+          ? <div className={styles.logoCard}><img className={styles.logoImg} src={logoUrl} alt="לוגו" /></div>
+          : <div className={`${styles.logoCard} ${styles.logoEmpty}`}>לוגו</div>;
+      case 'filter':
+        return (
+          <div className={styles.filterCard}>
+            <div className={styles.fHead}>סינון</div>
+            <div className={styles.fSection}>
+              <div className={styles.fLabel}>טווח זמן</div>
+              <div className={styles.pillGroup} role="group" aria-label="טווח זמן">
+                {RANGE_LABELS.map((r) => (
+                  <button key={r.key} type="button" className={`${styles.pill} ${preset === r.key ? styles.on : ''}`} onClick={() => setPreset(r.key)}>
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              {preset === 'custom' && (
+                <span className={styles.customRange}>
+                  <DatePickerPopover variant="field" value={custom.from} onChange={(d) => setCustom((c) => ({ ...c, from: d }))} />
+                  <span className={styles.dash}>–</span>
+                  <DatePickerPopover variant="field" value={custom.to} onChange={(d) => setCustom((c) => ({ ...c, to: d }))} />
+                </span>
+              )}
+            </div>
+            <div className={styles.fSection}>
+              <div className={styles.fLabel}>מסננים</div>
+              <select className={styles.dimSelect} value={leadId} onChange={(e) => setLeadId(e.target.value)} aria-label="מנהל דיון">
+                <option value="">מנהל דיון: הכל</option>
+                {leadOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+              <select className={styles.dimSelect} value={typeValue} onChange={(e) => setTypeValue(e.target.value)} aria-label="סוג דיון">
+                <option value="">סוג דיון: הכל</option>
+                {typeOpts.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <select className={styles.dimSelect} value={participantId} onChange={(e) => setParticipantId(e.target.value)} aria-label="משתתף">
+                <option value="">משתתף: הכל</option>
+                {participantOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div className={styles.fSection}>
+              <div className={styles.fLabel}>צבירה</div>
+              <div className={styles.pillGroup} role="group" aria-label="צבירה">
+                {MODE_LABELS.map((m) => (
+                  <button key={m.key} type="button" className={`${styles.pill} ${mode === m.key ? styles.on : ''}`} onClick={() => setMode(m.key)}>
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className={styles.fFoot}>מציג <b>{model.totalDiscussions} דיונים</b> בטווח הנבחר</div>
+          </div>
+        );
+      case 'effectiveness':
+        return (
+          <div className={styles.hero}>
+            <div className={styles.heroBody}>
+              <span className={styles.heroLabel}>
+                אפקטיביות דיונים
+                <span className={styles.effHelp}>
+                  <button type="button" className={styles.effHelpIcon} aria-label="איך מחושב ציון האפקטיביות">?</button>
+                  <span className={styles.effTip} role="tooltip">
+                    ציון האפקטיביות = מספר המשימות שבוצעו מתוך סך כל המשימות של הדיונים שבטווח/בסינון הנוכחי (למשל 2 מתוך 26 = 8%). משימות בעיכוב — כאלה שעבר הדדליין שלהן וטרם בוצעו — מוצגות לצד המספר אך אינן נכנסות למכנה.
+                  </span>
+                </span>
+              </span>
+              <span className={styles.heroSub}>{eff.done} משימות בוצעו · {eff.delayed} בעיכוב (עבר הדדליין וטרם בוצעו) · מתוך {eff.total}</span>
+              <div className={styles.effBar}>
+                <div style={{ width: `${doneW}%`, background: '#7fd8a9' }} />
+                <div style={{ width: 2, background: 'rgba(255,255,255,.6)' }} />
+                <div style={{ width: `${delayedW}%`, background: '#ffb3c0' }} />
+              </div>
+            </div>
+            <span className={styles.heroValue}>{eff.pct}%</span>
+          </div>
+        );
+      case 'cubeDiscussions':
+        return cube(SERIES[0], 'סך דיונים', model.totalDiscussions);
+      case 'cubeParticipants':
+        return cube(SERIES[2], `${noun} משתתפים בדיונים${mode !== 'sum' ? ' לדיון' : ''}`, model.participations);
+      case 'cubeDecisions':
+        return cube(SERIES[4], `${noun} החלטות${mode !== 'sum' ? ' לדיון' : ''}`, model.decisionsPerDiscussion);
+      case 'cubeTasks':
+        return cube(SERIES[3], `${noun} משימות${mode !== 'sum' ? ' לדיון' : ''}`, model.tasksPerDiscussion);
+      case 'bar':
+        return (
+          <div className={`${styles.card} ${styles.barCard}`}>
+            <div className={styles.cardTitle}>דיונים {model.axisLabel}</div>
+            {barData.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+              <div className={styles.chartFill}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={barData} margin={{ top: 18, right: 8, left: 8, bottom: 4 }}>
+                    <CartesianGrid vertical={false} stroke="#edf0f6" />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9699a6' }} axisLine={false} tickLine={false} />
+                    <YAxis hide />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(0,115,234,.06)' }} />
+                    <Bar
+                      dataKey="count"
+                      radius={[4, 4, 0, 0]}
+                      maxBarSize={46}
+                      cursor="pointer"
+                      onClick={(d) => pickDrill('period', d?.payload?.key ?? d?.key)}
+                    >
+                      {barData.map((entry, i) => <Cell key={entry.key} fill={SERIES[i % SERIES.length]} />)}
+                      <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: '#323338', fontWeight: 600 }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        );
+      case 'donut':
+        return (
+          <div className={`${styles.card} ${styles.donutCard}`}>
+            <div className={styles.cardTitle}>התפלגות לפי סוג דיון</div>
+            {model.byType.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+              <div className={styles.donutWrap}>
+                <ResponsiveContainer width={150} height={150}>
+                  <PieChart>
+                    <Pie
+                      data={model.byType}
+                      dataKey="count"
+                      nameKey="label"
+                      innerRadius={42}
+                      outerRadius={68}
+                      paddingAngle={2}
+                      stroke="#fff"
+                      strokeWidth={2}
+                      cursor="pointer"
+                      onClick={(d) => pickDrill('type', d?.label ?? d?.payload?.label)}
+                    >
+                      {model.byType.map((entry, i) => <Cell key={entry.label} fill={SERIES[i % SERIES.length]} />)}
+                    </Pie>
+                    <Tooltip content={<ChartTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className={styles.legend}>
+                  {model.byType.map((entry, i) => (
+                    <button
+                      key={entry.label}
+                      type="button"
+                      className={styles.legendRow}
+                      onClick={() => pickDrill('type', entry.label)}
+                    >
+                      <span className={styles.sw} style={{ background: SERIES[i % SERIES.length] }} />
+                      {entry.label} · <b>{entry.count}</b>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      case 'participants':
+        return (
+          <div className={`${styles.card} ${styles.partCard}`}>
+            <div className={styles.cardTitle}>משתתפים מובילים בדיונים · טופ 5</div>
+            {model.byParticipant.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+              <div className={styles.partList}>
+                {model.byParticipant.map((p) => {
+                  const u = usersById.get(String(p.id));
+                  const name = u?.name || p.name;
+                  const pct = maxPart ? Math.max(6, Math.round((p.count / maxPart) * 100)) : 0;
+                  return (
+                    <div key={p.id} className={styles.partRow}>
+                      <span className={styles.partAvatar} title={name}>
+                        <Avatar size="small" src={u?.photo_thumb || undefined} text={initialsOf(name)} type={u?.photo_thumb ? 'img' : 'text'} ariaLabel={name} />
+                      </span>
+                      <span className={styles.partName} title={name}>{name}</span>
+                      <span className={styles.partBar}><span className={styles.partBarFill} style={{ width: `${pct}%` }} /></span>
+                      <span className={styles.partCount}>{p.count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const ready = !loading && !error && !!model;
+
   return (
     <div className={styles.root}>
       {/* Header — same pattern as "המשימות שלי"/"ההחלטות שלי": LTR row so the
@@ -155,226 +426,85 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
           </button>
         )}
         <h1 className={styles.viewTitle}>דשבורד דיונים</h1>
+        {/* round160 — owner-only layout editor controls. */}
+        {canEditLayout && ready && (
+          <div className={styles.dashTools}>
+            {editing ? (
+              <>
+                <button type="button" className={styles.toolBtn} onClick={resetLayout} title="החזרת הפריסה לברירת המחדל">
+                  <RotateCcw size={15} aria-hidden="true" /> אפס
+                </button>
+                <button type="button" className={`${styles.toolBtn} ${styles.toolBtnDone}`} onClick={() => setEditing(false)}>
+                  <Check size={15} aria-hidden="true" /> סיום עריכה
+                </button>
+              </>
+            ) : (
+              <button type="button" className={styles.toolBtn} onClick={() => setEditing(true)}>
+                <Pencil size={15} aria-hidden="true" /> ערוך פריסה
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className={styles.scroll}>
-        {/* round158 — three-zone layout: a LEFT rail (client logo + vertical
-            filter), then a 2×2 grid that locks same-row cell heights
-            ([eff+cubes] ‖ bar) / (participants ‖ donut). */}
-        <div className={styles.body}>
-          <div className={styles.colFilter}>
-            {logoUrl && (
-              <div className={styles.logoCard}>
-                <img className={styles.logoImg} src={logoUrl} alt="לוגו" />
+        {loading ? (
+          <div className={styles.centerMsg}><BrandLoader /></div>
+        ) : !ready ? (
+          <div className={`${styles.centerMsg} ${styles.empty}`}>אירעה שגיאה בטעינת נתוני הדשבורד</div>
+        ) : (
+          <>
+            {editing && hiddenWidgets.length > 0 && (
+              <div className={styles.hiddenTray}>
+                <span className={styles.trayLabel}>ווידג׳טים מוסתרים:</span>
+                {hiddenWidgets.map((w) => (
+                  <button key={w.id} type="button" className={styles.trayChip} onClick={() => toggleHidden(w.id)} title="החזרה לתצוגה">
+                    {w.label} <span aria-hidden="true">＋</span>
+                  </button>
+                ))}
               </div>
             )}
-            <div className={styles.filterCard}>
-              <div className={styles.fHead}>סינון</div>
-              <div className={styles.fSection}>
-                <div className={styles.fLabel}>טווח זמן</div>
-                <div className={styles.pillGroup} role="group" aria-label="טווח זמן">
-                  {RANGE_LABELS.map((r) => (
-                    <button key={r.key} type="button" className={`${styles.pill} ${preset === r.key ? styles.on : ''}`} onClick={() => setPreset(r.key)}>
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-                {preset === 'custom' && (
-                  <span className={styles.customRange}>
-                    <DatePickerPopover variant="field" value={custom.from} onChange={(d) => setCustom((c) => ({ ...c, from: d }))} />
-                    <span className={styles.dash}>–</span>
-                    <DatePickerPopover variant="field" value={custom.to} onChange={(d) => setCustom((c) => ({ ...c, to: d }))} />
-                  </span>
-                )}
-              </div>
-              <div className={styles.fSection}>
-                <div className={styles.fLabel}>מסננים</div>
-                <select className={styles.dimSelect} value={leadId} onChange={(e) => setLeadId(e.target.value)} aria-label="מנהל דיון">
-                  <option value="">מנהל דיון: הכל</option>
-                  {leadOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                <select className={styles.dimSelect} value={typeValue} onChange={(e) => setTypeValue(e.target.value)} aria-label="סוג דיון">
-                  <option value="">סוג דיון: הכל</option>
-                  {typeOpts.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <select className={styles.dimSelect} value={participantId} onChange={(e) => setParticipantId(e.target.value)} aria-label="משתתף">
-                  <option value="">משתתף: הכל</option>
-                  {participantOpts.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </div>
-              <div className={styles.fSection}>
-                <div className={styles.fLabel}>צבירה</div>
-                <div className={styles.pillGroup} role="group" aria-label="צבירה">
-                  {MODE_LABELS.map((m) => (
-                    <button key={m.key} type="button" className={`${styles.pill} ${mode === m.key ? styles.on : ''}`} onClick={() => setMode(m.key)}>
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {model && (
-                <div className={styles.fFoot}>מציג <b>{model.totalDiscussions} דיונים</b> בטווח הנבחר</div>
-              )}
+            <div
+              ref={measureCanvas}
+              className={`${styles.canvas} ${editing ? styles.canvasEditing : ''}`}
+              style={{ height: canvasHeight }}
+            >
+              {WIDGET_IDS.map((id) => {
+                const rect = viewLayout[id];
+                if (rect.hidden) return null;
+                const px = rectToPx(rect, Math.max(canvasW, 1));
+                return (
+                  <div
+                    key={id}
+                    className={`${styles.widgetBox} ${editing ? styles.widgetEditing : ''} ${drag?.id === id ? styles.widgetActive : ''}`}
+                    style={{ left: px.left, top: px.top, width: px.width, height: px.height }}
+                  >
+                    <div className={styles.widgetInner}>{renderWidget(id)}</div>
+                    {editing && (
+                      <>
+                        <div className={styles.moveHandle} onPointerDown={(e) => beginGesture(e, id, null)} title="גרור להזזה">
+                          <GripVertical size={14} aria-hidden="true" />
+                        </div>
+                        <button type="button" className={styles.hideBtn} onClick={() => toggleHidden(id)} title="הסתרת ווידג׳ט">
+                          <EyeOff size={14} aria-hidden="true" />
+                        </button>
+                        <div className={`${styles.rHandle} ${styles.rhN}`} onPointerDown={(e) => beginGesture(e, id, 'n')} />
+                        <div className={`${styles.rHandle} ${styles.rhS}`} onPointerDown={(e) => beginGesture(e, id, 's')} />
+                        <div className={`${styles.rHandle} ${styles.rhE}`} onPointerDown={(e) => beginGesture(e, id, 'e')} />
+                        <div className={`${styles.rHandle} ${styles.rhW}`} onPointerDown={(e) => beginGesture(e, id, 'w')} />
+                        <div className={`${styles.rHandle} ${styles.rhSE}`} onPointerDown={(e) => beginGesture(e, id, 'se')} />
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          </>
+        )}
 
-          <div className={styles.main}>
-            {loading ? (
-              <div className={styles.spanAll}><BrandLoader /></div>
-            ) : error || !model ? (
-              <div className={`${styles.spanAll} ${styles.empty}`}>אירעה שגיאה בטעינת נתוני הדשבורד</div>
-            ) : (
-              <>
-                {/* row 1, left cell — effectiveness + 4 KPI cubes */}
-                <div className={styles.cellEff}>
-                  {/* round159 — the score sits on the LEFT of the widget (like the
-                      KPI cubes); the label + breakdown + bar stack on the right. */}
-                  <div className={styles.hero}>
-                    <div className={styles.heroBody}>
-                      <span className={styles.heroLabel}>
-                        אפקטיביות דיונים
-                        {/* round154 item 7 (owner-approved formula) — a "?" to the LEFT
-                            of the title with an RTL hover explanation of the score. */}
-                        <span className={styles.effHelp}>
-                          <button type="button" className={styles.effHelpIcon} aria-label="איך מחושב ציון האפקטיביות">?</button>
-                          <span className={styles.effTip} role="tooltip">
-                            ציון האפקטיביות = מספר המשימות שבוצעו מתוך סך כל המשימות של הדיונים שבטווח/בסינון הנוכחי (למשל 2 מתוך 26 = 8%). משימות בעיכוב — כאלה שעבר הדדליין שלהן וטרם בוצעו — מוצגות לצד המספר אך אינן נכנסות למכנה.
-                          </span>
-                        </span>
-                      </span>
-                      <span className={styles.heroSub}>{eff.done} משימות בוצעו · {eff.delayed} בעיכוב (עבר הדדליין וטרם בוצעו) · מתוך {eff.total}</span>
-                      <div className={styles.effBar}>
-                        <div style={{ width: `${doneW}%`, background: '#7fd8a9' }} />
-                        <div style={{ width: 2, background: 'rgba(255,255,255,.6)' }} />
-                        <div style={{ width: `${delayedW}%`, background: '#ffb3c0' }} />
-                      </div>
-                    </div>
-                    <span className={styles.heroValue}>{eff.pct}%</span>
-                  </div>
-                  <div className={styles.kpis}>
-                    <div className={styles.kpi} style={{ '--accent': SERIES[0] }}>
-                      <div className={styles.kLabel}>סך דיונים</div>
-                      <div className={styles.kValue}>{model.totalDiscussions}</div>
-                    </div>
-                    <div className={styles.kpi} style={{ '--accent': SERIES[2] }}>
-                      <div className={styles.kLabel}>{noun} משתתפים בדיונים{mode !== 'sum' ? ' לדיון' : ''}</div>
-                      <div className={styles.kValue}>{model.participations}</div>
-                    </div>
-                    <div className={styles.kpi} style={{ '--accent': SERIES[4] }}>
-                      <div className={styles.kLabel}>{noun} החלטות{mode !== 'sum' ? ' לדיון' : ''}</div>
-                      <div className={styles.kValue}>{model.decisionsPerDiscussion}</div>
-                    </div>
-                    <div className={styles.kpi} style={{ '--accent': SERIES[3] }}>
-                      <div className={styles.kLabel}>{noun} משימות{mode !== 'sum' ? ' לדיון' : ''}</div>
-                      <div className={styles.kValue}>{model.tasksPerDiscussion}</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* row 1, right cell — daily bar chart (each bar its own color) */}
-                <div className={`${styles.card} ${styles.barCard}`}>
-                  <div className={styles.cardTitle}>דיונים {model.axisLabel}</div>
-                  {barData.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
-                    <div className={styles.chartFill}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={barData} margin={{ top: 18, right: 8, left: 8, bottom: 4 }}>
-                          <CartesianGrid vertical={false} stroke="#edf0f6" />
-                          <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#9699a6' }} axisLine={false} tickLine={false} />
-                          <YAxis hide />
-                          <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(0,115,234,.06)' }} />
-                          <Bar
-                            dataKey="count"
-                            radius={[4, 4, 0, 0]}
-                            maxBarSize={46}
-                            cursor="pointer"
-                            onClick={(d) => pickDrill('period', d?.payload?.key ?? d?.key)}
-                          >
-                            {barData.map((entry, i) => <Cell key={entry.key} fill={SERIES[i % SERIES.length]} />)}
-                            <LabelList dataKey="count" position="top" style={{ fontSize: 11, fill: '#323338', fontWeight: 600 }} />
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  )}
-                </div>
-
-                {/* row 2, left cell — top-5 participants */}
-                <div className={`${styles.card} ${styles.partCard}`}>
-                  <div className={styles.cardTitle}>משתתפים מובילים בדיונים · טופ 5</div>
-                  {model.byParticipant.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
-                    // round156 — a plain RTL row list (avatar RIGHT of the name, then
-                    // a proportional bar, then the count). Replaces the recharts
-                    // horizontal chart, whose Y-axis names got clipped / collided; the
-                    // name now takes the row's flex space (ellipsis + hover title).
-                    <div className={styles.partList}>
-                      {model.byParticipant.map((p) => {
-                        const u = usersById.get(String(p.id));
-                        const name = u?.name || p.name;
-                        const pct = maxPart ? Math.max(6, Math.round((p.count / maxPart) * 100)) : 0;
-                        return (
-                          <div key={p.id} className={styles.partRow}>
-                            <span className={styles.partAvatar} title={name}>
-                              <Avatar size="small" src={u?.photo_thumb || undefined} text={initialsOf(name)} type={u?.photo_thumb ? 'img' : 'text'} ariaLabel={name} />
-                            </span>
-                            <span className={styles.partName} title={name}>{name}</span>
-                            <span className={styles.partBar}><span className={styles.partBarFill} style={{ width: `${pct}%` }} /></span>
-                            <span className={styles.partCount}>{p.count}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                {/* row 2, right cell — type donut (same height as participants) */}
-                <div className={`${styles.card} ${styles.donutCard}`}>
-                  <div className={styles.cardTitle}>התפלגות לפי סוג דיון</div>
-                  {model.byType.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
-                    <div className={styles.donutWrap}>
-                      <ResponsiveContainer width={150} height={150}>
-                        <PieChart>
-                          <Pie
-                            data={model.byType}
-                            dataKey="count"
-                            nameKey="label"
-                            innerRadius={42}
-                            outerRadius={68}
-                            paddingAngle={2}
-                            stroke="#fff"
-                            strokeWidth={2}
-                            cursor="pointer"
-                            onClick={(d) => pickDrill('type', d?.label ?? d?.payload?.label)}
-                          >
-                            {model.byType.map((entry, i) => <Cell key={entry.label} fill={SERIES[i % SERIES.length]} />)}
-                          </Pie>
-                          <Tooltip content={<ChartTooltip />} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                      <div className={styles.legend}>
-                        {model.byType.map((entry, i) => (
-                          <button
-                            key={entry.label}
-                            type="button"
-                            className={styles.legendRow}
-                            onClick={() => pickDrill('type', entry.label)}
-                          >
-                            <span className={styles.sw} style={{ background: SERIES[i % SERIES.length] }} />
-                            {entry.label} · <b>{entry.count}</b>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Drill-down: the discussions that compose the clicked bar / slice
-            (mirrors the effectiveness-dashboard bar drill-down). Full width,
-            below the grid. */}
-        {!loading && !error && model && drillView && (
+        {/* Drill-down: the discussions that compose the clicked bar / slice.
+            Full width, below the canvas. */}
+        {ready && drillView && (
           <div className={styles.drill} ref={drillRef}>
             <div className={styles.drillHeader}>
               <span className={styles.drillTitle}>דיונים · {drillView.title} · {drillView.items.length}</span>

@@ -1,0 +1,127 @@
+// round160 — owner-editable dashboard layout. This module is the PURE part:
+// the widget registry, the default placement, and the grid geometry/mutation
+// helpers. The React canvas, the pointer drag/resize wiring, and persistence to
+// `settings.preferences.dashboardLayout` all live in DiscussionsDashboard.
+//
+// Grid model: GRID_COLS columns, a fixed row height. Each widget is a rect
+// `{ x, y, w, h }` in whole grid cells, plus a `hidden` flag. Coordinates are
+// LTR (x = 0 is the visual LEFT); the canvas sets `direction: ltr` for placement
+// while each widget's own content stays RTL.
+
+export const GRID_COLS = 12;
+export const ROW_H = 36;    // px per row unit
+export const GRID_GAP = 12; // px between cells
+
+// The movable/resizable/hideable widgets. `label` is shown in the "hidden" tray.
+export const WIDGETS = [
+  { id: 'logo', label: 'לוגו' },
+  { id: 'filter', label: 'סינון' },
+  { id: 'effectiveness', label: 'אפקטיביות דיונים' },
+  { id: 'cubeDiscussions', label: 'סך דיונים' },
+  { id: 'cubeParticipants', label: 'סך משתתפים בדיונים' },
+  { id: 'cubeDecisions', label: 'סך החלטות' },
+  { id: 'cubeTasks', label: 'סך משימות' },
+  { id: 'bar', label: 'דיונים לפי יום' },
+  { id: 'donut', label: 'התפלגות לפי סוג דיון' },
+  { id: 'participants', label: 'משתתפים מובילים בדיונים' },
+];
+export const WIDGET_IDS = WIDGETS.map((w) => w.id);
+
+// Default placement — approximates the round158/159 three-zone layout: filter
+// rail + logo on the left, effectiveness + four cubes in the middle, bar +
+// donut on the right, participants under the cubes.
+export const DEFAULT_LAYOUT = {
+  logo:             { x: 0, y: 0, w: 2, h: 3 },
+  filter:           { x: 0, y: 3, w: 2, h: 14 },
+  effectiveness:    { x: 2, y: 0, w: 4, h: 3 },
+  cubeParticipants: { x: 2, y: 3, w: 2, h: 2 },
+  cubeDiscussions:  { x: 4, y: 3, w: 2, h: 2 },
+  cubeTasks:        { x: 2, y: 5, w: 2, h: 2 },
+  cubeDecisions:    { x: 4, y: 5, w: 2, h: 2 },
+  participants:     { x: 2, y: 7, w: 4, h: 8 },
+  bar:              { x: 6, y: 0, w: 6, h: 7 },
+  donut:            { x: 6, y: 7, w: 6, h: 8 },
+};
+
+const clampInt = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(n)));
+
+// Constrain a rect to the grid: w in [1, cols], x so the rect stays inside
+// [0, cols], h ≥ 1, y ≥ 0.
+export function clampRect(rect, cols = GRID_COLS) {
+  const w = clampInt(rect.w, 1, cols);
+  const h = Math.max(1, Math.round(rect.h));
+  const x = clampInt(rect.x, 0, cols - w);
+  const y = Math.max(0, Math.round(rect.y));
+  return { x, y, w, h };
+}
+
+// Move by whole-cell deltas (drag).
+export function moveRect(rect, dCols, dRows, cols = GRID_COLS) {
+  return clampRect({ ...rect, x: rect.x + dCols, y: rect.y + dRows }, cols);
+}
+
+// Resize from an edge/corner. `dir` contains any of n/s/e/w. Dragging the top
+// or left edge moves the opposite-anchored origin (y/x) as it grows/shrinks.
+export function resizeRect(rect, dir, dCols, dRows, cols = GRID_COLS) {
+  let { x, y, w, h } = rect;
+  if (dir.includes('e')) w += dCols;
+  if (dir.includes('w')) { x += dCols; w -= dCols; }
+  if (dir.includes('s')) h += dRows;
+  if (dir.includes('n')) { y += dRows; h -= dRows; }
+  // Never let a west/north drag invert the rect past its opposite edge.
+  if (w < 1) { if (dir.includes('w')) x -= 1 - w; w = 1; }
+  if (h < 1) { if (dir.includes('n')) y -= 1 - h; h = 1; }
+  return clampRect({ x, y, w, h }, cols);
+}
+
+// Merge a stored (partial / possibly stale) layout over the defaults: every
+// known widget is present, unknown keys are dropped, each rect is clamped, and
+// `hidden` is coerced to a boolean.
+export function resolveLayout(stored, cols = GRID_COLS) {
+  const src = stored && typeof stored === 'object' ? stored : null;
+  const out = {};
+  for (const id of WIDGET_IDS) {
+    const d = DEFAULT_LAYOUT[id];
+    const s = src ? src[id] : null;
+    const rect = s
+      ? clampRect({ x: s.x ?? d.x, y: s.y ?? d.y, w: s.w ?? d.w, h: s.h ?? d.h }, cols)
+      : { ...d };
+    out[id] = { ...rect, hidden: !!(s && s.hidden) };
+  }
+  return out;
+}
+
+// Rows the canvas must be tall enough to show every VISIBLE widget.
+export function layoutRows(layout) {
+  let rows = 0;
+  for (const id of WIDGET_IDS) {
+    const it = layout[id];
+    if (it && !it.hidden) rows = Math.max(rows, it.y + it.h);
+  }
+  return rows;
+}
+
+// Column width in px for a given container width.
+function colWidth(containerWidth, cols, gap) {
+  return (containerWidth - (cols - 1) * gap) / cols;
+}
+
+// px geometry (absolute placement) for a rect at a given container width.
+export function rectToPx(rect, containerWidth, cols = GRID_COLS, rowH = ROW_H, gap = GRID_GAP) {
+  const colW = colWidth(containerWidth, cols, gap);
+  return {
+    left: rect.x * (colW + gap),
+    top: rect.y * (rowH + gap),
+    width: rect.w * colW + (rect.w - 1) * gap,
+    height: rect.h * rowH + (rect.h - 1) * gap,
+  };
+}
+
+// Convert a px drag delta to whole-cell deltas (snapping).
+export function pxDeltaToCells(dxPx, dyPx, containerWidth, cols = GRID_COLS, rowH = ROW_H, gap = GRID_GAP) {
+  const colW = colWidth(containerWidth, cols, gap);
+  return {
+    dCols: Math.round(dxPx / (colW + gap)),
+    dRows: Math.round(dyPx / (rowH + gap)),
+  };
+}
