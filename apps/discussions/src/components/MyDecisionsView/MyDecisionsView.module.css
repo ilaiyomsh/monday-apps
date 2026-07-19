@@ -393,10 +393,9 @@
    (owner request): scrolling itself still works (wheel/trackpad/drag), only
    the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
    ::-webkit-scrollbar pseudo. */
-/* round168 — reveal the vertical scrollbar only while the pointer is in the
-   rightmost third of the screen (owner request). `.barReveal` is toggled by
-   `useRightEdgeReveal` (pointer tracking). */
-.board.barReveal::-webkit-scrollbar-thumb:vertical {
+/* round169 — the board's vertical scrollbar is visible from the first moment
+   (owner request), overriding the global transparent-until-hover default. */
+.board::-webkit-scrollbar-thumb:vertical {
   background: var(--ui-border-color, #c3c6d4);
   background-clip: padding-box;
 }

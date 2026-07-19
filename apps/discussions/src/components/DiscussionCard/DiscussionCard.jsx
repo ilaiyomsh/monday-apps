@@ -32,7 +32,6 @@ import { fmtTimeLabel, composeLocalDate, localYmd, toDateInput, toTimeInput } fr
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import logger from '@generated/utils/logger.js';
 import { useViewTracking } from '@generated/utils/viewTracking.js';
-import { useRightEdgeReveal } from '@generated/utils/scrollReveal.js';
 import { loadPointItems, addPointItem, mergePointItemIn, prunePointItems } from '@generated/utils/pointItems.js';
 import styles from './DiscussionCard.module.css';
 
@@ -139,9 +138,6 @@ export function DiscussionCard({
   // for environments without ResizeObserver (tests/SSR).
   const titleRowRef = useRef(null);
   const participantsRef = useRef(null);
-  // round168 — reveal the tab scrollbar only while the pointer is in the right
-  // third of the screen.
-  const [bodyScrollRef, barReveal] = useRightEdgeReveal();
   const [hideMeta, setHideMeta] = useState(false);
   // round111 — the header roles/participants row is collapsed by default behind
   // a chevron next to the date/time; reset to closed per selected discussion.
@@ -829,7 +825,7 @@ export function DiscussionCard({
           (hidden) to keep their loaded data + UI state; Tasks/Effectiveness read
           the shared prefetched tasksData, so every switch is instant.
           Every wrapper div gets .tabPane when active so it fades in smoothly. */}
-      <div ref={bodyScrollRef} className={`${styles.body} ${barReveal ? styles.barReveal : ''}`} key={discussion.id}>
+      <div className={styles.body} key={discussion.id}>
         <div className={activeTab === 'previous' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'previous' ? undefined : 'none' }}>
           <PreviousTasksTab discussion={data} onCarryForward={tasksData.mergeTasks} onCarryForwardUndo={tasksData.removeTasks} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} canTask={canTask} canCreateTask={createTask} canEditDiscussion={editDiscussionFields} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
         </div>
