@@ -84,7 +84,11 @@ export function createLifecycleService({ eventsBoard, logger, fetchImpl }) {
       return null;
     }
     const itemId = await eventsBoard.recordEvent(evt);
-    logger.track('lifecycle_event', { app: evt.appSlug, type: evt.eventType, kind: evt.category });
+    // recordEvent never throws — null means the board write failed. Only a
+    // successful write counts as a recorded event (review finding #143-10).
+    if (itemId !== null && itemId !== undefined) {
+      logger.track('lifecycle_event', { app: evt.appSlug, type: evt.eventType, kind: evt.category });
+    }
     return itemId;
   }
 
@@ -121,11 +125,15 @@ export function createLifecycleService({ eventsBoard, logger, fetchImpl }) {
     const slug = String(appSlug ?? '');
     const id = eventId ?? null;
     try {
+      const b = body && typeof body === 'object' ? body : {};
       if (isDuplicate(id)) {
+        // A redelivery means monday did not accept our previous ack — ack
+        // again (recording stays at-most-once) so the redelivery loop ends
+        // (review finding #143-2).
         logger.debug('duplicate_event', TAG, { app: slug, eventId: id });
+        ackBackToUrl(b.back_to_url, { app: slug, eventId: id });
         return { duplicate: true };
       }
-      const b = body && typeof body === 'object' ? body : {};
       const payload = b.payload && typeof b.payload === 'object' ? b.payload : {};
 
       let feature = '';

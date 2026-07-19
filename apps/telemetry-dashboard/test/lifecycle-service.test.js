@@ -284,6 +284,22 @@ describe('privacy — details allowlist and logger hygiene', () => {
       kind: 'Lifecycle',
     });
   });
+
+  it('does NOT track when the board write fails — recordEvent resolves null (finding #143-10)', async () => {
+    const { service, eventsBoard, logger } = makeService();
+    // events-board's contract: never throws, resolves null on failure.
+    eventsBoard.recordEvent.mockResolvedValue(null);
+
+    const result = await service.handleFeatureEvent({
+      appSlug: 'discussions',
+      body: featureBody(),
+      eventId: 'evt-p6',
+    });
+
+    expect(result).toEqual({ duplicate: false, itemId: null });
+    expect(eventsBoard.recordEvent).toHaveBeenCalledTimes(1);
+    expect(logger.track).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -391,8 +407,11 @@ describe('dedup', () => {
     expect(first.duplicate).toBe(false);
     expect(second).toEqual({ duplicate: true });
     expect(eventsBoard.recordEvent).toHaveBeenCalledTimes(1);
-    // The redelivery creates no item and does not re-ack.
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    // The redelivery creates no item but IS re-acked — a redelivery means
+    // monday never accepted the previous ack, so withholding it would loop
+    // the redelivery forever (finding #143-2). Recording stays at-most-once.
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenLastCalledWith(BACK_TO_URL, expect.objectContaining({ method: 'POST' }));
   });
 
   it('dedup spans both handlers (one shared event-id space)', async () => {
