@@ -146,8 +146,11 @@
 .dimSelect + .dimSelect { margin-top: 9px; }
 .dimSelect:hover { background: #e6eaf5; }
 .dimSelect:focus { outline: none; border-color: var(--dash-s1); }
-.customRange { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
-.customRange .dash { color: var(--secondary-text-color, #676879); }
+/* round163 — start (left) → end (right) with an arrow toward the end; wraps
+   instead of clipping when the filter column is narrow. */
+.customRange { display: flex; direction: ltr; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 9px; }
+.crField { flex: 1 1 110px; min-width: 100px; }
+.crArrow { flex: none; color: var(--secondary-text-color, #676879); }
 
 /* ROW 1, left cell — effectiveness (grows to fill) + 4 KPI cubes. */
 .cellEff { display: flex; flex-direction: column; gap: 12px; }
