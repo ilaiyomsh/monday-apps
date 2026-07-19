@@ -353,5 +353,8 @@
     width: 100% !important; height: auto !important;
   }
   .widgetInner, .widgetInner > * { height: auto !important; }
+  /* Charts get an explicit height in flow (ResponsiveContainer needs one). */
   .chartFill { height: 240px; }
+  .donutChart { height: 200px !important; }
+  .donutWrap { min-height: 0; }
 }
