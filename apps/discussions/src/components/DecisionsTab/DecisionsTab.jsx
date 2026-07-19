@@ -381,6 +381,15 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstDecSortDir(col), active: true });
   const clearSort = () => setSort({ col: null, dir: null, active: false });
 
+  // Header title per column key (name/decider/affected/status/date; 'sel' has none).
+  const DEC_TITLE = { name: 'החלטה', decider: 'מחליט', affected: 'מושפעים', status: 'סטאטוס', tracking: 'מעקב החלטה', date: 'תאריך' };
+  // round140 — owner-only column display names (shared per-instance overrides).
+  // round155 — this HOOK must run on EVERY render: it lives ABOVE the
+  // boardMapped/loading early returns below, or the hook count changes when
+  // `loading` flips true→false and React throws #310 (crashed the Decisions tab).
+  const { titles: decTitles, dots: decRenameDots, menu: decRenameMenu } =
+    useColumnRenameMenu('decisions', DEC_TITLE, { canManageSettings, dotsClassName: styles.renameDots });
+
   // The decisions board is mapped MANUALLY in Settings (not wizard-created) —
   // unmapped is an EXPECTED state: render the empty state, fire nothing.
   const boardMapped = !!getBoardId('decisions');
@@ -487,11 +496,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     </>
   );
 
-  // Header title per column key (name/decider/affected/status/date; 'sel' has none).
-  const DEC_TITLE = { name: 'החלטה', decider: 'מחליט', affected: 'מושפעים', status: 'סטאטוס', tracking: 'מעקב החלטה', date: 'תאריך' };
-  // round140 — owner-only column display names (shared per-instance overrides).
-  const { titles: decTitles, dots: decRenameDots, menu: decRenameMenu } =
-    useColumnRenameMenu('decisions', DEC_TITLE, { canManageSettings, dotsClassName: styles.renameDots });
+  // (DEC_TITLE + useColumnRenameMenu moved ABOVE the early returns — round155
+  // hooks-order fix; see the comment there.)
   const decRelStyle = canResize ? { position: 'relative' } : undefined;
   const decHandle = (key) => (canResize && key !== 'sel' ? <ResizeHandle onMouseDown={(e) => startResize(key, e)} /> : null);
   // Movable header cells = every VISIBLE column except the pinned name (+ sel).
