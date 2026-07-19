@@ -377,8 +377,6 @@ export function DiscussionList({
   refreshToken = 0,
 }) {
   const isCalendar = viewMode === 'calendar' && !!calendarAnchor;
-  const activeFilterCount =
-    (typeFilter !== 'all' ? 1 : 0) + (!isCalendar && monthFilter !== 'all' ? 1 : 0);
   const [search, setSearch] = useState('');
   // Default to the current month for fast initial load — fetching only this month's
   // discussions instead of all (up to PAGE_SIZE). "כל החודשים" is still selectable.
@@ -391,7 +389,11 @@ export function DiscussionList({
   // that opens a small popover holding the type (+ month, in list view) selects.
   const [filterOpen, setFilterOpen] = useState(false);
   // Active-filter count for the button badge ('all' === unfiltered; the month
-  // filter only applies in list view, where it is offered).
+  // filter only applies in list view, where it is offered). MUST be declared
+  // AFTER typeFilter/monthFilter — referencing them earlier is a temporal-dead-
+  // zone crash ("Cannot access … before initialization"). round171 fix.
+  const activeFilterCount =
+    (typeFilter !== 'all' ? 1 : 0) + (!isCalendar && monthFilter !== 'all' ? 1 : 0);
   const [debouncedSearch, setDebouncedSearch] = useState('');
   // Right-click context menu (round 33) — {item, x, y} while open. A single
   // instance serves BOTH the list rows and the calendar chips (both live inside
