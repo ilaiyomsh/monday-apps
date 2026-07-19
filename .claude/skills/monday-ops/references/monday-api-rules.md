@@ -89,3 +89,12 @@ paste a token into the conversation. Scope every call to the authorized workspac
 
 - Batch create/update with aliased mutations, ~10–15 per request, to stay under complexity limits:
   `mutation($b:ID!,$n0:String!,$cv0:JSON!,...){ r0:create_item(...){id} r1:create_item(...){id} }`.
+
+## Quirk (2026-07-19, scale-seed run #3): `users(kind: all)` returns unassignable users
+`enabled: true, is_guest: false` users can STILL fail people-column writes with
+`invalidPersonAssignment` — pending invitees (`is_pending: true`) and view-only
+users (`is_view_only: true`) pass the naive filter, and board subscription (P3)
+does not make them assignable. Rules: (1) filter `is_pending`/`is_view_only`
+when building an assignee pool; (2) for bulk seeding, PROBE-validate each
+candidate with one real assignment on a scratch item before writing thousands
+of rows (see seed-scale.py `probe_assignable`).

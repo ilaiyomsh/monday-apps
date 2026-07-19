@@ -83,14 +83,42 @@ def synth_dryrun_state(bp, config):
 
 
 def fetch_real_users(apply):
-    """Live account users (people columns accept only real ids)."""
+    """Live account users (people columns accept only real ids).
+    Pending invitees and view-only users pass the `enabled` filter but FAIL
+    people-column assignment with invalidPersonAssignment (2026-07-19 run #3
+    incident) — filter them out up front."""
     if not apply:
         return [{"id": 1000 + i, "name": f"DRYRUN user {i}"} for i in range(3)]
-    data = gql('query { users(kind: all, limit: 100) { id name enabled is_guest } }', apply=True)
-    users = [u for u in data.get("users", []) if u.get("enabled") and not u.get("is_guest")]
+    data = gql('query { users(kind: all, limit: 100) { id name enabled is_guest is_pending is_view_only } }', apply=True)
+    users = [u for u in data.get("users", [])
+             if u.get("enabled") and not u.get("is_guest")
+             and not u.get("is_pending") and not u.get("is_view_only")]
     if not users:
-        raise SystemExit("SEED-SCALE ERROR: no enabled non-guest users returned — cannot fill people columns.")
+        raise SystemExit("SEED-SCALE ERROR: no assignable users returned — cannot fill people columns.")
     return users
+
+
+def probe_assignable(users, board_id, owner_col_id, apply):
+    """Prove each candidate can actually be assigned to a people column before
+    seeding thousands of items: one probe item, one assignment attempt per
+    user, then the probe is deleted. Users the platform rejects are dropped
+    (metadata filters can miss e.g. dedicated-team quirks)."""
+    d = gql('mutation($b:ID!){create_item(board_id:$b,item_name:"WZ-SCALE probe"){id}}',
+            {"b": board_id}, apply)
+    probe_id = d["create_item"]["id"]
+    ok = []
+    for u in users:
+        try:
+            gql('mutation($b:ID!,$i:ID!,$cv:JSON!){change_multiple_column_values(board_id:$b,item_id:$i,column_values:$cv){id}}',
+                {"b": board_id, "i": probe_id,
+                 "cv": cv({owner_col_id: person(u["id"])})}, apply)
+            ok.append(u)
+        except SystemExit as e:
+            print(f"  dropping unassignable user {u['id']} ({u['name']}): {str(e)[:120]}")
+    gql('mutation($i:ID!){delete_item(item_id:$i){id}}', {"i": probe_id}, apply)
+    if not ok:
+        raise SystemExit("SEED-SCALE ERROR: no user in the account survived the assignability probe.")
+    return ok
 
 
 def add_subscribers(board_ids, user_ids, apply):
@@ -177,6 +205,10 @@ def main():
     add_subscribers([B[k]["id"] for k in ("portfolio", "employees", "allocations", "timeLogs") if k in B],
                     user_ids, apply)
     print(f"subscribers ensured on 4 boards for {len(user_ids)} users")
+
+    # ---- assignability probe: drop users the platform refuses to assign ----
+    users = probe_assignable(users, B["portfolio"]["id"], col("portfolio", "owner"), apply)
+    print(f"assignable users after probe: {len(users)}")
 
     created = {"projects": 0, "employees": 0, "allocations": 0, "timeReports": 0}
 
