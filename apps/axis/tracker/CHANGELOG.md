@@ -33,7 +33,7 @@
 
 ### 🧪 Tests
 
-- **2026-07-17** — v2.1.1: high-scale test round — `aggregateAll` 5,000-event equivalence vs an independent reference (+anchors), granularity conservation, `consolidateBarData` cap, and un-chunked `fetchItemsStatus`/`fetchItemsLinkedIds` id-query characterization (FOLLOW-UPS F13); no runtime changes `04a96e6`
+- **2026-07-17** — high-scale test round (joins the 2.2.0 candidate) — `aggregateAll` 5,000-event equivalence vs an independent reference (+anchors), granularity conservation, `consolidateBarData` cap, and un-chunked `fetchItemsStatus`/`fetchItemsLinkedIds` id-query characterization (FOLLOW-UPS F13); no runtime changes `04a96e6`
 
 ## 2026-06
 
