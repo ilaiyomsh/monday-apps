@@ -53,10 +53,12 @@ Options:
   --help          Show this help
 
 Reads scripts/lifecycle-apps.config.json:
-  { "webhookBaseUrl": "...", "apps": [{ "name", "appId", "appSlug", "features": [{ "featureSlug", "kind" }] }] }
+  { "webhookBaseUrl": "...", "apps": [{ "name", "appId", "appSlug", "features": [{ "featureSlug", "featureId", "kind" }] }] }
 
-webhookBaseUrl must be filled (telemetry-dashboard live URL). Entries with an
-empty featureSlug (or appSlug) are skipped with a warning.
+webhookBaseUrl must be filled (telemetry-dashboard live URL). Each feature's
+entity_identifier is "<appSlug>::<featureSlug>" when both are non-empty,
+otherwise String(featureId) when featureId is present. Entries with neither
+are skipped with a warning.
 
 Token: MONDAY_API_TOKEN env var, else accessToken from ~/.config/mapps/.mappsrc.
 `;
@@ -210,23 +212,27 @@ async function main() {
       console.warn(`\n[${label}] no features configured — skipping (app-level webhooks are registered in the Developer Center, not here)`);
       continue;
     }
-    if (!app.appSlug) {
-      console.warn(`\n[${label}] appSlug is empty — skipping all its features (fill it from the Developer Center)`);
-      continue;
-    }
 
     let registeredAny = false;
     for (const feature of features) {
-      if (!feature.featureSlug) {
-        console.warn(`[${label}] feature with empty featureSlug — skipping (fill it from the Developer Center feature URL slug)`);
-        continue;
-      }
-      if (!EVENTS_BY_KIND[feature.kind]) {
-        console.warn(`[${label}] feature ${feature.featureSlug} has unknown kind "${feature.kind}" — skipping (expected one of: ${Object.keys(EVENTS_BY_KIND).join(', ')})`);
+      // Prefer the slug form when both the app slug and feature slug are
+      // filled in; otherwise fall back to the numeric feature id (still
+      // unique and accepted by the API as an entity_identifier). Skip only
+      // when neither identifier is available.
+      let entityId;
+      if (app.appSlug && feature.featureSlug) {
+        entityId = `${app.appSlug}::${feature.featureSlug}`;
+      } else if (feature.featureId) {
+        entityId = String(feature.featureId);
+      } else {
+        console.warn(`[${label}] feature has neither an appSlug+featureSlug pair nor a featureId — skipping (fill one from the Developer Center)`);
         continue;
       }
 
-      const entityId = `${app.appSlug}::${feature.featureSlug}`;
+      if (!EVENTS_BY_KIND[feature.kind]) {
+        console.warn(`[${label}] feature ${feature.featureSlug || feature.featureId} has unknown kind "${feature.kind}" — skipping (expected one of: ${Object.keys(EVENTS_BY_KIND).join(', ')})`);
+        continue;
+      }
       const mutation = buildRegisterMutation({ entityId, kind: feature.kind, webhookUrl });
 
       if (dryRun) {
@@ -241,7 +247,7 @@ async function main() {
         registeredAny = true;
       } catch (err) {
         console.error(`[${label}] registration failed for ${entityId}: ${err.message}`);
-        failures.push(`${label}/${feature.featureSlug}`);
+        failures.push(`${label}/${feature.featureSlug || feature.featureId}`);
       }
     }
 
