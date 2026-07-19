@@ -3,6 +3,10 @@
 // createItem request shape (JSON.stringify'd column_values + group_id), and
 // api_latency health emission via the injected logger (spy on logger.health).
 // All monday traffic goes through an injected fetchImpl — zero network, zero env.
+//
+// Token resolution (Change #143 continuation — app-identity OAuth): the
+// factory takes `getToken` (async, resolved PER REQUEST) instead of a static
+// `token` — see the "token resolution" describe block below.
 
 import { describe, it, expect, vi } from 'vitest';
 import {
@@ -37,7 +41,7 @@ function makeLogger() {
 function makeApi(body, opts = {}) {
   const { calls, fetchImpl } = fetchReturning(body, opts);
   const logger = makeLogger();
-  const api = createMondayApi({ token: TOKEN, fetchImpl, logger });
+  const api = createMondayApi({ getToken: async () => TOKEN, fetchImpl, logger });
   return { api, calls, logger };
 }
 
@@ -215,7 +219,7 @@ describe('createMondayApi — api_latency health signal', () => {
   it('emits api_latency ok:false on network failure (fetch rejects) wrapped as MondayApiError', async () => {
     const logger = makeLogger();
     const fetchImpl = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
-    const api = createMondayApi({ token: TOKEN, fetchImpl, logger });
+    const api = createMondayApi({ getToken: async () => TOKEN, fetchImpl, logger });
 
     const err = await rejectionOf(api.graphql('query GetBoardGroups { boards { id } }'));
 
@@ -236,5 +240,60 @@ describe('createMondayApi — api_latency health signal', () => {
       'api_latency',
       expect.objectContaining({ op: 'anon', ok: true })
     );
+  });
+});
+
+describe('createMondayApi — getToken resolution (Change #143 continuation)', () => {
+  it('calls getToken and sends its resolved value as the raw Authorization header, PER REQUEST', async () => {
+    const { calls, fetchImpl } = fetchReturning({ data: { boards: [] } });
+    const logger = makeLogger();
+    const tokens = ['tok-first', 'tok-second'];
+    const getToken = vi.fn(async () => tokens.shift());
+    const api = createMondayApi({ getToken, fetchImpl, logger });
+
+    await api.graphql('query GetBoardGroups { boards { id } }');
+    await api.graphql('query GetBoardGroups { boards { id } }');
+
+    expect(getToken).toHaveBeenCalledTimes(2);
+    expect(calls).toHaveLength(2);
+    expect(new Headers(calls[0].init.headers).get('authorization')).toBe('tok-first');
+    expect(new Headers(calls[1].init.headers).get('authorization')).toBe('tok-second');
+  });
+
+  it('never calls fetch and throws MondayApiError("no_write_token") when getToken resolves null', async () => {
+    const fetchImpl = vi.fn();
+    const logger = makeLogger();
+    const api = createMondayApi({ getToken: async () => null, fetchImpl, logger });
+
+    const err = await rejectionOf(api.graphql('query Ping { boards { id } }'));
+
+    expect(err).toBeInstanceOf(MondayApiError);
+    expect(err.message).toBe('no_write_token');
+    expect(err.code).toBe('no_write_token');
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('still emits an api_latency ok:false signal when there is no write token', async () => {
+    const logger = makeLogger();
+    const api = createMondayApi({ getToken: async () => null, fetchImpl: vi.fn(), logger });
+
+    await rejectionOf(api.graphql('query Ping { boards { id } }'));
+
+    expect(logger.health).toHaveBeenCalledWith(
+      'api_latency',
+      expect.objectContaining({ op: 'Ping', ok: false })
+    );
+  });
+
+  it('treats an empty-string token the same as null (no fetch, no_write_token)', async () => {
+    const fetchImpl = vi.fn();
+    const logger = makeLogger();
+    const api = createMondayApi({ getToken: async () => '', fetchImpl, logger });
+
+    const err = await rejectionOf(api.createItem({ boardId: BOARD_ID, itemName: 'x' }));
+
+    expect(err).toBeInstanceOf(MondayApiError);
+    expect(err.message).toBe('no_write_token');
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

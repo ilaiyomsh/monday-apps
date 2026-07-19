@@ -5,11 +5,19 @@
 // callers never see a half-failed payload.
 //
 // Differences from the deadline-confirm original, per the lifecycle spec:
-// - token/url/logger are bound at factory time (DI — nothing here reads env
-//   or imports helpers); graphql(query, variables) carries no token arg.
+// - url/logger are bound at factory time (DI — nothing here reads env or
+//   imports helpers); graphql(query, variables) carries no token arg.
 // - Authorization is the RAW token (no Bearer), API-Version 2026-04.
 // Every funnelled call emits an api_latency health signal (op + ms + ok)
 // via the injected logger so slow/failing monday calls are queryable.
+//
+// Token resolution (Change #143 continuation — app-identity OAuth): the
+// token is NOT bound at factory time. `getToken` is resolved PER REQUEST,
+// because the write credential may change at runtime (the owner authorizes
+// via /oauth/start after the process has already booted) or arrive from the
+// MONDAY_API_TOKEN fallback. A null resolution is a MondayApiError
+// ('no_write_token'), not a crash — events-board's recordEvent already
+// treats any thrown error as a failed write and fails soft (returns null).
 
 export const API_VERSION = '2026-04';
 export const MONDAY_API_URL = 'https://api.monday.com/v2';
@@ -50,9 +58,9 @@ export class MondayApiError extends Error {
 
 /**
  * Create the monday API client for the lifecycle events board.
- * @param {{ token: string, url?: string, fetchImpl?: typeof fetch, logger: object }} opts
+ * @param {{ getToken: () => Promise<string|null>, url?: string, fetchImpl?: typeof fetch, logger: object }} opts
  */
-export function createMondayApi({ token, url = MONDAY_API_URL, fetchImpl, logger }) {
+export function createMondayApi({ getToken, url = MONDAY_API_URL, fetchImpl, logger }) {
   const doFetch = fetchImpl ?? globalThis.fetch;
 
   // Timing wrapper: every funnelled call emits an api_latency health signal
@@ -71,6 +79,14 @@ export function createMondayApi({ token, url = MONDAY_API_URL, fetchImpl, logger
   }
 
   async function runGraphql(query, variables) {
+    // Resolved per request — see the header comment. No token (owner has not
+    // authorized yet, and no MONDAY_API_TOKEN fallback) → fail soft, never
+    // call fetch with a garbage Authorization header.
+    const token = await getToken();
+    if (!token) {
+      throw new MondayApiError('no_write_token', { code: 'no_write_token' });
+    }
+
     let res;
     try {
       res = await doFetch(url, {

@@ -10,6 +10,11 @@
 // (verified against per-app Signing/Client Secret maps — fail-closed 401 when
 // no secrets are configured) and are mounted BEFORE the static/SPA block and
 // deliberately OUTSIDE the requireSession gate.
+//
+// OAuth (Change #143 continuation): GET /oauth/start + /oauth/callback are
+// mounted BEFORE the static block and are also OUTSIDE requireSession — OAuth
+// is its own auth (the code-exchange proves the caller controls the monday
+// account performing the authorization). See routes/oauth.js.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -18,6 +23,7 @@ import express from 'express';
 import { createSessionTokenMiddleware } from './middlewares/session-token.js';
 import { createWebhookAuthMiddleware } from './middlewares/webhook-auth.js';
 import { createWebhooksRouter } from './routes/webhooks.js';
+import { createOauthRouter } from './routes/oauth.js';
 import { createLifecycleService } from './services/lifecycle-service.js';
 import logger from './helpers/logger.js';
 
@@ -33,9 +39,13 @@ const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
  *   Webhook wiring (index.js always provides it). Omitted deps degrade to the
  *   inert-by-default posture: routes still mount, challenge echo works, auth
  *   is fail-closed 401, nothing is recorded.
+ * @param {ReturnType<import('./services/storage.js').createStorageService>} [deps.storage]
+ *   Owner-token storage for the OAuth flow (index.js always provides it).
+ * @param {typeof fetch} [deps.fetchImpl] - injected for tests; the oauth
+ *   router's exchange/identity calls only (defaults to global fetch).
  * @returns {import('express').Express}
  */
-export function createApp({ telemetry, env, lifecycle = {} }) {
+export function createApp({ telemetry, env, lifecycle = {}, storage, fetchImpl }) {
   const app = express();
   app.set('trust proxy', true);
   app.disable('x-powered-by');
@@ -44,6 +54,9 @@ export function createApp({ telemetry, env, lifecycle = {} }) {
   app.get('/health', (_req, res) => {
     res.json({ ok: true, version: env.version ?? 'dev', axiom: telemetry.enabled });
   });
+
+  // --- OAuth app-identity token (own auth — NOT behind requireSession) ---
+  app.use('/oauth', createOauthRouter({ env, storage, logger, fetchImpl }));
 
   // --- Webhooks (own JWT auth — NOT behind requireSession) ---------------
   const lifecycleService =

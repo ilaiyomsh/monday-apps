@@ -47,8 +47,21 @@ export function getEnv() {
     port: Number(process.env.PORT || 8080),
     version: process.env.npm_package_version || '',
 
+    // --- OAuth app-identity token flow (Change #143 continuation) ----------
+    // monday app Client ID for the /oauth/start authorize redirect. The
+    // Client Secret is `clientSecret` above (reused for the token exchange —
+    // it is the same monday app Client Secret used for session-token verify).
+    mondayClientId: process.env.MONDAY_CLIENT_ID || '',
+    // This app's own stable base URL, used to build the oauth2 redirect_uri
+    // (`${baseUrl}/oauth/callback`) — must match the redirect URI registered
+    // in the monday Developer Center OAuth config exactly.
+    baseUrl: process.env.BASE_URL || '',
+
     // --- Lifecycle events → monday board (all inert by default) -----------
-    // monday API token used to WRITE items on the lifecycle events board.
+    // Optional fallback: a personal monday API token used to WRITE items on
+    // the lifecycle events board when the owner has not authorized via
+    // /oauth/start yet (or for local dev). The OAuth-issued token (stored in
+    // SecureStorage) takes priority — see services/storage.js + index.js.
     mondayApiToken: process.env.MONDAY_API_TOKEN || '',
     // Override for tests only — production uses the default endpoint.
     mondayApiUrl: process.env.MONDAY_API_URL || 'https://api.monday.com/v2',

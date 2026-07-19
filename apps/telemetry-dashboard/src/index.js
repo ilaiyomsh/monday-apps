@@ -25,6 +25,8 @@ const { createTelemetryService } = await import('./server/telemetry-service.js')
 const { createMondayApi } = await import('./services/monday-api.js');
 const { createEventsBoardService } = await import('./services/events-board.js');
 const { createLifecycleService } = await import('./services/lifecycle-service.js');
+const { createStorageService } = await import('./services/storage.js');
+const { createSecureStorageBackend } = await import('./storage/secure-storage-backend.js');
 const { getEnv } = await import('./helpers/environment.js');
 
 const env = getEnv();
@@ -49,27 +51,40 @@ const telemetry = createTelemetryService({
   axiomOrgId: env.axiomOrgId,
 });
 
-// --- Lifecycle events → monday board (inert unless configured) -----------
-// No token → no monday client; no board id → no board service. The lifecycle
-// service is ALWAYS built: with eventsBoard null it warns once per route and
+// --- OAuth app-identity token (Change #143 continuation) ------------------
+// The owner authorizes ONCE at /oauth/start (mounted in app.js); the token is
+// stored in SecureStorage (services/storage.js, key owner:oauth_token) with
+// a 60s read cache. getWriteToken resolves it per monday-api call, falling
+// back to the personal MONDAY_API_TOKEN only when no OAuth token exists yet.
+const storageBackend = createSecureStorageBackend();
+const storage = createStorageService({ backend: storageBackend, logger });
+const getWriteToken = async () => (await storage.getOwnerToken()) ?? (env.mondayApiToken || null);
+
+// --- Lifecycle events → monday board (inert unless a board id is set) ----
+// The monday API client resolves its write token PER CALL (getWriteToken
+// above), so the events board is built whenever a board id is configured —
+// even before the owner has authorized, since the token can arrive later via
+// OAuth. Until then, each write attempt fails soft: monday-api throws
+// MondayApiError('no_write_token'), which events-board's recordEvent catches
+// like any other failure (logs, returns null) — it never reaches the webhook
+// path. The lifecycle service is ALWAYS built: with eventsBoard null (no
+// board id at all) it warns 'lifecycle_not_configured' once per route and
 // skips recording, so webhooks still 202 and never error back at monday.
-const mondayApi = env.mondayApiToken
-  ? createMondayApi({ token: env.mondayApiToken, url: env.mondayApiUrl, logger })
+const mondayApi = createMondayApi({ getToken: getWriteToken, url: env.mondayApiUrl, logger });
+const eventsBoard = env.lifecycleBoardId
+  ? createEventsBoardService({
+      mondayApi,
+      boardId: env.lifecycleBoardId,
+      columns: env.lifecycleBoardColumns,
+      logger,
+    })
   : null;
-const eventsBoard =
-  mondayApi && env.lifecycleBoardId
-    ? createEventsBoardService({
-        mondayApi,
-        boardId: env.lifecycleBoardId,
-        columns: env.lifecycleBoardColumns,
-        logger,
-      })
-    : null;
 const lifecycleService = createLifecycleService({ eventsBoard, logger });
 
 const app = createApp({
   telemetry,
   env,
+  storage,
   lifecycle: {
     service: lifecycleService,
     signingSecrets: env.lifecycleSigningSecrets,
