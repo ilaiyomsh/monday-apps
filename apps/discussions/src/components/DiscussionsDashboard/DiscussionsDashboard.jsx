@@ -274,7 +274,6 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
                 ))}
               </div>
             </div>
-            <div className={styles.fFoot}>מציג <b>{model.totalDiscussions} דיונים</b> בטווח הנבחר</div>
           </div>
         );
       case 'effectiveness':
