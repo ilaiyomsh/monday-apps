@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { ArrowLeft } from 'lucide-react';
+import { Avatar } from '@vibe/core';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, Tooltip, LabelList,
   PieChart, Pie,
@@ -7,6 +8,7 @@ import {
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { useDashboardData } from '@generated/hooks/useDashboardData.js';
+import { useUsers } from '@api/hooks/use-users';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { aggregateDashboard } from './dashboardAgg.js';
 import logger from '@generated/utils/logger.js';
@@ -34,10 +36,9 @@ function fmtDate(d) {
   if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
   return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
 }
-// Trim long participant names so they don't collide with the bars (owner note).
-function truncate(s, n = 12) {
-  const str = String(s ?? '');
-  return str.length > n ? `${str.slice(0, n - 1)}…` : str;
+// First-letters fallback for an avatar with no photo (mirrors PersonAvatar).
+function initialsOf(name) {
+  return (name || '?').split(' ').map((n) => n[0]).join('').slice(0, 2);
 }
 
 function ChartTooltip({ active, payload, label, suffix = '' }) {
@@ -50,15 +51,6 @@ function ChartTooltip({ active, payload, label, suffix = '' }) {
   );
 }
 
-// Custom Y-axis tick for the top-participants chart: right-anchored + truncated so
-// long Hebrew names get their own gutter instead of overlapping the bars.
-function ParticipantTick({ x, y, payload }) {
-  return (
-    <text x={x} y={y} dy={4} textAnchor="end" fontSize={11} fill="#676879">
-      {truncate(payload?.value)}
-    </text>
-  );
-}
 
 // Distinct-people options for the three dimension filters, built from the data.
 function peopleOptions(discussions, key) {
@@ -102,6 +94,14 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
     typeValue: typeValue || null,
     participantId: participantId || null,
   }) : null), [data, preset, custom, mode, leadId, typeValue, participantId]);
+
+  // round156 — top-participants widget: resolve each leader's monday photo via
+  // the shared users cache (fetches on demand, re-renders when avatars arrive).
+  const topParticipants = model?.byParticipant || [];
+  const partIds = useMemo(() => topParticipants.map((p) => String(p.id)), [topParticipants]);
+  const { users: partUsers } = useUsers(partIds);
+  const usersById = useMemo(() => new Map(partUsers.map((u) => [String(u.id), u])), [partUsers]);
+  const maxPart = topParticipants.reduce((m, p) => Math.max(m, p.count), 0);
 
   // Toggle a bar/slice open; picking the same one again closes the list.
   const pickDrill = (kind, key) => {
@@ -301,22 +301,26 @@ export function DiscussionsDashboard({ onBackToDiscussions }) {
               <div className={styles.card}>
                 <div className={styles.cardTitle}>משתתפים מובילים בדיונים</div>
                 {model.byParticipant.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
-                  // round155 — force an LTR context: inside the RTL dashboard the
-                  // horizontal bar chart mirrored (names landed ON the bars). LTR
-                  // puts the name gutter on the left, bars growing right, counts at
-                  // the bar ends — no collision. Hebrew names still shape RTL.
-                  <div dir="ltr" style={{ width: '100%' }}>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart layout="vertical" data={model.byParticipant} margin={{ top: 4, right: 30, left: 4, bottom: 4 }}>
-                        <CartesianGrid horizontal={false} stroke="#edf0f6" />
-                        <XAxis type="number" hide domain={[0, 'dataMax']} />
-                        <YAxis type="category" dataKey="name" width={112} tick={<ParticipantTick />} axisLine={false} tickLine={false} interval={0} />
-                        <Tooltip content={<ChartTooltip />} cursor={{ fill: 'rgba(232,123,164,.08)' }} />
-                        <Bar dataKey="count" fill={SERIES[2]} radius={[0, 4, 4, 0]} maxBarSize={22}>
-                          <LabelList dataKey="count" position="right" style={{ fontSize: 11, fill: '#323338', fontWeight: 600 }} />
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                  // round156 — a plain RTL row list (avatar RIGHT of the name, then
+                  // a proportional bar, then the count). Replaces the recharts
+                  // horizontal chart, whose Y-axis names got clipped / collided; the
+                  // name now takes the row's flex space (ellipsis + hover title).
+                  <div className={styles.partList}>
+                    {model.byParticipant.map((p) => {
+                      const u = usersById.get(String(p.id));
+                      const name = u?.name || p.name;
+                      const pct = maxPart ? Math.max(6, Math.round((p.count / maxPart) * 100)) : 0;
+                      return (
+                        <div key={p.id} className={styles.partRow}>
+                          <span className={styles.partAvatar} title={name}>
+                            <Avatar size="small" src={u?.photo_thumb || undefined} text={initialsOf(name)} type={u?.photo_thumb ? 'img' : 'text'} ariaLabel={name} />
+                          </span>
+                          <span className={styles.partName} title={name}>{name}</span>
+                          <span className={styles.partBar}><span className={styles.partBarFill} style={{ width: `${pct}%` }} /></span>
+                          <span className={styles.partCount}>{p.count}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
