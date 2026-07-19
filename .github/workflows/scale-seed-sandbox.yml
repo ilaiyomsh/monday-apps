@@ -58,6 +58,12 @@ jobs:
       - name: Provision WZ-SCALE boards (dry-run plan)
         run: python3 .claude/skills/monday-ops/scripts/provision.py .claude/skills/monday-ops/configs/wz-scale-sandbox.config.json
 
+      # Sandbox hygiene before a fresh build: drop WZ-SCALE leftovers from
+      # previous runs (triple-guarded: sandbox-only, WZ-SCALE prefix, ≤20).
+      - name: Clean previous WZ-SCALE boards
+        if: ${{ inputs.apply }}
+        run: python3 .claude/skills/monday-ops/scripts/cleanup-wz-scale.py --apply
+
       - name: Provision WZ-SCALE boards (apply)
         if: ${{ inputs.apply }}
         run: python3 .claude/skills/monday-ops/scripts/provision.py .claude/skills/monday-ops/configs/wz-scale-sandbox.config.json --apply

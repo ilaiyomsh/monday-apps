@@ -43,9 +43,15 @@ def gql(q, v=None, apply=True):
     One retry with a 60s cooldown on complexity exhaustion."""
     if not apply:
         return {"_dryrun": True}
-    a = [API, q] + ([json.dumps(v, ensure_ascii=False)] if v is not None else []) + [APIV]
+    # The variables slot must ALWAYS be present (empty string when unused) —
+    # otherwise the api-version arg shifts into $2 and mapps-api.sh crashes
+    # trying to json-parse "2026-04" as variables (2026-07-19 CI incident).
+    a = [API, q, (json.dumps(v, ensure_ascii=False) if v is not None else ""), APIV]
     for attempt in (1, 2):
-        out = json.loads(subprocess.run(a, capture_output=True, text=True).stdout)
+        r = subprocess.run(a, capture_output=True, text=True)
+        if r.returncode != 0 or not r.stdout.strip():
+            raise SystemExit(f"mapps-api.sh failed (exit {r.returncode}): {r.stderr.strip()[:400]}")
+        out = json.loads(r.stdout)
         errs = out.get("errors")
         if not errs:
             return out.get("data", {})
