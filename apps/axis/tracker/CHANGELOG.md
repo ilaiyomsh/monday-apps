@@ -29,6 +29,12 @@
   - _Requested:_ Phase 1c בתוכנית v2 — להביא את tracker לפורמט ה-wire של v2 (track/health, err_msg מסונן, kind דומייני) בלי לשבור את מאגר הטסטים הנעול.
   - _Done:_ Added track()/health() to tracker's logger.js (INFO records with domainKind usage/health + alwaysShip, message via the shared encodeDims imported from @axis/app-core so the wire format can't drift). In axiomSink.js: imported scrubMessage from @axis/app-core and now ship error.message ONLY scrubbed, as err_msg (D2); reconciled the envelope kind to the DOMAIN discriminator (error default, init/initSummary to health, explicit domainKind wins) instead of tracker's rendering enum — closing the cross-app schema drift the PR #239 review flagged; let shouldShip bypass the WARN/ERROR policy for alwaysShip records (duplicates still drop first); and anchored firstStackFrame's Firefox @-frame match (no whitespace before @) so an email in error.message can never be mistaken for a frame and leak into stack1. Bumped 2.1.0 to 2.1.1. Verified: tracker suite 976 pass, +5 new tests, and the 10 pre-existing unrelated failures (RTL snapshots, an env flag, integration timeouts) are unchanged — no new failures introduced into the locked suite.
 
+## 2026-07
+
+### 🧪 Tests
+
+- **2026-07-17** — high-scale test round (joins the 2.2.0 candidate) — `aggregateAll` 5,000-event equivalence vs an independent reference (+anchors), granularity conservation, `consolidateBarData` cap, and un-chunked `fetchItemsStatus`/`fetchItemsLinkedIds` id-query characterization (FOLLOW-UPS F13); no runtime changes `04a96e6`
+
 ## 2026-06
 
 ### 🐛 Bug Fixes

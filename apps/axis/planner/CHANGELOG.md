@@ -15,6 +15,12 @@
   - Tests: `src/utils/__tests__/telemetry-v2.test.ts` locks encodeDims / track / health / scrubMessage / shouldShip / mapRecordToEvent + a transport sanitizer/allowlist round-trip. Suite 315 -> 328 green; app typecheck + production build green.
   - **Privacy hardening (follow-up):** `buildRecord` in `Logger.ts` now scrubs any Error-DERIVED `record.message` (an `Error` passed as the message-source, or a stringified non-string first arg — including a cross-realm `Error` that fails `instanceof` and stringifies to `"Error: <msg>"`) with the same `scrubMessage` the sink applies to `err_msg`, so a raw `error.message` can never reach `ev.message`; a developer-supplied string literal (the stable event id) still ships raw. `scrubMessage` was extracted to `src/utils/scrubMessage.ts` (single source of truth, re-exported from `axiomErrorSink.ts`) so `Logger.ts` shares it without a circular import. Added a lock test asserting an Error-derived message ships scrubbed end-to-end (328 -> 329 green). Also fixed the one live call site (`services/apiQueue.ts`) that interpolated `err.message` into a WARN message string — the error now flows as the error arg, so its text ships only scrubbed as `err_msg`, closing the last raw-message path. No version bump.
 
+## 2026-07
+
+### 🧪 Tests
+
+- **2026-07-17** — high-scale test round (joins the 2.2.0 candidate) — `fetchCriticalBundle` scale suite (1,200-allocation cursor drain, reported-hours aggregate 500-group-cap characterization #90, >100-project id chunking) backed by the new `@axis/scale-fixtures` deterministic generators; no runtime changes `04a96e6`
+
 ## 2026-06
 
 ### 🐛 Bug Fixes

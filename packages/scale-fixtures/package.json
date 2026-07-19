@@ -1,0 +1,16 @@
+{
+  "name": "@axis/scale-fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic high-scale test fixtures for the axis apps (30+ users, dozens of projects, thousands of time reports). Test-only — never imported by runtime code.",
+  "type": "module",
+  "main": "src/index.js",
+  "types": "src/index.d.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.2"
+  }
+}

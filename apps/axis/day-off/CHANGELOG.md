@@ -18,6 +18,12 @@
   - _Requested:_ להנחית את Stage 1 של צנרת ה-Axiom על develop (Phase 0 בתוכנית v2) — מתקן באג פרטיות חי ומהווה תנאי מקדים לכל שאר השלבים.
   - _Done:_ Landed the stranded Stage 1 Axiom work onto a fresh feature branch off origin/develop via cherry-pick (not rebase, to avoid replaying 502 commits). Day-off's main.tsx now attaches the shared hardened Axiom sink before render, retiring the naive per-record shipAxiom that had no batching, sanitizer, or circuit breaker; app-core's logger drops that path entirely, closing the latent privacy leak that would activate the moment a token was baked in. Resolved conflicts in main.tsx (kept both the version-label boot line and the sink attach), settings.json plus the error-guard hook (kept develop's richer versions), the four deploy workflows (merged both env families), and CLAUDE.md (appended the Error handling and observability section). Folded in the account-id gap Stage 1 omitted: MondayProvider now passes accountId and runs a one-time me account id fallback (gated on an active sink) so every row carries acc. Bumped day-off 2.1.0 to 2.1.1. Verified against CI: type-check, lint and build all green across the workspace, app-core 58/58 tests pass, corridor-guard passes with day-off as the only touched app. Shipping stays inert until the AXIOM_INGEST_TOKEN GitHub secret is set.
 
+## 2026-07
+
+### 🧪 Tests
+
+- **2026-07-17** — high-scale test round (joins the 2.2.0 candidate) — `computeBalance`/`pendingDaysFor` 30×4×1000 reference sweep with cross-year boundary pins, and `listEntries` multi-page drain + window rules + client overlap backstop; no runtime changes `04a96e6`
+
 ## 2026-06
 
 ### 🐛 Bug Fixes

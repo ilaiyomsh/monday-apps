@@ -106,6 +106,7 @@
     ]
   },
   "devDependencies": {
+    "@axis/scale-fixtures": "workspace:*",
     "@mondaycom/apps-cli": "^4.10.5",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
