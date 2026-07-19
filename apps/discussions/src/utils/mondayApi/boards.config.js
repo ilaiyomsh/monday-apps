@@ -633,6 +633,10 @@ export const COLUMN_SCHEMA = {
     deciderID: { type: 'people', title: 'מחליט' },
     affectedID: { type: 'people', title: 'מושפעים' },
     decisionStatusID: { type: 'status', title: 'סטאטוס החלטה' },
+    // round153 — a SECOND status column on decisions: "מעקב החלטה" (decision
+    // tracking). Labels + default come from the mapped column; a new decision
+    // defaults to "התקבלה" (see useDecisions). Mapped in Settings like any column.
+    decisionTrackingID: { type: 'status', title: 'מעקב החלטה' },
     decisionPriorityID: { type: 'status', title: 'עדיפות' },
     decisionDateID: { type: 'date', title: 'תאריך' },
     discussionLinkID: { type: 'board_relation', title: 'דיון' },

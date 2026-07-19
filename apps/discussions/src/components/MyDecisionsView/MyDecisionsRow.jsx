@@ -135,9 +135,11 @@ export function MyDecisionsRow({
   showDecider = true,
   showAffected = true,
   showPriority = true,
+  showTracking = true,
   showDate = true,
   showDiscussion = true,
   onStatusChange,
+  onTrackingChange,
   onPriorityChange,
   onDateChange,
   // People edit handlers (round 74): when provided, the decider / affected
@@ -156,6 +158,7 @@ export function MyDecisionsRow({
   searchTerm = '',
 }) {
   const statusOpts = useStatusOptions('decisions', 'decisionStatusID');
+  const trackingOpts = useStatusOptions('decisions', 'decisionTrackingID');
   const priorityOpts = useStatusOptions('decisions', 'decisionPriorityID');
 
   // Inline rename (hover pencil) — the pencil shows only when onRenameDecision is
@@ -300,6 +303,19 @@ export function MyDecisionsRow({
         onChange={onStatusChange}
       />
     ),
+    // מעקב החלטה — second status column (round153), same inline editor.
+    tracking: showTracking ? (
+      <StatusEditCell
+        key="tracking"
+        decisionId={decision.id}
+        value={decision.decisionTrackingID}
+        options={trackingOpts.options}
+        labelById={trackingOpts.labelById}
+        colorById={trackingOpts.colorById}
+        emptyLabel="ללא מעקב"
+        onChange={onTrackingChange}
+      />
+    ) : null,
     // date — inline date picker when permitted, read-only text otherwise
     // (mirrors MyTasksRow's deadline cell: full-cell picker + hover clear-X).
     date: showDate ? (
