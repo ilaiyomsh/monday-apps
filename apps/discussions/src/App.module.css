@@ -36,6 +36,15 @@
   box-shadow: var(--frame-shadow);
   overflow: hidden;
 }
+/* round166b — anchor the desktop divider handle (position:absolute, below) to the
+   discussions frame. MUST live on `.appFrame` (unique to the App shell), NOT on
+   the shared, non-scoped `.root` class: putting `position: relative` on `.root`
+   leaked onto every component's root (DiscussionCard, tabs, …) and disrupted the
+   sticky discussion-card header. `.appFrame` is on the same App root div, so the
+   divider still anchors correctly. */
+.appFrame {
+  position: relative;
+}
 /* Real monday mobile app: tighten the frame so it doesn't eat scarce space. */
 :global(.mobile-app) .appShell {
   --frame-pad: 6px;
@@ -84,12 +93,6 @@
   width: 100%;
   display: flex;
   overflow: hidden;
-  /* round165 — anchor the desktop divider handle (below) to THIS box rather than
-     the viewport. round164's frame padding shifted the card inward, but the
-     handle was `position: fixed` (viewport-relative) so its resize line +
-     collapse chevron drifted ~14px off the real sidebar edge and fouled the
-     list's right-edge scrollbar. Absolute-in-relative tracks the padded frame. */
-  position: relative;
 }
 
 /* While dragging the divider, suppress text selection and keep the resize
