@@ -39,19 +39,23 @@ a,
   touch-action: manipulation;
 }
 
-/* round165 — unified VERTICAL scrollbar, app-wide (owner request): a thin,
-   arrow-less, monday-grey bar that stays transparent until the pointer is inside
-   the scrolling element, then fades in. Modelled on the discussions-list bar and
-   applied globally so every scroll area matches. Scoped to `:vertical` so table
-   horizontal scrollbars keep their default look.
-   Chromium gotcha (verified round125): setting the STANDARD `scrollbar-width` /
+/* round165/round166 — unified scrollbar, app-wide (owner request): a thin,
+   arrow-less, monday-grey bar. The VERTICAL bar stays transparent until the
+   pointer is inside the scrolling element, then fades in; the HORIZONTAL table
+   bar stays visible (discoverability). Modelled on the discussions-list bar.
+   round166 fix: the base `::-webkit-scrollbar` selector MUST be claimed (not just
+   `:vertical`) — that is what puts WebKit/Chromium into CUSTOM-scrollbar mode and
+   DROPS the native stepper arrows. Scoping only `:vertical` (round165) left real
+   Chrome in native mode, so the arrows survived and the bar showed permanently.
+   Chromium gotcha (round125): setting the STANDARD `scrollbar-width` /
    `scrollbar-color` on an element DISABLES all its ::-webkit-scrollbar rules — so
    Chromium gets the pseudo-elements ONLY, and the standard props are scoped to
    engines WITHOUT ::-webkit-scrollbar (Firefox) via @supports. */
-*::-webkit-scrollbar:vertical {
+*::-webkit-scrollbar {
   width: 10px;
+  height: 10px;
 }
-/* No stepper arrows at the ends. */
+/* No stepper arrows at either end. */
 *::-webkit-scrollbar-button {
   display: none;
   height: 0;
@@ -60,25 +64,29 @@ a,
 *::-webkit-scrollbar-track {
   background: transparent;
 }
-*::-webkit-scrollbar-thumb:vertical {
-  background: transparent;
+*::-webkit-scrollbar-thumb {
   border-radius: 6px;
   /* A 2px transparent ring (painted via padding-box) keeps the thumb off the
      very edge so it reads as a slim inset pill. */
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-/* Reveal while the pointer is anywhere inside the scrolling element (hover
-   bubbles to ancestors, so a scroll container that contains the pointer matches),
-   and keep it painted — darker — while over/dragging the thumb itself. */
+/* Vertical bar: transparent until the pointer is inside the scroll container
+   (hover bubbles to ancestors, so a container that contains the pointer matches). */
+*::-webkit-scrollbar-thumb:vertical {
+  background: transparent;
+}
 *:hover::-webkit-scrollbar-thumb:vertical {
   background: var(--ui-border-color, #c3c6d4);
-  background-clip: padding-box;
 }
-*::-webkit-scrollbar-thumb:vertical:hover,
-*::-webkit-scrollbar-thumb:vertical:active {
+/* Horizontal table bar: stays visible so table scroll is discoverable. */
+*::-webkit-scrollbar-thumb:horizontal {
+  background: var(--ui-border-color, #c3c6d4);
+}
+/* Darker under the pointer / while dragging (both axes). */
+*::-webkit-scrollbar-thumb:hover,
+*::-webkit-scrollbar-thumb:active {
   background: #a8adbd;
-  background-clip: padding-box;
 }
 @supports not selector(::-webkit-scrollbar) {
   /* Firefox: thin bar, no buttons by default; transparent until hover. */

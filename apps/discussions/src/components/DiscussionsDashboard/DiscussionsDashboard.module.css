@@ -276,7 +276,18 @@
 /* =========================================================================
    round160 — owner-editable free-form canvas (drag / resize / hide widgets).
    ========================================================================= */
-.centerMsg { display: flex; align-items: center; justify-content: center; min-height: 320px; }
+/* round166 — the loading splash / error message fills the scroll area with a
+   solid white backdrop (like My Tasks), instead of letting the dashboard's grey
+   `.root` show around the animation. Negative margins bleed over `.scroll`'s
+   side/bottom padding so the white reaches the frame edges. */
+.centerMsg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  background: var(--primary-background-color, #fff);
+  margin: 0 -16px -24px;
+}
 
 /* Editor toolbar in the header (LTR row → margin-inline-start:auto pushes it to
    the far side). */

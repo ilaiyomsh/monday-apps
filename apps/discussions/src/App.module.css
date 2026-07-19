@@ -154,13 +154,16 @@
 :global(.is-desktop) .dividerHandle {
   position: absolute;
   top: 0;
-  /* Centered ON the divider line. The toggle is a plain always-clickable
-     button (a fixed element on top of the sidebar), so the whole circle works
-     even where it straddles the column edge. */
+  /* round166 — the grab zone sits on the CARD side of the seam, not straddling
+     it. Straddling (translateX(-50%), 28px) put the handle's left half over the
+     list's right-edge scrollbar and stole its pointer, so the bar couldn't be
+     clicked (owner: "duplication between resizing and scrolling"). Anchoring the
+     handle's inline-start AT the seam and extending into the card frees the
+     scrollbar; the visible resize line (::before) is pinned back to the seam. */
   inset-inline-start: var(--sidebar-w, 320px);
-  transform: translateX(-50%);
+  transform: translateX(0);
   height: 100%;
-  width: 28px;
+  width: 16px;
   z-index: 1000;
   display: block;
 }
@@ -173,8 +176,9 @@
   content: '';
   position: absolute;
   top: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  /* Pinned to the handle's inline-start = the list/card seam (the handle now
+     extends into the card from the seam, so the line stays on the true edge). */
+  inset-inline-start: 0;
   height: 100%;
   width: 2px;
   background: var(--ui-border-color, #d0d4e4);
