@@ -44,7 +44,7 @@ import styles from './DecisionsTab.module.css';
 // decision). `name` (החלטה) is the pinned/frozen leading column; the rest
 // resize AND reorder (owner drag) under the 'decisions' tableId (Round 7). A
 // leading 'sel' checkbox column is prepended at the call site when selectable.
-const DECISION_COLUMN_KEYS = ['name', 'decider', 'affected', 'status', 'date'];
+const DECISION_COLUMN_KEYS = ['name', 'decider', 'affected', 'status', 'tracking', 'date'];
 
 
 // Group-by options for decisions — סטאטוס + מחליט (person). Mirrors the Tasks /
@@ -110,6 +110,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     loading,
     updateDecisionName,
     updateDecisionStatus,
+    updateDecisionTracking,
     updateDecisionDate,
     updateDecisionAffected,
     updateDecisionDecider,
@@ -122,6 +123,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   // useStatusOptions never fires when the board/column is unmapped. (עדיפות was
   // removed from the table, so decisionPriorityID is no longer read here.)
   const statusOpts = useStatusOptions('decisions', 'decisionStatusID');
+  // round153 — second decisions status column "מעקב החלטה".
+  const trackingOpts = useStatusOptions('decisions', 'decisionTrackingID');
 
   // ---- Multi-select (Round 7) — a leading 'sel' checkbox column + a floating
   // bulk-action bar. Selection is offered when the user can act on at least one
@@ -159,6 +162,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     { key: 'decider', label: 'מחליט', icon: 'person' },
     { key: 'affected', label: 'מושפעים', icon: 'person' },
     { key: 'status', label: 'סטאטוס', icon: 'status' },
+    { key: 'tracking', label: 'מעקב החלטה', icon: 'status' },
     { key: 'date', label: 'תאריך', icon: 'date' },
   ];
   const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
@@ -357,6 +361,9 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   const applyDecisionStatus = async (id, status) => {
     for (const t of resolveDecisionTargets(id, 'editDecisionStatus')) await updateDecisionStatus(t, status);
   };
+  const applyDecisionTracking = async (id, tracking) => {
+    for (const t of resolveDecisionTargets(id, 'editDecisionStatus')) await updateDecisionTracking(t, tracking);
+  };
   const applyDecisionDate = async (id, date) => {
     for (const t of resolveDecisionTargets(id, 'editDecisionDate')) await updateDecisionDate(t, date);
   };
@@ -373,6 +380,15 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   // Sort handlers (session-only until an owner hits Save, like the other builders).
   const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstDecSortDir(col), active: true });
   const clearSort = () => setSort({ col: null, dir: null, active: false });
+
+  // Header title per column key (name/decider/affected/status/date; 'sel' has none).
+  const DEC_TITLE = { name: 'החלטה', decider: 'מחליט', affected: 'מושפעים', status: 'סטאטוס', tracking: 'מעקב החלטה', date: 'תאריך' };
+  // round140 — owner-only column display names (shared per-instance overrides).
+  // round155 — this HOOK must run on EVERY render: it lives ABOVE the
+  // boardMapped/loading early returns below, or the hook count changes when
+  // `loading` flips true→false and React throws #310 (crashed the Decisions tab).
+  const { titles: decTitles, dots: decRenameDots, menu: decRenameMenu } =
+    useColumnRenameMenu('decisions', DEC_TITLE, { canManageSettings, dotsClassName: styles.renameDots });
 
   // The decisions board is mapped MANUALLY in Settings (not wizard-created) —
   // unmapped is an EXPECTED state: render the empty state, fire nothing.
@@ -480,11 +496,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
     </>
   );
 
-  // Header title per column key (name/decider/affected/status/date; 'sel' has none).
-  const DEC_TITLE = { name: 'החלטה', decider: 'מחליט', affected: 'מושפעים', status: 'סטאטוס', date: 'תאריך' };
-  // round140 — owner-only column display names (shared per-instance overrides).
-  const { titles: decTitles, dots: decRenameDots, menu: decRenameMenu } =
-    useColumnRenameMenu('decisions', DEC_TITLE, { canManageSettings, dotsClassName: styles.renameDots });
+  // (DEC_TITLE + useColumnRenameMenu moved ABOVE the early returns — round155
+  // hooks-order fix; see the comment there.)
   const decRelStyle = canResize ? { position: 'relative' } : undefined;
   const decHandle = (key) => (canResize && key !== 'sel' ? <ResizeHandle onMouseDown={(e) => startResize(key, e)} /> : null);
   // Movable header cells = every VISIBLE column except the pinned name (+ sel).
@@ -555,9 +568,11 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         selectedIds={selectedIds}
         onToggleSelect={toggleSelect}
         statusOpts={statusOpts}
+        trackingOpts={trackingOpts}
         canDecision={canDecision}
         updateDecisionName={updateDecisionName}
         updateDecisionStatus={applyDecisionStatus}
+        updateDecisionTracking={applyDecisionTracking}
         updateDecisionDate={applyDecisionDate}
         updateDecisionDecider={applyDecisionDecider}
         updateDecisionAffected={applyDecisionAffected}

@@ -411,6 +411,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     'deciderID', // 'מחליט' — people column; decision-tier decider role
     'affectedID', // 'מושפעים' — people column; decision-tier "affected" role
     'decisionStatusID', // 'סטאטוס החלטה' — status column (labels come from the column)
+    'decisionTrackingID', // 'מעקב החלטה' — round153 second status column; labels from the column, default "התקבלה"
     // 'decisionPriorityID' ('עדיפות') intentionally NOT listed — the decisions
     // priority column was dropped from the UI (DecisionsTab hid it visually in an
     // earlier round), so it is excluded from the MAPPING screen too. The alias

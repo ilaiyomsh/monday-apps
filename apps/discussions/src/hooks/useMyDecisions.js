@@ -300,6 +300,11 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     (decisionId, priority) => updateStatusColumn('decisionPriorityID')(decisionId, priority),
     [updateStatusColumn]
   );
+  // round153 — "מעקב החלטה" second status column, same optimistic path.
+  const updateDecisionTracking = useCallback(
+    (decisionId, tracking) => updateStatusColumn('decisionTrackingID')(decisionId, tracking),
+    [updateStatusColumn]
+  );
 
   // Optimistic inline edit of a PEOPLE column (מחליט / מושפעים) — revert on
   // error. `people` is the PersonPicker selection ([{id, name, ...}]); the
@@ -419,6 +424,7 @@ export function useMyDecisions(subTab = 'decider', { currentUser, context, searc
     configured,
     loadMore,
     updateDecisionStatus,
+    updateDecisionTracking,
     updateDecisionPriority,
     updateDecisionDate,
     updateDecisionDecider,

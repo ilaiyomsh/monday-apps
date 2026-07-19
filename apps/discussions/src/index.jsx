@@ -16,10 +16,19 @@ import { SettingsModal } from './components/SettingsModal';
 import { SetupWizard } from './components/SetupWizard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { setupGlobalErrorHandlers } from './utils/globalErrorHandler';
+import { attachAxiomSink } from './utils/axiomErrorSink';
 import { getVersionLabel } from './utils/versionLabel.js';
 
 // Layer 5: window.onerror / unhandledrejection -> logger, BEFORE React mounts.
 setupGlobalErrorHandlers();
+
+// Axiom v2 telemetry sink — register on the same logger.addSink fan-out that
+// useUiErrorSink uses, BEFORE createRoot so the ring-buffer replay ships any
+// import-time ERROR/WARN records. Idempotent (globalThis guard) so StrictMode's
+// double-invoke never double-registers; inert unless PROD + VITE_AXIOM_* baked in.
+// log-once (correlationId) already withholds duplicates from every sink, so an
+// error shown by the UI sink is never double-shipped here.
+attachAxiomSink();
 
 console.info('[discussions] ' + getVersionLabel());
 
