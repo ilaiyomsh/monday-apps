@@ -12,6 +12,11 @@ import styles from './PersonalShell.module.css';
 // flush-LEFT horizontal switcher (owner request): the three modes as a segmented
 // pill, then "חזרה לדיונים" folded in as a fourth segment (same style, left arrow).
 // Order right→left: דשבורד · ההחלטות שלי · המשימות שלי · חזרה לדיונים ←.
+//
+// round179 — separation redesign (owner request): the switcher now floats on the
+// grey backdrop (no card frame) and the active view sits in its own white card
+// below (see PersonalShell.module.css). The JSX structure is unchanged — only the
+// styling of .header (transparent) and .body (white card) moved.
 const MODES = [
   { id: 'dashboard', label: 'דשבורד' },
   { id: 'myDecisions', label: 'ההחלטות שלי' },

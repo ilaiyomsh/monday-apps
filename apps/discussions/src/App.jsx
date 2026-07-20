@@ -841,7 +841,7 @@ export default function App() {
   if (effectiveView === 'myTasks' || effectiveView === 'myDecisions' || effectiveView === 'dashboard') {
     return (
       <div className={`${styles.appShell} ${layoutClass}`}>
-        <div className={styles.appShellBody} dir="rtl">
+        <div className={styles.appShellPersonal} dir="rtl">
           <PersonalShell activeMode={effectiveView} onSelectMode={handleAppViewChange} onBack={backToDiscussions}>
             {effectiveView === 'myTasks' && (
               <MyTasksView embedded canManageSettings={canManageSettings} onNotify={notify} />
