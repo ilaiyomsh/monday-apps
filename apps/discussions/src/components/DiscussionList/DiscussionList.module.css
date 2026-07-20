@@ -17,7 +17,13 @@
 }
 
 .headerInner {
-  padding: 10px 14px;
+  /* round190 — align the icon row with the discussion title on the right (the
+     DiscussionCard header starts its 36px title 16px below the card top) and make
+     the three white gaps UNIFORM at 16px: card-top→icon-row (this top padding),
+     icon-row→separator (this bottom padding), and separator→first-discussion
+     (.list padding-top). The icon controls are 36px tall = the title's min-height,
+     so both rows sit at the same height. */
+  padding: 16px 14px;
 }
 
 /* round176 — the top card is ONE icon-only row (owner request). Actions cluster
@@ -441,7 +447,9 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--spacing-xs, 4px);
+  /* round190 — mirror .list's 16px top padding so the first row doesn't jump down
+     when the skeleton is swapped for real content. */
+  padding: 16px 4px 4px;
 }
 
 /* Plain, empty initial-load placeholder for the LEFT list (round 46). The list
@@ -463,7 +471,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px;
+  /* round190 — top padding 16px so the gap from the separator line to the topmost
+     discussion matches the two header gaps above it (uniform 16px). Sides/bottom
+     stay 8px. */
+  padding: 16px 8px 8px;
 }
 
 /* Row wrapper — full width, anchors the absolutely-positioned kebab over the card. */
