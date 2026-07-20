@@ -170,7 +170,9 @@
   overflow: auto;
   direction: ltr;
   margin-inline-start: var(--content-gutter-start, 52px); /* round114 — shared white gutter */
-  margin-inline-end: 0;
+  /* round184 — symmetric right inset (owner request): row separators stop a bit
+     before the right edge instead of bleeding to it, matching the other tables. */
+  margin-inline-end: var(--section-rule-inset-wide, 24px);
 }
 /* Shared horizontal extent: as wide as the widest group table, never narrower
    than the viewport, so all groups scroll in unison. */

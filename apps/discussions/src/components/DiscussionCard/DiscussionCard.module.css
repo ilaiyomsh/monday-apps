@@ -692,6 +692,12 @@
   width: 100%;
   max-width: 100%;
   margin-inline: 0;
+  /* round184 — the board's row separators STOP at the same right inset as the
+     header rule (.header::after inset-inline-end: 24px), instead of bleeding to
+     the very edge — so the top line under the tabs and every table row line end at
+     the exact same point (owner request). Left inset stays each tab's own 52px
+     gutter; box-sizing:border-box keeps this inside the 100% width. */
+  padding-inline-end: var(--section-rule-inset-wide, 24px);
 }
 
 /* round169 — the tab content's vertical scrollbar is visible from the first
