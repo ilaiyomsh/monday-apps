@@ -111,10 +111,12 @@
      scrollport minus the scroller's own padding, so with padding the frozen
      cells rested 28px in and the scrolled columns peeked out in that gutter.
      With margin the scrollport itself starts 28px in: scrolled content clips
-     there and the frozen cells (left:0) pin exactly at the inset, gutter clean.
-     NO right inset so the row separators run to the right edge of the view. */
+     there and the frozen cells (left:0) pin exactly at the inset, gutter clean. */
   margin-inline-start: var(--content-gutter-start, 52px); /* round114 — shared white gutter */
-  margin-inline-end: 0;
+  /* round184 — a symmetric right inset (owner request) so the row separators STOP
+     a bit before the right edge instead of bleeding to it, matching the discussion
+     tables' right rule inset. */
+  margin-inline-end: var(--section-rule-inset-wide, 24px);
 }
 /* Establishes the shared horizontal extent: as wide as the widest group table
    (max-content), but never narrower than the viewport (min-width:100%) so the
