@@ -136,6 +136,24 @@ describe('buildDiscussionModel', () => {
     expect(model.tasks).toEqual([]);
   });
 
+  it('shapes decisions into plain strings — decider names, date, status label (round192)', () => {
+    const model = buildDiscussionModel({
+      discussion: {},
+      decisions: [
+        { name: 'החלטה א', decider: [{ id: '1', name: 'דנה' }, { id: '2', name: 'יוסי' }], date: new Date('2026-07-03T00:00:00Z'), status: 'אושר' },
+        { name: 'החלטה ב', decider: [], date: null, status: '' },
+      ],
+    });
+    expect(model.decisions).toEqual([
+      { name: 'החלטה א', deciderText: 'דנה, יוסי', dateText: expect.any(String), status: 'אושר' },
+      { name: 'החלטה ב', deciderText: '', dateText: '', status: '' },
+    ]);
+  });
+
+  it('defaults decisions to an empty array when none are given (round192)', () => {
+    expect(buildDiscussionModel({ discussion: {} }).decisions).toEqual([]);
+  });
+
   it('orders tasks by responsible, grouping each person together, empty-assignee last (round191)', () => {
     const model = buildDiscussionModel({
       discussion: {},
@@ -240,6 +258,19 @@ describe('data-driven template (buildExportDoc)', () => {
     expect(xml).toContain('אחראי');   // assignee header kept
     expect(xml).toContain('סטטוס');    // status header kept
     expect(xml).not.toContain('מדיון קודם'); // the removed column header
+  });
+
+  it('renders a decisions table with decider, date and status (round192)', async () => {
+    const model = buildDiscussionModel({
+      discussion: { name: 'ד' },
+      decisions: [{ name: 'החלטה חשובה', decider: [{ id: '1', name: 'דנה' }], date: new Date('2026-07-03T00:00:00Z'), status: 'אושר' }],
+    });
+    const template = { sections: [{ key: 'decisions', enabled: true, label: 'החלטות' }] };
+    const xml = await xmlOf(model, template);
+    expect(xml).toContain('מחליט');       // decider column header
+    expect(xml).toContain('החלטה חשובה'); // the decision text
+    expect(xml).toContain('דנה');         // decider name
+    expect(xml).toContain('אושר');        // status label
   });
 });
 

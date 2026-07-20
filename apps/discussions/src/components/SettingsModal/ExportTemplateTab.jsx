@@ -86,6 +86,8 @@ const SECTION_NAMES = {
   topics: 'נושאים לדיון',
   summary: 'סיכום',
   tasks: 'משימות',
+  // round192 — decisions section (owner request).
+  decisions: 'החלטות',
   // round191 — renamed from 'מידע כללי' to 'פתיחה' (owner request). Name comes
   // from this map (not the stored template), so the rename applies immediately to
   // every instance, including ones with a saved template.
