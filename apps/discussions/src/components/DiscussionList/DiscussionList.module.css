@@ -28,32 +28,34 @@
   padding-bottom: var(--spacing-medium, 12px);
 }
 
-/* round172 — uniform-height control card. A 2-col grid: col1 holds the personal
-   button (row1) + the search bar (row2), so they share ONE width; col2 holds the
-   icon cluster + "חדש" (row1) and the "סינון" button (row2), hugging col1. Every
-   control is `--ctl-h` tall. dir=ltr → DOM order == visual left→right. */
+/* round173 — symmetric, full-width control card. TWO EQUAL halves (1fr 1fr):
+   col1 (left) holds the personal button (row1) + the search bar (row2); col2
+   (right) holds the icon cluster + "דיון חדש" (row1) and the "סינון" button
+   (row2). Every element fills its half, so personal-width == search-width ==
+   action-cluster-width == filter-width — the whole row is full and mirror-
+   balanced. Every control is `--ctl-h` tall. dir=ltr → col1 is on the LEFT. */
 .actionGrid {
   --ctl-h: 34px;
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto;
   direction: ltr;
   align-items: center;
-  gap: 8px;
+  gap: 8px 10px;
 }
 
-/* "האזור האישי" — sized to its content (avatar + label + chevron), NOT stretched.
-   Its own dir=rtl orders avatar(right) → label → chevron(left). */
+/* "האזור האישי" — fills col1 (row1). Its own dir=rtl orders avatar(right) →
+   label → chevron(far left, pushed by the auto inline-start margin). */
 .personalBtn {
   grid-column: 1;
-  justify-self: start;
+  grid-row: 1;
   direction: rtl;
-  width: max-content;
-  max-width: 100%;
+  width: 100%;
   display: inline-flex;
   align-items: center;
   gap: 7px;
   height: var(--ctl-h);
-  padding: 0 10px;
+  padding: 0 12px;
   border: 1px solid var(--ui-border-color, #d0d4e4);
   border-radius: 8px;
   background: var(--primary-background-color, #fff);
@@ -65,17 +67,21 @@
 }
 .personalBtn:hover { background: var(--primary-background-hover-color, #f5f6f8); }
 .personalLabel { white-space: nowrap; }
-.personalChevron { flex: none; color: var(--secondary-text-color, #676879); }
+.personalChevron { flex: none; margin-inline-start: auto; color: var(--secondary-text-color, #676879); }
 /* Keep the user avatar compact so the button stays --ctl-h tall. */
 .personalAvatar { flex: none; display: inline-flex; align-items: center; }
 .personalAvatar :global(.MuiAvatar-root),
 .personalAvatar :global([class*="avatar"]) { width: 22px; height: 22px; font-size: 10px; }
 
-/* col2 row1 — icon cluster + "חדש", hugging the col1 boundary. */
+/* col2 row1 — "דיון חדש" (rightmost, flexes to fill) + settings + calendar,
+   filling the whole half. dir=rtl → DOM order newBtn→settings→calendar renders
+   newBtn at the RIGHT edge (top-rightmost button, owner request). */
 .actionIcons {
   grid-column: 2;
-  justify-self: start;
-  display: inline-flex;
+  grid-row: 1;
+  direction: rtl;
+  width: 100%;
+  display: flex;
   align-items: center;
   gap: 8px;
 }
@@ -97,9 +103,17 @@
   background: var(--primary-background-hover-color, #f5f6f8);
   color: var(--primary-text-color, #323338);
 }
+/* "דיון חדש" — the flexible member of the cluster: it grows to fill whatever the
+   two fixed icon buttons leave, so the cluster spans the full half. */
 .newBtn {
+  flex: 1;
+  min-width: 0;
   height: var(--ctl-h);
   padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   border: none;
   border-radius: 8px;
   background: var(--primary-color, #0073ea);
@@ -107,6 +121,7 @@
   font-family: var(--font-family);
   font-size: 13.5px;
   font-weight: 700;
+  white-space: nowrap;
   cursor: pointer;
 }
 .newBtn:hover { background: var(--primary-hover-color, #0060b9); }
@@ -114,20 +129,25 @@
 /* col1 row2 — search bar; grid-stretches to col1 (= personal button width). */
 .actionGrid .searchWrap {
   grid-column: 1;
+  grid-row: 2;
   width: 100%;
   min-width: 0;
   height: var(--ctl-h);
 }
-/* col2 row2 — the "סינון" button. */
+/* col2 row2 — the "סינון" button, filling the half so row2 mirrors row1. */
 .filterAnchor {
   grid-column: 2;
-  justify-self: start;
+  grid-row: 2;
+  direction: rtl;
+  width: 100%;
   position: relative;
 }
 .filterBtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  width: 100%;
   height: var(--ctl-h, 34px);
   padding: 0 14px;
   border: 1px solid var(--ui-border-color, #d0d4e4);

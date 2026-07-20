@@ -7,8 +7,7 @@
   min-height: 0;
   width: 100%;
 }
-/* round172 — the header content is flush-LEFT (dir:ltr + flex-start), with the
-   back button as the leftmost control and the 3-mode switcher to its right. */
+/* round172/round173 — the header holds ONE flush-LEFT segmented switcher. */
 .header {
   flex: none;
   display: flex;
@@ -20,32 +19,9 @@
   border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
   background: var(--primary-background-color, #fff);
 }
-.leftGroup {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-.back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--ui-border-color, #e6e9ef);
-  border-radius: 8px;
-  background: var(--primary-background-color, #fff);
-  font-family: var(--font-family);
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--primary-text-color, #323338);
-  cursor: pointer;
-}
-.back:hover {
-  background: var(--primary-background-hover-color, #f5f6f8);
-}
 .tabs {
   display: inline-flex;
-  /* keep the tabs in natural RTL reading order inside the LTR flush-left group */
+  /* natural RTL reading order: דשבורד (right) → … → חזרה לדיונים (left) */
   direction: rtl;
   background: var(--primary-background-hover-color, #eef1f8);
   border-radius: 11px;
@@ -73,6 +49,13 @@
   font-weight: 800;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
+/* round173 — the back control is a 4th segment: identical tab styling, plus a
+   left arrow after its label (icon sits on the LEFT since the group is RTL). */
+.tabBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .body {
   flex: 1;
   min-height: 0;
@@ -83,7 +66,7 @@
   padding-top: 8px;
 }
 /* On a real mobile app the back label is dropped to save width (icon only). */
-:global(.mobile-app) .back span {
+:global(.mobile-app) .tabBack span {
   display: none;
 }
 :global(.mobile-app) .tab {
