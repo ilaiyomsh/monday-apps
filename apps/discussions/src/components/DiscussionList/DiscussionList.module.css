@@ -6,17 +6,14 @@
   background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
 }
 
-/* round170 — the header (personal-area entry + create + consolidated filter) is
-   now its OWN card, visually separated from the discussion list below it by a
-   border + gap (owner request). It is a flex sibling above the scroll area, so
-   it already stays put; the old sticky + hairline rule are no longer needed. */
+/* round175 (variant B) — the header's own card frame (border/radius/shadow/gap)
+   was removed for a flatter, smoother look (owner request). The controls now sit
+   directly on the list background, separated from the rows below by a single
+   hairline. */
 .header {
   flex: none;
-  margin: 10px 10px 0;
   background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
-  border: 1px solid var(--ui-border-color, #e6e9ef);
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(20, 30, 60, 0.06);
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
 }
 
 .headerInner {
@@ -56,16 +53,17 @@
   gap: 7px;
   height: var(--ctl-h);
   padding: 0 12px;
-  border: 1px solid var(--ui-border-color, #d0d4e4);
+  /* variant B — flat: no border, a subtle grey fill instead. */
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--primary-background-color, #fff);
+  background: var(--primary-background-hover-color, #f1f2f6);
   font-family: var(--font-family);
   font-size: 14px;
   font-weight: 700;
   color: var(--primary-text-color, #323338);
   cursor: pointer;
 }
-.personalBtn:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.personalBtn:hover { background: var(--ui-background-color, #eceef2); }
 .personalLabel { white-space: nowrap; }
 .personalChevron { flex: none; margin-inline-start: auto; color: var(--secondary-text-color, #676879); }
 /* Keep the user avatar compact so the button stays --ctl-h tall. */
@@ -93,14 +91,15 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 1px solid var(--ui-border-color, #d0d4e4);
+  /* variant B — flat */
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--primary-background-color, #fff);
+  background: var(--primary-background-hover-color, #f1f2f6);
   color: var(--secondary-text-color, #676879);
   cursor: pointer;
 }
 .iconBtn:hover {
-  background: var(--primary-background-hover-color, #f5f6f8);
+  background: var(--ui-background-color, #eceef2);
   color: var(--primary-text-color, #323338);
 }
 /* "דיון חדש" — the flexible member of the cluster: it grows to fill whatever the
@@ -126,17 +125,18 @@
 }
 .newBtn:hover { background: var(--primary-hover-color, #0060b9); }
 
-/* col1 row2 — search bar; grid-stretches to col1 (= personal button width). */
+/* round175 — row 2 swapped (owner request): "סינון" sits on the LEFT under the
+   personal button (col1 ⇒ = personal width), and the search bar on the RIGHT under
+   the action cluster (col2 ⇒ = דיון-חדש+הגדרות+יומן width). */
 .actionGrid .searchWrap {
-  grid-column: 1;
+  grid-column: 2;
   grid-row: 2;
   width: 100%;
   min-width: 0;
   height: var(--ctl-h);
 }
-/* col2 row2 — the "סינון" button, filling the half so row2 mirrors row1. */
 .filterAnchor {
-  grid-column: 2;
+  grid-column: 1;
   grid-row: 2;
   direction: rtl;
   width: 100%;
@@ -150,9 +150,10 @@
   width: 100%;
   height: var(--ctl-h, 34px);
   padding: 0 14px;
-  border: 1px solid var(--ui-border-color, #d0d4e4);
+  /* variant B — flat */
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--primary-background-color, #fff);
+  background: var(--primary-background-hover-color, #f1f2f6);
   font-family: var(--font-family);
   font-size: 13.5px;
   font-weight: 600;
@@ -161,8 +162,7 @@
 }
 .filterBtn:hover,
 .filterBtnOpen {
-  background: var(--primary-background-hover-color, #f5f6f8);
-  border-color: var(--primary-color, #0073ea);
+  background: var(--ui-background-color, #eceef2);
 }
 .filterBtn :global(svg) {
   color: var(--secondary-text-color, #676879);
@@ -267,9 +267,10 @@
   padding-inline-start: 30px;
   /* room for the clear-X pinned at the inline-end (left in RTL) */
   padding-inline-end: 28px;
-  border: 1px solid var(--ui-border-color, #c3c6d4);
+  /* variant B — flat: no border, subtle grey fill (matches the other controls). */
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--primary-background-color, #fff);
+  background: var(--primary-background-hover-color, #f1f2f6);
   color: var(--text-color, #323338);
   font-size: var(--font-size-general-label, 14px);
   font-family: var(--font-family);
@@ -277,6 +278,7 @@
 .search:focus-visible {
   outline: none;
   border-color: var(--primary-color, #0073ea);
+  background: var(--primary-background-color, #fff);
   box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
 }
 
