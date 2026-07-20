@@ -23,7 +23,9 @@
   flex-wrap: wrap;
   flex: none;
   background: var(--primary-background-color, #ffffff);
-  padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
+  /* round180 — extra top padding (~1cm) so the toolbar row starts lower and isn't
+     glued to the top edge of the PersonalShell white card (owner request). */
+  padding: 32px var(--spacing-medium, 16px) var(--spacing-small, 8px);
   /* round114 — "משימה חדשה" (first pill) starts exactly on the table edge line. */
   padding-inline-start: var(--content-gutter-start, 52px);
   /* Round 90 — keep the toolbar frozen at the top on scroll (it already sits

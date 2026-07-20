@@ -29,8 +29,10 @@
   display: inline-flex;
   /* natural RTL reading order: דשבורד (right) → … → חזרה לדיונים (left) */
   direction: rtl;
-  /* slightly deeper than the #eceef3 backdrop so the pill reads as a control. */
-  background: #e2e6f0;
+  /* round180 — the pill background is transparent so it is IDENTICAL to the grey
+     backdrop it floats on (owner request): no visible container, only the active
+     segment's white card stands out. */
+  background: transparent;
   border-radius: 11px;
   padding: 4px;
   gap: 3px;
