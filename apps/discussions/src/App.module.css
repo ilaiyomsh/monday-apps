@@ -298,6 +298,9 @@
      actually visible as a corner. Only the corner sliver of this gray ever
      shows — the card fills the pane. */
   background: var(--allgrey-background-color, #f6f7fb);
+  /* round178 — anchor the CONTAINED SettingsModal overlay to this pane so the
+     settings box centers within it and dims only its tabs (not the whole app). */
+  position: relative;
 }
 
 /* mobile: panes toggle via .hiddenMobile; both show side-by-side on md+ */

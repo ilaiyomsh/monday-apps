@@ -636,7 +636,7 @@ export function DiscussionList({
                 type="text"
                 className={styles.search}
                 aria-label="חיפוש דיון"
-                placeholder="חיפוש דיון"
+                placeholder=""
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
