@@ -153,6 +153,11 @@ export const DEFAULT_EXPORT_TEMPLATE = {
   font: DEFAULT_EXPORT_FONT,
   // Body sections in render order. `enabled:false` drops a section entirely.
   sections: [
+    // round191 — "פתיחה" (was 'מידע כללי') is now FIRST and enabled by default
+    // (owner request): an intro block at the head of the document. Empty title+body
+    // still emit nothing (buildFreeText returns []), so a fresh export with no
+    // opening text is byte-identical to before — only its position/default changed.
+    { key: 'freeText', enabled: true, title: '', body: '' },
     {
       key: 'meta',
       enabled: true,
@@ -169,8 +174,6 @@ export const DEFAULT_EXPORT_TEMPLATE = {
     { key: 'topics', enabled: true, label: 'נושאים לדיון' },
     { key: 'summary', enabled: true, label: 'סיכום' },
     { key: 'tasks', enabled: true, label: 'משימות' },
-    // Free-text block — OFF by default so today's output is unchanged.
-    { key: 'freeText', enabled: false, title: '', body: '' },
   ],
   // CONFIG-mode header/footer. `hasLogo` is a flag; the base64 image itself lives
   // in exportAssets (headerLogo / footerLogo). Empty text/logo ⇒ nothing rendered,

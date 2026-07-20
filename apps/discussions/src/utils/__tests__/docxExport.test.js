@@ -135,6 +135,23 @@ describe('buildDiscussionModel', () => {
     expect(model.summaryHtml).toBe('');
     expect(model.tasks).toEqual([]);
   });
+
+  it('orders tasks by responsible, grouping each person together, empty-assignee last (round191)', () => {
+    const model = buildDiscussionModel({
+      discussion: {},
+      tasks: [
+        { id: '1', name: 'עילי-ראשונה', assignees: [{ id: 'a', name: 'עילי' }], status: 'x' },
+        { id: '2', name: 'ללא-אחראי', assignees: [], status: 'x' },
+        { id: '3', name: 'עידו-אחת', assignees: [{ id: 'b', name: 'עידו' }], status: 'x' },
+        { id: '4', name: 'עילי-שנייה', assignees: [{ id: 'a', name: 'עילי' }], status: 'x' },
+      ],
+    });
+    // 'עידו' < 'עילי' (ד before ל); the two 'עילי' keep their input order (stable
+    // sort); the assignee-less task sorts last.
+    expect(model.tasks.map((t) => t.name)).toEqual([
+      'עידו-אחת', 'עילי-ראשונה', 'עילי-שנייה', 'ללא-אחראי',
+    ]);
+  });
 });
 
 describe('renderDocx', () => {
@@ -215,6 +232,14 @@ describe('data-driven template (buildExportDoc)', () => {
     expect(xml).toContain('הערות');
     expect(xml).toContain('שורה א');
     expect(xml).toContain('שורה ב');
+  });
+
+  it('tasks table has the 5 columns and NO "מדיון קודם" column (round191)', async () => {
+    const template = { sections: [{ key: 'tasks', enabled: true, label: 'משימות' }] };
+    const xml = await xmlOf(baseModel(), template);
+    expect(xml).toContain('אחראי');   // assignee header kept
+    expect(xml).toContain('סטטוס');    // status header kept
+    expect(xml).not.toContain('מדיון קודם'); // the removed column header
   });
 });
 

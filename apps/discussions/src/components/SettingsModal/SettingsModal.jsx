@@ -1098,9 +1098,15 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
             <Button kind={"tertiary"} onClick={onClose}>ביטול</Button>
             <Button kind={"primary"} loading={saving} onClick={handleSave}>שמור</Button>
           </Flex>
-          <div className={styles.versionLabel} dir="ltr">
-            <Text type={"text3"} color={"secondary"}>{getVersionLabel()}</Text>
-          </div>
+          {/* round191 — version badge is OWNERS ONLY (owner request). This footer only
+              renders in the full (owner) modal — non-owners get the templatesOnly early
+              return above with no footer — but gate it explicitly so a future refactor
+              can't leak the version/sha to non-owners. */}
+          {!templatesOnly && (
+            <div className={styles.versionLabel} dir="ltr">
+              <Text type={"text3"} color={"secondary"}>{getVersionLabel()}</Text>
+            </div>
+          )}
         </div>
       </div>
     </div>

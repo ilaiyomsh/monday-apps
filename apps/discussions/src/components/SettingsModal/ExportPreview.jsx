@@ -112,7 +112,7 @@ export default function ExportPreview({ template, assets }) {
           <div key="freeText" className={styles.docSection}>
             {section.title && <div className={styles.h2}>{section.title}</div>}
             {section.body && <p className={styles.para}>{section.body}</p>}
-            {!section.title && !section.body && <p className={styles.paraMuted}>מידע כללי (ריק)</p>}
+            {!section.title && !section.body && <p className={styles.paraMuted}>פתיחה (ריק)</p>}
           </div>
         );
       default:

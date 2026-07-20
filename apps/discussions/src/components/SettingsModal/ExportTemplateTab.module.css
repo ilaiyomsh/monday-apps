@@ -25,6 +25,15 @@
   flex-direction: column;
   gap: 14px;
   min-width: 0;
+  /* round191 — the components list + header/footer bands can grow taller than the
+     modal, and the sticky preview column made the bottom unreachable (owner had to
+     zoom out). Give the controls column its OWN vertical scroll region so it scrolls
+     independently; the bar is the app-wide thin arrow-less grey one (index.css global
+     ::-webkit-scrollbar), inherited automatically by any overflow:auto element. */
+  max-height: 68vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-inline-end: 6px;
 }
 .previewCol {
   position: sticky;
