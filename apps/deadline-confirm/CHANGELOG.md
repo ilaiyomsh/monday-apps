@@ -2,6 +2,15 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.5.1 — 2026-07-20 — digest: board pickers filter by object type
+
+- Both board pickers (tasks board + users board) now show only **real
+  work-management boards** — `fetchBoards` requests `object_type_unique_key`
+  and keeps only boards (drops sub-item boards, portfolios, docs, custom
+  objects), mirroring the tracker's PortfolioPickStep filter. `isRealBoard`
+  is robust to the namespace form (`board` / `work-management::board`).
+- Tests: `services/monday.boards.test.ts` (red→green + 2 killed mutations).
+
 ## 0.5.0 — 2026-07-19 — v4 phase 1: per-user digest email (manual)
 
 - **Digest email per user** (spec V4 Amendment Phase 1; design log

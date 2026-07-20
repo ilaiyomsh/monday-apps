@@ -60,11 +60,30 @@ async function seamlessApi<T>(query: string, variables?: Record<string, unknown>
   return res.data;
 }
 
+// The raw boards() query returns every board-like OBJECT — real work
+// boards, but also sub-item boards, portfolios, docs, custom objects, etc.
+// The board pickers must offer only real boards, so we filter by
+// object_type_unique_key (same mechanism the tracker uses in
+// PortfolioPickStep). Standard work-management board = 'board'.
+export const REAL_BOARD_OBJECT_TYPE_KEY = 'board';
+
+/** True only for a real work-management board (drops sub-items/portfolio/docs/…).
+ * Robust to the namespace form: matches both 'board' and 'work-management::board'. */
+export function isRealBoard(board: { object_type_unique_key?: string | null }): boolean {
+  const key = board.object_type_unique_key;
+  if (typeof key !== 'string') return false;
+  const bare = key.includes('::') ? (key.split('::').pop() ?? '') : key;
+  return bare === REAL_BOARD_OBJECT_TYPE_KEY;
+}
+
 export async function fetchBoards(): Promise<Board[]> {
-  const data = await seamlessApi<{ boards: Array<{ id: string; name: string } | null> }>(
-    `query AdminBoards { boards(limit: 200, order_by: used_at) { id name } }`
-  );
-  return (data.boards ?? []).filter((b): b is Board => Boolean(b));
+  const data = await seamlessApi<{
+    boards: Array<{ id: string; name: string; object_type_unique_key?: string | null } | null>;
+  }>(`query AdminBoards { boards(limit: 500, order_by: used_at) { id name object_type_unique_key } }`);
+  return (data.boards ?? [])
+    .filter((b): b is NonNullable<typeof b> => Boolean(b))
+    .filter(isRealBoard)
+    .map((b) => ({ id: b.id, name: b.name }));
 }
 
 interface RawSettingsLabel {
