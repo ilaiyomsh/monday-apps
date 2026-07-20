@@ -174,6 +174,9 @@ export const DEFAULT_EXPORT_TEMPLATE = {
     { key: 'topics', enabled: true, label: 'נושאים לדיון' },
     { key: 'summary', enabled: true, label: 'סיכום' },
     { key: 'tasks', enabled: true, label: 'משימות' },
+    // round192 — decisions table (owner request). Enabled by default; degrades to
+    // "אין החלטות." when the discussion has none / the decisions board is unmapped.
+    { key: 'decisions', enabled: true, label: 'החלטות' },
   ],
   // CONFIG-mode header/footer. `hasLogo` is a flag; the base64 image itself lives
   // in exportAssets (headerLogo / footerLogo). Empty text/logo ⇒ nothing rendered,

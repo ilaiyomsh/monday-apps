@@ -107,6 +107,13 @@ export default function ExportPreview({ template, assets }) {
             <ul className={styles.list}><li>משימה לדוגמה — אחראי: דנה — יעד: 10/07</li><li>משימה נוספת — אחראי: יוסי</li></ul>
           </div>
         );
+      case 'decisions':
+        return (
+          <div key="decisions" className={styles.docSection}>
+            <div className={styles.h2}>החלטות</div>
+            <ul className={styles.list}><li>החלטה לדוגמה — מחליט: דנה — 10/07</li><li>החלטה נוספת — מחליט: יוסי</li></ul>
+          </div>
+        );
       case 'freeText':
         return (
           <div key="freeText" className={styles.docSection}>

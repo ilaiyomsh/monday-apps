@@ -41,6 +41,18 @@ import styles from './SettingsModal.module.css';
 function seedExportTemplate(stored) {
   const base = { ...DEFAULT_EXPORT_TEMPLATE, ...(stored || {}) };
   if (!Array.isArray(base.sections) || !base.sections.length) base.sections = DEFAULT_EXPORT_TEMPLATE.sections;
+  // Clone so we never mutate a shared constant / the stored object, then back-fill
+  // any section key added to the schema after this instance last saved (round192:
+  // 'decisions'). Each missing key is inserted near its DEFAULT position; the order
+  // of keys the user already has is preserved (they own that order).
+  base.sections = base.sections.map((s) => ({ ...s }));
+  const present = new Set(base.sections.map((s) => s?.key));
+  DEFAULT_EXPORT_TEMPLATE.sections.forEach((def, idx) => {
+    if (!present.has(def.key)) {
+      base.sections.splice(Math.min(idx, base.sections.length), 0, { ...def });
+      present.add(def.key);
+    }
+  });
   base.header = { ...DEFAULT_EXPORT_TEMPLATE.header, ...(stored?.header || {}) };
   base.footer = { ...DEFAULT_EXPORT_TEMPLATE.footer, ...(stored?.footer || {}) };
   return base;

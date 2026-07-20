@@ -30,7 +30,7 @@
  * buildDiscussionModel) are unit-tested; renderDocx is covered by a Blob smoke test.
  */
 import { api, parseValue, cvSelection } from './mondayApi/monday-client.js';
-import { דיונים1Board } from './mondayApi/BoardSDK.js';
+import { דיונים1Board, החלטות1Board } from './mondayApi/BoardSDK.js';
 import { getColumns, getBoardId } from './mondayApi/board-config-store.js';
 import { DEFAULT_EXPORT_TEMPLATE, EXPORT_FONTS, DEFAULT_EXPORT_FONT } from './mondayApi/boards.config.js';
 import { loadSummaryUpdateId } from './summaryStore.js';
@@ -42,6 +42,11 @@ import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import logger from './logger.js';
 
 const TASK_COLS = ['responsibilityID', 'deadlineID', 'statusID']; // assignee, deadline, status
+// round192 — decisions section: decider (people), status, date. Read from the
+// DECISIONS board (mapped manually), which is why an unmapped board degrades to [].
+const DECISION_COLS = ['deciderID', 'decisionStatusID', 'decisionDateID'];
+// 5 decision columns, DXA: מס׳, החלטה, מחליט, תאריך, סטאטוס (mirrors the tasks table).
+const DECISION_COL_WIDTHS = [600, 3800, 1900, 1400, 1300];
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const HEADER_FILL = '4F6B8F';
 // round191 — the "מדיון קודם" column was removed (owner request); its 900 DXA were
@@ -174,7 +179,7 @@ function formatHeDate(value) {
  * shaping is testable without docx. The summary stays as HTML (`summaryHtml`) and
  * is converted to docx inside renderDocx (needs the docx classes + DOMParser).
  */
-export function buildDiscussionModel({ discussion, topics = [], summaryHtml = '', tasks = [], previousDiscussionName = '', typeLabel = '' }) {
+export function buildDiscussionModel({ discussion, topics = [], summaryHtml = '', tasks = [], decisions = [], previousDiscussionName = '', typeLabel = '' }) {
   const participants = Array.isArray(discussion?.participantsID) ? discussion.participantsID : [];
   const lead = Array.isArray(discussion?.discussionLeadID) ? discussion.discussionLeadID : [];
   // "סוג" is a status column — its value is a label id; the caller resolves the
@@ -206,6 +211,14 @@ export function buildDiscussionModel({ discussion, topics = [], summaryHtml = ''
         if (!b.assigneesText) return -1;
         return a.assigneesText.localeCompare(b.assigneesText, 'he');
       }),
+    // round192 — decisions section (owner request): each decision's text (name) +
+    // decider (מחליט) + date + status label, shaped to plain strings like tasks.
+    decisions: (Array.isArray(decisions) ? decisions : []).map((d) => ({
+      name: d?.name || '',
+      deciderText: (Array.isArray(d?.decider) ? d.decider : []).map((p) => p?.name).filter(Boolean).join(', '),
+      dateText: formatHeDate(d?.date),
+      status: d?.status || '',
+    })),
   };
 }
 
@@ -298,6 +311,60 @@ async function fetchTasksOfDiscussion(discussionId) {
       // Export shows the human label, not the stable id parseValue('status')
       // returns — the status cv carries `text` (the label) alongside `index`.
       status: byId[taskColumns.statusID?.id]?.text || '',
+    };
+  });
+}
+
+// Read a discussion's DECISIONS for the export. monday can't server-filter a
+// board_relation by linked id, so — exactly like useDecisions' reload — we SCAN
+// the decisions board and keep items whose decision-side discussionLinkID points
+// at this discussion, then read the display columns (status TEXT needs the raw
+// `.text`, which parseValue('status') drops for its stable index). An unmapped
+// decisions board / link column is an EXPECTED state (mapped manually) → returns [].
+const DECISIONS_SCAN_PAGE = 100;
+const DECISIONS_SCAN_GUARD = 20;
+async function fetchDecisionsOfDiscussion(discussionId) {
+  const decisionsBoardId = getBoardId('decisions');
+  const decisionColumns = getColumns('decisions') || {};
+  const linkColId = decisionColumns?.discussionLinkID?.id;
+  if (!decisionsBoardId || !linkColId) return [];
+
+  const target = String(discussionId);
+  const matchedIds = [];
+  let cursor = null;
+  let guard = 0;
+  do {
+    const res = await new החלטות1Board()
+      .items()
+      .withPagination({ limit: DECISIONS_SCAN_PAGE, ...(cursor ? { cursor } : {}) })
+      .execute();
+    for (const it of res.items || []) {
+      const ids = (it.discussionLinkID?.ids || []).map(String);
+      if (ids.includes(target)) matchedIds.push(String(it.id));
+    }
+    cursor = res.cursor || null;
+    guard += 1;
+  } while (cursor && guard < DECISIONS_SCAN_GUARD);
+  if (!matchedIds.length) return [];
+
+  const cols = DECISION_COLS.map((a) => decisionColumns?.[a]?.id).filter(Boolean);
+  const cv = cvSelection(DECISION_COLS.map((a) => decisionColumns?.[a]?.type));
+  const data = await api(
+    `query ($ids: [ID!], $cols: [String!]) {
+      items(ids: $ids) { id name column_values(ids: $cols) { ${cv} } }
+    }`,
+    { ids: matchedIds, cols },
+    'docxExport.fetchDecisions'
+  );
+  return (data?.items || []).map((item) => {
+    const byId = {};
+    (item.column_values || []).forEach((c) => { byId[c.id] = c; });
+    return {
+      name: item.name,
+      decider: parseValue('people', byId[decisionColumns.deciderID?.id]),
+      // Human label, not the stable index parseValue('status') returns.
+      status: byId[decisionColumns.decisionStatusID?.id]?.text || '',
+      date: parseValue('date', byId[decisionColumns.decisionDateID?.id]),
     };
   });
 }
@@ -588,6 +655,55 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     return out;
   };
 
+  // round192 — decisions table (owner request): same monday-board look as the tasks
+  // table (heading kept with the table via keepNext/cantSplit). Columns:
+  // מס׳ · החלטה · מחליט · תאריך · סטאטוס. The "החלטה" (name) column is right-aligned;
+  // the rest centered.
+  const buildDecisions = (section) => {
+    const out = [new Paragraph({ ...RTL, keepNext: true, heading: HeadingLevel.HEADING_2, children: [run(section?.label || 'החלטות')] })];
+    if (!model.decisions.length) {
+      out.push(para('אין החלטות.'));
+      return out;
+    }
+    const cell = (text, widthDxa, isHeader, center) => new TableCell({
+      width: { size: widthDxa, type: WidthType.DXA },
+      verticalAlign: VerticalAlignTable.CENTER,
+      shading: isHeader ? { type: 'clear', color: 'auto', fill: HEADER_FILL } : undefined,
+      margins: { marginUnitType: WidthType.DXA, top: 40, bottom: 40, left: 90, right: 90 },
+      children: [new Paragraph({
+        ...RTL,
+        ...(center ? { alignment: AlignmentType.CENTER } : {}),
+        keepNext: true,
+        children: [run(text, isHeader ? { bold: true, color: 'FFFFFF' } : undefined)],
+      })],
+    });
+    const NAME_COL = 1; // "החלטה" — right-aligned, all others centered.
+    const headers = ['מס׳', 'החלטה', 'מחליט', 'תאריך', 'סטאטוס'];
+    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, DECISION_COL_WIDTHS[i], true, i !== NAME_COL)) })];
+    model.decisions.forEach((d, i) => {
+      rows.push(new TableRow({
+        cantSplit: true,
+        children: [
+          cell(String(i + 1), DECISION_COL_WIDTHS[0], false, true),
+          cell(d.name, DECISION_COL_WIDTHS[1], false, false),
+          cell(d.deciderText, DECISION_COL_WIDTHS[2], false, true),
+          cell(d.dateText, DECISION_COL_WIDTHS[3], false, true),
+          cell(d.status || '—', DECISION_COL_WIDTHS[4], false, true),
+        ],
+      }));
+    });
+    const border = { style: BorderStyle.SINGLE, size: 2, color: 'D9D9D9' };
+    out.push(new Table({
+      columnWidths: DECISION_COL_WIDTHS,
+      layout: TableLayoutType.FIXED,
+      width: { size: DECISION_COL_WIDTHS.reduce((a, b) => a + b, 0), type: WidthType.DXA },
+      visuallyRightToLeft: true,
+      borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border },
+      rows,
+    }));
+    return out;
+  };
+
   // Free-text block — a heading (its title) + one paragraph per line of body.
   // Emits nothing when both title and body are empty.
   const buildFreeText = (section) => {
@@ -614,6 +730,7 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
       case 'topics': children.push(...buildTopics(section)); break;
       case 'summary': children.push(...buildSummary(section)); break;
       case 'tasks': children.push(...buildTasks(section)); break;
+      case 'decisions': children.push(...buildDecisions(section)); break;
       case 'freeText': children.push(...buildFreeText(section)); break;
       default: break;
     }
@@ -752,10 +869,11 @@ export async function exportDiscussionToDocx(discussion, { template = DEFAULT_EX
   if (!discussion?.id) throw new Error('exportDiscussionToDocx: discussion is required');
   const discussionId = String(discussion.id);
 
-  const [topics, summaryHtml, currentTasks, previous, fullDiscussion] = await Promise.all([
+  const [topics, summaryHtml, currentTasks, decisions, previous, fullDiscussion] = await Promise.all([
     fetchTopicsForExport(discussionId),
     fetchSummaryHtml(discussionId),
     fetchTasksOfDiscussion(discussionId),
+    fetchDecisionsOfDiscussion(discussionId),
     resolvePreviousDiscussion(discussionId),
     // The list is lean (id/name/date), so fetch the discussion's own columns
     // (participants, lead, type, description) for the metadata block. Best-effort.
@@ -771,6 +889,7 @@ export async function exportDiscussionToDocx(discussion, { template = DEFAULT_EX
     topics,
     summaryHtml,
     tasks: mergeTasksForExport(currentTasks, previousTasks),
+    decisions,
     previousDiscussionName: previous?.name || '',
     typeLabel,
   });
