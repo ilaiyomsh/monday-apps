@@ -24,8 +24,11 @@
   flex: none;
   background: var(--primary-background-color, #ffffff);
   /* round180 — extra top padding (~1cm) so the toolbar row starts lower and isn't
-     glued to the top edge of the PersonalShell white card (owner request). */
-  padding: 32px var(--spacing-medium, 16px) var(--spacing-small, 8px);
+     glued to the top edge of the PersonalShell white card (owner request).
+     round188 — the toolbar→content gap (bottom 20px) is pinned HERE on the sticky
+     toolbar, and the scroll-away gap on .groupScrollInner is zeroed, so the gap
+     stays CONSTANT while the board scrolls. */
+  padding: 32px var(--spacing-medium, 16px) 20px;
   /* round114 — "משימה חדשה" (first pill) starts exactly on the table edge line. */
   padding-inline-start: var(--content-gutter-start, 52px);
   /* Round 90 — keep the toolbar frozen at the top on scroll (it already sits
@@ -126,7 +129,10 @@
   width: max-content;
   min-width: 100%;
   direction: ltr;
-  padding-block: var(--spacing-small, 8px) 0;
+  /* round188 — was `8px 0`; that top pad sat in the scrolling board and shrank the
+     toolbar→content gap on scroll. Zeroed; the whole gap is now the sticky toolbar's
+     pinned padding-bottom, so it is constant at every scroll position. */
+  padding-block: 0;
 }
 
 /* Base pill — plain by default, light hover (matches monday's Search/Person). */

@@ -1,8 +1,11 @@
 .wrap {
   display: flex;
   flex-direction: column;
-  /* Tightened inter-topic gap (was 24px) — proportional to the 14–18px text. */
-  gap: 12px;
+  /* round188 — was 12px; the toolbar→content gap moved into the sticky toolbar's
+     pinned padding-bottom so it stays constant on scroll (see .toolbar). Zeroing the
+     wrap gap also removes it from BETWEEN topic sections, so restore that inter-topic
+     gap on the sections themselves via .section margin (below). */
+  gap: 0;
   /* Full width (broke out of the 90% frame) so the point tables run to the RIGHT
      edge; a left inset keeps content off the edge, the right stays flush. */
   width: 100%;
@@ -21,15 +24,31 @@
   justify-content: flex-start;
   gap: 8px;
   width: 100%;
-  /* round138 — identical toolbar rhythm in all four discussion tabs (owner
-     request): same 4px block padding as the Tasks/Previous/Decisions toolbars,
-     and margin so pills sit exactly 20px above the content below
-     (4px padding + 12px wrap gap + 4px margin), like the Tasks tab
-     (4px padding + 16px root gap). Pills are 14px via the shared components;
-     pinned here so the row can never drift per-tab. */
+  /* round138 — identical toolbar rhythm in all four discussion tabs (owner request);
+     pills are 14px via the shared components, pinned here so the row can never drift.
+     round188 — the Topics toolbar now FREEZES on scroll like the other three tabs
+     (owner request: it used to scroll up and disappear). Sticky to the DiscussionCard
+     .body scroll container; opaque bg + z-index cover the topic tables scrolling
+     underneath, and the whole toolbar→content gap (20px) is pinned on padding-bottom
+     so it stays constant on scroll (matching Tasks/Previous/Decisions). */
   font-size: 14px;
-  padding-block: 4px;
-  margin-block-end: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--primary-background-color, #ffffff);
+  padding-top: 4px;
+  padding-bottom: 20px;
+}
+/* Cover the scroll container's (.body) top padding band above the pinned toolbar
+   so scrolled topic tables can't peek above it (mirrors the Tasks tab). */
+.toolbar::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  height: var(--spacing-large, 24px);
+  background: var(--primary-background-color, #ffffff);
+  pointer-events: none;
 }
 /* Leading controls (new-topic + apply-template); the trailing collapse-all sits
    right after them in one left-aligned cluster (like the My Tasks toolbar). */
@@ -55,6 +74,13 @@
   /* round120 — same header→table gap as the Tasks/Previous group headers (their
      .groupHeader margin-bottom is 18px), so all tabs share one group rhythm. */
   gap: 18px;
+}
+/* round188 — the inter-topic gap used to come from .wrap's flex `gap` (now 0, so the
+   toolbar→content gap can be pinned on the sticky toolbar). Restore the 12px spacing
+   only BETWEEN adjacent topic sections, leaving the toolbar→first-section gap to the
+   toolbar's own pinned padding-bottom. */
+.section + .section {
+  margin-block-start: 12px;
 }
 /* Hidden / "לא לדיון" topic — dim the table body; the eye control stays full. */
 .sectionExcluded .sectionBody {

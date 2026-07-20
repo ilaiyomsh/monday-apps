@@ -19,6 +19,16 @@
   gap: var(--spacing-medium, 16px);
 }
 
+/* round188 — KPI column + chart live in this row wrapper (was directly on .root).
+   The bar-click drill-down list is a sibling of .topRow under .root, so it renders
+   full-width BELOW the widgets instead of becoming a squeezed third column when the
+   desktop row layout is active. Base = stacked (mobile); desktop = side-by-side. */
+.topRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-large, 24px);
+}
+
 /* KPI cards */
 .kpiGrid {
   display: grid;
@@ -31,8 +41,9 @@
    bar chart sits to their RIGHT and is TALLER. Gated on `.is-desktop` (not viewport
    width) so a docked item-card panel keeps the mobile stacked layout. The tiles
    keep their exact size (single-column grid, fixed width, min-height unchanged);
-   `.root` becomes a row and the chart card takes the remaining width. */
-:global(.is-desktop) .root {
+   round188 — `.topRow` (not `.root`) becomes the row so the drill-down list stays
+   full-width below; the chart card takes the remaining width. */
+:global(.is-desktop) .topRow {
   flex-direction: row;
   /* round185 — stretch so the chart card is EXACTLY as tall as the KPI column
      (owner request): its top edge aligns with the top tile (סה"כ משימות) and its

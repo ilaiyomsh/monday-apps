@@ -1,7 +1,9 @@
 .root {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-medium, 16px);
+  /* round188 — zero the normal-flow gap; the toolbar→content gap is pinned on the
+     sticky toolbar's padding-bottom (see .toolbar) so it stays CONSTANT on scroll. */
+  gap: 0;
   /* Full width (the tab pane broke out of the 90% frame) so the board's row
      separators run to the RIGHT edge of the view. Left inset keeps the toolbar off
      the edge; the right stays flush (the board bleeds right). */
@@ -29,7 +31,10 @@
   top: 0;
   z-index: 20;
   background: var(--primary-background-color, #ffffff);
-  padding-block: 4px;
+  /* round188 — the toolbar→content gap lives HERE (pinned), not in the parent
+     flex `gap` which scrolls away. 20px bottom keeps it constant on scroll. */
+  padding-top: 4px;
+  padding-bottom: 20px;
   font-size: 14px; /* round138 — pinned; identical toolbar row in all four tabs */
 }
 /* Cover the scroll container's (.body) top padding band above the pinned toolbar

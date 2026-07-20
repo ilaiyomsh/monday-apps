@@ -222,6 +222,10 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
 
   return (
     <div className={styles.root}>
+      {/* round188 — KPI column + chart share one desktop ROW; the drill-down list
+          (below) is a sibling of this row so it renders full-width BELOW the widgets,
+          not squeezed into a third column. */}
+      <div className={styles.topRow}>
       {/* KPI cards — total · בוצעו (done set) · בעיכוב (computed, deadline-based). */}
       <div className={styles.kpiGrid}>
         <Box className={styles.kpiCard} rounded="medium" dir="ltr">
@@ -319,6 +323,7 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
           </div>
         </Box>
       )}
+      </div>
 
       {/* Tasks for the selected bar */}
       {selected && filteredTasks.length > 0 && (

@@ -152,8 +152,10 @@
   flex: none;
   background: var(--primary-background-color, #ffffff);
   /* round180 — extra top padding (~1cm) so the toolbar row starts lower and isn't
-     glued to the top edge of the PersonalShell white card (owner request). */
-  padding: 32px var(--spacing-medium, 16px) var(--spacing-small, 8px);
+     glued to the top edge of the PersonalShell white card (owner request).
+     round188 — toolbar→content gap (bottom 20px) pinned HERE on the sticky toolbar;
+     the scroll-away gap on .groupScrollInner is zeroed, so the gap is constant. */
+  padding: 32px var(--spacing-medium, 16px) 20px;
   padding-inline-start: var(--content-gutter-start, 52px); /* round114 — first pill on the table edge line */
   /* Round 90 — keep the toolbar frozen at the top on scroll (it already sits
      above the scrolling .board; sticky guards against any view-level scroll). */
@@ -180,7 +182,9 @@
   width: max-content;
   min-width: 100%;
   direction: ltr;
-  padding-block: var(--spacing-small, 8px) 0;
+  /* round188 — was `8px 0`; zeroed so the toolbar→content gap lives entirely in the
+     sticky toolbar's pinned padding-bottom and stays constant on scroll. */
+  padding-block: 0;
 }
 
 /* Base pill — plain by default, light hover (matches monday's Search pill). */
