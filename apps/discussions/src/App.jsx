@@ -24,6 +24,7 @@ import { ensurePeopleColumns } from './utils/mondayApi/peopleColumns.js';
 import { usePermission } from './hooks/usePermission.js';
 import { prefetchMyTasks } from './hooks/useMyTasks.js';
 import { prefetchMyDecisions } from './hooks/useMyDecisions.js';
+import { prefetchDashboard } from './hooks/useDashboardData.js';
 import { prefetchDiscussions } from './hooks/useDiscussions.js';
 import logger from './utils/logger.js';
 import { installChromeNarrowWatcher } from './utils/chromeNarrow.js';
@@ -459,9 +460,9 @@ export default function App() {
 
   // Round 45 — BOOT GATE: on INITIAL app entry hold the fullscreen white
   // BrandLoader (see the render gate below) until the monday context + settings
-  // are resolved AND all three datasets have loaded — the discussions list
-  // (prefetchDiscussions, which ALSO warms the list's first paint) + the two
-  // personal-view caches (prefetchMyTasks / prefetchMyDecisions) — then reveal
+  // are resolved AND all datasets have loaded — the discussions list
+  // (prefetchDiscussions, which ALSO warms the list's first paint) + the three
+  // personal-view caches (prefetchMyTasks / prefetchMyDecisions / prefetchDashboard) — then reveal
   // the discussions view already populated. Completion is tracked by Promise.all
   // over the three loads, each wrapped so a rejection still counts as settled
   // (reveal on success OR error — never hang), plus a hard BOOT_MAX_WAIT_MS
@@ -510,6 +511,7 @@ export default function App() {
       settle(prefetchDiscussions()),
       settle(prefetchMyTasks({ currentUser, context })),
       settle(prefetchMyDecisions('decider', { currentUser, context })),
+      settle(prefetchDashboard({ currentUser, context })),
     ]).then(reveal)
       // settle() maps every fetch to a resolved void, so only reveal() itself
       // could reject here — log it; the BOOT_MAX_WAIT_MS timer still reveals.
@@ -540,6 +542,7 @@ export default function App() {
       if (cancelled) return;
       prefetchMyTasks({ currentUser, context }).catch(() => {});
       prefetchMyDecisions('decider', { currentUser, context }).catch(() => {});
+      prefetchDashboard({ currentUser, context }).catch(() => {});
     };
     let idleId = null;
     let timerId = null;
