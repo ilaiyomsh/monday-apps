@@ -355,19 +355,22 @@ export default function App() {
   // path → identical to before this guard existed.
   const can = usePermission({ canManageSettings, currentUser });
 
-  // round180 — flag when the discussions selector panel occupies horizontal width
-  // (desktop: list shown AND not collapsed). The card is narrow then, so the task
-  // quick-filter battery (TasksTab / PreviousTasksTab) hides via
-  // body[data-list-open] — mirroring the body[data-chrome-narrow] pattern used for
-  // monday's docked updates panel. Clears in the personal area, on mobile card
-  // view, and whenever the list is collapsed (i.e. the tabs area is expanded).
+  // round180/181 — flag when the discussions selector panel occupies horizontal
+  // width ALONGSIDE the card. On DESKTOP the split shows both panes whenever the
+  // list is not collapsed (`.hiddenMobile` is display:block there, so `showList`
+  // does NOT hide the sidebar — round181 fix: gating on showList was wrong because
+  // handleSelect sets showList=false on desktop, so expanding the list after a
+  // select left the flag off). On MOBILE the panes never coexist (card is full
+  // width), so the flag stays off. While set, the card is narrow: the task
+  // quick-filter battery AND the header participants expander hide (see the tabs'
+  // and DiscussionCard's CSS) — mirroring the body[data-chrome-narrow] pattern.
   useEffect(() => {
     if (typeof document === 'undefined') return undefined;
-    const open = effectiveView === 'discussions' && showList && !collapsed;
+    const open = effectiveView === 'discussions' && !isMobile && !collapsed;
     if (open) document.body.setAttribute('data-list-open', '1');
     else document.body.removeAttribute('data-list-open');
     return () => document.body.removeAttribute('data-list-open');
-  }, [effectiveView, showList, collapsed]);
+  }, [effectiveView, isMobile, collapsed]);
 
   useEffect(() => {
     let cancelled = false;

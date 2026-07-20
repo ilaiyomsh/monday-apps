@@ -760,6 +760,14 @@
    below does not jump up when the panel opens. */
 :global(body[data-chrome-narrow="1"]) .participants { display: none !important; }
 
+/* round181 — while the discussions SELECTOR panel is open the card is narrow, so
+   the participants roles must not be shown at all here (owner request): hide the
+   expander chevron and any already-open role/people groups. The date and time stay
+   visible. (body[data-list-open] is set by App while the desktop split shows the
+   selector alongside the card.) */
+:global(body[data-list-open="1"]) .metaToggle,
+:global(body[data-list-open="1"]) .peopleGroupAvatars { display: none !important; }
+
 /* round116 — the tabs strip's own horizontal scrollbar disappears entirely
    while the updates panel narrows the pane (scrolling still works by drag/
    wheel); base state keeps the round70 thin-bar behavior. */
