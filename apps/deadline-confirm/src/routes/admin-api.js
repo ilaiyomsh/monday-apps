@@ -171,12 +171,23 @@ function validateConfig(body) {
       }
       if (!isNonEmptyString(s.title, 60)) return { field: 'digest.sections' };
       if (!isNonEmptyString(s.dateColumnId)) return { field: 'digest.sections' };
+      if (!isNonEmptyString(s.dateColumnTitle, 255)) return { field: 'digest.sections' };
       if (!buttonIds.has(s.buttonId)) return { field: 'digest.sections' };
+      // "show by status": a non-empty set of label ids (0 is valid).
+      if (
+        !Array.isArray(s.includeStatusLabelIds) ||
+        s.includeStatusLabelIds.length === 0 ||
+        !s.includeStatusLabelIds.every((n) => Number.isInteger(n) && n >= 0)
+      ) {
+        return { field: 'digest.sections' };
+      }
       sections.push({
         id: s.id ?? generateId('s'),
         title: s.title,
         dateColumnId: s.dateColumnId,
+        dateColumnTitle: s.dateColumnTitle,
         buttonId: s.buttonId,
+        includeStatusLabelIds: [...s.includeStatusLabelIds],
       });
     }
     if (new Set(sections.map((s) => s.id)).size !== sections.length) {

@@ -40,7 +40,10 @@ function renderSection({ section, baseUrl, secret, accountId }) {
     .map((task) => renderTaskRow({ task, button: section.button, baseUrl, secret, accountId }))
     .join('\n');
   const th = (text) =>
-    `<td align="center" style="padding:8px 6px;${CELL_BORDER};background:#FFFFFF;color:#55606E;${FONT};font-size:12px;font-weight:bold;">${text}</td>`;
+    `<td align="center" style="padding:8px 6px;${CELL_BORDER};background:#FFFFFF;color:#55606E;${FONT};font-size:12px;font-weight:bold;">${escapeHtml(text)}</td>`;
+  // The date column header is the ORIGINAL board column title (captured at
+  // save); fall back to a generic label if somehow empty.
+  const dateHeader = section.dateColumnTitle && section.dateColumnTitle.length > 0 ? section.dateColumnTitle : 'תאריך';
   return `  <tr>
     <td dir="rtl" style="direction:rtl;padding:0 20px 22px;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" dir="rtl" style="direction:rtl;background:#F7F8FA;border:1px solid #E4E7EC;border-radius:12px;">
@@ -52,7 +55,7 @@ function renderSection({ section, baseUrl, secret, accountId }) {
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" dir="rtl" style="direction:rtl;border-collapse:collapse;background:#ffffff;">
               <tr>
                 <td dir="rtl" align="right" style="direction:rtl;text-align:right;padding:8px 10px;${CELL_BORDER};background:#FFFFFF;color:#55606E;${FONT};font-size:12px;font-weight:bold;">&#8207;שם הפעולה</td>
-                ${th('תאריך')}
+                ${th(dateHeader)}
                 ${th('סטאטוס')}
                 ${th('עדכון בקליק')}
               </tr>

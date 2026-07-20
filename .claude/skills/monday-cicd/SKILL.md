@@ -26,6 +26,7 @@ Files in this skill (paths under `.claude/skills/monday-cicd/`, relative to the 
 | `scripts/dev-live-attach.sh` | Point the DRAFT at a local dev server via tunnel (hot reload in monday) |
 | `scripts/dev-live-detach.sh` | End dev-live: kill processes + rebind draft to the CDN build (mandatory) |
 | `references/pipeline-model.md` | Full model: branches, gates, secrets, deploy commands, version mechanisms |
+| `references/server-app-urls.md` | Server-side apps: draft vs live URLs — which URL goes in which dev-center field (BASE_URL / OAuth redirect / feature URL) so BOTH versions stay stable |
 
 ## Mode selection — route by INTENT, never by exact wording
 

@@ -51,7 +51,12 @@ export interface DigestSectionConfig {
   id: string; // s_XXXXXXXX — client-generated on add, server validates
   title: string;
   dateColumnId: string;
+  dateColumnTitle: string; // the board column's title, captured at save → email <th>
   buttonId: string;
+  // A task enters the section only if its status (on the button's status
+  // column) is one of these label ids. Empty = nothing matches. Label id 0
+  // is valid — never truthy-check.
+  includeStatusLabelIds: number[];
 }
 
 export interface DigestConfig {

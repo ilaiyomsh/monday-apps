@@ -23,6 +23,7 @@ function recipient(overrides = {}) {
       {
         sectionId: 's_done0001',
         title: 'משימות שנדרש לסיים וטרם בוצעו:',
+        dateColumnTitle: 'תאריך יעד',
         buttonId: 'b_done0001',
         button: BUTTON_DONE,
         tasks: [{ itemId: '9002', name: 'הגשת דוח רבעוני', date: '2026-07-01', statusText: 'בעבודה' }],
@@ -57,6 +58,26 @@ describe('renderDigestEmail', () => {
     expect(html).toContain('הגשת דוח רבעוני');
     expect(html).toContain('בעבודה');
     expect(html).toContain('01/07/2026');
+  });
+
+  it('the date column header is the ORIGINAL board column title (dateColumnTitle), not a generic label', () => {
+    const html = render();
+    expect(html).toContain('תאריך יעד');
+  });
+
+  it('falls back to a generic "תאריך" header when dateColumnTitle is empty', () => {
+    const r = recipient();
+    r.sections[0].dateColumnTitle = '';
+    const html = render({ recipient: r });
+    expect(html).toContain('תאריך');
+  });
+
+  it('HTML-escapes the date column title (no raw injected markup)', () => {
+    const r = recipient();
+    r.sections[0].dateColumnTitle = '<b>x</b>';
+    const html = render({ recipient: r });
+    expect(html).not.toContain('<b>x</b>');
+    expect(html).toContain('&lt;b&gt;x&lt;/b&gt;');
   });
 
   it('is email-safe: rtl direction everywhere, button colored per style, and NO <script> tag', () => {

@@ -56,8 +56,8 @@ function digestBlock(overrides = {}) {
     usersEmailColumnId: 'email_u',
     subject: 'המשימות שלך — נדרש עדכון',
     sections: [
-      { id: 's_start001', title: 'להתחיל:', dateColumnId: 'date_start', buttonId: 'b_start001' },
-      { id: 's_done0001', title: 'לסיים:', dateColumnId: 'date_due', buttonId: 'b_done0001' },
+      { id: 's_start001', title: 'להתחיל:', dateColumnId: 'date_start', dateColumnTitle: 'תאריך התחלה', buttonId: 'b_start001', includeStatusLabelIds: [0] },
+      { id: 's_done0001', title: 'לסיים:', dateColumnId: 'date_due', dateColumnTitle: 'תאריך סיום', buttonId: 'b_done0001', includeStatusLabelIds: [0] },
     ],
     ...overrides,
   };
@@ -83,7 +83,7 @@ function boardItemsDouble() {
       columns: {
         people_t: { text: 'דנה', statusLabelId: null, date: null, personIds: ['501'] },
         date_start: { text: '', statusLabelId: null, date: '2026-07-10', personIds: [] },
-        status_a: { text: '', statusLabelId: null, date: null, personIds: [] },
+        status_a: { text: 'בעבודה', statusLabelId: 0, date: null, personIds: [] },
         date_due: { text: '', statusLabelId: null, date: null, personIds: [] },
         status_b: { text: '', statusLabelId: null, date: null, personIds: [] },
       },
@@ -194,7 +194,22 @@ describe('PUT /api/config with digest', () => {
     ['empty sections', { sections: [] }, 'digest.sections'],
     [
       'unknown buttonId in a section',
-      { sections: [{ id: 's_x00001', title: 'א', dateColumnId: 'd', buttonId: 'b_nope0001' }] },
+      { sections: [{ id: 's_x00001', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_nope0001', includeStatusLabelIds: [0] }] },
+      'digest.sections',
+    ],
+    [
+      'section missing dateColumnTitle',
+      { sections: [{ id: 's_x00001', title: 'א', dateColumnId: 'd', dateColumnTitle: '', buttonId: 'b_start001', includeStatusLabelIds: [0] }] },
+      'digest.sections',
+    ],
+    [
+      'section with empty includeStatusLabelIds',
+      { sections: [{ id: 's_x00001', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_start001', includeStatusLabelIds: [] }] },
+      'digest.sections',
+    ],
+    [
+      'section with a non-integer includeStatusLabelId',
+      { sections: [{ id: 's_x00001', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_start001', includeStatusLabelIds: ['x'] }] },
       'digest.sections',
     ],
   ])('invalid digest — %s → 400 naming the field', async (_name, patch, field) => {

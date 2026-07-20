@@ -416,11 +416,18 @@ decision log §3.
   Rows missing an email/person are reported as skipped, never guessed.
   Duplicate emails merge (person ids united).
 - The digest is split into SECTIONS (1..4; default two, per the approved
-  mock). Each section = a date column on the tasks board + one action button.
-  **Pending rule:** date set AND date < today (strictly; Asia/Jerusalem) AND
-  the button's status column ≠ the button's target label id (unset status IS
-  pending; label id 0 handled). A recipient with zero pending tasks gets no
-  email; an empty section is omitted.
+  mock). Each section = a date column on the tasks board + one action button +
+  a **status condition**. **Pending rule (owner spec 2026-07-20):** date set
+  AND date ≤ today (a past date **includes today**; Asia/Jerusalem) AND the
+  task's status (on the button's status column) is **one of the section's
+  `includeStatusLabelIds`** — "show by status", only the listed statuses enter
+  (label id 0 valid; unset status matches nothing). This replaces the earlier
+  "≠ button target" rule, which let already-done tasks appear in a
+  not-yet-done section. A recipient with zero pending tasks gets no email; an
+  empty section is omitted.
+- **Email date-column header** = the ORIGINAL board column title
+  (`section.dateColumnTitle`), captured when the column is picked in the admin
+  (re-save after a board-side rename to refresh).
 - Each task row carries the button as a REAL v3 `/confirm` link
   (`itemId + a + k + btn`) — one click, auto-POST, done.
 - **Phase 1 sending is MANUAL ONLY** — the "שלח עכשיו" button in the admin's
@@ -444,7 +451,9 @@ digest: {
   usersEmailColumnId: "email_u",
   subject: "המשימות שלך — נדרש עדכון סטטוס",   // 1..120
   sections: [ { id: "s_xxxxxxxx", title: "…", dateColumnId: "date_x",
-                buttonId: "b_xxxxxxxx" } ]     // 1..4, buttonId must exist
+                dateColumnTitle: "תאריך התחלה",   // board title → email <th>
+                buttonId: "b_xxxxxxxx",           // must exist
+                includeStatusLabelIds: [0, 2] } ] // 1..4 sections; >=1 label id (0 valid)
 }
 ```
 

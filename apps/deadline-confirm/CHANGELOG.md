@@ -2,6 +2,25 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.6.0 — 2026-07-20 — digest: show-by-status condition + today-inclusive + real date header
+
+- **Status condition per section ("show by status")**: each group now carries
+  `includeStatusLabelIds` — a task enters only if its status (on the group
+  button's status column) is one of those labels. Fixes the bug where an
+  already-done task appeared in a not-yet-done group (old rule was "status ≠
+  button target"). At least one label is required per section.
+- **A past date now includes today** (Asia/Jerusalem) — `date ≤ today` counts
+  as overdue (was strictly before today).
+- **Email date-column header** is the ORIGINAL board column title
+  (`dateColumnTitle`), captured when the column is picked, HTML-escaped.
+- Admin UI: each section gets a multi-select of the button's status-column
+  labels; the date-column title is captured on pick; a board switch clears the
+  section's date + status condition.
+- Server validation extended (dateColumnTitle non-empty; includeStatusLabelIds
+  non-empty ints ≥0). Spec V4 Amendment + schema updated.
+- Tests: digest-service / digest-email / admin-api-digest / draft-digest
+  re-gated (green + 8 killed mutations total); full suite 452 green.
+
 ## 0.5.1 — 2026-07-20 — digest: board pickers filter by object type
 
 - Both board pickers (tasks board + users board) now show only **real

@@ -8,7 +8,9 @@ export interface DigestSectionDraft {
   id: string;
   title: string;
   dateColumnId: string | null;
+  dateColumnTitle: string; // captured when the date column is picked
   buttonId: string | null;
+  includeStatusLabelIds: number[]; // task shown only if its status is one of these
 }
 
 export interface DigestDraft {
@@ -67,7 +69,14 @@ export function newButtonsBlock(): TemplateBlock {
 }
 
 export function newDigestSection(title = ''): DigestSectionDraft {
-  return { id: `s_${randomSlug()}`, title, dateColumnId: null, buttonId: null };
+  return {
+    id: `s_${randomSlug()}`,
+    title,
+    dateColumnId: null,
+    dateColumnTitle: '',
+    buttonId: null,
+    includeStatusLabelIds: [],
+  };
 }
 
 export const DEFAULT_DIGEST_SUBJECT = 'המשימות שלך — נדרש עדכון סטטוס';
@@ -95,7 +104,7 @@ export function digestFromConfig(digest: DigestConfig | null | undefined): Diges
     usersPeopleColumnId: digest.usersPeopleColumnId,
     usersEmailColumnId: digest.usersEmailColumnId,
     subject: digest.subject,
-    sections: digest.sections.map((s) => ({ ...s })),
+    sections: digest.sections.map((s) => ({ ...s, includeStatusLabelIds: [...s.includeStatusLabelIds] })),
   };
 }
 
@@ -107,7 +116,12 @@ export function digestIsComplete(digest: DigestDraft): boolean {
     digest.subject.trim().length > 0 &&
     digest.sections.length > 0 &&
     digest.sections.every(
-      (s) => s.title.trim().length > 0 && s.dateColumnId !== null && s.buttonId !== null
+      (s) =>
+        s.title.trim().length > 0 &&
+        s.dateColumnId !== null &&
+        s.buttonId !== null &&
+        // a status condition is mandatory — at least one included label
+        s.includeStatusLabelIds.length > 0
     )
   );
 }
@@ -124,7 +138,9 @@ function digestToConfig(digest: DigestDraft): DigestConfig | null {
       id: s.id,
       title: s.title,
       dateColumnId: s.dateColumnId as string,
+      dateColumnTitle: s.dateColumnTitle,
       buttonId: s.buttonId as string,
+      includeStatusLabelIds: [...s.includeStatusLabelIds],
     })),
   };
 }
