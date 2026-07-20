@@ -137,15 +137,12 @@ describe('CreateDiscussionModal', () => {
     expect(date).toBeTruthy();
   });
 
-  it('does not render a "ללא תבנית" option in the template dropdown', async () => {
-    templatesValue.templates = [{ id: 't1', name: 'תבנית', topics: [] }];
-    await renderOpen();
-    // open the template dropdown — its trigger shows the placeholder
-    const trigger = screen.getByText('בחר תבנית');
-    fireEvent.click(trigger);
-    expect(screen.queryByText('ללא תבנית')).toBeNull();
-    expect(screen.getByText('בחר תבנית')).toBeTruthy();
-  });
+  // round182 — the standalone "בחר תבנית" topic-template dropdown was REMOVED in
+  // round147: templates are now TYPE-driven (picking a discussion type auto-applies
+  // its topic template; there is no manual template picker anymore). The old test
+  // that guarded that dropdown's "ללא תבנית" option is therefore retired — the
+  // feature it targeted no longer exists. The previous-discussion dropdown below
+  // still exists and keeps its own "no explicit none option" guard.
 
   it('does not render a "ללא דיון קודם" option in the previous-discussion dropdown', async () => {
     await renderOpen();
