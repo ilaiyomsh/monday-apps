@@ -9,9 +9,9 @@
 .decisionsRoot {
   display: flex;
   flex-direction: column;
-  /* Tightened inter-element gap (was 16px) — halved to match the Topics tab
-     and stay proportional to the 14px table text. */
-  gap: var(--spacing-small, 8px);
+  /* round188 — zero the normal-flow gap; the toolbar→content gap is pinned on the
+     sticky toolbar's padding-bottom (see .decToolbar) so it stays CONSTANT on scroll. */
+  gap: 0;
   /* Same full-bleed layout as TasksTab: left inset keeps the toolbar off the
      edge, the board bleeds right so row separators run to the right edge. */
   width: 100%;
@@ -40,13 +40,12 @@
   top: 0;
   z-index: 20;
   background: var(--primary-background-color, #ffffff);
-  padding-block: 4px;
-  /* round138 — identical toolbar rhythm in all four discussion tabs (owner
-     request): the decisions root gap is 8px (vs 16px in Tasks/Previous), so an
-     extra 8px margin lands the pills exactly 20px above the content below,
-     like the other tabs. Font pinned to the shared pills' 14px. */
+  /* round188 — the whole toolbar→content gap (20px, matching Tasks/Previous) is
+     pinned HERE on the sticky toolbar's padding-bottom, not split between a margin
+     and the root gap which both scroll away. Keeps the gap constant on scroll. */
+  padding-top: 4px;
+  padding-bottom: 20px;
   font-size: 14px;
-  margin-block-end: 8px;
 }
 /* Cover the scroll container's (.body) top padding band above the pinned toolbar
    so scrolled rows can't peek above it (round93). */
