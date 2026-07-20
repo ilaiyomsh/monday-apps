@@ -41,6 +41,9 @@ describe('SummaryTab', () => {
     });
     render(<SummaryTab discussion={{ id: 'D1' }} />);
     expect(await screen.findByTestId('rte')).toHaveTextContent('סיכום קיים');
+    // round183 — the box + save button reveal only once the editor reports ready
+    // (the branded loader covers until then); simulate that readiness.
+    act(() => { cap.onReady('<p>סיכום קיים</p>'); });
     expect(screen.getByRole('button', { name: 'שמור' })).toBeInTheDocument();
     expect(screen.getByText(/נערך לאחרונה/)).toBeInTheDocument();
   });

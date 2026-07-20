@@ -447,9 +447,18 @@
   background: var(--ui-border-color, #d0d4e4);
 }
 
-/* People-column groups get a wider label→avatars gap than the date/time groups. */
+/* round183 — the expanded role groups (מנהל / מרכז דיון / משתתפים) are tightened
+   (owner request): less white space BETWEEN groups (padding-inline 12px → 4px) and
+   between each label and its avatars (gap 12px → 6px). */
 .peopleGroupAvatars {
-  gap: 12px;
+  gap: 6px;
+  padding-inline: 4px;
+}
+/* round183 — and NO divider around/between the role groups: drop the ::before
+   separator whenever a role group follows any group (time→first role and
+   role→role). The date·time separator (date followed by a .dateGroup) is kept. */
+.peopleGroup + .peopleGroupAvatars::before {
+  display: none;
 }
 
 /* Header people fields ONLY: neutralize the shared PersonPicker trigger's own

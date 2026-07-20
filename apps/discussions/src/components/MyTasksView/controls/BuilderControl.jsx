@@ -98,7 +98,9 @@ export function BuilderControl({
       <button type="button" ref={triggerRef} className={pillClass} onMouseDown={updatePosition}>
         <Icon className={styles.bPillIcon} />
         <span>{label}</span>
-        {applied && badge != null ? <span className={styles.bPillCount}>/ {badge}</span> : null}
+        {/* round183 — the "/ N" count suffix was removed (owner request); an
+            active control is signalled by the darker background alone
+            (styles.bPillApplied via pillClass), no slash + number. */}
       </button>
     </Dialog>
   );
