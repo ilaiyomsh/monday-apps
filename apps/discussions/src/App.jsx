@@ -948,7 +948,7 @@ export default function App() {
           exportingId={exportingId}
           canManageSettings={canManageSettings}
           currentUser={currentUser}
-          onOpenSettings={() => setShowSettings(true)}
+          onOpenSettings={() => setShowSettings((s) => !s)}
           onOpenPersonal={openPersonal}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
