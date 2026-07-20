@@ -98,3 +98,20 @@ a,
     scrollbar-color: var(--ui-border-color, #c3c6d4) transparent;
   }
 }
+
+/* round187 — recharts draws the browser's focus ring around the WHOLE plot SVG
+   when a bar is clicked (the <svg> surface takes focus), which read as a stray
+   black frame around all the bars. Suppress it on the recharts surface/wrapper —
+   app-wide, so both the discussion Effectiveness chart and the personal Dashboard
+   chart are covered. The charts have no keyboard interaction that needs the ring.
+   (recharts class names are its own global classes, not CSS-module-scoped.) */
+.recharts-wrapper:focus,
+.recharts-wrapper:focus-visible,
+.recharts-surface:focus,
+.recharts-surface:focus-visible,
+.recharts-wrapper svg:focus,
+.recharts-wrapper svg:focus-visible,
+.recharts-wrapper svg *:focus,
+.recharts-wrapper svg *:focus-visible {
+  outline: none;
+}
