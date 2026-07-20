@@ -3,9 +3,15 @@
   flex-direction: column;
   gap: 12px;
   padding: 16px 0;
-  /* Match PreviousTasksTab/TasksTab width — 100% up to a 1100px cap, centered by DiscussionCard's .body > * rule. */
+  /* Match PreviousTasksTab/TasksTab width — 100% up to a 1100px cap. */
   width: 100%;
   max-width: 1100px;
+  /* round186 — center the root WITHIN its (90%-wide, centered) tab wrapper. Without
+     this, once the card is wide enough that 90% > 1100px the 1100px-capped root has
+     no auto margins and sticks to one side (right, in RTL) — so the editor AND the
+     loader looked off-center when the selector was CLOSED (wide card) but centered
+     when it was OPEN (narrow card). margin-inline:auto centers it in both states. */
+  margin-inline: auto;
 }
 
 /* round183 — the editor area holds the (mounting) editor with the branded loader
