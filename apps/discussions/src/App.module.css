@@ -45,6 +45,21 @@
 .appFrame {
   position: relative;
 }
+/* round175 — when monday's item-card / updates panel docks and narrows the iframe
+   (body[data-chrome-narrow]; see utils/chromeNarrow.js — the canonical panel-open
+   signal), flatten the frame's PHYSICAL-RIGHT edge (the panel always docks on the
+   right, regardless of the app's RTL) so the floating card meets the panel flush —
+   no grey padding gap, rounded corner, or shadow seam. Self-clears when the panel
+   closes and the width returns. */
+:global(body[data-chrome-narrow="1"]) .appShell {
+  padding-right: 0;
+}
+:global(body[data-chrome-narrow="1"]) .appFrame,
+:global(body[data-chrome-narrow="1"]) .appShellBody {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
 /* Real monday mobile app: tighten the frame so it doesn't eat scarce space. */
 :global(.mobile-app) .appShell {
   --frame-pad: 6px;
