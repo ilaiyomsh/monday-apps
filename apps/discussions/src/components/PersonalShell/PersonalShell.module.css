@@ -1,74 +1,103 @@
-/* round170 — personal-area shell: back arrow pinned top-LEFT, 3-tab switcher
-   centered, the active view fills the rest. */
+/* round174 — personal-area shell as a LEFT vertical rail + main content (owner
+   request). The rail (dir:ltr on the shell puts it on the physical LEFT) carries
+   "חזרה לדיונים" at the top and the 3-mode switcher below; the active view fills
+   the rest. Frees the whole top of the screen for the view's own single toolbar. */
 .shell {
   display: flex;
-  flex-direction: column;
+  direction: ltr;
   flex: 1;
   min-height: 0;
   width: 100%;
 }
-/* round172/round173 — the header holds ONE flush-LEFT segmented switcher. */
-.header {
+.rail {
   flex: none;
-  display: flex;
-  direction: ltr;
-  align-items: center;
-  justify-content: flex-start;
-  min-height: 48px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
-  background: var(--primary-background-color, #fff);
-}
-.tabs {
-  display: inline-flex;
-  /* natural RTL reading order: דשבורד (right) → … → חזרה לדיונים (left) */
+  width: 176px;
   direction: rtl;
-  background: var(--primary-background-hover-color, #eef1f8);
-  border-radius: 11px;
-  padding: 4px;
-  gap: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 10px;
+  background: var(--primary-background-hover-color, #f7f8fb);
+  border-inline-end: 1px solid var(--layout-border-color, #eef0f5);
 }
-.tab {
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
   border: none;
-  background: transparent;
-  padding: 8px 20px;
   border-radius: 8px;
+  background: transparent;
   font-family: var(--font-family);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--secondary-text-color, #676879);
   cursor: pointer;
-  white-space: nowrap;
 }
-.tab:hover {
+.back:hover {
+  background: var(--primary-background-color, #fff);
   color: var(--primary-text-color, #323338);
 }
-.tabActive {
+.sep {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--ui-border-color, #e6e9ef);
+}
+.tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  font-family: var(--font-family);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary-text-color, #4b4e57);
+  cursor: pointer;
+  text-align: right;
+}
+.item:hover {
+  background: var(--primary-background-color, #fff);
+}
+.itemActive {
   background: var(--primary-background-color, #fff);
   color: var(--primary-color, #0073ea);
   font-weight: 800;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
-/* round173 — the back control is a 4th segment: identical tab styling, plus a
-   left arrow after its label (icon sits on the LEFT since the group is RTL). */
-.tabBack {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.itemIcon {
+  flex: none;
 }
-.body {
+.label {
+  white-space: nowrap;
+}
+.main {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   display: flex;
-  /* round172 — one CONSTANT, small gap between the mode switcher and the active
-     view's content, applied to all three modes. Each embedded view starts flush
-     to the top of this box, so the only gap is this padding. */
-  padding-top: 8px;
 }
-/* On a real mobile app the back label is dropped to save width (icon only). */
-:global(.mobile-app) .tabBack span {
+/* Real monday mobile app: collapse the rail to an icon-only strip to save the
+   scarce horizontal width. */
+:global(.mobile-app) .rail {
+  width: 52px;
+  padding: 10px 6px;
+}
+:global(.mobile-app) .label {
   display: none;
 }
-:global(.mobile-app) .tab {
-  padding: 8px 12px;
+:global(.mobile-app) .item,
+:global(.mobile-app) .back {
+  justify-content: center;
+  padding: 0;
 }
