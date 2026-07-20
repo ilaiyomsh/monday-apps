@@ -88,7 +88,7 @@ export function useDashboardData() {
           discussionId: firstLinkedId(d.discussionLinkID),
         }));
 
-        setState({ data: { discussions, tasks, decisions, doneStatusIds }, loading: false, error: null });
+        setState({ data: { discussions, tasks, decisions }, loading: false, error: null });
       } catch (err) {
         logger.error('useDashboardData', 'טעינת נתוני הדשבורד נכשלה', err);
         if (!cancelled && runId === runIdRef.current) setState({ data: null, loading: false, error: err });
@@ -96,9 +96,23 @@ export function useDashboardData() {
     })();
 
     return () => { cancelled = true; };
-  }, [nonce, doneStatusIds]);
+    // round181 — depend ONLY on `nonce` (explicit reload). doneStatusIds is an
+    // AGGREGATION input, NOT a fetch input (the queries above never reference it),
+    // so it must not trigger a full 3-board refetch. Previously it was a dep, and
+    // because `doneId` starts null and resolves a tick later (a NEW Set each time),
+    // a cold first-touch fetched all three boards TWICE. It is merged into the
+    // returned data below via a cheap memo instead — so resolving doneId (or the
+    // owner changing the delayed-done preference) re-aggregates without refetching.
+  }, [nonce]);
 
-  return { ...state, reload: () => setNonce((n) => n + 1) };
+  // Merge the aggregation-only doneStatusIds into the returned data without
+  // re-running the fetch effect above.
+  const data = useMemo(
+    () => (state.data ? { ...state.data, doneStatusIds } : null),
+    [state.data, doneStatusIds]
+  );
+
+  return { data, loading: state.loading, error: state.error, reload: () => setNonce((n) => n + 1) };
 }
 
 export default useDashboardData;
