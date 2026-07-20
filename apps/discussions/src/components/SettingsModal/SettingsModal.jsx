@@ -140,7 +140,7 @@ export function resolveMultiColView(typedOptions, selectedIds, colTitles = {}) {
  * alias→real-column-id mapping that the SDK reads, then persist via
  * SettingsContext.updateSettings (monday.storage, per instance).
  */
-export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false }) {
+export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false, contained = false }) {
   const { settings, updateSettings, isConfigured } = useSettings();
   const { context } = useMondayContext();
   // settings is null until a mapping is stored; seed the editable draft from an
@@ -615,13 +615,18 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
 
   if (!isOpen) return null;
 
+  // round178 — `contained` scopes the overlay to the right discussion-card pane
+  // (absolute, not fixed) so the settings box opens CENTERED within that pane and
+  // dims only its tabs (owner request). Full-screen otherwise (e.g. the boot gate).
+  const overlayClass = `${styles.overlay} ${contained ? styles.overlayContained : ''}`;
+
   // round147 — templates-only mode: a super member ("חבר-על") opens the gear to
   // manage templates and NOTHING else — no mapping, no preferences, no
   // permissions. TemplatesPanel persists itself to monday.storage, so the
   // settings save/footer machinery is deliberately absent here.
   if (templatesOnly) {
     return (
-      <div className={styles.overlay} onClick={(e) => {
+      <div className={overlayClass} onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}>
         <div
@@ -654,7 +659,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // so the re-seed effect refreshes the mapping view with the fresh config.
   if (showTopUp) {
     return (
-      <div className={styles.overlay} onClick={(e) => {
+      <div className={overlayClass} onClick={(e) => {
         if (e.target === e.currentTarget) setShowTopUp(false);
       }}>
         <div
@@ -684,7 +689,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   }
 
   return (
-    <div className={styles.overlay} onClick={(e) => {
+    <div className={overlayClass} onClick={(e) => {
       if (e.target === e.currentTarget) onClose();
     }}>
       <div

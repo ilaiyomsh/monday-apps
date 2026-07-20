@@ -943,6 +943,16 @@ export default function App() {
             canManageSettings={canManageSettings}
           />
         )}
+        {/* round178 — the gear-opened Settings box is rendered INSIDE the card pane
+            with `contained`, so it centers within this white pane and dims only its
+            tabs (not the whole screen). */}
+        <SettingsModal
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          onNotify={notify}
+          templatesOnly={!canManageSettings}
+          contained
+        />
       </div>
 
       <CreateDiscussionModal
@@ -955,9 +965,6 @@ export default function App() {
         canManageSettings={canManageSettings}
       />
 
-      {/* round147 — a super member (not an owner) gets the gear in
-          templates-only mode: manage templates, nothing else. */}
-      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} onNotify={notify} templatesOnly={!canManageSettings} />
     </div>
       {/* round132 — deep-link splash: the app keeps rendering (and loading)
           UNDERNEATH this opaque overlay, so the branded loader plays until the
