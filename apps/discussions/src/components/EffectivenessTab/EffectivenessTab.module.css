@@ -214,6 +214,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-small, 12px);
+  /* round189 — breathing room below the revealed items so the last row doesn't touch
+     the bottom edge of the white card. Sized to match the gap between the chart widget
+     and the group title below it (the .root/.topRow gap, --spacing-large 24px). */
+  margin-block-end: var(--spacing-large, 24px);
 }
 
 .filteredHeader {
@@ -225,11 +229,13 @@
 .filteredTitle {
   margin: 0;
   font-size: 18px;
-  font-weight: 700;
-  /* Match the Tasks/Previous-Tasks group titles — force the variable-font weight
-     axis so the Hebrew label renders bold and uniform across all task tables. */
-  font-variation-settings: 'wght' 700;
-  color: var(--text-color, #323338);
+  /* round189 — match the board group titles used everywhere else (TasksTab
+     .groupTitle): medium weight (500, NOT bold) and the secondary-text grey. The
+     inline selectedColor still tints status selections; person selections fall back
+     to this grey, exactly like a normal group header. */
+  font-weight: 500;
+  font-variation-settings: 'wght' 500;
+  color: var(--secondary-text-color, #676879);
 }
 
 .taskStack {
