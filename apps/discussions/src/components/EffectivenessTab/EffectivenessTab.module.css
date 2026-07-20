@@ -26,11 +26,27 @@
   gap: var(--spacing-medium, 16px);
 }
 
-/* Auto-fitting grid on desktop (three cards: total · בוצעו · בעיכוב); gated on
-   `.is-desktop` (not viewport width) so an item-card panel narrowing the iframe
-   doesn't drop it to a single column. */
+/* round183 — desktop layout (owner request): the 3 KPI tiles STACK VERTICALLY on
+   the LEFT (order top→bottom: סה"כ משימות · בוצעו · בעיכוב — the JSX order), and the
+   bar chart sits to their RIGHT and is TALLER. Gated on `.is-desktop` (not viewport
+   width) so a docked item-card panel keeps the mobile stacked layout. The tiles
+   keep their exact size (single-column grid, fixed width, min-height unchanged);
+   `.root` becomes a row and the chart card takes the remaining width. */
+:global(.is-desktop) .root {
+  flex-direction: row;
+  align-items: flex-start; /* tiles keep their natural height — never stretched */
+}
 :global(.is-desktop) .kpiGrid {
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: 1fr; /* single column → the 3 tiles stack vertically */
+  width: 240px;
+  flex: none;
+}
+:global(.is-desktop) .chartCard {
+  flex: 1;
+  min-width: 0;
+}
+:global(.is-desktop) .chartContainer {
+  height: 420px; /* taller now that the tiles no longer sit above it */
 }
 
 /* dir="ltr" on the card puts the accent stripe physically on the left; the body

@@ -3,6 +3,7 @@ import { Button } from '@vibe/core';
 import { Check, Loader2, AlertCircle } from 'lucide-react';
 import { useSummary } from '@generated/hooks/useSummary.js';
 import lazyRetry from '@generated/utils/lazyRetry.js';
+import { BrandLoader } from '@components/BrandLoader';
 import styles from './SummaryTab.module.css';
 
 // Lazy-load the editor so TipTap (~130KB gz) stays out of the initial board-view
@@ -35,6 +36,13 @@ export function SummaryTab({ discussion, canEdit = true }) {
   const savingRef = useRef(false); // a save is in flight (serialise saves)
   // 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
   const [status, setStatus] = useState('idle');
+  // round183 — show the branded loader (like create-discussion) until the editor
+  // is FULLY ready: the lazy TipTap chunk resolved AND its instance created (its
+  // onReady/onCreate fired) — so the summary box appears in one paint with all its
+  // formatting tools + the save button, never a bare frame first. Reset per
+  // discussion (the editor remounts via `key`).
+  const [editorReady, setEditorReady] = useState(false);
+  useEffect(() => { setEditorReady(false); }, [discussionId]);
 
   // Persist the current draft. Saves are serialised: while one is in flight any
   // further request no-ops, and the running save re-runs from its tail if the
@@ -65,7 +73,11 @@ export function SummaryTab({ discussion, canEdit = true }) {
     timerRef.current = setTimeout(() => { runSave(); }, AUTOSAVE_DELAY);
   }, [runSave]);
 
-  const handleReady = useCallback((h) => { draftRef.current = h; savedRef.current = h; }, []);
+  const handleReady = useCallback((h) => {
+    draftRef.current = h;
+    savedRef.current = h;
+    setEditorReady(true);
+  }, []);
 
   const handleChange = useCallback((h) => {
     draftRef.current = h;
@@ -86,33 +98,36 @@ export function SummaryTab({ discussion, canEdit = true }) {
     }
   }, [save]);
 
-  // A skeleton shaped like the editor itself, for both load + lazy-chunk fallback.
-  const skeleton = (
-    <div className={styles.skeletonFrame} aria-busy="true" aria-label="טוען סיכום">
-      <div className={styles.skeletonToolbar} />
-      <div className={styles.skeletonBody} />
-    </div>
-  );
-
-  if (loading) {
-    return <div className={styles.root} dir="rtl">{skeleton}</div>;
-  }
-
   const when = formatWhen(updatedAt);
+  // The branded loader covers the editor area until the data has loaded AND the
+  // editor reports ready (see editorReady). The editor mounts underneath (once the
+  // data is in) so its onReady can fire; the footer (save button + status) appears
+  // only once everything is up, so the box arrives complete.
+  const showLoader = loading || !editorReady;
 
   return (
     <div className={styles.root} dir="rtl">
-      <Suspense fallback={skeleton}>
-        <RichTextEditor
-          key={discussionId}
-          initialValue={html}
-          onReady={handleReady}
-          onChange={handleChange}
-          placeholder={canEdit ? PLACEHOLDER : ''}
-          editable={canEdit}
-        />
-      </Suspense>
+      <div className={styles.editorWrap}>
+        {!loading && (
+          <Suspense fallback={null}>
+            <RichTextEditor
+              key={discussionId}
+              initialValue={html}
+              onReady={handleReady}
+              onChange={handleChange}
+              placeholder={canEdit ? PLACEHOLDER : ''}
+              editable={canEdit}
+            />
+          </Suspense>
+        )}
+        {showLoader && (
+          <div className={styles.loaderOverlay} aria-busy="true" aria-label="טוען סיכום">
+            <BrandLoader />
+          </div>
+        )}
+      </div>
 
+      {!showLoader && (
       <div className={styles.footer}>
         {!canEdit ? null : (
         <div className={styles.actions}>
@@ -147,6 +162,7 @@ export function SummaryTab({ discussion, canEdit = true }) {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
