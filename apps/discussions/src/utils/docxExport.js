@@ -44,9 +44,10 @@ import logger from './logger.js';
 const TASK_COLS = ['responsibilityID', 'deadlineID', 'statusID']; // assignee, deadline, status
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const HEADER_FILL = '4F6B8F';
-// 6 task columns, DXA (twips): #, task, assignee, deadline, status, from-previous.
-// Sum 9000 < printable width on Letter/A4 (≥9026).
-const TASK_COL_WIDTHS = [600, 2900, 1900, 1400, 1300, 900];
+// round191 — the "מדיון קודם" column was removed (owner request); its 900 DXA were
+// folded into the task-name column so the table still fills the same width.
+// 5 task columns, DXA (twips): #, task, assignee, deadline, status. Sum 9000.
+const TASK_COL_WIDTHS = [600, 3800, 1900, 1400, 1300];
 
 // Decode a base64 string to a Uint8Array (browser + node/jsdom both have atob).
 function base64ToU8(b64) {
@@ -96,7 +97,9 @@ export function parseImageMeta(dataUri) {
     }
     if (!width || !height) return null;
     return { type: kind, data, width, height };
-  } catch {
+  } catch (err) {
+    // Malformed/unsupported logo data URI — skip the logo rather than break export.
+    logger.warn('docxExport', 'פענוח מטא-נתוני הלוגו נכשל — הלוגו יושמט מהייצוא', err);
     return null;
   }
 }
@@ -186,13 +189,23 @@ export function buildDiscussionModel({ discussion, topics = [], summaryHtml = ''
     previousText: previousDiscussionName || '',
     topics: filterTopicsForExport(topics),
     summaryHtml: summaryHtml || '',
-    tasks: tasks.map((t) => ({
-      name: t?.name || '',
-      assigneesText: (Array.isArray(t?.assignees) ? t.assignees : []).map((p) => p?.name).filter(Boolean).join(', '),
-      deadlineText: formatHeDate(t?.deadline),
-      status: t?.status || '',
-      fromPrevious: !!t?.fromPrevious,
-    })),
+    // round191 — the exported tasks table is ordered by RESPONSIBLE (owner request):
+    // all of one person's tasks together, then the next. Stable sort by assignee
+    // text (Hebrew collation); tasks with no assignee sort last.
+    tasks: tasks
+      .map((t) => ({
+        name: t?.name || '',
+        assigneesText: (Array.isArray(t?.assignees) ? t.assignees : []).map((p) => p?.name).filter(Boolean).join(', '),
+        deadlineText: formatHeDate(t?.deadline),
+        status: t?.status || '',
+        fromPrevious: !!t?.fromPrevious,
+      }))
+      .sort((a, b) => {
+        if (!a.assigneesText && !b.assigneesText) return 0;
+        if (!a.assigneesText) return 1;
+        if (!b.assigneesText) return -1;
+        return a.assigneesText.localeCompare(b.assigneesText, 'he');
+      }),
   };
 }
 
@@ -548,7 +561,8 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
       })],
     });
     const NAME_COL = 1; // the "משימה" column — right-aligned, all others centered.
-    const headers = ['מס׳', 'משימה', 'אחראי', 'דד ליין', 'סטטוס', 'מדיון קודם'];
+    // round191 — the "מדיון קודם" column was removed (owner request); 5 columns now.
+    const headers = ['מס׳', 'משימה', 'אחראי', 'דד ליין', 'סטטוס'];
     const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, TASK_COL_WIDTHS[i], true, i !== NAME_COL)) })];
     model.tasks.forEach((t, i) => {
       rows.push(new TableRow({
@@ -559,7 +573,6 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
           cell(t.assigneesText, TASK_COL_WIDTHS[2], false, true),
           cell(t.deadlineText, TASK_COL_WIDTHS[3], false, true),
           cell(t.status || '—', TASK_COL_WIDTHS[4], false, true),
-          cell(t.fromPrevious ? '✓' : '', TASK_COL_WIDTHS[5], false, true),
         ],
       }));
     });
@@ -701,7 +714,10 @@ export function injectSectionRtlIntoZip(bytes) {
     else xml = xml.replace(/<\/w:sectPr>/g, '<w:bidi/></w:sectPr>');
     files[key] = strToU8(xml);
     return zipSync(files, { level: 6 });
-  } catch {
+  } catch (err) {
+    // Byte-surgery is a rendering nicety; on any failure return the original bytes
+    // so the export never breaks over it.
+    logger.warn('docxExport', 'הזרקת RTL ברמת ה-section נכשלה — מייצא את הקובץ ללא ההתאמה', err);
     return bytes;
   }
 }

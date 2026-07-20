@@ -151,6 +151,9 @@
   flex-direction: column;
   gap: 2px;
   min-width: 140px;
+  /* round191 — the whole kebab popup is RTL (owner request): menu items right-aligned
+     (icon leads on the right), and the delete-confirm row's ✓/✕ land on the LEFT. */
+  direction: rtl;
 }
 .menuItem {
   display: flex;
@@ -180,6 +183,13 @@
   padding: 6px 10px;
   font-size: 13px;
   color: var(--text-color, #323338);
+  /* round191 — RTL confirm row: the "?למחוק נושא" text sits on the RIGHT and stretches,
+     pushing the ✓ (confirm) and ✕ (cancel) buttons to the far LEFT (owner request). */
+  direction: rtl;
+  text-align: right;
+}
+.menuConfirm > span {
+  flex: 1;
 }
 .menuIcon {
   display: inline-flex;
