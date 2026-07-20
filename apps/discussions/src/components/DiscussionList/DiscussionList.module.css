@@ -28,28 +28,32 @@
   padding-bottom: var(--spacing-medium, 12px);
 }
 
-.titleRow {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-small, 8px);
-  /* round170 — LTR so DOM order == visual order: [האזור האישי][יומן][הגדרות][חדש]. */
+/* round172 — uniform-height control card. A 2-col grid: col1 holds the personal
+   button (row1) + the search bar (row2), so they share ONE width; col2 holds the
+   icon cluster + "חדש" (row1) and the "סינון" button (row2), hugging col1. Every
+   control is `--ctl-h` tall. dir=ltr → DOM order == visual left→right. */
+.actionGrid {
+  --ctl-h: 34px;
+  display: grid;
+  grid-template-columns: max-content 1fr;
   direction: ltr;
-  flex-wrap: wrap;
-  row-gap: var(--spacing-xs, 4px);
+  align-items: center;
+  gap: 8px;
 }
 
-/* round170 — the "האזור האישי" entry button: wide, neutral (no coloured icon),
-   with a leading label and a trailing chevron. Fills the row's free space so the
-   icons + "חדש" sit to its right. */
+/* "האזור האישי" — sized to its content (avatar + label + chevron), NOT stretched.
+   Its own dir=rtl orders avatar(right) → label → chevron(left). */
 .personalBtn {
-  flex: 1 1 auto;
-  min-width: 0;
+  grid-column: 1;
+  justify-self: start;
+  direction: rtl;
+  width: max-content;
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
+  gap: 7px;
+  height: var(--ctl-h);
+  padding: 0 10px;
   border: 1px solid var(--ui-border-color, #d0d4e4);
   border-radius: 8px;
   background: var(--primary-background-color, #fff);
@@ -59,33 +63,72 @@
   color: var(--primary-text-color, #323338);
   cursor: pointer;
 }
-.personalBtn:hover {
-  background: var(--primary-background-hover-color, #f5f6f8);
-}
-.personalBtn :global(svg) {
-  flex: none;
-  color: var(--secondary-text-color, #676879);
-}
+.personalBtn:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.personalLabel { white-space: nowrap; }
+.personalChevron { flex: none; color: var(--secondary-text-color, #676879); }
+/* Keep the user avatar compact so the button stays --ctl-h tall. */
+.personalAvatar { flex: none; display: inline-flex; align-items: center; }
+.personalAvatar :global(.MuiAvatar-root),
+.personalAvatar :global([class*="avatar"]) { width: 22px; height: 22px; font-size: 10px; }
 
-/* round170 — consolidated filter row: search (right) + one "סינון" button (left). */
-.filterBar {
-  display: flex;
+/* col2 row1 — icon cluster + "חדש", hugging the col1 boundary. */
+.actionIcons {
+  grid-column: 2;
+  justify-self: start;
+  display: inline-flex;
   align-items: center;
-  gap: var(--spacing-small, 8px);
+  gap: 8px;
 }
-.filterBar .searchWrap {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.filterAnchor {
-  position: relative;
+.iconBtn {
+  width: var(--ctl-h);
+  height: var(--ctl-h);
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 8px;
+  background: var(--primary-background-color, #fff);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.iconBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--primary-text-color, #323338);
+}
+.newBtn {
+  height: var(--ctl-h);
+  padding: 0 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.newBtn:hover { background: var(--primary-hover-color, #0060b9); }
+
+/* col1 row2 — search bar; grid-stretches to col1 (= personal button width). */
+.actionGrid .searchWrap {
+  grid-column: 1;
+  width: 100%;
+  min-width: 0;
+  height: var(--ctl-h);
+}
+/* col2 row2 — the "סינון" button. */
+.filterAnchor {
+  grid-column: 2;
+  justify-self: start;
+  position: relative;
 }
 .filterBtn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 38px;
+  height: var(--ctl-h, 34px);
   padding: 0 14px;
   border: 1px solid var(--ui-border-color, #d0d4e4);
   border-radius: 8px;
@@ -198,13 +241,14 @@
 }
 .search {
   width: 100%;
-  height: 32px;
+  /* round172 — match the uniform control height + radius of the card. */
+  height: var(--ctl-h, 34px);
   padding: 0 8px;
   padding-inline-start: 30px;
   /* room for the clear-X pinned at the inline-end (left in RTL) */
   padding-inline-end: 28px;
   border: 1px solid var(--ui-border-color, #c3c6d4);
-  border-radius: var(--border-radius-small, 4px);
+  border-radius: 8px;
   background: var(--primary-background-color, #fff);
   color: var(--text-color, #323338);
   font-size: var(--font-size-general-label, 14px);

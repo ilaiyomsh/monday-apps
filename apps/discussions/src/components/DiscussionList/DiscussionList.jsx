@@ -2,9 +2,10 @@ import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallba
 import { createPortal } from 'react-dom';
 import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscussions';
 import { Button, Text, IconButton } from '@vibe/core';
-import { Calendar, CloseSmall, Search, Settings } from '@vibe/icons';
+import { CloseSmall, Search } from '@vibe/icons';
 import { HighlightedText } from '@generated/components/HighlightedText';
-import { Check, ChevronLeft, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { PersonAvatar } from '@generated/components/PersonAvatar';
+import { Calendar, Check, ChevronLeft, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Settings, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
 import { fmtTimeLabel, buildMonthOptions } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
@@ -541,47 +542,52 @@ export function DiscussionList({
       {/* round131 — the 4px gradient accent bar was removed (owner request). */}
       <div className={styles.header}>
         <div className={styles.headerInner}>
-          {/* Mockup buttons row: personal-view nav (outline) at inline-start,
-              chrome (gear + view toggle) and the primary "חדש" at inline-end. */}
-          {/* round170 — one "האזור האישי" entry (replaces המשימות שלי / ההחלטות
-              שלי / dashboard), then the calendar + settings icons, then the
-              primary "חדש". The row is dir=ltr, so DOM order = visual left→right. */}
-          <div className={styles.titleRow}>
+          {/* round170/round172 — a uniform-height control card. 2-col grid so the
+              personal button (col1, sized to its content) and the search bar
+              (col1 below it) share ONE width, while the icon cluster + "חדש"
+              (col2) and the "סינון" button (col2 below) sit to their right. Every
+              control is `--ctl-h` tall. dir=ltr → DOM = visual left→right. */}
+          <div className={styles.actionGrid} data-testid="filter-bar">
             {onOpenPersonal && (
               <button type="button" className={styles.personalBtn} onClick={onOpenPersonal}>
-                <span>האזור האישי</span>
-                <ChevronLeft size={16} aria-hidden="true" />
+                {currentUser && (
+                  <span className={styles.personalAvatar} aria-hidden="true">
+                    <PersonAvatar person={currentUser} size="sm" showName={false} />
+                  </span>
+                )}
+                <span className={styles.personalLabel}>האזור האישי</span>
+                <ChevronLeft size={16} aria-hidden="true" className={styles.personalChevron} />
               </button>
             )}
-            {onViewModeChange && (
-              <IconButton
-                icon={isCalendar ? List : Calendar}
-                size={"small"}
-                kind={"tertiary"}
-                ariaLabel={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
-                tooltipContent={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
-                onClick={() => onViewModeChange(isCalendar ? 'list' : 'calendar')}
-              />
-            )}
-            {(canManageSettings || isSuper) && (
-              <IconButton
-                icon={Settings}
-                size={"small"}
-                kind={"tertiary"}
-                ariaLabel={canManageSettings ? 'הגדרות' : 'ניהול תבניות'}
-                onClick={onOpenSettings}
-              />
-            )}
-            {canCreateDiscussion && (
-              <Button kind={"primary"} size={"small"} onClick={onCreateNew}>
-                חדש
-              </Button>
-            )}
-          </div>
-          {/* round170 — consolidated filter row: search on the RIGHT, one "סינון"
-              button on the LEFT opening a popover with the type (+ month, list
-              view only) selects. */}
-          <div className={styles.filterBar} data-testid="filter-bar">
+            <div className={styles.actionIcons}>
+              {onViewModeChange && (
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  aria-label={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
+                  title={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
+                  onClick={() => onViewModeChange(isCalendar ? 'list' : 'calendar')}
+                >
+                  {isCalendar ? <List size={18} aria-hidden="true" /> : <Calendar size={18} aria-hidden="true" />}
+                </button>
+              )}
+              {(canManageSettings || isSuper) && (
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  aria-label={canManageSettings ? 'הגדרות' : 'ניהול תבניות'}
+                  title={canManageSettings ? 'הגדרות' : 'ניהול תבניות'}
+                  onClick={onOpenSettings}
+                >
+                  <Settings size={18} aria-hidden="true" />
+                </button>
+              )}
+              {canCreateDiscussion && (
+                <button type="button" className={styles.newBtn} onClick={onCreateNew}>
+                  חדש
+                </button>
+              )}
+            </div>
             <div className={styles.searchWrap}>
               <Search className={styles.searchIcon} aria-hidden="true" />
               <input

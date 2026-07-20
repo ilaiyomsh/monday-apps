@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import styles from './PersonalShell.module.css';
 
 // round170 — "האזור האישי" (personal area): one shell hosting the three personal
@@ -17,29 +17,33 @@ const MODES = [
 export function PersonalShell({ activeMode, onSelectMode, onBack, children }) {
   return (
     <div className={styles.shell} dir="rtl">
+      {/* round172 — the whole group is flush-LEFT: back is the leftmost control,
+          then the 3-mode switcher. The back arrow sits to the LEFT of its label. */}
       <div className={styles.header}>
-        <button
-          type="button"
-          className={styles.back}
-          onClick={onBack}
-          aria-label="חזרה לאזור הדיונים"
-        >
-          <ArrowRight size={17} aria-hidden="true" />
-          <span>חזרה לדיונים</span>
-        </button>
-        <div className={styles.tabs} role="tablist" aria-label="האזור האישי">
-          {MODES.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              role="tab"
-              aria-selected={activeMode === m.id}
-              className={`${styles.tab} ${activeMode === m.id ? styles.tabActive : ''}`}
-              onClick={() => onSelectMode(m.id)}
-            >
-              {m.label}
-            </button>
-          ))}
+        <div className={styles.leftGroup}>
+          <button
+            type="button"
+            className={styles.back}
+            onClick={onBack}
+            aria-label="חזרה לאזור הדיונים"
+          >
+            <ArrowLeft size={17} aria-hidden="true" />
+            <span>חזרה לדיונים</span>
+          </button>
+          <div className={styles.tabs} role="tablist" aria-label="האזור האישי">
+            {MODES.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                role="tab"
+                aria-selected={activeMode === m.id}
+                className={`${styles.tab} ${activeMode === m.id ? styles.tabActive : ''}`}
+                onClick={() => onSelectMode(m.id)}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <div className={styles.body}>{children}</div>
