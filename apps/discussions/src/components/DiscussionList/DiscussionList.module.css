@@ -27,14 +27,23 @@
   display: flex;
   direction: rtl;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 10px;
 }
 .actions {
   display: inline-flex;
   direction: rtl;
   align-items: center;
   gap: 6px;
+}
+/* round177 — always-open search bar filling the gap between the action cluster
+   and the personal avatar. Its magnifier (`.searchIcon`, inset-inline-start) sits
+   on the RTL-leading RIGHT edge, immediately left of the calendar toggle. */
+.searchBar {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 /* Transparent icon button — no resting background; a subtle grey only on hover /
    while its popover is open. */
@@ -94,17 +103,6 @@
   line-height: 15px;
   text-align: center;
 }
-/* Tiny dot marking an active search term on the search icon. */
-.iconDot {
-  position: absolute;
-  top: 6px;
-  inset-inline-start: 7px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--primary-color, #0073ea);
-}
-
 /* Personal-area entry (far LEFT): the user avatar with a left arrow to its LEFT.
    dir=rtl + DOM order [avatar, chevron] ⇒ avatar right, chevron (←) left. */
 .personalBtn {
@@ -124,20 +122,6 @@
 .personalAvatar :global(.MuiAvatar-root),
 .personalAvatar :global([class*="avatar"]) { width: 30px; height: 30px; font-size: 12px; }
 
-/* Search popover panel (icon → dialog holding the input). */
-.searchPanel {
-  position: absolute;
-  top: calc(100% + 6px);
-  inset-inline-start: 0;
-  z-index: 41;
-  width: 260px;
-  max-width: 78vw;
-  background: var(--primary-background-color, #fff);
-  border: 1px solid var(--ui-border-color, #e6e9ef);
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(20, 30, 60, 0.16);
-  padding: 10px;
-}
 .filterBadge {
   min-width: 18px;
   height: 18px;

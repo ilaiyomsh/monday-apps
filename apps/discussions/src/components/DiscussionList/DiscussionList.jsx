@@ -389,15 +389,12 @@ export function DiscussionList({
   // round170 — the two filter cells were consolidated into ONE "סינון" button
   // that opens a small popover holding the type (+ month, in list view) selects.
   const [filterOpen, setFilterOpen] = useState(false);
-  // round176 — the top card collapsed to an icon-only row; search is now an icon
-  // that toggles a small popover holding the input (mirrors the filter popover).
-  const [searchOpen, setSearchOpen] = useState(false);
-  // Active-filter count for the button badge ('all' === unfiltered; the month
-  // filter only applies in list view, where it is offered). MUST be declared
-  // AFTER typeFilter/monthFilter — referencing them earlier is a temporal-dead-
-  // zone crash ("Cannot access … before initialization"). round171 fix.
-  const activeFilterCount =
-    (typeFilter !== 'all' ? 1 : 0) + (!isCalendar && monthFilter !== 'all' ? 1 : 0);
+  // Active-filter count for the button badge. round177 — the month selector is a
+  // NATIVE default (it opens on the current month), so it never contributes to the
+  // badge (owner: "הסינון של החודש הנוכחי הוא נייטיבי"); only an explicit type
+  // filter counts. MUST be declared AFTER typeFilter — referencing it earlier is a
+  // temporal-dead-zone crash. round171 fix.
+  const activeFilterCount = typeFilter !== 'all' ? 1 : 0;
   const [debouncedSearch, setDebouncedSearch] = useState('');
   // Right-click context menu (round 33) — {item, x, y} while open. A single
   // instance serves BOTH the list rows and the calendar chips (both live inside
@@ -545,11 +542,11 @@ export function DiscussionList({
       {/* round131 — the 4px gradient accent bar was removed (owner request). */}
       <div className={styles.header}>
         <div className={styles.headerInner}>
-          {/* round176 — the top card collapsed to ONE icon-only row (owner request):
-              right→left: + (blue, create) · settings · filter · search · [calendar],
-              all TRANSPARENT icon buttons except the blue +; the personal-area entry
-              (avatar + a left arrow to its LEFT) sits at the far LEFT. Filter & search
-              each toggle a small popover. */}
+          {/* round176/round177 — ONE row (owner request). Right→left: the action
+              cluster + (blue, create) · settings · filter · calendar; then an
+              ALWAYS-OPEN search bar that flexes to fill the gap toward the far-LEFT
+              personal-area entry (avatar + a left arrow to its LEFT). All controls
+              are transparent icon buttons except the blue +. */}
           <div className={styles.bar} data-testid="filter-bar">
             <div className={styles.actions}>
               {canCreateDiscussion && (
@@ -578,7 +575,7 @@ export function DiscussionList({
                 <button
                   type="button"
                   className={`${styles.iconBtn} ${filterOpen ? styles.iconBtnOpen : ''}`}
-                  onClick={() => { setFilterOpen((o) => !o); setSearchOpen(false); }}
+                  onClick={() => setFilterOpen((o) => !o)}
                   aria-haspopup="dialog"
                   aria-expanded={filterOpen}
                   aria-label="סינון"
@@ -619,49 +616,6 @@ export function DiscussionList({
                   </>
                 )}
               </div>
-              <div className={styles.popAnchor}>
-                <button
-                  type="button"
-                  className={`${styles.iconBtn} ${searchOpen ? styles.iconBtnOpen : ''}`}
-                  onClick={() => { setSearchOpen((o) => !o); setFilterOpen(false); }}
-                  aria-haspopup="dialog"
-                  aria-expanded={searchOpen}
-                  aria-label="חיפוש"
-                  title="חיפוש"
-                >
-                  <Search size={19} aria-hidden="true" />
-                  {search ? <span className={styles.iconDot} aria-hidden="true" /> : null}
-                </button>
-                {searchOpen && (
-                  <>
-                    <div className={styles.filterBackdrop} onClick={() => setSearchOpen(false)} />
-                    <div className={styles.searchPanel} role="dialog" aria-label="חיפוש דיון" dir="rtl">
-                      <div className={styles.searchWrap}>
-                        <Search className={styles.searchIcon} aria-hidden="true" />
-                        <input
-                          type="text"
-                          className={styles.search}
-                          aria-label="חיפוש דיון"
-                          placeholder="חיפוש דיון"
-                          autoFocus
-                          value={search}
-                          onChange={(e) => setSearch(e.target.value)}
-                        />
-                        {search ? (
-                          <button
-                            type="button"
-                            className={styles.searchClear}
-                            aria-label="נקה חיפוש"
-                            onClick={() => setSearch('')}
-                          >
-                            <CloseSmall size={16} />
-                          </button>
-                        ) : null}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
               {onViewModeChange && (
                 <button
                   type="button"
@@ -673,6 +627,29 @@ export function DiscussionList({
                   {isCalendar ? <List size={19} aria-hidden="true" /> : <Calendar size={19} aria-hidden="true" />}
                 </button>
               )}
+            </div>
+            {/* Always-open search bar — fills the gap; magnifier on its right edge
+                (RTL leading), immediately to the LEFT of the calendar toggle. */}
+            <div className={styles.searchBar}>
+              <Search className={styles.searchIcon} aria-hidden="true" />
+              <input
+                type="text"
+                className={styles.search}
+                aria-label="חיפוש דיון"
+                placeholder="חיפוש דיון"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search ? (
+                <button
+                  type="button"
+                  className={styles.searchClear}
+                  aria-label="נקה חיפוש"
+                  onClick={() => setSearch('')}
+                >
+                  <CloseSmall size={16} />
+                </button>
+              ) : null}
             </div>
             {onOpenPersonal && (
               <button
