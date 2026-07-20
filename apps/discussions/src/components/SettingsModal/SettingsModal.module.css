@@ -9,6 +9,25 @@
   backdrop-filter: blur(2px);
   padding: 16px;
 }
+/* round178 — `contained` scopes the overlay to the right discussion-card pane
+   (App renders this instance inside `.main`, which is position:relative): the box
+   opens CENTERED within that pane and dims only its tabs, not the whole screen. */
+.overlayContained {
+  position: absolute;
+  z-index: 30;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.32);
+}
+.overlayContained .modal {
+  width: min(760px, 96%);
+  max-height: 100%;
+}
+.overlayContained .modalFixed,
+.overlayContained .modalWide {
+  width: min(760px, 96%);
+  height: auto;
+  max-height: 100%;
+}
 
 .modal {
   width: min(1000px, 95vw);

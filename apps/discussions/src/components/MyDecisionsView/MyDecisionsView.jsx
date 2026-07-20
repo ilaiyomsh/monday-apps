@@ -117,7 +117,7 @@ function DiscussionDates({ onLoaded }) {
   return null;
 }
 
-export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions, onNotify }) {
+export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions, onNotify, embedded = false }) {
   // v2 usage telemetry: one view_open per session for the my_decisions view (D3).
   useViewTracking(logger, 'my_decisions');
   const { context, currentUser } = useMondayContext();
@@ -521,37 +521,22 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
           left-arrow "back to discussions" icon button to its LEFT (round 53a,
           replacing the old text button that lived in the toolbar). The header is
           direction:ltr so the arrow sits on the left, the title to its right. */}
-      <div className={styles.viewHeader}>
-        {backArrow}
-        <h1 className={styles.viewTitle}>ההחלטות שלי</h1>
-      </div>
+      {/* round170 — embedded in PersonalShell → the shell owns back + title. */}
+      {!embedded && (
+        <div className={styles.viewHeader}>
+          {backArrow}
+          <h1 className={styles.viewTitle}>ההחלטות שלי</h1>
+        </div>
+      )}
 
       {/* Single toolbar row (round 35 baseline; round 41 flush-LEFT): dir="ltr"
           and flush-LEFT, reading (left→right)
-          [toggle שקיבלתי|שמשפיעות עליי][Search][Filter][Sort][Group by][collapse].
-          Round 53a moved the back control out of the toolbar to a left-arrow
-          icon button beside the view title, so the sub-tabs toggle is now the
-          leftmost toolbar control. The toggle keeps its OWN dir="rtl" track, so
-          "החלטות שקיבלתי" still renders on its left and stays the default. */}
+          [Search][Filter][Sort][Group by][collapse][toggle שקיבלתי|שמשפיעות עליי].
+          round180 moved the received/affecting-me toggle to the END so it is the
+          RIGHTMOST feature, adjacent to the pills (owner request). The toggle keeps
+          its OWN dir="rtl" track, so "החלטות שקיבלתי" still renders on its left and
+          stays the default. */}
       <div className={styles.toolbar} dir="ltr">
-        {/* Sub-tabs: which people column scopes the server-side query. Default
-            'decider' ("החלטות שקיבלתי") renders on the LEFT of the track (its own
-            rtl direction + SUB_TABS order) — round-27 behavior preserved. */}
-        <div className={styles.subTabs} role="tablist" aria-label="סינון החלטות לפי תפקיד">
-          {SUB_TABS.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              role="tab"
-              aria-selected={subTab === tab.key}
-              className={`${styles.subTab}${subTab === tab.key ? ` ${styles.subTabActive}` : ''}`}
-              onClick={() => setSubTab(tab.key)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
         {showSearch ? (
           <div className={styles.searchPill}>
             {/* clear-X pinned to the pill's LEFT edge (LTR toolbar → first child).
@@ -622,6 +607,26 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
         )}
 
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
+
+        {/* round180 — the received/affecting-me toggle is now the RIGHTMOST feature
+            in the row (owner request): last child of the flex-start LTR toolbar, so
+            it sits just after Collapse — adjacent to the other feature pills, not at
+            the far-right screen edge. Its own dir="rtl" keeps "החלטות שקיבלתי" on the
+            left of the track and the default. */}
+        <div className={styles.subTabs} role="tablist" aria-label="סינון החלטות לפי תפקיד">
+          {SUB_TABS.map((tab) => (
+            <button
+              key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={subTab === tab.key}
+              className={`${styles.subTab}${subTab === tab.key ? ` ${styles.subTabActive}` : ''}`}
+              onClick={() => setSubTab(tab.key)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Floating bulk-action bar — count + delete + close. Batch

@@ -194,21 +194,7 @@
 }
 
 /* Mobile-only back affordance (original `md:hidden`). */
-/* round108 — owner brand logo in the header. First visible child of .titleRow,
-   so in the RTL row it pins to the far-right corner at the title's height. */
-.ownerLogo {
-  flex-shrink: 0;
-  height: 32px;
-  max-width: 140px;
-  object-fit: contain;
-  align-self: center;
-  margin-inline-start: 8px;
-}
-/* The phone header is tight (title wraps next to an info button) — keep the
-   logo to the desktop layout only. */
-:global(.mobile-app) .ownerLogo {
-  display: none;
-}
+/* round108 — owner brand logo (moved to the dashboard's top-left in round158). */
 
 .backButton {
   display: none;
@@ -374,24 +360,22 @@
      that isn't the title is flush right). Physical — not inline — so the block's
      own dir="rtl" (which orders תאריך→שעה→people right-to-left) doesn't flip it. */
   margin-left: auto;
-  /* Round 51: the meta does NOT shrink (flex-shrink:0), so it keeps its natural
-     width flush-right on ONE line and it is the TITLE that yields first — the title
-     ellipsizes to give the meta room (see .title / .titleBlock min-width). When the
-     pane narrows past the point where [title min-width + the full meta] fit, the
-     meta would be pushed past the row's right edge and clipped; DiscussionCard.jsx
-     measures exactly that overflow and toggles .participantsNarrow to hide the
-     PEOPLE groups (keeping date + time), so the crowded state is transient and the
-     header stays one row (flex-wrap:nowrap here; the inner date/time/label/avatar
-     items are each already nowrap) and the table below never jumps. overflow-x:clip
-     does the horizontal clip in the brief crowded frame; overflow-y stays visible
-     so the inline half-hour time menu can still drop BELOW the row (a plain
-     overflow:hidden/auto would clip it — the date popover is portaled by Vibe, so
-     it is unaffected either way). At wide widths it sits on one line, flush right,
-     with every group shown. Round 48 established this one-row/no-wrap contract;
-     round 50 hid the people by a fixed 600px width (which never fired because the
-     docked Updates panel keeps the header wider than that); round 51 hides them by
-     REAL overflow instead, so it triggers whenever the panel docks, at any size. */
-  flex-shrink: 0;
+  /* round180 — the meta may now SHRINK (flex-shrink:1 + min-width:0). Because this
+     block is dir="rtl", its main-axis START is the RIGHT: the date packs at the
+     right edge, then time · chevron · (people) to the left. When the pane narrows,
+     the block shrinks to the available width and the LEFT-most items (the opened
+     people groups) overflow past the left edge and are clipped by overflow-x:clip —
+     the date and time, being at the right/start, are NEVER clipped. This fixes the
+     bug where expanding the roles on a narrow card (selector panel open) pushed the
+     block past the row's right edge and clipped the DATE/TIME. (Before round180 the
+     block was flex-shrink:0 and it was the whole meta that overflowed rightward.)
+     The header still stays ONE row (flex-wrap:nowrap; inner items nowrap) so the
+     table below never jumps; overflow-y stays visible so the inline half-hour time
+     menu can still drop BELOW the row. The DiscussionCard.jsx overflow watcher
+     (.participantsNarrow) still hides the people at extreme narrowness as a belt-
+     and-suspenders, but shrink-then-clip is now the primary mechanism. */
+  flex-shrink: 1;
+  min-width: 0;
   /* round112 — back to the ONE-line row layout (round111's two-row variant was
      reverted by the owner): date · time · chevron · (roles, when opened). */
   display: flex;
@@ -463,9 +447,18 @@
   background: var(--ui-border-color, #d0d4e4);
 }
 
-/* People-column groups get a wider label→avatars gap than the date/time groups. */
+/* round183 — the expanded role groups (מנהל / מרכז דיון / משתתפים) are tightened
+   (owner request): less white space BETWEEN groups (padding-inline 12px → 4px) and
+   between each label and its avatars (gap 12px → 6px). */
 .peopleGroupAvatars {
-  gap: 12px;
+  gap: 6px;
+  padding-inline: 4px;
+}
+/* round183 — and NO divider around/between the role groups: drop the ::before
+   separator whenever a role group follows any group (time→first role and
+   role→role). The date·time separator (date followed by a .dateGroup) is kept. */
+.peopleGroup + .peopleGroupAvatars::before {
+  display: none;
 }
 
 /* Header people fields ONLY: neutralize the shared PersonPicker trigger's own
@@ -699,6 +692,21 @@
   width: 100%;
   max-width: 100%;
   margin-inline: 0;
+  /* round184 — the board's row separators STOP at the same right inset as the
+     header rule (.header::after inset-inline-end: 24px), instead of bleeding to
+     the very edge — so the top line under the tabs and every table row line end at
+     the exact same point (owner request). Left inset stays each tab's own 52px
+     gutter; box-sizing:border-box keeps this inside the 100% width. */
+  padding-inline-end: var(--section-rule-inset-wide, 24px);
+}
+
+/* round169 — the tab content's vertical scrollbar is visible from the first
+   moment (owner request), overriding the global transparent-until-hover default.
+   (The other views' vertical bars stay hover-revealed; these table views want it
+   always shown.) */
+.body::-webkit-scrollbar-thumb:vertical {
+  background: var(--ui-border-color, #c3c6d4);
+  background-clip: padding-box;
 }
 
 /* Smooth fade-in when a tab becomes active (either freshly mounted or revealed
@@ -766,6 +774,14 @@
    round117: visibility (not display) so the row keeps its space and the layout
    below does not jump up when the panel opens. */
 :global(body[data-chrome-narrow="1"]) .participants { display: none !important; }
+
+/* round181 — while the discussions SELECTOR panel is open the card is narrow, so
+   the participants roles must not be shown at all here (owner request): hide the
+   expander chevron and any already-open role/people groups. The date and time stay
+   visible. (body[data-list-open] is set by App while the desktop split shows the
+   selector alongside the card.) */
+:global(body[data-list-open="1"]) .metaToggle,
+:global(body[data-list-open="1"]) .peopleGroupAvatars { display: none !important; }
 
 /* round116 — the tabs strip's own horizontal scrollbar disappears entirely
    while the updates panel narrows the pane (scrolling still works by drag/

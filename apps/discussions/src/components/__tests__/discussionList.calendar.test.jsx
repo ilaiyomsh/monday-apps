@@ -60,12 +60,22 @@ function renderCalendarList(overrides = {}) {
 }
 
 describe('DiscussionList calendar view header', () => {
-  it('places search and type filter on one row without the month filter', async () => {
+  // round180+ redesign — the calendar + list share ONE unified control bar
+  // (`filter-bar`); type/month filters live in a popover opened by the "סינון"
+  // button. The month filter is still gated `!isCalendar` (the calendar grid
+  // navigates months itself), so the original intent holds in the new structure:
+  // calendar view offers search + the TYPE filter but NOT the month filter.
+  it('calendar header: offers search + type filter, hides the month filter', async () => {
     renderCalendarList();
     await act(async () => { await Promise.resolve(); });
-    const row = screen.getByTestId('calendar-filter-row');
-    expect(within(row).getByRole('textbox', { name: 'חיפוש דיון' })).toBeTruthy();
-    expect(within(row).getByRole('button', { name: 'סינון לפי סוג' })).toBeTruthy();
+    const bar = screen.getByTestId('filter-bar');
+    // search stays available in calendar view
+    expect(within(bar).getByRole('textbox', { name: 'חיפוש דיון' })).toBeTruthy();
+    // open the filter popover
+    fireEvent.click(within(bar).getByRole('button', { name: 'סינון' }));
+    // type filter is offered…
+    expect(screen.getByRole('button', { name: 'סינון לפי סוג' })).toBeTruthy();
+    // …but the MONTH filter is hidden in calendar view (the grid navigates months)
     expect(screen.queryByRole('button', { name: 'סינון לפי חודש' })).toBeNull();
   });
 

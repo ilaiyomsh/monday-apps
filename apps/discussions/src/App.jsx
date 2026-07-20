@@ -7,6 +7,7 @@ import { CreateDiscussionModal } from '@generated/components/CreateDiscussionMod
 import { MyTasksView } from '@generated/components/MyTasksView';
 import { MyDecisionsView } from '@generated/components/MyDecisionsView';
 import { DiscussionsDashboard } from '@generated/components/DiscussionsDashboard';
+import { PersonalShell } from '@generated/components/PersonalShell';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { useToast } from './hooks/useToast';
 import { useUiErrorSink } from './hooks/useUiErrorSink';
@@ -23,6 +24,7 @@ import { ensurePeopleColumns } from './utils/mondayApi/peopleColumns.js';
 import { usePermission } from './hooks/usePermission.js';
 import { prefetchMyTasks } from './hooks/useMyTasks.js';
 import { prefetchMyDecisions } from './hooks/useMyDecisions.js';
+import { prefetchDashboard } from './hooks/useDashboardData.js';
 import { prefetchDiscussions } from './hooks/useDiscussions.js';
 import logger from './utils/logger.js';
 import { installChromeNarrowWatcher } from './utils/chromeNarrow.js';
@@ -252,6 +254,11 @@ export default function App() {
   // the view simply follows the persisted appView — no opt-in gate, no top toggle.
   const { settings, isLoading: settingsLoading } = useSettings();
   const effectiveView = appView;
+  // round180 — the three personal modes share ONE PersonalShell; switching between
+  // them must keep the switcher bar mounted and load ONLY the content card below
+  // (see the personal render branch), so we treat them as one "personal" surface.
+  const personalView =
+    effectiveView === 'myTasks' || effectiveView === 'myDecisions' || effectiveView === 'dashboard';
 
   // Branded splash gate. Shows the fullscreen BrandLoader (a) on cold boot until
   // `context` resolves AND a ~2s min window elapses, and (b) for a ~2s min
@@ -264,9 +271,10 @@ export default function App() {
   // it (per-view behavior unchanged). Round 50: the min window is now ~2s
   // (MIN_SPLASH_MS) so the branded loader is clearly experienced on each switch.
   const splash = useMinSplash(context == null, MIN_SPLASH_MS, effectiveView);
-  const openMyTasks = useCallback(() => handleAppViewChange('myTasks'), [handleAppViewChange]);
-  const openMyDecisions = useCallback(() => handleAppViewChange('myDecisions'), [handleAppViewChange]);
-  const openDashboard = useCallback(() => handleAppViewChange('dashboard'), [handleAppViewChange]);
+  // round170 — the discussions list now has ONE "האזור האישי" entry point; the
+  // three personal modes (my tasks / my decisions / dashboard) live behind the
+  // PersonalShell switcher. Entering the personal area defaults to my-tasks.
+  const openPersonal = useCallback(() => handleAppViewChange('myTasks'), [handleAppViewChange]);
   const backToDiscussions = useCallback(() => handleAppViewChange('discussions'), [handleAppViewChange]);
 
   // Round 46 — RIGHT-PANE discussions splash. The branded loader must show in the
@@ -347,6 +355,23 @@ export default function App() {
   // bypass; while the feature is off it resolves via the legacy creator/lead
   // path → identical to before this guard existed.
   const can = usePermission({ canManageSettings, currentUser });
+
+  // round180/181 — flag when the discussions selector panel occupies horizontal
+  // width ALONGSIDE the card. On DESKTOP the split shows both panes whenever the
+  // list is not collapsed (`.hiddenMobile` is display:block there, so `showList`
+  // does NOT hide the sidebar — round181 fix: gating on showList was wrong because
+  // handleSelect sets showList=false on desktop, so expanding the list after a
+  // select left the flag off). On MOBILE the panes never coexist (card is full
+  // width), so the flag stays off. While set, the card is narrow: the task
+  // quick-filter battery AND the header participants expander hide (see the tabs'
+  // and DiscussionCard's CSS) — mirroring the body[data-chrome-narrow] pattern.
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const open = effectiveView === 'discussions' && !isMobile && !collapsed;
+    if (open) document.body.setAttribute('data-list-open', '1');
+    else document.body.removeAttribute('data-list-open');
+    return () => document.body.removeAttribute('data-list-open');
+  }, [effectiveView, isMobile, collapsed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -435,9 +460,9 @@ export default function App() {
 
   // Round 45 — BOOT GATE: on INITIAL app entry hold the fullscreen white
   // BrandLoader (see the render gate below) until the monday context + settings
-  // are resolved AND all three datasets have loaded — the discussions list
-  // (prefetchDiscussions, which ALSO warms the list's first paint) + the two
-  // personal-view caches (prefetchMyTasks / prefetchMyDecisions) — then reveal
+  // are resolved AND all datasets have loaded — the discussions list
+  // (prefetchDiscussions, which ALSO warms the list's first paint) + the three
+  // personal-view caches (prefetchMyTasks / prefetchMyDecisions / prefetchDashboard) — then reveal
   // the discussions view already populated. Completion is tracked by Promise.all
   // over the three loads, each wrapped so a rejection still counts as settled
   // (reveal on success OR error — never hang), plus a hard BOOT_MAX_WAIT_MS
@@ -486,6 +511,7 @@ export default function App() {
       settle(prefetchDiscussions()),
       settle(prefetchMyTasks({ currentUser, context })),
       settle(prefetchMyDecisions('decider', { currentUser, context })),
+      settle(prefetchDashboard({ currentUser, context })),
     ]).then(reveal)
       // settle() maps every fetch to a resolved void, so only reveal() itself
       // could reject here — log it; the BOOT_MAX_WAIT_MS timer still reveals.
@@ -516,6 +542,7 @@ export default function App() {
       if (cancelled) return;
       prefetchMyTasks({ currentUser, context }).catch(() => {});
       prefetchMyDecisions('decider', { currentUser, context }).catch(() => {});
+      prefetchDashboard({ currentUser, context }).catch(() => {});
     };
     let idleId = null;
     let timerId = null;
@@ -816,15 +843,16 @@ export default function App() {
   //   (b) the INITIAL boot data is ready (`bootDataReady` — all three datasets
   //       loaded or the safety timeout fired; see the round-45 boot gate), AND
   //   (c) the min-splash window has elapsed — but ONLY for the personal views.
-  // Round 46: the fullscreen min-splash still replays when switching INTO
-  // 'myTasks' / 'myDecisions' (those are single-pane views, so fullscreen == that
-  // view), but is DISARMED for the discussions view (`effectiveView !==
-  // 'discussions'`). A return to discussions is instead handled by the
-  // right-pane `discussionsRightSplash` (loader in the card pane only, never the
-  // left list); cold boot into discussions is already covered by the boot gate,
-  // so it needs no extra splash window. `bootDataReady` latches true after the
-  // first boot, so it only gates INITIAL entry and never a later transition.
-  if (context == null || !bootDataReady || (splash && effectiveView !== 'discussions')) {
+  // Round 46: the fullscreen min-splash replayed when switching between top-level
+  // views; it is DISARMED for the discussions view (handled by the right-pane
+  // `discussionsRightSplash`), and — round180 — ALSO disarmed for the personal
+  // views: switching between the personal modes must keep the PersonalShell
+  // switcher mounted and show the loader ONLY in the content card below (see the
+  // personal branch, which gates its children on `splash`). The fullscreen loader
+  // therefore fires only for genuine boot (`context == null` / `!bootDataReady`).
+  // `bootDataReady` latches true after the first boot, so it only gates INITIAL
+  // entry and never a later transition.
+  if (context == null || !bootDataReady || (splash && effectiveView !== 'discussions' && !personalView)) {
     return (
       <div className={`${styles.appShell} ${layoutClass}`}>
         <BrandLoader fullscreen />
@@ -832,33 +860,35 @@ export default function App() {
     );
   }
 
-  if (effectiveView === 'myTasks') {
+  // round170 — the three personal modes render inside one PersonalShell (back
+  // arrow top-left + centered 3-tab switcher). Each view renders `embedded` so it
+  // drops its own back button + title; the shell owns that chrome. Modes still map
+  // to the existing appView values, so persistence/splash logic is unchanged.
+  if (personalView) {
     return (
       <div className={`${styles.appShell} ${layoutClass}`}>
-        <div className={styles.appShellBody} dir="rtl">
-          <MyTasksView canManageSettings={canManageSettings} onBackToDiscussions={backToDiscussions} onNotify={notify} />
-        </div>
-        {overlays}
-      </div>
-    );
-  }
-
-  if (effectiveView === 'myDecisions') {
-    return (
-      <div className={`${styles.appShell} ${layoutClass}`}>
-        <div className={styles.appShellBody} dir="rtl">
-          <MyDecisionsView canManageSettings={canManageSettings} onBackToDiscussions={backToDiscussions} onNotify={notify} />
-        </div>
-        {overlays}
-      </div>
-    );
-  }
-
-  if (effectiveView === 'dashboard') {
-    return (
-      <div className={`${styles.appShell} ${layoutClass}`}>
-        <div className={styles.appShellBody} dir="rtl">
-          <DiscussionsDashboard onBackToDiscussions={backToDiscussions} />
+        <div className={styles.appShellPersonal} dir="rtl">
+          <PersonalShell activeMode={effectiveView} onSelectMode={handleAppViewChange} onBack={backToDiscussions}>
+            {/* round180 — the switcher (PersonalShell header) stays mounted across
+                mode switches; only THIS content card changes, so a switch never
+                feels like leaving the personal area.
+                round181 — mount the active view IMMEDIATELY (no artificial 2s
+                min-splash gate here). Each view owns its loading animation and the
+                cheaper views (My Tasks / My Decisions) seed instantly from cache,
+                while the dashboard shows its own BrandLoader WHILE it fetches — so
+                its fetch starts at once instead of waiting 2s behind the splash
+                (that sequential gap was the main cause of the dashboard feeling
+                especially slow). */}
+            {effectiveView === 'myTasks' && (
+              <MyTasksView embedded canManageSettings={canManageSettings} onNotify={notify} />
+            )}
+            {effectiveView === 'myDecisions' && (
+              <MyDecisionsView embedded canManageSettings={canManageSettings} onNotify={notify} />
+            )}
+            {effectiveView === 'dashboard' && (
+              <DiscussionsDashboard embedded canManageSettings={canManageSettings} />
+            )}
+          </PersonalShell>
         </div>
         {overlays}
       </div>
@@ -869,7 +899,7 @@ export default function App() {
     <div className={`${styles.appShell} ${layoutClass}`}>
     <div
       ref={rootRef}
-      className={`${styles.root} ${resizing ? styles.resizing : ''}`}
+      className={`${styles.root} ${styles.appFrame} ${resizing ? styles.resizing : ''}`}
       style={rootStyle}
       dir="ltr"
     >
@@ -918,10 +948,8 @@ export default function App() {
           exportingId={exportingId}
           canManageSettings={canManageSettings}
           currentUser={currentUser}
-          onOpenSettings={() => setShowSettings(true)}
-          onOpenMyTasks={openMyTasks}
-          onOpenMyDecisions={openMyDecisions}
-          onOpenDashboard={openDashboard}
+          onOpenSettings={() => setShowSettings((s) => !s)}
+          onOpenPersonal={openPersonal}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           calendarAnchor={calNav.anchor}
@@ -951,6 +979,16 @@ export default function App() {
             canManageSettings={canManageSettings}
           />
         )}
+        {/* round178 — the gear-opened Settings box is rendered INSIDE the card pane
+            with `contained`, so it centers within this white pane and dims only its
+            tabs (not the whole screen). */}
+        <SettingsModal
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          onNotify={notify}
+          templatesOnly={!canManageSettings}
+          contained
+        />
       </div>
 
       <CreateDiscussionModal
@@ -963,9 +1001,6 @@ export default function App() {
         canManageSettings={canManageSettings}
       />
 
-      {/* round147 — a super member (not an owner) gets the gear in
-          templates-only mode: manage templates, nothing else. */}
-      <SettingsModal isOpen={showSettings} onClose={() => setShowSettings(false)} onNotify={notify} templatesOnly={!canManageSettings} />
     </div>
       {/* round132 — deep-link splash: the app keeps rendering (and loading)
           UNDERNEATH this opaque overlay, so the branded loader plays until the
