@@ -389,6 +389,9 @@ export function DiscussionList({
   // round170 — the two filter cells were consolidated into ONE "סינון" button
   // that opens a small popover holding the type (+ month, in list view) selects.
   const [filterOpen, setFilterOpen] = useState(false);
+  // round176 — the top card collapsed to an icon-only row; search is now an icon
+  // that toggles a small popover holding the input (mirrors the filter popover).
+  const [searchOpen, setSearchOpen] = useState(false);
   // Active-filter count for the button badge ('all' === unfiltered; the month
   // filter only applies in list view, where it is offered). MUST be declared
   // AFTER typeFilter/monthFilter — referencing them earlier is a temporal-dead-
@@ -542,31 +545,22 @@ export function DiscussionList({
       {/* round131 — the 4px gradient accent bar was removed (owner request). */}
       <div className={styles.header}>
         <div className={styles.headerInner}>
-          {/* round170/round172 — a uniform-height control card. 2-col grid so the
-              personal button (col1, sized to its content) and the search bar
-              (col1 below it) share ONE width, while the icon cluster + "חדש"
-              (col2) and the "סינון" button (col2 below) sit to their right. Every
-              control is `--ctl-h` tall. dir=ltr → DOM = visual left→right. */}
-          <div className={styles.actionGrid} data-testid="filter-bar">
-            {onOpenPersonal && (
-              <button type="button" className={styles.personalBtn} onClick={onOpenPersonal}>
-                {currentUser && (
-                  <span className={styles.personalAvatar} aria-hidden="true">
-                    <PersonAvatar person={currentUser} size="sm" showName={false} />
-                  </span>
-                )}
-                <span className={styles.personalLabel}>האזור האישי</span>
-                <ChevronLeft size={16} aria-hidden="true" className={styles.personalChevron} />
-              </button>
-            )}
-            {/* round173 — dir=rtl cluster: "דיון חדש" first in DOM ⇒ rightmost
-                (top-rightmost button, owner request), then settings, then the
-                calendar toggle. "דיון חדש" flexes to fill the half. */}
-            <div className={styles.actionIcons}>
+          {/* round176 — the top card collapsed to ONE icon-only row (owner request):
+              right→left: + (blue, create) · settings · filter · search · [calendar],
+              all TRANSPARENT icon buttons except the blue +; the personal-area entry
+              (avatar + a left arrow to its LEFT) sits at the far LEFT. Filter & search
+              each toggle a small popover. */}
+          <div className={styles.bar} data-testid="filter-bar">
+            <div className={styles.actions}>
               {canCreateDiscussion && (
-                <button type="button" className={styles.newBtn} onClick={onCreateNew}>
-                  <Plus size={16} aria-hidden="true" />
-                  דיון חדש
+                <button
+                  type="button"
+                  className={styles.plusBtn}
+                  onClick={onCreateNew}
+                  aria-label="דיון חדש"
+                  title="דיון חדש"
+                >
+                  <Plus size={20} aria-hidden="true" />
                 </button>
               )}
               {(canManageSettings || isSuper) && (
@@ -577,9 +571,97 @@ export function DiscussionList({
                   title={canManageSettings ? 'הגדרות' : 'ניהול תבניות'}
                   onClick={onOpenSettings}
                 >
-                  <Settings size={18} aria-hidden="true" />
+                  <Settings size={19} aria-hidden="true" />
                 </button>
               )}
+              <div className={styles.popAnchor}>
+                <button
+                  type="button"
+                  className={`${styles.iconBtn} ${filterOpen ? styles.iconBtnOpen : ''}`}
+                  onClick={() => { setFilterOpen((o) => !o); setSearchOpen(false); }}
+                  aria-haspopup="dialog"
+                  aria-expanded={filterOpen}
+                  aria-label="סינון"
+                  title="סינון"
+                >
+                  <Filter size={19} aria-hidden="true" />
+                  {activeFilterCount > 0 && <span className={styles.iconBadge}>{activeFilterCount}</span>}
+                </button>
+                {filterOpen && (
+                  <>
+                    <div className={styles.filterBackdrop} onClick={() => setFilterOpen(false)} />
+                    <div className={styles.filterPanel} role="dialog" aria-label="סינון דיונים" dir="rtl">
+                      <div className={styles.filterField}>
+                        <div className={styles.filterFieldLabel}>סוג הדיון</div>
+                        <FilterSelect
+                          options={typeDropdownOptions}
+                          value={typeFilter}
+                          onChange={(val) => setTypeFilter(val ?? 'all')}
+                          ariaLabel="סינון לפי סוג"
+                          fieldLabel="סוג הדיון"
+                          icon={Filter}
+                          searchable
+                        />
+                      </div>
+                      {!isCalendar && (
+                        <div className={styles.filterField}>
+                          <div className={styles.filterFieldLabel}>חודש</div>
+                          <FilterSelect
+                            options={monthDropdownOptions}
+                            value={monthFilter}
+                            onChange={(val) => setMonthFilter(val ?? 'all')}
+                            ariaLabel="סינון לפי חודש"
+                            icon={Filter}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className={styles.popAnchor}>
+                <button
+                  type="button"
+                  className={`${styles.iconBtn} ${searchOpen ? styles.iconBtnOpen : ''}`}
+                  onClick={() => { setSearchOpen((o) => !o); setFilterOpen(false); }}
+                  aria-haspopup="dialog"
+                  aria-expanded={searchOpen}
+                  aria-label="חיפוש"
+                  title="חיפוש"
+                >
+                  <Search size={19} aria-hidden="true" />
+                  {search ? <span className={styles.iconDot} aria-hidden="true" /> : null}
+                </button>
+                {searchOpen && (
+                  <>
+                    <div className={styles.filterBackdrop} onClick={() => setSearchOpen(false)} />
+                    <div className={styles.searchPanel} role="dialog" aria-label="חיפוש דיון" dir="rtl">
+                      <div className={styles.searchWrap}>
+                        <Search className={styles.searchIcon} aria-hidden="true" />
+                        <input
+                          type="text"
+                          className={styles.search}
+                          aria-label="חיפוש דיון"
+                          placeholder="חיפוש דיון"
+                          autoFocus
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                        />
+                        {search ? (
+                          <button
+                            type="button"
+                            className={styles.searchClear}
+                            aria-label="נקה חיפוש"
+                            onClick={() => setSearch('')}
+                          >
+                            <CloseSmall size={16} />
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
               {onViewModeChange && (
                 <button
                   type="button"
@@ -588,76 +670,26 @@ export function DiscussionList({
                   title={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
                   onClick={() => onViewModeChange(isCalendar ? 'list' : 'calendar')}
                 >
-                  {isCalendar ? <List size={18} aria-hidden="true" /> : <Calendar size={18} aria-hidden="true" />}
+                  {isCalendar ? <List size={19} aria-hidden="true" /> : <Calendar size={19} aria-hidden="true" />}
                 </button>
               )}
             </div>
-            <div className={styles.searchWrap}>
-              <Search className={styles.searchIcon} aria-hidden="true" />
-              <input
-                type="text"
-                className={styles.search}
-                aria-label="חיפוש דיון"
-                placeholder="חיפוש דיון"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {/* clear-X — pinned to the input's LEFT edge (inline-end in RTL) */}
-              {search ? (
-                <button
-                  type="button"
-                  className={styles.searchClear}
-                  aria-label="נקה חיפוש"
-                  onClick={() => setSearch('')}
-                >
-                  <CloseSmall size={16} />
-                </button>
-              ) : null}
-            </div>
-            <div className={styles.filterAnchor}>
+            {onOpenPersonal && (
               <button
                 type="button"
-                className={`${styles.filterBtn} ${filterOpen ? styles.filterBtnOpen : ''}`}
-                onClick={() => setFilterOpen((o) => !o)}
-                aria-haspopup="dialog"
-                aria-expanded={filterOpen}
+                className={styles.personalBtn}
+                onClick={onOpenPersonal}
+                aria-label="האזור האישי"
+                title="האזור האישי"
               >
-                <Filter size={15} aria-hidden="true" />
-                <span>סינון</span>
-                {activeFilterCount > 0 && <span className={styles.filterBadge}>{activeFilterCount}</span>}
+                {currentUser && (
+                  <span className={styles.personalAvatar} aria-hidden="true">
+                    <PersonAvatar person={currentUser} size="sm" showName={false} />
+                  </span>
+                )}
+                <ChevronLeft size={18} aria-hidden="true" className={styles.personalChevron} />
               </button>
-              {filterOpen && (
-                <>
-                  <div className={styles.filterBackdrop} onClick={() => setFilterOpen(false)} />
-                  <div className={styles.filterPanel} role="dialog" aria-label="סינון דיונים" dir="rtl">
-                    <div className={styles.filterField}>
-                      <div className={styles.filterFieldLabel}>סוג הדיון</div>
-                      <FilterSelect
-                        options={typeDropdownOptions}
-                        value={typeFilter}
-                        onChange={(val) => setTypeFilter(val ?? 'all')}
-                        ariaLabel="סינון לפי סוג"
-                        fieldLabel="סוג הדיון"
-                        icon={Filter}
-                        searchable
-                      />
-                    </div>
-                    {!isCalendar && (
-                      <div className={styles.filterField}>
-                        <div className={styles.filterFieldLabel}>חודש</div>
-                        <FilterSelect
-                          options={monthDropdownOptions}
-                          value={monthFilter}
-                          onChange={(val) => setMonthFilter(val ?? 'all')}
-                          ariaLabel="סינון לפי חודש"
-                          icon={Filter}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
+            )}
           </div>
         </div>
       </div>

@@ -17,155 +17,126 @@
 }
 
 .headerInner {
+  padding: 10px 14px;
+}
+
+/* round176 — the top card is ONE icon-only row (owner request). Actions cluster
+   on the RIGHT (dir=rtl); the personal-area entry on the far LEFT (space-between).
+   All controls are transparent icon buttons except the blue "+" (create). */
+.bar {
   display: flex;
-  flex-direction: column;
-  gap: var(--spacing-small, 8px);
-  padding: var(--spacing-medium, 16px);
-  /* Gap between the filters and the header rule below them. */
-  padding-bottom: var(--spacing-medium, 12px);
-}
-
-/* round173 — symmetric, full-width control card. TWO EQUAL halves (1fr 1fr):
-   col1 (left) holds the personal button (row1) + the search bar (row2); col2
-   (right) holds the icon cluster + "דיון חדש" (row1) and the "סינון" button
-   (row2). Every element fills its half, so personal-width == search-width ==
-   action-cluster-width == filter-width — the whole row is full and mirror-
-   balanced. Every control is `--ctl-h` tall. dir=ltr → col1 is on the LEFT. */
-.actionGrid {
-  --ctl-h: 34px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto;
-  direction: ltr;
-  align-items: center;
-  gap: 8px 10px;
-}
-
-/* "האזור האישי" — fills col1 (row1). Its own dir=rtl orders avatar(right) →
-   label → chevron(far left, pushed by the auto inline-start margin). */
-.personalBtn {
-  grid-column: 1;
-  grid-row: 1;
   direction: rtl;
-  width: 100%;
-  display: inline-flex;
   align-items: center;
-  gap: 7px;
-  height: var(--ctl-h);
-  padding: 0 12px;
-  /* variant B — flat: no border, a subtle grey fill instead. */
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--primary-background-hover-color, #f1f2f6);
-  font-family: var(--font-family);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--primary-text-color, #323338);
-  cursor: pointer;
-}
-.personalBtn:hover { background: var(--ui-background-color, #eceef2); }
-.personalLabel { white-space: nowrap; }
-.personalChevron { flex: none; margin-inline-start: auto; color: var(--secondary-text-color, #676879); }
-/* Keep the user avatar compact so the button stays --ctl-h tall. */
-.personalAvatar { flex: none; display: inline-flex; align-items: center; }
-.personalAvatar :global(.MuiAvatar-root),
-.personalAvatar :global([class*="avatar"]) { width: 22px; height: 22px; font-size: 10px; }
-
-/* col2 row1 — "דיון חדש" (rightmost, flexes to fill) + settings + calendar,
-   filling the whole half. dir=rtl → DOM order newBtn→settings→calendar renders
-   newBtn at the RIGHT edge (top-rightmost button, owner request). */
-.actionIcons {
-  grid-column: 2;
-  grid-row: 1;
-  direction: rtl;
-  width: 100%;
-  display: flex;
-  align-items: center;
+  justify-content: space-between;
   gap: 8px;
 }
+.actions {
+  display: inline-flex;
+  direction: rtl;
+  align-items: center;
+  gap: 6px;
+}
+/* Transparent icon button — no resting background; a subtle grey only on hover /
+   while its popover is open. */
 .iconBtn {
-  width: var(--ctl-h);
-  height: var(--ctl-h);
+  position: relative;
+  width: 36px;
+  height: 36px;
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  /* variant B — flat */
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--primary-background-hover-color, #f1f2f6);
+  border: none;
+  border-radius: 9px;
+  background: transparent;
   color: var(--secondary-text-color, #676879);
   cursor: pointer;
 }
-.iconBtn:hover {
-  background: var(--ui-background-color, #eceef2);
+.iconBtn:hover,
+.iconBtnOpen {
+  background: var(--primary-background-hover-color, #f4f5f8);
   color: var(--primary-text-color, #323338);
 }
-/* "דיון חדש" — the flexible member of the cluster: it grows to fill whatever the
-   two fixed icon buttons leave, so the cluster spans the full half. */
-.newBtn {
-  flex: 1;
-  min-width: 0;
-  height: var(--ctl-h);
-  padding: 0 16px;
+/* "+" — the only filled control: creates a discussion. */
+.plusBtn {
+  width: 36px;
+  height: 36px;
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  padding: 0;
   border: none;
-  border-radius: 8px;
+  border-radius: 9px;
   background: var(--primary-color, #0073ea);
   color: #fff;
-  font-family: var(--font-family);
-  font-size: 13.5px;
-  font-weight: 700;
-  white-space: nowrap;
   cursor: pointer;
 }
-.newBtn:hover { background: var(--primary-hover-color, #0060b9); }
-
-/* round175 — row 2 swapped (owner request): "סינון" sits on the LEFT under the
-   personal button (col1 ⇒ = personal width), and the search bar on the RIGHT under
-   the action cluster (col2 ⇒ = דיון-חדש+הגדרות+יומן width). */
-.actionGrid .searchWrap {
-  grid-column: 2;
-  grid-row: 2;
-  width: 100%;
-  min-width: 0;
-  height: var(--ctl-h);
-}
-.filterAnchor {
-  grid-column: 1;
-  grid-row: 2;
-  direction: rtl;
-  width: 100%;
+.plusBtn:hover { background: var(--primary-hover-color, #0060b9); }
+.popAnchor {
   position: relative;
+  display: inline-flex;
 }
-.filterBtn {
+/* Small count badge over the filter icon (top-inline-start corner). */
+.iconBadge {
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 20px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+}
+/* Tiny dot marking an active search term on the search icon. */
+.iconDot {
+  position: absolute;
+  top: 6px;
+  inset-inline-start: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--primary-color, #0073ea);
+}
+
+/* Personal-area entry (far LEFT): the user avatar with a left arrow to its LEFT.
+   dir=rtl + DOM order [avatar, chevron] ⇒ avatar right, chevron (←) left. */
+.personalBtn {
+  direction: rtl;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-  height: var(--ctl-h, 34px);
-  padding: 0 14px;
-  /* variant B — flat */
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--primary-background-hover-color, #f1f2f6);
-  font-family: var(--font-family);
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--primary-text-color, #323338);
+  gap: 4px;
+  padding: 3px 4px;
+  border: none;
+  border-radius: 20px;
+  background: transparent;
   cursor: pointer;
 }
-.filterBtn:hover,
-.filterBtnOpen {
-  background: var(--ui-background-color, #eceef2);
-}
-.filterBtn :global(svg) {
-  color: var(--secondary-text-color, #676879);
+.personalBtn:hover { background: var(--primary-background-hover-color, #f4f5f8); }
+.personalChevron { flex: none; color: var(--secondary-text-color, #676879); }
+.personalAvatar { flex: none; display: inline-flex; align-items: center; }
+.personalAvatar :global(.MuiAvatar-root),
+.personalAvatar :global([class*="avatar"]) { width: 30px; height: 30px; font-size: 12px; }
+
+/* Search popover panel (icon → dialog holding the input). */
+.searchPanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: 41;
+  width: 260px;
+  max-width: 78vw;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(20, 30, 60, 0.16);
+  padding: 10px;
 }
 .filterBadge {
   min-width: 18px;
