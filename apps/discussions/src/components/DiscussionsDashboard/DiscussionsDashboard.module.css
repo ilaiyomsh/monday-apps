@@ -27,7 +27,9 @@
   align-items: center;
   gap: var(--spacing-small, 8px);
   direction: ltr;
-  padding: var(--spacing-medium, 16px);
+  /* round172 — tight vertical padding so the (embedded) "ערוך פריסה" toolbar and
+     the dashboard content below it sit high, near the mode switcher. */
+  padding: 4px var(--spacing-medium, 16px);
   padding-inline-start: var(--content-gutter-start, 52px);
 }
 .viewTitle {
