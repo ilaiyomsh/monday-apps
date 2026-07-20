@@ -867,24 +867,23 @@ export default function App() {
         <div className={styles.appShellPersonal} dir="rtl">
           <PersonalShell activeMode={effectiveView} onSelectMode={handleAppViewChange} onBack={backToDiscussions}>
             {/* round180 — the switcher (PersonalShell header) stays mounted across
-                mode switches; only THIS content card reloads. On each switch the
-                per-view min-splash (`splash`) shows the branded loader in the card
-                alone, then reveals the view — no full-screen reload, so it never
-                feels like leaving the personal area. */}
-            {splash ? (
-              <BrandLoader />
-            ) : (
-              <>
-                {effectiveView === 'myTasks' && (
-                  <MyTasksView embedded canManageSettings={canManageSettings} onNotify={notify} />
-                )}
-                {effectiveView === 'myDecisions' && (
-                  <MyDecisionsView embedded canManageSettings={canManageSettings} onNotify={notify} />
-                )}
-                {effectiveView === 'dashboard' && (
-                  <DiscussionsDashboard embedded canManageSettings={canManageSettings} />
-                )}
-              </>
+                mode switches; only THIS content card changes, so a switch never
+                feels like leaving the personal area.
+                round181 — mount the active view IMMEDIATELY (no artificial 2s
+                min-splash gate here). Each view owns its loading animation and the
+                cheaper views (My Tasks / My Decisions) seed instantly from cache,
+                while the dashboard shows its own BrandLoader WHILE it fetches — so
+                its fetch starts at once instead of waiting 2s behind the splash
+                (that sequential gap was the main cause of the dashboard feeling
+                especially slow). */}
+            {effectiveView === 'myTasks' && (
+              <MyTasksView embedded canManageSettings={canManageSettings} onNotify={notify} />
+            )}
+            {effectiveView === 'myDecisions' && (
+              <MyDecisionsView embedded canManageSettings={canManageSettings} onNotify={notify} />
+            )}
+            {effectiveView === 'dashboard' && (
+              <DiscussionsDashboard embedded canManageSettings={canManageSettings} />
             )}
           </PersonalShell>
         </div>
