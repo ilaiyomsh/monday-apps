@@ -5,7 +5,7 @@ import { Button, Text, IconButton } from '@vibe/core';
 import { CloseSmall, Search } from '@vibe/icons';
 import { HighlightedText } from '@generated/components/HighlightedText';
 import { PersonAvatar } from '@generated/components/PersonAvatar';
-import { Calendar, Check, ChevronLeft, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Settings, Trash2 } from 'lucide-react';
+import { Calendar, Check, ChevronLeft, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
 import { fmtTimeLabel, buildMonthOptions } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
@@ -559,16 +559,14 @@ export function DiscussionList({
                 <ChevronLeft size={16} aria-hidden="true" className={styles.personalChevron} />
               </button>
             )}
+            {/* round173 — dir=rtl cluster: "דיון חדש" first in DOM ⇒ rightmost
+                (top-rightmost button, owner request), then settings, then the
+                calendar toggle. "דיון חדש" flexes to fill the half. */}
             <div className={styles.actionIcons}>
-              {onViewModeChange && (
-                <button
-                  type="button"
-                  className={styles.iconBtn}
-                  aria-label={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
-                  title={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
-                  onClick={() => onViewModeChange(isCalendar ? 'list' : 'calendar')}
-                >
-                  {isCalendar ? <List size={18} aria-hidden="true" /> : <Calendar size={18} aria-hidden="true" />}
+              {canCreateDiscussion && (
+                <button type="button" className={styles.newBtn} onClick={onCreateNew}>
+                  <Plus size={16} aria-hidden="true" />
+                  דיון חדש
                 </button>
               )}
               {(canManageSettings || isSuper) && (
@@ -582,9 +580,15 @@ export function DiscussionList({
                   <Settings size={18} aria-hidden="true" />
                 </button>
               )}
-              {canCreateDiscussion && (
-                <button type="button" className={styles.newBtn} onClick={onCreateNew}>
-                  חדש
+              {onViewModeChange && (
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  aria-label={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
+                  title={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
+                  onClick={() => onViewModeChange(isCalendar ? 'list' : 'calendar')}
+                >
+                  {isCalendar ? <List size={18} aria-hidden="true" /> : <Calendar size={18} aria-hidden="true" />}
                 </button>
               )}
             </div>
