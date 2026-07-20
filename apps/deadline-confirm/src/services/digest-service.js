@@ -3,9 +3,12 @@
 // person ids -> recipient email; tasks come from the configured tasks board,
 // matched by person-id intersection with config.peopleColumnId.
 //
-// Pending semantics (per section): date set AND date < today (strictly —
-// today itself is not overdue) AND the section's button status !== the
-// button's targetIndex (label ID — 0 valid; unset status counts as pending).
+// Pending semantics (per section, owner decision 2026-07-20):
+//   date set AND date <= today (a past date INCLUDES today) AND the task's
+//   status (on the section button's status column) is one of the section's
+//   includeStatusLabelIds ("show by status" — only listed statuses enter).
+// Label id 0 is valid — never truthy-check. An unset status (null) matches
+// nothing, so it is excluded unless the board uses a real "not started" label.
 
 /**
  * Column ids the tasks-board read needs (people + every section date +
@@ -71,12 +74,15 @@ export function buildDigest({ config, tasks, users, today }) {
   for (const section of digest.sections) {
     const button = buttonsById.get(section.buttonId);
     if (!button) continue; // config validation prevents this; defensive skip
+    const includeSet = new Set(section.includeStatusLabelIds ?? []);
     const pending = [];
     for (const task of tasks) {
       const date = col(task, section.dateColumnId).date;
-      if (!date || date >= today) continue; // unset / today / future — not overdue
+      if (!date || date > today) continue; // future only — today counts as passed
       const statusLabelId = col(task, button.statusColumnId).statusLabelId;
-      if (statusLabelId === button.targetIndex) continue; // already at target
+      // "show by status": only statuses the section lists enter the digest
+      // (label id 0 is valid — Set membership, never truthy-check).
+      if (statusLabelId === null || !includeSet.has(statusLabelId)) continue;
       pending.push({
         itemId: task.id,
         name: task.name,
@@ -103,6 +109,7 @@ export function buildDigest({ config, tasks, users, today }) {
       sections.push({
         sectionId: section.id,
         title: section.title,
+        dateColumnTitle: section.dateColumnTitle ?? '',
         buttonId: section.buttonId,
         tasks: mine.map(({ itemId, name, date, statusText }) => ({ itemId, name, date, statusText })),
       });

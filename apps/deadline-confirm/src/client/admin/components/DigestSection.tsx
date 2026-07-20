@@ -96,6 +96,16 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
     onChange({ sections: digest.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)) });
   };
 
+  // The status-condition options for a section = the labels of the status
+  // column that the section's action button writes to (owner decision: the
+  // condition lives on the button's status column).
+  const statusLabelOptionsFor = (buttonId: string | null): Option[] => {
+    const button = buttons.find((b) => b.id === buttonId);
+    if (!button) return [];
+    const column = tasksColumns.find((c) => c.id === button.statusColumnId);
+    return (column?.labels ?? []).map((l) => toOption(String(l.id), l.label));
+  };
+
   const loadPreview = async (recipient: string | null) => {
     setPreviewLoading(true);
     setPreviewError(null);
@@ -211,50 +221,90 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
         <section className="dc-section">
           <h2>מקבצי משימות</h2>
           <div className="dc-hint">
-            כל מקבץ הוא טבלה במייל: עמודת תאריך שקובעת "באיחור", והכפתור שמופיע ליד כל משימה.
+            כל מקבץ הוא טבלה במייל: עמודת תאריך שקובעת "באיחור" (תאריך שעבר — כולל היום),
+            תנאי סטטוס שקובע אילו משימות נכנסות, והכפתור שמופיע ליד כל משימה.
           </div>
-          {digest.sections.map((section) => (
-            <div key={section.id} className="dc-card">
-              <div className="dc-row">
-                <div className="dc-field" style={{ minWidth: 280 }}>
-                  <label>כותרת המקבץ</label>
-                  <TextField
-                    value={section.title}
-                    placeholder="למשל: משימות שנדרש לסיים"
-                    onChange={(value: string) => patchSection(section.id, { title: value })}
-                  />
+          {digest.sections.map((section) => {
+            const statusOptions = statusLabelOptionsFor(section.buttonId);
+            const selectedStatus = statusOptions.filter((o) =>
+              section.includeStatusLabelIds.includes(Number(o.value))
+            );
+            return (
+              <div key={section.id} className="dc-card">
+                <div className="dc-row">
+                  <div className="dc-field" style={{ minWidth: 280 }}>
+                    <label>כותרת המקבץ</label>
+                    <TextField
+                      value={section.title}
+                      placeholder="למשל: משימות שנדרש לסיים"
+                      onChange={(value: string) => patchSection(section.id, { title: value })}
+                    />
+                  </div>
+                  <div className="dc-field">
+                    <label>עמודת תאריך (בלוח המשימות)</label>
+                    <Dropdown
+                      placeholder={tasksColumnsLoading ? 'טוען…' : 'בחרו עמודת תאריך'}
+                      options={dateOptions}
+                      value={findOption(dateOptions, section.dateColumnId)}
+                      onChange={(opt: Option | null) =>
+                        patchSection(section.id, {
+                          dateColumnId: opt?.value ?? null,
+                          // capture the board column title → email header
+                          dateColumnTitle: opt?.label ?? '',
+                        })
+                      }
+                      clearable={false}
+                    />
+                  </div>
+                  <div className="dc-field">
+                    <label>כפתור פעולה</label>
+                    <Dropdown
+                      placeholder="בחרו כפתור"
+                      options={buttonOptions}
+                      value={findOption(buttonOptions, section.buttonId)}
+                      onChange={(opt: Option | null) =>
+                        // switching the button changes the status column → reset the condition
+                        patchSection(section.id, { buttonId: opt?.value ?? null, includeStatusLabelIds: [] })
+                      }
+                      clearable={false}
+                    />
+                  </div>
+                  {digest.sections.length > 1 && (
+                    <Button
+                      kind={Button.kinds.TERTIARY}
+                      onClick={() => onChange({ sections: digest.sections.filter((s) => s.id !== section.id) })}
+                    >
+                      הסרה
+                    </Button>
+                  )}
                 </div>
-                <div className="dc-field">
-                  <label>עמודת תאריך (בלוח המשימות)</label>
-                  <Dropdown
-                    placeholder={tasksColumnsLoading ? 'טוען…' : 'בחרו עמודת תאריך'}
-                    options={dateOptions}
-                    value={findOption(dateOptions, section.dateColumnId)}
-                    onChange={(opt: Option | null) => patchSection(section.id, { dateColumnId: opt?.value ?? null })}
-                    clearable={false}
-                  />
+                <div className="dc-row">
+                  <div className="dc-field" style={{ minWidth: 320, flex: 1 }}>
+                    <label>הצג רק משימות שהסטטוס שלהן (בעמודת הכפתור):</label>
+                    <Dropdown
+                      multi
+                      multiline
+                      placeholder={
+                        !section.buttonId ? 'בחרו קודם כפתור פעולה' : 'בחרו סטטוסים שנכנסים למקבץ'
+                      }
+                      disabled={!section.buttonId}
+                      options={statusOptions}
+                      value={selectedStatus}
+                      onChange={(opts: Option[] | null) =>
+                        patchSection(section.id, {
+                          includeStatusLabelIds: (opts ?? []).map((o) => Number(o.value)),
+                        })
+                      }
+                      clearable={false}
+                    />
+                    <div className="dc-hint">
+                      רק משימות בסטטוסים שנבחרו יופיעו במקבץ — כך משימות שכבר טופלו (למשל "בוצע") לא ייכנסו.
+                    </div>
+                  </div>
                 </div>
-                <div className="dc-field">
-                  <label>כפתור פעולה</label>
-                  <Dropdown
-                    placeholder="בחרו כפתור"
-                    options={buttonOptions}
-                    value={findOption(buttonOptions, section.buttonId)}
-                    onChange={(opt: Option | null) => patchSection(section.id, { buttonId: opt?.value ?? null })}
-                    clearable={false}
-                  />
-                </div>
-                {digest.sections.length > 1 && (
-                  <Button
-                    kind={Button.kinds.TERTIARY}
-                    onClick={() => onChange({ sections: digest.sections.filter((s) => s.id !== section.id) })}
-                  >
-                    הסרה
-                  </Button>
-                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
           {digest.sections.length < 4 && (
             <div>
               <Button

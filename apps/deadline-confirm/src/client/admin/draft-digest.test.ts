@@ -28,7 +28,16 @@ const DIGEST_CONFIG: DigestConfig = {
   usersPeopleColumnId: 'people_u',
   usersEmailColumnId: 'email_u',
   subject: 'המשימות שלך',
-  sections: [{ id: 's_done0001', title: 'לסיים:', dateColumnId: 'date_due', buttonId: 'b_done0001' }],
+  sections: [
+    {
+      id: 's_done0001',
+      title: 'לסיים:',
+      dateColumnId: 'date_due',
+      dateColumnTitle: 'תאריך סיום',
+      buttonId: 'b_done0001',
+      includeStatusLabelIds: [0],
+    },
+  ],
 };
 
 function completeDraft(digest?: Partial<ConfigDraft['digest']>): ConfigDraft {
@@ -49,7 +58,9 @@ describe('defaultDigestDraft', () => {
     expect(d.sections).toHaveLength(2);
     expect(d.sections[0].id).toMatch(/^s_/);
     expect(d.sections[0].dateColumnId).toBeNull();
+    expect(d.sections[0].dateColumnTitle).toBe('');
     expect(d.sections[0].buttonId).toBeNull();
+    expect(d.sections[0].includeStatusLabelIds).toEqual([]);
     // two distinct generated ids
     expect(d.sections[0].id).not.toBe(d.sections[1].id);
   });
@@ -61,7 +72,9 @@ describe('newDigestSection', () => {
     expect(s.id).toMatch(/^s_[A-Za-z0-9_-]{4,16}$/);
     expect(s.title).toBe('כותרת');
     expect(s.dateColumnId).toBeNull();
+    expect(s.dateColumnTitle).toBe('');
     expect(s.buttonId).toBeNull();
+    expect(s.includeStatusLabelIds).toEqual([]);
   });
 });
 
@@ -71,7 +84,14 @@ describe('digestFromConfig / draftFromConfig', () => {
     expect(d.enabled).toBe(true);
     expect(d.usersBoardId).toBe('222');
     expect(d.sections).toEqual([
-      { id: 's_done0001', title: 'לסיים:', dateColumnId: 'date_due', buttonId: 'b_done0001' },
+      {
+        id: 's_done0001',
+        title: 'לסיים:',
+        dateColumnId: 'date_due',
+        dateColumnTitle: 'תאריך סיום',
+        buttonId: 'b_done0001',
+        includeStatusLabelIds: [0],
+      },
     ]);
   });
 
@@ -100,9 +120,10 @@ describe('digestIsComplete', () => {
     ['no email column', { usersEmailColumnId: null }],
     ['empty subject', { subject: '  ' }],
     ['no sections', { sections: [] }],
-    ['section without date column', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: null, buttonId: 'b_done0001' }] }],
-    ['section without button', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', buttonId: null }] }],
-    ['section with empty title', { sections: [{ id: 's_a1234', title: ' ', dateColumnId: 'd', buttonId: 'b_done0001' }] }],
+    ['section without date column', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: null, dateColumnTitle: '', buttonId: 'b_done0001', includeStatusLabelIds: [0] }] }],
+    ['section without button', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: null, includeStatusLabelIds: [0] }] }],
+    ['section with empty title', { sections: [{ id: 's_a1234', title: ' ', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_done0001', includeStatusLabelIds: [0] }] }],
+    ['section with no include statuses', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_done0001', includeStatusLabelIds: [] }] }],
   ])('false when %s', (_name, patch) => {
     expect(digestIsComplete({ ...digestFromConfig(DIGEST_CONFIG), ...patch })).toBe(false);
   });

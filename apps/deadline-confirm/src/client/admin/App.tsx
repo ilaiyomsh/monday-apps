@@ -106,10 +106,16 @@ export function App() {
           targetIndex: -1,
           targetLabel: '',
         }));
-        // Digest section date columns live on the tasks board too.
+        // Digest section date columns + status conditions live on the tasks
+        // board too — a board switch invalidates them.
         next.digest = {
           ...next.digest,
-          sections: next.digest.sections.map((s) => ({ ...s, dateColumnId: null })),
+          sections: next.digest.sections.map((s) => ({
+            ...s,
+            dateColumnId: null,
+            dateColumnTitle: '',
+            includeStatusLabelIds: [],
+          })),
         };
       }
       return next;
