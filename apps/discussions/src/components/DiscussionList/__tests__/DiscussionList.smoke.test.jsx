@@ -45,9 +45,10 @@ describe('DiscussionList render smoke', () => {
         viewMode="list"
       />
     );
-    // The consolidated "סינון" button and the "האזור האישי" entry are the round170
-    // header controls whose surrounding code crashed at render.
-    expect(screen.getByText('סינון')).toBeInTheDocument();
+    // The "סינון" and "האזור האישי" header controls are the round170 controls whose
+    // surrounding code crashed at render. round176 made them icon buttons, so they
+    // are matched by accessible name (aria-label), not visible text.
+    expect(screen.getByRole('button', { name: 'סינון' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /האזור האישי/ })).toBeInTheDocument();
   });
 });
