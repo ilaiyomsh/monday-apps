@@ -253,6 +253,11 @@ export default function App() {
   // the view simply follows the persisted appView — no opt-in gate, no top toggle.
   const { settings, isLoading: settingsLoading } = useSettings();
   const effectiveView = appView;
+  // round180 — the three personal modes share ONE PersonalShell; switching between
+  // them must keep the switcher bar mounted and load ONLY the content card below
+  // (see the personal render branch), so we treat them as one "personal" surface.
+  const personalView =
+    effectiveView === 'myTasks' || effectiveView === 'myDecisions' || effectiveView === 'dashboard';
 
   // Branded splash gate. Shows the fullscreen BrandLoader (a) on cold boot until
   // `context` resolves AND a ~2s min window elapses, and (b) for a ~2s min
@@ -349,6 +354,20 @@ export default function App() {
   // bypass; while the feature is off it resolves via the legacy creator/lead
   // path → identical to before this guard existed.
   const can = usePermission({ canManageSettings, currentUser });
+
+  // round180 — flag when the discussions selector panel occupies horizontal width
+  // (desktop: list shown AND not collapsed). The card is narrow then, so the task
+  // quick-filter battery (TasksTab / PreviousTasksTab) hides via
+  // body[data-list-open] — mirroring the body[data-chrome-narrow] pattern used for
+  // monday's docked updates panel. Clears in the personal area, on mobile card
+  // view, and whenever the list is collapsed (i.e. the tabs area is expanded).
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const open = effectiveView === 'discussions' && showList && !collapsed;
+    if (open) document.body.setAttribute('data-list-open', '1');
+    else document.body.removeAttribute('data-list-open');
+    return () => document.body.removeAttribute('data-list-open');
+  }, [effectiveView, showList, collapsed]);
 
   useEffect(() => {
     let cancelled = false;
@@ -818,15 +837,16 @@ export default function App() {
   //   (b) the INITIAL boot data is ready (`bootDataReady` — all three datasets
   //       loaded or the safety timeout fired; see the round-45 boot gate), AND
   //   (c) the min-splash window has elapsed — but ONLY for the personal views.
-  // Round 46: the fullscreen min-splash still replays when switching INTO
-  // 'myTasks' / 'myDecisions' (those are single-pane views, so fullscreen == that
-  // view), but is DISARMED for the discussions view (`effectiveView !==
-  // 'discussions'`). A return to discussions is instead handled by the
-  // right-pane `discussionsRightSplash` (loader in the card pane only, never the
-  // left list); cold boot into discussions is already covered by the boot gate,
-  // so it needs no extra splash window. `bootDataReady` latches true after the
-  // first boot, so it only gates INITIAL entry and never a later transition.
-  if (context == null || !bootDataReady || (splash && effectiveView !== 'discussions')) {
+  // Round 46: the fullscreen min-splash replayed when switching between top-level
+  // views; it is DISARMED for the discussions view (handled by the right-pane
+  // `discussionsRightSplash`), and — round180 — ALSO disarmed for the personal
+  // views: switching between the personal modes must keep the PersonalShell
+  // switcher mounted and show the loader ONLY in the content card below (see the
+  // personal branch, which gates its children on `splash`). The fullscreen loader
+  // therefore fires only for genuine boot (`context == null` / `!bootDataReady`).
+  // `bootDataReady` latches true after the first boot, so it only gates INITIAL
+  // entry and never a later transition.
+  if (context == null || !bootDataReady || (splash && effectiveView !== 'discussions' && !personalView)) {
     return (
       <div className={`${styles.appShell} ${layoutClass}`}>
         <BrandLoader fullscreen />
@@ -838,19 +858,30 @@ export default function App() {
   // arrow top-left + centered 3-tab switcher). Each view renders `embedded` so it
   // drops its own back button + title; the shell owns that chrome. Modes still map
   // to the existing appView values, so persistence/splash logic is unchanged.
-  if (effectiveView === 'myTasks' || effectiveView === 'myDecisions' || effectiveView === 'dashboard') {
+  if (personalView) {
     return (
       <div className={`${styles.appShell} ${layoutClass}`}>
         <div className={styles.appShellPersonal} dir="rtl">
           <PersonalShell activeMode={effectiveView} onSelectMode={handleAppViewChange} onBack={backToDiscussions}>
-            {effectiveView === 'myTasks' && (
-              <MyTasksView embedded canManageSettings={canManageSettings} onNotify={notify} />
-            )}
-            {effectiveView === 'myDecisions' && (
-              <MyDecisionsView embedded canManageSettings={canManageSettings} onNotify={notify} />
-            )}
-            {effectiveView === 'dashboard' && (
-              <DiscussionsDashboard embedded canManageSettings={canManageSettings} />
+            {/* round180 — the switcher (PersonalShell header) stays mounted across
+                mode switches; only THIS content card reloads. On each switch the
+                per-view min-splash (`splash`) shows the branded loader in the card
+                alone, then reveals the view — no full-screen reload, so it never
+                feels like leaving the personal area. */}
+            {splash ? (
+              <BrandLoader />
+            ) : (
+              <>
+                {effectiveView === 'myTasks' && (
+                  <MyTasksView embedded canManageSettings={canManageSettings} onNotify={notify} />
+                )}
+                {effectiveView === 'myDecisions' && (
+                  <MyDecisionsView embedded canManageSettings={canManageSettings} onNotify={notify} />
+                )}
+                {effectiveView === 'dashboard' && (
+                  <DiscussionsDashboard embedded canManageSettings={canManageSettings} />
+                )}
+              </>
             )}
           </PersonalShell>
         </div>

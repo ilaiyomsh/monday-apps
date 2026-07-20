@@ -360,24 +360,22 @@
      that isn't the title is flush right). Physical — not inline — so the block's
      own dir="rtl" (which orders תאריך→שעה→people right-to-left) doesn't flip it. */
   margin-left: auto;
-  /* Round 51: the meta does NOT shrink (flex-shrink:0), so it keeps its natural
-     width flush-right on ONE line and it is the TITLE that yields first — the title
-     ellipsizes to give the meta room (see .title / .titleBlock min-width). When the
-     pane narrows past the point where [title min-width + the full meta] fit, the
-     meta would be pushed past the row's right edge and clipped; DiscussionCard.jsx
-     measures exactly that overflow and toggles .participantsNarrow to hide the
-     PEOPLE groups (keeping date + time), so the crowded state is transient and the
-     header stays one row (flex-wrap:nowrap here; the inner date/time/label/avatar
-     items are each already nowrap) and the table below never jumps. overflow-x:clip
-     does the horizontal clip in the brief crowded frame; overflow-y stays visible
-     so the inline half-hour time menu can still drop BELOW the row (a plain
-     overflow:hidden/auto would clip it — the date popover is portaled by Vibe, so
-     it is unaffected either way). At wide widths it sits on one line, flush right,
-     with every group shown. Round 48 established this one-row/no-wrap contract;
-     round 50 hid the people by a fixed 600px width (which never fired because the
-     docked Updates panel keeps the header wider than that); round 51 hides them by
-     REAL overflow instead, so it triggers whenever the panel docks, at any size. */
-  flex-shrink: 0;
+  /* round180 — the meta may now SHRINK (flex-shrink:1 + min-width:0). Because this
+     block is dir="rtl", its main-axis START is the RIGHT: the date packs at the
+     right edge, then time · chevron · (people) to the left. When the pane narrows,
+     the block shrinks to the available width and the LEFT-most items (the opened
+     people groups) overflow past the left edge and are clipped by overflow-x:clip —
+     the date and time, being at the right/start, are NEVER clipped. This fixes the
+     bug where expanding the roles on a narrow card (selector panel open) pushed the
+     block past the row's right edge and clipped the DATE/TIME. (Before round180 the
+     block was flex-shrink:0 and it was the whole meta that overflowed rightward.)
+     The header still stays ONE row (flex-wrap:nowrap; inner items nowrap) so the
+     table below never jumps; overflow-y stays visible so the inline half-hour time
+     menu can still drop BELOW the row. The DiscussionCard.jsx overflow watcher
+     (.participantsNarrow) still hides the people at extreme narrowness as a belt-
+     and-suspenders, but shrink-then-clip is now the primary mechanism. */
+  flex-shrink: 1;
+  min-width: 0;
   /* round112 — back to the ONE-line row layout (round111's two-row variant was
      reverted by the owner): date · time · chevron · (roles, when opened). */
   display: flex;

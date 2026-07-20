@@ -70,6 +70,12 @@
   margin-inline-start: auto;
   margin-inline-end: 0.5cm;
 }
+/* round180 — while the discussions selector panel is open the card is narrow, so
+   hide the colored quick-filter battery; it returns only once the tabs area is
+   expanded (the list collapsed). Mirrors the body[data-list-open] flag set in App. */
+:global(body[data-list-open="1"]) .batterySlot {
+  display: none !important;
+}
 
 .groupSelect {
   width: 144px;
