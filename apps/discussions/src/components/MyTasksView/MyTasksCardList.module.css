@@ -1,0 +1,155 @@
+/* round208 — mobile card list for המשימות שלי. Class names ctl*-adjacent are
+   deliberately specific (non-scoped test strategy). */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 2px 10px;
+}
+
+.card {
+  position: relative;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #e6e9f2);
+  border-radius: 14px;
+  padding: 12px 14px 10px;
+  overflow: hidden;
+  touch-action: pan-y; /* keep vertical scroll; drag activates on long-press */
+}
+
+.stripe {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.name {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: start;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--primary-text-color, #323338);
+  line-height: 1.35;
+  padding: 0;
+  cursor: pointer;
+}
+
+.disc {
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  margin-top: 3px;
+}
+
+.chipsRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 9px;
+}
+.chipsStart { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.chipsEnd { display: flex; align-items: center; }
+
+.chip {
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 6px 11px;
+  min-height: 30px;
+  color: #fff;
+  cursor: pointer;
+}
+.chipStatic { cursor: default; }
+.chipEmpty {
+  background: var(--primary-background-hover-color, #f0f1f5);
+  color: var(--secondary-text-color, #50546e);
+}
+.chipLate {
+  background: #ffe8ec;
+  color: #d83a52;
+}
+
+.newInput {
+  width: 100%;
+  border: none;
+  outline: none;
+  font-size: 14.5px;
+  background: transparent;
+}
+
+/* ---- bottom sheet ---- */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 1200;
+}
+.sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--primary-background-color, #fff);
+  border-radius: 20px 20px 0 0;
+  padding: 8px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  z-index: 1210;
+  max-height: 70vh;
+  overflow-y: auto;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18);
+}
+.grip {
+  width: 40px;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--ui-border-color, #d0d4e4);
+  margin: 4px auto 12px;
+}
+.sheetTitle {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--primary-text-color, #323338);
+  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sheetOpt {
+  display: block;
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 13px 14px;
+  font-size: 14.5px;
+  font-weight: 600;
+  margin-bottom: 7px;
+  cursor: pointer;
+  color: #fff;
+  text-align: center;
+}
+.sheetGhost {
+  display: block;
+  width: 100%;
+  border: 1px solid var(--ui-border-color, #e6e9f2);
+  background: transparent;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #d83a52;
+  cursor: pointer;
+}
+.dateBody { display: flex; flex-direction: column; gap: 8px; }
+.dateInput {
+  width: 100%;
+  border: 1.5px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-family: inherit;
+}

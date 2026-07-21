@@ -867,6 +867,23 @@ export default function App() {
     );
   }
 
+  // round208 — MOBILE = "המשימות שלי" בלבד (owner decision): inside the monday
+  // mobile app EVERY user — board owners included — gets a single focused screen:
+  // the My Tasks view. No discussions workspace, no personal-area switcher, no
+  // dashboard, no My Decisions and no settings (those are desktop activities).
+  // MyTasksView renders non-embedded (its own title, no back arrow) and swaps to
+  // the card layout + icon toolbar internally via useViewport().isMobile.
+  if (isMobile) {
+    return (
+      <div className={`${styles.appShell} ${layoutClass}`}>
+        <div className={styles.appShellPersonal} dir="rtl">
+          <MyTasksView canManageSettings={canManageSettings} onNotify={notify} />
+        </div>
+        {overlays}
+      </div>
+    );
+  }
+
   // round170 — the three personal modes render inside one PersonalShell (back
   // arrow top-left + centered 3-tab switcher). Each view renders `embedded` so it
   // drops its own back button + title; the shell owns that chrome. Modes still map

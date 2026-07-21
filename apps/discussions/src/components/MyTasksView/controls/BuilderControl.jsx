@@ -41,9 +41,11 @@ export function BuilderControl({
   if (mobile) {
     return (
       <>
+        {/* round208 — an ACTIVE control is signalled by the stronger background
+            alone (bPillApplied); the old badge dot was dropped (owner spec:
+            no extra marks or numbers on the mobile icons). */}
         <button type="button" ref={triggerRef} className={pillClass} onClick={() => setOpen(true)} aria-label={label}>
           <Icon className={styles.bPillIcon} />
-          {applied ? <span className={styles.bBadgeDot} /> : null}
         </button>
         {open && (
           <>

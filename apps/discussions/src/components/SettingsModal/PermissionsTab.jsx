@@ -199,14 +199,33 @@ export default function PermissionsTab({ permissions, setPermissions, columns, s
       const missingSeedKeys = needsSeed
         ? []
         : Object.keys(DEFAULT_PERMISSION_SEED).filter((k) => !prev.roles[k]);
-      if (prev?.enabled === true && !needsSeed && !missingSeedKeys.length) return prev;
+      // round209 — per-CAPABILITY backfill: capability ids added to the catalog
+      // AFTER an instance stored its roles (viewReferencesBox / viewSummaryBox)
+      // are seeded into the EXISTING role rows so the checkboxes reflect the
+      // live default (visible). Only keys that are wholly ABSENT from the
+      // stored role are added — an owner's explicit true/false is never touched.
+      const NEW_CAPS = ['viewReferencesBox', 'viewSummaryBox'];
+      const capBackfill = needsSeed
+        ? []
+        : Object.keys(DEFAULT_PERMISSION_SEED).filter((k) => {
+          if (!prev.roles[k]) return false;
+          const seedCaps = DEFAULT_PERMISSION_SEED[k]?.capabilities || {};
+          return NEW_CAPS.some((c) => c in seedCaps && prev.roles[k]?.capabilities?.[c] === undefined);
+        });
+      if (prev?.enabled === true && !needsSeed && !missingSeedKeys.length && !capBackfill.length) return prev;
       const next = { ...DEFAULT_PERMISSIONS, ...prev, enabled: true };
       if (needsSeed) {
         next.roles = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED));
-      } else if (missingSeedKeys.length) {
+      } else if (missingSeedKeys.length || capBackfill.length) {
         next.roles = { ...prev.roles };
         for (const k of missingSeedKeys) {
           next.roles[k] = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED[k]));
+        }
+        for (const k of capBackfill) {
+          const seedCaps = DEFAULT_PERMISSION_SEED[k]?.capabilities || {};
+          const caps = { ...(next.roles[k]?.capabilities || {}) };
+          NEW_CAPS.forEach((c) => { if (c in seedCaps && caps[c] === undefined) caps[c] = seedCaps[c]; });
+          next.roles[k] = { ...next.roles[k], capabilities: caps };
         }
       }
       return next;

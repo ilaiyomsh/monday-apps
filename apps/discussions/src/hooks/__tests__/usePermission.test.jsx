@@ -347,7 +347,10 @@ describe('A. fail-open (enabled:false) snapshot — unchanged after Stage 1', ()
         for (const d of [readyD, unloadedDisc]) {
           const ctx = { boardKey: 'tasks', discussion: d, item: task({ creator: [person(uid)] }), currentUserId: uid };
           // Recompute the EXPECTED legacy value independently of the resolver.
-          const isView = cap === 'viewDiscussion';
+          // round209 — the box-view caps are view-LIKE: allow-all in fail-open
+          // and never ready-gated (the panes were visible to every viewer today).
+          const isView = cap === 'viewDiscussion'
+            || cap === 'viewReferencesBox' || cap === 'viewSummaryBox';
           const isSystem = ['createDiscussion', 'reorderColumns', 'manageTemplates', 'addDiscussionTypes', 'saveViewDefaults'].includes(cap);
           const isReadyGated = !isSystem && !isView;
           const ready = isSystem ? true : (d === readyD);

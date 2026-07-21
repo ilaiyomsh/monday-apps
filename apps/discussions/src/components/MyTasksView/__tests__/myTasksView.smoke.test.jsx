@@ -33,6 +33,12 @@ vi.mock('@generated/hooks/useStatusOptions', () => ({
 vi.mock('../MyTasksTable.jsx', () => ({
   MyTasksTable: ({ tasks }) => <div data-testid="table">{tasks.map((t) => <div key={t.id}>{t.name}</div>)}</div>,
 }));
+// round208 — mobile renders MyTasksCardList instead of the table; keep it dumb
+// too (its own behavior is pinned in myTasksCardList.test.jsx) so card chip
+// texts (e.g. the empty "עדיפות" chip) don't collide with builder options here.
+vi.mock('../MyTasksCardList.jsx', () => ({
+  MyTasksCardList: ({ tasks }) => <div data-testid="cards">{tasks.map((t) => <div key={t.id}>{t.name}</div>)}</div>,
+}));
 // No saved view / no save permission — the smoke test runs without the
 // Settings/Monday providers the real hook needs.
 // The permission resolver reads MondayContext + SettingsContext (mocked only

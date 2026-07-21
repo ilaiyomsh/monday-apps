@@ -37,6 +37,10 @@
 .bBadgeDot { position: absolute; top: 2px; inset-inline-end: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--primary-color, #0073ea); }
 /* Mobile-app only (gated on `.mobile-app`, not viewport width). */
 :global(.mobile-app) .bPill { width: 32px; height: var(--toolbar-pill-h, 32px); padding: 0; gap: 0; justify-content: center; flex-shrink: 0; }
+/* round208 — active state on mobile = a stronger background ALONE (the badge
+   dot was removed; owner spec: no extra marks/numbers on the icons). */
+:global(.mobile-app) .bPillApplied { background: var(--primary-selected-hover-color, #cce0ff); }
+:global(.mobile-app) .bPillApplied .bPillIcon { color: var(--primary-color, #0073ea); }
 
 /* ---- desktop panel (inside @vibe DialogContentContainer) ---- */
 .bPanel {
