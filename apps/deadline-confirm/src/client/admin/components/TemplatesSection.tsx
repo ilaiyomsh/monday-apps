@@ -16,6 +16,7 @@ import { EMAIL_FONTS } from '../types';
 import { newButtonsBlock, newTemplate, newTextBlock } from '../draft';
 import { ButtonPreview } from './ButtonPreview';
 import { apiFetch, ApiError } from '../services/api';
+import logger from '../utils/logger';
 
 interface Option {
   value: string;
@@ -70,7 +71,7 @@ export function TemplatesSection({ templates, buttons, dirty, onChange }: Props)
       await navigator.clipboard.writeText(res.html);
       setCopiedId(id);
     } catch (err) {
-      console.error('email html copy failed', err);
+      logger.error('admin', 'email_html_copy_failed', err);
       setCopyError(
         err instanceof ApiError && err.status === 409
           ? 'צרו מפתח קישור לפני העתקת ה-HTML'
@@ -260,7 +261,18 @@ export function TemplatesSection({ templates, buttons, dirty, onChange }: Props)
       ))}
       {copyError && <div className="dc-error">{copyError}</div>}
       <div className="dc-row">
-        <Button size="small" onClick={() => onChange([...templates, newTemplate()])}>
+        <Button
+          size="small"
+          onClick={() => {
+            // newTemplate() calls crypto.getRandomValues — guard the event handler.
+            try {
+              onChange([...templates, newTemplate()]);
+            } catch (err) {
+              logger.error('admin', 'add_template_failed', err);
+              setCopyError('הוספת תבנית נכשלה. נסו שוב.');
+            }
+          }}
+        >
           + הוסף תבנית
         </Button>
       </div>

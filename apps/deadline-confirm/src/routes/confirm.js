@@ -22,7 +22,7 @@ import express from 'express';
 import { secretEquals } from '../services/secret.js';
 import { performAction } from '../services/confirm-service.js';
 import { successPage, invalidPage, badRequestPage, confirmLandingPage } from '../helpers/pages.js';
-import { logAttempt, logError, track } from '../helpers/logger.js';
+import logger, { logAttempt, track } from '../helpers/logger.js';
 
 const ITEM_ID_RE = /^\d{1,20}$/;
 const ACCOUNT_ID_RE = /^\d{1,20}$/;
@@ -99,7 +99,7 @@ export function createConfirmRouter({ storage, api, rateLimiter }) {
       logAttempt({ ip: passed.ip, itemId: passed.itemId, outcome: 'page_served' });
       sendHtml(res, 200, confirmLandingPage({ itemId: passed.itemId, k: passed.k, btn: passed.btn, a: passed.a }));
     } catch (err) {
-      logError('confirm', 'GET handler failure', { error: String(err?.message ?? err) });
+      logger.logError('confirm', 'GET handler failure', { error: String(err?.message ?? err) });
       logAttempt({ ip: req.ip ?? '', itemId: null, outcome: 'api_error' });
       sendHtml(res, 200, invalidPage());
     }
@@ -118,7 +118,11 @@ export function createConfirmRouter({ storage, api, rateLimiter }) {
       });
       logAttempt({ ip: passed.ip, itemId: passed.itemId, outcome: result.outcome });
       // Usage telemetry (D3): the confirmation outcome, no PII (dims fold into message).
-      track('confirm', { outcome: result.outcome, method: 'POST' });
+      // A successful status change whose attribution update failed is reported as
+      // 'ok_no_audit' here (the attempt line above still carries the locked 'ok') so the
+      // partial failure is visible in the usage/health signal instead of masked.
+      const trackedOutcome = result.audit === 'failed' ? 'ok_no_audit' : result.outcome;
+      track('confirm', { outcome: trackedOutcome, method: 'POST' });
 
       if (result.outcome === 'ok' || result.outcome === 'already_done') {
         sendHtml(res, 200, successPage(result.button?.targetLabel ?? ''));
@@ -127,7 +131,7 @@ export function createConfirmRouter({ storage, api, rateLimiter }) {
         sendHtml(res, 200, invalidPage());
       }
     } catch (err) {
-      logError('confirm', 'POST handler failure', { error: String(err?.message ?? err) });
+      logger.logError('confirm', 'POST handler failure', { error: String(err?.message ?? err) });
       logAttempt({ ip: req.ip ?? '', itemId: null, outcome: 'api_error' });
       sendHtml(res, 200, invalidPage());
     }

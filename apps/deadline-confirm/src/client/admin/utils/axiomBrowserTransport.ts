@@ -47,6 +47,8 @@ export interface TransportStats {
   droppedQueue: number;
   droppedDedup: number;
   droppedSessionCap: number;
+  /** Events lost because a POST failed (batch already cut from the queue, at-most-once). */
+  droppedShipFailure: number;
   breakerState: BreakerState;
   consecutiveFailures: number;
 }
@@ -96,6 +98,8 @@ const DEFAULT_ENDPOINT = 'https://api.axiom.co/v1/datasets';
 const DEDUP_MAP_MAX = 500;
 const KIND_MAX_LEN = 32;
 const ERR_MSG_MAX_LEN = 200; // scrubbed error.message (see axiomErrorSink.ts scrubMessage)
+const STACK_MAX_LEN = 1500; // fix 3: extended `stack` (top-5 scrubbed frames)
+const COMPONENT_STACK_MAX_LEN = 1000; // fix 3: React `component_stack`
 
 // Deny substring on every non-allowlisted key, regardless of value type.
 const DENY_RE = /(name|title|summary|text|label|email|token|secret|password)/i;
@@ -135,6 +139,8 @@ function buildAllowlist(caps: TransportCaps): Record<string, number | undefined>
   allow.err_code = f;
   allow.err_msg = ERR_MSG_MAX_LEN;
   allow.stack1 = caps.stackMaxLen;
+  allow.stack = STACK_MAX_LEN; // fix 3: top-5 scrubbed frames (query compat kept via stack1)
+  allow.component_stack = COMPONENT_STACK_MAX_LEN; // fix 3: React componentStack when present
   return allow;
 }
 
@@ -209,6 +215,7 @@ export function createAxiomBrowserTransport(options: TransportOptions): AxiomTra
           droppedQueue: 0,
           droppedDedup: 0,
           droppedSessionCap: 0,
+          droppedShipFailure: 0,
           breakerState: 'closed',
           consecutiveFailures: 0,
         };
@@ -242,6 +249,7 @@ export function createAxiomBrowserTransport(options: TransportOptions): AxiomTra
   let droppedQueue = 0;
   let droppedDedup = 0;
   let droppedSessionCap = 0;
+  let droppedShipFailure = 0;
   let breakerState: BreakerState = 'closed';
   let consecutiveFailures = 0;
   let openedAt = 0;
@@ -314,6 +322,10 @@ export function createAxiomBrowserTransport(options: TransportOptions): AxiomTra
     } catch (e) {
       failMsg = `ship failed: ${String(e)}`;
     }
+    // The batch was already cut from the queue and is discarded (at-most-once) — those
+    // events are permanently lost. Count them so the loss is visible in stats() instead of
+    // only a console breadcrumb (fix 1).
+    droppedShipFailure += count;
     consecutiveFailures++;
     if (breakerState !== 'open' && consecutiveFailures >= caps.breakerFailureThreshold) {
       breakerState = 'open';
@@ -329,6 +341,15 @@ export function createAxiomBrowserTransport(options: TransportOptions): AxiomTra
 
     // Circuit breaker: open → no-op until the window elapses, then half-open.
     if (breakerState === 'open') {
+      // Terminal flush override (fix 2): a page-hide/visibility-hidden flush is the LAST
+      // chance to ship before the tab is gone. Attempt exactly one keepalive send even
+      // while OPEN — at-most-once (the batch is cut and never re-queued) makes it safe, and
+      // a failed send is counted by droppedShipFailure.
+      if (reason === 'hidden') {
+        const { body, count } = cutBatchHidden();
+        if (count > 0) await ship(body, count, true);
+        return;
+      }
       if (Date.now() - openedAt < caps.breakerOpenMs) return; // zero fetch while open
       breakerState = 'half-open';
     }
@@ -396,8 +417,13 @@ export function createAxiomBrowserTransport(options: TransportOptions): AxiomTra
 
     const tag = typeof ev.tag === 'string' ? ev.tag : '';
     if (tag !== 'transport') {
-      // transport meta events bypass dedup
-      const key = `${String(ev.level ?? '')}|${tag}|${String(ev.message ?? '')}`;
+      // transport meta events bypass dedup.
+      // Dedup key includes err_name + the first 40 chars of the (scrubbed) err_msg (fix 5):
+      // distinct errors funnelled through ONE generic logger message (e.g. 'request failed')
+      // otherwise collided on level|tag|message and were dropped as duplicates.
+      const errName = typeof ev.err_name === 'string' ? ev.err_name : '';
+      const errMsg = typeof ev.err_msg === 'string' ? ev.err_msg.slice(0, 40) : '';
+      const key = `${String(ev.level ?? '')}|${tag}|${String(ev.message ?? '')}|${errName}|${errMsg}`;
       const now = Date.now();
       let entry = dedup.get(key);
       if (!entry || now - entry.windowStart >= caps.dedupWindowMs) {
@@ -491,6 +517,7 @@ export function createAxiomBrowserTransport(options: TransportOptions): AxiomTra
         droppedQueue,
         droppedDedup,
         droppedSessionCap,
+        droppedShipFailure,
         breakerState,
         consecutiveFailures,
       };

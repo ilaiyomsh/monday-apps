@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { Button } from '@vibe/core';
+import logger from '../utils/logger';
 
 const CONFIRM_TEXT =
   'החלפת המפתח תנתק את כל הקישורים שכבר נשלחו במייל — בכל הכפתורים ובכל התבניות. אחרי ההחלפה יש להעתיק מחדש את ה-HTML לתבניות ה-workflow. להמשיך?';
@@ -18,15 +19,20 @@ interface Props {
 export function SecretSection({ maskedSecret, rotatedSecret, rotating, onRotate }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
 
   const copyRotated = async () => {
     if (!rotatedSecret) return;
+    setCopyError(null);
     try {
       await navigator.clipboard.writeText(rotatedSecret);
       setCopied(true);
     } catch (err) {
-      console.error('clipboard copy failed', err);
+      // Log (ships) AND tell the user — a clipboard block must not fail silently
+      // (they must copy the once-shown secret manually before it disappears).
+      logger.error('admin', 'secret_copy_failed', err);
       setCopied(false);
+      setCopyError('ההעתקה נכשלה — סמנו והעתיקו את המפתח ידנית לפני שתעזבו את המסך.');
     }
   };
 
@@ -47,6 +53,7 @@ export function SecretSection({ maskedSecret, rotatedSecret, rotating, onRotate 
               {copied ? 'הועתק ✓' : 'העתק'}
             </Button>
           </div>
+          {copyError && <div className="dc-error">{copyError}</div>}
         </>
       )}
       {confirming ? (
