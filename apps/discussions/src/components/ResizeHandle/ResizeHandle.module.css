@@ -2,7 +2,12 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  inset-inline-end: 0; /* trailing edge; in the dir="ltr" tables this is the right edge */
+  /* round199 — PHYSICAL right, not inset-inline-end: the drag math in
+     useColumnWidths is physical (dragging RIGHT grows the column), and the topics
+     header cells are direction:rtl — inline-end resolved to their LEFT edge there,
+     so the handle sat on the wrong side and dragging felt inverted. Physical
+     right = identical behavior in every table regardless of the cell's direction. */
+  right: 0;
   width: 6px;
   cursor: col-resize;
   z-index: 4;
