@@ -1,4 +1,5 @@
-import { Component, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+import logger from '../../lib/logger';
 
 interface Props { children: ReactNode }
 interface State { error: Error | null }
@@ -10,9 +11,10 @@ export class ErrorBoundary extends Component<Props, State> {
     return { error };
   }
 
-  componentDidCatch(error: Error) {
-    // eslint-disable-next-line no-console
-    console.error('[admin] uncaught', error);
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    // Stable English event id as the message (ships as-is); the Error rides record.error
+    // (scrubbed to err_msg by the sink) and React's componentStack ships as component_stack.
+    logger.error('admin', 'render_error', error, { componentStack: info.componentStack ?? undefined });
   }
 
   render() {

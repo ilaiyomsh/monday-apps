@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, Text } from '@vibe/core';
 import { ConditionalCard } from './ConditionalCard';
 import { ImportExportDialog } from './ImportExportDialog';
+import logger from '../../lib/logger';
 import type { Column, Conditional, ConditionalAction } from '../../types';
 
 interface Props {
@@ -152,6 +153,10 @@ export function ConditionalList({ conditionals, eligibleColumns, policyBoardId, 
       setServerSnapshot(snapshot);
       // Collapse everything — the user just confirmed the state is what they want.
       setOpenIds(new Set());
+    } catch (err) {
+      // onSave (ConditionsTab wrapper) already displays the failure toast and rethrows;
+      // log here so the failure reaches Axiom, and swallow so it isn't an unhandled rejection.
+      logger.error('conditionals', 'conditionals_save_failed', err);
     } finally {
       setSaving(false);
     }

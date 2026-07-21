@@ -55,9 +55,15 @@ jobs:
 
       - name: Build axis-sync-calender
         # Version layer: stamp the exact commit + release flag into the bundle.
+        # Axiom error sink: bake the shared error dataset + ingest token + app slug into the
+        # client bundle (error-guard remote-monitoring standard). The sink self-gates on
+        # import.meta.env.PROD, so it stays inert in dev/tunnel/test builds.
         env:
           VITE_BUILD_SHA: ${{ github.sha }}
           VITE_IS_RELEASE: "true"
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: sync-calender-admin
         run: pnpm --filter "./apps/axis/sync-calender" build
 
       - name: Install monday.com apps CLI

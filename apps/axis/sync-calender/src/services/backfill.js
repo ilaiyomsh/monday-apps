@@ -259,7 +259,14 @@ export async function startBackfill({ configId }) {
         finishedAt: Date.now(),
         lastError: String(err.message || err).slice(0, 500),
       });
-    } catch { /* swallow */ }
+    } catch (checkpointErr) {
+      // The primary backfill error is already shipped above; this secondary
+      // failure (couldn't even persist the error checkpoint) is logged as a WARN
+      // so a stuck 'running' status that never flips to 'error' is traceable.
+      logger.warn('backfill_error_checkpoint_failed', TAG, {
+        ...ctx, stage: 'backfill_error_checkpoint', cause: checkpointErr?.message || String(checkpointErr),
+      });
+    }
   }
 }
 

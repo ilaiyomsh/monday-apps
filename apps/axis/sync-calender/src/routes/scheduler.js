@@ -41,7 +41,10 @@ async function renewCustomObjectConfigs() {
       const result = await provider.ensureSubscription(config);
       if (result?.renewed) counts.renewed++; else counts.skipped++;
     } catch (err) {
-      const config = await syncConfigStorage.getSyncConfig(configId).catch(() => null);
+      const config = await syncConfigStorage.getSyncConfig(configId).catch((e) => {
+        logger.warn('config_reload_failed', TAG, { cfg: shortId(configId), stage: 'renewal_recovery', cause: e?.message || String(e) });
+        return null;
+      });
       const ctx = config ? buildSyncCtx(config) : { cfg: shortId(configId) };
       // Renewal hits the provider's token refresh first, so a dead refresh
       // token (Google or Microsoft) surfaces HERE — and historically this was
@@ -57,7 +60,10 @@ async function renewCustomObjectConfigs() {
         });
         const policy = await syncConfigStorage
           .getInstancePolicy(config.objectId)
-          .catch(() => null);
+          .catch((e) => {
+            logger.warn('policy_reload_failed', TAG, { ...ctx, stage: 'renewal_recovery', cause: e?.message || String(e) });
+            return null;
+          });
         // Reload so the notifiers see the just-written lastError + fresh
         // cooldown fields.
         const fresh = (await syncConfigStorage.getSyncConfig(configId)) || config;

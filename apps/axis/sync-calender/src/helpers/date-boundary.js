@@ -43,8 +43,20 @@ export function crossesLocalDayBoundary(event, tz) {
   const endIso = event?.end?.dateTime;
   if (!startIso || !endIso) return false;
 
-  const startDate = dateInTz(startIso, tz);
-  const endDate = dateInTz(endIso, tz);
+  let startDate;
+  let endDate;
+  try {
+    startDate = dateInTz(startIso, tz);
+    endDate = dateInTz(endIso, tz);
+  } catch (e) {
+    // config.mondayTimeZone is not a validated IANA id, so a bad value reaches
+    // Intl.DateTimeFormat as a raw RangeError. Convert it into a clear, classifiable
+    // error the caller's per-config catch can ship (instead of an opaque RangeError).
+    const err = new Error(`invalid_time_zone: ${tz}`);
+    err.code = 'invalid_time_zone';
+    err.cause = e;
+    throw err;
+  }
   if (!startDate || !endDate) return false;
   if (startDate === endDate) return false;
 
