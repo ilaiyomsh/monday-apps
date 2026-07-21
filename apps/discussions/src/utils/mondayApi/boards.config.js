@@ -268,6 +268,14 @@ export const CAPABILITY_DEFAULTS = {
   // a user in no people column of the discussion is denied. The resolver keeps
   // two safety valves (unready discussion / unseeded roles map → allow).
   viewDiscussion: 'creatorLeadOwner',
+  // round209 — the box-view caps default to 'all' so EXISTING stored role maps
+  // (which lack these new keys) keep today's behavior: everyone who can open
+  // the discussion sees the boxes. Unlike other 'all' caps the resolver does
+  // NOT short-circuit these — an explicit `false` on a held role (e.g. the
+  // owner unchecking participants) hides the pane. See usePermission.js
+  // BOX_VIEW_CAPS.
+  viewReferencesBox: 'all',
+  viewSummaryBox: 'all',
   editDiscussionFields: 'creatorLeadOwner',
   editSummary: 'creatorLeadOwner',
   exportDocs: 'creatorLeadOwner',
@@ -311,6 +319,10 @@ export const CAPABILITY_DEFAULTS = {
 export const CAPABILITIES = [
   // ---- discussion tier ----
   { id: 'viewDiscussion', tier: 'disc', group: 'discussion', label: 'צפייה בדיון' },
+  // round209 — per-role VIEW gates for the triple-box panes (owner spec: decide
+  // whether participants may SEE the התייחסויות / סיכום boxes).
+  { id: 'viewReferencesBox', tier: 'disc', group: 'discussion', label: 'צפייה בתיבת התייחסויות' },
+  { id: 'viewSummaryBox', tier: 'disc', group: 'discussion', label: 'צפייה בתיבת סיכום' },
   { id: 'editDiscussionFields', tier: 'disc', group: 'discussion', label: 'עריכת פרטי הדיון' },
   { id: 'editSummary', tier: 'disc', group: 'discussion', label: 'עריכת סיכום' },
   { id: 'exportDocs', tier: 'disc', group: 'discussion', label: 'ייצוא' },
@@ -385,6 +397,8 @@ export const DEFAULT_PERMISSION_SEED = {
   'discussions:discussionCreatorID': {
     capabilities: {
       viewDiscussion: true,
+      viewReferencesBox: true,
+      viewSummaryBox: true,
       editDiscussionFields: true,
       editSummary: true,
       exportDocs: true,
@@ -401,6 +415,8 @@ export const DEFAULT_PERMISSION_SEED = {
   'discussions:discussionLeadID': {
     capabilities: {
       viewDiscussion: true,
+      viewReferencesBox: true,
+      viewSummaryBox: true,
       editDiscussionFields: true,
       editSummary: true,
       exportDocs: true,
@@ -417,6 +433,8 @@ export const DEFAULT_PERMISSION_SEED = {
   'discussions:discussionCoordinatorID': {
     capabilities: {
       viewDiscussion: true,
+      viewReferencesBox: true,
+      viewSummaryBox: true,
       editDiscussionFields: true,
       editSummary: true,
       exportDocs: true,
@@ -435,6 +453,8 @@ export const DEFAULT_PERMISSION_SEED = {
   'discussions:participantsID': {
     capabilities: {
       viewDiscussion: true,
+      viewReferencesBox: true,
+      viewSummaryBox: true,
       editDiscussionFields: false,
       editSummary: false,
       exportDocs: true,

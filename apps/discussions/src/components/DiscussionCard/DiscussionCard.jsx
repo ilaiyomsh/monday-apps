@@ -287,8 +287,11 @@ export function DiscussionCard({
   const prefs = settings?.preferences;
   const showTopicsTables = isComponentVisible(prefs, 'topics');
   const showBackground = isComponentVisible(prefs, 'background');
-  const showReferences = isComponentVisible(prefs, 'references');
-  const showSummaryPane = isComponentVisible(prefs, 'summary'); // round206 — a triple-box pane now
+  // round209 — the התייחסויות/סיכום panes are ALSO per-role view-gated (owner
+  // decides in the permissions tab whether e.g. participants may see them);
+  // the component-visibility preference and the permission gate must BOTH pass.
+  const showReferences = isComponentVisible(prefs, 'references') && can('viewReferencesBox');
+  const showSummaryPane = isComponentVisible(prefs, 'summary') && can('viewSummaryBox'); // round206 — a triple-box pane now
   const visibleTabs = useMemo(() => TAB_DEFS.filter((t) => (
     t.key === 'topics'
       ? (showTopicsTables || showBackground || showReferences || showSummaryPane)

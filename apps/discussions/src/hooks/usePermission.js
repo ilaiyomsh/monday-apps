@@ -95,6 +95,13 @@ const SUMMARY_WRITER_ALIASES = new Set([
 // `viewDiscussion` is a discussion cap but is NOT an edit cap — it must never be
 // suppressed by the `ready` gate (you can always view).
 const VIEW_CAP = 'viewDiscussion';
+// round209 — per-role VIEW gates for the triple-box panes (התייחסויות / סיכום).
+// View-like: never ready-gated, allow-all while the feature is off, and the two
+// viewDiscussion safety valves apply. Their CAPABILITY_DEFAULTS bucket is 'all'
+// but they deliberately SKIP the 'all' short-circuit so an explicit `false` on
+// a held role (e.g. the owner unchecking participants) actually hides the pane;
+// existing stored role maps that lack these keys inherit the default → visible.
+const BOX_VIEW_CAPS = new Set(['viewReferencesBox', 'viewSummaryBox']);
 
 // True when `myId` appears in a monday people-column value (array of {id}).
 function inPeople(arr, myId) {
@@ -195,6 +202,7 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
   const myId = String(ctx.currentUserId ?? '');
 
   const isViewCap = capability === VIEW_CAP;
+  const isBoxViewCap = BOX_VIEW_CAPS.has(capability);
   const isSystemCap = SYSTEM_CAPS.has(capability);
   const isTaskCap = TASK_CAPS.has(capability);
   const isDecisionCap = DECISION_CAPS.has(capability);
@@ -202,7 +210,7 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
   // itemBoardKey names the board whose role sources apply (null = discussion tier).
   const itemBoardKey = isTaskCap ? 'tasks' : isDecisionCap ? 'decisions' : null;
   // Discussion-scoped EDIT caps are gated by `ready`; view & system caps aren't.
-  const isReadyGated = !isSystemCap && !isViewCap;
+  const isReadyGated = !isSystemCap && !isViewCap && !isBoxViewCap;
 
   // 1. Owner bypass — unrestricted. Account admins are NOT auto-bypassed: an
   // admin who wants access makes themselves an OBJECT owner (native subscribers).
@@ -228,6 +236,7 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
   // 2. Feature off / fail-open — reproduce TODAY exactly.
   if (!permissions?.enabled) {
     if (isViewCap) return true; // view is allow-all today
+    if (isBoxViewCap) return true; // the boxes were visible to every viewer today
     // DOCS-export ran UNGATED today (any user seeing the row/chip could export).
     // The consumers now gate via can('exportDocs'), so the fail-open path MUST
     // return true here — otherwise a non-creator/lead/owner participant would
@@ -294,8 +303,10 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
   }
 
   // An 'all'-default capability is allowed for every member regardless of
-  // which roles they hold — it isn't role-gated.
-  if (CAPABILITY_DEFAULTS[capability] === 'all') return true;
+  // which roles they hold — it isn't role-gated. The box-view caps are the
+  // exception (round209): their 'all' default flows through the ROLE SCAN as a
+  // default grant instead, so an explicit `false` on a held role can revoke it.
+  if (CAPABILITY_DEFAULTS[capability] === 'all' && !isBoxViewCap) return true;
 
   // Item 20 (2026-07-14) — viewDiscussion is now ROLE-GATED (participants view
   // via the seed; strangers are denied by the scan below). Two safety valves
@@ -304,7 +315,7 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
   //   (b) roles map has no discussions:* rows (owner never opened the
   //       permissions tab, so the seed was never written) → keep the historic
   //       allow-all instead of locking every member out.
-  if (isViewCap) {
+  if (isViewCap || isBoxViewCap) {
     if (!discussionReady(discussion)) return true;
     if (!Object.keys(roles).some((k) => k.startsWith('discussions:'))) return true;
   }
