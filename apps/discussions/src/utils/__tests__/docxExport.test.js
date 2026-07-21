@@ -260,17 +260,20 @@ describe('data-driven template (buildExportDoc)', () => {
     expect(xml).not.toContain('מדיון קודם'); // the removed column header
   });
 
-  it('renders a decisions table with decider, date and status (round192)', async () => {
+  it('renders a decisions table with only מס׳/החלטה/מחליט — no date/status columns (round193)', async () => {
     const model = buildDiscussionModel({
       discussion: { name: 'ד' },
       decisions: [{ name: 'החלטה חשובה', decider: [{ id: '1', name: 'דנה' }], date: new Date('2026-07-03T00:00:00Z'), status: 'אושר' }],
     });
     const template = { sections: [{ key: 'decisions', enabled: true, label: 'החלטות' }] };
     const xml = await xmlOf(model, template);
-    expect(xml).toContain('מחליט');       // decider column header
-    expect(xml).toContain('החלטה חשובה'); // the decision text
-    expect(xml).toContain('דנה');         // decider name
-    expect(xml).toContain('אושר');        // status label
+    expect(xml).toContain('מחליט');        // decider column header kept
+    expect(xml).toContain('החלטה חשובה');  // the decision text
+    expect(xml).toContain('דנה');          // decider name
+    // round193 — date + status columns were removed from the decisions table
+    expect(xml).not.toContain('תאריך');    // no date column header
+    expect(xml).not.toContain('סטאטוס');   // no status column header
+    expect(xml).not.toContain('אושר');     // status value no longer rendered
   });
 });
 

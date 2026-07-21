@@ -23,7 +23,8 @@
   max-height: 100%;
 }
 .overlayContained .modalFixed,
-.overlayContained .modalWide {
+.overlayContained .modalWide,
+.overlayContained .modalExport {
   width: min(760px, 96%);
   height: auto;
   max-height: 100%;
@@ -47,11 +48,19 @@
   height: min(760px, 88vh);
 }
 
-/* Permissions AND Export-template tabs share ONE fixed, larger box (wider than
-   the mapping/prefs/templates tabs) so switching between them doesn't resize. */
+/* Permissions tab: a fixed, larger box (wider than the mapping/prefs/templates
+   tabs). */
 .modalWide {
   width: min(1200px, 96vw);
   height: min(690px, 92vh);
+}
+
+/* round193 — the Export-template tab is the LARGEST box (owner request): both
+   taller and wider than the permissions box, so the components column + the live
+   preview sheet both have room without cramping. */
+.modalExport {
+  width: min(1360px, 98vw);
+  height: min(900px, 95vh);
 }
 
 .header {

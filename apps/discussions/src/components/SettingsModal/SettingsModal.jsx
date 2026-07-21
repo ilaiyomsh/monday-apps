@@ -705,7 +705,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       if (e.target === e.currentTarget) onClose();
     }}>
       <div
-        className={`${styles.modal} ${activeTab <= 2 ? styles.modalFixed : ''} ${activeTab >= 3 ? styles.modalWide : ''}`}
+        className={`${styles.modal} ${activeTab <= 2 ? styles.modalFixed : ''} ${activeTab === 3 ? styles.modalExport : ''} ${activeTab === 4 ? styles.modalWide : ''}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
