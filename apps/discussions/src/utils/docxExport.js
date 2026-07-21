@@ -45,8 +45,9 @@ const TASK_COLS = ['responsibilityID', 'deadlineID', 'statusID']; // assignee, d
 // round192 — decisions section: decider (people), status, date. Read from the
 // DECISIONS board (mapped manually), which is why an unmapped board degrades to [].
 const DECISION_COLS = ['deciderID', 'decisionStatusID', 'decisionDateID'];
-// 5 decision columns, DXA: מס׳, החלטה, מחליט, תאריך, סטאטוס (mirrors the tasks table).
-const DECISION_COL_WIDTHS = [600, 3800, 1900, 1400, 1300];
+// round193 — decisions table trimmed to 3 columns (owner request; date + status
+// dropped): מס׳, החלטה, מחליט. Sum 9000 DXA to match the tasks table width.
+const DECISION_COL_WIDTHS = [700, 5300, 3000];
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const HEADER_FILL = '4F6B8F';
 // round191 — the "מדיון קודם" column was removed (owner request); its 900 DXA were
@@ -678,7 +679,8 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
       })],
     });
     const NAME_COL = 1; // "החלטה" — right-aligned, all others centered.
-    const headers = ['מס׳', 'החלטה', 'מחליט', 'תאריך', 'סטאטוס'];
+    // round193 — only מס׳ · החלטה · מחליט (date + status columns removed).
+    const headers = ['מס׳', 'החלטה', 'מחליט'];
     const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, DECISION_COL_WIDTHS[i], true, i !== NAME_COL)) })];
     model.decisions.forEach((d, i) => {
       rows.push(new TableRow({
@@ -687,8 +689,6 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
           cell(String(i + 1), DECISION_COL_WIDTHS[0], false, true),
           cell(d.name, DECISION_COL_WIDTHS[1], false, false),
           cell(d.deciderText, DECISION_COL_WIDTHS[2], false, true),
-          cell(d.dateText, DECISION_COL_WIDTHS[3], false, true),
-          cell(d.status || '—', DECISION_COL_WIDTHS[4], false, true),
         ],
       }));
     });

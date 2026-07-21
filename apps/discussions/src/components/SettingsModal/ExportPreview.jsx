@@ -19,6 +19,18 @@ const META_SAMPLE = {
   typesText: 'ישיבת הנהלה',
   previousText: 'סיכום רבעון קודם',
 };
+const DOC_TITLE_SAMPLE = 'ישיבת הנהלה — יולי 2026';
+// round193 — the preview now mirrors the actual .docx: real bordered tables with
+// the SAME column headers/order the docx emits (buildTasks / buildDecisions), so
+// "תצוגה מקדימה" reflects what the Word file will look like, not a loose sketch.
+const TASKS_SAMPLE = [
+  { name: 'להכין מצגת סיכום לרבעון', assignee: 'דנה כהן', deadline: '10.07.2026', status: 'בעבודה' },
+  { name: 'לתאם פגישת המשך עם הצוות', assignee: 'יוסי לוי', deadline: '15.07.2026', status: 'טרם החל' },
+];
+const DECISIONS_SAMPLE = [
+  { name: 'לאשר את התקציב הרבעוני', decider: 'עידו פיוטרקובסקי' },
+  { name: 'להעביר את הפרויקט לשלב הבא', decider: 'מיכל בר' },
+];
 
 /**
  * Live, mock-style approximation of the exported .docx. NOT the real Word
@@ -68,6 +80,22 @@ export default function ExportPreview({ template, assets }) {
     );
   };
 
+  // A bordered table mirroring the docx tables: dark header row (white bold text),
+  // hairline #D9D9D9 borders, the NAME column (index 1) right-aligned like the docx
+  // ("משימה"/"החלטה"), every other column centered.
+  const renderTable = (headers, rows) => (
+    <table className={styles.table}>
+      <thead>
+        <tr>{headers.map((h, i) => <th key={i} className={i === 1 ? styles.thName : ''}>{h}</th>)}</tr>
+      </thead>
+      <tbody>
+        {rows.map((cells, r) => (
+          <tr key={r}>{cells.map((c, i) => <td key={i} className={i === 1 ? styles.tdName : ''}>{c}</td>)}</tr>
+        ))}
+      </tbody>
+    </table>
+  );
+
   const renderSection = (section) => {
     if (!section || section.enabled === false) return null;
     switch (section.key) {
@@ -104,14 +132,20 @@ export default function ExportPreview({ template, assets }) {
         return (
           <div key="tasks" className={styles.docSection}>
             <div className={styles.h2}>משימות</div>
-            <ul className={styles.list}><li>משימה לדוגמה — אחראי: דנה — יעד: 10/07</li><li>משימה נוספת — אחראי: יוסי</li></ul>
+            {renderTable(
+              ['מס׳', 'משימה', 'אחראי', 'דד ליין', 'סטטוס'],
+              TASKS_SAMPLE.map((t, i) => [String(i + 1), t.name, t.assignee, t.deadline, t.status]),
+            )}
           </div>
         );
       case 'decisions':
         return (
           <div key="decisions" className={styles.docSection}>
             <div className={styles.h2}>החלטות</div>
-            <ul className={styles.list}><li>החלטה לדוגמה — מחליט: דנה — 10/07</li><li>החלטה נוספת — מחליט: יוסי</li></ul>
+            {renderTable(
+              ['מס׳', 'החלטה', 'מחליט'],
+              DECISIONS_SAMPLE.map((d, i) => [String(i + 1), d.name, d.decider]),
+            )}
           </div>
         );
       case 'freeText':
@@ -135,6 +169,8 @@ export default function ExportPreview({ template, assets }) {
           <div className={`${styles.band} ${styles.bandNote}`}>הכותרות מגיעות מקובץ התבנית שהועלה</div>
         )}
         <div className={styles.body}>
+          {/* The docx always opens with a centered title; mirror it here. */}
+          <div className={styles.docTitle}>{`סיכום דיון: ${DOC_TITLE_SAMPLE}`}</div>
           {sections.map(renderSection)}
         </div>
         {isConfig ? renderBand('footer', true) : null}
