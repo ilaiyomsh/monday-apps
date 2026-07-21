@@ -120,10 +120,9 @@ const SURFACES = [
     renderMarkers: ['createRoot('],
     boundaryDirs: ['apps/deadline-confirm/src/client/admin'],
     workflow: '.github/workflows/deploy-draft-deadline-confirm.yml',
-    // KNOWN GAP: the deadline-confirm workflow builds the admin SPA without baking VITE_AXIOM_*,
-    // so its client error sink is inert in production. Wiring is present; only the build-time
-    // activation env is missing. Tracked as an openIssue rather than failing the audit.
-    deployEnv: { keys: ['VITE_AXIOM_DATASET', 'VITE_AXIOM_TOKEN', 'VITE_AXIOM_APP'], knownGap: 'workflow does not inject VITE_AXIOM_* into the admin build — client sink inert in prod (openIssue)' },
+    // The admin build now bakes VITE_AXIOM_* (draft + live workflows) — the former known gap is
+    // closed, so this surface is enforced like the rest: a missing key FAILS, never warns.
+    deployEnv: { keys: ['VITE_AXIOM_DATASET', 'VITE_AXIOM_TOKEN', 'VITE_AXIOM_APP'] },
   },
   {
     name: 'telemetry-dashboard-client', kind: 'client',
