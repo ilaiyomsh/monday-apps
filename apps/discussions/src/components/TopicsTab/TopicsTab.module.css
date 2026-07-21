@@ -65,6 +65,31 @@
   flex: 1;
 }
 
+/* round198 — bottom add-group entry (monday's "+ הוספת קבוצה" pattern): a ghost
+   dashed button under the LAST group, aligned to the tables' left edge. */
+.bottomAddRow {
+  margin-top: 16px;
+  display: flex;
+}
+.bottomAddBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+  font-family: var(--font-family);
+  direction: rtl;
+  cursor: pointer;
+}
+.bottomAddBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--primary-text-color, #323338);
+}
+
 /* One topic = a monday board GROUP: a plain colored-title header (no band) with
    the points rendered below as a bordered table box (mirrors the My Tasks tab). */
 .section {
