@@ -121,8 +121,6 @@
       {
         "files": [
           "src/hooks/useUiErrorSink.js",
-          "src/utils/axiomErrorSink.js",
-          "src/utils/axiomBrowserTransport.js",
           "vite.config.js"
         ],
         "rules": {

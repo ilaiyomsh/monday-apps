@@ -143,15 +143,28 @@ const mondayService = {
     assertStorageWriteOk(response, key, 'column-config');
   },
 
-  // App storage (app-wide)
+  // App storage (app-wide). Currently unused in production (no src call sites),
+  // but a future caller must not inherit an unguarded await: wrap the fallible
+  // ops so any failure is logged (not just an unhandledrejection with zero
+  // context) before it rethrows to the caller's own catch/log/display path.
   async getAppStorage(key) {
-    const response = await monday.storage.getItem(key);
-    return parseStoredValue(response.data?.value, key, 'app');
+    try {
+      const response = await monday.storage.getItem(key);
+      return parseStoredValue(response.data?.value, key, 'app');
+    } catch (err) {
+      logger.error('mondayService', `Failed to read app storage key "${key}"`, err);
+      throw err;
+    }
   },
 
   async setAppStorage(key, value) {
-    const response = await monday.storage.setItem(key, JSON.stringify(value));
-    assertStorageWriteOk(response, key, 'app');
+    try {
+      const response = await monday.storage.setItem(key, JSON.stringify(value));
+      assertStorageWriteOk(response, key, 'app');
+    } catch (err) {
+      logger.error('mondayService', `Failed to write app storage key "${key}"`, err);
+      throw err;
+    }
   },
 };
 

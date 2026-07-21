@@ -25,6 +25,9 @@
 //       soft-error: the promise RESOLVES, it does not reject — same as live).
 //   apiRejectNext  — next api() rejects (network/hard error).
 //   storageErrorNext — next storage op resolves { data: { success:false } }.
+//   storageRejectNext — next storage op REJECTS (hard/network failure, as
+//       opposed to storageErrorNext's in-band success:false) — mirrors
+//       apiRejectNext for the storage surface.
 //   latencyMs      — async latency added to every call (default 30).
 
 import { CONTEXTS, THEMES, ROLES, API_FIXTURES, DEFAULT_SETTINGS, USERS } from './fixtures.js';
@@ -59,6 +62,7 @@ function createHarness() {
       apiErrorNext: false,
       apiRejectNext: false,
       storageErrorNext: false,
+      storageRejectNext: false,
       latencyMs: 30,
     },
 
@@ -110,6 +114,7 @@ function createHarness() {
         apiErrorNext: false,
         apiRejectNext: false,
         storageErrorNext: false,
+        storageRejectNext: false,
         latencyMs: 30,
       });
       state.context = clone(CONTEXTS[FEATURE_TYPE] || CONTEXTS.board_view);
@@ -133,6 +138,10 @@ function delay() {
 
 async function storageGuard() {
   await delay();
+  if (harness.failures.storageRejectNext) {
+    harness.failures.storageRejectNext = false;
+    throw new Error('dev-harness: simulated storage rejection');
+  }
   if (harness.failures.storageErrorNext) {
     harness.failures.storageErrorNext = false;
     return { data: { success: false, error: 'dev-harness: simulated storage failure' } };

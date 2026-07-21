@@ -122,7 +122,15 @@ export const AppErrorBoundary = ({ children, scope = 'root', FallbackComponent, 
         // Canonical render-throw record. Pass the component stack in context so a
         // remote sink can attribute the crash; do NOT also toast here — the
         // fallback screen is the single user-facing surface for render throws.
-        logger.error(`ErrorBoundary:${scope}`, 'React render error caught', error);
+        //
+        // The message includes error.message (not a fixed string) so distinct
+        // render crashes within the same scope don't collide on the transport's
+        // dedup key (level|tag|message @ axiomBrowserTransport dedup window) and
+        // get throttled together as if they were one repeating error. Falls back
+        // to a stable label when the thrown value isn't a real Error (e.g. a
+        // thrown string/object with no .message).
+        const detail = typeof error?.message === 'string' && error.message !== '' ? error.message : 'unknown error';
+        logger.error(`ErrorBoundary:${scope}`, `Render error: ${detail}`, error);
         logger.debug(`ErrorBoundary:${scope}`, 'Component stack', { componentStack: info?.componentStack });
     };
 

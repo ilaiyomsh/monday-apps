@@ -45,7 +45,7 @@ export default defineConfig({
     global: 'globalThis',
     // Version layer (docs/monday-cicd-spec.md): package.json is the source of
     // truth; CI injects the commit SHA (draft) and the release flag (live).
-    // __APP_VERSION__ also stamps remote error records (utils/axiomErrorSink.js).
+    // __APP_VERSION__ also stamps remote error records (index.jsx's attachAxiomSink wiring).
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_SHA__: JSON.stringify(process.env.VITE_BUILD_SHA ?? 'local'),
     __IS_RELEASE__: JSON.stringify(process.env.VITE_IS_RELEASE === 'true'),
