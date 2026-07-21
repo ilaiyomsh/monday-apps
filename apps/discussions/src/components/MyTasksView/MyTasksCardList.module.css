@@ -42,6 +42,59 @@
   overflow-wrap: anywhere;
 }
 
+/* round215 — name row: name (right) + pencil/grip cluster at the top-LEFT. */
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.cardTop .name { flex: 1; min-width: 0; }
+.cardTopActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.renameBtn {
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #9699a6);
+  border-radius: 7px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.renameBtn:active { background: var(--primary-selected-color, #e6f1ff); color: var(--primary-color, #0073ea); }
+.dragHandle {
+  border: none;
+  background: transparent;
+  color: var(--ui-border-color, #c3c6d4);
+  border-radius: 7px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  /* drag starts straight from the handle — block the browser's touch scroll here */
+  touch-action: none;
+}
+.dragHandle:active { color: var(--primary-color, #0073ea); cursor: grabbing; }
+.renameInput {
+  flex: 1;
+  min-width: 0;
+  border: 1.5px solid var(--primary-color, #0073ea);
+  border-radius: 8px;
+  padding: 5px 9px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  outline: none;
+}
+
 .disc {
   font-size: 12px;
   color: var(--secondary-text-color, #676879);

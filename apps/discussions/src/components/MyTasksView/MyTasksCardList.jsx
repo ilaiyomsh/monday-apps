@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
-import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { GripVertical, Pencil } from 'lucide-react';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { HighlightedText } from '@generated/components/HighlightedText';
 import { getTaskDiscussion } from './grouping.js';
@@ -91,8 +91,11 @@ function MobileHebrewCalendar({ value, onPick }) {
   );
 }
 
+// round215 — dragging activates ONLY from the visible grip handle (simple,
+// immediate — no long-press), so plain touches still scroll and tap. The
+// handle props are handed down via a render-prop.
 function SortableCard({ task, children }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(task.id) });
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: String(task.id) });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -100,8 +103,8 @@ function SortableCard({ task, children }) {
     opacity: isDragging ? 0.85 : 1,
   };
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      {children}
+    <div ref={setNodeRef} style={style}>
+      {children({ handleRef: setActivatorNodeRef, handleProps: { ...attributes, ...listeners } })}
     </div>
   );
 }
@@ -120,7 +123,11 @@ export function MyTasksCardList({
   onStatusChange,
   onPriorityChange,
   onDeadlineChange,
-  onReorder,
+  onRenameTask,
+  // round215 — the parent (MyTasksView) owns ONE DndContext across all groups,
+  // so cards drag between groups too; this list only provides its
+  // SortableContext (id = the group key).
+  sortableId,
   searchTerm = '',
   newTaskRow = null,
 }) {
@@ -128,22 +135,16 @@ export function MyTasksCardList({
   const [sheet, setSheet] = useState(null);
   const closeSheet = () => setSheet(null);
 
-  // Long-press activation so vertical scrolling still works; mouse drags (dev)
-  // activate on a small distance instead.
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
-  );
+  // round215 — inline rename (the top-left pencil): which task is being renamed.
+  const [renamingId, setRenamingId] = useState(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const commitRename = (task) => {
+    setRenamingId(null);
+    const next = renameDraft.trim();
+    if (next && next !== task.name) onRenameTask?.(task.id, next);
+  };
 
   const ids = useMemo(() => tasks.map((t) => String(t.id)), [tasks]);
-
-  const onDragEnd = ({ active, over }) => {
-    if (!over || active.id === over.id || !onReorder) return;
-    const from = ids.indexOf(String(active.id));
-    const to = ids.indexOf(String(over.id));
-    if (from === -1 || to === -1) return;
-    onReorder(arrayMove(ids, from, to));
-  };
 
   const sheetTask = sheet ? tasks.find((t) => String(t.id) === String(sheet.taskId)) : null;
 
@@ -187,8 +188,7 @@ export function MyTasksCardList({
         </div>
       )}
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+      <SortableContext id={sortableId} items={ids} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => {
             const discussion = getTaskDiscussion(task);
             const statusFill = task.statusID != null && statusLabelById[task.statusID] != null
@@ -197,18 +197,62 @@ export function MyTasksCardList({
               ? (priorityColorById[task.priorityID] || NEUTRAL) : null;
             const deadlineText = fmtDate(task.deadlineID);
             const late = isOverdue(task.deadlineID);
+            const canRename = Boolean(onRenameTask && canTask('editTaskName', task));
             return (
               <SortableCard key={task.id} task={task}>
+                {({ handleRef, handleProps }) => (
                 <div className={styles.card} data-testid="mytask-card">
                   {color ? <span className={styles.stripe} style={{ background: color }} /> : null}
-                  <button
-                    type="button"
-                    className={styles.name}
-                    title={task.name}
-                    onClick={() => openOrToggleItemCard(task.id)}
-                  >
-                    <HighlightedText text={task.name} query={searchTerm} />
-                  </button>
+                  <div className={styles.cardTop}>
+                    {renamingId === String(task.id) ? (
+                      <input
+                        className={styles.renameInput}
+                        autoFocus
+                        value={renameDraft}
+                        aria-label="עריכת שם המשימה"
+                        onChange={(e) => setRenameDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitRename(task);
+                          else if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                        onBlur={() => commitRename(task)}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className={styles.name}
+                        title={task.name}
+                        onClick={() => openOrToggleItemCard(task.id)}
+                      >
+                        <HighlightedText text={task.name} query={searchTerm} />
+                      </button>
+                    )}
+                    {/* round215 — top-LEFT controls (RTL end): rename pencil +
+                        the drag grip (drag activates ONLY from the grip). */}
+                    <div className={styles.cardTopActions}>
+                      {canRename && renamingId !== String(task.id) && (
+                        <button
+                          type="button"
+                          className={styles.renameBtn}
+                          onClick={() => { setRenamingId(String(task.id)); setRenameDraft(task.name || ''); }}
+                          aria-label="עריכת שם המשימה"
+                          title="עריכת שם"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        ref={handleRef}
+                        {...handleProps}
+                        className={styles.dragHandle}
+                        aria-label="גרירת המשימה לשינוי מיקום"
+                        title="גרור לשינוי מיקום"
+                      >
+                        <GripVertical size={15} />
+                      </button>
+                    </div>
+                  </div>
                   {showDiscussion && discussion?.name ? (
                     <div className={styles.disc}>{discussion.name}</div>
                   ) : null}
@@ -243,11 +287,11 @@ export function MyTasksCardList({
                     </div>
                   </div>
                 </div>
+                )}
               </SortableCard>
             );
           })}
-        </SortableContext>
-      </DndContext>
+      </SortableContext>
 
       {sheet && sheetTask && (
         <>

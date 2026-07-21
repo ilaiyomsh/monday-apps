@@ -95,6 +95,22 @@ describe('MyTasksCardList (round208 mobile cards)', () => {
     expect(picked[1].getDate()).toBe(12);
   });
 
+  it('round215: the pencil renames inline (Enter commits the trimmed name)', () => {
+    const onRenameTask = vi.fn();
+    render(<MyTasksCardList {...baseProps} onRenameTask={onRenameTask} />);
+    fireEvent.click(screen.getByRole('button', { name: 'עריכת שם המשימה' }));
+    const input = screen.getByLabelText('עריכת שם המשימה');
+    fireEvent.change(input, { target: { value: ' מצגת רבעונית ' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onRenameTask).toHaveBeenCalledWith('1', 'מצגת רבעונית');
+  });
+
+  it('round215: no pencil without rename permission; drag handle always present', () => {
+    render(<MyTasksCardList {...baseProps} onRenameTask={vi.fn()} canTask={(cap) => cap !== 'editTaskName'} />);
+    expect(screen.queryByRole('button', { name: 'עריכת שם המשימה' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'גרירת המשימה לשינוי מיקום' })).toBeInTheDocument();
+  });
+
   it('round214: נקה תאריך clears the deadline (no הסר תאריך label)', () => {
     render(<MyTasksCardList {...baseProps} />);
     fireEvent.click(screen.getByRole('button', { name: '📅 05/01' }));

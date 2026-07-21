@@ -605,14 +605,9 @@ export const COLUMN_SCHEMA = {
     externalParticipantsID: { type: 'long_text', title: 'משתתפים חיצוניים' },
     // File column the exported summary .docx is uploaded into (add_file_to_column).
     summaryFileID: { type: 'file', title: 'קובץ סיכום (DOCS)' },
-    // round204 — optional files column for the רקע box's preparation files
-    // (uploaded via monday's native dialog; unmapped → the box hides the
-    // "הוסף קובץ" button and offers links only).
-    backgroundFilesID: { type: 'file', title: 'קבצי רקע' },
-    // round206 — optional files columns for the התייחסויות/סיכום panes of the
-    // triple box (📎 in the formatting toolbar; unmapped → 📎 hidden).
-    referencesFilesID: { type: 'file', title: 'קבצי התייחסויות' },
-    summaryFilesID: { type: 'file', title: 'קבצי סיכום' },
+    // round216 — the three triple-box files columns (קבצי רקע/התייחסויות/סיכום,
+    // rounds 204/206) were REMOVED from the schema + mapping (owner request):
+    // with no mapped column the 📎 attach button and file chips simply hide.
     tasksBoardLinkID: { type: 'board_relation', title: 'לוח משימות' },
     topicsBoardLinkID: { type: 'board_relation', title: 'לוח נושאים לדיון' },
     // סוג דיון — a DROPDOWN column. Its value is the label TEXT (not a numeric
