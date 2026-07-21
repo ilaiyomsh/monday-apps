@@ -63,7 +63,10 @@ export function RowKebabMenu({ excluded, onToggleHide, onDelete, kind = 'נקו�
         showTrigger={[]}
         hideTrigger={['clickoutside', 'esc']}
         onDialogDidHide={close}
-        position="bottom-start"
+        // round194 — anchor the popup by its END (left, in RTL) edge so the delete
+        // box lines up with the group title's left edge below it, instead of the
+        // bottom-start anchoring that let its left edge overhang past the title.
+        position="bottom-end"
         zIndex={1000}
         content={() => (
           <DialogContentContainer>
