@@ -536,8 +536,17 @@ const logger = {
 
   /**
    * Error log. ERROR is forwarded to sinks even when the console is muted (production).
+   *
+   * The optional 4th `context` arg is attached to record.context so structured context a
+   * caller supplies — e.g. React's componentStack from ErrorBoundary's onError — rides the
+   * shipped ERROR record (@mapps/error-kit's Axiom sink reads componentStack ONLY from
+   * record.context.componentStack). A 3-arg call leaves context undefined.
+   * @param {string} module
+   * @param {string} message
+   * @param {Error|*} [error]
+   * @param {Object} [context] - structured diagnostic context (e.g. { componentStack })
    */
-  error: (module, message, error = null) => {
+  error: (module, message, error = null, context = null) => {
     emit({
       kind: 'error',
       level: 'ERROR',
@@ -546,6 +555,7 @@ const logger = {
       error: error instanceof Error ? error : undefined,
       // If error is not an Error instance (object/string), keep it on data for rendering/sinks.
       data: error instanceof Error ? undefined : error,
+      context: context || undefined,
       consoleEnabled: currentLevel <= LOG_LEVELS.ERROR
     });
   },

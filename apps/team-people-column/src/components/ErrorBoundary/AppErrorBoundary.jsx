@@ -130,8 +130,14 @@ export const AppErrorBoundary = ({ children, scope = 'root', FallbackComponent, 
         // to a stable label when the thrown value isn't a real Error (e.g. a
         // thrown string/object with no .message).
         const detail = typeof error?.message === 'string' && error.message !== '' ? error.message : 'unknown error';
-        logger.error(`ErrorBoundary:${scope}`, `Render error: ${detail}`, error);
-        logger.debug(`ErrorBoundary:${scope}`, 'Component stack', { componentStack: info?.componentStack });
+        // ONE shipped ERROR record carrying React's componentStack in the context channel
+        // so it rides record.context.componentStack — the exact path @mapps/error-kit's
+        // Axiom sink reads (browser/axiomSink.ts). The previous separate logger.debug record
+        // never shipped (shouldShip drops DEBUG) and put the stack in record.data, not
+        // record.context, so the component tree was lost from every shipped crash.
+        logger.error(`ErrorBoundary:${scope}`, `Render error: ${detail}`, error, {
+            componentStack: info?.componentStack,
+        });
     };
 
     return (

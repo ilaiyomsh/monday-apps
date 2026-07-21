@@ -529,8 +529,17 @@ const logger = {
   /**
    * לוג error - שגיאות
    * ERROR נשלח ל-sink גם כשהקונסול מושתק (PROD).
+   *
+   * ה-arg הרביעי האופציונלי (context) נצמד ל-record.context כדי שהקשר מובנה שהקורא
+   * מצרף — למשל componentStack של React מ-ErrorBoundary.componentDidCatch — יזרום עם
+   * רשומת ה-ERROR הנשלחת (ה-Axiom sink של @mapps/error-kit קורא componentStack רק מ-
+   * record.context.componentStack). קריאה עם 3 ארגומנטים משאירה context כ-undefined.
+   * @param {string} module
+   * @param {string} message
+   * @param {Error|*} [error]
+   * @param {Object} [context] - הקשר דיאגנוסטי מובנה (למשל { componentStack })
    */
-  error: (module, message, error = null) => {
+  error: (module, message, error = null, context = null) => {
     emit({
       kind: 'error',
       level: 'ERROR',
@@ -539,6 +548,7 @@ const logger = {
       error: error instanceof Error ? error : undefined,
       // אם error אינו instance של Error (למשל אובייקט/מחרוזת) — נשמר כ-data לרינדור/sink
       data: error instanceof Error ? undefined : error,
+      context: context || undefined,
       consoleEnabled: currentLevel <= LOG_LEVELS.ERROR
     });
   },

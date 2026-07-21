@@ -24,14 +24,28 @@ export class ErrorBoundary extends React.Component {
     return { hasError: true, isChunk: isChunkLoadError(error), error };
   }
 
-  componentDidCatch(error) {
+  componentDidCatch(error, errorInfo) {
+    // Log the render crash FIRST — this is the canonical, must-not-be-lost record, and
+    // the logger is internally hardened (sink fan-out is try/caught in emit) so it will
+    // not throw back into React's error path. Fold error.message into the message (not a
+    // fixed string) so distinct render crashes get distinct transport dedup keys, and
+    // pass React's componentStack in the logger's context channel so it rides
+    // record.context.componentStack — the exact path @mapps/error-kit's Axiom sink reads
+    // (browser/axiomSink.ts). Falls back to a stable label when the thrown value has no
+    // usable .message.
+    const detail = typeof error?.message === 'string' && error.message !== '' ? error.message : 'unknown error';
+    logger.error('ErrorBoundary', `Render error: ${detail}`, error, {
+      componentStack: errorInfo?.componentStack,
+    });
     try {
+      // Best-effort: build the copyable full-error object behind the "details" button.
       const parsed = parseMondayError(error);
       const fullError = createFullErrorObject(parsed, 'ErrorBoundary');
       this.setState({ fullError });
-      logger.error('ErrorBoundary', error?.message || 'Render error', error);
-    } catch {
-      // never let the boundary's own logging throw
+    } catch (detailsError) {
+      // The details object is a nice-to-have; if building it fails, record that too
+      // (never silently swallow — the primary render-error record above already shipped).
+      logger.error('ErrorBoundary', 'Failed to build error details', detailsError);
     }
   }
 
