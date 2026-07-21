@@ -42,7 +42,8 @@
     "react-dom": "^19.2.7",
     "react-i18next": "^17.0.8",
     "recharts": "^3.8.1",
-    "tiptap-text-direction": "^0.4.0"
+    "tiptap-text-direction": "^0.4.0",
+    "@mapps/error-kit": "workspace:*"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
