@@ -31,6 +31,7 @@ vi.mock('@generated/components/TopicPointRow', () => ({ TopicPointRow: () => <di
 vi.mock('@generated/components/ApplyTemplateMenu', () => ({ ApplyTemplateMenu: () => <div data-testid="apply-template" /> }));
 // round200 — stub the references panel (monday.storage + lazy TipTap).
 vi.mock('../ReferencesPanel.jsx', () => ({ ReferencesPanel: () => <div data-testid="references-panel" /> }));
+vi.mock('../BackgroundPanel.jsx', () => ({ BackgroundPanel: () => <div data-testid="background-panel" /> }));
 
 import { TopicsTab } from '../TopicsTab.jsx';
 

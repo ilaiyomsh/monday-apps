@@ -40,6 +40,10 @@ vi.mock('@generated/components/ApplyTemplateMenu', () => ({
 vi.mock('../ReferencesPanel.jsx', () => ({
   ReferencesPanel: () => <div data-testid="references-panel" />,
 }));
+// round204 — same hermetic stub for the new background panel.
+vi.mock('../BackgroundPanel.jsx', () => ({
+  BackgroundPanel: () => <div data-testid="background-panel" />,
+}));
 
 import { TopicsTab } from '../TopicsTab.jsx';
 import styles from '../TopicsTab.module.css';

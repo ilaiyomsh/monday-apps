@@ -842,7 +842,9 @@ export function DiscussionCard({
           <TabsContext activeTabId={activeIndex}>
             <TabList activeTabId={activeIndex} onTabChange={(id) => setActiveTab(TAB_KEYS[id])}>
               <Tab>הנחיות קודמות</Tab>
-              <Tab>נושאים</Tab>
+              {/* round204 — renamed from "נושאים" (owner request): the tab now
+                  also hosts the רקע + התייחסויות boxes. */}
+              <Tab>ניהול דיון</Tab>
               <Tab>משימות</Tab>
               <Tab>החלטות</Tab>
               <Tab>סיכום</Tab>

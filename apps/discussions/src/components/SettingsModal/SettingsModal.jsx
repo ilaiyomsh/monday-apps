@@ -387,6 +387,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     'discussionDateID',
     'discussionTypeID',
     'summaryFileID',
+    'backgroundFilesID', // round204 — קבצי רקע (files column for the רקע box)
     'previousDiscussionID',
     'tasksBoardLinkID',
     'topicsBoardLinkID',

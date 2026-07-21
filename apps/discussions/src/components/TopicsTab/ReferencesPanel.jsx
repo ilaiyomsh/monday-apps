@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useRef, useState, useCallback, useEffect } from 'react';
-import { Check, Loader2, AlertCircle } from 'lucide-react';
+import { Check, Loader2, AlertCircle, ChevronDown } from 'lucide-react';
 import { useReferences } from '@generated/hooks/useReferences.js';
 import lazyRetry from '@generated/utils/lazyRetry.js';
 import { BrandLoader } from '@components/BrandLoader';
@@ -92,15 +92,27 @@ export function ReferencesPanel({ discussionId, canEdit = false }) {
   const when = formatWhen(updatedAt);
   const showLoader = loading || !editorReady;
 
-  return (
-    <div className={styles.refPanel} dir="rtl">
-      {/* Title row — SAME typography as the topic group titles, and vertically
-          parallel to the FIRST group's title (both columns start at the split
-          row's top; see .refTitleRow margins). */}
-      <div className={styles.refTitleRow}>
-        <span className={styles.refTitle}>התייחסויות</span>
-      </div>
+  // round204 (approved mockup) — the panel is a COLLAPSIBLE box, closed by
+  // default; one click on its header opens it. Collapses again on a
+  // discussion switch so every discussion opens clean.
+  const [open, setOpen] = useState(false);
+  useEffect(() => { setOpen(false); }, [discussionId]);
 
+  return (
+    <div className={styles.sideBox} dir="rtl">
+      <button
+        type="button"
+        className={styles.sideHead}
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <ChevronDown size={16} className={`${styles.sideChev} ${open ? styles.sideChevOpen : ''}`} />
+        <span className={styles.refTitle}>התייחסויות</span>
+        {!open && when && <span className={styles.sideHint}>עודכן</span>}
+      </button>
+
+      {open && (
+      <div className={styles.sideBody}>
       <div className={styles.refBox}>
         {!loading && (
           <Suspense fallback={null}>
@@ -148,6 +160,8 @@ export function ReferencesPanel({ discussionId, canEdit = false }) {
             </span>
           )}
         </div>
+      )}
+      </div>
       )}
     </div>
   );

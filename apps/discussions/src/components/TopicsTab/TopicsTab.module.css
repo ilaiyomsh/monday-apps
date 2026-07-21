@@ -87,17 +87,151 @@
   align-self: flex-start;
   /* Keep it clear of the tab's right inset (round184 rule line). */
   margin-inline-end: var(--section-rule-inset-wide, 24px);
+  /* round204 — the column now stacks TWO collapsible boxes (רקע above
+     התייחסויות). */
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
-/* Title row — SAME typography as the topic group titles (.groupTitle in the task
-   tabs / .sectionHeader titles here: 18px, medium weight, secondary grey) and the
-   same 18px title→content rhythm, so it sits PARALLEL to the first group title. */
-.refTitleRow {
+
+/* round204 (approved mockup) — collapsible update-box shell: a bordered card
+   whose whole header row is the open/close toggle; closed by default. */
+.sideBox {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  background: var(--primary-background-color, #fff);
+  overflow: hidden;
+}
+.sideHead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  min-height: 28px;
-  margin-bottom: 18px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-family);
+  text-align: start;
+}
+.sideHead:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+.sideChev {
+  color: var(--secondary-text-color, #676879);
+  flex-shrink: 0;
+  transition: transform var(--motion-productive-medium, 0.2s) ease;
+}
+.sideChevOpen {
+  transform: rotate(180deg);
+}
+.sideHint {
+  margin-inline-start: auto;
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  background: var(--primary-background-hover-color, #f0f1f3);
+  border-radius: 10px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.sideBody {
+  border-top: 1px solid var(--layout-border-color, #e6e9ef);
+  padding: 12px 14px 14px;
+}
+
+/* round204 — the רקע box's preparation files/links block. */
+.attachBlock {
+  margin-top: 12px;
+}
+.attachHead {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--secondary-text-color, #676879);
+  margin-bottom: 8px;
+}
+.attachRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.attachChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+}
+.attachChip a {
+  color: var(--primary-color, #0073ea);
+  text-decoration: none;
+}
+.attachChip a:hover {
+  text-decoration: underline;
+}
+.attachX {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: var(--placeholder-color, #9699a6);
+  cursor: pointer;
+  padding: 0;
+}
+.attachX:hover {
+  color: var(--negative-color, #d83a52);
+}
+.attachBtns {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.attachAddBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px dashed var(--ui-border-color, #c3c6d4);
+  background: transparent;
+  border-radius: var(--border-radius-small, 4px);
+  padding: 4px 12px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.attachAddBtn:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--primary-text-color, #323338);
+}
+.attachAddBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.linkForm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.linkInput {
+  flex: 1;
+  min-width: 120px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  direction: ltr;
+  text-align: left;
+}
+.linkInput:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
 }
 .refTitle {
   font-size: 18px;
