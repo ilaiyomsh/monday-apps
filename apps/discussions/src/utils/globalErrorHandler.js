@@ -8,6 +8,34 @@ import { handleGlobalChunkError } from './lazyRetry';
 import logger from './logger';
 
 /**
+ * החלטה על כישלון טעינת משאב (script/link/img), מופרדת לפונקציה טהורה לצורך בדיקות.
+ *
+ * chunk-load אמיתי → החזרת true (הקורא מפעיל preventDefault ורענון חד-פעמי כבר בוצע).
+ * כל כישלון משאב אחר (IMG שבור / CSS / script שאינו chunk) חייב להירשם — WARN עם url+tag,
+ * כדי שלא ייעלם בשקט — ואז החזרת false כך שברירת המחדל של הדפדפן ממשיכה.
+ * (מקביל ל-@mapps/error-kit/browser globalErrorHandler ול-port של team-people-column.)
+ *
+ * @param {{target?: any}} event  אירוע ה-error מהמאזין ב-capture phase
+ * @param {*} win  ה-window (מוזרק לבדיקות)
+ * @returns {boolean} true אם זוהה chunk וטופל (הקורא יפעיל preventDefault)
+ */
+export const handleResourceError = (event, win) => {
+    const w = win ?? (typeof window !== 'undefined' ? window : undefined);
+    const target = event?.target;
+    // שגיאת JS אמיתית מגיעה עם target === window; המאזין ב-bubble phase מטפל בה.
+    if (!target || target === w) return false;
+    const tag = target.tagName;
+    if (tag !== 'SCRIPT' && tag !== 'LINK' && tag !== 'IMG') return false;
+    const url = target.src || target.href || '';
+    // אירועי שגיאת משאב חסרי message; ה-detector מזהה chunk לפי טקסט ה-message, לכן נבנה
+    // pseudo-error עם message ניטרלי שלא "מתחזה" ל-chunk-load (אחרת IMG שבור היה מפעיל רענון).
+    const pseudoError = new Error(`Failed to load resource: ${url}`);
+    if (handleGlobalChunkError(pseudoError)) return true; // הקורא מפעיל preventDefault
+    logger.warn('globalErrorHandler', 'Resource failed to load', { url, tag });
+    return false;
+};
+
+/**
  * טיפול בשגיאה גלובלית
  */
 export const handleGlobalError = (error, context = {}) => {
@@ -24,14 +52,9 @@ export const setupGlobalErrorHandlers = () => {
     // טיפול בכישלון טעינה של משאבים (script/link tags) — לא bubbles, נדרש capture
     // שימושי לכישלון של ה-bundle הראשי או של preload tags כשה-CDN החזיר HTML
     window.addEventListener('error', (event) => {
-        const target = event.target;
-        if (!target || target === window) return;
-        const tag = target.tagName;
-        if (tag !== 'SCRIPT' && tag !== 'LINK' && tag !== 'IMG') return;
-        // pseudo-error לטובת ה-pattern matcher (resource errors אין להם message)
-        const url = target.src || target.href || '';
-        const pseudoError = new Error(`Failed to load module script: ${url}`);
-        if (handleGlobalChunkError(pseudoError)) {
+        // chunk → preventDefault (handleResourceError already ran the one-shot reload);
+        // כל כישלון משאב אחר נרשם בתוך handleResourceError ב-WARN (url+tag) ולא נבלע.
+        if (handleResourceError(event, window)) {
             event.preventDefault();
         }
     }, true);

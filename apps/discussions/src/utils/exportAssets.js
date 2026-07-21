@@ -70,8 +70,9 @@ export async function loadExportAssets(context) {
   try {
     const res = await withTimeout(monday.storage.getItem(instanceKey(context)));
     if (res?.data?.value) return normalize(JSON.parse(res.data.value));
-  } catch {
-    /* storage unavailable / parse error — treat as no assets */
+  } catch (err) {
+    // storage unavailable / parse error — treat as no assets, but keep it visible.
+    logger.warn('exportAssets', 'load export assets failed', err);
   }
   return { ...EMPTY };
 }

@@ -540,9 +540,15 @@ export default function App() {
     let cancelled = false;
     const warm = () => {
       if (cancelled) return;
-      prefetchMyTasks({ currentUser, context }).catch(() => {});
-      prefetchMyDecisions('decider', { currentUser, context }).catch(() => {});
-      prefetchDashboard({ currentUser, context }).catch(() => {});
+      prefetchMyTasks({ currentUser, context }).catch((err) =>
+        logger.warn('App', 'idle prefetchMyTasks warm failed', err)
+      );
+      prefetchMyDecisions('decider', { currentUser, context }).catch((err) =>
+        logger.warn('App', 'idle prefetchMyDecisions warm failed', err)
+      );
+      prefetchDashboard({ currentUser, context }).catch((err) =>
+        logger.warn('App', 'idle prefetchDashboard warm failed', err)
+      );
     };
     let idleId = null;
     let timerId = null;
@@ -621,7 +627,7 @@ export default function App() {
         if (cancelled) return;
         applyLocation(res?.data || res || {});
       })
-      .catch(() => {});
+      .catch((err) => logger.warn('App', 'initial location read failed', err));
 
     const unsubscribe = monday.listen('location', (res) => {
       applyLocation(res?.data || res || {});

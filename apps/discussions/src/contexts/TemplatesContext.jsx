@@ -32,8 +32,9 @@ function genId() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return `tpl_${crypto.randomUUID()}`;
     }
-  } catch {
-    /* fall through to the time+random id below */
+  } catch (err) {
+    // crypto unavailable — fall through to the time+random id below (still usable)
+    logger.warn('TemplatesContext', 'crypto.randomUUID unavailable; using fallback id', err);
   }
   return `tpl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -121,8 +122,9 @@ export function TemplatesProvider({ children }) {
       } else {
         commit([]);
       }
-    } catch {
+    } catch (err) {
       // storage unavailable / parse error — start empty, never block the app.
+      logger.warn('TemplatesContext', 'topic templates load failed', err);
       commit([]);
     }
 
@@ -136,7 +138,8 @@ export function TemplatesProvider({ children }) {
       } else {
         commitParticipants([]);
       }
-    } catch {
+    } catch (err) {
+      logger.warn('TemplatesContext', 'participant templates load failed', err);
       commitParticipants([]);
     }
 
@@ -151,7 +154,8 @@ export function TemplatesProvider({ children }) {
       } else {
         commitTypes([]);
       }
-    } catch {
+    } catch (err) {
+      logger.warn('TemplatesContext', 'type templates load failed', err);
       commitTypes([]);
     }
 
@@ -164,7 +168,8 @@ export function TemplatesProvider({ children }) {
       } else {
         commitTypeColors({});
       }
-    } catch {
+    } catch (err) {
+      logger.warn('TemplatesContext', 'type colors load failed', err);
       commitTypeColors({});
     }
 

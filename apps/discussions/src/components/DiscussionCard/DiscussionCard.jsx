@@ -390,7 +390,7 @@ export function DiscussionCard({
     prunePointItems(id, {
       decisions: decisionsData.items.map((d) => String(d.id)),
       tasks: tasksData.items.map((t) => String(t.id)),
-    }).catch(() => {});
+    }).catch((err) => logger.warn('DiscussionCard', 'prunePointItems housekeeping failed', err));
     // items are read at run time; depending on them would re-run on every
     // optimistic change — the loading transition is the correct, race-free trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -580,7 +580,9 @@ export function DiscussionCard({
     const recordPointItem = (itemId) => {
       if (!pointIsReal || itemId == null) return;
       setPointItemsByPoint((prev) => mergePointItemIn(prev, pointRealId, kind, itemId));
-      addPointItem(discussion.id, pointRealId, kind, itemId).catch(() => {});
+      addPointItem(discussion.id, pointRealId, kind, itemId).catch((err) =>
+        logger.warn('DiscussionCard', 'recordPointItem persist failed', err)
+      );
     };
     // In-flight the instant we submit (before the awaited create resolves).
     if (statusKey) setPointCreateState(statusKey, 'pending');
