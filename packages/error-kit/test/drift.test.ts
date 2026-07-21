@@ -11,7 +11,7 @@
  * supersets) are accommodated; the load-bearing hardening guarantees are enforced.
  *
  * Coverage (per the error-kit architecture, 5 hardening fixes):
- *   BROWSER copies (sync-calender SPA, deadline-confirm SPA, telemetry-dashboard client):
+ *   BROWSER transports (sync-calender SPA, deadline-confirm SPA, telemetry-dashboard client):
  *     - gate inertness (empty token → inert handle, zero listeners, zero fetch)
  *     - fix1: droppedShipFailure counted on a failed POST
  *     - fix2: terminal (hidden) flush ships even with the breaker OPEN
@@ -19,6 +19,12 @@
  *     - fix5: dedup key includes err_name + err_msg (distinct errors behind one generic
  *             logger message do not collide)
  *     - globalErrorHandler: a CAPTURE-PHASE 'error' listener for resource failures
+ *   BROWSER sinks (the record→envelope + privacy layer beside each transport):
+ *     - scrubMessage redaction (emails / tokens&hex>=16 / digit-runs>=7), boundaries + cap 200
+ *     - shouldShip WARN/ERROR policy (+ duplicate drop, alwaysShip bypass)
+ *     - mapRecordToEvent: err_msg is the SCRUBBED message (raw never ships), top-5 stack + stack1,
+ *       component_stack (cap 1000) only from context.componentStack, err_name/err_code extracted
+ *     - discriminator: record.domainKind → ev.kind (default 'error'; the rendering kind never leaks)
  *   SERVER copies (sync-calender, deadline-confirm, telemetry-dashboard):
  *     - opts-injected (zero process.env reads — asserted against the file source)
  *     - scrubMessage redaction (emails / tokens&hex>=16 / digit-runs>=7)
@@ -44,6 +50,16 @@ import { createAxiomBrowserTransport as telemetryTransport } from '../../../apps
 import { setupGlobalErrorHandlers as syncCalGEH } from '../../../apps/axis/sync-calender/src/client/admin/utils/globalErrorHandler';
 import { setupGlobalErrorHandlers as deadlineGEH } from '../../../apps/deadline-confirm/src/client/admin/utils/globalErrorHandler';
 import { setupGlobalErrorHandlers as telemetryGEH } from '../../../apps/telemetry-dashboard/src/client/utils/globalErrorHandler';
+
+// ---- vendored BROWSER sinks (scrubMessage / shouldShip / mapRecordToEvent) --------------
+// The pure record→envelope + privacy layer that lives BESIDE each vendored transport. These
+// are TS modules importing their app's logger + the vendored transport by relative path; in
+// the workspace (unlike the deployed bundle) those resolve. Their activation gate reads
+// import.meta.env (provided by vitest) and resolves inert here — but the exported pure
+// functions we assert on (scrubMessage/shouldShip/mapRecordToEvent) never touch the gate.
+import * as syncCalSink from '../../../apps/axis/sync-calender/src/client/admin/utils/axiomErrorSink';
+import * as deadlineSink from '../../../apps/deadline-confirm/src/client/admin/utils/axiomErrorSink';
+import * as telemetrySink from '../../../apps/telemetry-dashboard/src/client/utils/axiomErrorSink';
 
 // ---- vendored SERVER sinks (JS, opts-injected) -----------------------------------------
 import * as syncCalServer from '../../../apps/axis/sync-calender/src/services/axiomServerSink.js';
@@ -336,6 +352,152 @@ describe('drift — vendored SERVER sinks conform to the sink contract', () => {
         expect(mapped.ms).toBe(42);
         expect(mapped.board).toBe('b1');
         for (const k of ['title', 'email', 'nested']) expect(k in mapped).toBe(false);
+      });
+    });
+  }
+});
+
+// ============================================================================
+// Browser SINK surfaces — the record→envelope + privacy layer beside each transport
+// ============================================================================
+// The transport contract above guards the buffering/dedup/breaker plumbing. This section
+// guards the SINK that feeds it: the PII/secret scrubber (scrubMessage), the WARN/ERROR ship
+// policy (shouldShip), and the allowlisted record→event mapping (mapRecordToEvent). A drifted
+// browser scrubMessage would ship un-redacted PII while every transport check stayed green —
+// exactly the gap this section closes. Behavioral, not byte-equal: the domainKind→kind adapter
+// (these copies read record.domainKind, not the canonical record.kind) is accommodated.
+
+interface BrowserSink {
+  scrubMessage(raw: unknown): string;
+  shouldShip(record: unknown, remoteLevel?: string | null): boolean;
+  mapRecordToEvent(record: unknown): Record<string, unknown>;
+}
+
+const BROWSER_SINK_SURFACES: Array<{ name: string; mod: BrowserSink }> = [
+  { name: 'sync-calender admin SPA', mod: syncCalSink as unknown as BrowserSink },
+  { name: 'deadline-confirm admin SPA', mod: deadlineSink as unknown as BrowserSink },
+  { name: 'telemetry-dashboard client', mod: telemetrySink as unknown as BrowserSink },
+];
+
+// A six-frame V8 stack — top-5 anchoring is observable, the 6th must be dropped.
+const SIX_FRAME_STACK = [
+  'Error: boom',
+  '    at a (f.js:1:1)',
+  '    at b (f.js:2:2)',
+  '    at c (f.js:3:3)',
+  '    at d (f.js:4:4)',
+  '    at e (f.js:5:5)',
+  '    at f (f.js:6:6)',
+].join('\n');
+
+describe('drift — vendored BROWSER sinks conform to the sink contract', () => {
+  for (const surface of BROWSER_SINK_SURFACES) {
+    describe(surface.name, () => {
+      // ---- 1. scrubMessage: the privacy control (strict) ------------------------------
+      it('scrubMessage redacts emails, token/hex runs (>=16), digit-runs (>=7); capped 200', () => {
+        const { scrubMessage } = surface.mod;
+        // exact outputs — email / token / digit each collapse to its tag, prose is preserved
+        expect(scrubMessage('contact admin@corp.com now')).toBe('contact [email] now');
+        expect(scrubMessage('key abcdef0123456789XYZ done')).toBe('key [redacted] done');
+        expect(scrubMessage('id 1234567 ok')).toBe('id [num] ok');
+        // email runs BEFORE token so the whole address is one [email] (not a [redacted] local part)
+        expect(scrubMessage('verylonglocalpart1234@example.com')).toBe('[email]');
+        // cap + non-string contract
+        expect(scrubMessage('word '.repeat(100)).length).toBe(200);
+        expect(scrubMessage(undefined)).toBe('');
+        expect(scrubMessage('')).toBe('');
+      });
+
+      it('scrubMessage honours the redaction BOUNDARIES exactly (>=16 tokens, >=7 digits)', () => {
+        const { scrubMessage } = surface.mod;
+        // token boundary: 16 chars redacted, 15 left intact (pure-letter runs so the
+        // digit rule cannot interfere — a 16+ all-letter word is the accepted trade-off)
+        expect(scrubMessage('t abcdefghijklmnop z')).toBe('t [redacted] z'); // 16
+        expect(scrubMessage('t abcdefghijklmno z')).toBe('t abcdefghijklmno z'); // 15
+        // digit boundary: 7 digits redacted, 6 left intact
+        expect(scrubMessage('n 1234567 z')).toBe('n [num] z'); // 7
+        expect(scrubMessage('n 123456 z')).toBe('n 123456 z'); // 6
+      });
+
+      it('scrubMessage collapses a combined PII string with NO raw fragment surviving', () => {
+        const { scrubMessage } = surface.mod;
+        const out = scrubMessage('login failed for admin@corp.com token abcdef0123456789ABCD id 12345678');
+        expect(out).toContain('[email]');
+        expect(out).toContain('[redacted]');
+        expect(out).toContain('[num]');
+        expect(out).not.toContain('admin@corp.com');
+        expect(out).not.toContain('abcdef0123456789ABCD');
+        expect(out).not.toContain('12345678');
+      });
+
+      // ---- 2. shouldShip: WARN/ERROR policy + duplicate + alwaysShip ------------------
+      it('shouldShip: WARN/ERROR ship by default; DEBUG/INFO do not; duplicate never; alwaysShip bypasses', () => {
+        const { shouldShip } = surface.mod;
+        expect(shouldShip({ level: 'ERROR' })).toBe(true);
+        expect(shouldShip({ level: 'WARN' })).toBe(true);
+        expect(shouldShip({ level: 'INFO' })).toBe(false);
+        expect(shouldShip({ level: 'DEBUG' })).toBe(false);
+        // duplicate is dropped even at ERROR, and even when alwaysShip is set
+        expect(shouldShip({ level: 'ERROR', duplicate: true })).toBe(false);
+        expect(shouldShip({ level: 'INFO', alwaysShip: true, duplicate: true })).toBe(false);
+        // alwaysShip (usage/health at INFO) bypasses the level policy
+        expect(shouldShip({ level: 'INFO', alwaysShip: true })).toBe(true);
+        expect(shouldShip({ level: 'DEBUG', alwaysShip: true })).toBe(true);
+        // nullish record never ships
+        expect(shouldShip(null)).toBe(false);
+        expect(shouldShip(undefined)).toBe(false);
+      });
+
+      // ---- 3. mapRecordToEvent: scrubbed err_msg, stack anchoring, component_stack ----
+      it('mapRecordToEvent ships err_msg SCRUBBED (never raw) + err_name/err_code + top-5 stack + stack1', () => {
+        const { mapRecordToEvent } = surface.mod;
+        const err = Object.assign(new Error('user admin@corp.com id 12345678 failed'), {
+          errorCode: 'ComplexityException',
+        });
+        err.stack = SIX_FRAME_STACK;
+        const mapped = mapRecordToEvent({ level: 'ERROR', module: 'svc', message: 'op_failed', error: err });
+        // stable English event id ships as-is; the RAW error.message must never appear anywhere
+        expect(mapped.message).toBe('op_failed');
+        expect(String(mapped.err_name)).toBe('Error');
+        expect(mapped.err_code).toBe('ComplexityException');
+        expect(mapped.stack1).toBe('at a (f.js:1:1)');
+        const frames = (mapped.stack as string).split('\n');
+        expect(frames).toHaveLength(5); // top-5 only, the 6th frame dropped
+        expect(frames[0]).toBe('at a (f.js:1:1)');
+        expect((mapped.stack as string).length).toBeLessThanOrEqual(1500);
+        // err_msg is the SCRUBBED message — tags present, raw PII gone from the ENTIRE envelope
+        expect(mapped.err_msg).toContain('[email]');
+        expect(mapped.err_msg).toContain('[num]');
+        const serialized = JSON.stringify(mapped);
+        expect(serialized).not.toContain('admin@corp.com');
+        expect(serialized).not.toContain('12345678');
+      });
+
+      it('mapRecordToEvent ships component_stack (scrubbed, cap 1000) ONLY from context.componentStack', () => {
+        const { mapRecordToEvent } = surface.mod;
+        // present + long + PII-laden → scrubbed, capped 1000, but NOT clipped to the 200 err_msg cap
+        const cs = 'in Row prop=admin@corp.com id=12345678\n'.repeat(60); // ~2340 chars
+        const withCs = mapRecordToEvent({ level: 'ERROR', message: 'm', error: new Error('x'), context: { componentStack: cs } });
+        expect(withCs.component_stack as string).not.toContain('admin@corp.com');
+        expect(withCs.component_stack as string).not.toContain('12345678');
+        expect((withCs.component_stack as string).length).toBeLessThanOrEqual(1000);
+        expect((withCs.component_stack as string).length).toBeGreaterThan(200);
+        // absent when the context carries no componentStack — ordinary errors never gain the key
+        const noCs = mapRecordToEvent({ level: 'ERROR', message: 'm', error: new Error('x') });
+        expect('component_stack' in noCs).toBe(false);
+      });
+
+      // ---- 4. discriminator: domainKind → kind (a real error is 'error', never 'simple') ----
+      it('mapRecordToEvent maps domainKind → kind (default error; usage/health honoured; rendering kind never leaks)', () => {
+        const { mapRecordToEvent } = surface.mod;
+        // a real error record: no domainKind, and a rendering kind='simple' present — must ship 'error'
+        const errEvent = mapRecordToEvent({ level: 'ERROR', message: 'boom', kind: 'simple', error: new Error('x') });
+        expect(errEvent.kind).toBe('error');
+        expect(errEvent.kind).not.toBe('simple');
+        expect(errEvent.kind).toBeDefined();
+        // usage/health telemetry: domainKind drives the discriminator
+        expect(mapRecordToEvent({ level: 'INFO', message: 'x', domainKind: 'usage' }).kind).toBe('usage');
+        expect(mapRecordToEvent({ level: 'INFO', message: 'x', domainKind: 'health' }).kind).toBe('health');
       });
     });
   }
