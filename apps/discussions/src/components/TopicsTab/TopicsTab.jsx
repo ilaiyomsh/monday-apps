@@ -545,6 +545,9 @@ export function TopicsTab({
   // creator / lead + board owner (canEditSummaryBox in DiscussionCard). Everyone
   // else sees the panel read-only. Defaults false (read-only) on purpose.
   canEditReferences = false,
+  // round205 — owner-configurable component visibility (Settings → העדפות):
+  // the topic tables and each side box can be hidden per instance.
+  showTopics = true, showBackground = true, showReferences = true,
   // Owners (can('reorderColumns')) may drag-resize the topics columns; the
   // widths persist per-instance under the shared 'topics' tableId (all users).
   canReorderColumns = false,
@@ -888,6 +891,9 @@ export function TopicsTab({
 
   return (
     <div ref={rootRef} className={styles.wrap} dir="ltr">
+      {/* round205 — the toolbar is topics-machinery (add/template/search/collapse);
+          it hides together with the topic tables when the owner hid them. */}
+      {showTopics && (
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>
           {addTopicOrPoint && (!addingTopic ? (
@@ -938,6 +944,7 @@ export function TopicsTab({
           <CollapseAllButton collapsed={!anyOpen} onClick={toggleAll} />
         )}
       </div>
+      )}
 
       {/* Floating bulk-action bar (Round 7) — appears when ≥1 point is selected.
           Same chrome as the Tasks/Decisions action bars: count · actions · close. */}
@@ -966,6 +973,7 @@ export function TopicsTab({
           (ending at the tasks column instead of bleeding right) and the
           "התייחסויות" panel on the RIGHT. */}
       <div className={styles.splitRow}>
+      {showTopics && (
       <div className={styles.topicsCol}>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTopicDragEnd}>
         <SortableContext items={visibleTopics.map((t) => String(t.id))} strategy={verticalListSortingStrategy}>
@@ -1051,15 +1059,19 @@ export function TopicsTab({
         <div className={styles.empty}>אין נושאים לדיון זה</div>
       )}
       </div>
+      )}
 
       {/* round204 (approved mockup) — the side column stays on the physical
           RIGHT and stacks TWO collapsible update-boxes: רקע on top,
           התייחסויות below it; both closed by default. Same fixed edit rule
-          (coordinator/creator/lead + owner) gates both. */}
+          (coordinator/creator/lead + owner) gates both. round205: each box
+          renders only when its component is owner-visible. */}
+      {(showBackground || showReferences) && (
       <div className={styles.refPanel}>
-        <BackgroundPanel discussionId={discussion?.id} canEdit={canEditReferences} />
-        <ReferencesPanel discussionId={discussion?.id} canEdit={canEditReferences} />
+        {showBackground && <BackgroundPanel discussionId={discussion?.id} canEdit={canEditReferences} />}
+        {showReferences && <ReferencesPanel discussionId={discussion?.id} canEdit={canEditReferences} />}
       </div>
+      )}
       </div>
 
       <PointItemsPopup

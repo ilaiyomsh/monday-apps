@@ -1,6 +1,6 @@
 import './styles/theme-tokens.css';
 import styles from './App.module.css';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { DiscussionList } from '@generated/components/DiscussionList';
 import { DiscussionCard } from '@generated/components/DiscussionCard';
 import { CreateDiscussionModal } from '@generated/components/CreateDiscussionModal';
@@ -18,7 +18,7 @@ import { api } from './utils/mondayApi/monday-client.js';
 import { monday } from './utils/mondayApi/monday-client.js';
 import { exportDiscussionToDocx } from './utils/docxExport.js';
 import { loadExportAssets } from './utils/exportAssets.js';
-import { DEFAULT_EXPORT_TEMPLATE } from './utils/mondayApi/boards.config.js';
+import { isComponentVisible, DEFAULT_EXPORT_TEMPLATE } from './utils/mondayApi/boards.config.js';
 import { hydrateFromStorage, ensureRoster } from './utils/usersStore.js';
 import { ensurePeopleColumns } from './utils/mondayApi/peopleColumns.js';
 import { usePermission } from './hooks/usePermission.js';
@@ -271,10 +271,30 @@ export default function App() {
   // it (per-view behavior unchanged). Round 50: the min window is now ~2s
   // (MIN_SPLASH_MS) so the branded loader is clearly experienced on each switch.
   const splash = useMinSplash(context == null, MIN_SPLASH_MS, effectiveView);
+  // round205 — owner-configurable component visibility (Settings → העדפות):
+  // the personal area (entry button), each personal mode and the dashboard can
+  // be hidden per instance. Hidden modes drop from the PersonalShell switcher;
+  // if the CURRENT view was hidden, snap back to a visible one.
+  const prefs = settings?.preferences;
+  const visiblePersonalModes = useMemo(
+    () => ['myTasks', 'myDecisions', 'dashboard'].filter((m) => isComponentVisible(prefs, m)),
+    [prefs]
+  );
+  const personalAreaVisible = isComponentVisible(prefs, 'personalArea') && visiblePersonalModes.length > 0;
+  useEffect(() => {
+    if (personalView && (!personalAreaVisible || !visiblePersonalModes.includes(effectiveView))) {
+      handleAppViewChange(personalAreaVisible ? visiblePersonalModes[0] : 'discussions');
+    }
+  }, [personalView, personalAreaVisible, visiblePersonalModes, effectiveView, handleAppViewChange]);
+
   // round170 — the discussions list now has ONE "האזור האישי" entry point; the
   // three personal modes (my tasks / my decisions / dashboard) live behind the
-  // PersonalShell switcher. Entering the personal area defaults to my-tasks.
-  const openPersonal = useCallback(() => handleAppViewChange('myTasks'), [handleAppViewChange]);
+  // PersonalShell switcher. Entering the personal area defaults to my-tasks
+  // (round205: to the first OWNER-VISIBLE mode).
+  const openPersonal = useCallback(
+    () => handleAppViewChange(visiblePersonalModes[0] || 'myTasks'),
+    [handleAppViewChange, visiblePersonalModes]
+  );
   const backToDiscussions = useCallback(() => handleAppViewChange('discussions'), [handleAppViewChange]);
 
   // Round 46 — RIGHT-PANE discussions splash. The branded loader must show in the
@@ -957,7 +977,7 @@ export default function App() {
           canManageSettings={canManageSettings}
           currentUser={currentUser}
           onOpenSettings={() => setShowSettings((s) => !s)}
-          onOpenPersonal={openPersonal}
+          onOpenPersonal={personalAreaVisible ? openPersonal : null}
           viewMode={viewMode}
           onViewModeChange={handleViewModeChange}
           calendarAnchor={calNav.anchor}

@@ -8,7 +8,7 @@ import { useDecisions } from '@generated/hooks/useDecisions';
 import { useDiscussionDetails } from '@generated/hooks/useDiscussions';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { DEFAULT_PREFERENCES, resolveAccessPeople } from '@api/boards.config.js';
+import { DEFAULT_PREFERENCES, resolveAccessPeople, isComponentVisible } from '@api/boards.config.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { usePermissions } from '@generated/hooks/usePermission.js';
@@ -46,6 +46,16 @@ const EffectivenessTab = lazy(lazyRetry(() => import('@generated/components/Effe
 // Ordered tab keys — index <-> key mapping for @vibe/core's index-based Tabs.
 // 'decisions' is also a valid deep-link tab (?app[tab]=decisions).
 const TAB_KEYS = ['previous', 'topics', 'tasks', 'decisions', 'summary', 'effectiveness'];
+// round205 — labels + visibility-component key per tab (the tab list is now
+// DYNAMIC: an owner may hide components in Settings → העדפות).
+const TAB_DEFS = [
+  { key: 'previous', label: 'הנחיות קודמות' },
+  { key: 'topics', label: 'ניהול דיון' },
+  { key: 'tasks', label: 'משימות' },
+  { key: 'decisions', label: 'החלטות' },
+  { key: 'summary', label: 'סיכום' },
+  { key: 'effectiveness', label: 'אפקטיביות' },
+];
 
 // Half-hour steps for the header's time menu — full day (the create modal's
 // 6:00–23:00 window is too narrow here: existing discussions carry times like
@@ -259,10 +269,33 @@ export function DiscussionCard({
     holdsRole(data?.discussionLeadID) ||
     holdsRole(data?.discussionCoordinatorID);
   // round203 (owner decision): renaming the discussion FROM ITS TITLE is a FIXED
-  // rule — the discussion lead (מנהל דיון), the coordinator (מרכז דיון) and the
-  // board owner. Deliberately NOT the creator and not a matrix capability.
+  // rule — not a matrix capability. round205 added the CREATOR to the rule
+  // (owner request), alongside the lead, the coordinator and the board owner.
   const canEditTitle =
-    canManageSettings || holdsRole(data?.discussionLeadID) || holdsRole(data?.discussionCoordinatorID);
+    canManageSettings ||
+    holdsRole(data?.discussionCreatorID) ||
+    holdsRole(data?.discussionLeadID) ||
+    holdsRole(data?.discussionCoordinatorID);
+
+  // round205 — owner-configurable component visibility (Settings → העדפות):
+  // hidden tabs drop from the strip. The ניהול-דיון tab hosts THREE components
+  // (topic tables + the רקע/התייחסויות boxes) and stays as long as any of them
+  // is visible; the inner pieces gate individually.
+  const prefs = settings?.preferences;
+  const showTopicsTables = isComponentVisible(prefs, 'topics');
+  const showBackground = isComponentVisible(prefs, 'background');
+  const showReferences = isComponentVisible(prefs, 'references');
+  const visibleTabs = useMemo(() => TAB_DEFS.filter((t) => (
+    t.key === 'topics'
+      ? (showTopicsTables || showBackground || showReferences)
+      : isComponentVisible(prefs, t.key)
+  )), [prefs, showTopicsTables, showBackground, showReferences]);
+  // Snap back when the active tab's component was hidden by the owner.
+  useEffect(() => {
+    if (visibleTabs.length && !visibleTabs.some((t) => t.key === activeTab)) {
+      setActiveTab(visibleTabs[0].key);
+    }
+  }, [visibleTabs, activeTab]);
 
   // Item 19 / round 78 — access-column payload for every task created FROM this
   // discussion. Which discussion ROLES fill each tasks access column is
@@ -437,7 +470,7 @@ export function DiscussionCard({
     );
   }
 
-  const activeIndex = TAB_KEYS.indexOf(activeTab);
+  const activeIndex = visibleTabs.findIndex((t) => t.key === activeTab);
 
   // Persist a single-field edit (name or column16) to the board, optimistically.
   const persistField = async (alias, value) => {
@@ -840,15 +873,10 @@ export function DiscussionCard({
         </div>
         <div className={styles.tabsRow} dir="ltr">
           <TabsContext activeTabId={activeIndex}>
-            <TabList activeTabId={activeIndex} onTabChange={(id) => setActiveTab(TAB_KEYS[id])}>
-              <Tab>הנחיות קודמות</Tab>
-              {/* round204 — renamed from "נושאים" (owner request): the tab now
-                  also hosts the רקע + התייחסויות boxes. */}
-              <Tab>ניהול דיון</Tab>
-              <Tab>משימות</Tab>
-              <Tab>החלטות</Tab>
-              <Tab>סיכום</Tab>
-              <Tab>אפקטיביות</Tab>
+            {/* round205 — the strip renders only the OWNER-VISIBLE components
+                (TAB_DEFS filtered; round204 renamed נושאים → ניהול דיון). */}
+            <TabList activeTabId={activeIndex} onTabChange={(id) => setActiveTab(visibleTabs[id]?.key || visibleTabs[0]?.key)}>
+              {visibleTabs.map((t) => <Tab key={t.key}>{t.label}</Tab>)}
             </TabList>
           </TabsContext>
         </div>
@@ -859,15 +887,20 @@ export function DiscussionCard({
           the shared prefetched tasksData, so every switch is instant.
           Every wrapper div gets .tabPane when active so it fades in smoothly. */}
       <div className={styles.body} key={discussion.id}>
+        {isComponentVisible(prefs, 'previous') && (
         <div className={activeTab === 'previous' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'previous' ? undefined : 'none' }}>
           <PreviousTasksTab discussion={data} onCarryForward={tasksData.mergeTasks} onCarryForwardUndo={tasksData.removeTasks} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} canTask={canTask} canCreateTask={createTask} canEditDiscussion={editDiscussionFields} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
         </div>
+        )}
+        {(showTopicsTables || showBackground || showReferences) && (
         <div className={activeTab === 'topics' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'topics' ? undefined : 'none' }}>
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} onLoadingChange={handleTopicsLoadingChange}
             addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditReferences={canEditSummaryBox} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+            showTopics={showTopicsTables} showBackground={showBackground} showReferences={showReferences}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
             decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus} />
         </div>
+        )}
         {activeTab === 'tasks' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
             <TasksTab data={tasksData} discussionId={discussion.id} onNewTask={openNewTaskModal} onInlineCreateTask={handleInlineCreateTask} onNotify={onNotify} canTask={canTask} canCreateTask={createTask} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
