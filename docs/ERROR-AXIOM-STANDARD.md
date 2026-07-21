@@ -166,14 +166,26 @@ kit remains visibility-only until the standing lint debt is cleared.
 
 ## openIssues (real gaps found, tracked for the owner)
 
-- **deadline-confirm admin SPA — client sink inert in prod.** The deadline-confirm deploy
-  workflows build the admin SPA **without** injecting `VITE_AXIOM_*`, so its (correctly
-  wired) client error sink never activates in production. Fix: add the three `VITE_AXIOM_*`
-  env vars to the Build step of `deploy-{draft,live}-deadline-confirm.yml` (mirror
-  sync-calender; suggested `VITE_AXIOM_APP: deadline-confirm-admin`). Surfaced by the audit
-  as a ⚠ known gap (not failed) pending the owner's app-name decision.
+> **Owner activation is the ONLY thing standing between this PR and live shipping.** Every
+> item below is a token/env action agents cannot perform — the code is wired and fail-soft
+> until they land. See *Runbooks → One-time setup* for the exact commands.
+
+- **`AXIOM_INGEST_TOKEN` GitHub secret — not yet set.** Until it exists every client build
+  bakes an empty token and the gate stays inert (fail-soft). Blocks ALL client surfaces.
 - **sync-calender server dataset.** Ships via the opts-injected server sink but its runtime
-  `AXIOM_*` env still needs the user's `mapps code:env` change to land on `app-errors`.
+  `AXIOM_*` env still needs the user's `mapps code:env -i 11666315` change to land on
+  `app-errors`.
+- **telemetry-dashboard — `APP_TELEMETRY_DASHBOARD_ID` secret not set.** Without it the app
+  does not deploy at all; its server also needs the `AXIOM_*` runtime env (`mapps code:env`).
+
+### Resolved by this PR (kept for history)
+- **deadline-confirm admin SPA — client sink inert in prod.** ✅ Fixed — both
+  `deploy-{draft,live}-deadline-confirm.yml` Build steps now inject the three `VITE_AXIOM_*`
+  vars (`VITE_AXIOM_APP: deadline-confirm-admin`); the audit's `knownGap` was removed so a
+  future regression FAILS rather than warns.
+- **tracker shipped only a single stack frame + dropped `component_stack`.** ✅ Fixed — its
+  local sink now ships the extended top-5 `stack` and React `component_stack` at parity with
+  every other client (locked by tracker's own test suite).
 - **telemetry-dashboard was drifted — corrected 2026-07-21.** Its vendored client transport
   was the pre-fix version (missing all 4 transport hardening fixes) and its server sink read
   `process.env` at module load. Both were re-vendored/migrated to the canonical model and are
