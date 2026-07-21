@@ -271,6 +271,24 @@ describe('data-driven template (buildExportDoc)', () => {
     expect(xml).not.toContain('מדיון קודם'); // the removed column header
   });
 
+  it('renders the references section through the HTML converter (round200)', async () => {
+    const model = buildDiscussionModel({
+      discussion: { name: 'ד' },
+      referencesHtml: '<p><strong>דנה כהן:</strong> הערת-בדיקה-מיוחדת</p><ul><li>סעיף-ראשון-לבדיקה</li></ul>',
+    });
+    const template = { sections: [{ key: 'references', enabled: true, label: 'התייחסויות' }] };
+    const xml = await xmlOf(model, template);
+    expect(xml).toContain('התייחסויות');          // section heading
+    expect(xml).toContain('הערת-בדיקה-מיוחדת');   // rich body survived
+    expect(xml).toContain('סעיף-ראשון-לבדיקה');   // list item survived
+  });
+
+  it('renders "אין התייחסויות." when the references box is empty (round200)', async () => {
+    const template = { sections: [{ key: 'references', enabled: true, label: 'התייחסויות' }] };
+    const xml = await xmlOf(baseModel(), template);
+    expect(xml).toContain('אין התייחסויות.');
+  });
+
   it('renders a decisions table with only מס׳/החלטה/מחליט — no date/status columns (round193)', async () => {
     const model = buildDiscussionModel({
       discussion: { name: 'ד' },

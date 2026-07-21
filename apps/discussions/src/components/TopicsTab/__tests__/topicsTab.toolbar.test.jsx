@@ -35,6 +35,11 @@ vi.mock('@generated/components/TopicPointRow', () => ({
 vi.mock('@generated/components/ApplyTemplateMenu', () => ({
   ApplyTemplateMenu: () => <div data-testid="apply-template" />,
 }));
+// round200 — the references panel talks to monday.storage + lazy-loads TipTap;
+// stub it so the toolbar tests stay hermetic.
+vi.mock('../ReferencesPanel.jsx', () => ({
+  ReferencesPanel: () => <div data-testid="references-panel" />,
+}));
 
 import { TopicsTab } from '../TopicsTab.jsx';
 import styles from '../TopicsTab.module.css';
