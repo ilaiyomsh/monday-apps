@@ -454,6 +454,57 @@
   margin-inline-start: auto;
 }
 
+/* round210 — PHONE fit (owner screenshot 2026-07-21): the desktop board chrome
+   (the 52px start gutter, the max-content scroll extent that serves the wide
+   tables, both-axis scrolling) leaked into the mobile CARD layout and pushed
+   every card's right side — the task name, priority and deadline — off-screen,
+   leaving a horizontal scrollbar. On the phone the board is a plain FULL-WIDTH
+   vertical list: no gutters, no horizontal scroll, RTL flow, and the toolbar
+   icons spread across one row. */
+:global(.mobile-app) .viewHeader {
+  padding: 12px 16px 6px;
+  padding-inline-start: 16px;
+}
+:global(.mobile-app) .toolbar {
+  padding: 6px 12px 12px;
+  padding-inline-start: 12px;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 2px;
+}
+:global(.mobile-app) .searchPill {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+:global(.mobile-app) .searchInput {
+  width: 100%;
+  min-width: 0;
+}
+:global(.mobile-app) .board {
+  margin-inline-start: 0;
+  margin-inline-end: 0;
+  padding: 0 12px;
+  overflow-x: hidden;
+  direction: rtl;
+}
+:global(.mobile-app) .groupScrollInner {
+  width: 100%;
+  min-width: 0;
+  direction: rtl;
+}
+:global(.mobile-app) .groupStack {
+  direction: rtl;
+  gap: 18px;
+}
+:global(.mobile-app) .groupHeader {
+  position: static;
+  width: 100%;
+  margin: 0 0 10px;
+}
+:global(.mobile-app) .loadMore {
+  padding: 8px 0 20px;
+}
+
 /* round103 — hide this chrome while monday's item-card panel is open (iframe narrows).
    round117: visibility (not display) so the row keeps its space and the layout
    below does not jump up when the panel opens. */
