@@ -27,7 +27,13 @@ SHARED_LABEL="${HAS_SHARED_LABEL:-false}"
 CORRIDOR="${CORRIDOR_MODE:-off}"
 fail=0
 
-ver_at()  { git show "$1:$(app_path "$2")/package.json" | jq -r .version; }
+# version at a git ref; empty string when the app does not exist at that ref yet
+# (a pre-first-release app is in apps.sh + on develop but not on main).
+ver_at()  {
+  local spec="$1:$(app_path "$2")/package.json"
+  git cat-file -e "$spec" 2>/dev/null || return 0
+  git show "$spec" | jq -r .version
+}
 ver_now() { jq -r .version "$(app_path "$1")/package.json"; }
 # strictly_higher OLD NEW -> true if NEW > OLD
 strictly_higher() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$2" ] && [ "$1" != "$2" ]; }
@@ -57,12 +63,18 @@ targets=("${touched[@]:-}")
 for slug in "${targets[@]}"; do
   [ -n "$slug" ] || continue
   vm="$(ver_at "$MAIN" "$slug")"; vd="$(ver_at "$DEV" "$slug")"; vn="$(ver_now "$slug")"
-  strictly_higher "$vm" "$vn" || { echo "::error::$slug: version must bump above main ($vm) — got $vn. Run: scripts/bump.sh $slug"; fail=1; }
+  if [ -z "$vm" ]; then
+    # App not yet on main (pre-first-release): there is no baseline to bump above.
+    # Its first go-live is a deliberate promote (pipeline-model.md §4b), not this rule.
+    echo "::notice::$slug: not yet released to main — 'bump above main' check skipped (first release)"
+  else
+    strictly_higher "$vm" "$vn" || { echo "::error::$slug: version must bump above main ($vm) — got $vn. Run: scripts/bump.sh $slug"; fail=1; }
+  fi
   not_lower "$vd" "$vn"       || { echo "::error::$slug: version went backwards vs develop ($vd -> $vn)"; fail=1; }
   # Bump-once-per-candidate (owner rule 2026-07-14): numbers count RELEASES,
   # not PRs. Raising an already-pending candidate is sanctioned ONLY as a
   # deliberate magnitude raise — warn so needless per-PR bumps stay visible.
-  if strictly_higher "$vm" "$vd" && strictly_higher "$vd" "$vn"; then
+  if [ -n "$vm" ] && strictly_higher "$vm" "$vd" && strictly_higher "$vd" "$vn"; then
     echo "::warning::$slug: raising an unreleased candidate ($vd -> $vn, main has $vm). Draft iterations keep the number; raise only for a bigger change (bump-once rule)."
   fi
 done
