@@ -78,4 +78,28 @@ describe('MyTasksCardList (round208 mobile cards)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'להכין מצגת' }));
     expect(openCard).toHaveBeenCalledWith('1');
   });
+
+  it('round214: the deadline sheet shows a HEBREW RTL calendar and a נקה תאריך button', () => {
+    render(<MyTasksCardList {...baseProps} />);
+    fireEvent.click(screen.getByRole('button', { name: '📅 05/01' }));
+    // Hebrew month header (the task's deadline month) + Hebrew weekday row.
+    expect(screen.getByText('ינואר 2030')).toBeInTheDocument();
+    expect(screen.getByText('א׳')).toBeInTheDocument();
+    // Picking a day writes a Date for that day and closes the sheet.
+    fireEvent.click(screen.getByRole('button', { name: '12' }));
+    const picked = baseProps.onDeadlineChange.mock.calls.at(-1);
+    expect(picked[0]).toBe('1');
+    expect(picked[1]).toBeInstanceOf(Date);
+    expect(picked[1].getFullYear()).toBe(2030);
+    expect(picked[1].getMonth()).toBe(0);
+    expect(picked[1].getDate()).toBe(12);
+  });
+
+  it('round214: נקה תאריך clears the deadline (no הסר תאריך label)', () => {
+    render(<MyTasksCardList {...baseProps} />);
+    fireEvent.click(screen.getByRole('button', { name: '📅 05/01' }));
+    expect(screen.queryByText('הסר תאריך')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'נקה תאריך' }));
+    expect(baseProps.onDeadlineChange).toHaveBeenCalledWith('1', null);
+  });
 });

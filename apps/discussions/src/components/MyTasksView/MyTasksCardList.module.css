@@ -147,12 +147,64 @@
   color: #d83a52;
   cursor: pointer;
 }
-.dateBody { display: flex; flex-direction: column; gap: 8px; }
-.dateInput {
-  width: 100%;
-  border: 1.5px solid var(--ui-border-color, #c3c6d4);
-  border-radius: 12px;
-  padding: 12px 14px;
-  font-size: 15px;
+.dateBody { display: flex; flex-direction: column; gap: 10px; }
+
+/* round214 — the Hebrew RTL month calendar inside the deadline sheet. */
+.cal {
+  border: 1px solid var(--ui-border-color, #e6e9f2);
+  border-radius: 14px;
+  padding: 10px 12px 12px;
+}
+.calHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.calMonth {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--primary-text-color, #323338);
+}
+.calNav {
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  font-size: 20px;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.calNav:active { background: var(--primary-background-hover-color, #f0f1f5); }
+.calGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+.calDow {
+  font-size: 11.5px;
+  color: var(--secondary-text-color, #9699a6);
+  padding: 4px 0 6px;
+}
+.calDay {
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  aspect-ratio: 1;
+  font-size: 13.5px;
   font-family: inherit;
+  color: var(--primary-text-color, #323338);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.calDay:active { background: var(--primary-selected-color, #e6f1ff); }
+.calDayToday { box-shadow: inset 0 0 0 1.5px var(--primary-color, #0073ea); }
+.calDaySel {
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-weight: 700;
 }
