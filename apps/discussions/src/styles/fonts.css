@@ -27,3 +27,18 @@
   font-style: normal;
   font-display: swap;
 }
+
+/* round195 — Hebrew glyph coverage INSIDE the 'Figtree' family itself
+   (unicode-range face): the live export preview (docx-preview) copies the docx
+   run font as a SINGLE font-family ('Figtree'), dropping the w:cs Hebrew face —
+   so Hebrew glyphs fell through to the browser default instead of Noto Sans
+   Hebrew. This face routes the Hebrew block of any 'Figtree'-styled text to the
+   Noto file, exactly like the app's usual 'Figtree','Noto Sans Hebrew' stack. */
+@font-face {
+  font-family: 'Figtree';
+  src: url('../assets/fonts/NotoSansHebrew-Variable.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0590-05FF, U+FB1D-FB4F;
+}

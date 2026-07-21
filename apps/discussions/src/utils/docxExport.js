@@ -161,10 +161,15 @@ export function mergeTasksForExport(currentTasks = [], previousTasks = []) {
 // Short numeric date DD.MM.YYYY (e.g. 05.07.2026) — NOT the long "יום ראשון 5
 // ביולי" form. Accepts a Date or an ISO-ish "YYYY-MM-DD..." string; anything else
 // is passed through as-is.
+// round195 (review finding, pre-existing bug): use LOCAL getters, not getUTC*.
+// parseValue('date') returns LOCAL-midnight Dates for date-only values, so UTC
+// getters shifted every date-only export one day EARLY for viewers east of UTC
+// (Israel — the actual user base). Local getters render the stored calendar day
+// for date-only values and the app-visible local date for timed ones.
 function formatHeDate(value) {
   const pad = (n) => String(n).padStart(2, '0');
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return `${pad(value.getUTCDate())}.${pad(value.getUTCMonth() + 1)}.${value.getUTCFullYear()}`;
+    return `${pad(value.getDate())}.${pad(value.getMonth() + 1)}.${value.getFullYear()}`;
   }
   if (typeof value === 'string') {
     const m = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);

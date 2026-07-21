@@ -5,10 +5,65 @@
   min-width: 0;
 }
 
+.pageLabelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .pageLabel {
   font-size: 12px;
   font-weight: 600;
   color: var(--secondary-text-color, #676879);
+}
+
+/* round195 — status chips next to the label: green = the pane shows the ACTUAL
+   rendered .docx; grey = a live rebuild is in progress. */
+.liveBadge,
+.buildingBadge {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+.liveBadge {
+  color: var(--positive-color, #258750);
+  background: rgba(37, 135, 80, 0.1);
+}
+.buildingBadge {
+  color: var(--secondary-text-color, #676879);
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+
+/* round195 — LIVE preview frame: a grey "desk" the real Word pages sit on,
+   scrolling vertically; the pages themselves come from docx-preview and are
+   zoom-scaled to the frame width (see fitZoom in ExportPreview.jsx). */
+.liveBox {
+  /* Fits INSIDE the modalExport box (min(900px,95vh) minus ~240px of modal
+     chrome) — a plain 76vh overflowed it and produced a second scrollbar on
+     the modal body (review finding). */
+  max-height: calc(min(900px, 95vh) - 240px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 4px;
+  background: #eceef4;
+  padding: 12px;
+}
+/* docx-preview injects its own global classes (.docx-wrapper / section.docx) —
+   strip its dark backdrop and let our desk styling own the chrome. */
+.liveHost :global(.docx-wrapper) {
+  background: transparent !important;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.liveHost :global(.docx-wrapper > section.docx) {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16) !important;
+  margin-bottom: 0 !important;
 }
 
 /* The "sheet" — a white page with a soft shadow. FIXED height so it doesn't grow
