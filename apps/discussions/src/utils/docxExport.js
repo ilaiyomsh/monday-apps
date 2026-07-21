@@ -892,6 +892,20 @@ export const __testHooks = { buildExportDoc };
  */
 export async function exportDiscussionToDocx(discussion, { template = DEFAULT_EXPORT_TEMPLATE, assets = null } = {}) {
   if (!discussion?.id) throw new Error('exportDiscussionToDocx: discussion is required');
+  const { model, filename } = await assembleDiscussionModel(discussion);
+  return deliverDiscussionDocx(model, filename, {
+    template, assets, discussionId: String(discussion.id),
+  });
+}
+
+/**
+ * round207 — fetch everything and build the export MODEL (no rendering). The
+ * per-discussion export dialog reuses this once for its live preview, then
+ * hands the same model to deliverDiscussionDocx on "הפק מסמך".
+ * @returns {{ model: object, filename: string }}
+ */
+export async function assembleDiscussionModel(discussion) {
+  if (!discussion?.id) throw new Error('assembleDiscussionModel: discussion is required');
   const discussionId = String(discussion.id);
 
   const [topics, summaryHtml, referencesHtml, currentTasks, decisions, previous, fullDiscussion] = await Promise.all([
@@ -921,7 +935,17 @@ export async function exportDiscussionToDocx(discussion, { template = DEFAULT_EX
     typeLabel,
   });
 
-  const filename = buildFilename(discussion);
+  return { model, filename: buildFilename(discussion) };
+}
+
+/**
+ * round207 — render an ALREADY-ASSEMBLED model to .docx, download it, and
+ * best-effort upload it into the mapped summary file column (identical to the
+ * tail of the classic export; extracted so the dialog can deliver without
+ * re-fetching).
+ * @returns {{ uploadAttempted: boolean, uploaded: boolean }}
+ */
+export async function deliverDiscussionDocx(model, filename, { template = DEFAULT_EXPORT_TEMPLATE, assets = null, discussionId } = {}) {
   // UPLOAD mode: render a body-only .docx (buildExportDoc omits header/footer when
   // headerMode==='upload') and splice it into the owner's uploaded template so its
   // header/footer survive. Any failure falls back to the plain render so export

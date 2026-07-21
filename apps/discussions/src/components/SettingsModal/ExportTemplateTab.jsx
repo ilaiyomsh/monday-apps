@@ -144,7 +144,7 @@ function SortableSectionRow({ section, onToggle, onExpandToggle, expanded, child
  *
  * Deliberately controls-only: no eyebrow section titles, no hint/explanation text.
  */
-export default function ExportTemplateTab({ template, setTemplate, assets, setAssets, assetError }) {
+export default function ExportTemplateTab({ template, setTemplate, assets, setAssets, assetError, previewModel = null, previewModelKey = null }) {
   const headerLogoRef = useRef(null);
   const footerLogoRef = useRef(null);
   const templateDocxRef = useRef(null);
@@ -380,7 +380,7 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
       </div>
 
       <div className={styles.previewCol}>
-        <ExportPreview template={template} assets={assets} />
+        <ExportPreview template={template} assets={assets} model={previewModel} modelKey={previewModelKey} />
       </div>
     </div>
   );
