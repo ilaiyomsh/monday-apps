@@ -1,3 +1,7 @@
+// Pin an east-of-UTC timezone (the app's real user base) so the date-formatting
+// tests can actually catch UTC/local day-shift regressions (round195).
+process.env.TZ = 'Asia/Jerusalem';
+
 import { describe, it, expect } from 'vitest';
 import { Packer } from 'docx';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -134,6 +138,13 @@ describe('buildDiscussionModel', () => {
     expect(model.topics).toEqual([]);
     expect(model.summaryHtml).toBe('');
     expect(model.tasks).toEqual([]);
+  });
+
+  it('formats a local-midnight Date to the SAME calendar day — no UTC day-shift (round195)', () => {
+    // parseValue('date') returns LOCAL midnight for date-only monday values; with
+    // the old getUTC* formatting this rendered 06.06.2026 in Asia/Jerusalem.
+    const model = buildDiscussionModel({ discussion: { discussionDateID: new Date(2026, 5, 7) } });
+    expect(model.dateText).toBe('07.06.2026');
   });
 
   it('shapes decisions into plain strings — decider names, date, status label (round192)', () => {

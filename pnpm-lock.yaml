@@ -553,6 +553,9 @@ importers:
       docx:
         specifier: ^9.7.1
         version: 9.7.1
+      docx-preview:
+        specifier: ^0.4.0
+        version: 0.4.0
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -4661,6 +4664,9 @@ packages:
 
   document.contains@1.0.2:
     resolution: {integrity: sha512-YcvYFs15mX8m3AO1QNQy3BlIpSMfNRj3Ujk2BEJxsZG+HZf7/hZ6jr7mDpXrF8q+ff95Vef5yjhiZxm8CGJr6Q==}
+
+  docx-preview@0.4.0:
+    resolution: {integrity: sha512-OdKtE/uj3M4RfGarLkGjahUzRg8/kBp0Sraj1r1NAY1tp/sTpHOBqDrzVf9onMBt9vxP6SdQ6bpLCUCsFwjgcA==}
 
   docx@9.7.1:
     resolution: {integrity: sha512-ilXFf9Moz47ABjFpDiA5s1w9lpb4EFSp7+5iiJSbfyYDM+bpZdAgLlSr7fW4aXhVe/E+F6QCv0EvRVFEd5CsWg==}
@@ -13866,6 +13872,10 @@ snapshots:
     dependencies:
       define-properties: 1.2.1
 
+  docx-preview@0.4.0:
+    dependencies:
+      jszip: 3.10.1
+
   docx@9.7.1:
     dependencies:
       '@types/node': 25.9.4
@@ -17149,7 +17159,7 @@ snapshots:
   readable-stream@3.6.2:
     dependencies:
       inherits: 2.0.4
-      string_decoder: 1.1.1
+      string_decoder: 1.3.0
       util-deprecate: 1.0.2
 
   readable-stream@4.7.0:
