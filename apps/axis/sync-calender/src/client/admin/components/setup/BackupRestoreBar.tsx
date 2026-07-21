@@ -99,6 +99,9 @@ export function BackupRestoreBar({ policy, isOwner, onPatch }: Props) {
       }
       setPending({ patch, unknownKeys });
     } catch (err) {
+      // Ship AND display: the toast tells the owner, logger.error ships it to Axiom so a
+      // malformed-import failure is observable (it was display-only before).
+      logger.error('backup_restore', 'import_parse_failed', err instanceof Error ? err : new Error(String(err)));
       toast.error(`Import failed: ${(err as Error).message}`);
     }
   };
@@ -111,6 +114,9 @@ export function BackupRestoreBar({ policy, isOwner, onPatch }: Props) {
       toast.success('Setup imported');
       setPending(null);
     } catch (err) {
+      // Ship AND display: a failed policy write (PATCH /api/policy) must reach Axiom, not
+      // just the owner's toast — it was display-only before.
+      logger.error('backup_restore', 'import_apply_failed', err instanceof Error ? err : new Error(String(err)));
       toast.error(`Import failed: ${(err as Error).message}`);
     } finally {
       setImporting(false);

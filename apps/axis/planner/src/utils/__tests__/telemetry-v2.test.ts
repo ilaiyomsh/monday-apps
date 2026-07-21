@@ -78,6 +78,41 @@ describe('logger.track / logger.health', () => {
     expect(String(ev.message)).not.toContain('@');
     expect(String(ev.message)).not.toContain('12345678');
   });
+
+  it('log-once: the SAME Error instance ships to sinks exactly once (dedup)', () => {
+    // A create/edit failure is logged by the hook AND re-logged by the modal's catch.
+    // Both pass the identical Error instance; Axiom must get ONE record, not two.
+    const boom = new Error('save failed');
+    const recs = capture(() => {
+      logger.error('[useAllocations] Failed to add allocation:', boom);
+      logger.error('Failed to save allocation:', boom); // modal's re-log, same instance
+    });
+    const errShipped = recs.filter((r) => r.level === 'ERROR' && r.error === boom);
+    expect(errShipped).toHaveLength(1);
+    expect(errShipped[0].duplicate).toBeUndefined();
+  });
+
+  it('log-once: distinct Error instances each ship (no over-dedup)', () => {
+    const recs = capture(() => {
+      logger.error('[a] first', new Error('one'));
+      logger.error('[b] second', new Error('two'));
+    });
+    expect(recs.filter((r) => r.level === 'ERROR')).toHaveLength(2);
+  });
+
+  it('log-once: a repeat pass carries the first pass correlationId', () => {
+    const boom = new Error('correlated');
+    const recs = capture(() => {
+      logger.error('[x] first', boom);
+      logger.error('[x] again', boom);
+    });
+    // The second pass is buffered (not shipped) but shares the id stamped on the first.
+    const buffered = logger.getBuffer().filter((r) => r.error === boom);
+    const ids = new Set(buffered.map((r) => r.correlationId));
+    expect(ids.size).toBe(1);
+    expect([...ids][0]).toBeTruthy();
+    expect(recs.filter((r) => r.error === boom)).toHaveLength(1);
+  });
 });
 
 describe('scrubMessage (privacy D2)', () => {

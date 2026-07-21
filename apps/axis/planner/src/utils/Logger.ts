@@ -35,6 +35,12 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 const STORAGE_KEY = 'planner_logger_config';
 
+// Monotonic id for log-once correlation. Stamped (non-enumerable) on an Error the
+// first time it reaches emit(); a later pass of the SAME instance is marked duplicate
+// and skipped from sinks — so a create/edit failure logged by both the hook and the
+// modal's catch produces ONE Axiom record, not two. (Ports discussions' __loggedId.)
+let loggedIdCounter = 0;
+
 // Ring buffer capacity — retains the most recent records for sink replay (see attachAxiomSink).
 const RING_BUFFER_SIZE = 150;
 
@@ -321,6 +327,32 @@ class Logger {
    * throw back or recurse).
    */
   private emit(record: LogRecord): void {
+    // log-once dedup: the SAME Error instance ships to sinks exactly once. A repeat
+    // pass (e.g. a create/edit failure logged by the hook AND re-logged by the modal's
+    // catch) is buffered but marked duplicate so the sink fan-out below skips it —
+    // one Axiom record, not N. Records without an Error (usage/health/string-only) are
+    // never deduped. Stamp is non-enumerable so it can't pollute JSON/serialization.
+    const err = record.error;
+    if (err && typeof err === 'object') {
+      const stamped = (err as { __loggedId?: string }).__loggedId;
+      if (stamped !== undefined) {
+        record.duplicate = true;
+        record.correlationId = record.correlationId || stamped;
+      } else {
+        const id = record.correlationId || `log_${++loggedIdCounter}`;
+        try {
+          Object.defineProperty(err, '__loggedId', {
+            value: id,
+            enumerable: false,
+            configurable: true,
+            writable: true,
+          });
+        } catch {
+          // frozen/non-configurable Error — never blocks this record from shipping.
+        }
+        record.correlationId = id;
+      }
+    }
     const ts = Date.now();
     record.timestamp = ts;
     record.timestampISO = new Date(ts).toISOString();

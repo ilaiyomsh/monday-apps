@@ -74,4 +74,48 @@ describe('installProcessGuards', () => {
     await onUncaughtException(new Error('fatal'));
     expect(exit).toHaveBeenCalledWith(1);
   });
+
+  it('uncaughtException exits(1) via the ceiling even when flush never settles', async () => {
+    // A hung Axiom endpoint must never wedge a dying process: the flush is raced
+    // against a hard ceiling. setTimeoutFn is injected and fires immediately so
+    // the ceiling path is exercised deterministically (no real timer).
+    const exit = vi.fn();
+    const flush = vi.fn(() => new Promise(() => {})); // never resolves
+    const timeoutFn = vi.fn((fn) => {
+      fn();
+      return { unref: vi.fn() };
+    });
+    const { onUncaughtException } = installProcessGuards({
+      logger: { error: vi.fn() },
+      flush,
+      exit,
+      setTimeoutFn: timeoutFn,
+    });
+    onUncaughtException(new Error('fatal'));
+    await Promise.resolve();
+    expect(timeoutFn).toHaveBeenCalledWith(expect.any(Function), 2000);
+    expect(exit).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('uncaughtException exits exactly once when flush and ceiling both fire', async () => {
+    // The ceiling and a settling flush both call finish(); the once-guard must
+    // ensure exit(1) is not invoked twice.
+    const exit = vi.fn();
+    const flush = vi.fn().mockResolvedValue(undefined);
+    const timers = [];
+    const timeoutFn = vi.fn((fn) => {
+      timers.push(fn);
+      return { unref: vi.fn() };
+    });
+    const { onUncaughtException } = installProcessGuards({
+      logger: { error: vi.fn() },
+      flush,
+      exit,
+      setTimeoutFn: timeoutFn,
+    });
+    await onUncaughtException(new Error('fatal')); // flush resolves → finish()
+    timers.forEach((fn) => fn()); // ceiling fires late → finish() again
+    expect(exit).toHaveBeenCalledTimes(1);
+  });
 });

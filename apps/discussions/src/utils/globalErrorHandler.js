@@ -27,10 +27,22 @@ export const handleResourceError = (event, win) => {
     const tag = target.tagName;
     if (tag !== 'SCRIPT' && tag !== 'LINK' && tag !== 'IMG') return false;
     const url = target.src || target.href || '';
-    // אירועי שגיאת משאב חסרי message; ה-detector מזהה chunk לפי טקסט ה-message, לכן נבנה
-    // pseudo-error עם message ניטרלי שלא "מתחזה" ל-chunk-load (אחרת IMG שבור היה מפעיל רענון).
-    const pseudoError = new Error(`Failed to load resource: ${url}`);
-    if (handleGlobalChunkError(pseudoError)) return true; // הקורא מפעיל preventDefault
+    // CODE resources — a <script> tag, or a module/preload <link> — that fail after a
+    // redeploy (CDN served stale HTML for a hashed asset) are exactly the chunk-load
+    // situation the one-shot reload recovers, and are the reason this capture listener
+    // exists. Resource error events carry NO message, so we synthesize one the chunk
+    // detector recognizes (`Failed to load module script`) and route it through the
+    // sessionStorage-guarded one-shot reload. CONTENT resources — a broken IMG or a
+    // plain stylesheet <link> — must NEVER trigger a reload; they are logged at WARN.
+    const rel = String(target.rel || '').toLowerCase();
+    const isCodeResource = tag === 'SCRIPT' || (tag === 'LINK' && rel.includes('preload'));
+    if (isCodeResource) {
+        const codeLoadError = new Error(`Failed to load module script: ${url}`);
+        if (handleGlobalChunkError(codeLoadError)) return true; // הקורא מפעיל preventDefault
+        // reload כבר נוצל ב-session הזה — לא נבלע: מתעדים WARN עם url+tag.
+        logger.warn('globalErrorHandler', 'Code resource failed to load after refresh', { url, tag });
+        return false;
+    }
     logger.warn('globalErrorHandler', 'Resource failed to load', { url, tag });
     return false;
 };

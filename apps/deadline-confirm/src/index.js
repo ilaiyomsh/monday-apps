@@ -98,6 +98,11 @@ server.on('error', makeServerErrorHandler(logger, { flush: flushAxiom }));
 // Last-resort net: an uncaughtException means unknown state → log (ships) → flush → exit(1).
 installProcessGuards(logger, { flush: flushAxiom });
 
+// A rejected promise nobody awaited: log+ship but do NOT exit — unlike uncaughtException
+// above, the process state is still known-good and killing it would drop in-flight /confirm
+// requests. This deliberately overrides Node's modern default (terminate). Same policy and
+// rationale as sync-calender's onUnhandledRejection (process-guards.js); telemetry-dashboard
+// matches too — the three servers are aligned, this comment records why for deadline-confirm.
 process.on('unhandledRejection', (reason) => {
   logger.logError('server', 'unhandled rejection', { reason: String(reason) });
 });
@@ -105,6 +110,7 @@ process.on('unhandledRejection', (reason) => {
 // Drain the Axiom buffer on shutdown so the last records before exit are not lost.
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.on(signal, () => {
-    flushAxiom().finally(() => process.exit(0));
+    // return the promise (not floated): flushAxiom never throws, and exit(0) runs in finally.
+    return flushAxiom().finally(() => process.exit(0));
   });
 }

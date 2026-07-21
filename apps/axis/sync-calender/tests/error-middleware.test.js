@@ -39,6 +39,19 @@ describe('createErrorMiddleware', () => {
     expect(ctx.error).toBe(err);
   });
 
+  it('coerces a non-Error rejection so the shipped record is never empty (Low)', () => {
+    // next('boom') / a thrown string reaches here as a non-Error. Previously ctx.error was
+    // undefined AND ctx.cause was err?.message (also undefined) — the record shipped empty,
+    // so a real failure was invisible in Axiom. It must coerce to an Error and carry a cause.
+    const error = vi.fn();
+    const mw = createErrorMiddleware({ error });
+    mw('string failure', { method: 'GET', path: '/p' }, fakeRes(), vi.fn());
+    const ctx = error.mock.calls[0][2];
+    expect(ctx.error).toBeInstanceOf(Error);
+    expect(ctx.error.message).toContain('string failure');
+    expect(ctx.cause).toContain('string failure');
+  });
+
   it('responds 500 internal_error and does not call next when headers are not sent', () => {
     const mw = createErrorMiddleware({ error: vi.fn() });
     const next = vi.fn();

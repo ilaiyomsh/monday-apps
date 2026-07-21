@@ -70,7 +70,10 @@ export function createTelemetryService({ axiomToken, axiomDataset, axiomOrgId, f
           // errors dataset when the sink is active (it used to be console-only and never
           // shipped even with the sink on). Panel + status only — never the token or the
           // full query text. The panel degrades to [] so the rest of the dashboard renders.
-          logger.warn('telemetry_panel_failed', 'axiom', {
+          // logger is optional (see the opts JSDoc) — guard the call so a caller that
+          // omits it can never turn a soft panel failure into a thrown TypeError, which
+          // would break the "never throws to the caller" invariant this function promises.
+          logger?.warn?.('telemetry_panel_failed', 'axiom', {
             panel: key,
             status: Number.isFinite(err?.status) ? err.status : undefined,
             error: err instanceof Error ? err : new Error(String(err?.message ?? err)),

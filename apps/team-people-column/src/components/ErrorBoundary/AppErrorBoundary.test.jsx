@@ -1,13 +1,11 @@
 // AppErrorBoundary — locks the render-throw log record's message contract.
 //
-// Regression this guards: handleError used to log a FIXED string ('React
-// render error caught') for every render crash under a scope. Because the
-// Axiom transport dedups on (level|tag|message), two DISTINCT render crashes
-// in the same scope collided on one dedup key and were throttled together —
-// an observability gap (see error-inventory topGaps for AppErrorBoundary.jsx:121).
-// The fix folds error.message into the logged message so distinct crashes get
-// distinct keys. This test asserts the logged message CONTAINS the thrown
-// error's own message (not a fixed string).
+// M4 (privacy, 2026-07-21): the logged message is now the CONSTANT event id 'render_error',
+// NOT error.message. The sink ships `message` verbatim (only err_msg is scrubbed), so folding
+// a raw error.message into it would leak PII past the D2 privacy scrub. The crash identity
+// travels on the Error INSTANCE (3rd arg to logger.error) — scrubbed to err_msg by the sink —
+// and distinct crashes still dedup distinctly because the shared @mapps/error-kit transport's
+// dedup key includes err_name + err_msg (fix 5), no longer relying on the message string.
 
 import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
@@ -23,24 +21,29 @@ function Boom({ message }) {
 }
 
 describe('AppErrorBoundary — render-throw log message', () => {
-  it('logs a message that CONTAINS the thrown error.message (not a fixed string)', () => {
+  it('logs the CONSTANT event id and never leaks the raw error.message into the message field', () => {
     const spy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     render(
       <AppErrorBoundary scope="test-scope">
-        <Boom message="settings payload was not an array" />
+        <Boom message="settings payload was not an array for admin@corp.co" />
       </AppErrorBoundary>
     );
 
     expect(spy).toHaveBeenCalled();
-    const [module, message] = spy.mock.calls[0];
+    const [module, message, error] = spy.mock.calls[0];
     expect(module).toBe('ErrorBoundary:test-scope');
-    expect(message).toContain('settings payload was not an array');
+    expect(message).toBe('render_error');
+    expect(message).not.toContain('settings payload');
+    expect(message).not.toContain('@');
+    // the crash identity travels on the Error instance (scrubbed to err_msg by the sink)
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toContain('settings payload was not an array');
 
     spy.mockRestore();
   });
 
-  it('gives two DISTINCT crashes two DISTINCT messages (no dedup-collision on a fixed string)', () => {
+  it('two DISTINCT crashes carry distinct Error instances (dedup keys on err_name+err_msg, fix 5)', () => {
     const spy = vi.spyOn(logger, 'error').mockImplementation(() => {});
 
     const { unmount } = render(
@@ -55,10 +58,15 @@ describe('AppErrorBoundary — render-throw log message', () => {
       </AppErrorBoundary>
     );
 
+    // message is the same constant for both — dedup no longer relies on it …
     const messages = spy.mock.calls.map((call) => call[1]);
-    expect(messages[0]).not.toBe(messages[1]);
-    expect(messages[0]).toContain('first distinct crash');
-    expect(messages[1]).toContain('second distinct crash');
+    expect(messages[0]).toBe('render_error');
+    expect(messages[1]).toBe('render_error');
+    // … the distinct identity is on the Error instances (→ distinct err_msg → distinct key).
+    const errMsgs = spy.mock.calls.map((call) => call[2]?.message);
+    expect(errMsgs[0]).toContain('first distinct crash');
+    expect(errMsgs[1]).toContain('second distinct crash');
+    expect(errMsgs[0]).not.toBe(errMsgs[1]);
 
     spy.mockRestore();
   });

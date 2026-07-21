@@ -44,6 +44,10 @@ const CTX_ALLOW = new Set([
   'acc', 'usr', 'obj', 'cfg', 'prv', 'board',
   'created', 'updated', 'deleted', 'skipped', 'ms', 'total', 'total_ms',
   'status', 'method', 'path', 'url', 'step',
+  // short enum/id context this app actually logs: the failed telemetry panel key
+  // (telemetry-service telemetry_panel_failed) and the auth-reject reason
+  // (session-token). Without these the shipped record can't say WHICH panel failed.
+  'panel', 'reason',
 ]);
 const FIELD_MAX = 256;
 

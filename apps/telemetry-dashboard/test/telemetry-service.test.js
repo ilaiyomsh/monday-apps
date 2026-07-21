@@ -83,6 +83,21 @@ describe('createTelemetryService — a failing panel fails soft AND routes throu
     expect(logger.warn).not.toHaveBeenCalledWith('telemetry_panel_failed', expect.anything(), expect.anything());
   });
 
+  it('a failing panel still fails soft when NO logger is injected (logger is optional)', async () => {
+    // The opts JSDoc marks logger optional; a panel failure must degrade to [] rather than
+    // throw a TypeError on the log call and break the "never throws to caller" invariant.
+    const svc = createTelemetryService({
+      axiomToken: TOKEN,
+      axiomDataset: DATASET,
+      fetchImpl: fetchFailingPanels(['topk', 'top_errors', 'err_name']),
+      // no logger
+    });
+
+    const payload = await svc.getTelemetry('7d');
+    expect(payload.seed).toBe(false);
+    expect(Array.isArray(payload.errors_by_app)).toBe(true);
+  });
+
   it('reports seed mode (and never queries) when no axiom token is configured', async () => {
     const logger = makeLogger();
     const fetchImpl = vi.fn();

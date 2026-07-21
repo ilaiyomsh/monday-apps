@@ -4,8 +4,9 @@ import App from './App';
 import { ErrorBoundary } from './components/feedback/ErrorBoundary';
 import { versionLabel } from './lib/versionLabel';
 import logger from './lib/logger';
+import monday from './services/monday';
 import { setupGlobalErrorHandlers } from './utils/globalErrorHandler';
-import { attachAxiomSink } from './utils/axiomErrorSink';
+import { attachAxiomSink, setAxiomContext, isAxiomSinkActive } from './utils/axiomErrorSink';
 import '@vibe/core/tokens';
 import './styles/index.css';
 
@@ -30,6 +31,21 @@ attachAxiomSink(logger, {
   appVersion: typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0',
   environment: import.meta.env.VITE_AXIOM_ENV ?? 'production',
 });
+
+// Merge the monday account/user identity into every future Axiom envelope, so a shipped
+// render/API error carries acc/usr (identity enrichment — error-axiom standard). Gated on
+// the live sink so it never costs an API round-trip in dev / tunnel / tests.
+if (isAxiomSinkActive()) {
+  monday
+    .get('context')
+    .then((res: unknown) => {
+      const data = (res as { data?: { account_id?: string | number; user_id?: string | number } }).data;
+      setAxiomContext({ accountId: data?.account_id, userId: data?.user_id });
+    })
+    .catch((err: unknown) => {
+      logger.error('admin', 'axiom_context_failed', err);
+    });
+}
 
 console.info('[sync-calender-admin] ' + versionLabel);
 

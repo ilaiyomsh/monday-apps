@@ -6,6 +6,9 @@ import mondaySdk from 'monday-sdk-js';
 
 const monday = mondaySdk();
 
+/** The shared monday-sdk-js singleton — reused for the seamless context read (identity). */
+export default monday;
+
 let sessionTokenPromise: Promise<string> | null = null;
 
 export function getSessionToken(): Promise<string> {

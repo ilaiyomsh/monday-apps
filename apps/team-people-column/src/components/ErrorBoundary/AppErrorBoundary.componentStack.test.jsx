@@ -53,8 +53,13 @@ describe('AppErrorBoundary — render-crash componentStack shipping', () => {
     expect(errs.length).toBe(1);
 
     const rec = errs[0];
-    // The crash still ships at ERROR with the error message folded in (distinct dedup key).
-    expect(rec.message).toBe('Render error: kaboom in tpc');
+    // M4: the message is a CONSTANT event id, NOT error.message — the sink ships `message`
+    // verbatim (only err_msg is scrubbed), so folding the raw message would leak PII. The
+    // crash identity travels on the Error instance; distinct crashes still dedup distinctly
+    // via err_name + err_msg (fix 5).
+    expect(rec.message).toBe('render_error');
+    expect(rec.error).toBeInstanceOf(Error);
+    expect(rec.error.message).toBe('kaboom in tpc');
     // The component tree ships at the EXACT path the error-kit sink reads.
     expect(typeof rec.context?.componentStack).toBe('string');
     expect(rec.context.componentStack).toContain('Boom');

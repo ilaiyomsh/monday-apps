@@ -23,7 +23,13 @@ export class ErrorBoundary extends Component<Props, State> {
     // fix 4: put componentStack into the ERROR record's context so the Axiom sink ships it
     // (as `component_stack`). The old separate DEBUG record never shipped, so it is removed —
     // the componentStack now rides the single ERROR record that already ships.
-    this.props.logger.error('ErrorBoundary', error.message, error, { componentStack: info.componentStack });
+    //
+    // The message is a CONSTANT event id ('render_error'), NOT error.message: the sink ships
+    // `message` verbatim (only `err_msg` is scrubbed via scrubMessage), so folding a raw
+    // error.message in here would leak PII past the privacy scrub (D2). The error instance
+    // still travels as the payload, so the scrubbed err_msg / err_name / stack all ship; and
+    // fix-5's dedup key already includes err_name + err_msg, so distinct errors stay distinct.
+    this.props.logger.error('ErrorBoundary', 'render_error', error, { componentStack: info.componentStack });
     this.props.onError?.(error);
   }
 

@@ -50,7 +50,10 @@ eg_should_skip() {
     */services/logger/*) return 0 ;;   # server logger dir (basename is index.js)
   esac
   case "$base" in
-    setupTests.*|logger.js|logger.ts) return 0 ;;
+    # logger infra file (console rendering + localStorage/infra catches ARE its job).
+    # Case-insensitive on the first letter: planner ships `Logger.ts`, the others
+    # `logger.{js,ts}` — the exemption must cover both spellings.
+    setupTests.*|logger.js|logger.ts|Logger.js|Logger.ts) return 0 ;;
     *Sink*|*-sink.*) return 0 ;;
     # sanctioned infra files: console breadcrumbs + intentional exit-path catches.
     # Both .js (pure-client template) and .ts (vendored SPA copies + the canonical

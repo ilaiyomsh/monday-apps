@@ -25,10 +25,25 @@ describe('ErrorBoundary — fix 4: componentStack ships in the ERROR record cont
     const info: ErrorInfo = { componentStack: '\n    in Broken\n    in App' };
     boundary.componentDidCatch(err, info);
     expect(error).toHaveBeenCalledTimes(1);
-    expect(error).toHaveBeenCalledWith('ErrorBoundary', 'render blew up', err, {
+    // The message is the CONSTANT event id, not error.message (see F4d). The Error still
+    // travels as the payload so err_msg/err_name/stack ship; componentStack rides the context.
+    expect(error).toHaveBeenCalledWith('ErrorBoundary', 'render_error', err, {
       componentStack: '\n    in Broken\n    in App',
     });
     expect(onError).toHaveBeenCalledWith(err);
+  });
+
+  it('F4d (M4): a raw error.message NEVER becomes the record message (ships unscrubbed)', () => {
+    // The sink ships `message` verbatim (only err_msg is scrubbed). A boundary that folded
+    // error.message into the message arg would leak PII past the D2 privacy scrub.
+    const { logger, error } = fakeLogger();
+    const boundary = new ErrorBoundary({ logger, children: null });
+    const pii = new Error('failed for admin@corp.co token ABCDEF0123456789ghij id 12345678');
+    boundary.componentDidCatch(pii, { componentStack: '\n    in App' });
+    const [, message] = error.mock.calls[0];
+    expect(message).toBe('render_error');
+    expect(message).not.toContain('@');
+    expect(message).not.toContain('12345678');
   });
 
   it('F4b: no separate DEBUG record is emitted (it never shipped)', () => {

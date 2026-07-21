@@ -38,3 +38,53 @@ describe('handleResourceError — non-chunk resource failures are logged, not dr
     expect(warn).not.toHaveBeenCalled();
   });
 });
+
+// M3: the capture listener exists to recover a failed main bundle / module-preload
+// after a redeploy (CDN served stale HTML for a hashed asset). SCRIPT tags and preload
+// LINKs are CODE resources and MUST get the one-shot reload; IMG + plain stylesheets are
+// CONTENT and must never trigger a reload. Previously ALL resource errors built a neutral
+// pseudo-error that matched no chunk pattern, so the code-resource reload branch was dead.
+describe('handleResourceError — code-resource failures get the one-shot reload (M3)', () => {
+  let reloadSpy;
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
+    reloadSpy = vi.fn();
+    // jsdom location.reload is non-configurable; replace the whole location object.
+    delete window.location;
+    window.location = { reload: reloadSpy };
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('a failed <script> triggers a single reload and returns true (caller preventDefaults)', () => {
+    const event = { target: { tagName: 'SCRIPT', src: 'https://cdn.example/assets/index-abc123.js' } };
+    const handled = handleResourceError(event, window);
+    expect(handled).toBe(true);
+    expect(reloadSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed module-preload <link> triggers the reload path', () => {
+    const event = { target: { tagName: 'LINK', rel: 'modulepreload', href: 'https://cdn.example/assets/chunk-def456.js' } };
+    expect(handleResourceError(event, window)).toBe(true);
+    expect(reloadSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT reload again if the one-shot was already spent this session (returns true, no 2nd reload)', () => {
+    window.sessionStorage.setItem('lazy-retry:global', '1');
+    const event = { target: { tagName: 'SCRIPT', src: 'https://cdn.example/assets/index-abc123.js' } };
+    expect(handleResourceError(event, window)).toBe(true);
+    expect(reloadSpy).not.toHaveBeenCalled();
+  });
+
+  it('a broken IMG still never reloads (content resource)', () => {
+    const event = { target: { tagName: 'IMG', src: 'https://cdn.example/logo.png' } };
+    expect(handleResourceError(event, window)).toBe(false);
+    expect(reloadSpy).not.toHaveBeenCalled();
+  });
+
+  it('a plain stylesheet <link> (no preload rel) still never reloads', () => {
+    const event = { target: { tagName: 'LINK', href: 'https://cdn.example/app.css' } };
+    expect(handleResourceError(event, window)).toBe(false);
+    expect(reloadSpy).not.toHaveBeenCalled();
+  });
+});

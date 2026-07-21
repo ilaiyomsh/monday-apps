@@ -51,10 +51,12 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBounda
     return { error };
   }
 
-  componentDidCatch(error: Error): void {
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
     // Stable English event id as the message (ships as-is); the Error rides record.error
-    // (scrubbed to err_msg by the sink). React's componentStack stays console-only.
-    logger.error('admin', 'render_error', error);
+    // (scrubbed to err_msg by the sink). React's componentStack rides the context channel
+    // as record.context.componentStack so the sink ships it as component_stack (fix 3) —
+    // parity with sync-calender-admin's boundary.
+    logger.error('admin', 'render_error', error, { componentStack: info.componentStack ?? undefined });
   }
 
   render(): React.ReactNode {

@@ -125,7 +125,9 @@ describe('seamlessApi — funnel logging on a network/SDK throw', () => {
     vi.doMock('monday-sdk-js', () => ({
       default: () => ({
         get: vi.fn(async () => ({ data: 'tok' })),
-        api: vi.fn(async () => ({ data: { boards: [{ id: '1', name: 'B' }] } })),
+        api: vi.fn(async () => ({
+          data: { boards: [{ id: '1', name: 'B', object_type_unique_key: 'board' }] },
+        })),
       }),
     }));
     const loggerMod = await import('../utils/logger');

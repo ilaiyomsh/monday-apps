@@ -123,19 +123,19 @@ export const AppErrorBoundary = ({ children, scope = 'root', FallbackComponent, 
         // remote sink can attribute the crash; do NOT also toast here — the
         // fallback screen is the single user-facing surface for render throws.
         //
-        // The message includes error.message (not a fixed string) so distinct
-        // render crashes within the same scope don't collide on the transport's
-        // dedup key (level|tag|message @ axiomBrowserTransport dedup window) and
-        // get throttled together as if they were one repeating error. Falls back
-        // to a stable label when the thrown value isn't a real Error (e.g. a
-        // thrown string/object with no .message).
-        const detail = typeof error?.message === 'string' && error.message !== '' ? error.message : 'unknown error';
+        // The message is a CONSTANT event id, NOT error.message: the transport ships
+        // `message` verbatim (only err_msg is scrubbed), so folding a raw error.message
+        // here would leak PII past the D2 privacy scrub. The Error still travels as the
+        // payload (scrubbed err_msg + err_name + stack), and the shared @mapps/error-kit
+        // transport's dedup key already includes err_name + err_msg (fix 5), so distinct
+        // render crashes still get distinct keys without the raw message.
+        //
         // ONE shipped ERROR record carrying React's componentStack in the context channel
         // so it rides record.context.componentStack — the exact path @mapps/error-kit's
         // Axiom sink reads (browser/axiomSink.ts). The previous separate logger.debug record
         // never shipped (shouldShip drops DEBUG) and put the stack in record.data, not
         // record.context, so the component tree was lost from every shipped crash.
-        logger.error(`ErrorBoundary:${scope}`, `Render error: ${detail}`, error, {
+        logger.error(`ErrorBoundary:${scope}`, 'render_error', error, {
             componentStack: info?.componentStack,
         });
     };

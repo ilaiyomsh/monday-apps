@@ -51,20 +51,28 @@ describe('ErrorBoundary — render-crash componentStack shipping', () => {
     expect(errs.length).toBe(1);
 
     const rec = errs[0];
-    // The error message still ships (identity of the crash).
-    expect(rec.message).toContain('kaboom in discussions');
+    // The crash identity travels on the Error instance (scrubbed to err_msg by the sink),
+    // NOT the message field — see the privacy test below.
+    expect(rec.error).toBeInstanceOf(Error);
+    expect(rec.error.message).toContain('kaboom in discussions');
     // The component tree ships at the EXACT path the error-kit sink reads.
     expect(typeof rec.context?.componentStack).toBe('string');
     expect(rec.context.componentStack).toContain('Boom');
   });
 
-  it('adopts the "Render error: <message>" form so distinct crashes get distinct dedup keys', () => {
+  it('M4: the record message is a CONSTANT event id — a raw error.message never leaks into it', () => {
+    // The sink ships `message` verbatim (only err_msg is scrubbed), so folding error.message
+    // in would leak PII. Distinct crashes still dedup distinctly via err_name + err_msg (fix 5).
     const records = captureRecords(
       <ErrorBoundary>
-        <Boom message="unique crash text" />
+        <Boom message="leak admin@corp.co id 12345678" />
       </ErrorBoundary>
     );
     const rec = records.find((r) => r.level === 'ERROR' && r.module === 'ErrorBoundary');
-    expect(rec.message).toBe('Render error: unique crash text');
+    expect(rec.message).toBe('render_error');
+    expect(rec.message).not.toContain('@');
+    expect(rec.message).not.toContain('12345678');
+    // the identity is preserved on the Error instance for the sink's scrubbed err_msg
+    expect(rec.error.message).toContain('leak admin@corp.co id 12345678');
   });
 });

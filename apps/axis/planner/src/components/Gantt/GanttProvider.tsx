@@ -765,6 +765,10 @@ export const GanttProvider: React.FC<GanttProviderProps> = ({
     const task = groups.flatMap(g => g.tasks).find(t => t.id === taskId);
     if (task) {
       await updateAllocation({ ...task, ...updates });
+    } else {
+      // An update for an id not in the loaded groups is a real anomaly (stale UI / lost
+      // optimistic row), not a normal no-op — WARN so it ships instead of vanishing silently.
+      logger.warn('[GanttProvider] updateTask: no task for id', { taskId: String(taskId) });
     }
   }, [groups, updateAllocation]);
 
