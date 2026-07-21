@@ -843,13 +843,14 @@ export function TopicsTab({
   };
 
   // round198 — a SECOND add-topic entry under the LAST group (owner request), so
-  // a long topics list doesn't force scrolling back to the top toolbar. Same
-  // addTopic path — a new topic is appended below the bottom group.
+  // a long topics list doesn't force scrolling back to the top toolbar.
+  // round201 — passes position:'bottom' so the new topic actually lands (and is
+  // persisted) BELOW the last group, not prepended like the toolbar button.
   const [addingTopicBottom, setAddingTopicBottom] = useState(false);
   const [newTopicBottomText, setNewTopicBottomText] = useState('');
   const handleAddTopicBottom = () => {
     if (!newTopicBottomText.trim()) return;
-    addTopic(newTopicBottomText.trim());
+    addTopic(newTopicBottomText.trim(), { position: 'bottom' });
     setNewTopicBottomText('');
     setAddingTopicBottom(false);
   };

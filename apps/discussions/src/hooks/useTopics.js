@@ -249,7 +249,7 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
   // Background create for ONE optimistic topic row. Extracted from addTopic so a
   // FAILED create can be re-run (retry) against the same temp row (the temp id
   // stays the React key + color seed, so nothing flashes or jumps).
-  const runTopicCreate = useCallback((tempId, trimmed, creatorId) => {
+  const runTopicCreate = useCallback((tempId, trimmed, creatorId, position = 'top') => {
     // Clear any prior error flag (retry path) + mark saving.
     setItems((prev) => prev.map((t) => (t.id === tempId ? { ...t, _pending: true, _createFailed: false } : t)));
 
@@ -290,11 +290,27 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
         if (!createdId) throw new Error('create_item returned no id');
         createdRealIdRef.current.set(tempId, createdId);
       }
-      const saved = await loadOrder(discussionId);
-      await saveTopicOrder(
-        discussionId,
-        [createdId, ...(saved?.topics || []).map(String).filter((id) => id !== createdId)],
-      );
+      // round201 — persist the ON-SCREEN order (the optimistic row already sits
+      // where the user added it: the toolbar button prepends, the bottom button
+      // appends), mapping this temp row to its new real id and skipping other
+      // still-saving temp rows. The previous `[createdId, ...saved]` save pinned
+      // every new topic to the TOP regardless of where it was inserted, which
+      // made the bottom "נושא חדש" button's topic jump above the first group.
+      const orderedIds = itemsRef.current
+        .map((t) => {
+          const id = String(t.id);
+          if (id === tempId) return createdId;
+          if (t._realId) return String(t._realId);
+          return id.startsWith('temp-') ? null : id;
+        })
+        .filter(Boolean);
+      // Safety net: the items mirror updates post-render, so if this row isn't
+      // in it yet, fall back to inserting by the requested position.
+      if (!orderedIds.includes(createdId)) {
+        if (position === 'bottom') orderedIds.push(createdId);
+        else orderedIds.unshift(createdId);
+      }
+      await saveTopicOrder(discussionId, orderedIds);
       return createdId;
     })();
     pendingCreates.current.set(tempId, promise);
@@ -319,14 +335,20 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
   // Add a new TOPIC (item) linked to the discussion. Fully optimistic: the row
   // appears INSTANTLY as a normal topic (no fade/lock/spinner) and is editable
   // right away; the board write runs in the background (runTopicCreate).
-  const addTopic = useCallback((name) => {
+  // round201 — options.position ('top' default | 'bottom') controls where the
+  // optimistic row lands AND where the persisted order puts it: the toolbar
+  // button keeps prepending, the bottom "נושא חדש" button appends below the
+  // last group.
+  const addTopic = useCallback((name, options = {}) => {
     if (!discussionId || !name?.trim()) return;
+    const position = options.position === 'bottom' ? 'bottom' : 'top';
     const tempId = `temp-${++tempSeq.current}`;
     const trimmed = name.trim();
     const creatorId = currentUser?.id != null ? String(currentUser.id) : null;
-    setItems((prev) => [{ id: tempId, _realId: null, name: trimmed, notForDiscussion: false, creatorId, _subitems: [], _pending: true }, ...prev]);
-    stashCreateArgs(tempId, { kind: 'topic', name: trimmed });
-    runTopicCreate(tempId, trimmed, creatorId);
+    const row = { id: tempId, _realId: null, name: trimmed, notForDiscussion: false, creatorId, _subitems: [], _pending: true };
+    setItems((prev) => (position === 'bottom' ? [...prev, row] : [row, ...prev]));
+    stashCreateArgs(tempId, { kind: 'topic', name: trimmed, position });
+    runTopicCreate(tempId, trimmed, creatorId, position);
   }, [discussionId, currentUser, stashCreateArgs, runTopicCreate]);
 
   // Background create for ONE optimistic point (subitem). Extracted from addPoint
@@ -419,7 +441,7 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     if (!args) return;
     if (args.kind === 'topic') {
       const creatorId = currentUser?.id != null ? String(currentUser.id) : null;
-      runTopicCreate(id, args.name, creatorId);
+      runTopicCreate(id, args.name, creatorId, args.position || 'top');
     } else if (args.kind === 'point') {
       runPointCreate(args.topicId, id, args.name);
     }

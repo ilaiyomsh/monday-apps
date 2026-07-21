@@ -45,10 +45,30 @@
   max-height: calc(100vh - 262px);
   overflow-y: auto;
   overflow-x: auto;
+  /* round201 — the frame sits in an RTL layout, which parks the vertical bar on
+     the LEFT; force LTR on the scroll frame itself so the bar hugs the RIGHT
+     edge of the element it scrolls (.liveHost re-establishes dir="rtl"). */
+  direction: ltr;
   border: 1px solid var(--ui-border-color, #d0d4e4);
   border-radius: 4px;
   background: #eceef4;
   padding: 12px;
+}
+
+/* round201 — owner request: the preview frame's vertical bar is ALWAYS visible,
+   overriding the app-wide hover-gated default (index.css) so the scrollable
+   preview is discoverable at a glance. Hover/active keep the darker shade. */
+.liveBox::-webkit-scrollbar-thumb:vertical {
+  background: var(--ui-border-color, #c3c6d4);
+}
+.liveBox::-webkit-scrollbar-thumb:hover,
+.liveBox::-webkit-scrollbar-thumb:active {
+  background: #a8adbd;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .liveBox {
+    scrollbar-color: var(--ui-border-color, #c3c6d4) transparent;
+  }
 }
 
 /* round197 — preview controls: page up/down + "עמוד x / y" + horizontal nudges,

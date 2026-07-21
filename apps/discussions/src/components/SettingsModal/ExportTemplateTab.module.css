@@ -36,6 +36,29 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding-inline-end: 6px;
+  /* round201 — the column sits in the RTL .layout, which parks the vertical bar
+     on the LEFT; force LTR on the scroll container so the bar hugs the RIGHT
+     edge of the column it scrolls, and re-establish RTL on every child (under
+     LTR the padding-inline-end above lands next to the bar, as before). */
+  direction: ltr;
+}
+.controls > * {
+  direction: rtl;
+}
+
+/* round201 — owner request: the components column's vertical bar is ALWAYS
+   visible, overriding the app-wide hover-gated default (index.css). */
+.controls::-webkit-scrollbar-thumb:vertical {
+  background: var(--ui-border-color, #c3c6d4);
+}
+.controls::-webkit-scrollbar-thumb:hover,
+.controls::-webkit-scrollbar-thumb:active {
+  background: #a8adbd;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .controls {
+    scrollbar-color: var(--ui-border-color, #c3c6d4) transparent;
+  }
 }
 .previewCol {
   position: sticky;
