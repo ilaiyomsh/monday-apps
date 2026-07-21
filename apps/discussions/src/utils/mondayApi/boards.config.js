@@ -581,6 +581,11 @@ export const COLUMN_SCHEMA = {
     discussionDateID: { type: 'date', title: 'תאריך הדיון' },
     creationDateID: { type: 'date', title: 'תאריך יצירה' },
     participantsID: { type: 'people', title: 'משתתפים' },
+    // round211 — EXTERNAL participants (not monday users): a plain text column
+    // holding comma-separated names. They can never be assigned tasks; editable
+    // by the discussion creator/lead/coordinator + board owners. Unmapped → the
+    // whole feature hides.
+    externalParticipantsID: { type: 'long_text', title: 'משתתפים חיצוניים' },
     // File column the exported summary .docx is uploaded into (add_file_to_column).
     summaryFileID: { type: 'file', title: 'קובץ סיכום (DOCS)' },
     // round204 — optional files column for the רקע box's preparation files

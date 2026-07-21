@@ -381,6 +381,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     'discussionLeadID',
     'discussionCoordinatorID', // מרכז דיון — optional people column / full role
     'participantsID',
+    'externalParticipantsID', // round211 — משתתפים חיצוניים (long_text, comma-separated names)
     'creationDateID',
     'discussionDateID',
     'discussionTypeID',

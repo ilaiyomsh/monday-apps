@@ -14,6 +14,9 @@ import { useViewport } from '@generated/hooks/useViewport.js';
 import { usePermissions } from '@generated/hooks/usePermission.js';
 import { PersonList } from '@generated/components/PersonAvatar';
 import { PersonPicker } from '@generated/components/PersonPicker';
+import { ExternalPeople } from '@generated/components/ExternalPeople';
+import { parseExternalParticipants, formatExternalParticipants } from '@generated/utils/externalParticipants.js';
+import { getColumns } from '@api/board-config-store.js';
 import {
   ensurePeopleColumns,
   getColumnTitle,
@@ -279,6 +282,14 @@ export function DiscussionCard({
     holdsRole(data?.discussionCreatorID) ||
     holdsRole(data?.discussionLeadID) ||
     holdsRole(data?.discussionCoordinatorID);
+  // round211 — EXTERNAL participants (text-only names): the SAME fixed rule —
+  // creator / lead / coordinator + board owner — may add/remove them.
+  const canEditExternalParticipants = canEditTitle;
+  // The feature exists only when the long_text column is mapped in Settings.
+  const externalColumnMapped = Boolean(getColumns('discussions')?.externalParticipantsID?.id);
+  const externalNames = externalColumnMapped
+    ? parseExternalParticipants(data?.externalParticipantsID)
+    : [];
 
   // round205 — owner-configurable component visibility (Settings → העדפות):
   // hidden tabs drop from the strip. The ניהול-דיון tab hosts THREE components
@@ -505,6 +516,23 @@ export function DiscussionCard({
       onUpdated?.({ ...data, [alias]: people });
     } catch (err) {
       if (!err?.__loggedId) logger.error('DiscussionCard', 'עדכון עמודת האנשים נכשל', err);
+      setOverrides((o) => { const next = { ...o }; delete next[alias]; return next; });
+    }
+  };
+
+  // round211 — persist the external-participants names list (long_text column).
+  // Gated by the FIXED rule (creator/lead/coordinator/owner) — deliberately NOT
+  // persistField's matrix canEdit gate. Optimistic + revert, like its siblings.
+  const persistExternalParticipants = async (names) => {
+    if (!canEditExternalParticipants) return;
+    const text = formatExternalParticipants(names);
+    const alias = 'externalParticipantsID';
+    setOverrides((o) => ({ ...o, [alias]: text }));
+    try {
+      await new דיונים1Board().item(discussion.id).update({ [alias]: text }).execute();
+      onUpdated?.({ ...data, [alias]: text });
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('DiscussionCard', 'עדכון המשתתפים החיצוניים נכשל', err);
       setOverrides((o) => { const next = { ...o }; delete next[alias]; return next; });
     }
   };
@@ -833,7 +861,8 @@ export function DiscussionCard({
                     )}
                   </div>
                 )}
-                {headerPeopleGroups.length > 0 && (
+                {(headerPeopleGroups.length > 0
+                  || (externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0))) && (
                   /* In this dir=rtl row the chevron sits LEFT of the time; the
                      glyphs: ‹ (points left) = open the roles, › = close them. */
                   <button
@@ -874,6 +903,22 @@ export function DiscussionCard({
                     </div>
                   );
                 })}
+                {/* round211 — EXTERNAL participants (text-only names): rendered in
+                    the SAME group styling — initials-circle per name, full name on
+                    hover. Creator/lead/coordinator/owner get the "+" editor; shown
+                    only when the column is mapped and there's something to show/edit. */}
+                {metaOpen && externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0) && (
+                  <div className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
+                    <span className={styles.peopleGroupLabel}>
+                      {getColumnTitle('discussions', 'externalParticipantsID') || 'משתתפים חיצוניים'}
+                    </span>
+                    <ExternalPeople
+                      names={externalNames}
+                      canEdit={canEditExternalParticipants}
+                      onChange={persistExternalParticipants}
+                    />
+                  </div>
+                )}
               </div>
             )
           )}

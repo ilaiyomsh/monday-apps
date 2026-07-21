@@ -1,0 +1,135 @@
+/* round211 — external (text-only) participants. Class names ext*-prefixed
+   (non-scoped test strategy). */
+.extWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.extAvatars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+/* Native-title tooltip host (mirrors PersonAvatar's .avatarTip). */
+.extAvatar {
+  display: inline-flex;
+  cursor: default;
+}
+
+.extAddBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1.5px dashed var(--ui-border-color, #c3c6d4);
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-inline-start: 2px;
+}
+.extAddBtn:hover {
+  border-color: var(--primary-color, #0073ea);
+  color: var(--primary-color, #0073ea);
+}
+
+.extBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+.extPopover {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: 1000;
+  width: 240px;
+  background: var(--primary-background-color, #fff);
+  border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--ui-border-color, #e6e9ef);
+  padding: 10px 12px 12px;
+  direction: rtl;
+}
+.extTitle {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--secondary-text-color, #676879);
+  margin-bottom: 8px;
+}
+.extList {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.extRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--primary-background-hover-color, #f6f7fb);
+  border-radius: 7px;
+  padding: 5px 9px;
+  font-size: 13px;
+  color: var(--primary-text-color, #323338);
+}
+.extRowName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.extRemove {
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #9699a6);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.extRemove:hover {
+  color: var(--negative-color, #d83a52);
+  background: #ffe8ec;
+}
+.extAddRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.extInput {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 7px;
+  padding: 6px 9px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+.extInput:focus {
+  border-color: var(--primary-color, #0073ea);
+}
+.extAdd {
+  border: none;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.extAdd:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
