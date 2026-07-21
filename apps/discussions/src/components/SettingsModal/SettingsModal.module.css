@@ -447,3 +447,22 @@
   color: var(--primary-color, #0073ea);
   font-weight: 600;
 }
+
+/* round205 — per-component visibility grid in the preferences tab. */
+.componentGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px 16px;
+}
+.componentItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.componentItem input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary-color, #0073ea);
+  flex-shrink: 0;
+}

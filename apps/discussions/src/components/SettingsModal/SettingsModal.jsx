@@ -3,7 +3,7 @@ import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, Ta
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible } from '../../utils/mondayApi/boards.config.js';
 
 // Round 78: the effective auto-fill role list for a tasks access column
 // (taskViewersID / taskEditorsID) — the stored preference, or the default when
@@ -24,7 +24,6 @@ export function toggleAccessRoleSource(preferences, accessAlias, roleAlias) {
 import { api } from '../../utils/mondayApi/monday-client.js';
 import { detectManagedColumnId } from '../../utils/mondayApi/managedColumns.js';
 import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js';
-import { fileToLogoDataUrl } from '../../utils/imageLogo.js';
 import SearchablePicker from './SearchablePicker';
 import PermissionsTab from './PermissionsTab.jsx';
 import ExportTemplateTab from './ExportTemplateTab.jsx';
@@ -193,7 +192,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // configured — never during the first-run forced modal.
   const [showTopUp, setShowTopUp] = useState(false);
   const fileInputRef = useRef(null);
-  const logoInputRef = useRef(null); // round108 — hidden picker for the header logo
 
   // re-seed local draft from the live settings whenever the modal opens
   useEffect(() => {
@@ -615,21 +613,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     }
   };
 
-  // round108 — owner uploads a brand logo shown at the top-right of the
-  // discussion header. We downscale it to a small data-URI (self-contained, no
-  // asset hosting) and stash it on preferences.logoUrl; "שמור" persists it.
-  const handleLogoFile = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // allow re-picking the same file
-    if (!file) return;
-    try {
-      const dataUrl = await fileToLogoDataUrl(file, { maxPx: 320 });
-      setPreferences((p) => ({ ...p, logoUrl: dataUrl }));
-    } catch (err) {
-      logger.error('SettingsModal', 'טעינת הלוגו נכשלה', err);
-    }
-  };
-
   if (!isOpen) return null;
 
   // round178 — `contained` scopes the overlay to the right discussion-card pane
@@ -1025,43 +1008,36 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                   {/* round108 — brand logo shown at the top-right of every discussion
                       header. Owner-only (this whole modal is owner-gated). Stored as
                       a downscaled data-URI on preferences.logoUrl; "שמור" persists it. */}
+                  {/* round205 — per-component visibility (owner request; this
+                      whole modal is owner-gated): which app surfaces exist for
+                      EVERYONE on this instance. Default-on; unchecking stores an
+                      explicit false under preferences.visibleComponents.
+                      (The round108 "לוגו" preference row was removed here.) */}
                   <div className={styles.prefRow}>
                     <div className={styles.prefLabel}>
-                      <Text type={"text2"}>לוגו בכותרת הדיון</Text>
+                      <Text type={"text2"}>רכיבים באפליקציה</Text>
                     </div>
                     <div className={styles.prefControl}>
-                      <Flex align="center" gap={12} wrap>
-                        {preferences.logoUrl && (
-                          <img
-                            src={preferences.logoUrl}
-                            alt="תצוגה מקדימה של הלוגו"
-                            style={{ height: 32, maxWidth: 140, objectFit: 'contain', border: '1px solid var(--ui-border-color, #d0d4e4)', borderRadius: 4, padding: 2 }}
-                          />
-                        )}
-                        <Button
-                          kind="secondary"
-                          size="small"
-                          onClick={() => logoInputRef.current?.click()}
-                        >
-                          {preferences.logoUrl ? 'החלף לוגו' : 'העלה לוגו'}
-                        </Button>
-                        {preferences.logoUrl && (
-                          <Button
-                            kind="tertiary"
-                            size="small"
-                            onClick={() => setPreferences((p) => ({ ...p, logoUrl: null }))}
-                          >
-                            הסר
-                          </Button>
-                        )}
-                        <input
-                          ref={logoInputRef}
-                          type="file"
-                          accept="image/*"
-                          style={{ display: 'none' }}
-                          onChange={handleLogoFile}
-                        />
-                      </Flex>
+                      <div className={styles.componentGrid}>
+                        {APP_COMPONENTS.map((c) => (
+                          <label key={c.key} className={styles.componentItem}>
+                            <input
+                              type="checkbox"
+                              checked={isComponentVisible(preferences, c.key)}
+                              onChange={(e) =>
+                                setPreferences((p) => ({
+                                  ...p,
+                                  visibleComponents: {
+                                    ...(p.visibleComponents || {}),
+                                    [c.key]: e.target.checked ? true : false,
+                                  },
+                                }))
+                              }
+                            />
+                            <Text type={"text2"}>{c.label}</Text>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>

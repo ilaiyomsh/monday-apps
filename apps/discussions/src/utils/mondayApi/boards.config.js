@@ -41,8 +41,38 @@ export const PREVIOUS_TASKS_MODES = {
   DISCUSSION_TYPE: 'discussionType',
   AUTO: 'auto',
 };
+/*
+ * round205 — the owner-selectable APP COMPONENTS (Settings → העדפות, owners
+ * only): every major surface a board owner may hide for the whole instance.
+ * Visibility is stored under preferences.visibleComponents as an EXPLICIT-false
+ * map — a key that was never touched stays visible (default-on), so new
+ * components appear automatically on existing instances.
+ */
+export const APP_COMPONENTS = [
+  { key: 'previous', label: 'הנחיות קודמות' },
+  { key: 'background', label: 'רקע' },
+  { key: 'references', label: 'התייחסויות' },
+  { key: 'summary', label: 'סיכום' },
+  { key: 'topics', label: 'נושאים ונקודות' },
+  { key: 'tasks', label: 'משימות' },
+  { key: 'decisions', label: 'החלטות' },
+  { key: 'effectiveness', label: 'אפקטיביות' },
+  { key: 'personalArea', label: 'אזור אישי' },
+  { key: 'myTasks', label: 'המשימות שלי' },
+  { key: 'myDecisions', label: 'ההחלטות שלי' },
+  { key: 'dashboard', label: 'דשבורד' },
+];
+
+/** A component is visible unless the owner EXPLICITLY hid it (stored false). */
+export function isComponentVisible(preferences, key) {
+  return preferences?.visibleComponents?.[key] !== false;
+}
+
 export const DEFAULT_PREFERENCES = {
   previousTasksMode: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION,
+  // round205 — per-component visibility map ({ [componentKey]: false } hides);
+  // see APP_COMPONENTS + isComponentVisible above. Empty = everything shown.
+  visibleComponents: {},
   // round108 — owner-set logo shown at the top-right of the discussion header
   // (parallel to the title). Stored as a small downscaled data-URI (self-contained,
   // no asset hosting); null = no logo. Set only by owners in Settings → העדפות.
