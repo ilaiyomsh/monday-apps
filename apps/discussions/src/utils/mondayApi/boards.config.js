@@ -277,6 +277,9 @@ export const CAPABILITY_DEFAULTS = {
   viewReferencesBox: 'all',
   viewSummaryBox: 'all',
   editDiscussionFields: 'creatorLeadOwner',
+  // round212 — triple-box writes: default like editSummary (creator/lead/owner).
+  writeBackground: 'creatorLeadOwner',
+  writeReferences: 'creatorLeadOwner',
   editSummary: 'creatorLeadOwner',
   exportDocs: 'creatorLeadOwner',
   createTask: 'creatorLeadOwner',
@@ -324,13 +327,19 @@ export const CAPABILITIES = [
   { id: 'viewReferencesBox', tier: 'disc', group: 'discussion', label: 'צפייה בתיבת התייחסויות' },
   { id: 'viewSummaryBox', tier: 'disc', group: 'discussion', label: 'צפייה בתיבת סיכום' },
   { id: 'editDiscussionFields', tier: 'disc', group: 'discussion', label: 'עריכת פרטי הדיון' },
-  { id: 'editSummary', tier: 'disc', group: 'discussion', label: 'עריכת סיכום' },
+  // round212 — the triple-box WRITE gates are matrix capabilities now (owner
+  // spec: full ✓-table control). editSummary keeps its id (stored configs
+  // survive) but reads "כתיבת סיכום" alongside the two new siblings.
+  { id: 'writeBackground', tier: 'disc', group: 'discussion', label: 'כתיבת רקע' },
+  { id: 'writeReferences', tier: 'disc', group: 'discussion', label: 'כתיבת התייחסויות' },
+  { id: 'editSummary', tier: 'disc', group: 'discussion', label: 'כתיבת סיכום' },
   { id: 'exportDocs', tier: 'disc', group: 'discussion', label: 'ייצוא' },
   { id: 'addTopicOrPoint', tier: 'disc', group: 'topics', label: 'הוספת נושא/נקודה' },
   { id: 'editTopicOrPoint', tier: 'disc', group: 'topics', label: 'עריכת נושא/נקודה' },
   { id: 'deleteTopicOrPoint', tier: 'disc', group: 'topics', label: 'מחיקת נושא/נקודה' },
   { id: 'checkPoint', tier: 'disc', group: 'topics', label: 'סימון נקודה כנידונה' },
-  { id: 'editResponses', tier: 'disc', group: 'topics', label: 'עריכת התייחסויות' },
+  // round212 — relabeled "לנקודות" so it can't be confused with the references BOX write.
+  { id: 'editResponses', tier: 'disc', group: 'topics', label: 'עריכת התייחסויות לנקודות' },
   // discussion-scoped "משימות" card (creating a task lives in the discussion)
   { id: 'createTask', tier: 'disc', group: 'tasks', label: 'יצירת משימה בדיון' },
   // discussion-scoped "החלטות" card (creating a decision lives in the discussion)
@@ -400,6 +409,8 @@ export const DEFAULT_PERMISSION_SEED = {
       viewReferencesBox: true,
       viewSummaryBox: true,
       editDiscussionFields: true,
+      writeBackground: true,
+      writeReferences: true,
       editSummary: true,
       exportDocs: true,
       createTask: true,
@@ -418,6 +429,8 @@ export const DEFAULT_PERMISSION_SEED = {
       viewReferencesBox: true,
       viewSummaryBox: true,
       editDiscussionFields: true,
+      writeBackground: true,
+      writeReferences: true,
       editSummary: true,
       exportDocs: true,
       createTask: true,
@@ -436,6 +449,8 @@ export const DEFAULT_PERMISSION_SEED = {
       viewReferencesBox: true,
       viewSummaryBox: true,
       editDiscussionFields: true,
+      writeBackground: true,
+      writeReferences: true,
       editSummary: true,
       exportDocs: true,
       createTask: true,
@@ -456,6 +471,8 @@ export const DEFAULT_PERMISSION_SEED = {
       viewReferencesBox: true,
       viewSummaryBox: true,
       editDiscussionFields: false,
+      writeBackground: false,
+      writeReferences: false,
       editSummary: false,
       exportDocs: true,
       createTask: true,

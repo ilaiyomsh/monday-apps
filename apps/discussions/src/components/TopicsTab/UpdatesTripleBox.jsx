@@ -255,17 +255,24 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
  */
 export function UpdatesTripleBox({
   discussionId, canEdit = false,
+  // round212 — PER-PANE write gates (matrix capabilities); null falls back to
+  // the legacy single canEdit so old call sites/tests keep working.
+  canEditBackground = null, canEditReferences = null, canEditSummary = null,
   showBackground = true, showReferences = true, showSummary = true,
 }) {
   const background = useBackground(showBackground ? discussionId : null);
   const references = useReferences(showReferences ? discussionId : null);
   const summary = useSummary(showSummary ? discussionId : null);
 
+  const editBackground = canEditBackground ?? canEdit;
+  const editReferences = canEditReferences ?? canEdit;
+  const editSummaryPane = canEditSummary ?? canEdit;
+
   const panes = useMemo(() => [
-    showBackground && { key: 'background', title: 'רקע', hook: background, placeholder: 'כתבו כאן רקע והכנה לדיון…', filesAlias: 'backgroundFilesID', withLinks: true },
-    showReferences && { key: 'references', title: 'התייחסויות', hook: references, placeholder: 'כתבו כאן התייחסויות של משתתפי הדיון…', filesAlias: 'referencesFilesID' },
-    showSummary && { key: 'summary', title: 'סיכום', hook: summary, placeholder: 'כתבו כאן את סיכום הדיון…', filesAlias: 'summaryFilesID' },
-  ].filter(Boolean), [showBackground, showReferences, showSummary, background, references, summary]);
+    showBackground && { key: 'background', title: 'רקע', hook: background, canEdit: editBackground, placeholder: 'כתבו כאן רקע והכנה לדיון…', filesAlias: 'backgroundFilesID', withLinks: true },
+    showReferences && { key: 'references', title: 'התייחסויות', hook: references, canEdit: editReferences, placeholder: 'כתבו כאן התייחסויות של משתתפי הדיון…', filesAlias: 'referencesFilesID' },
+    showSummary && { key: 'summary', title: 'סיכום', hook: summary, canEdit: editSummaryPane, placeholder: 'כתבו כאן את סיכום הדיון…', filesAlias: 'summaryFilesID' },
+  ].filter(Boolean), [showBackground, showReferences, showSummary, background, references, summary, editBackground, editReferences, editSummaryPane]);
 
   const [activeKey, setActiveKey] = useState(panes[0]?.key || 'background');
   useEffect(() => { setActiveKey(panes[0]?.key || 'background'); }, [discussionId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -297,7 +304,7 @@ export function UpdatesTripleBox({
           discussionId={discussionId}
           hook={p.hook}
           placeholder={p.placeholder}
-          canEdit={canEdit}
+          canEdit={p.canEdit}
           filesAlias={p.filesAlias}
           withLinks={p.withLinks === true}
           active={activeKey === p.key}

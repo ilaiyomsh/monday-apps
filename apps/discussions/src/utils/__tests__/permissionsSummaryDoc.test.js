@@ -40,8 +40,8 @@ describe('buildPermissionsSummaryModel', () => {
     const lead = disc.roles.find((r) => r.title === 'מנהל דיון');
     const participants = disc.roles.find((r) => r.title === 'משתתפים');
 
-    expect(lead.caps.find((c) => c.label === 'עריכת סיכום').state).toBe('granted');
-    expect(participants.caps.find((c) => c.label === 'עריכת סיכום').state).toBe('denied');
+    expect(lead.caps.find((c) => c.label === 'כתיבת סיכום').state).toBe('granted');
+    expect(participants.caps.find((c) => c.label === 'כתיבת סיכום').state).toBe('denied');
     // Untouched cap → inherits the catalog default (exportDocs: creatorLeadOwner).
     const untouched = lead.caps.find((c) => c.label === 'ייצוא');
     expect(untouched.state).toBe('default');
@@ -63,7 +63,7 @@ describe('buildPermissionsSummaryModel', () => {
     const system = model.tiers.find((t) => t.id === 'system');
     const labels = system.roles[0].caps.map((c) => c.label);
     expect(labels).toContain('יצירת דיון');
-    expect(labels.every((l) => l !== 'עריכת סיכום')).toBe(true);
+    expect(labels.every((l) => l !== 'כתיבת סיכום')).toBe(true);
   });
 });
 

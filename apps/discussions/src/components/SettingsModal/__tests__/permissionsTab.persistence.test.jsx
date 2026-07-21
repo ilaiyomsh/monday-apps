@@ -39,6 +39,7 @@ const COLUMNS = {
   discussions: {
     discussionCreatorID: { title: 'יוצר דיון', type: 'people' },
     discussionLeadID: { title: 'מוביל דיון', type: 'people' },
+    discussionCoordinatorID: { title: 'מרכז דיון', type: 'people' },
     participantsID: { title: 'משתתפים', type: 'people' },
   },
   tasks: {
@@ -125,11 +126,11 @@ describe('PermissionsTab persistence round-trip', () => {
     await waitFor(() => expect(screen.getByText('save')).toBeTruthy());
     await act(async () => {}); // flush the always-on seed effect
 
-    // The first tier is "כללי" (system), so select the discussion-creator role
-    // explicitly (seeded with editSummary:true). Then flip "עריכת סיכום" off.
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'יוצר דיון' })); });
-    const editSummary = screen.getByLabelText('עריכת סיכום');
-    await act(async () => { fireEvent.click(editSummary); });
+    // round212 — the matrix: the discussion-creator × כתיבת סיכום cell is a ✓
+    // cell (seeded editSummary:true). Clicking it flips the grant to false.
+    const cell = screen.getByTestId('mx-discussions:discussionCreatorID-editSummary');
+    expect(cell.textContent).toContain('✓');
+    await act(async () => { fireEvent.click(cell); });
 
     await act(async () => { fireEvent.click(screen.getByText('save')); });
 
@@ -148,15 +149,10 @@ describe('PermissionsTab persistence round-trip', () => {
     await waitFor(() => expect(screen.getByText('save')).toBeTruthy());
     await act(async () => {}); // flush the always-on seed effect
 
-    // "כללי" (system) is the FIRST tier and selected by default, so there are two
-    // "כללי" buttons — the sidebar role button (first in the DOM) and the card
-    // head. Click the sidebar one to be explicit.
-    const systemRoleBtn = screen.getAllByRole('button', { name: 'כללי' })[0];
-    await act(async () => { fireEvent.click(systemRoleBtn); });
-
-    // System capabilities are reachable as checkbox rows.
-    const createDiscussion = screen.getByLabelText('יצירת דיון');
-    await act(async () => { fireEvent.click(createDiscussion); });
+    // round212 — the system matrix: the Members × יצירת דיון cell writes the
+    // system:system pseudo-role.
+    const cell = screen.getByTestId('mx-system:system-createDiscussion');
+    await act(async () => { fireEvent.click(cell); });
 
     await act(async () => { fireEvent.click(screen.getByText('save')); });
 
@@ -164,6 +160,21 @@ describe('PermissionsTab persistence round-trip', () => {
     expect(
       written.permissions.roles['system:system'].capabilities.createDiscussion
     ).toBe(true);
+  });
+
+  it('round212: the no-coordinator switch drops the coordinator column and persists', async () => {
+    renderHarness();
+    await waitFor(() => expect(screen.getByText('save')).toBeTruthy());
+    await act(async () => {}); // flush the always-on seed effect
+
+    // The coordinator column starts present in the discussion matrix.
+    expect(screen.getByTestId('mx-discussions:discussionCoordinatorID-editSummary')).toBeTruthy();
+
+    await act(async () => { fireEvent.click(screen.getByRole('checkbox')); });
+    expect(screen.queryByTestId('mx-discussions:discussionCoordinatorID-editSummary')).toBeNull();
+
+    await act(async () => { fireEvent.click(screen.getByText('save')); });
+    expect(lastWritten().permissions.noCoordinator).toBe(true);
   });
 
   it('seeds the new מרכז דיון (coordinator) role on mount', async () => {

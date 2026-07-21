@@ -315,3 +315,133 @@
   justify-content: flex-start;
   margin-bottom: 10px;
 }
+
+/* ================= round212 — the ✓-matrix redesign ================= */
+/* The whole tab scrolls as ONE column (matrices + app roles). */
+.matrixScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 2px 16px;
+  text-align: right;
+}
+
+.mxSec { margin-bottom: 26px; }
+.mxTitle {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--primary-text-color, #323338);
+  margin-bottom: 2px;
+}
+.mxSubRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.mxSub { font-size: 12px; color: var(--secondary-text-color, #9699a6); }
+.noCoordRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--primary-text-color, #50546e);
+  cursor: pointer;
+}
+
+.mxTable { border-collapse: collapse; width: 100%; }
+.mxTable th, .mxTable td { border: 1px solid var(--ui-border-color, #e6e9f2); font-size: 13px; }
+.mxRoleTh {
+  background: #f6f7fb;
+  color: #50546e;
+  font-weight: 700;
+  padding: 7px 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+.mxActionTh { border: none !important; background: transparent; width: 240px; }
+.mxRoleName { vertical-align: middle; }
+.mxRoleSmall { display: block; font-weight: 500; color: #9699a6; font-size: 10.5px; margin-top: 1px; }
+.mxRoleHidden { opacity: 0.45; }
+.mxEyeBtn {
+  border: none;
+  background: transparent;
+  color: #9699a6;
+  cursor: pointer;
+  padding: 1px 4px;
+  margin-inline-start: 4px;
+  border-radius: 5px;
+  vertical-align: middle;
+}
+.mxEyeBtn:hover { color: var(--primary-color, #0073ea); background: #eef5ff; }
+
+.mxAction {
+  text-align: right;
+  padding: 7px 12px;
+  color: var(--primary-text-color, #323338);
+  background: #fcfcfe;
+}
+.mxTd { text-align: center; padding: 0; }
+.mxCell {
+  width: 100%;
+  min-height: 36px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 15px;
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.mxCell:hover { background: #eef5ff; }
+.mxCell:disabled { cursor: default; opacity: 0.35; }
+.mxCell:disabled:hover { background: transparent; }
+.mxOn { color: #00854d; font-weight: 900; }
+.mxLocked { cursor: default; color: #9fb3c8; }
+.mxLocked:hover { background: transparent; }
+.mxInherit { cursor: default; color: #b8bcc9; font-size: 11px; font-weight: 600; }
+.mxInherit:hover { background: transparent; }
+.mxAlways { font-size: 10px; font-weight: 600; color: #9fb3c8; }
+.mxNote {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--secondary-text-color, #676879);
+  background: #f6f7fb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  line-height: 1.6;
+}
+
+/* ===== app roles (bottom) ===== */
+.appRolesSec {
+  border-top: 2px solid var(--ui-border-color, #e6e9f2);
+  padding-top: 16px;
+  margin-top: 4px;
+}
+.appRolesGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+.appRoleCard {
+  border: 1px solid var(--ui-border-color, #e6e9f2);
+  border-radius: 12px;
+  padding: 14px;
+}
+.appRoleHead {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--primary-text-color, #323338);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.appRoleBadge { font-size: 10px; font-weight: 800; border-radius: 8px; padding: 2px 8px; }
+.badgeOwner { background: #ffe9d9; color: #b25000; }
+.badgeSuper { background: #efe5ff; color: #6c3fc9; }
+.appRoleDesc { display: block; margin-bottom: 10px; line-height: 1.55; }
