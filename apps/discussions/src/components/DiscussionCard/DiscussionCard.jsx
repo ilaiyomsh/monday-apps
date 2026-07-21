@@ -24,7 +24,6 @@ import { PreviousTasksTab } from '@generated/components/PreviousTasksTab';
 import { TopicsTab } from '@generated/components/TopicsTab';
 import { TasksTab } from '@generated/components/TasksTab';
 import { DecisionsTab } from '@generated/components/DecisionsTab';
-import { SummaryTab } from '@generated/components/SummaryTab';
 import lazyRetry from '@generated/utils/lazyRetry.js';
 import { NewTaskModal } from '@generated/components/NewTaskModal';
 import { QuickCreateFab } from '@generated/components/QuickCreateFab';
@@ -45,7 +44,7 @@ const EffectivenessTab = lazy(lazyRetry(() => import('@generated/components/Effe
 
 // Ordered tab keys — index <-> key mapping for @vibe/core's index-based Tabs.
 // 'decisions' is also a valid deep-link tab (?app[tab]=decisions).
-const TAB_KEYS = ['previous', 'topics', 'tasks', 'decisions', 'summary', 'effectiveness'];
+const TAB_KEYS = ['previous', 'topics', 'tasks', 'decisions', 'effectiveness'];
 // round205 — labels + visibility-component key per tab (the tab list is now
 // DYNAMIC: an owner may hide components in Settings → העדפות).
 const TAB_DEFS = [
@@ -53,7 +52,8 @@ const TAB_DEFS = [
   { key: 'topics', label: 'ניהול דיון' },
   { key: 'tasks', label: 'משימות' },
   { key: 'decisions', label: 'החלטות' },
-  { key: 'summary', label: 'סיכום' },
+  // round206 — the summary TAB was retired: the summary lives in the triple
+  // box inside ניהול דיון (approved mockup).
   { key: 'effectiveness', label: 'אפקטיביות' },
 ];
 
@@ -70,6 +70,9 @@ const HEADER_DATE_FMT = { weekday: 'long', day: 'numeric', month: 'long', year: 
 function normalizeTabName(tabName) {
   if (!tabName) return null;
   const value = String(tabName).trim().toLowerCase();
+  // round206 — the summary tab was retired; legacy ?tab=summary deep-links
+  // land on ניהול דיון, where the summary now lives (the triple box).
+  if (value === 'summary') return 'topics';
   return TAB_KEYS.includes(value) ? value : null;
 }
 
@@ -285,11 +288,12 @@ export function DiscussionCard({
   const showTopicsTables = isComponentVisible(prefs, 'topics');
   const showBackground = isComponentVisible(prefs, 'background');
   const showReferences = isComponentVisible(prefs, 'references');
+  const showSummaryPane = isComponentVisible(prefs, 'summary'); // round206 — a triple-box pane now
   const visibleTabs = useMemo(() => TAB_DEFS.filter((t) => (
     t.key === 'topics'
-      ? (showTopicsTables || showBackground || showReferences)
+      ? (showTopicsTables || showBackground || showReferences || showSummaryPane)
       : isComponentVisible(prefs, t.key)
-  )), [prefs, showTopicsTables, showBackground, showReferences]);
+  )), [prefs, showTopicsTables, showBackground, showReferences, showSummaryPane]);
   // Snap back when the active tab's component was hidden by the owner.
   useEffect(() => {
     if (visibleTabs.length && !visibleTabs.some((t) => t.key === activeTab)) {
@@ -892,11 +896,11 @@ export function DiscussionCard({
           <PreviousTasksTab discussion={data} onCarryForward={tasksData.mergeTasks} onCarryForwardUndo={tasksData.removeTasks} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} canTask={canTask} canCreateTask={createTask} canEditDiscussion={editDiscussionFields} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
         </div>
         )}
-        {(showTopicsTables || showBackground || showReferences) && (
+        {(showTopicsTables || showBackground || showReferences || showSummaryPane) && (
         <div className={activeTab === 'topics' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'topics' ? undefined : 'none' }}>
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} onLoadingChange={handleTopicsLoadingChange}
             addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditReferences={canEditSummaryBox} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
-            showTopics={showTopicsTables} showBackground={showBackground} showReferences={showReferences}
+            showTopics={showTopicsTables} showBackground={showBackground} showReferences={showReferences} showSummary={showSummaryPane}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
             decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus} />
         </div>
@@ -911,13 +915,6 @@ export function DiscussionCard({
             <DecisionsTab data={decisionsData} discussionId={discussion.id} onNewDecision={() => openQuickCreate('decision', null, 'topButton')} onInlineCreate={handleInlineCreateDecision} onNotify={onNotify} canDecision={canDecision} canCreateDecision={canCreateDecision} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
           </div>
         )}
-        {activeTab === 'summary' && (
-          <div className={styles.tabPane}>
-            {/* round200 — summary editing narrowed to coordinator/creator/lead
-                (+ board owner), the same fixed rule as the references box. */}
-            <SummaryTab discussion={data} canEdit={canEditSummaryBox} />
-          </div>
-        )}
         {activeTab === 'effectiveness' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
             {/* round135 — lazy chunk (see the lazy() declaration above). */}
@@ -928,11 +925,11 @@ export function DiscussionCard({
         )}
       </div>
 
-      {/* Quick-create FAB — ONLY on the summary + effectiveness tabs (owner
-          decision 2026-07-14; the other tabs have their own inline/toolbar
+      {/* Quick-create FAB — ONLY on the effectiveness tab (round206: the
+          summary tab was retired; the other tabs have their own inline/toolbar
           create affordances). Hidden while either create modal is open, and
           entirely absent when the user can create neither tasks nor decisions. */}
-      {(activeTab === 'summary' || activeTab === 'effectiveness') &&
+      {activeTab === 'effectiveness' &&
         (createTask || canCreateDecision) && !newTaskOpen && !quickCreate && (
         <QuickCreateFab
           onClick={() => openQuickCreate('task', null, 'fab')}

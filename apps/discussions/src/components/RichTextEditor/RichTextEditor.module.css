@@ -194,3 +194,54 @@
   height: 0;
   float: right;
 }
+
+/* round206 — flush variant (the triple box): the editor loses its own frame;
+   the toolbar is a full-width strip glued to the container's top. */
+.rootFlush {
+  border: none;
+  border-radius: 0;
+}
+.rootFlush .toolbar {
+  border-radius: 0;
+}
+.toolbarFlush {
+  background: var(--primary-background-color, #fff);
+}
+/* Host-provided toolbar actions (📎 attach) pinned to the far end. The toolbar
+   is direction:ltr, so margin-left:auto pushes to the physical RIGHT edge —
+   which is the RTL reading start; use the LEFT edge instead (mockup): auto on
+   the right in LTR flow = physical left … keep it simple: push to the end. */
+.toolbarExtra {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* round206 — selection bubble: dark pill with core formatting actions. */
+.bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: #2b2c33;
+  border-radius: 8px;
+  padding: 4px 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  z-index: 3000;
+}
+.bubble .btn {
+  color: #ffffff;
+}
+.bubble .btn:hover {
+  background: #45464e;
+}
+.bubble .btnActive {
+  background: #0073ea;
+  color: #ffffff;
+}
+.bubbleSep {
+  width: 1px;
+  height: 16px;
+  background: #55565e;
+  margin: 0 3px;
+}

@@ -567,6 +567,10 @@ export const COLUMN_SCHEMA = {
     // (uploaded via monday's native dialog; unmapped → the box hides the
     // "הוסף קובץ" button and offers links only).
     backgroundFilesID: { type: 'file', title: 'קבצי רקע' },
+    // round206 — optional files columns for the התייחסויות/סיכום panes of the
+    // triple box (📎 in the formatting toolbar; unmapped → 📎 hidden).
+    referencesFilesID: { type: 'file', title: 'קבצי התייחסויות' },
+    summaryFilesID: { type: 'file', title: 'קבצי סיכום' },
     tasksBoardLinkID: { type: 'board_relation', title: 'לוח משימות' },
     topicsBoardLinkID: { type: 'board_relation', title: 'לוח נושאים לדיון' },
     // סוג דיון — a DROPDOWN column. Its value is the label TEXT (not a numeric
