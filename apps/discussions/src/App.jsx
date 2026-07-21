@@ -673,6 +673,13 @@ export default function App() {
     notify('הדיון נמחק', 'info', 6000, undo ? { label: 'בטל', onClick: undo } : null);
   };
 
+  // round196 — a freshly CREATED discussion opens on the נושאים tab (owner
+  // request). The card deliberately keeps its active tab across selections, so
+  // without a directive a new discussion landed on whatever tab was last open
+  // (e.g. אפקטיביות). Reuses the deep-link initialTab pipe; the directive wins
+  // over launchParams once set (a create is more recent than the boot deep-link).
+  const [createdTabTarget, setCreatedTabTarget] = useState(null); // { id, tab }
+
   // Shared by create + edit (the modal passes the updated discussion when editing).
   const handleSaved = (updated, meta = {}) => {
     setShowCreate(false);
@@ -690,8 +697,9 @@ export default function App() {
       }
       notify('הדיון עודכן בהצלחה');
     } else {
-      // Create / duplicate: open the new discussion immediately.
+      // Create / duplicate: open the new discussion immediately — on נושאים.
       if (updated?.id) {
+        setCreatedTabTarget({ id: String(updated.id), tab: 'topics' });
         setSelectedDiscussion(updated);
         setShowList(false);
       }
@@ -973,8 +981,8 @@ export default function App() {
             onShowLoading={notifyLoading}
             onDismissToast={dismissNotice}
             onUpdated={handleSaved}
-            initialTab={launchParams.tab}
-            initialTabDiscussionId={launchParams.discussionId}
+            initialTab={createdTabTarget?.tab ?? launchParams.tab}
+            initialTabDiscussionId={createdTabTarget?.id ?? launchParams.discussionId}
             onInitialTabReady={handleDeepLinkReady}
             canManageSettings={canManageSettings}
           />

@@ -249,7 +249,21 @@
   direction: ltr;
 }
 
-/* empty state */
+/* round196 — no-tasks state: the chart card renders EMPTY (no toolbar, no plot)
+   with a single centered note. Same card chrome, so the desktop row still
+   stretches it to the KPI column height; the min-height covers mobile/stacked. */
+.chartCardEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+}
+.chartEmptyMsg {
+  color: var(--secondary-text-color, #676879);
+  font-size: 15px;
+}
+
+/* empty state (unused since round196 — kept only if re-referenced) */
 .empty {
   text-align: center;
   padding: var(--spacing-xxl, 48px) 0;

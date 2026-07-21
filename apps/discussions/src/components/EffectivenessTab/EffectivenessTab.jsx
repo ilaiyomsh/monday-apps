@@ -251,7 +251,14 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
         </Box>
       </div>
 
-      {/* Column chart */}
+      {/* Column chart. round196 — when there are no tasks the CARD still renders,
+          completely empty except a "טרם נוצרו משימות" note (owner request), instead
+          of the widgets floating over a bare background. */}
+      {!hasChart && (
+        <Box className={`${styles.chartCard} ${styles.chartCardEmpty}`} rounded="medium" shadow="xs" border>
+          <span className={styles.chartEmptyMsg}>טרם נוצרו משימות</span>
+        </Box>
+      )}
       {hasChart && (
         <Box className={styles.chartCard} rounded="medium" shadow="xs" border>
           <div className={styles.chartBody}>
@@ -365,11 +372,6 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
         </div>
       )}
 
-      {items.length === 0 && (
-        <div className={styles.empty}>
-          אין מספיק נתונים להצגת אפקטיביות
-        </div>
-      )}
     </div>
   );
 }
