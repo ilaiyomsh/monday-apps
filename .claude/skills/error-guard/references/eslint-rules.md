@@ -11,6 +11,17 @@ This kit is proven in the Tracker reference app (`Axis/tracker/package.json`
 `eslintConfig`). It grows that 3-rule set to 4 by adding
 `promise/catch-or-return`, and adds one TypeScript-only rule.
 
+> **Scripts vs. this per-app kit.** This document specifies the PERMANENT
+> per-app anchor (layer 3 — installed into each app's own ESLint config, blocking
+> in CI). The hook + ship-gate scripts (`scripts/check.sh`/`audit.sh`) are layer
+> 1/2: since 2026-07-21 they **generate an ESLint 9 flat config on the fly** from
+> the same rule intents (via `scripts/lib-eslint-flat.sh`) and resolve their
+> plugins from the **repo root** `devDependencies` — so they enforce the same
+> rules on any app regardless of that app's local install. `check.sh` runs the
+> syntax rules only (fast, no type info); `audit.sh` adds the type-aware
+> `no-floating-promises` in full-tree mode. See `references/known-issues.md`
+> (2026-07-21) for the port record.
+
 ---
 
 ## The 4 rules
