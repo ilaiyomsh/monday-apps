@@ -424,14 +424,6 @@ export default function ExportPreview({ template, assets }) {
             )}
           </div>
         );
-      case 'freeText':
-        return (
-          <div key="freeText" className={styles.docSection}>
-            {section.title && <div className={styles.h2}>{section.title}</div>}
-            {section.body && <p className={styles.para}>{section.body}</p>}
-            {!section.title && !section.body && <p className={styles.paraMuted}>פתיחה (ריק)</p>}
-          </div>
-        );
       default:
         return null;
     }

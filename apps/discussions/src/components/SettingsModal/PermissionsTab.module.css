@@ -308,3 +308,10 @@
     overflow-y: visible;
   }
 }
+
+/* round203 — permissions-summary download row, pinned above the role cards. */
+.summaryRow {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 10px;
+}

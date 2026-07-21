@@ -738,17 +738,8 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     return out;
   };
 
-  // Free-text block — a heading (its title) + one paragraph per line of body.
-  // Emits nothing when both title and body are empty.
-  const buildFreeText = (section) => {
-    const title = (section?.title || '').trim();
-    const body = section?.body || '';
-    if (!title && !body) return [];
-    const out = [];
-    if (title) out.push(heading(title, HeadingLevel.HEADING_2));
-    String(body).split(/\r?\n/).forEach((line) => out.push(para(line)));
-    return out;
-  };
+  // round203 — the 'freeText' ("פתיחה") section was retired (owner request);
+  // seedExportTemplate drops it from stored templates, so no case renders it.
 
   // ---- assemble (data-driven). Title is always first; the rest is driven by the
   // template's ordered `sections` list (skip disabled), so reordering/toggling in
@@ -766,7 +757,6 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
       case 'references': children.push(...buildReferences(section)); break;
       case 'tasks': children.push(...buildTasks(section)); break;
       case 'decisions': children.push(...buildDecisions(section)); break;
-      case 'freeText': children.push(...buildFreeText(section)); break;
       default: break;
     }
   }

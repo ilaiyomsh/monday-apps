@@ -90,10 +90,7 @@ const SECTION_NAMES = {
   tasks: 'משימות',
   // round192 — decisions section (owner request).
   decisions: 'החלטות',
-  // round191 — renamed from 'מידע כללי' to 'פתיחה' (owner request). Name comes
-  // from this map (not the stored template), so the rename applies immediately to
-  // every instance, including ones with a saved template.
-  freeText: 'פתיחה',
+  // round203 — the "פתיחה" (freeText) section was retired (owner request).
 };
 
 const POS_OPTIONS = [
@@ -120,7 +117,7 @@ function stripDataPrefix(dataUri) {
 function SortableSectionRow({ section, onToggle, onExpandToggle, expanded, children }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.key });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
-  const expandable = section.key === 'meta' || section.key === 'freeText';
+  const expandable = section.key === 'meta';
   return (
     <div ref={setNodeRef} style={style} className={styles.sectionWrap}>
       <div className={styles.sectionRow}>
@@ -226,7 +223,6 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
   };
 
   const metaSection = sections.find((s) => s.key === 'meta');
-  const freeTextSection = sections.find((s) => s.key === 'freeText');
 
   const renderBand = (band) => {
     const cfg = template?.[band] || {};
@@ -347,12 +343,6 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
                       <TextField value={f.label || ''} onChange={(val) => patchMetaField(f.key, { label: val })} size="small" />
                     </div>
                   ))}
-                </div>
-              )}
-              {section.key === 'freeText' && freeTextSection && (
-                <div className={styles.freeText}>
-                  <TextField placeholder="כותרת" value={freeTextSection.title || ''} onChange={(val) => patchSection('freeText', { title: val })} size="small" />
-                  <TextArea placeholder="תוכן" value={freeTextSection.body || ''} onChange={(e) => patchSection('freeText', { body: e.target.value })} rows={3} />
                 </div>
               )}
             </SortableSectionRow>

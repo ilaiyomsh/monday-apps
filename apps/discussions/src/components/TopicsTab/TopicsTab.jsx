@@ -32,6 +32,7 @@ import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { TOPICS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
 import { ReferencesPanel } from './ReferencesPanel.jsx';
+import { BackgroundPanel } from './BackgroundPanel.jsx';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
 import { getPointItemIds } from '@generated/utils/pointItems.js';
@@ -1051,7 +1052,14 @@ export function TopicsTab({
       )}
       </div>
 
-      <ReferencesPanel discussionId={discussion?.id} canEdit={canEditReferences} />
+      {/* round204 (approved mockup) — the side column stays on the physical
+          RIGHT and stacks TWO collapsible update-boxes: רקע on top,
+          התייחסויות below it; both closed by default. Same fixed edit rule
+          (coordinator/creator/lead + owner) gates both. */}
+      <div className={styles.refPanel}>
+        <BackgroundPanel discussionId={discussion?.id} canEdit={canEditReferences} />
+        <ReferencesPanel discussionId={discussion?.id} canEdit={canEditReferences} />
+      </div>
       </div>
 
       <PointItemsPopup

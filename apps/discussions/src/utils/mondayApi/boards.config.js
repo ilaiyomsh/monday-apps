@@ -152,12 +152,9 @@ export const DEFAULT_EXPORT_TEMPLATE = {
   // Selected export font key (see EXPORT_FONTS). Default = brand (today's output).
   font: DEFAULT_EXPORT_FONT,
   // Body sections in render order. `enabled:false` drops a section entirely.
+  // round203 — the "פתיחה" (freeText) section was RETIRED (owner request);
+  // seedExportTemplate drops it from previously-stored templates.
   sections: [
-    // round191 — "פתיחה" (was 'מידע כללי') is now FIRST and enabled by default
-    // (owner request): an intro block at the head of the document. Empty title+body
-    // still emit nothing (buildFreeText returns []), so a fresh export with no
-    // opening text is byte-identical to before — only its position/default changed.
-    { key: 'freeText', enabled: true, title: '', body: '' },
     {
       key: 'meta',
       enabled: true,
@@ -536,6 +533,10 @@ export const COLUMN_SCHEMA = {
     participantsID: { type: 'people', title: 'משתתפים' },
     // File column the exported summary .docx is uploaded into (add_file_to_column).
     summaryFileID: { type: 'file', title: 'קובץ סיכום (DOCS)' },
+    // round204 — optional files column for the רקע box's preparation files
+    // (uploaded via monday's native dialog; unmapped → the box hides the
+    // "הוסף קובץ" button and offers links only).
+    backgroundFilesID: { type: 'file', title: 'קבצי רקע' },
     tasksBoardLinkID: { type: 'board_relation', title: 'לוח משימות' },
     topicsBoardLinkID: { type: 'board_relation', title: 'לוח נושאים לדיון' },
     // סוג דיון — a DROPDOWN column. Its value is the label TEXT (not a numeric

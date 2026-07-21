@@ -38,7 +38,7 @@ import styles from './SettingsModal.module.css';
 // keys added to the schema after the instance was last saved (so new sections/
 // fields appear). A shallow merge over the default is enough for the top-level
 // keys; `sections` is taken verbatim when present (the user owns its order).
-function seedExportTemplate(stored) {
+export function seedExportTemplate(stored) {
   const base = { ...DEFAULT_EXPORT_TEMPLATE, ...(stored || {}) };
   if (!Array.isArray(base.sections) || !base.sections.length) base.sections = DEFAULT_EXPORT_TEMPLATE.sections;
   // Clone so we never mutate a shared constant / the stored object, then back-fill
@@ -46,6 +46,10 @@ function seedExportTemplate(stored) {
   // 'decisions'). Each missing key is inserted near its DEFAULT position; the order
   // of keys the user already has is preserved (they own that order).
   base.sections = base.sections.map((s) => ({ ...s }));
+  // round203 — drop RETIRED section keys (e.g. 'freeText' — "פתיחה") that an
+  // older instance still carries; only keys in the current schema survive.
+  const defaultKeys = new Set(DEFAULT_EXPORT_TEMPLATE.sections.map((s) => s.key));
+  base.sections = base.sections.filter((s) => defaultKeys.has(s?.key));
   const present = new Set(base.sections.map((s) => s?.key));
   DEFAULT_EXPORT_TEMPLATE.sections.forEach((def, idx) => {
     if (!present.has(def.key)) {
@@ -383,6 +387,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     'discussionDateID',
     'discussionTypeID',
     'summaryFileID',
+    'backgroundFilesID', // round204 — קבצי רקע (files column for the רקע box)
     'previousDiscussionID',
     'tasksBoardLinkID',
     'topicsBoardLinkID',

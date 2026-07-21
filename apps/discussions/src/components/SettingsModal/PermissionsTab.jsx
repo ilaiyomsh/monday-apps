@@ -1,6 +1,10 @@
 import React, { useMemo, useState, useEffect, useSyncExternalStore } from 'react';
-import { Checkbox, Text } from '@vibe/core';
-import { Comment, Note, Status, Completed, Settings, DropdownChevronDown } from '@vibe/icons';
+import { Button, Checkbox, Text } from '@vibe/core';
+import { Comment, Note, Status, Completed, Settings, DropdownChevronDown, Download } from '@vibe/icons';
+import { buildPermissionsSummaryModel, downloadPermissionsSummary } from '../../utils/permissionsSummaryDoc.js';
+import { getBoardId } from '../../utils/mondayApi/board-config-store.js';
+import { getBoardPeople } from '../../utils/mondayApi/subscribers.js';
+import logger from '../../utils/logger.js';
 import {
   CAPABILITIES,
   DEFAULT_PERMISSION_SEED,
@@ -273,6 +277,30 @@ export default function PermissionsTab({ permissions, setPermissions, columns, s
 
   const cards = selectedRole ? TIER_CARDS[selectedRole.tier.id] || [] : [];
 
+  // round203 — "הורדת סיכום הרשאות" (owner request): a Word document with every
+  // role's effective capabilities, the fixed rules and the board membership.
+  // Board people are fetched on demand; a fetch failure still produces the doc
+  // (membership lines show "—") — the failure is logged, never swallowed.
+  const [downloading, setDownloading] = useState(false);
+  const handleDownloadSummary = async () => {
+    setDownloading(true);
+    try {
+      let boardPeople = null;
+      try {
+        const boardId = getBoardId('discussions');
+        if (boardId) boardPeople = await getBoardPeople(boardId);
+      } catch (err) {
+        if (!err?.__loggedId) logger.warn('PermissionsTab', 'טעינת חברי הלוח לסיכום ההרשאות נכשלה — הסיכום יופק בלעדיהם', err);
+      }
+      const model = buildPermissionsSummaryModel({ permissions, roleGroups });
+      await downloadPermissionsSummary(model, boardPeople);
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('PermissionsTab', 'הפקת סיכום ההרשאות נכשלה', err);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div className={styles.root} dir="ltr">
       <div className={styles.layout}>
@@ -335,6 +363,19 @@ export default function PermissionsTab({ permissions, setPermissions, columns, s
 
         {/* MAIN — selected role title + description + category cards */}
         <section className={styles.main}>
+          {/* round203 — permissions-summary download, pinned above the cards. */}
+          <div className={styles.summaryRow} dir="rtl">
+            <Button
+              kind="secondary"
+              size="small"
+              leftIcon={Download}
+              onClick={handleDownloadSummary}
+              loading={downloading}
+              disabled={downloading}
+            >
+              הורדת סיכום הרשאות (Word)
+            </Button>
+          </div>
           {selectedRole && (
             <>
               <div className={styles.roleHeader}>
