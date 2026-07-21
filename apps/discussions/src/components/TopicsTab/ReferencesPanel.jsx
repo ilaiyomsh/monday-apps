@@ -99,22 +99,6 @@ export function ReferencesPanel({ discussionId, canEdit = false }) {
           row's top; see .refTitleRow margins). */}
       <div className={styles.refTitleRow}>
         <span className={styles.refTitle}>התייחסויות</span>
-        {!showLoader && canEdit && (
-          <span className={styles.refStatus}>
-            {status === 'saved' && (<span className={styles.refSaved}><Check size={13} /> נשמר</span>)}
-            {status === 'dirty' && <span>שינויים לא נשמרו</span>}
-            {status === 'saving' && (<span><Loader2 size={13} className={styles.refSpin} /> שומר…</span>)}
-            {status === 'error' && (
-              saveErrorCode === 'USER_UNAUTHORIZED' ? (
-                <span className={styles.refError}><AlertCircle size={13} /> אינך מורשה לערוך</span>
-              ) : (
-                <button type="button" className={styles.refErrorBtn} onClick={() => runSave()}>
-                  <AlertCircle size={13} /> השמירה נכשלה — נסה שוב
-                </button>
-              )
-            )}
-          </span>
-        )}
       </div>
 
       <div className={styles.refBox}>
@@ -137,9 +121,32 @@ export function ReferencesPanel({ discussionId, canEdit = false }) {
         )}
       </div>
 
-      {!showLoader && when && (
-        <div className={styles.refMeta}>
-          {author ? `נערך לאחרונה ע״י ${author} · ${when}` : `נערך לאחרונה · ${when}`}
+      {/* round202 — footer row under the box: the last-edited meta on the RIGHT
+          (rtl start) and the save-status chip at the box's BOTTOM-LEFT (owner
+          request — moved down from the title row). */}
+      {!showLoader && (when || canEdit) && (
+        <div className={styles.refFooterRow}>
+          {when && (
+            <span className={styles.refMeta}>
+              {author ? `נערך לאחרונה ע״י ${author} · ${when}` : `נערך לאחרונה · ${when}`}
+            </span>
+          )}
+          {canEdit && (
+            <span className={styles.refStatus}>
+              {status === 'saved' && (<span className={styles.refSaved}><Check size={13} /> נשמר</span>)}
+              {status === 'dirty' && <span>שינויים לא נשמרו</span>}
+              {status === 'saving' && (<span><Loader2 size={13} className={styles.refSpin} /> שומר…</span>)}
+              {status === 'error' && (
+                saveErrorCode === 'USER_UNAUTHORIZED' ? (
+                  <span className={styles.refError}><AlertCircle size={13} /> אינך מורשה לערוך</span>
+                ) : (
+                  <button type="button" className={styles.refErrorBtn} onClick={() => runSave()}>
+                    <AlertCircle size={13} /> השמירה נכשלה — נסה שוב
+                  </button>
+                )
+              )}
+            </span>
+          )}
         </div>
       )}
     </div>
