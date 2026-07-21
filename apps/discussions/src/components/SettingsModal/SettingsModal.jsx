@@ -630,7 +630,11 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // round178 — `contained` scopes the overlay to the right discussion-card pane
   // (absolute, not fixed) so the settings box opens CENTERED within that pane and
   // dims only its tabs (owner request). Full-screen otherwise (e.g. the boot gate).
-  const overlayClass = `${styles.overlay} ${contained ? styles.overlayContained : ''}`;
+  // round197 — the Export-template tab BREAKS OUT of containment (owner request):
+  // its box fills the whole app iframe, so the contained (card-pane-scoped)
+  // overlay is dropped while that tab is active and the viewport-fixed overlay
+  // takes over; every other tab keeps the contained behavior.
+  const overlayClass = `${styles.overlay} ${contained && activeTab !== 3 ? styles.overlayContained : ''}`;
 
   // round147 — templates-only mode: a super member ("חבר-על") opens the gear to
   // manage templates and NOTHING else — no mapping, no preferences, no

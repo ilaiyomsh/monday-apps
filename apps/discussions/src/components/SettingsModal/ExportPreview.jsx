@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   EXPORT_FONTS,
   DEFAULT_EXPORT_FONT,
@@ -87,6 +88,105 @@ function canRunLivePreview() {
   return typeof Blob !== 'undefined' && typeof Blob.prototype.arrayBuffer === 'function';
 }
 
+// round197 — height-based pagination, like Word. docx-preview breaks pages ONLY
+// at explicit page-break marks; a generated doc has none, so everything landed on
+// ONE clipped/overlapping "page" and only the first page was visible. This splits
+// the rendered section into true fixed-height A4 pages: whole blocks (paragraphs /
+// tables) move to the next page when they cross the content budget — a heading
+// glued above a moved block moves with it (mirrors the doc's keepNext, so the
+// tasks/decisions table drops to the next page exactly like Word pushes it) — and
+// each page clones the section shell + header + footer. Must run while the stage
+// is ATTACHED (hidden) so offsets/heights are real.
+function paginateRenderedDocx(stage) {
+  const wrapper = stage.querySelector('.docx-wrapper') || stage;
+  const src = wrapper.querySelector('section.docx');
+  const article = src?.querySelector(':scope > article');
+  if (!src || !article) return;
+  const cs = getComputedStyle(src);
+  const pageH = parseFloat(cs.minHeight);
+  if (!Number.isFinite(pageH) || pageH <= 0) return;
+
+  // Content budget = page height minus everything that isn't body flow: the
+  // article's real offset from the page top (top margin + header flow, measured,
+  // so negative header margins are accounted for), the footer's flow height
+  // (offsetHeight + its calc margins), and the bottom page margin.
+  const srcTop = src.getBoundingClientRect().top;
+  const articleTopRel = article.getBoundingClientRect().top - srcTop;
+  const header = src.querySelector(':scope > header');
+  const footer = src.querySelector(':scope > footer');
+  let footerFlow = 0;
+  if (footer) {
+    const fcs = getComputedStyle(footer);
+    footerFlow = footer.offsetHeight + (parseFloat(fcs.marginTop) || 0) + (parseFloat(fcs.marginBottom) || 0);
+  }
+  const padB = parseFloat(cs.paddingBottom) || 0;
+  const budget = pageH - articleTopRel - footerFlow - padB;
+  if (!Number.isFinite(budget) || budget <= 40) return;
+
+  const children = Array.from(article.children);
+  if (!children.length) {
+    src.style.height = cs.minHeight; // pin the exact page height anyway
+    return;
+  }
+  const articleRectTop = article.getBoundingClientRect().top;
+  const tops = children.map((el) => el.getBoundingClientRect().top - articleRectTop);
+  const bottoms = children.map((el, i) => tops[i] + el.offsetHeight);
+  // docx-preview classes paragraph styles as docx_heading1..3 — the keepNext glue.
+  const isHeading = (el) => /heading/i.test(String(el.className || ''));
+
+  const breaks = [];
+  let pageStart = 0;
+  for (let i = 0; i < children.length; i += 1) {
+    if (i === pageStart) continue; // a page's first block always stays on it
+    if (bottoms[i] - tops[pageStart] > budget) {
+      let b = i;
+      while (b > pageStart + 1 && isHeading(children[b - 1])) b -= 1;
+      breaks.push(b);
+      pageStart = b;
+    }
+  }
+  // Pin EXACT page height (not min) so the footer sits at the physical bottom and
+  // overflow can never overlap it — also on a single-page doc.
+  if (!breaks.length) {
+    src.style.height = cs.minHeight;
+    return;
+  }
+
+  const ranges = [0, ...breaks, children.length];
+  const pages = [];
+  for (let p = 0; p < ranges.length - 1; p += 1) {
+    const shell = src.cloneNode(false);
+    shell.style.height = cs.minHeight;
+    if (header) shell.appendChild(header.cloneNode(true));
+    const art = article.cloneNode(false);
+    shell.appendChild(art);
+    if (footer) shell.appendChild(footer.cloneNode(true));
+    for (let i = ranges[p]; i < ranges[p + 1]; i += 1) art.appendChild(children[i]);
+    pages.push(shell);
+  }
+  src.remove();
+  pages.forEach((pg) => wrapper.appendChild(pg));
+}
+
+// docx-preview parses but never EVALUATES page-number fields (PAGE/NUMPAGES),
+// leaving "עמוד  מתוך " blanks. After pagination the real page count is known —
+// stamp k/N per page (preview-only; the exported file keeps real Word fields).
+function patchPageNumbers(stage) {
+  const sections = stage.querySelectorAll('section.docx');
+  const total = sections.length;
+  sections.forEach((sec, idx) => {
+    sec.querySelectorAll('p').forEach((p) => {
+      const t = p.textContent || '';
+      if (t.includes('עמוד') && t.includes('מתוך') && !/\d/.test(t)) {
+        p.querySelectorAll('span').forEach((s) => {
+          if (s.textContent === 'עמוד ') s.textContent = `עמוד ${idx + 1}`;
+          else if (s.textContent === ' מתוך ') s.textContent = ` מתוך ${total}`;
+        });
+      }
+    });
+  });
+}
+
 /**
  * Export-template preview (round195 rewrite).
  *
@@ -109,6 +209,9 @@ export default function ExportPreview({ template, assets }) {
 
   const [live, setLive] = useState(false);
   const [building, setBuilding] = useState(canRunLivePreview());
+  // round197 — page navigation state for the paginated live preview.
+  const [pageCount, setPageCount] = useState(1);
+  const [curPage, setCurPage] = useState(1);
   const boxRef = useRef(null);   // scrollable frame (measures available width)
   const hostRef = useRef(null);  // docx-preview render target (zoom applied here)
   const seqRef = useRef(0);      // render token — only the latest build applies
@@ -144,6 +247,31 @@ export default function ExportPreview({ template, assets }) {
   useEffect(() => {
     if (live) fitZoom();
   }, [live]);
+
+  // round197 — page/scroll controls (owner request): ▲/▼ flip between the real
+  // rendered pages, ◀/▶ nudge horizontal scroll, and manual scrolling keeps the
+  // "עמוד x / y" indicator in sync via the frame's onScroll.
+  const pageSections = () => Array.from(hostRef.current?.querySelectorAll('section.docx') || []);
+  const goPage = (delta) => {
+    const secs = pageSections();
+    if (!secs.length) return;
+    const next = Math.min(secs.length, Math.max(1, curPage + delta));
+    secs[next - 1].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setCurPage(next);
+  };
+  const hScroll = (dir) => {
+    boxRef.current?.scrollBy({ left: dir * 160, behavior: 'smooth' });
+  };
+  const onBoxScroll = () => {
+    const box = boxRef.current;
+    if (!box) return;
+    const boxTop = box.getBoundingClientRect().top;
+    let cur = 1;
+    pageSections().forEach((s, i) => {
+      if (s.getBoundingClientRect().top <= boxTop + 24) cur = i + 1;
+    });
+    setCurPage(cur);
+  };
 
   // Content signature of the last SUCCESSFUL live build — skips rebuilds when
   // only object identity changed (the parent recreates `template` per patch).
@@ -185,35 +313,43 @@ export default function ExportPreview({ template, assets }) {
         }
         if (cancelled || seq !== seqRef.current || !hostRef.current) return;
 
-        // Render offscreen, then swap atomically — no blank flash on rebuilds.
+        // round197 — render into a HIDDEN ATTACHED stage: the height-based
+        // pagination measures real offsets, which a detached node can't give
+        // (visibility:hidden + fixed offscreen keeps it laid out but invisible);
+        // still swapped atomically at the end — no blank flash on rebuilds.
         // experimental:false (review finding): its deferred tab-stop measuring
         // pass mixes zoom-scaled and unzoomed geometry under our CSS zoom and
         // DISTORTS tab-aligned headers from uploaded templates; the generated
         // doc emits no tab stops, so the pass buys nothing here.
+        if (typeof document.fonts?.ready?.then === 'function') {
+          await document.fonts.ready; // measure with the real webfonts loaded
+          if (cancelled || seq !== seqRef.current) return;
+        }
         const stage = document.createElement('div');
-        await docxPreview.renderAsync(new Blob([bytes]), stage, stage, {
-          inWrapper: true,
-          breakPages: true,
-          experimental: false,
-          renderHeaders: true,
-          renderFooters: true,
-          useBase64URL: true,
-        });
-        // docx-preview parses but never EVALUATES page-number fields, leaving
-        // "עמוד  מתוך " blanks — patch sample values in (cosmetic, preview-only;
-        // the exported file keeps the real Word fields).
-        stage.querySelectorAll('p').forEach((p) => {
-          const t = p.textContent || '';
-          if (t.includes('עמוד') && t.includes('מתוך') && !/\d/.test(t)) {
-            p.querySelectorAll('span').forEach((s) => {
-              if (s.textContent === 'עמוד ') s.textContent = 'עמוד 1';
-              else if (s.textContent === ' מתוך ') s.textContent = ' מתוך 1';
-            });
-          }
-        });
+        stage.style.cssText = 'position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none;';
+        stage.dir = 'rtl';
+        document.body.appendChild(stage);
+        let pageTotal = 1;
+        try {
+          await docxPreview.renderAsync(new Blob([bytes]), stage, stage, {
+            inWrapper: true,
+            breakPages: true,
+            experimental: false,
+            renderHeaders: true,
+            renderFooters: true,
+            useBase64URL: true,
+          });
+          paginateRenderedDocx(stage);   // true Word-like page breaks by height
+          patchPageNumbers(stage);       // stamp עמוד k מתוך N per page
+          pageTotal = stage.querySelectorAll('section.docx').length || 1;
+        } finally {
+          stage.remove();
+        }
         if (cancelled || seq !== seqRef.current || !hostRef.current) return;
         hostRef.current.replaceChildren(...stage.childNodes);
         lastSigRef.current = sig;
+        setPageCount(pageTotal);
+        setCurPage(1);
         setLive(true);
         setBuilding(false);
         fitZoom();
@@ -356,10 +492,28 @@ export default function ExportPreview({ template, assets }) {
         <span className={styles.pageLabel}>תצוגה מקדימה</span>
         {live && !building && <span className={styles.liveBadge}>הקובץ בפועל</span>}
         {building && <span className={styles.buildingBadge}>בונה תצוגה…</span>}
+        {live && (
+          <span className={styles.previewControls}>
+            <button type="button" className={styles.ctrlBtn} onClick={() => goPage(-1)} disabled={curPage <= 1} aria-label="עמוד קודם" title="עמוד קודם">
+              <ChevronUp size={14} />
+            </button>
+            <span className={styles.pageIndicator}>{`עמוד ${curPage} / ${pageCount}`}</span>
+            <button type="button" className={styles.ctrlBtn} onClick={() => goPage(1)} disabled={curPage >= pageCount} aria-label="עמוד הבא" title="עמוד הבא">
+              <ChevronDown size={14} />
+            </button>
+            <span className={styles.ctrlDivider} />
+            <button type="button" className={styles.ctrlBtn} onClick={() => hScroll(1)} aria-label="גלילה ימינה" title="גלילה ימינה">
+              <ChevronRight size={14} />
+            </button>
+            <button type="button" className={styles.ctrlBtn} onClick={() => hScroll(-1)} aria-label="גלילה שמאלה" title="גלילה שמאלה">
+              <ChevronLeft size={14} />
+            </button>
+          </span>
+        )}
       </div>
 
       {/* Live Word rendering — kept mounted so rebuilds swap in place. */}
-      <div ref={boxRef} className={styles.liveBox} style={live ? undefined : { display: 'none' }}>
+      <div ref={boxRef} className={styles.liveBox} style={live ? undefined : { display: 'none' }} onScroll={onBoxScroll}>
         <div ref={hostRef} className={styles.liveHost} dir="rtl" />
       </div>
 

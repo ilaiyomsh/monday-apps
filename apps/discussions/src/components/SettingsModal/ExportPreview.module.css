@@ -40,16 +40,57 @@
    scrolling vertically; the pages themselves come from docx-preview and are
    zoom-scaled to the frame width (see fitZoom in ExportPreview.jsx). */
 .liveBox {
-  /* Fits INSIDE the modalExport box (min(900px,95vh) minus ~240px of modal
-     chrome) — a plain 76vh overflowed it and produced a second scrollbar on
-     the modal body (review finding). */
-  max-height: calc(min(900px, 95vh) - 240px);
+  /* round197 — the export tab's box is now FULLSCREEN (100vh-32), so the frame
+     gets everything minus the modal chrome (~230px: header+tabs+footer+label). */
+  max-height: calc(100vh - 262px);
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   border: 1px solid var(--ui-border-color, #d0d4e4);
   border-radius: 4px;
   background: #eceef4;
   padding: 12px;
+}
+
+/* round197 — preview controls: page up/down + "עמוד x / y" + horizontal nudges,
+   pushed to the far LEFT of the RTL label row so they hug the frame's corner. */
+.previewControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+.ctrlBtn {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 4px;
+  background: var(--primary-background-color, #fff);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.ctrlBtn:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--primary-text-color, #323338);
+}
+.ctrlBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.ctrlDivider {
+  width: 1px;
+  height: 14px;
+  background: var(--ui-border-color, #d0d4e4);
+  margin: 0 2px;
+}
+.pageIndicator {
+  font-size: 11px;
+  color: var(--secondary-text-color, #676879);
+  min-width: 58px;
+  text-align: center;
 }
 /* docx-preview injects its own global classes (.docx-wrapper / section.docx) —
    strip its dark backdrop and let our desk styling own the chrome. */

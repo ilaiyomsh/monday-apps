@@ -30,7 +30,9 @@
      zoom out). Give the controls column its OWN vertical scroll region so it scrolls
      independently; the bar is the app-wide thin arrow-less grey one (index.css global
      ::-webkit-scrollbar), inherited automatically by any overflow:auto element. */
-  max-height: 68vh;
+  /* round197 — the export tab's box is fullscreen now; give the controls column
+     the same working height as the preview frame. */
+  max-height: calc(100vh - 240px);
   overflow-y: auto;
   overflow-x: hidden;
   padding-inline-end: 6px;
