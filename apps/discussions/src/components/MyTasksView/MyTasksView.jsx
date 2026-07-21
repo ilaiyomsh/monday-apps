@@ -142,6 +142,19 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
   }, [saveView, hiddenColumns, onNotify]);
 
+  // round213 — MOBILE (owner spec): Filter/Sort/Group are replaced by ONE quick
+  // "סידור לפי" toggle — status (default) ⇄ priority — that simply GROUPS the
+  // list top-down by that column. The effect pins the group state to the toggle
+  // (and clears any saved-view sort/filter, which have no mobile controls).
+  const [mobileGroupCol, setMobileGroupCol] = useState('status');
+  useEffect(() => {
+    if (!isMobile) return;
+    setGroup({ col: mobileGroupCol, order: firstGroupOrder(mobileGroupCol) });
+    setSort({ ...DEFAULT_SORT });
+    clearFilter();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, mobileGroupCol]);
+
   const [collapsed, setCollapsed] = useState({});
   const [discDateMap, setDiscDateMap] = useState({});
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -661,27 +674,43 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
           </button>
         )}
 
-        <BuilderControl
-          icon={Filter} label="Filter" title="Filter by" mobile={isMobile} width={isMobile ? undefined : 620}
-          applied={fc > 0} badge={fc}
-          onClear={fc > 0 ? clearFilter : null}
-          onSave={canSaveView ? saveFilterView : null}
-          renderBody={renderFilterBody}
-        />
-        <BuilderControl
-          icon={Sort} label="Sort" title="Sort by" mobile={isMobile} width={isMobile ? undefined : 360}
-          applied={sort.active} badge={1}
-          onClear={sort.active ? clearSort : null}
-          onSave={canSaveView ? saveSortView : null}
-          renderBody={renderSortBody}
-        />
-        <BuilderControl
-          icon={Group} label="Group by" title="Group items by" mobile={isMobile} width={isMobile ? undefined : 360}
-          applied={group.col !== 'none'} badge={1}
-          onClear={group.col !== 'none' ? clearGroup : null}
-          onSave={canSaveView ? saveGroupView : null}
-          renderBody={renderGroupBody}
-        />
+        {/* round213 — MOBILE: one quick "סידור לפי" toggle (status ⇄ priority)
+            replaces the Filter/Sort/Group builders (owner spec). */}
+        {isMobile ? (
+          <button
+            type="button"
+            className={styles.mobileSortPill}
+            dir="rtl"
+            onClick={() => setMobileGroupCol((c) => (c === 'status' ? 'priority' : 'status'))}
+            aria-label="החלפת הסידור בין סטטוס לעדיפות"
+          >
+            סידור לפי: <b>{mobileGroupCol === 'status' ? 'סטטוס' : 'עדיפות'}</b>
+          </button>
+        ) : (
+          <>
+            <BuilderControl
+              icon={Filter} label="Filter" title="Filter by" width={620}
+              applied={fc > 0} badge={fc}
+              onClear={fc > 0 ? clearFilter : null}
+              onSave={canSaveView ? saveFilterView : null}
+              renderBody={renderFilterBody}
+            />
+            <BuilderControl
+              icon={Sort} label="Sort" title="Sort by" width={360}
+              applied={sort.active} badge={1}
+              onClear={sort.active ? clearSort : null}
+              onSave={canSaveView ? saveSortView : null}
+              renderBody={renderSortBody}
+            />
+            <BuilderControl
+              icon={Group} label="Group by" title="Group items by" width={360}
+              applied={group.col !== 'none'} badge={1}
+              onClear={group.col !== 'none' ? clearGroup : null}
+              onSave={canSaveView ? saveGroupView : null}
+              renderBody={renderGroupBody}
+            />
+          </>
+        )}
 
         {/* Hide columns (round 46) — owners only. Non-owners never see it and
             always get the saved config applied. */}

@@ -65,29 +65,23 @@ describe('MyTasksView — toolbar + builder (smoke)', () => {
     expect(screen.getByText('משימה ב')).toBeTruthy();
   });
 
-  it('opens the Sort builder (mobile sheet) EMPTY — placeholder column, no direction yet', () => {
+  it('round213 — MOBILE: the builders are replaced by the "סידור לפי" toggle, grouping by status then priority', () => {
     vp.mobile = true;
     render(<MyTasksView />);
-    fireEvent.click(screen.getByLabelText('Sort')); // icon-only pill -> opens sheet
-    expect(screen.getByText('Sort by')).toBeTruthy();             // sheet title
-    expect(screen.getByText('Choose a column')).toBeTruthy();     // empty placeholder
-    expect(screen.queryByText('Direction')).toBeNull();           // no direction until a column is picked
-    // picking a column activates the sort and reveals the direction segment
-    fireEvent.click(screen.getByText('Choose a column'));
-    fireEvent.click(screen.getByText('עדיפות'));
-    expect(screen.getByText('Direction')).toBeTruthy();
-    expect(screen.getByText('Label order')).toBeTruthy();
-  });
-
-  it('opens the Filter builder (mobile sheet) EMPTY — no pre-seeded Where row; "+ New filter" adds one', () => {
-    vp.mobile = true;
-    render(<MyTasksView />);
-    fireEvent.click(screen.getByLabelText('Filter'));
-    expect(screen.getByText('Filter by')).toBeTruthy();
-    expect(screen.queryByText('Where')).toBeNull();                          // empty default
-    expect(screen.getByText('No filters — showing all tasks')).toBeTruthy();
-    fireEvent.click(screen.getByText('+ New filter'));
-    expect(screen.getByText('Where')).toBeTruthy();
+    // No Filter/Sort/Group builders on the phone.
+    expect(screen.queryByLabelText('Sort')).toBeNull();
+    expect(screen.queryByLabelText('Filter')).toBeNull();
+    expect(screen.queryByLabelText('Group by')).toBeNull();
+    // Default: grouped top-down by STATUS (the mocked labels are group headers).
+    const pill = screen.getByRole('button', { name: 'החלפת הסידור בין סטטוס לעדיפות' });
+    expect(pill.textContent).toContain('סטטוס');
+    expect(screen.getByText('בעבודה')).toBeTruthy();
+    expect(screen.getByText('בוצע')).toBeTruthy();
+    // One tap flips the toggle to PRIORITY grouping.
+    fireEvent.click(pill);
+    expect(pill.textContent).toContain('עדיפות');
+    expect(screen.getByText('דחוף')).toBeTruthy();
+    expect(screen.queryByText('בעבודה')).toBeNull();
   });
 });
 
