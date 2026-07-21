@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useEditor, useEditorState, EditorContent } from '@tiptap/react';
+// round206 — selection bubble (owner request): a dark floating menu with the
+// core formatting actions pops over any text selection, so formatting never
+// requires scrolling back to the top toolbar.
+import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
 import { TextStyle, FontSize } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
@@ -52,7 +56,15 @@ const ALIGNS = [
   { key: 'justify', label: 'יישור לשני הצדדים', Icon: AlignJustify },
 ];
 
-export default function RichTextEditor({ initialValue = '', onChange, onReady, placeholder = '', editable = true }) {
+/*
+ * round206 props:
+ *   variant='flush'      — the editor loses its own frame and the toolbar
+ *                          becomes a flush full-width strip glued to the top of
+ *                          the CONTAINER (the triple-box look — no box-in-box).
+ *   extraToolbarActions  — node appended at the toolbar's far end (e.g. the
+ *                          📎 attach-file action of the triple box).
+ */
+export default function RichTextEditor({ initialValue = '', onChange, onReady, placeholder = '', editable = true, variant = 'default', extraToolbarActions = null }) {
   const editor = useEditor({
     editable,
     extensions: [
@@ -154,9 +166,9 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
   const ActiveAlignIcon = (ALIGNS.find((a) => a.key === st.align) || ALIGNS[0]).Icon;
 
   return (
-    <div className={styles.root} dir="rtl">
+    <div className={`${styles.root} ${variant === 'flush' ? styles.rootFlush : ''}`} dir="rtl">
       {editable && (
-      <div className={styles.toolbar} role="toolbar" aria-label="עיצוב טקסט" ref={barRef}>
+      <div className={`${styles.toolbar} ${variant === 'flush' ? styles.toolbarFlush : ''}`} role="toolbar" aria-label="עיצוב טקסט" ref={barRef}>
         <Btn label="מודגש" active={st.bold} onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={16} /></Btn>
         <Btn label="נטוי" active={st.italic} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={16} /></Btn>
         <Btn label="קו תחתון" active={st.underline} onClick={() => editor.chain().focus().toggleUnderline().run()}><Underline size={16} /></Btn>
@@ -264,7 +276,25 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
             </ul>
           )}
         </div>
+
+        {/* round206 — host-provided actions (e.g. 📎 attach) pinned to the
+            toolbar's far end. */}
+        {extraToolbarActions && <span className={styles.toolbarExtra}>{extraToolbarActions}</span>}
       </div>
+      )}
+
+      {/* round206 — selection bubble: core formatting over any selection. */}
+      {editable && (
+        <BubbleMenu editor={editor} className={styles.bubble} options={{ placement: 'top' }}>
+          <Btn label="מודגש" active={st.bold} onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={15} /></Btn>
+          <Btn label="נטוי" active={st.italic} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={15} /></Btn>
+          <Btn label="קו תחתון" active={st.underline} onClick={() => editor.chain().focus().toggleUnderline().run()}><Underline size={15} /></Btn>
+          <Btn label="קו חוצה" active={st.strike} onClick={() => editor.chain().focus().toggleStrike().run()}><Strikethrough size={15} /></Btn>
+          <span className={styles.bubbleSep} aria-hidden="true" />
+          <Btn label="רשימת תבליטים" active={st.bullet} onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={15} /></Btn>
+          <Btn label="רשימה ממוספרת" active={st.ordered} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered size={15} /></Btn>
+          <Btn label="צ׳קליסט" active={st.task} onClick={() => editor.chain().focus().toggleTaskList().run()}><ListChecks size={15} /></Btn>
+        </BubbleMenu>
       )}
 
       <EditorContent editor={editor} className={styles.editorWrap} />

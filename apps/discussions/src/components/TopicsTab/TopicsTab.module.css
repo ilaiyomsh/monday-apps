@@ -81,9 +81,11 @@
   flex: 0 0 36%;
   min-width: 320px;
   max-width: 520px;
-  /* Freeze the panel while the topics scroll (below the pinned toolbar). */
+  /* Freeze the panel while the topics scroll. round206: the box top aligns
+     with the features row (the toolbar lives inside the topics column now),
+     so it sticks right at the scroll container's top. */
   position: sticky;
-  top: 64px;
+  top: 4px;
   align-self: flex-start;
   /* Keep it clear of the tab's right inset (round184 rule line). */
   margin-inline-end: var(--section-rule-inset-wide, 24px);
@@ -982,4 +984,91 @@
   background: var(--topic-accent, hsl(var(--status-default)));
   border-start-start-radius: 6px;
   pointer-events: none;
+}
+
+/* round206 (approved mockup) — the TRIPLE BOX: one card, three header titles
+   (רקע → התייחסויות → סיכום). The card top aligns with the features row (the
+   toolbar moved inside the topics column, so .splitRow starts at its top). */
+.tripleBox {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  background: var(--primary-background-color, #fff);
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+.tripleTabs {
+  display: flex;
+  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
+  background: var(--primary-background-hover-color, #fafbfc);
+}
+.tripleTab {
+  flex: 1;
+  padding: 10px 8px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  color: var(--secondary-text-color, #676879);
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+}
+.tripleTab:hover {
+  color: var(--primary-text-color, #323338);
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.tripleTabActive {
+  color: var(--primary-color, #0073ea);
+  font-weight: 600;
+  background: var(--primary-background-color, #fff);
+}
+.tripleTabActive::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  right: 12%;
+  left: 12%;
+  height: 2px;
+  background: var(--primary-color, #0073ea);
+  border-radius: 2px;
+}
+/* Pane internals — the editor is variant='flush' (its toolbar is the strip
+   glued under the headers); reserve height + anchor the brand loader. */
+.paneEditor {
+  position: relative;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+}
+.paneAttachments {
+  padding: 0 14px 12px;
+}
+.paneFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--primary-background-hover-color, #f0f1f3);
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  min-height: 18px;
+}
+/* 📎 inside the formatting toolbar (host-provided action). */
+.attachToolbarBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: var(--primary-color, #0073ea);
+  font-size: 13px;
+  font-family: var(--font-family);
+  border-radius: var(--border-radius-small, 4px);
+  padding: 4px 8px;
+  cursor: pointer;
+  direction: rtl;
+}
+.attachToolbarBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
 }

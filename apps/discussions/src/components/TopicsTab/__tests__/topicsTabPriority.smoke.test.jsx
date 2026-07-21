@@ -30,8 +30,7 @@ vi.mock('@generated/hooks/useStatusOptions', () => ({
 vi.mock('@generated/components/TopicPointRow', () => ({ TopicPointRow: () => <div data-testid="point-row" />, RowKebabMenu: () => <div data-testid="kebab" />, CreatorAvatar: () => <div data-testid="avatar" /> }));
 vi.mock('@generated/components/ApplyTemplateMenu', () => ({ ApplyTemplateMenu: () => <div data-testid="apply-template" /> }));
 // round200 — stub the references panel (monday.storage + lazy TipTap).
-vi.mock('../ReferencesPanel.jsx', () => ({ ReferencesPanel: () => <div data-testid="references-panel" /> }));
-vi.mock('../BackgroundPanel.jsx', () => ({ BackgroundPanel: () => <div data-testid="background-panel" /> }));
+vi.mock('../UpdatesTripleBox.jsx', () => ({ UpdatesTripleBox: () => <div data-testid="updates-triple-box" /> }));
 
 import { TopicsTab } from '../TopicsTab.jsx';
 

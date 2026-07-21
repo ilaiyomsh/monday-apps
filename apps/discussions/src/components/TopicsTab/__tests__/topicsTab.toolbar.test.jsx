@@ -37,12 +37,8 @@ vi.mock('@generated/components/ApplyTemplateMenu', () => ({
 }));
 // round200 — the references panel talks to monday.storage + lazy-loads TipTap;
 // stub it so the toolbar tests stay hermetic.
-vi.mock('../ReferencesPanel.jsx', () => ({
-  ReferencesPanel: () => <div data-testid="references-panel" />,
-}));
-// round204 — same hermetic stub for the new background panel.
-vi.mock('../BackgroundPanel.jsx', () => ({
-  BackgroundPanel: () => <div data-testid="background-panel" />,
+vi.mock('../UpdatesTripleBox.jsx', () => ({
+  UpdatesTripleBox: () => <div data-testid="updates-triple-box" />,
 }));
 
 import { TopicsTab } from '../TopicsTab.jsx';
@@ -63,18 +59,19 @@ describe('TopicsTab — toolbar collapse-all alignment', () => {
     // is a sibling that comes AFTER it, so it sits at the far (LTR) end.
     const leadingGroup = toolbar.querySelector(`.${styles.toolbarLeft}`);
     expect(leadingGroup).toBeTruthy();
-    // Topics now default-OPEN on entering the tab, so the button starts as "collapse".
-    const collapseBtn = screen.getByLabelText('קפל הכל');
+    // round206 — topics default-COLLAPSED on entering the tab, so the button
+    // starts as "expand all".
+    const collapseBtn = screen.getByLabelText('פתח הכל');
     expect(toolbar.lastElementChild.contains(collapseBtn)).toBe(true);
     expect(toolbar.lastElementChild).not.toBe(leadingGroup);
   });
 
-  it('toggles the collapse-all aria-label between קפל הכל and פתח הכל on click', () => {
+  it('toggles the collapse-all aria-label between פתח הכל and קפל הכל on click', () => {
     render(<TopicsTab discussion={discussion} canEdit />);
-    // Topics now default-OPEN on entering the tab, so the button starts as "collapse".
-    const btn = screen.getByLabelText('קפל הכל');
+    // round206 — topics default-COLLAPSED, so the button starts as "expand all".
+    const btn = screen.getByLabelText('פתח הכל');
     fireEvent.click(btn);
-    expect(screen.getByLabelText('פתח הכל')).toBeTruthy();
+    expect(screen.getByLabelText('קפל הכל')).toBeTruthy();
   });
 
   it('does not render the collapse-all button when there are no topics', () => {
@@ -86,8 +83,9 @@ describe('TopicsTab — toolbar collapse-all alignment', () => {
 
   it('renders the discussed column header as "#" (round 52 rename of נידונה)', () => {
     render(<TopicsTab discussion={discussion} canEdit />);
-    // The open topic's column-header row shows the check column's title as "#",
-    // and the old "נידונה" label is gone from the header.
+    // round206 — topics start collapsed: expand all first, then the topic's
+    // column-header row shows the check column's title as "#" (not "נידונה").
+    fireEvent.click(screen.getByLabelText('פתח הכל'));
     expect(screen.getByText('#')).toBeTruthy();
     expect(screen.queryByText('נידונה')).toBeNull();
   });

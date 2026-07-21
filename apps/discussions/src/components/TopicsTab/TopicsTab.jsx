@@ -31,8 +31,7 @@ import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { TOPICS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
-import { ReferencesPanel } from './ReferencesPanel.jsx';
-import { BackgroundPanel } from './BackgroundPanel.jsx';
+import { UpdatesTripleBox } from './UpdatesTripleBox.jsx';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
 import { getPointItemIds } from '@generated/utils/pointItems.js';
@@ -546,8 +545,9 @@ export function TopicsTab({
   // else sees the panel read-only. Defaults false (read-only) on purpose.
   canEditReferences = false,
   // round205 — owner-configurable component visibility (Settings → העדפות):
-  // the topic tables and each side box can be hidden per instance.
-  showTopics = true, showBackground = true, showReferences = true,
+  // the topic tables and each triple-box pane can be hidden per instance.
+  // round206 added showSummary (the summary moved into the triple box).
+  showTopics = true, showBackground = true, showReferences = true, showSummary = true,
   // Owners (can('reorderColumns')) may drag-resize the topics columns; the
   // widths persist per-instance under the shared 'topics' tableId (all users).
   canReorderColumns = false,
@@ -824,12 +824,14 @@ export function TopicsTab({
     if (loading) return;
     if (collapseInitRef.current === discussion?.id) return;
     collapseInitRef.current = discussion?.id;
-    // Default: every topic OPEN on entering the tab / switching discussions.
-    // isOpen(id) is `collapsed[id] !== true`, so an empty map = all expanded.
-    // Manual collapse/expand (chevron, title click, collapse-all) keeps writing
-    // per-topic flags into `collapsed` from here on — only the initial default
-    // changed (was: seed every topic collapsed).
-    setCollapsed({});
+    // round206 (owner request, approved mockup): every topic starts COLLAPSED
+    // on entering the ניהול-דיון view / switching discussions. Manual
+    // collapse/expand (chevron, title click, collapse-all) keeps writing
+    // per-topic flags into `collapsed` from here on. Newly-added topics are
+    // not in the seed map, so they open expanded — ready for typing points.
+    const seed = {};
+    items.forEach((t) => { seed[t.id] = true; });
+    setCollapsed(seed);
   }, [loading, discussion?.id, items]);
 
   const isOpen = (id) => collapsed[id] !== true;
@@ -891,9 +893,38 @@ export function TopicsTab({
 
   return (
     <div ref={rootRef} className={styles.wrap} dir="ltr">
-      {/* round205 — the toolbar is topics-machinery (add/template/search/collapse);
-          it hides together with the topic tables when the owner hid them. */}
+
+      {/* Floating bulk-action bar (Round 7) — appears when ≥1 point is selected.
+          Same chrome as the Tasks/Decisions action bars: count · actions · close. */}
+      {selectedPointIds.size > 0 && (
+        <div className={styles.actionBar} role="region" aria-label="פעולות על נקודות נבחרות">
+          <div className={styles.actionBarLeft}>
+            <Text type={"text2"} element="span">{selectedPointIds.size} נבחרו</Text>
+          </div>
+          <div className={styles.actionBarCenter}>
+            {canHide && (
+              <Button kind={"secondary"} size={"small"} onClick={hideSelectedPoints}>הסתרה</Button>
+            )}
+            {deleteTopicOrPoint && (
+              <Button kind={"secondary"} size={"small"} onClick={deleteSelectedPoints}>מחיקה</Button>
+            )}
+          </div>
+          <div className={styles.actionBarRight}>
+            <button type="button" className={styles.closeSelectionBtn} onClick={clearPointSelection} aria-label="בטל בחירה">
+              <CloseSmall size={18} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* round200 — the tab splits into two columns: the topic tables on the LEFT
+          (ending at the tasks column instead of bleeding right) and the
+          "התייחסויות" panel on the RIGHT. */}
+      <div className={styles.splitRow}>
       {showTopics && (
+      <div className={styles.topicsCol}>
+      {/* round206 — the features row lives INSIDE the topics column so the
+          triple box's top edge aligns with it (approved mockup). */}
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>
           {addTopicOrPoint && (!addingTopic ? (
@@ -944,37 +975,6 @@ export function TopicsTab({
           <CollapseAllButton collapsed={!anyOpen} onClick={toggleAll} />
         )}
       </div>
-      )}
-
-      {/* Floating bulk-action bar (Round 7) — appears when ≥1 point is selected.
-          Same chrome as the Tasks/Decisions action bars: count · actions · close. */}
-      {selectedPointIds.size > 0 && (
-        <div className={styles.actionBar} role="region" aria-label="פעולות על נקודות נבחרות">
-          <div className={styles.actionBarLeft}>
-            <Text type={"text2"} element="span">{selectedPointIds.size} נבחרו</Text>
-          </div>
-          <div className={styles.actionBarCenter}>
-            {canHide && (
-              <Button kind={"secondary"} size={"small"} onClick={hideSelectedPoints}>הסתרה</Button>
-            )}
-            {deleteTopicOrPoint && (
-              <Button kind={"secondary"} size={"small"} onClick={deleteSelectedPoints}>מחיקה</Button>
-            )}
-          </div>
-          <div className={styles.actionBarRight}>
-            <button type="button" className={styles.closeSelectionBtn} onClick={clearPointSelection} aria-label="בטל בחירה">
-              <CloseSmall size={18} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* round200 — the tab splits into two columns: the topic tables on the LEFT
-          (ending at the tasks column instead of bleeding right) and the
-          "התייחסויות" panel on the RIGHT. */}
-      <div className={styles.splitRow}>
-      {showTopics && (
-      <div className={styles.topicsCol}>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTopicDragEnd}>
         <SortableContext items={visibleTopics.map((t) => String(t.id))} strategy={verticalListSortingStrategy}>
           {visibleTopics.map((topic) => (
@@ -1061,15 +1061,19 @@ export function TopicsTab({
       </div>
       )}
 
-      {/* round204 (approved mockup) — the side column stays on the physical
-          RIGHT and stacks TWO collapsible update-boxes: רקע on top,
-          התייחסויות below it; both closed by default. Same fixed edit rule
-          (coordinator/creator/lead + owner) gates both. round205: each box
-          renders only when its component is owner-visible. */}
-      {(showBackground || showReferences) && (
+      {/* round206 (approved mockup) — the TRIPLE BOX on the physical RIGHT:
+          one card, three header titles (רקע → התייחסויות → סיכום), each pane
+          its own monday Update; owner-hidden panes drop their header. Same
+          fixed edit rule (coordinator/creator/lead + owner) gates all three. */}
+      {(showBackground || showReferences || showSummary) && (
       <div className={styles.refPanel}>
-        {showBackground && <BackgroundPanel discussionId={discussion?.id} canEdit={canEditReferences} />}
-        {showReferences && <ReferencesPanel discussionId={discussion?.id} canEdit={canEditReferences} />}
+        <UpdatesTripleBox
+          discussionId={discussion?.id}
+          canEdit={canEditReferences}
+          showBackground={showBackground}
+          showReferences={showReferences}
+          showSummary={showSummary}
+        />
       </div>
       )}
       </div>
