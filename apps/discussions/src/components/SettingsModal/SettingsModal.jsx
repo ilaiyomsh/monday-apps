@@ -386,9 +386,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     'discussionDateID',
     'discussionTypeID',
     'summaryFileID',
-    'backgroundFilesID', // round204 — קבצי רקע (files column for the רקע box)
-    'referencesFilesID', // round206 — קבצי התייחסויות (triple-box 📎)
-    'summaryFilesID', // round206 — קבצי סיכום (triple-box 📎)
     'previousDiscussionID',
     'tasksBoardLinkID',
     'topicsBoardLinkID',

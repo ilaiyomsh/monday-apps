@@ -78,9 +78,11 @@
   min-width: 0;
 }
 .refPanel {
-  flex: 0 0 36%;
-  min-width: 320px;
-  max-width: 520px;
+  /* round216 — the owner wants the box WIDER (toward the left) and TALLER:
+     the column takes a larger share of the row and a higher cap. */
+  flex: 0 0 46%;
+  min-width: 360px;
+  max-width: 720px;
   /* Freeze the panel while the topics scroll. round206: the box top aligns
      with the features row (the toolbar lives inside the topics column now),
      so it sticks right at the scroll container's top. */
@@ -1036,9 +1038,13 @@
    glued under the headers); reserve height + anchor the brand loader. */
 .paneEditor {
   position: relative;
-  min-height: 220px;
+  /* round216 — one FIXED editor height for all three panes (רקע/התייחסויות/
+     סיכום), so switching headers never changes the box size; long content
+     scrolls inside. Taller than the old 220px min (owner request). */
+  height: 420px;
   display: flex;
   flex-direction: column;
+  overflow-y: auto;
 }
 .paneAttachments {
   padding: 0 14px 12px;

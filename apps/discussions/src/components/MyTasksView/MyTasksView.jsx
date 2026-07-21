@@ -15,8 +15,10 @@ import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { BrandLoader } from '@generated/components/BrandLoader';
+import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { MyTasksTable } from './MyTasksTable.jsx';
 import { MyTasksCardList } from './MyTasksCardList.jsx';
+import { computeCardDrop } from './cardDnd.js';
 import { loadMyTasksOrder, saveMyTasksOrder, applyManualOrder } from '@generated/utils/myTasksOrder.js';
 import { groupMyTasks, ensureGroupColors, NO_DISCUSSION } from './grouping.js';
 import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
@@ -49,6 +51,18 @@ const firstSortDir = (col) => (SORT_COLUMNS.find((c) => c.key === col) || SORT_C
 const firstGroupOrder = (col) => (GROUP_COLUMNS.find((c) => c.key === col) || GROUP_COLUMNS[0]).orders[0].key;
 const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'Choose a date range';
 const rangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
+
+// round215 — mobile-only DndContext wrapper: ONE context over ALL the card
+// groups so a card can be dropped in another group; on desktop it's a no-op
+// passthrough (the tables have no card drag).
+function CardDndWrapper({ enabled, sensors, onDragEnd, children }) {
+  if (!enabled) return children;
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      {children}
+    </DndContext>
+  );
+}
 
 // Hidden loader: mounted ONLY when "group by discussion → order by date" is
 // active, so discussion dates (which tasks don't carry) are fetched lazily.
@@ -296,6 +310,33 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     setManualOrder(flat);
     saveMyTasksOrder(currentUser?.id, flat);
   }, [grouped, currentUser?.id]);
+
+  // round215 — ONE DndContext spans all the mobile card groups: a drop inside
+  // the same group reorders; a drop on a card of ANOTHER group MOVES the task
+  // there (writes the target group's status/priority label) and places it at
+  // the drop position. Drag activates only from each card's grip handle.
+  const cardSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 8 } }),
+  );
+  const handleCardDragEnd = useCallback(({ active, over }) => {
+    const drop = computeCardDrop({
+      grouped,
+      groupCol: group.col,
+      activeId: active?.id,
+      overId: over?.id,
+    });
+    if (!drop) return;
+    if (drop.type === 'reorder') {
+      reorderGroup(drop.groupKey, drop.ids);
+      return;
+    }
+    // move: write the target group's column value, then persist the new order.
+    if (group.col === 'status') applyStatus(drop.taskId, drop.value);
+    else applyPriority(drop.taskId, drop.value);
+    setManualOrder(drop.flat);
+    saveMyTasksOrder(currentUser?.id, drop.flat);
+  }, [grouped, group.col, reorderGroup, applyStatus, applyPriority, currentUser?.id]);
 
   // Surface the just-created task at the VERY TOP of the view. Under GROUP BY
   // DISCUSSION the new (unlinked) task lives in "ללא דיון", so that group is
@@ -753,6 +794,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       ) : (
         <div className={styles.groupScrollInner}>
           <div className={styles.groupStack}>
+            <CardDndWrapper enabled={isMobile} sensors={cardSensors} onDragEnd={handleCardDragEnd}>
             {groupsForRender.map((grp, gi) => (
               <div key={grp.key}>
                 <button
@@ -792,7 +834,8 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                     onStatusChange={applyStatus}
                     onPriorityChange={applyPriority}
                     onDeadlineChange={applyDeadline}
-                    onReorder={(newIds) => reorderGroup(grp.key, newIds)}
+                    onRenameTask={applyRename}
+                    sortableId={grp.key}
                     searchTerm={debouncedSearch}
                     newTaskRow={creatingNew && gi === 0 ? {
                       defaultName: 'משימה חדשה',
@@ -834,6 +877,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                 )}
               </div>
             ))}
+            </CardDndWrapper>
           </div>
           {hasMore && (
             <div className={styles.loadMore}>
