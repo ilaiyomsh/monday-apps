@@ -173,6 +173,10 @@ export const DEFAULT_EXPORT_TEMPLATE = {
     },
     { key: 'topics', enabled: true, label: 'נושאים לדיון' },
     { key: 'summary', enabled: true, label: 'סיכום' },
+    // round200 — the References (התייחסויות) box from the Topics tab; rendered
+    // through the same HTML→docx converter as the summary. Enabled by default;
+    // degrades to "אין התייחסויות." when the box is empty.
+    { key: 'references', enabled: true, label: 'התייחסויות' },
     { key: 'tasks', enabled: true, label: 'משימות' },
     // round192 — decisions table (owner request). Enabled by default; degrades to
     // "אין החלטות." when the discussion has none / the decisions board is unmapped.

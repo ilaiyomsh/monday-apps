@@ -61,6 +61,10 @@ const LIVE_SAMPLE_INPUTS = {
   summaryHtml:
     '<h3>עיקרי הדיון</h3><p>סיכום הדיון יופיע כאן — כולל <strong>הדגשות</strong>, <em>הטיות</em> ורשימות.</p>' +
     '<ul><li>נקודה מרכזית ראשונה</li><li>נקודה מרכזית שנייה</li></ul>',
+  // round200 — the References box sample; same converter as the summary.
+  referencesHtml:
+    '<p><strong>דנה כהן:</strong> מבקשת לבחון מחדש את מסגרת התקציב.</p>' +
+    '<ol><li>סבב הערות עד יום רביעי</li><li>אישור סופי בישיבה הבאה</li></ol>',
   tasks: [
     { id: 't1', name: 'להכין מצגת סיכום לרבעון', assignees: [{ id: '1', name: 'דנה כהן' }], deadline: '2026-07-10', status: 'בעבודה' },
     { id: 't2', name: 'לתאם פגישת המשך עם הצוות', assignees: [{ id: '2', name: 'יוסי לוי' }], deadline: '2026-07-15', status: 'טרם החל' },
@@ -451,6 +455,14 @@ export default function ExportPreview({ template, assets }) {
           <div key="summary" className={styles.docSection}>
             <div className={styles.h2}>סיכום</div>
             <p className={styles.para}>טקסט הסיכום של הדיון יופיע כאן, בגופן ובעיצוב שנבחרו.</p>
+          </div>
+        );
+      case 'references':
+        return (
+          <div key="references" className={styles.docSection}>
+            <div className={styles.h2}>התייחסויות</div>
+            <p className={styles.para}><b>דנה כהן:</b> מבקשת לבחון מחדש את מסגרת התקציב.</p>
+            <ol className={styles.list}><li>סבב הערות עד יום רביעי</li><li>אישור סופי בישיבה הבאה</li></ol>
           </div>
         );
       case 'tasks':

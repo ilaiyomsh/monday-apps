@@ -225,7 +225,8 @@ export function DiscussionCard({
   // both through `editDiscussionFields` so the duplicated task UX can't drift
   // (task-tier caps land in Phase 4). createTask/topics/summary/responses get
   // their own caps so Phase 3+ can diverge them per role.
-  const editSummary = can('editSummary');
+  // (round200: the summary box no longer consumes the editSummary matrix cap —
+  // the owner fixed its rule to coordinator/creator/lead; see canEditSummaryBox.)
   const createTask = can('createTask');
   const addTopicOrPoint = can('addTopicOrPoint');
   const editTopicOrPoint = can('editTopicOrPoint');
@@ -246,6 +247,16 @@ export function DiscussionCard({
     Array.isArray(people) && people.some((p) => String(p?.id) === String(currentUser?.id));
   const canHideTopicOrPoint =
     canManageSettings || holdsRole(data?.discussionLeadID) || holdsRole(data?.discussionCoordinatorID);
+  // round200 (owner decision): the Summary box AND the new References box are
+  // editable ONLY by the discussion coordinator (מרכז דיון), its creator, or its
+  // lead (מנהל דיון) — plus the board owner. A FIXED rule like canHideTopicOrPoint,
+  // deliberately not a matrix capability. Until the details load, the people
+  // columns are unknown → read-only for non-owners (never a brief edit flash).
+  const canEditSummaryBox =
+    canManageSettings ||
+    holdsRole(data?.discussionCreatorID) ||
+    holdsRole(data?.discussionLeadID) ||
+    holdsRole(data?.discussionCoordinatorID);
 
   // Item 19 / round 78 — access-column payload for every task created FROM this
   // discussion. Which discussion ROLES fill each tasks access column is
@@ -831,7 +842,7 @@ export function DiscussionCard({
         </div>
         <div className={activeTab === 'topics' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'topics' ? undefined : 'none' }}>
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} onLoadingChange={handleTopicsLoadingChange}
-            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditReferences={canEditSummaryBox} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
             decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus} />
         </div>
@@ -847,7 +858,9 @@ export function DiscussionCard({
         )}
         {activeTab === 'summary' && (
           <div className={styles.tabPane}>
-            <SummaryTab discussion={data} canEdit={editSummary} />
+            {/* round200 — summary editing narrowed to coordinator/creator/lead
+                (+ board owner), the same fixed rule as the references box. */}
+            <SummaryTab discussion={data} canEdit={canEditSummaryBox} />
           </div>
         )}
         {activeTab === 'effectiveness' && (

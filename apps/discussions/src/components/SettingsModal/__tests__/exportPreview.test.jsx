@@ -19,6 +19,8 @@ describe('ExportPreview (static sketch, jsdom)', () => {
     expect(screen.queryByText('מדיון קודם')).toBeNull();
     // decisions table header (round193 shape — decider only, no date/status cols)
     expect(screen.getByText('מחליט')).toBeInTheDocument();
+    // references section (round200 — enabled by default)
+    expect(screen.getByText('התייחסויות')).toBeInTheDocument();
   });
 
   it('omits a disabled section (decisions off ⇒ no מחליט header)', () => {

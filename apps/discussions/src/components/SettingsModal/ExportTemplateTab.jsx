@@ -85,6 +85,8 @@ const SECTION_NAMES = {
   meta: 'פרטי דיון',
   topics: 'נושאים לדיון',
   summary: 'סיכום',
+  // round200 — the References box from the Topics tab.
+  references: 'התייחסויות',
   tasks: 'משימות',
   // round192 — decisions section (owner request).
   decisions: 'החלטות',

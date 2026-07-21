@@ -34,6 +34,7 @@ import { דיונים1Board, החלטות1Board } from './mondayApi/BoardSDK.js'
 import { getColumns, getBoardId } from './mondayApi/board-config-store.js';
 import { DEFAULT_EXPORT_TEMPLATE, EXPORT_FONTS, DEFAULT_EXPORT_FONT } from './mondayApi/boards.config.js';
 import { loadSummaryUpdateId } from './summaryStore.js';
+import { loadReferencesUpdateId } from './referencesStore.js';
 import { getItemUpdate } from './mondayApi/updates.js';
 import { isSummaryHtmlEmpty } from './summaryHtml.js';
 import { uploadFileToColumnSeamless } from './mondayApi/fileUpload.js';
@@ -185,7 +186,7 @@ function formatHeDate(value) {
  * shaping is testable without docx. The summary stays as HTML (`summaryHtml`) and
  * is converted to docx inside renderDocx (needs the docx classes + DOMParser).
  */
-export function buildDiscussionModel({ discussion, topics = [], summaryHtml = '', tasks = [], decisions = [], previousDiscussionName = '', typeLabel = '' }) {
+export function buildDiscussionModel({ discussion, topics = [], summaryHtml = '', referencesHtml = '', tasks = [], decisions = [], previousDiscussionName = '', typeLabel = '' }) {
   const participants = Array.isArray(discussion?.participantsID) ? discussion.participantsID : [];
   const lead = Array.isArray(discussion?.discussionLeadID) ? discussion.discussionLeadID : [];
   // "סוג" is a status column — its value is a label id; the caller resolves the
@@ -200,6 +201,9 @@ export function buildDiscussionModel({ discussion, topics = [], summaryHtml = ''
     previousText: previousDiscussionName || '',
     topics: filterTopicsForExport(topics),
     summaryHtml: summaryHtml || '',
+    // round200 — the References (התייחסויות) box HTML; converted to docx like
+    // the summary (bold/lists survive; the template font applies to its runs).
+    referencesHtml: referencesHtml || '',
     // round191 — the exported tasks table is ordered by RESPONSIBLE (owner request):
     // all of one person's tasks together, then the next. Stable sort by assignee
     // text (Hebrew collation); tasks with no assignee sort last.
@@ -413,6 +417,22 @@ async function fetchSummaryHtml(discussionId) {
   }
 }
 
+// round200 — the References (התייחסויות) box lives in its OWN single monday
+// Update (referencesStore tracks its id), exactly like the summary. Same
+// HTML-in-update read; rendered with the same HTML→docx converter so its
+// formatting (bold/lists/numbering) survives into the document.
+async function fetchReferencesHtml(discussionId) {
+  try {
+    const updateId = await loadReferencesUpdateId(discussionId);
+    if (!updateId) return '';
+    const update = await getItemUpdate(discussionId, updateId);
+    return update?.body || '';
+  } catch (err) {
+    if (!err?.__loggedId) logger.warn('docxExport', 'טעינת ההתייחסויות לייצוא נכשלה', err);
+    return '';
+  }
+}
+
 /* ----------------------------------------------------------- docx render */
 
 function buildFilename(discussion) {
@@ -609,6 +629,15 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     return out;
   };
 
+  // round200 — the References box, through the SAME HTML→docx converter as the
+  // summary, so its rich formatting lands in the document with the template font.
+  const buildReferences = (section) => {
+    const out = [heading(section?.label || 'התייחסויות', HeadingLevel.HEADING_2)];
+    if (isSummaryHtmlEmpty(model.referencesHtml)) out.push(para('אין התייחסויות.'));
+    else out.push(...htmlToParagraphs(model.referencesHtml));
+    return out;
+  };
+
   const buildTasks = (section) => {
     // `keepNext` keeps the heading with the first table row; combined with keepNext
     // on every cell paragraph + cantSplit on every row, Word keeps the whole table
@@ -734,6 +763,7 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
       case 'meta': children.push(...buildMeta(section)); break;
       case 'topics': children.push(...buildTopics(section)); break;
       case 'summary': children.push(...buildSummary(section)); break;
+      case 'references': children.push(...buildReferences(section)); break;
       case 'tasks': children.push(...buildTasks(section)); break;
       case 'decisions': children.push(...buildDecisions(section)); break;
       case 'freeText': children.push(...buildFreeText(section)); break;
@@ -874,9 +904,10 @@ export async function exportDiscussionToDocx(discussion, { template = DEFAULT_EX
   if (!discussion?.id) throw new Error('exportDiscussionToDocx: discussion is required');
   const discussionId = String(discussion.id);
 
-  const [topics, summaryHtml, currentTasks, decisions, previous, fullDiscussion] = await Promise.all([
+  const [topics, summaryHtml, referencesHtml, currentTasks, decisions, previous, fullDiscussion] = await Promise.all([
     fetchTopicsForExport(discussionId),
     fetchSummaryHtml(discussionId),
+    fetchReferencesHtml(discussionId),
     fetchTasksOfDiscussion(discussionId),
     fetchDecisionsOfDiscussion(discussionId),
     resolvePreviousDiscussion(discussionId),
@@ -893,6 +924,7 @@ export async function exportDiscussionToDocx(discussion, { template = DEFAULT_EX
     discussion: mergedDiscussion,
     topics,
     summaryHtml,
+    referencesHtml,
     tasks: mergeTasksForExport(currentTasks, previousTasks),
     decisions,
     previousDiscussionName: previous?.name || '',

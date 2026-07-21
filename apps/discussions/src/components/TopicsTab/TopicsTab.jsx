@@ -31,6 +31,7 @@ import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { TOPICS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
+import { ReferencesPanel } from './ReferencesPanel.jsx';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
 import { getPointItemIds } from '@generated/utils/pointItems.js';
@@ -539,6 +540,10 @@ export function TopicsTab({
   // coordinator / owner), computed by DiscussionCard, independent of
   // editTopicOrPoint. Defaults true for back-compat in tests/harnesses.
   canHide = true,
+  // round200 — edit gate for the References (התייחסויות) panel: coordinator /
+  // creator / lead + board owner (canEditSummaryBox in DiscussionCard). Everyone
+  // else sees the panel read-only. Defaults false (read-only) on purpose.
+  canEditReferences = false,
   // Owners (can('reorderColumns')) may drag-resize the topics columns; the
   // widths persist per-instance under the shared 'topics' tableId (all users).
   canReorderColumns = false,
@@ -955,6 +960,11 @@ export function TopicsTab({
         </div>
       )}
 
+      {/* round200 — the tab splits into two columns: the topic tables on the LEFT
+          (ending at the tasks column instead of bleeding right) and the
+          "התייחסויות" panel on the RIGHT. */}
+      <div className={styles.splitRow}>
+      <div className={styles.topicsCol}>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTopicDragEnd}>
         <SortableContext items={visibleTopics.map((t) => String(t.id))} strategy={verticalListSortingStrategy}>
           {visibleTopics.map((topic) => (
@@ -1038,6 +1048,10 @@ export function TopicsTab({
       {items.length === 0 && !addingTopic && (
         <div className={styles.empty}>אין נושאים לדיון זה</div>
       )}
+      </div>
+
+      <ReferencesPanel discussionId={discussion?.id} canEdit={canEditReferences} />
+      </div>
 
       <PointItemsPopup
         open={!!popup}
