@@ -28,10 +28,17 @@ How each surface gets that code depends on how it deploys:
    through a thin per-app **domainKind→kind adapter** (their logger's record shape → the
    sink's). Vite bundles the package into the client build.
 
-2. **Axis apps — import through the `@axis/app-core` facade.**
+2. **Axis apps — go through the `@axis/app-core` facade.**
    `app-core` re-exports error-kit (`attachAxiomSink`, `ErrorBoundary`,
-   `setupGlobalErrorHandlers`, transport). tracker and day-off consume it; `MondayProvider`
-   auto-enriches every envelope with iframe identity.
+   `setupGlobalErrorHandlers`, transport); `MondayProvider` auto-enriches every envelope with
+   iframe identity. **day-off** consumes the facade's sink + `ErrorBoundary` directly.
+   **tracker** is the conservative case: its logger/sink/`ErrorBoundary`/globalErrorHandler are
+   **test-locked local copies** (their record/listener shapes app-core cannot reproduce — see
+   `apps/axis/tracker/CLAUDE.md` §8), so it imports only the shared **transport +
+   `scrubMessage`** primitives and keeps a local `mapRecordToEvent`. That local sink is held at
+   field parity with the canonical one — it ships the extended top-5 `stack` and React
+   `component_stack`, enforced by tracker's own `axiomSink`/`ErrorBoundary` test suites (not
+   `drift.test.ts`, which guards vendored *copies*; tracker is a divergent local, not a copy).
 
 3. **Server apps + their embedded admin SPAs — keep a VENDORED copy.**
    monday-code deploys push the app **root only**, so a workspace dependency does **not**

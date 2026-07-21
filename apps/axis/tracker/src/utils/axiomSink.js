@@ -140,6 +140,38 @@ function firstStackFrame(stack) {
     return sigilLine === undefined ? undefined : sigilLine.trim();
 }
 
+// fix 3 caps — parity with the shared @axis/app-core / @mapps/error-kit sink.
+const STACK_MAXLEN = 1500;            // joined top-5 frames
+const COMPONENT_STACK_MAXLEN = 1000;  // React componentStack
+
+/**
+ * The top `max` stack frames — same anchored frame detection as firstStackFrame (V8 `at `
+ * or a real Firefox/Safari `name@url:line[:col]` frame), so a prose header or an '@'-bearing
+ * message can never masquerade as a frame and leak error.message content.
+ */
+function topFrames(stack, max) {
+    if (typeof stack !== 'string' || stack === '') return [];
+    const out = [];
+    for (const line of stack.split('\n')) {
+        if (/^\s*at /.test(line) || /^\s*\S*@\S+:\d+(?::\d+)?\s*$/.test(line)) {
+            out.push(line.trim());
+            if (out.length >= max) break;
+        }
+    }
+    return out;
+}
+
+/**
+ * componentStack scrubbed to `cap`. React's componentStack is newline-delimited component
+ * frames; scrubbing each line via scrubMessage (its per-line 200 cap is ample) then joining
+ * and slicing to `cap` gives the same privacy guarantee as the shared sink's uncapped redact,
+ * without needing a second scrubber export.
+ */
+function scrubComponentStack(raw, cap) {
+    if (typeof raw !== 'string' || raw === '') return '';
+    return raw.split('\n').map((line) => scrubMessage(line)).join('\n').slice(0, cap);
+}
+
 /**
  * §4.3 mapping table — EXACTLY these fields, nothing else. The transport stamps
  * `_time` at enqueue and enriches app/env/ver/sess + acc/usr/obj/board at flush.
@@ -164,6 +196,11 @@ export function mapRecordToEvent(record) {
         if (code != null) ev.err_code = String(code);
         const stack1 = firstStackFrame(err.stack);
         if (stack1 !== undefined) ev.stack1 = stack1;                // transport truncates at 400
+        // Extended stack (fix 3): top-5 frames, each scrubbed, joined by newline, total cap 1500.
+        // Shipped IN ADDITION to stack1 (which stays the single-frame query field) — parity with
+        // every other client so tracker render crashes carry the full stack, not one frame.
+        const frames = topFrames(err.stack, 5);
+        if (frames.length > 0) ev.stack = frames.map((f) => scrubMessage(f)).join('\n').slice(0, STACK_MAXLEN);
         // error.message ships ONLY scrubbed, as err_msg (D2) — single source scrubMessage from @axis/app-core
         if (typeof err.message === 'string' && err.message !== '') ev.err_msg = scrubMessage(err.message);
     }
@@ -175,6 +212,16 @@ export function mapRecordToEvent(record) {
         if (typeof ctx.totalMs === 'number' && Number.isFinite(ctx.totalMs)) ev.total_ms = ctx.totalMs;
         if (typeof ctx.step === 'number' && Number.isFinite(ctx.step)) ev.step = ctx.step;
     }
+    // React componentStack (fix 3): scrubbed, cap 1000. From context.componentStack (the canonical
+    // path, parity with the shared sink) OR — since tracker's test-locked logger.error carries no
+    // context bag — from the error object, where ErrorBoundary stamps errorInfo.componentStack.
+    const rawComponentStack =
+        (ctx != null && typeof ctx === 'object' && typeof ctx.componentStack === 'string' && ctx.componentStack !== '')
+            ? ctx.componentStack
+            : (err != null && typeof err === 'object' && typeof err.componentStack === 'string' && err.componentStack !== '')
+                ? err.componentStack
+                : undefined;
+    if (rawComponentStack !== undefined) ev.component_stack = scrubComponentStack(rawComponentStack, COMPONENT_STACK_MAXLEN);
     return ev;
 }
 
