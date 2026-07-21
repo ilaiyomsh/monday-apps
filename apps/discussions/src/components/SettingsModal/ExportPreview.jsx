@@ -119,7 +119,13 @@ function canRunLivePreview() {
  * the first live render builds, in test/jsdom environments, and if the live
  * pipeline ever fails (each failure is logged through the funnel).
  */
-export default function ExportPreview({ template, assets }) {
+/*
+ * round207 props: `model` (optional) — a REAL, pre-assembled discussion export
+ * model (assembleDiscussionModel); when provided the live preview renders THAT
+ * discussion instead of the built-in sample. `modelKey` identifies it in the
+ * rebuild signature (the model object is stable per dialog mount).
+ */
+export default function ExportPreview({ template, assets, model = null, modelKey = null }) {
   const fontCss = (EXPORT_FONTS[template?.font] || EXPORT_FONTS[DEFAULT_EXPORT_FONT]).css;
   const isConfig = (template?.headerMode || EXPORT_HEADER_MODES.CONFIG) !== EXPORT_HEADER_MODES.UPLOAD;
   const sections = Array.isArray(template?.sections) ? template.sections : [];
@@ -198,7 +204,7 @@ export default function ExportPreview({ template, assets }) {
   // typing in the free-text/header fields doesn't rebuild on every keystroke.
   useEffect(() => {
     if (!canRunLivePreview()) return undefined;
-    const sig = `${JSON.stringify(template)}|${assets?.headerLogo?.length || 0}|${assets?.footerLogo?.length || 0}|${assets?.templateDocx?.length || 0}`;
+    const sig = `${modelKey || 'sample'}|${JSON.stringify(template)}|${assets?.headerLogo?.length || 0}|${assets?.footerLogo?.length || 0}|${assets?.templateDocx?.length || 0}`;
     if (sig === lastSigRef.current) {
       setBuilding(false); // identity churn only — the shown render is current
       return undefined;
@@ -211,9 +217,11 @@ export default function ExportPreview({ template, assets }) {
         const docxPreview = await import('docx-preview');
         if (cancelled || seq !== seqRef.current) return;
 
-        const model = buildDiscussionModel(LIVE_SAMPLE_INPUTS);
+        // round207 — a provided REAL model (the per-discussion dialog) wins
+        // over the built-in sample.
+        const previewModel = model || buildDiscussionModel(LIVE_SAMPLE_INPUTS);
         // Identical to the export path: renderDocx builds + injects section RTL…
-        const blob = await renderDocx(model, template, assets);
+        const blob = await renderDocx(previewModel, template, assets);
         if (cancelled || seq !== seqRef.current) return; // stale — skip the zip work
         let bytes = new Uint8Array(await blob.arrayBuffer());
         // …and in UPLOAD mode the body is spliced into the uploaded template so
@@ -308,7 +316,7 @@ export default function ExportPreview({ template, assets }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [template, assets]);
+  }, [template, assets, model, modelKey]);
 
   /* ------------------------------------------------ static sketch (fallback) */
 

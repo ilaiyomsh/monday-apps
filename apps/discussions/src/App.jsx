@@ -16,12 +16,10 @@ import { useMondayContext } from './contexts/MondayContext.jsx';
 import { useSettings } from './contexts/SettingsContext.jsx';
 import { api } from './utils/mondayApi/monday-client.js';
 import { monday } from './utils/mondayApi/monday-client.js';
-import { exportDiscussionToDocx } from './utils/docxExport.js';
-import { loadExportAssets } from './utils/exportAssets.js';
-import { isComponentVisible, DEFAULT_EXPORT_TEMPLATE } from './utils/mondayApi/boards.config.js';
+import { isComponentVisible } from './utils/mondayApi/boards.config.js';
+import { canExportDiscussion } from './utils/exportGate.js';
 import { hydrateFromStorage, ensureRoster } from './utils/usersStore.js';
 import { ensurePeopleColumns } from './utils/mondayApi/peopleColumns.js';
-import { usePermission } from './hooks/usePermission.js';
 import { prefetchMyTasks } from './hooks/useMyTasks.js';
 import { prefetchMyDecisions } from './hooks/useMyDecisions.js';
 import { prefetchDashboard } from './hooks/useDashboardData.js';
@@ -31,6 +29,7 @@ import { installChromeNarrowWatcher } from './utils/chromeNarrow.js';
 import { ToastContainer } from './components/Toast';
 import { ErrorDetailsModal } from './components/ErrorDetailsModal';
 import { SettingsModal } from './components/SettingsModal';
+import { ExportDialog } from './components/ExportDialog';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Drag-to-resize bounds for the discussions column (px). The default width
@@ -353,7 +352,6 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [canManageSettings, setCanManageSettings] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [exportingId, setExportingId] = useState(null);
   const [launchParams, setLaunchParams] = useState(() => readLaunchParams());
   const [currentLocationHref, setCurrentLocationHref] = useState(() =>
     typeof window !== 'undefined' ? window.location.href : ''
@@ -368,13 +366,10 @@ export default function App() {
   const [deepLinkSplash, setDeepLinkSplash] = useState(() => Boolean(readLaunchParams().discussionId));
   const deepLinkArmedRef = useRef(Boolean(launchParams.discussionId));
 
-  // Advisory permission resolver, bound to the owner bypass + current user.
-  // Used as a belt-and-suspenders guard in handleExport so a stale/unhidden
-  // export control can't fire the mutation for a user who lacks `exportDocs`
-  // (the DiscussionList row/calendar controls are the primary gate). Owners
-  // bypass; while the feature is off it resolves via the legacy creator/lead
-  // path → identical to before this guard existed.
-  const can = usePermission({ canManageSettings, currentUser });
+  // round207 — the discussion whose per-discussion export dialog is open (null
+  // = closed). Export is a FIXED rule (creator/lead/coordinator + board owner,
+  // exportGate.js), no longer the exportDocs matrix capability.
+  const [exportDialogDiscussion, setExportDialogDiscussion] = useState(null);
 
   // round180/181 — flag when the discussions selector panel occupies horizontal
   // width ALONGSIDE the card. On DESKTOP the split shows both panes whenever the
@@ -653,31 +648,15 @@ export default function App() {
     };
   }, []);
 
-  // Export a discussion to .docx (all users). Fetches + renders client-side; the
-  // per-row spinner is keyed off exportingId. API errors are already logged +
-  // toasted by the api() funnel, so re-log only un-logged failures.
-  const handleExport = async (discussion) => {
-    if (!discussion?.id || exportingId) return;
-    // Advisory gate (belt-and-suspenders): the DiscussionList row/calendar
-    // controls already hide/withhold export for users without `exportDocs`, but
-    // guard the handler too so a stale control can't fire the export.
-    if (!can('exportDocs', { discussion })) return;
-    setExportingId(discussion.id);
-    try {
-      // Per-instance export template (sections/fields/order + header/footer config).
-      // Falls back to the default (today's layout) when unset. Heavy binaries
-      // (logos / uploaded template) load from the separate assets store.
-      const template = settings?.exportTemplate || DEFAULT_EXPORT_TEMPLATE;
-      const assets = await loadExportAssets(context);
-      const { uploadAttempted, uploaded } = await exportDiscussionToDocx(discussion, { template, assets });
-      if (uploadAttempted && uploaded) notify('הדיון יוצא ונשמר לעמודת הקובץ');
-      else if (uploadAttempted) notify('הקובץ ירד למחשב, אך השמירה לעמודת הקובץ נכשלה', 'warning');
-      else notify('הדיון יוצא ל-DOCS בהצלחה');
-    } catch (err) {
-      if (!err?.__loggedId) logger.error('App', 'ייצוא הדיון ל-DOCS נכשל', err);
-    } finally {
-      setExportingId(null);
-    }
+  // round207 — "ייצוא" no longer downloads directly: it opens the per-discussion
+  // export dialog (live preview of THE REAL discussion + per-discussion template
+  // customization; ExportDialog owns the render/deliver flow). The fixed-rule
+  // guard here is belt-and-suspenders — the DiscussionList row control is the
+  // primary gate — so a stale/unhidden control can't open the dialog.
+  const handleExport = (discussion) => {
+    if (!discussion?.id) return;
+    if (!canExportDiscussion(discussion, { canManageSettings, currentUser })) return;
+    setExportDialogDiscussion(discussion);
   };
 
   // Delete a discussion (owner action from the row kebab menu). The list removes
@@ -973,7 +952,6 @@ export default function App() {
           onDuplicate={(d) => setDuplicateFrom(d)}
           onExport={handleExport}
           onDelete={handleDeleteDiscussion}
-          exportingId={exportingId}
           canManageSettings={canManageSettings}
           currentUser={currentUser}
           onOpenSettings={() => setShowSettings((s) => !s)}
@@ -1028,6 +1006,18 @@ export default function App() {
         onCreated={handleSaved}
         canManageSettings={canManageSettings}
       />
+
+      {/* round207 — per-discussion export dialog (opened from the row kebab's
+          "ייצוא"; fixed rule creator/lead/coordinator + owner). */}
+      {exportDialogDiscussion && (
+        <ExportDialog
+          discussion={exportDialogDiscussion}
+          settings={settings}
+          context={context}
+          onClose={() => setExportDialogDiscussion(null)}
+          onNotify={notify}
+        />
+      )}
 
     </div>
       {/* round132 — deep-link splash: the app keeps rendering (and loading)

@@ -24,7 +24,9 @@ const PAGE_SIZE = 500;
 // date (display/ordering) + סוג status (drives the list/calendar dot color) +
 // the creator/lead people columns (drive the per-row edit-permission gate in the
 // list — only the discussion creator/lead, or a board owner, may edit/delete).
-const LIST_COLUMNS = ['discussionDateID', 'discussionTypeID', 'discussionCreatorID', 'discussionLeadID'];
+// round207 — the coordinator joined the row-level fixed EXPORT rule, so the
+// lean list read now carries the coordinator column too.
+const LIST_COLUMNS = ['discussionDateID', 'discussionTypeID', 'discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID'];
 // Date-only column set for the month-filter option fetch (useDiscussionMonths):
 // only each discussion's date is needed to derive the distinct months that have
 // discussions — no need to pull type/people.
