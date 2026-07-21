@@ -9,12 +9,15 @@ import jwt from 'jsonwebtoken';
 
 /**
  * Verify a monday sessionToken (with or without a `Bearer ` prefix).
- * Pure — never throws.
+ * Never throws — an invalid/expired token resolves to null (the caller turns that into a
+ * 401 and logs the actionable WARN). An optional logger records the raw verify failure at
+ * DEBUG (funnel-level, off in prod) so the catch is never silent; no token bytes are logged.
  * @param {string} rawToken
  * @param {string} clientSecret
+ * @param {{ debug?: Function }} [logger]
  * @returns {{ accountId: string, userId: string } | null}
  */
-export function verifySessionToken(rawToken, clientSecret) {
+export function verifySessionToken(rawToken, clientSecret, logger) {
   try {
     if (typeof rawToken !== 'string' || rawToken.length === 0) return null;
     if (typeof clientSecret !== 'string' || clientSecret.length === 0) return null;
@@ -24,8 +27,11 @@ export function verifySessionToken(rawToken, clientSecret) {
     const userId = decoded?.dat?.user_id;
     if (accountId == null || userId == null) return null;
     return { accountId: String(accountId), userId: String(userId) };
-  } catch {
-    // Verification failure is routine (expired/foreign token) — null IS the handling.
+  } catch (err) {
+    // Verification failure is routine (expired/foreign token) — null IS the handling for
+    // the caller. Record the funnel event at DEBUG (reason only, never the token) so the
+    // catch is not silent; the middleware ships the WARN summary.
+    logger?.debug?.('session_token_verify_failed', 'auth', { reason: err?.name ?? 'verify_error' });
     return null;
   }
 }
@@ -35,19 +41,24 @@ export function verifySessionToken(rawToken, clientSecret) {
  * 401 { error: 'invalid_session_token' } for missing/invalid tokens;
  * 403 { error: 'forbidden_account' } when a non-empty allowlist excludes the
  * token's account; success → req.session = { accountId, userId }.
- * @param {{ clientSecret: string, allowedAccountIds: string[] }} opts
+ * Auth denials are logged at WARN (observability gap #6) — reason + account id only,
+ * NEVER any token contents — so a spike of rejected reads is visible in the sink.
+ * @param {{ clientSecret: string, allowedAccountIds: string[], logger?: { warn: Function } }} opts
  * @returns {import('express').RequestHandler}
  */
-export function createSessionTokenMiddleware({ clientSecret, allowedAccountIds }) {
+export function createSessionTokenMiddleware({ clientSecret, allowedAccountIds, logger }) {
   const allow = Array.isArray(allowedAccountIds) ? allowedAccountIds : [];
   return function requireSession(req, res, next) {
     const raw = req.headers?.authorization ?? req.get?.('Authorization') ?? null;
-    const session = raw === null ? null : verifySessionToken(raw, clientSecret);
+    const session = raw === null ? null : verifySessionToken(raw, clientSecret, logger);
     if (!session) {
+      // reason distinguishes a probe with no header from a present-but-bad token; no token bytes.
+      logger?.warn('session_token_rejected', 'auth', { reason: raw === null ? 'missing' : 'invalid' });
       res.status(401).json({ error: 'invalid_session_token' });
       return;
     }
     if (allow.length > 0 && !allow.includes(session.accountId)) {
+      logger?.warn('session_forbidden_account', 'auth', { acc: session.accountId });
       res.status(403).json({ error: 'forbidden_account' });
       return;
     }

@@ -49,6 +49,7 @@ const telemetry = createTelemetryService({
   axiomToken: env.axiomToken,
   axiomDataset: env.axiomDataset,
   axiomOrgId: env.axiomOrgId,
+  logger,
 });
 
 // --- OAuth app-identity token (Change #143 continuation) ------------------

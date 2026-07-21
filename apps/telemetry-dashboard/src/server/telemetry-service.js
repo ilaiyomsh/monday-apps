@@ -24,9 +24,9 @@ const PANEL_KEYS = [
 ];
 
 /**
- * @param {{ axiomToken: string, axiomDataset: string, axiomOrgId?: string, fetchImpl?: typeof fetch, now?: () => number }} opts
+ * @param {{ axiomToken: string, axiomDataset: string, axiomOrgId?: string, fetchImpl?: typeof fetch, now?: () => number, logger?: { warn: Function } }} opts
  */
-export function createTelemetryService({ axiomToken, axiomDataset, axiomOrgId, fetchImpl, now }) {
+export function createTelemetryService({ axiomToken, axiomDataset, axiomOrgId, fetchImpl, now, logger }) {
   const clock = now || (() => Date.now());
   const enabled = typeof axiomToken === 'string' && axiomToken.length > 0;
   const client = enabled ? createAxiomClient({ token: axiomToken, orgId: axiomOrgId, fetchImpl }) : null;
@@ -66,8 +66,15 @@ export function createTelemetryService({ axiomToken, axiomDataset, axiomOrgId, f
           const rows = await client.query(queries[key], startIso, endIso);
           return [key, rows];
         } catch (err) {
-          // Log status only — never the token or the full query text.
-          console.error(`telemetry panel "${key}" failed: ${err?.status ?? ''} ${err?.message ?? err}`.trim());
+          // Route through the server logger so an Axiom-read failure ships to the shared
+          // errors dataset when the sink is active (it used to be console-only and never
+          // shipped even with the sink on). Panel + status only — never the token or the
+          // full query text. The panel degrades to [] so the rest of the dashboard renders.
+          logger.warn('telemetry_panel_failed', 'axiom', {
+            panel: key,
+            status: Number.isFinite(err?.status) ? err.status : undefined,
+            error: err instanceof Error ? err : new Error(String(err?.message ?? err)),
+          });
           return [key, []];
         }
       })

@@ -45,8 +45,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # VITE_AXIOM_* are baked into the client bundle at build time to activate the
+      # browser error sink (src/client/utils/axiomErrorSink.ts), gated on import.meta.env.PROD.
+      # VITE_AXIOM_TOKEN is an Axiom ingest token (secret); an absent secret builds an inert
+      # sink (Boolean('') === false), so the client never ships until the secret is added.
       - name: Build telemetry-dashboard (client)
         run: pnpm --filter "./apps/telemetry-dashboard" build
+        env:
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: telemetry-dashboard
 
       - name: Install monday.com apps CLI
         if: ${{ env.APP_ID != '' }}
