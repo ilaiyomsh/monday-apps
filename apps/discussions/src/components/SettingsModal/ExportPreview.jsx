@@ -321,10 +321,14 @@ export default function ExportPreview({ template, assets }) {
         // pagination measures real offsets, which a detached node can't give
         // (visibility:hidden + fixed offscreen keeps it laid out but invisible);
         // still swapped atomically at the end — no blank flash on rebuilds.
-        // experimental:false (review finding): its deferred tab-stop measuring
-        // pass mixes zoom-scaled and unzoomed geometry under our CSS zoom and
-        // DISTORTS tab-aligned headers from uploaded templates; the generated
-        // doc emits no tab stops, so the pass buys nothing here.
+        // round201 — experimental:true is REQUIRED for tab stops: Word templates
+        // typically center header/footer text with center/right tab stops, and
+        // without the experimental pass docx-preview renders each tab as a bare
+        // em-space, so uploaded-template headers lose their centering. The
+        // round195 distortion (zoom-scaled vs unzoomed geometry) happened when
+        // the deferred pass ran AFTER the swap into the zoomed host — waiting it
+        // out below, while the pages are still in this unzoomed stage, is what
+        // makes it safe now.
         if (typeof document.fonts?.ready?.then === 'function') {
           await document.fonts.ready; // measure with the real webfonts loaded
           if (cancelled || seq !== seqRef.current) return;
@@ -338,11 +342,18 @@ export default function ExportPreview({ template, assets }) {
           await docxPreview.renderAsync(new Blob([bytes]), stage, stage, {
             inWrapper: true,
             breakPages: true,
-            experimental: false,
+            experimental: true,
             renderHeaders: true,
             renderFooters: true,
             useBase64URL: true,
           });
+          // docx-preview's refreshTabStops fires on an INTERNAL 500ms setTimeout
+          // after renderAsync resolves — wait it out while the pages are still
+          // attached and unzoomed so the measured tab widths are correct; the
+          // spans keep their computed inline styles through the pagination
+          // cloning and the host swap.
+          await new Promise((resolve) => { setTimeout(resolve, 650); });
+          if (cancelled || seq !== seqRef.current) return;
           paginateRenderedDocx(stage);   // true Word-like page breaks by height
           patchPageNumbers(stage);       // stamp עמוד k מתוך N per page
           pageTotal = stage.querySelectorAll('section.docx').length || 1;
