@@ -97,10 +97,14 @@ export function createLogger(options: LoggerOptions) {
   };
 
   const api = {
-    debug: (m: string, msg: string, d?: unknown) => emit('DEBUG', m, msg, d),
-    info: (m: string, msg: string, d?: unknown) => emit('INFO', m, msg, d),
-    warn: (m: string, msg: string, d?: unknown) => emit('WARN', m, msg, d),
-    error: (m: string, msg: string, e?: unknown) => emit('ERROR', m, msg, e),
+    // The optional 4th `context` arg is forwarded onto the record (via emit) so a caller
+    // that attaches structured context — e.g. error-kit's ErrorBoundary passing
+    // { componentStack } to logger.error — has it ride the shipped ERROR record. The
+    // arity matches error-kit's Logger interface; a 3-arg call leaves context undefined.
+    debug: (m: string, msg: string, d?: unknown, ctx?: Record<string, unknown>) => emit('DEBUG', m, msg, d, ctx),
+    info: (m: string, msg: string, d?: unknown, ctx?: Record<string, unknown>) => emit('INFO', m, msg, d, ctx),
+    warn: (m: string, msg: string, d?: unknown, ctx?: Record<string, unknown>) => emit('WARN', m, msg, d, ctx),
+    error: (m: string, msg: string, e?: unknown, ctx?: Record<string, unknown>) => emit('ERROR', m, msg, e, ctx),
     api: (fn: string, query?: unknown, variables?: unknown) => emit('DEBUG', 'API', `→ ${fn}`, { query, variables }),
     apiResponse: (fn: string, durationMs: number) => emit('DEBUG', 'API', `← ${fn} (${Math.round(durationMs)}ms)`),
     apiError: (fn: string, error: unknown, context?: Record<string, unknown>) => emit('ERROR', 'API', `✕ ${fn}`, error, context),
