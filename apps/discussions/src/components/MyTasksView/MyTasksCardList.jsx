@@ -33,9 +33,63 @@ const isOverdue = (d) => {
   return d < today;
 };
 
-const toDateInputValue = (d) => (d instanceof Date && !Number.isNaN(d.getTime())
-  ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  : '');
+// round214 — the deadline sheet's own HEBREW, RTL month calendar (owner spec):
+// the native <input type="date"> opened the OS picker whose header is
+// English/LTR and can't be localized. Sunday (א׳) is the rightmost column;
+// the chevron on the RIGHT goes to the PREVIOUS month (Hebrew calendar
+// convention); tapping a day picks it.
+const DOW_HE = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+
+function MobileHebrewCalendar({ value, onPick }) {
+  const today = new Date();
+  const valid = value instanceof Date && !Number.isNaN(value.getTime()) ? value : null;
+  const seed = valid || today;
+  const [view, setView] = useState(() => new Date(seed.getFullYear(), seed.getMonth(), 1));
+  const monthLabel = view.toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+  const firstDow = view.getDay(); // 0 = Sunday (א׳)
+  const daysInMonth = new Date(view.getFullYear(), view.getMonth() + 1, 0).getDate();
+  const sameDay = (d, ref) => ref
+    && ref.getFullYear() === view.getFullYear()
+    && ref.getMonth() === view.getMonth()
+    && ref.getDate() === d;
+  return (
+    <div className={styles.cal} dir="rtl">
+      <div className={styles.calHead}>
+        <button
+          type="button"
+          className={styles.calNav}
+          onClick={() => setView((v) => new Date(v.getFullYear(), v.getMonth() - 1, 1))}
+          aria-label="חודש קודם"
+        >
+          ›
+        </button>
+        <span className={styles.calMonth}>{monthLabel}</span>
+        <button
+          type="button"
+          className={styles.calNav}
+          onClick={() => setView((v) => new Date(v.getFullYear(), v.getMonth() + 1, 1))}
+          aria-label="חודש הבא"
+        >
+          ‹
+        </button>
+      </div>
+      <div className={styles.calGrid}>
+        {DOW_HE.map((d) => <span key={d} className={styles.calDow}>{d}</span>)}
+        {Array.from({ length: firstDow }, (_, i) => <span key={`pad-${i}`} />)}
+        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => (
+          <button
+            key={d}
+            type="button"
+            className={`${styles.calDay} ${sameDay(d, valid) ? styles.calDaySel : ''} ${sameDay(d, today) ? styles.calDayToday : ''}`}
+            onClick={() => onPick(new Date(view.getFullYear(), view.getMonth(), d))}
+          >
+            {d}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function SortableCard({ task, children }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(task.id) });
@@ -225,23 +279,16 @@ export function MyTasksCardList({
             ))}
             {sheet.kind === 'deadline' && (
               <div className={styles.dateBody}>
-                <input
-                  type="date"
-                  className={styles.dateInput}
-                  defaultValue={toDateInputValue(sheetTask.deadlineID)}
-                  aria-label="בחירת תאריך יעד"
-                  onChange={(e) => {
-                    if (!e.target.value) return;
-                    onDeadlineChange?.(sheetTask.id, new Date(`${e.target.value}T00:00:00`));
-                    closeSheet();
-                  }}
+                <MobileHebrewCalendar
+                  value={sheetTask.deadlineID}
+                  onPick={(d) => { onDeadlineChange?.(sheetTask.id, d); closeSheet(); }}
                 />
                 <button
                   type="button"
                   className={styles.sheetGhost}
                   onClick={() => { onDeadlineChange?.(sheetTask.id, null); closeSheet(); }}
                 >
-                  הסר תאריך
+                  נקה תאריך
                 </button>
               </div>
             )}
