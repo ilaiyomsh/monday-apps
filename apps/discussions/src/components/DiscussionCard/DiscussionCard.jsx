@@ -233,7 +233,7 @@ export function DiscussionCard({
   // lead/owner path, so each granular boolean equals the old canEdit — behavior
   // is unchanged.
   const { can, canEdit, ready: permsReady } = usePermissions(data, { canManageSettings, currentUser });
-  const { settings } = useSettings();
+  const { settings, permissions } = useSettings();
   const { typeTemplates } = useTemplates();
 
   // Granular discussion-tier caps (each defaults to the legacy creator/lead/owner
@@ -264,16 +264,13 @@ export function DiscussionCard({
     Array.isArray(people) && people.some((p) => String(p?.id) === String(currentUser?.id));
   const canHideTopicOrPoint =
     canManageSettings || holdsRole(data?.discussionLeadID) || holdsRole(data?.discussionCoordinatorID);
-  // round200 (owner decision): the Summary box AND the new References box are
-  // editable ONLY by the discussion coordinator (מרכז דיון), its creator, or its
-  // lead (מנהל דיון) — plus the board owner. A FIXED rule like canHideTopicOrPoint,
-  // deliberately not a matrix capability. Until the details load, the people
-  // columns are unknown → read-only for non-owners (never a brief edit flash).
-  const canEditSummaryBox =
-    canManageSettings ||
-    holdsRole(data?.discussionCreatorID) ||
-    holdsRole(data?.discussionLeadID) ||
-    holdsRole(data?.discussionCoordinatorID);
+  // round212 — the triple-box WRITES are MATRIX capabilities now (owner spec:
+  // the permissions ✓-table controls them). The seeds reproduce the old fixed
+  // rule (creator/lead/coordinator + owner) out of the box; the owner can now
+  // grant/revoke each pane per role — participants included.
+  const canEditBackgroundPane = can('writeBackground');
+  const canEditReferencesPane = can('writeReferences');
+  const canEditSummaryPane = can('editSummary');
   // round203 (owner decision): renaming the discussion FROM ITS TITLE is a FIXED
   // rule — not a matrix capability. round205 added the CREATOR to the rule
   // (owner request), alongside the lead, the coordinator and the board owner.
@@ -373,9 +370,12 @@ export function DiscussionCard({
   // see the columns that actually have people. The live titles resolve via
   // ensurePeopleColumns (falling back to the schema title until they arrive).
   const headerPeopleGroups = useMemo(() => {
+    // round212 — an instance can opt OUT of the coordinator role entirely
+    // (permissions.noCoordinator, set in the permissions tab): the מרכז דיון
+    // group drops from the header alongside the matrix column and create modal.
     const defs = [
       { alias: 'discussionLeadID', fallback: 'מנהל דיון' },
-      { alias: 'discussionCoordinatorID', fallback: 'מרכז דיון' },
+      ...(permissions?.noCoordinator ? [] : [{ alias: 'discussionCoordinatorID', fallback: 'מרכז דיון' }]),
       { alias: 'participantsID', fallback: 'משתתפים' },
     ];
     return defs
@@ -387,7 +387,7 @@ export function DiscussionCard({
       .filter((d) => editDiscussionFields || d.people.length > 0);
     // peopleColumnsVersion recomputes the titles once the live columns load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.discussionLeadID, data.discussionCoordinatorID, data.participantsID, peopleColumnsVersion, editDiscussionFields]);
+  }, [data.discussionLeadID, data.discussionCoordinatorID, data.participantsID, peopleColumnsVersion, editDiscussionFields, permissions?.noCoordinator]);
 
   // Inline editing of the title (double-click to edit).
   const [editingTitle, setEditingTitle] = useState(false);
@@ -947,7 +947,7 @@ export function DiscussionCard({
         {(showTopicsTables || showBackground || showReferences || showSummaryPane) && (
         <div className={activeTab === 'topics' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'topics' ? undefined : 'none' }}>
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} onLoadingChange={handleTopicsLoadingChange}
-            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditReferences={canEditSummaryBox} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditBackground={canEditBackgroundPane} canEditReferences={canEditReferencesPane} canEditSummary={canEditSummaryPane} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
             showTopics={showTopicsTables} showBackground={showBackground} showReferences={showReferences} showSummary={showSummaryPane}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
             decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus} />

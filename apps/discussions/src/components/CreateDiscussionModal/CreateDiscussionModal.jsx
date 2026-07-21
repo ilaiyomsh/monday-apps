@@ -111,7 +111,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const can = usePermission({ canManageSettings, currentUser });
   const canAddType = can('addDiscussionTypes');
   const { templates, participantTemplates, typeTemplates, typeColor, assignRandomTypeColor } = useTemplates();
-  const { settings, updateSettings } = useSettings();
+  const { settings, updateSettings, permissions } = useSettings();
   const previousTasksMode =
     settings?.preferences?.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION;
   const [name, setName] = useState('');
@@ -923,13 +923,17 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                   {lead.length > 0 && <FieldClearButton onClear={() => setLead([])} label={`ניקוי ${leadLabel}`} />}
                 </div>
               </div>
-              <div className={styles.field}>
-                <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
-                <div className={styles.fieldWrap}>
-                  <PersonPicker selected={coordinator} onChange={setCoordinator} bordered single closeOnSelect boardKey="discussions" accountWide />
-                  {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
+              {/* round212 — an instance can opt OUT of the coordinator role
+                  (permissions.noCoordinator): the field drops from the form. */}
+              {!permissions?.noCoordinator && (
+                <div className={styles.field}>
+                  <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
+                  <div className={styles.fieldWrap}>
+                    <PersonPicker selected={coordinator} onChange={setCoordinator} bordered single closeOnSelect boardKey="discussions" accountWide />
+                    {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className={styles.field}>
                 <div className={styles.labelRow}>
                   <Text type="text2" className={styles.label}>{fieldLabels.participants}</Text>

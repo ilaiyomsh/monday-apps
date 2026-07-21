@@ -222,7 +222,7 @@ describe('resolveCan — feature on, additive role union', () => {
     expect(resolveCan('editDecisionAffected', ctx, opts)).toBe(false);
   });
 
-  it('item 13: editSummary matrix-granted to participants (multi-person) is IGNORED — only single-person discussion roles may write the summary', () => {
+  it('round212 (supersedes item 13): editSummary matrix-granted to participants COUNTS — the ✓-table gives owners full per-role control', () => {
     const grantedToParticipants = {
       permissions: {
         enabled: true,
@@ -232,8 +232,18 @@ describe('resolveCan — feature on, additive role union', () => {
       canManageSettings: false,
     };
     const ctx = { discussion: disc({ participants: [person(ME)] }), currentUserId: ME };
-    expect(resolveCan('editSummary', ctx, grantedToParticipants)).toBe(false);
-    // ...but the same explicit grant on the (single-person) lead role works.
+    expect(resolveCan('editSummary', ctx, grantedToParticipants)).toBe(true);
+    // An explicit false on the held role still denies (a plain participant).
+    const revokedFromParticipants = {
+      permissions: {
+        enabled: true,
+        version: 1,
+        roles: { 'discussions:participantsID': { capabilities: { editSummary: false } } },
+      },
+      canManageSettings: false,
+    };
+    expect(resolveCan('editSummary', ctx, revokedFromParticipants)).toBe(false);
+    // The lead-role grant keeps working, as before.
     const grantedToLead = {
       permissions: {
         enabled: true,

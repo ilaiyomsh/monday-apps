@@ -84,14 +84,9 @@ const TASK_CAPS = new Set(
 const DECISION_CAPS = new Set(
   CAPABILITIES.filter((c) => c.tier === 'decision').map((c) => c.id)
 );
-// Item 13 — the only discussion roles whose grants count for editSummary: the
-// single-person people columns (creator / מנהל דיון / מרכז דיון). participants
-// and any extra multi-person people column can never receive summary write.
-const SUMMARY_WRITER_ALIASES = new Set([
-  'discussionCreatorID',
-  'discussionLeadID',
-  'discussionCoordinatorID',
-]);
+// (Item 13's single-person-roles-only restriction on editSummary was REMOVED in
+// round212: the permissions matrix table gives owners full ✓ control, so a grant
+// on ANY held role — participants included — now counts for the summary write.)
 // `viewDiscussion` is a discussion cap but is NOT an edit cap — it must never be
 // suppressed by the `ready` gate (you can always view).
 const VIEW_CAP = 'viewDiscussion';
@@ -347,15 +342,6 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
     if (!inPeople(source?.[e.readId], myId)) continue; // user doesn't hold this role
     const role = roles[e.key];
     if (role?.hidden) continue; // role's column is ignored — contributes nothing
-    // Item 13 (2026-07-14): the SUMMARY may be written only by the discussion's
-    // single-person roles (creator/מנהל/מרכז). A matrix grant on a multi-person
-    // role (participants / extra people columns) is ignored for editSummary —
-    // it can still contribute its explicit false (deny) like any role.
-    if (capability === 'editSummary' && !SUMMARY_WRITER_ALIASES.has(e.readId)) {
-      const explicitDeny = role?.capabilities?.[capability] === false;
-      if (explicitDeny) denied = true;
-      continue;
-    }
     const explicit = role?.capabilities?.[capability];
     if (explicit === false) {
       denied = true; // explicit revoke — vetoes DEFAULT grants only

@@ -540,10 +540,13 @@ export function TopicsTab({
   // coordinator / owner), computed by DiscussionCard, independent of
   // editTopicOrPoint. Defaults true for back-compat in tests/harnesses.
   canHide = true,
-  // round200 — edit gate for the References (התייחסויות) panel: coordinator /
-  // creator / lead + board owner (canEditSummaryBox in DiscussionCard). Everyone
-  // else sees the panel read-only. Defaults false (read-only) on purpose.
+  // round212 — PER-PANE write gates for the triple box, resolved by the matrix
+  // capabilities (writeBackground / writeReferences / editSummary) in
+  // DiscussionCard. Everyone else sees the pane read-only. Default false
+  // (read-only) on purpose.
+  canEditBackground = false,
   canEditReferences = false,
+  canEditSummary = false,
   // round205 — owner-configurable component visibility (Settings → העדפות):
   // the topic tables and each triple-box pane can be hidden per instance.
   // round206 added showSummary (the summary moved into the triple box).
@@ -1069,7 +1072,9 @@ export function TopicsTab({
       <div className={styles.refPanel}>
         <UpdatesTripleBox
           discussionId={discussion?.id}
-          canEdit={canEditReferences}
+          canEditBackground={canEditBackground}
+          canEditReferences={canEditReferences}
+          canEditSummary={canEditSummary}
           showBackground={showBackground}
           showReferences={showReferences}
           showSummary={showSummary}

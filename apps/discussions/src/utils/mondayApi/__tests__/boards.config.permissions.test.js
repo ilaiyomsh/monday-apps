@@ -15,6 +15,9 @@ const DISC_CAPS = [
   'viewReferencesBox',
   'viewSummaryBox',
   'editDiscussionFields',
+  // round212 — the triple-box writes are matrix caps (labels: כתיבת רקע/התייחסויות/סיכום).
+  'writeBackground',
+  'writeReferences',
   'editSummary',
   'exportDocs',
   'createTask',
