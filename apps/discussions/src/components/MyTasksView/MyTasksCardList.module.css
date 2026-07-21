@@ -37,6 +37,9 @@
   line-height: 1.35;
   padding: 0;
   cursor: pointer;
+  /* round210 — long names WRAP inside the viewport-wide card (never widen it). */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .disc {

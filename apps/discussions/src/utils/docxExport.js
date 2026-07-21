@@ -37,6 +37,7 @@ import { loadSummaryUpdateId } from './summaryStore.js';
 import { loadReferencesUpdateId } from './referencesStore.js';
 import { getItemUpdate } from './mondayApi/updates.js';
 import { isSummaryHtmlEmpty } from './summaryHtml.js';
+import { parseExternalParticipants } from './externalParticipants.js';
 import { uploadFileToColumnSeamless } from './mondayApi/fileUpload.js';
 import { spliceBodyIntoTemplate } from './docxTemplateMerge.js';
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
@@ -196,6 +197,10 @@ export function buildDiscussionModel({ discussion, topics = [], summaryHtml = ''
     title: discussion?.name || 'דיון',
     dateText: formatHeDate(discussion?.discussionDateID),
     participantsText: participants.map((p) => p?.name).filter(Boolean).join(', '),
+    // round211 — EXTERNAL participants (text-only names, comma-separated in a
+    // long_text column). When present, the meta renderer splits the participants
+    // row into פנימיים/חיצוניים (see buildMeta).
+    externalParticipantsText: parseExternalParticipants(discussion?.externalParticipantsID).join(', '),
     leadText: lead.map((p) => p?.name).filter(Boolean).join(', '),
     typesText,
     previousText: previousDiscussionName || '',
@@ -600,6 +605,21 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     for (const f of fields) {
       if (!f || f.enabled === false) continue;
       const value = model[f.key];
+      // round211 — the participants row splits when EXTERNAL participants exist:
+      // the regular people are labeled "משתתפים פנימיים" (only when the owner
+      // kept the default label) and a "משתתפים חיצוניים" row follows. Without
+      // externals the row renders exactly as before.
+      if (f.key === 'participantsText') {
+        const ext = model.externalParticipantsText;
+        if (value) {
+          const label = ext && (!f.label || f.label === 'משתתפים')
+            ? 'משתתפים פנימיים'
+            : (f.label || '');
+          out.push(metaPara(label, value));
+        }
+        if (ext) out.push(metaPara('משתתפים חיצוניים', ext));
+        continue;
+      }
       if (value) out.push(metaPara(f.label || '', value));
     }
     return out;
