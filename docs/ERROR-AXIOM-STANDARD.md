@@ -101,22 +101,35 @@ CI injection lives in each client app's deploy workflow **Build** step
 (`.github/workflows/deploy-{draft,live}-*.yml`). A missing secret → empty token → inert
 gate (fail-soft), so wiring is safe before the token exists.
 
-**Server:** the sink is opts-injected and inert unless `AXIOM_TOKEN` + `AXIOM_DATASET` +
-`AXIOM_APP_NAME` are present at runtime — read by `index.js` (via the monday-code
-`EnvironmentVariablesManager`) and passed to `attachAxiomServerSink(logger, {...})`.
+**Server (ingest / shipping):** the sink is opts-injected and inert unless `AXIOM_TOKEN` +
+`AXIOM_DATASET` + `AXIOM_APP_NAME` are present at runtime — read by `index.js` (via the
+monday-code `EnvironmentVariablesManager`) and passed to `attachAxiomServerSink(logger, {...})`.
+`AXIOM_TOKEN` is an **ingest-only** token, the same class as the client `AXIOM_INGEST_TOKEN`.
+
+**Reader (telemetry-dashboard only):** the dashboard is the one surface that *reads*
+`app-errors` — its server runs 11 APL queries against the `_apl` endpoint. That path needs a
+distinct **query-scoped** token `AXIOM_QUERY_TOKEN` **and** `AXIOM_ORG_ID` (sent as the
+`X-Axiom-Org-Id` header), both server-only and never in any bundle. With `AXIOM_QUERY_TOKEN`
+unset the dashboard falls back to seed/demo mode (no real data). This is separate from, and in
+addition to, the ingest keys above that let it ship its own errors.
 
 ## Runbooks
 
 ### One-time setup (USER ONLY — agents never touch tokens)
 1. In Axiom, create the dataset **`app-errors`**.
-2. Create an **ingest-only** token scoped to `app-errors`.
-3. Add it to GitHub repo secrets as **`AXIOM_INGEST_TOKEN`** (client builds read it).
+2. Create the tokens (Axiom → Settings → API tokens), both scoped to `app-errors`:
+   - an **ingest-only** token — every app ships with it (clients + servers).
+   - a **query-scoped** token — only telemetry-dashboard reads with it. Note your **Org ID** too.
+3. Add the ingest token to GitHub repo secrets as **`AXIOM_INGEST_TOKEN`** (client builds read it).
 4. Server apps — set runtime env on the platform (not in files):
-   - sync-calender: `mapps code:env -i 11666315 -m set -k AXIOM_TOKEN -v <tok>` and
+   - sync-calender: `mapps code:env -i 11666315 -m set -k AXIOM_TOKEN -v <ingest>` and
      `-k AXIOM_DATASET -v app-errors` and `-k AXIOM_APP_NAME -v sync-calender`.
-   - telemetry-dashboard: same three keys (`AXIOM_TOKEN`, `AXIOM_DATASET=app-errors`,
-     `AXIOM_APP_NAME=telemetry-dashboard`) once its App ID / secret is provisioned.
    - deadline-confirm: same three keys against its app id (`mapps code:env -i 11704868`).
+   - telemetry-dashboard (once its App ID / `APP_TELEMETRY_DASHBOARD_ID` secret exists):
+     - **ingest** (ship its own errors): `AXIOM_TOKEN=<ingest>`, `AXIOM_DATASET=app-errors`,
+       `AXIOM_APP_NAME=telemetry-dashboard`.
+     - **query** (read app-errors for the dashboard): `AXIOM_QUERY_TOKEN=<query>` and
+       `AXIOM_ORG_ID=<org>`. Omit these and the dashboard runs in seed/demo mode.
 
 ### Acceptance test (per app, prod build)
 `setTimeout(() => { throw new Error('axiom-acceptance'); })`, then confirm client
@@ -176,7 +189,10 @@ kit remains visibility-only until the standing lint debt is cleared.
   `AXIOM_*` env still needs the user's `mapps code:env -i 11666315` change to land on
   `app-errors`.
 - **telemetry-dashboard — `APP_TELEMETRY_DASHBOARD_ID` secret not set.** Without it the app
-  does not deploy at all; its server also needs the `AXIOM_*` runtime env (`mapps code:env`).
+  does not deploy at all. Its server also needs runtime env (`mapps code:env`) for BOTH roles:
+  ingest (`AXIOM_TOKEN`/`AXIOM_DATASET`/`AXIOM_APP_NAME`) to ship its own errors, and query
+  (`AXIOM_QUERY_TOKEN` + `AXIOM_ORG_ID`) to READ app-errors — without the query token the
+  dashboard shows seed/demo data only.
 
 ### Resolved by this PR (kept for history)
 - **deadline-confirm admin SPA — client sink inert in prod.** ✅ Fixed — both
