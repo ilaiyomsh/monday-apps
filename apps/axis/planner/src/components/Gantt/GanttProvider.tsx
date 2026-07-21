@@ -1,4 +1,4 @@
-import React, { useState, useRef, type ReactNode, useMemo, useCallback, useEffect, useTransition, lazy, Suspense } from 'react';
+import React, { useState, useRef, type ReactNode, useMemo, useCallback, useEffect, useTransition, lazy } from 'react';
 import { parseISO, addDays, startOfDay } from 'date-fns';
 import type { ZoomLevel, ViewMode, TaskId, Task, Group, Allocation, ProjectClassification, RoleAvailability, RoleAvailabilityDay, RoleCapacity, ProjectMetrics } from '../../types/gantt.types';
 import type { TimeframeFilter, UtilizationFilter, PMFilter, ProjectTypeFilter, AvailablePM, AvailableProjectType } from './GanttContext';
@@ -30,6 +30,7 @@ import { getProjectColor } from '../../utils/colorUtils';
 import { classifyProject, isClassificationEnabled, CLASSIFICATION_ORDER } from '../../utils/projectClassification';
 import { getDefaultEffortModeByZoom } from '../../utils/effortUtils';
 import { useDisplayUnit } from '../../hooks/useDisplayUnit';
+import { LazyBoundary } from '../ui/LazyBoundary';
 import mondaySdk from 'monday-sdk-js';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '../../hooks/useLocale';
@@ -78,7 +79,11 @@ export const GanttProvider: React.FC<GanttProviderProps> = ({
 
   const saveSidebarWidth = useCallback((width: number) => {
     const newWidth = Math.max(width, MIN_SIDEBAR_WIDTH);
-    (monday.storage.instance as any).setItem(SIDEBAR_WIDTH_KEY, newWidth.toString());
+    // Fire-and-forget persistence: a setItem rejection was previously a fully silent
+    // unhandled promise rejection (fires on every sidebar resize). Attach a catch so the
+    // failure ships to Axiom (WARN — losing a sidebar-width preference is non-critical).
+    Promise.resolve((monday.storage.instance as any).setItem(SIDEBAR_WIDTH_KEY, newWidth.toString()))
+      .catch((err: unknown) => logger.warn('[GanttProvider] Failed to persist sidebar width:', err));
   }, []);
   
   const setViewMode = useCallback((mode: ViewMode) => {
@@ -983,16 +988,19 @@ export const GanttProvider: React.FC<GanttProviderProps> = ({
       {(isModalOpen || (isBulkModalOpen && bulkModalData)) && (
         <div className="fixed inset-0 z-[99] bg-black/20" />
       )}
-      <Suspense fallback={null}>
+      <LazyBoundary>
         <AllocationModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onSave={(data) => {
+            // RETURN the inner promise so AllocationModal.handleSubmit's `await onSave(...)`
+            // actually waits: on the create path addAllocation logs-then-rethrows, and this
+            // propagation is what lets the modal's catch (toast + log) fire instead of the
+            // rejection becoming an unhandled promise rejection.
             if (data.id) {
-              updateTask(data.id, data);
-            } else {
-              addAllocation(data);
+              return updateTask(data.id, data);
             }
+            return addAllocation(data);
           }}
           onDelete={deleteAllocation}
           onDuplicate={duplicateAllocation}
@@ -1020,7 +1028,7 @@ export const GanttProvider: React.FC<GanttProviderProps> = ({
             onSwitchToSingle={switchToSingle}
           />
         )}
-      </Suspense>
+      </LazyBoundary>
 
       {/* Toast Notifications */}
       {toast && (

@@ -5,6 +5,7 @@ import type { Employee } from '../types/entities/employee.types';
 import type { PlannerSettings } from '../types/settings.types';
 import { Allocation } from '../types/entities/allocation.types';
 import { ViewMode, GroupId } from '../types/gantt.types';
+import { logger } from '../utils/Logger';
 
 function buildAllocationName(allocation: Partial<Allocation>): string {
   const parts: string[] = [];
@@ -40,8 +41,10 @@ export const allocationsApi = {
     try {
       items = await mondayService.fetchCurrentAllocations(settings);
     } catch (err) {
-      // Operator names or query structure not supported — fall back to full fetch
-      console.warn('[allocationsApi] fetchCurrentAllocations failed, falling back to full fetch:', err);
+      // Operator names or query structure not supported — fall back to full fetch. Ship
+      // through the Axiom-wired logger (was console.warn, invisible to remote monitoring) so
+      // the signal that the fast filtered path is broken actually reaches Axiom.
+      logger.warn('[allocationsApi] fetchCurrentAllocations failed, falling back to full fetch:', err);
       items = await mondayService.fetchItems(settings.allocationsBoardId);
     }
 

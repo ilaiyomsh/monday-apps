@@ -64,8 +64,12 @@ export interface LogRecord {
   /** usage/health INFO records bypass the WARN/ERROR ship policy (D3/D5) */
   alwaysShip?: boolean;
   error?: Error;
-  /** numeric timings the sink may forward (duration → ms, totalMs, step) */
-  context?: { duration?: number; totalMs?: number; step?: number };
+  /**
+   * Structured context the sink may forward: numeric timings (duration → ms, totalMs, step)
+   * and the React `componentStack` (attached by the @mapps/error-kit ErrorBoundary via the
+   * bridge() entry, shipped as `component_stack`).
+   */
+  context?: { duration?: number; totalMs?: number; step?: number; componentStack?: string };
   correlationId?: string;
   duplicate?: boolean;
   timestamp?: number;
@@ -519,6 +523,57 @@ class Logger {
     // WARN/ERROR labeled records ship too (module = the label). INFO/DEBUG stay console-only.
     if (level === 'WARN' || level === 'ERROR') {
       this.emit(this.buildRecord(level, label, args));
+    }
+  }
+
+  /**
+   * bridge — the structured entry used by the @mapps/error-kit adapter
+   * (setupGlobalErrorHandlers + ErrorBoundary), whose Logger contract is
+   * `(module, message, payload?, context?)`. Unlike the variadic surface, bridge
+   * carries an explicit `context` object (e.g. the ErrorBoundary's componentStack)
+   * onto the record so the Axiom sink can ship it. Routes through the SAME choke-point
+   * as warn()/error(): console render at the given level, then WARN/ERROR fan out to
+   * sinks (INFO/DEBUG stay console-only, matching labeled()).
+   */
+  bridge(
+    level: LogLevel,
+    module: string,
+    message: string,
+    payload?: unknown,
+    context?: LogRecord['context']
+  ): void {
+    const error = payload instanceof Error ? payload : undefined;
+    if (this.shouldLog(level)) {
+      const colors: Record<LogLevel, string> = {
+        DEBUG: '#6366f1',
+        INFO: '#22c55e',
+        WARN: '#f59e0b',
+        ERROR: '#ef4444',
+      };
+      const method = level === 'DEBUG' ? 'debug'
+                   : level === 'INFO' ? 'info'
+                   : level === 'WARN' ? 'warn'
+                   : 'error';
+      // Include the payload in the console line only when it's present (Error or value).
+      const extras = payload === undefined ? [] : [payload];
+      console[method](
+        `%c${this.getTimestamp()} %c[${module}]`,
+        'color: #64748b',
+        `color: ${colors[level]}`,
+        message,
+        ...extras
+      );
+    }
+    // Only WARN/ERROR fan out to sinks (parity with labeled()); INFO/DEBUG stay console-only.
+    if (level === 'WARN' || level === 'ERROR') {
+      this.emit({
+        kind: error ? 'error' : 'simple',
+        level,
+        module,
+        message: typeof message === 'string' ? message : String(message),
+        error,
+        context,
+      });
     }
   }
 

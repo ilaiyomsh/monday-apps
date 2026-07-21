@@ -526,20 +526,27 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
 
   const handleRequestClose = async () => {
     if (isDirty) {
-      const { monday } = mondayService;
-      const result = await monday.execute("confirm", {
-        message: t('settings.unsavedConfirm.message'),
-        confirmButton: t('settings.unsavedConfirm.saveAndClose'),
-        cancelButton: t('settings.unsavedConfirm.closeWithoutSaving'),
-        excludeCancelButton: false
-      }) as any;
+      try {
+        const { monday } = mondayService;
+        const result = await monday.execute("confirm", {
+          message: t('settings.unsavedConfirm.message'),
+          confirmButton: t('settings.unsavedConfirm.saveAndClose'),
+          cancelButton: t('settings.unsavedConfirm.closeWithoutSaving'),
+          excludeCancelButton: false
+        }) as any;
 
-      if (result.data?.confirm) {
-        await handleSave();
-      } else if (result.data?.confirm === false) {
-        onClose();
+        if (result.data?.confirm) {
+          await handleSave();
+        } else if (result.data?.confirm === false) {
+          onClose();
+        }
+        // If user closes the confirm dialog without choosing, we stay in the settings
+      } catch (err) {
+        // The confirm SDK call was previously unguarded — a channel/SDK rejection was a
+        // silent unhandled promise rejection. Log it and keep the dialog open so the user's
+        // unsaved changes are never stranded by a failed confirm.
+        logger.error('[SettingsDialog] unsaved-changes confirm dialog failed; keeping dialog open:', err);
       }
-      // If user closes the confirm dialog without choosing, we stay in the settings
     } else {
       onClose();
     }
