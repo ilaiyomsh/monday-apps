@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, useSyncExternalStore, lazy, Suspense } from 'react';
 import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
 import { MoveArrowLeft, Info } from '@vibe/icons';
+import { Pencil } from 'lucide-react';
 import { דיונים1Board } from '@api/BoardSDK.js';
 import { useTasks } from '@generated/hooks/useTasks';
 import { useDecisions } from '@generated/hooks/useDecisions';
@@ -257,6 +258,11 @@ export function DiscussionCard({
     holdsRole(data?.discussionCreatorID) ||
     holdsRole(data?.discussionLeadID) ||
     holdsRole(data?.discussionCoordinatorID);
+  // round203 (owner decision): renaming the discussion FROM ITS TITLE is a FIXED
+  // rule — the discussion lead (מנהל דיון), the coordinator (מרכז דיון) and the
+  // board owner. Deliberately NOT the creator and not a matrix capability.
+  const canEditTitle =
+    canManageSettings || holdsRole(data?.discussionLeadID) || holdsRole(data?.discussionCoordinatorID);
 
   // Item 19 / round 78 — access-column payload for every task created FROM this
   // discussion. Which discussion ROLES fill each tasks access column is
@@ -477,7 +483,8 @@ export function DiscussionCard({
     persistField('discussionDateID', composeLocalDate(toDateInput(data.discussionDateID), timeStr));
   };
 
-  const startEditTitle = () => { if (!canEdit) return; setTitleDraft(data.name || ''); setEditingTitle(true); };
+  // round203 — gated by canEditTitle (lead/coordinator/owner), no longer canEdit.
+  const startEditTitle = () => { if (!canEditTitle) return; setTitleDraft(data.name || ''); setEditingTitle(true); };
   const saveTitle = () => {
     setEditingTitle(false);
     const t = titleDraft.trim();
@@ -658,11 +665,24 @@ export function DiscussionCard({
               <div className={styles.titleMainRow}>
                 <h1
                   className={styles.title}
-                  onDoubleClick={canEdit ? startEditTitle : undefined}
-                  title={canEdit ? 'לחיצה כפולה לעריכה' : undefined}
+                  onDoubleClick={canEditTitle ? startEditTitle : undefined}
+                  title={canEditTitle ? 'לחיצה כפולה לעריכה' : undefined}
                 >
                   {data.name}
                 </h1>
+                {/* round203 — hover pencil: a discoverable edit affordance next to
+                    the title for lead/coordinator/owner (dbl-click still works). */}
+                {canEditTitle && (
+                  <button
+                    type="button"
+                    className={styles.titleEditBtn}
+                    onClick={startEditTitle}
+                    aria-label="ערוך שם דיון"
+                    title="ערוך שם דיון"
+                  >
+                    <Pencil size={15} />
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -152,12 +152,9 @@ export const DEFAULT_EXPORT_TEMPLATE = {
   // Selected export font key (see EXPORT_FONTS). Default = brand (today's output).
   font: DEFAULT_EXPORT_FONT,
   // Body sections in render order. `enabled:false` drops a section entirely.
+  // round203 — the "פתיחה" (freeText) section was RETIRED (owner request);
+  // seedExportTemplate drops it from previously-stored templates.
   sections: [
-    // round191 — "פתיחה" (was 'מידע כללי') is now FIRST and enabled by default
-    // (owner request): an intro block at the head of the document. Empty title+body
-    // still emit nothing (buildFreeText returns []), so a fresh export with no
-    // opening text is byte-identical to before — only its position/default changed.
-    { key: 'freeText', enabled: true, title: '', body: '' },
     {
       key: 'meta',
       enabled: true,

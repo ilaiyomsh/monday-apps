@@ -251,16 +251,19 @@ describe('data-driven template (buildExportDoc)', () => {
     expect(xml).not.toContain('משתתפים'); // disabled field absent
   });
 
-  it('renders a free-text section title and body', async () => {
+  // round203 — the freeText ("פתיחה") section was retired: a stale stored
+  // template that still carries it must render NOTHING for it.
+  it('ignores a retired freeText section left in a stored template', async () => {
     const template = {
       sections: [
-        { key: 'freeText', enabled: true, title: 'הערות', body: 'שורה א\nשורה ב' },
+        { key: 'freeText', enabled: true, title: 'הערות', body: 'שורה א' },
+        { key: 'summary', enabled: true },
       ],
     };
     const xml = await xmlOf(baseModel(), template);
-    expect(xml).toContain('הערות');
-    expect(xml).toContain('שורה א');
-    expect(xml).toContain('שורה ב');
+    expect(xml).not.toContain('הערות');
+    expect(xml).not.toContain('שורה א');
+    expect(xml).toContain('סיכום'); // the rest of the template still renders
   });
 
   it('tasks table has the 5 columns and NO "מדיון קודם" column (round191)', async () => {

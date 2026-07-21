@@ -181,6 +181,32 @@
   min-width: 0;
 }
 
+/* round203 — hover pencil next to the title (lead/coordinator/owner only):
+   hidden at rest, revealed while hovering the title row; dbl-click still works. */
+.titleEditBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.titleMainRow:hover .titleEditBtn,
+.titleEditBtn:focus-visible {
+  opacity: 1;
+}
+.titleEditBtn:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--primary-text-color, #323338);
+}
+
 /* "View only" chip shown when the current user may not edit this discussion. */
 .viewOnlyBadge {
   flex-shrink: 0;
