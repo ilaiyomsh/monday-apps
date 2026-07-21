@@ -58,6 +58,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Error-wiring audit (blocking): every client surface wires the global handlers +
+      # Axiom sink before render and has a root boundary; every server has process guards,
+      # a terminal error middleware, and an opts-injected sink. Structural, node:fs only.
+      - name: Error-wiring audit
+        run: node scripts/error-wiring-audit.mjs
+
       - name: Type-check (skips packages with no type-check script)
         run: pnpm -r --if-present run type-check
 
@@ -66,6 +72,12 @@ jobs:
 
       - name: Build (skips packages with no build script)
         run: pnpm -r --if-present run build
+
+      # error-kit's own suite is BLOCKING (unlike the whole-workspace test job below, which is
+      # visibility-only): it carries the drift tests that guarantee the vendored server/SPA
+      # copies never diverge from the canonical shipping stack. Cheap — one package.
+      - name: error-kit tests + drift (blocking)
+        run: pnpm --filter @mapps/error-kit test
 
   # Visibility-only test job (owner decision 2026-07-12): runs the full
   # workspace test suites and reports the outcome in the job summary, but

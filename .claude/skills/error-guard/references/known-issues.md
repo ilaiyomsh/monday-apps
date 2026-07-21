@@ -151,3 +151,18 @@ selector adds `:not(:has(CallExpression[callee.name='logError']))` (and the
 sibling `logAttempt`/`logInfo` names where appropriate), treat hook findings
 on `logError(...)`-handled catches in this app as false positives — verify
 with `npx eslint <file>` before "fixing".
+
+### 2026-07-21 — False positive: `.ts` vendored transport not exempt (FIXED)
+- **Trigger:** re-vendoring the hardened browser transport into
+  `apps/telemetry-dashboard/src/client/utils/axiomBrowserTransport.ts` (a `.ts`
+  SPA copy) tripped the PostToolUse hook — `no-console` on the `crumb()`
+  breadcrumb and `catch-must-log`/`no-empty` on the transport's intentional
+  "never throws to the caller" exit-path catches.
+- **Root cause:** `eg_should_skip` (`scripts/lib-eslint-flat.sh`) exempted only
+  `axiomBrowserTransport.js` — the pure-client `.js` template — but the embedded
+  SPA copies and the canonical `packages/error-kit/src/browser/axiomTransport.ts`
+  are `.ts`. The intent was always to exempt the transport as sanctioned infra;
+  the list just missed the `.ts` variants (same gap for `processGuards.ts`).
+- **Fix:** exemption extended to `axiomBrowserTransport.ts` / `axiomTransport.ts`
+  / `processGuards.ts` / `process-guards.ts`. Behavior of the rule kit is
+  otherwise unchanged; `*Sink*` already covered every error/server sink file.

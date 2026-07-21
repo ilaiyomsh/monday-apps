@@ -14,8 +14,8 @@
  * kind (domain discriminator), corr, err_name, err_code, err_msg (scrubbed), first stack frame,
  * and numeric timings.
  */
-import { createAxiomBrowserTransport, type AxiomTransport } from './axiomBrowserTransport';
-import logger, { type LogRecord } from './logger';
+import { createAxiomBrowserTransport, type AxiomTransport, type AxiomEventInput } from './axiomBrowserTransport';
+import logger, { type LogRecord, type LogContext } from './logger';
 
 // Rank table — DEBUG < INFO < WARN < ERROR. Values are number|undefined so the
 // `=== undefined` guards below stay type-legal under strict TS.
@@ -125,29 +125,61 @@ const TOKEN_RE = /[A-Za-z0-9_-]{16,}/g;
 const DIGITS_RE = /\d{7,}/g;
 const MSG_PRECAP = 1000;
 const MSG_MAXLEN = 200;
+const STACK_MAXLEN = 1500;         // fix 3: joined top-5 frames
+const COMPONENT_STACK_MAXLEN = 1000; // fix 3: React componentStack
 
 /**
- * Redact PII/secrets from an error message so it can ship as `err_msg` (D2). Order matters:
- * emails FIRST (their local part would otherwise be eaten by the token rule), then long
- * token/hex runs (>=16), then digit-runs (>=7). Pre-capped at 1000, final slice 200.
- * Identical spec across app-core, the templates, and tracker.
+ * Redaction core (order matters: emails FIRST — their local part would otherwise be eaten by
+ * the token rule — then long token/hex runs (>=16), then digit-runs (>=7)). Shared by
+ * scrubMessage and scrubCapped so every scrubbed field obeys one redaction spec.
+ */
+function redact(s: string): string {
+  return s.replace(EMAIL_RE, '[email]').replace(TOKEN_RE, '[redacted]').replace(DIGITS_RE, '[num]');
+}
+
+/**
+ * Redact PII/secrets from an error message so it can ship as `err_msg` (D2). Pre-capped at
+ * 1000 to bound regex work, final slice 200. Identical spec across app-core, the templates,
+ * and every vendored copy.
  */
 export function scrubMessage(raw: unknown): string {
   if (typeof raw !== 'string' || raw === '') return '';
-  let s = raw.slice(0, MSG_PRECAP);
-  s = s.replace(EMAIL_RE, '[email]');
-  s = s.replace(TOKEN_RE, '[redacted]');
-  s = s.replace(DIGITS_RE, '[num]');
-  return s.slice(0, MSG_MAXLEN);
+  return redact(raw.slice(0, MSG_PRECAP)).slice(0, MSG_MAXLEN);
+}
+
+/**
+ * Same redaction as scrubMessage but with a caller-chosen final cap — for fields that are
+ * legitimately longer than an error message (the componentStack, cap 1000). Pre-caps at 3×cap.
+ */
+function scrubCapped(raw: unknown, cap: number): string {
+  if (typeof raw !== 'string' || raw === '') return '';
+  return redact(raw.slice(0, cap * 3)).slice(0, cap);
+}
+
+/**
+ * The top `max` stack frames — V8 (`/^\s*at /`) or a real Firefox/Safari `name@url:line[:col]`
+ * frame. Uses the SAME anchored frame detection as firstStackFrame, so a prose header line or
+ * an @-containing message can never masquerade as a frame and leak error.message content.
+ */
+function topFrames(stack: unknown, max: number): string[] {
+  if (typeof stack !== 'string' || stack === '') return [];
+  const out: string[] = [];
+  for (const line of stack.split('\n')) {
+    if (/^\s*at /.test(line) || /^\s*\S*@\S+:\d+(?::\d+)?\s*$/.test(line)) {
+      out.push(line.trim());
+      if (out.length >= max) break;
+    }
+  }
+  return out;
 }
 
 /**
  * Mapping table — EXACTLY these fields, nothing else. The transport stamps `_time` at
  * enqueue and enriches app/env/ver/sess + acc/usr/obj/board at flush.
  */
-export function mapRecordToEvent(record: LogRecord | null | undefined): Record<string, unknown> {
+export function mapRecordToEvent(record: LogRecord | null | undefined): AxiomEventInput {
   const r = record ?? ({} as LogRecord);
-  const ev: Record<string, unknown> = {
+  const ev: AxiomEventInput = {
     level: String(r.level ?? '').toLowerCase(),
     tag: String(r.module || 'app').toLowerCase(),
     message: r.message, // as-is (stable English event id); transport truncates
@@ -162,15 +194,24 @@ export function mapRecordToEvent(record: LogRecord | null | undefined): Record<s
     if (code != null) ev.err_code = String(code);
     const stack1 = firstStackFrame(err.stack);
     if (stack1 !== undefined) ev.stack1 = stack1; // transport truncates
+    // Extended stack (fix 3): top-5 frames, each scrubbed, joined by newline, total cap 1500.
+    // Shipped IN ADDITION to stack1 (which stays the single-frame query field).
+    const frames = topFrames(err.stack, 5);
+    if (frames.length > 0) ev.stack = frames.map((f) => scrubMessage(f)).join('\n').slice(0, STACK_MAXLEN);
     // error.message ships ONLY scrubbed, as err_msg (D2) — the raw message is never handed over
     if (typeof err.message === 'string' && err.message !== '') ev.err_msg = scrubMessage(err.message);
   }
-  const ctx = r.context;
+  const ctx = r.context as (LogContext & { componentStack?: unknown }) | undefined;
   if (ctx != null && typeof ctx === 'object') {
     // `ms` matches the status-hub vocabulary; total_ms stays separate.
     if (typeof ctx.duration === 'number' && Number.isFinite(ctx.duration)) ev.ms = ctx.duration;
     if (typeof ctx.totalMs === 'number' && Number.isFinite(ctx.totalMs)) ev.total_ms = ctx.totalMs;
     if (typeof ctx.step === 'number' && Number.isFinite(ctx.step)) ev.step = ctx.step;
+    // React componentStack (fix 3): scrubbed, cap 1000. Only when the record carries it — so
+    // ordinary error records never gain the key.
+    if (typeof ctx.componentStack === 'string' && ctx.componentStack !== '') {
+      ev.component_stack = scrubCapped(ctx.componentStack, COMPONENT_STACK_MAXLEN);
+    }
   }
   return ev;
 }

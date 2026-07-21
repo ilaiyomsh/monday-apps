@@ -90,3 +90,25 @@ context arg, and emitted a separate `logger.debug(...)` DEBUG record that never 
 Fix: componentDidCatch now calls `logger.error('ErrorBoundary', error.message, error,
 { componentStack: info.componentStack })` and the separate `logger.debug` call is removed,
 so the sink's component_stack mapping (fix 3) has a record context to read.
+
+## drift.test.ts — 2026-07-21
+
+**Purpose:** guarantee the vendored copies (3 browser SPAs + 3 server sinks) never rot
+against the canonical error-kit contract.
+
+**Red-gate (browser contract):** the `BROWSER_CHECKS` list (gate inertness, fix1
+droppedShipFailure, fix2 terminal flush, fix3 stack/component_stack allowlist, fix5 dedup
+key) was run against `makeBrokenTransport` — an in-memory transport with the OLD
+`level|tag|message` dedup key and NO droppedShipFailure accounting (a faithful stand-in for
+the pre-fix telemetry-dashboard copy that this change repaired).
+
+- Observed: the broken variant FAILS fix1 (droppedShipFailure stays 0), fix5 (the RangeError
+  behind the shared message dedup-collides → queued 5, droppedDedup 1), fix2 and fix3 as well
+  (4 of 5 checks reject it). The committed meta-test asserts `failures >= 2`.
+- Confirmed independently by pointing the same checks at the real telemetry-dashboard copy
+  BEFORE it was re-vendored: fix1/fix2/fix3/fix5 all red. After re-vendoring from the canonical
+  source, all green.
+
+**Server contract:** the `is opts-injected` check was seen RED against the pre-migration
+telemetry-dashboard server sink (module-level `process.env.AXIOM_*` reads); green after the
+sink was migrated to the opts-injected model and index.js was rewired to inject the config.

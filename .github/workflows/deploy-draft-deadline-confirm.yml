@@ -51,6 +51,10 @@ jobs:
           VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
           VITE_AXIOM_APP: deadline-confirm
         run: pnpm --filter "./apps/deadline-confirm" build
+        env:
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: deadline-confirm-admin
 
       - name: Install monday.com apps CLI
         run: npm install -g @mondaycom/apps-cli

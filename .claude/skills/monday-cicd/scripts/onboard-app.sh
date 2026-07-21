@@ -226,5 +226,9 @@ cat <<NEXT
 2. CI (Gate 1) must pass, then merge to develop.
 3. Watch the draft deploy:  gh run list --repo $REPO --workflow deploy-draft-$NAME.yml
 4. Confirm the draft advanced:  mapps app-version:list -i $APP_ID
+5. Error-wiring (docs/ERROR-AXIOM-STANDARD.md): wire the entry, add a SURFACES
+   entry in scripts/error-wiring-audit.mjs, inject VITE_AXIOM_* into the workflow
+   Build step (clients), add a drift entry if the app vendors a copy. The audit
+   ('node scripts/error-wiring-audit.mjs') must exit 0.
 ====================================================
 NEXT

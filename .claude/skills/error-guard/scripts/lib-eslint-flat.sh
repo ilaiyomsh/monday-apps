@@ -52,8 +52,12 @@ eg_should_skip() {
   case "$base" in
     setupTests.*|logger.js|logger.ts) return 0 ;;
     *Sink*|*-sink.*) return 0 ;;
-    # sanctioned infra files: console breadcrumbs + intentional exit-path catches
-    axiomBrowserTransport.js|processGuards.js|process-guards.js) return 0 ;;
+    # sanctioned infra files: console breadcrumbs + intentional exit-path catches.
+    # Both .js (pure-client template) and .ts (vendored SPA copies + the canonical
+    # error-kit source) — the transport's "enqueue/flush never throw to the caller"
+    # contract is what these silent catches implement.
+    axiomBrowserTransport.js|axiomBrowserTransport.ts|axiomTransport.ts) return 0 ;;
+    processGuards.js|processGuards.ts|process-guards.js|process-guards.ts) return 0 ;;
   esac
   return 1
 }
