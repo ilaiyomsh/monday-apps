@@ -1,0 +1,81 @@
+import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
+
+/*
+ * round208 — the mobile card list. Pinned owner spec:
+ *   · bottom chips row: priority+deadline on the RIGHT (chipsStart), status
+ *     ALONE on the bottom-LEFT (chipsEnd).
+ *   · the linked-discussion line is HIDDEN when the view is grouped by
+ *     discussion (showDiscussion=false), shown otherwise.
+ *   · tapping the status chip opens a bottom sheet; picking a label calls
+ *     onStatusChange(taskId, labelId).
+ *   · a permission-denied task renders a STATIC chip (no picker).
+ */
+const openCard = vi.hoisted(() => vi.fn());
+vi.mock('@generated/utils/itemCard.js', () => ({ openOrToggleItemCard: openCard }));
+
+import { MyTasksCardList } from '../MyTasksCardList.jsx';
+
+const TASK = {
+  id: '1',
+  name: 'להכין מצגת',
+  statusID: 10,
+  priorityID: 20,
+  deadlineID: new Date('2030-01-05T00:00:00'),
+  discussionLinkID: { linkedItems: [{ id: '99', name: 'ישיבת הנהלה' }] },
+};
+
+const baseProps = {
+  tasks: [TASK],
+  statusOptions: [{ id: 10, label: 'בתהליך', color: '#fdab3d' }, { id: 11, label: 'בוצע', color: '#00c875' }],
+  priorityOptions: [{ id: 20, label: 'גבוה', color: '#401694' }],
+  statusLabelById: { 10: 'בתהליך', 11: 'בוצע' },
+  statusColorById: { 10: '#fdab3d', 11: '#00c875' },
+  priorityLabelById: { 20: 'גבוה' },
+  priorityColorById: { 20: '#401694' },
+  onStatusChange: vi.fn(),
+  onPriorityChange: vi.fn(),
+  onDeadlineChange: vi.fn(),
+};
+
+beforeEach(() => { baseProps.onStatusChange.mockReset(); openCard.mockReset(); });
+
+describe('MyTasksCardList (round208 mobile cards)', () => {
+  it('status sits alone in the end (left) slot; priority+deadline in the start (right) slot', () => {
+    const { container } = render(<MyTasksCardList {...baseProps} />);
+    const start = container.querySelector('.chipsStart');
+    const end = container.querySelector('.chipsEnd');
+    expect(start.textContent).toContain('גבוה');
+    expect(start.textContent).toContain('05/01');
+    expect(start.textContent).not.toContain('בתהליך');
+    expect(end.textContent).toContain('בתהליך');
+    expect(end.textContent).not.toContain('גבוה');
+  });
+
+  it('hides the discussion line when grouped by discussion, shows it otherwise', () => {
+    const { rerender } = render(<MyTasksCardList {...baseProps} showDiscussion />);
+    expect(screen.getByText('ישיבת הנהלה')).toBeInTheDocument();
+    rerender(<MyTasksCardList {...baseProps} showDiscussion={false} />);
+    expect(screen.queryByText('ישיבת הנהלה')).not.toBeInTheDocument();
+  });
+
+  it('tapping the status chip opens the sheet; picking a label calls onStatusChange', () => {
+    render(<MyTasksCardList {...baseProps} />);
+    fireEvent.click(screen.getByRole('button', { name: 'בתהליך' }));
+    fireEvent.click(screen.getByRole('button', { name: 'בוצע' }));
+    expect(baseProps.onStatusChange).toHaveBeenCalledWith('1', 11);
+  });
+
+  it('permission-denied task renders static chips (no status picker)', () => {
+    render(<MyTasksCardList {...baseProps} canTask={() => false} />);
+    expect(screen.queryByRole('button', { name: 'בתהליך' })).not.toBeInTheDocument();
+    expect(screen.getByText('בתהליך')).toBeInTheDocument();
+  });
+
+  it('tapping the task name opens the monday item card', () => {
+    render(<MyTasksCardList {...baseProps} />);
+    fireEvent.click(screen.getByRole('button', { name: 'להכין מצגת' }));
+    expect(openCard).toHaveBeenCalledWith('1');
+  });
+});

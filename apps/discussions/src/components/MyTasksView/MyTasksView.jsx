@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@vibe/core';
-import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
+import { Button, IconButton } from '@vibe/core';
+import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall, Add } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
 import { ArrowLeft } from 'lucide-react';
 import { useMyTasks } from '@generated/hooks/useMyTasks.js';
@@ -16,6 +16,8 @@ import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { MyTasksTable } from './MyTasksTable.jsx';
+import { MyTasksCardList } from './MyTasksCardList.jsx';
+import { loadMyTasksOrder, saveMyTasksOrder, applyManualOrder } from '@generated/utils/myTasksOrder.js';
 import { groupMyTasks, ensureGroupColors, NO_DISCUSSION } from './grouping.js';
 import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
@@ -237,11 +239,29 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     () => sortTasks(scopedItems, sort, { orderById, labelById, priorityOrderById, priorityLabelById }),
     [scopedItems, sort, orderById, labelById, priorityOrderById, priorityLabelById]
   );
+  // round208 — MOBILE manual ordering (drag-reorder on the card list): a saved
+  // per-user order (monday.storage) is applied over the sorted list, so within
+  // each group the user's own drag order wins. Desktop is untouched.
+  const [manualOrder, setManualOrder] = useState([]);
+  useEffect(() => {
+    if (!isMobile || !currentUser?.id) return undefined;
+    let cancelled = false;
+    loadMyTasksOrder(currentUser.id)
+      .then((order) => { if (!cancelled) setManualOrder(order); })
+      // loadMyTasksOrder resolves [] on storage failure; this catch is the
+      // last-resort guard (e.g. a synchronous throw inside the promise chain).
+      .catch((err) => logger.warn('MyTasksView', 'טעינת סדר המשימות הידני נכשלה', err));
+    return () => { cancelled = true; };
+  }, [isMobile, currentUser?.id]);
+  const orderedItems = useMemo(
+    () => (isMobile ? applyManualOrder(sortedItems, manualOrder) : sortedItems),
+    [isMobile, sortedItems, manualOrder]
+  );
   // Right-click a group header → color palette; the chosen color is shared
   // across all users (round 77). colorsByKey overrides the auto group color.
   const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
   const grouped = useMemo(
-    () => ensureGroupColors(groupMyTasks(sortedItems, group.col, {
+    () => ensureGroupColors(groupMyTasks(orderedItems, group.col, {
       labelById, colorById, orderById,
       priorityLabelById, priorityColorById, priorityOrderById,
       isValidStatus,
@@ -252,8 +272,17 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       noDiscussionLabel: t('myTasks.noDiscussion'),
       allTasksLabel: t('myTasks.allTasks'),
     }), colorsByKey),
-    [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t, colorsByKey]
+    [orderedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t, colorsByKey]
   );
+
+  // round208 — a drag-drop inside ONE group (mobile cards) rebuilds the FLAT
+  // manual order from the current grouped view, with that group's new order
+  // spliced in, and persists it per user.
+  const reorderGroup = useCallback((groupKey, newIds) => {
+    const flat = grouped.flatMap((g) => (g.key === groupKey ? newIds : g.items.map((tk) => String(tk.id))));
+    setManualOrder(flat);
+    saveMyTasksOrder(currentUser?.id, flat);
+  }, [grouped, currentUser?.id]);
 
   // Surface the just-created task at the VERY TOP of the view. Under GROUP BY
   // DISCUSSION the new (unlinked) task lives in "ללא דיון", so that group is
@@ -586,9 +615,16 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
           the back control out of the toolbar to a left-arrow icon button beside
           the view title, so "משימה חדשה" is now the leftmost toolbar control. */}
       <div className={styles.toolbar} dir="ltr">
-        <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
-          משימה חדשה
-        </Button>
+        {/* round208 — mobile toolbar is ICONS-ONLY (owner spec): the new-task
+            button collapses to a "+" icon; the other pills are already icon-only
+            via the .mobile-app CSS. */}
+        {isMobile ? (
+          <IconButton icon={Add} kind="primary" size="small" onClick={startCreateNew} ariaLabel="משימה חדשה" />
+        ) : (
+          <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
+            משימה חדשה
+          </Button>
+        )}
 
         {showSearch ? (
           <div className={styles.searchPill}>
@@ -649,7 +685,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
 
         {/* Hide columns (round 46) — owners only. Non-owners never see it and
             always get the saved config applied. */}
-        {canManageSettings && (
+        {canManageSettings && !isMobile && (
           <HideColumnsControl
             columns={columnList}
             hidden={hiddenColumns}
@@ -662,10 +698,13 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
 
         {/* Quick-filter battery (round 81) — pushed to the far (right) end of the
-            toolbar, monday-battery style: open / done / delayed counts + filter. */}
-        <div className={styles.batterySlot}>
-          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
-        </div>
+            toolbar, monday-battery style: open / done / delayed counts + filter.
+            round208 — hidden on mobile: the icon toolbar stays minimal there. */}
+        {!isMobile && (
+          <div className={styles.batterySlot}>
+            <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
+          </div>
+        )}
       </div>
 
       <SelectionActionBar count={selectedIds.size} onClear={clearSelection} ariaLabel="פעולות על משימות נבחרות">
@@ -705,7 +744,35 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                   </span>
                   <span className={styles.groupCount}>{grp.items.length}</span>
                 </button>
-                {!collapsed[grp.key] && (
+                {/* round208 — MOBILE renders stacked cards (status bottom-left,
+                    priority+deadline bottom-right, drag-to-reorder, bottom-sheet
+                    pickers); the discussion line drops when already grouped by
+                    discussion. Desktop keeps the table untouched. */}
+                {!collapsed[grp.key] && isMobile && (
+                  <MyTasksCardList
+                    tasks={grp.items}
+                    color={grp.color}
+                    showDiscussion={group.col !== 'discussion'}
+                    statusOptions={statusOptions}
+                    priorityOptions={priorityOptions}
+                    statusLabelById={labelById}
+                    statusColorById={colorById}
+                    priorityLabelById={priorityLabelById}
+                    priorityColorById={priorityColorById}
+                    canTask={canTask}
+                    onStatusChange={applyStatus}
+                    onPriorityChange={applyPriority}
+                    onDeadlineChange={applyDeadline}
+                    onReorder={(newIds) => reorderGroup(grp.key, newIds)}
+                    searchTerm={debouncedSearch}
+                    newTaskRow={creatingNew && gi === 0 ? {
+                      defaultName: 'משימה חדשה',
+                      onCommit: commitNewTask,
+                      onCancel: cancelNewTask,
+                    } : null}
+                  />
+                )}
+                {!collapsed[grp.key] && !isMobile && (
                   <MyTasksTable
                     tasks={grp.items}
                     color={grp.color}
