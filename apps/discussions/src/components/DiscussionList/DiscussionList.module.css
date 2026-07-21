@@ -167,6 +167,63 @@
   flex-direction: column;
   gap: 6px;
 }
+/* round198 — a filter row = the select + a per-row X that clears just it. */
+.filterFieldRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.filterFieldRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.filterClearBtn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.filterClearBtn:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--negative-color, #d83a52);
+}
+.filterClearBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+/* Footer: "נקה הכל" as a link-style action at the panel's END (left, in RTL). */
+.filterPanelFooter {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.filterClearAll {
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--primary-color, #0073ea);
+  cursor: pointer;
+  border-radius: var(--border-radius-small, 4px);
+}
+.filterClearAll:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.filterClearAll:disabled {
+  color: var(--secondary-text-color, #676879);
+  opacity: 0.5;
+  cursor: default;
+}
 .filterFieldLabel {
   font-size: 12px;
   font-weight: 700;

@@ -837,6 +837,18 @@ export function TopicsTab({
     setAddingTopic(false);
   };
 
+  // round198 — a SECOND add-topic entry under the LAST group (owner request), so
+  // a long topics list doesn't force scrolling back to the top toolbar. Same
+  // addTopic path — a new topic is appended below the bottom group.
+  const [addingTopicBottom, setAddingTopicBottom] = useState(false);
+  const [newTopicBottomText, setNewTopicBottomText] = useState('');
+  const handleAddTopicBottom = () => {
+    if (!newTopicBottomText.trim()) return;
+    addTopic(newTopicBottomText.trim());
+    setNewTopicBottomText('');
+    setAddingTopicBottom(false);
+  };
+
   const handleTopicDragEnd = ({ active, over }) => {
     if (!over || active.id === over.id) return;
     const ids = items.map((t) => String(t.id));
@@ -991,6 +1003,37 @@ export function TopicsTab({
           ))}
         </SortableContext>
       </DndContext>
+
+      {/* round198 — bottom "נושא חדש": adds a group below the bottom group. */}
+      {addTopicOrPoint && items.length > 0 && (
+        <div className={styles.bottomAddRow}>
+          {!addingTopicBottom ? (
+            <button type="button" className={styles.bottomAddBtn} onClick={() => setAddingTopicBottom(true)}>
+              <Plus size={16} aria-hidden="true" />
+              נושא חדש
+            </button>
+          ) : (
+            <div className={styles.addTopicRow}>
+              <TextField
+                autoFocus
+                value={newTopicBottomText}
+                onChange={(v) => setNewTopicBottomText(v)}
+                placeholder="שם נושא"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); handleAddTopicBottom(); }
+                  if (e.key === 'Escape') { setAddingTopicBottom(false); setNewTopicBottomText(''); }
+                }}
+              />
+              <Button kind={"primary"} size={"small"} onClick={handleAddTopicBottom} disabled={!newTopicBottomText.trim()}>
+                הוסף
+              </Button>
+              <Button kind={"tertiary"} size={"small"} onClick={() => { setAddingTopicBottom(false); setNewTopicBottomText(''); }}>
+                ביטול
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {items.length === 0 && !addingTopic && (
         <div className={styles.empty}>אין נושאים לדיון זה</div>

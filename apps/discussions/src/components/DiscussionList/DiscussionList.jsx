@@ -5,7 +5,7 @@ import { Button, Text, IconButton } from '@vibe/core';
 import { CloseSmall, Search } from '@vibe/icons';
 import { HighlightedText } from '@generated/components/HighlightedText';
 import { PersonAvatar } from '@generated/components/PersonAvatar';
-import { Calendar, Check, ChevronLeft, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Plus, Settings, Trash2 } from 'lucide-react';
+import { Calendar, Check, ChevronLeft, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Plus, Settings, Trash2, X } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
 import { fmtTimeLabel, buildMonthOptions } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
@@ -588,30 +588,66 @@ export function DiscussionList({
                   <>
                     <div className={styles.filterBackdrop} onClick={() => setFilterOpen(false)} />
                     <div className={styles.filterPanel} role="dialog" aria-label="סינון דיונים" dir="rtl">
+                      {/* round198 — every filter row carries an X that clears JUST
+                          that row, and a "נקה הכל" footer clears every filter. */}
                       <div className={styles.filterField}>
                         <div className={styles.filterFieldLabel}>סוג הדיון</div>
-                        <FilterSelect
-                          options={typeDropdownOptions}
-                          value={typeFilter}
-                          onChange={(val) => setTypeFilter(val ?? 'all')}
-                          ariaLabel="סינון לפי סוג"
-                          fieldLabel="סוג הדיון"
-                          icon={Filter}
-                          searchable
-                        />
+                        <div className={styles.filterFieldRow}>
+                          <FilterSelect
+                            options={typeDropdownOptions}
+                            value={typeFilter}
+                            onChange={(val) => setTypeFilter(val ?? 'all')}
+                            ariaLabel="סינון לפי סוג"
+                            fieldLabel="סוג הדיון"
+                            icon={Filter}
+                            searchable
+                          />
+                          <button
+                            type="button"
+                            className={styles.filterClearBtn}
+                            onClick={() => setTypeFilter('all')}
+                            disabled={typeFilter === 'all'}
+                            aria-label="בטל סינון לפי סוג"
+                            title="בטל סינון לפי סוג"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
                       </div>
                       {!isCalendar && (
                         <div className={styles.filterField}>
                           <div className={styles.filterFieldLabel}>חודש</div>
-                          <FilterSelect
-                            options={monthDropdownOptions}
-                            value={monthFilter}
-                            onChange={(val) => setMonthFilter(val ?? 'all')}
-                            ariaLabel="סינון לפי חודש"
-                            icon={Filter}
-                          />
+                          <div className={styles.filterFieldRow}>
+                            <FilterSelect
+                              options={monthDropdownOptions}
+                              value={monthFilter}
+                              onChange={(val) => setMonthFilter(val ?? 'all')}
+                              ariaLabel="סינון לפי חודש"
+                              icon={Filter}
+                            />
+                            <button
+                              type="button"
+                              className={styles.filterClearBtn}
+                              onClick={() => setMonthFilter('all')}
+                              disabled={monthFilter === 'all'}
+                              aria-label="בטל סינון לפי חודש"
+                              title="בטל סינון לפי חודש"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
                         </div>
                       )}
+                      <div className={styles.filterPanelFooter}>
+                        <button
+                          type="button"
+                          className={styles.filterClearAll}
+                          onClick={() => { setTypeFilter('all'); setMonthFilter('all'); }}
+                          disabled={typeFilter === 'all' && (isCalendar || monthFilter === 'all')}
+                        >
+                          נקה הכל
+                        </button>
+                      </div>
                     </div>
                   </>
                 )}
