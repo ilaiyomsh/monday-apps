@@ -365,13 +365,15 @@
     "companyDayUpdated": "The company day was updated",
     "companyDayAdded": "The company day was added",
     "companyDayDeleted": "The company day was deleted",
-    "writeBlockedInvalidSettings": "Action blocked: board settings are missing or invalid. Complete the mapping in Settings and try again."
+    "writeBlockedInvalidSettings": "Action blocked: board settings are missing or invalid. Complete the mapping in Settings and try again.",
+    "attachmentPickFailed": "Couldn't attach the selected file. Please try again."
   },
   "settings": {
     "title": "Settings",
     "open": "Settings",
     "boardId": "Board ID",
     "fixErrors": "Fix the highlighted fields",
+    "saveError": "Failed to save settings. Please try again.",
     "validation": {
       "columnRequired": "This column must be mapped",
       "columnMissing": "The \"{{field}}\" column is not mapped",
