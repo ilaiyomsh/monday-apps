@@ -17,11 +17,21 @@ const RichTextEditor = lazy(lazyRetry(() => import('@components/RichTextEditor')
 
 const AUTOSAVE_DELAY = 1500;
 
+// round225 — the toolbar meta shows ONLY the last-update date + time (owner
+// spec), compact numeric form.
 function formatWhen(value) {
   if (!value) return null;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
+  const date = d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  return `${date} ${time}`;
+}
+
+// Initials circle for the last editor (creator { id name } carries no photo —
+// same colored-initials treatment as the external-participant avatars).
+function editorInitials(name) {
+  return String(name || '').split(' ').map((w) => w[0]).filter(Boolean).slice(0, 2).join('');
 }
 
 /*
@@ -143,6 +153,30 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
     </button>
   ) : null;
 
+  // round225 (owner spec) — the last-edit meta lives in the WHITE area at the
+  // toolbar's right end: last editor's initials avatar + date & time only + the
+  // green "נשמר" (and the other save states, which need the same home).
+  const toolbarMeta = (
+    <span className={styles.paneToolbarMeta} dir="rtl">
+      {author ? (
+        <span className={styles.paneMetaAvatar} title={author} aria-label={author}>{editorInitials(author)}</span>
+      ) : null}
+      {when ? <span className={styles.paneMetaWhen}>{when}</span> : null}
+      {status === 'saved' && (<span className={styles.refSaved}><Check size={13} /> נשמר</span>)}
+      {status === 'dirty' && <span className={styles.paneMetaState}>שינויים לא נשמרו</span>}
+      {status === 'saving' && (<span className={styles.paneMetaState}><Loader2 size={13} className={styles.refSpin} /> שומר…</span>)}
+      {status === 'error' && (
+        saveErrorCode === 'USER_UNAUTHORIZED' ? (
+          <span className={styles.refError}><AlertCircle size={13} /> אינך מורשה לערוך</span>
+        ) : (
+          <button type="button" className={styles.refErrorBtn} onClick={() => runSave()}>
+            <AlertCircle size={13} /> השמירה נכשלה — נסה שוב
+          </button>
+        )
+      )}
+    </span>
+  );
+
   return (
     <div style={active ? undefined : { display: 'none' }}>
       <div className={styles.paneEditor}>
@@ -156,7 +190,7 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
               placeholder={canEdit ? placeholder : ''}
               editable={canEdit}
               variant="flush"
-              extraToolbarActions={attachAction}
+              extraToolbarActions={<>{attachAction}{toolbarMeta}</>}
               mentionPeople={mentionPeople}
             />
           </Suspense>
@@ -216,29 +250,14 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
         </div>
       )}
 
-      {!showLoader && (when || canEdit) && (
+      {/* round225 — for EDITORS the meta/save-state moved into the toolbar's
+          white right end (toolbarMeta above); read-only viewers have no toolbar,
+          so they keep a slim footer with the last-edit info. */}
+      {!showLoader && !canEdit && when && (
         <div className={styles.paneFooter}>
-          {when && (
-            <span className={styles.refMeta}>
-              {author ? `נערך לאחרונה ע״י ${author} · ${when}` : `נערך לאחרונה · ${when}`}
-            </span>
-          )}
-          {canEdit && (
-            <span className={styles.refStatus}>
-              {status === 'saved' && (<span className={styles.refSaved}><Check size={13} /> נשמר</span>)}
-              {status === 'dirty' && <span>שינויים לא נשמרו</span>}
-              {status === 'saving' && (<span><Loader2 size={13} className={styles.refSpin} /> שומר…</span>)}
-              {status === 'error' && (
-                saveErrorCode === 'USER_UNAUTHORIZED' ? (
-                  <span className={styles.refError}><AlertCircle size={13} /> אינך מורשה לערוך</span>
-                ) : (
-                  <button type="button" className={styles.refErrorBtn} onClick={() => runSave()}>
-                    <AlertCircle size={13} /> השמירה נכשלה — נסה שוב
-                  </button>
-                )
-              )}
-            </span>
-          )}
+          <span className={styles.refMeta}>
+            {author ? `נערך לאחרונה ע״י ${author} · ${when}` : `נערך לאחרונה · ${when}`}
+          </span>
         </div>
       )}
     </div>
