@@ -2,6 +2,22 @@
 
 ## 0.4.0 — 2026-07-22
 
+- **Full lifecycle field mapping from the REAL payload (Change #145, folded —
+  bump-once).** A live capture (`DEBUG_LIFECYCLE_PAYLOAD`, Change #144.1)
+  proved monday nests feature-event fields under `data.*` — the handler read
+  them at the top level, so account/user/details always came out empty and
+  the `back_to_url` ack never fired. Fixed (legacy top-level shape kept as
+  fallback). Board schema grew to 15 columns: + User Name, User Email
+  (native on install/subscription events), Workspace, Object Name,
+  **Object URL (link)** — built as `https://<slug>.monday.com/boards/<object_id>`
+  via a new owner-gated, cached `me{account{slug}}` resolver
+  (`services/account-slug.js`; owner decision: NO user name/email API lookup)
+  — and App Version (from install/subscription `version_data`). Details now
+  also carry `object_id`/`source_object_id`/`app_feature_reference_id`/`app_id`.
+  Existing boards keep working (unknown column keys are skipped); recreate the
+  board from Settings to get the new columns. 204 tests; 4 seeded mutations
+  killed (data.* read, ack source, empty-link skip, crossed identity columns).
+
 - **Board-writes OAuth migrated to monday OAuth 2.1 (Change #144).** The
   owner-authorize flow was broken in production (`code_challenge is required`
   — this app's version enforces monday's new flow while the code spoke the

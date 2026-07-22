@@ -32,7 +32,7 @@ function makeEventsBoard({ recordEventImpl } = {}) {
   };
 }
 
-function makeService({ eventsBoard, logger, fetchImpl, debugRawPayload } = {}) {
+function makeService({ eventsBoard, logger, fetchImpl, debugRawPayload, slugResolver } = {}) {
   const log = logger ?? makeLogger();
   const board = eventsBoard === null ? null : (eventsBoard ?? makeEventsBoard());
   const doFetch = fetchImpl ?? vi.fn(async () => ({ ok: true, status: 200 }));
@@ -41,6 +41,7 @@ function makeService({ eventsBoard, logger, fetchImpl, debugRawPayload } = {}) {
     logger: log,
     fetchImpl: doFetch,
     debugRawPayload,
+    slugResolver,
   });
   return { service, logger: log, eventsBoard: board, fetchImpl: doFetch };
 }
@@ -649,5 +650,137 @@ describe('debugRawPayload — env-gated raw capture (console-only, never ships)'
 
     expect(logger.info.mock.calls.find((c) => c[0] === 'debug_lifecycle_raw')).toBeUndefined();
     expect(allLoggerArgs(logger)).not.toContain('user_email');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REAL payload shape (Change #145) — fixture captured live on 2026-07-22 via
+// DEBUG_LIFECYCLE_PAYLOAD from a tracker AppFeatureObject:create. monday nests
+// EVERYTHING under `data` (payload/back_to_url/ids/timestamp) — the original
+// handler read them at the top level and got empties.
+// ---------------------------------------------------------------------------
+
+function realFeatureBody(overrides = {}) {
+  return {
+    type: 'AppFeatureObject:create',
+    data: {
+      payload: {
+        object_id: 18423229216,
+        object_name: 'Tracker',
+        workspace_id: 15426602,
+        source_object_id: null,
+        source_workspace_id: null,
+        creation_attributes: null,
+        tracing_data: { trace_event_id: 'a37b-trace', object_app_feature_id: 23902080 },
+      },
+      back_to_url: BACK_TO_URL,
+      app_id: 10684862,
+      app_feature_reference_id: 15361233,
+      app_feature_id: 23902080,
+      user_id: 48274917,
+      account_id: 14334098,
+      timestamp: '2026-07-22T08:40:56.057Z',
+      ...overrides,
+    },
+  };
+}
+
+function makeSlugResolver(slug = 'yomsheni-il') {
+  return { getSlug: vi.fn(async () => slug) };
+}
+
+describe('handleFeatureEvent — REAL data.* payload shape (#145)', () => {
+  it('extracts account/user/timestamp/feature from data.* and the object fields from data.payload', async () => {
+    const { service, eventsBoard } = makeService();
+
+    await service.handleFeatureEvent({ appSlug: 'axis-tracker', body: realFeatureBody(), eventId: 'ev-real-1' });
+
+    const evt = eventsBoard.recordEvent.mock.calls[0][0];
+    expect(evt).toMatchObject({
+      category: 'Lifecycle',
+      eventType: 'AppFeatureObject:create',
+      appSlug: 'axis-tracker',
+      accountId: '14334098',
+      userId: '48274917',
+      feature: '23902080',
+      workspace: '15426602',
+      objectName: 'Tracker',
+      occurredAt: new Date('2026-07-22T08:40:56.057Z').toISOString(),
+    });
+    expect(evt.details).toMatchObject({
+      object_id: '18423229216',
+      app_feature_reference_id: '15361233',
+      app_id: '10684862',
+    });
+  });
+
+  it('acks data.back_to_url (the REAL location — the old top-level read never fired)', async () => {
+    const { service, fetchImpl } = makeService();
+
+    await service.handleFeatureEvent({ appSlug: 'axis-tracker', body: realFeatureBody(), eventId: 'ev-real-2' });
+    await flushAsync();
+
+    const ack = fetchImpl.mock.calls.find((c) => String(c[0]) === BACK_TO_URL);
+    expect(ack).toBeTruthy();
+    expect(JSON.parse(ack[1].body)).toEqual({ success: true });
+  });
+
+  it('builds objectUrl from the injected slug resolver (owner-gated)', async () => {
+    const resolver = makeSlugResolver();
+    const { service, eventsBoard } = makeService({ slugResolver: resolver });
+
+    await service.handleFeatureEvent({ appSlug: 'axis-tracker', body: realFeatureBody(), eventId: 'ev-real-3' });
+
+    expect(resolver.getSlug).toHaveBeenCalledWith('14334098');
+    const evt = eventsBoard.recordEvent.mock.calls[0][0];
+    expect(evt.objectUrl).toBe('https://yomsheni-il.monday.com/boards/18423229216');
+    // No user lookup by design (owner decision): feature events carry ids only.
+    expect(evt.userName).toBe('');
+    expect(evt.userEmail).toBe('');
+  });
+
+  it('a failing/absent slug resolver degrades to empty objectUrl (record still happens)', async () => {
+    const failing = { getSlug: vi.fn(async () => { throw new Error('api down'); }) };
+    const { service, eventsBoard } = makeService({ slugResolver: failing });
+
+    await service.handleFeatureEvent({ appSlug: 'axis-tracker', body: realFeatureBody(), eventId: 'ev-real-4' });
+
+    const evt = eventsBoard.recordEvent.mock.calls[0][0];
+    expect(evt.objectUrl).toBe('');
+    expect(eventsBoard.recordEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it('PRIVACY: the slug/url NEVER reach any logger call', async () => {
+    const { service, logger } = makeService({ slugResolver: makeSlugResolver() });
+
+    await service.handleFeatureEvent({ appSlug: 'axis-tracker', body: realFeatureBody(), eventId: 'ev-real-5' });
+
+    const logged = allLoggerArgs(logger);
+    expect(logged).not.toContain('yomsheni-il');
+    expect(logged).not.toContain('boards/18423229216');
+  });
+
+  it('LEGACY top-level shape still parses (docs-era bodies keep working)', async () => {
+    const { service, eventsBoard } = makeService();
+
+    await service.handleFeatureEvent({ appSlug: 'discussions', body: featureBody(), eventId: 'ev-real-6' });
+
+    expect(eventsBoard.recordEvent.mock.calls[0][0]).toMatchObject({
+      accountId: '12345',
+      userId: '67890',
+    });
+  });
+});
+
+describe('handleAppEvent — identity + version enrichment (#145)', () => {
+  it('maps user_name/user_email straight from data and version_data to appVersion', async () => {
+    const { service, eventsBoard } = makeService();
+
+    await service.handleAppEvent({ appSlug: 'discussions', body: appBody('install'), eventId: 'ev-app-1' });
+
+    const evt = eventsBoard.recordEvent.mock.calls[0][0];
+    expect(evt.userName).toBe('Private Buyer');
+    expect(evt.userEmail).toBe('buyer@example.com');
+    expect(evt.appVersion).toBe('1.2.3');
   });
 });
