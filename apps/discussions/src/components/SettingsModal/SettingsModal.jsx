@@ -720,7 +720,8 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
             </TabList>
             <TabPanels className={styles.tabPanels}>
               <TabPanel className={styles.tabPanelFill}>
-          <div className={styles.body}>
+          {/* round247 — the מיפוי panel is full RTL (owner request). */}
+          <div className={styles.body} dir="rtl">
             {/* Post-install entry to the config-aware SetupWizard. Shown only when
                 the instance is already configured (never in the first-run forced
                 modal, which has the wizard as its landing screen). */}
@@ -970,7 +971,8 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               </TabPanel>
 
               <TabPanel className={styles.tabPanelFill}>
-                <div className={styles.prefs}>
+                {/* round247 — the העדפות panel is full RTL (owner request). */}
+                <div className={styles.prefs} dir="rtl">
                   {/* How the "הנחיות קודמות" tab resolves its tasks — via the linked
                       previous discussion, or by the discussion TYPE (taskTypeID). */}
                   <div className={styles.prefRow}>
@@ -1045,8 +1047,11 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
 
               <TabPanel className={styles.tabPanelFill}>
                 {/* Templates manager — persists on its own (independent of the
-                    Settings "שמור"); owner-only since it lives inside Settings. */}
-                <TemplatesPanel />
+                    Settings "שמור"); owner-only since it lives inside Settings.
+                    round247 — full RTL (owner request). */}
+                <div dir="rtl" className={styles.rtlPanel}>
+                  <TemplatesPanel />
+                </div>
               </TabPanel>
 
               <TabPanel className={styles.tabPanelFill}>
