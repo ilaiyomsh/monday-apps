@@ -92,8 +92,11 @@
    box's tab band (.tripleTabs: tab padding 10px + ~20px line = 40px), so the two
    cards' header bars line up exactly. */
 .agendaHead {
-  padding: 10px 16px;
-  min-height: 40px;
+  padding: 0 16px;
+  /* round232 (owner request) — the agenda header and the triple box's tab band
+     are pinned to the SAME exact height (border-box, includes the 1px bottom
+     rule) so the two boxes' headers line up perfectly. */
+  height: 44px;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -111,11 +114,13 @@
    shared sticky rule + its scroll-cover pseudo-element. */
 .agendaBox .toolbar {
   position: static;
-  /* round222b — pin the row height so it matches the triple box's formatting
-     strip EXACTLY; vertical padding gives way to the fixed height + centering. */
-  min-height: 48px;
+  /* round222b/round232 — pin the row to an EXACT fixed height (border-box,
+     includes the 1px bottom rule) so it matches the triple box's formatting
+     strip perfectly; vertical padding gives way to the fixed height + centering. */
+  height: 48px;
   box-sizing: border-box;
   padding: 0 14px;
+  overflow: hidden;
   z-index: auto;
   background: var(--primary-background-color, #fff);
   border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
@@ -129,10 +134,15 @@
    (owner request). Vertical padding → 0 (the fixed height + align-items:center
    from the base .toolbar do the centering); horizontal padding kept. */
 .tripleBox .toolbarFlush {
-  min-height: 48px;
+  /* round232 — EXACT same fixed height as the agenda toolbar (border-box); one
+     row (nowrap) + clip so its formatting icons can never grow the strip past
+     the agenda toolbar, no matter which pane (רקע/התייחסויות/סיכום) is active. */
+  height: 48px;
   box-sizing: border-box;
   padding-top: 0;
   padding-bottom: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
 }
 /* The card body holds the topic list + the bottom add-row, with inner padding.
    round220 — a tall min-height so the אג'נדה card takes real vertical space like
@@ -922,12 +932,21 @@
 }
 .tripleTabs {
   display: flex;
+  /* round232 — pinned to the SAME exact height as the agenda header (border-box,
+     includes the 1px bottom rule) so the two boxes' headers line up perfectly. */
+  height: 44px;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
   background: var(--primary-background-hover-color, #fafbfc);
 }
 .tripleTab {
   flex: 1;
-  padding: 10px 8px;
+  /* round232 — vertical padding → 0; the fixed band height + center alignment
+     do the vertical centering, so the tab labels sit exactly mid-band. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
   font-size: 14px;
   font-weight: 500;
   font-family: var(--font-family);

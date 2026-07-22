@@ -115,4 +115,23 @@ describe('TopicPointRow — clean list row structure (round226 stage B smoke)', 
     renderRow({});
     expect(document.querySelector('[aria-label="פתח עדכונים"]')).toBeNull();
   });
+
+  it('round232 — a per-point trash button deletes via onDelete; absent without it or when hidden', () => {
+    const onDelete = vi.fn();
+    const { unmount } = renderRow({ onDelete });
+    const trash = document.querySelector('[aria-label="מחק נקודה: נקודה לבדיקה"]');
+    expect(trash).toBeTruthy();
+    fireEvent.click(trash);
+    expect(onDelete).toHaveBeenCalledWith(POINT);
+    unmount();
+
+    // No handler → no trash.
+    const noHandler = renderRow({});
+    expect(document.querySelector('[aria-label^="מחק נקודה"]')).toBeNull();
+    noHandler.unmount();
+
+    // Hidden (notForDiscussion) row is inert → no trash even with a handler.
+    renderRow({ onDelete, point: { ...POINT, notForDiscussion: true } });
+    expect(document.querySelector('[aria-label^="מחק נקודה"]')).toBeNull();
+  });
 });

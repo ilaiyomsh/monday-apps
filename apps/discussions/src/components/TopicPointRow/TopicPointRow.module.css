@@ -290,6 +290,11 @@
   background: var(--primary-background-hover-color, #e6e9ef);
   color: var(--primary-color, #0073ea);
 }
+/* round232 — the per-point delete trash turns red on hover (destructive). */
+.deleteBtn:hover {
+  background: var(--negative-color-selected, #fce9ec);
+  color: var(--negative-color, #d83a52);
+}
 .updatesBtn:disabled { cursor: default; }
 
 /* Per-point creator avatar (round 58) — rides inside the hover actions cluster. */

@@ -129,8 +129,11 @@ export function TopicPointRow({
   // actions cluster. Resolved from usersById via point.creatorId.
   usersById,
   onToggle, onToggleNotForDiscussion, onRename,
+  // round232 (owner request) — per-point DELETE: a hover trash button to the
+  // LEFT of the creator avatar (replaces the multi-select-checkbox delete path).
+  // Soft-delete with an undo toast lives in the parent; omitted ⇒ no trash.
+  onDelete,
   // Optimistic-create error affordance: retry re-runs a failed point create.
-  // (Deletion is via the נושאים tab's multi-select bulk delete.)
   onRetryCreate,
   // Granular discussion-tier caps. Each equals the legacy canEdit while the
   // permissions feature is off, so behavior is unchanged. point edit (rename +
@@ -305,6 +308,20 @@ export function TopicPointRow({
           <span className={styles.creatorAvatar}>
             <CreatorAvatar userId={point.creatorId} usersById={usersById} size="small" />
           </span>
+        )}
+        {/* round232 (owner request) — per-point DELETE trash, to the LEFT of the
+            creator avatar (last in this rtl cluster ⇒ leftmost). Soft-delete +
+            undo lives in the parent. Inert on a hidden row (item 11). */}
+        {onDelete && !inert && (
+          <button
+            type="button"
+            className={`${styles.rowActBtn} ${styles.deleteBtn}`}
+            title="מחיקת נקודה"
+            aria-label={`מחק נקודה: ${point.name}`}
+            onClick={(e) => { e.stopPropagation(); onDelete(point); }}
+          >
+            <Trash2 size={16} />
+          </button>
         )}
       </span>
 
