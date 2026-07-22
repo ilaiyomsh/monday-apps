@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton, Button, TextField, Dialog, DialogContentContainer, Text, Checkbox } from '@vibe/core';
-import { CloseSmall, DropdownChevronDown } from '@vibe/icons';
+import { CloseSmall, DropdownChevronDown, Edit } from '@vibe/icons';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
@@ -22,14 +22,10 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTopics } from '@generated/hooks/useTopics';
-import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
-import { useViewport } from '@generated/hooks/useViewport.js';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
 import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
-import { ResizeHandle } from '@generated/components/ResizeHandle';
-import { TOPICS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
 import { UpdatesTripleBox } from './UpdatesTripleBox.jsx';
 import { buildMentionRoster } from '@generated/utils/mention.js';
@@ -40,15 +36,10 @@ import styles from './TopicsTab.module.css';
 
 const NEUTRAL = 'hsl(var(--status-default))';
 
-// Column order for the points table (decisions redesign — per the approved
-// mockup): [checkbox lead 36px] | נקודה לדיון (fill) | נידונה | החלטות | משימות.
-// The leading cell is a FIXED 36px track — the selection checkbox + accent strip,
-// matching TaskTable's `.selectCell`; the other four keys resize via
-// useColumnWidths under the shared 'topics' tableId (owner-draggable, persisted
-// for all users). Widths/clamps come from constants/columnWidths TOPICS_COLUMN_WIDTHS.
-const LEAD_TRACK = '36px';
 // round226 — the decisions+tasks columns merged into ONE 'outputs' (תוצרים)
-// column (approved mockup): one quiet counter (sum) + one create "+".
+// key (approved mockup): one quiet counter (sum) + one create "+". Stage B
+// dropped the table grid entirely — these keys now only drive the Hide-columns
+// control (a hidden key drops that element from every point row).
 const TOPIC_COLUMN_KEYS = ['name', 'check', 'outputs'];
 
 // Per-topic priority box — identical look to the status column: FIXED width,
@@ -157,9 +148,12 @@ function topicColorStartIndex(id, seed = 0) {
   return (h + seed) % TOPIC_COLOR_COUNT;
 }
 
-/* One topic = a GROUP (mockup structure): a header row (hover kebab, collapse
-   chevron, drag grip, accent-colored name, spacer, priority pill) + a fixed
-   column-header row + the topic's point rows as a table + the add-point row. */
+/* One topic = a CARD (round226 stage B — approved mockup): a colored accent bar
+   on the inline-start edge (the topic's PRIORITY color when set, its stable
+   palette color otherwise), a tinted header row (chevron + colored name +
+   hover-revealed actions + priority pill), and the points as a CLEAN LIST
+   inside the card body (no table grid / column headers) + an inline add-point
+   row. The whole card is RTL (owner-approved). */
 function SortableTopicSection({
   topic, accent, open, onToggleOpen, usersById,
   renameTopic,
@@ -170,11 +164,8 @@ function SortableTopicSection({
   deleteTopic, addPoint, togglePoint,
   togglePointNotForDiscussion, toggleTopicNotForDiscussion,
   renamePoint, reorderPoints,
-  // Shared fixed grid template (same object for header + rows).
-  rowStyle,
-  // Visible column keys (round 47 Hide) — 'name' is always present; check/
-  // decisions/tasks appear only when not hidden. Drives BOTH the column-header
-  // cells and each point row's cells so they stay aligned to the grid template.
+  // Visible column keys (round 47 Hide) — 'name' is always present; a hidden
+  // check/outputs key drops that element from every point row.
   columns,
   // Granular discussion-tier caps (each equals the legacy canEdit while the
   // feature is off). add → add topic/point; edit → rename/priority/drag-reorder;
@@ -183,14 +174,11 @@ function SortableTopicSection({
   priorityMapped = false, priorityOptions, priorityLabelById, priorityColorById, updateTopicPriority,
   // Decisions/tasks-from-point wiring (threaded from TopicsTab).
   onCreatePointDecision, onCreatePointTask, onOpenPointItems,
-  // Owner column-resize (shared 'topics' tableId): when canResize, each column
-  // header cell gets a ResizeHandle whose drag calls startResize(key, e). The
-  // widths are shared across every topic section (one grid template).
-  canResize = false, startResize,
-  // Multi-select (Round 7): when `selectable`, each point row shows a checkbox;
-  // selection is tracked by point id in the parent. The section header hosts a
-  // select-all-in-topic checkbox.
-  selectable = false, selectedPointIds, onTogglePointSelect, onToggleTopicPoints,
+  // Multi-select (Round 7): when `selectable`, each point row reveals a checkbox
+  // on hover (pinned visible while a selection is active); selection is tracked
+  // by point id in the parent. The card header hosts a select-all-in-topic
+  // checkbox with the same reveal behavior.
+  selectable = false, selectedPointIds, onTogglePointSelect, onToggleTopicPoints, selectionActive = false,
   // Sets of the discussion's REAL decision/task ids — the per-point counters
   // intersect the point's STORED ids with these so the count is accurate.
   decisionIdSet, taskIdSet,
@@ -199,16 +187,20 @@ function SortableTopicSection({
   pointItemsByPoint,
   // Round 52 — per-point create-from-point progress, keyed `${kind}:${pointId}`
   // ('decision:<id>' / 'task:<id>' → 'pending' | 'success' | 'error'). Drives the
-  // inline CreateProgressBar on the matching link cell.
+  // inline CreateProgressBar on the matching תוצרים cluster.
   createStatusByPoint,
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(topic.id) });
   const accentTri = `var(${accent})`;
+  // round226 stage B — the card accent (bar + header tint + name color) is the
+  // topic's PRIORITY color when one is set (approved mockup: the priority shows
+  // as the card's color); topics without a priority keep their palette color.
+  const prioColor = topic.priority != null ? priorityColorById?.[topic.priority] : null;
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.5 : 1,
-    '--topic-accent': `hsl(${accentTri})`,
+    '--topic-accent': prioColor || `hsl(${accentTri})`,
   };
 
   const [editingTitle, setEditingTitle] = useState(false);
@@ -260,51 +252,66 @@ function SortableTopicSection({
   };
 
   // Whole-header drag (native monday feel): the sortable listeners/attributes
-  // ride on the section HEADER when the topic is editable — no six-dot grip. The
+  // ride on the card HEADER when the topic is editable — no six-dot grip. The
   // PointerSensor activation distance (TopicsTab, ~8px) keeps a plain click on
-  // the chevron/title/eye/kebab working; only a press-move starts a group drag.
+  // the header controls working; only a press-move starts a group drag.
   const headerDragProps = canEditTopic ? { ...attributes, ...listeners } : {};
+  const stopEvt = (e) => e.stopPropagation();
+
+  // Header "+" (נקודה חדשה): make sure the card is open, then focus the inline
+  // add-point row at the bottom of the list.
+  const openAddPointInput = () => {
+    if (!effectiveOpen && !excluded) onToggleOpen();
+    setShowAddPointInput(true);
+    requestAnimationFrame(() => addPointInputRef.current?.focus());
+  };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
+      dir="rtl"
       className={`${styles.section} ${excluded ? styles.sectionExcluded : ''}`}
     >
+      {/* Card header — the WHOLE tinted row toggles collapse (deferred so a
+          double-click rename on the title can cancel it); controls stop
+          propagation. Hover reveals the actions cluster (mockup .tActs). */}
       <div
-        className={`${styles.sectionHeader} ${canEditTopic ? styles.sectionHeaderDraggable : ''}`}
+        className={`${styles.cardHead} ${canEditTopic ? styles.sectionHeaderDraggable : ''}`}
         {...headerDragProps}
+        onClick={excluded ? undefined : () => {
+          if (titleClickTimerRef.current) clearTimeout(titleClickTimerRef.current);
+          titleClickTimerRef.current = setTimeout(() => {
+            titleClickTimerRef.current = null;
+            onToggleOpen();
+          }, 220);
+        }}
       >
-        {/* Hover-revealed 3-dot kebab (⋯) at the LEFT of the group header —
-            deletes the WHOLE topic (inline confirm-before-delete). Matches
-            monday's group ⋯ menu: hidden at rest, opacity 0→1 on header hover
-            (styles in .headerKebab). No select-all checkbox lives here anymore —
-            the per-topic select-all moved into the points' column-header leading
-            cell, so this group-title row reads like the Tasks group header
-            (chevron + colored title + the kept eye/count/avatar/priority). */}
-        {canDelete && (
-          <RowKebabMenu
-            excluded={excluded}
-            kind="נושא"
-            className={styles.headerKebab}
-            onDelete={() => deleteTopic(topic.id)}
-          />
+        {/* Select-all-in-topic — quiet at rest (hover / active-selection reveal),
+            replacing the old column-header lead cell (the header row is gone). */}
+        {selectable && points.length > 0 && (
+          <span
+            className={`${styles.headSelect} ${selectionActive ? styles.headSelectOn : ''}`}
+            onClick={stopEvt}
+            onPointerDown={stopEvt}
+          >
+            <TopicSelectAll
+              points={points}
+              selectedPointIds={selectedPointIds}
+              onToggleTopicPoints={onToggleTopicPoints}
+            />
+          </span>
         )}
         <button
           type="button"
           className={styles.triangle}
-          onClick={excluded ? undefined : onToggleOpen}
+          onClick={(e) => { e.stopPropagation(); if (!excluded) onToggleOpen(); }}
           disabled={excluded}
           aria-label={effectiveOpen ? 'קפל נושא' : 'פתח נושא'}
           title={excluded ? 'נושא מוסתר' : (effectiveOpen ? 'קפל' : 'פתח')}
         >
-          {/* Collapse caret — SAME glyph/size/rotation as a collapsed group in
-              Tasks/Decisions (vibe DropdownChevronDown, 24px, rotate(-90deg) when
-              collapsed) and tinted with the topic accent, mirroring how those
-              tabs tint the caret with the group color. */}
           <DropdownChevronDown
             className={`${styles.chevron} ${effectiveOpen ? '' : styles.chevronCollapsed}`}
-            style={{ color: `hsl(${accentTri})` }}
           />
         </button>
 
@@ -326,17 +333,9 @@ function SortableTopicSection({
           <span className={styles.titleWrap}>
             <span
               className={styles.title}
-              style={{ color: `hsl(${accentTri})`, opacity: excluded ? 0.5 : 1, cursor: excluded ? 'default' : 'pointer' }}
+              style={{ opacity: excluded ? 0.5 : 1, cursor: excluded ? 'default' : 'pointer' }}
               role={excluded ? undefined : 'button'}
               aria-label={excluded ? undefined : (effectiveOpen ? 'קפל נושא' : 'פתח נושא')}
-              onClick={excluded ? undefined : () => {
-                // Defer the toggle so a following double-click (rename) can cancel it.
-                if (titleClickTimerRef.current) clearTimeout(titleClickTimerRef.current);
-                titleClickTimerRef.current = setTimeout(() => {
-                  titleClickTimerRef.current = null;
-                  onToggleOpen();
-                }, 220);
-              }}
               onDoubleClick={!excluded ? (e) => {
                 e.preventDefault(); e.stopPropagation();
                 if (titleClickTimerRef.current) { clearTimeout(titleClickTimerRef.current); titleClickTimerRef.current = null; }
@@ -349,24 +348,66 @@ function SortableTopicSection({
           </span>
         )}
 
-        {/* Eye toggle — hide/show the topic, placed at the right edge of the
-            name. Single click toggles the not-for-discussion flag. Gated by
-            canHideTopic (lead/coordinator/owner only — item 10). */}
-        {canHideTopic && (
+        {topicFailed && onRetryCreate && (
           <button
             type="button"
-            className={styles.eyeBtn}
-            onClick={(e) => { e.stopPropagation(); toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(topic.id, !excluded); }}
-            aria-label={excluded ? 'הצג נושא' : 'הסתר נושא'}
-            title={excluded ? 'הצג נושא' : 'הסתר נושא'}
+            className={styles.topicRetryBtn}
+            onClick={(e) => { e.stopPropagation(); onRetryCreate(topic.id); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            title="שמירת הנושא נכשלה — נסה שוב"
           >
-            {excluded ? <Eye size={16} /> : <EyeOff size={16} />}
+            שמירה נכשלה · נסה שוב
           </button>
         )}
 
-        {/* Creator avatar — revealed only while hovering the topic's header. */}
-        <span className={styles.headerAvatar}>
-          <CreatorAvatar userId={topic.creatorId} usersById={usersById} />
+        {/* Hover-revealed header actions (mockup .tActs): נקודה חדשה, rename,
+            hide(eye), delete (kebab with inline confirm), creator avatar. The
+            eye stays visible on a HIDDEN topic so the restore is obvious. */}
+        <span className={styles.headActs} onClick={stopEvt} onPointerDown={stopEvt}>
+          {canAdd && !excluded && (
+            <button
+              type="button"
+              className={styles.headActBtn}
+              title="נקודה חדשה"
+              aria-label="הוסף נקודה לנושא"
+              onClick={openAddPointInput}
+            >
+              <Plus size={16} />
+            </button>
+          )}
+          {canEditTopic && !excluded && !editingTitle && (
+            <button
+              type="button"
+              className={styles.headActBtn}
+              title="שינוי שם"
+              aria-label="ערוך שם נושא"
+              onClick={() => { setTitleDraft(topic.name || ''); setEditingTitle(true); }}
+            >
+              <Edit size={16} />
+            </button>
+          )}
+          {canHideTopic && (
+            <button
+              type="button"
+              className={`${styles.headActBtn} ${excluded ? styles.headActOn : ''}`}
+              onClick={(e) => { e.stopPropagation(); toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(topic.id, !excluded); }}
+              aria-label={excluded ? 'הצג נושא' : 'הסתר נושא'}
+              title={excluded ? 'הצג נושא' : 'הסתר נושא'}
+            >
+              {excluded ? <Eye size={16} /> : <EyeOff size={16} />}
+            </button>
+          )}
+          {canDelete && (
+            <RowKebabMenu
+              excluded={excluded}
+              kind="נושא"
+              className={styles.headerKebab}
+              onDelete={() => deleteTopic(topic.id)}
+            />
+          )}
+          <span className={styles.headerAvatar}>
+            <CreatorAvatar userId={topic.creatorId} usersById={usersById} />
+          </span>
         </span>
 
         <span className={styles.headerSpacer} />
@@ -381,83 +422,16 @@ function SortableTopicSection({
             onChange={(labelId) => updateTopicPriority && updateTopicPriority(topic.id, labelId)}
           />
         )}
-
-        {topicFailed && onRetryCreate && (
-          <button
-            type="button"
-            className={styles.topicRetryBtn}
-            onClick={(e) => { e.stopPropagation(); onRetryCreate(topic.id); }}
-            onPointerDown={(e) => e.stopPropagation()}
-            title="שמירת הנושא נכשלה — נסה שוב"
-          >
-            שמירה נכשלה · נסה שוב
-          </button>
-        )}
       </div>
 
       {effectiveOpen && (
-        <div className={styles.sectionScroll}>
-        <div className={styles.sectionBody}>
-          {/* Column header — SAME grid template as the point rows (shared via
-              rowStyle). Owners get a ResizeHandle on each column's trailing edge
-              (the cell becomes a positioning context for the absolute handle). */}
-          <div className={styles.colHead} style={rowStyle}>
-            {/* Leading cell — hosts the per-topic SELECT-ALL checkbox (relocated
-                here from the group-title row), mirroring how TaskTable puts the
-                group select-all in the table header's leading `.selectCell`. It
-                selects/deselects every point of this topic; when the topic has no
-                points (or selection is off) it's just the bare accent strip. */}
-            <span className={`${styles.colHeadLead} ${styles.frozenLead}`}>
-              {selectable && points.length > 0 && (
-                <span
-                  className={styles.colHeadSelect}
-                  onClick={(e) => e.stopPropagation()}
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  <TopicSelectAll
-                    points={points}
-                    selectedPointIds={selectedPointIds}
-                    onToggleTopicPoints={onToggleTopicPoints}
-                  />
-                </span>
-              )}
-            </span>
-            {/* Data column headers — driven by the VISIBLE columns (round 47 Hide)
-                so a hidden column drops both its header cell and its grid track.
-                'name' is the frozen header (sticky positioning context hosts the
-                resize handle, like TaskTable's `.taskFirst`); the rest are
-                centered headers with a relative handle. */}
-            {(columns || TOPIC_COLUMN_KEYS).map((k) => {
-              if (k === 'name') {
-                return (
-                  <span key="name" className={`${styles.colHeadCell} ${styles.colHeadName}`}>
-                    {canResize && <ResizeHandle onMouseDown={(e) => startResize('name', e)} />}
-                  </span>
-                );
-              }
-              // Round 52 — the "discussed" checkbox column's header shows "#"
-              // (display/label only; the column id/alias 'check' is unchanged).
-              const headLabel = k === 'check' ? '#' : 'תוצרים';
-              return (
-                <span
-                  key={k}
-                  className={`${styles.colHeadCell} ${styles.colHeadCenter}`}
-                  style={canResize ? { position: 'relative' } : undefined}
-                >
-                  {headLabel}
-                  {canResize && <ResizeHandle onMouseDown={(e) => startResize(k, e)} />}
-                </span>
-              );
-            })}
-          </div>
-
+        <div className={styles.cardBody}>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handlePointDragEnd}>
             <SortableContext items={points.map((p) => String(p.id))} strategy={verticalListSortingStrategy}>
               {points.map((point) => (
                 <TopicPointRow
                   key={point.id}
                   point={point}
-                  rowStyle={rowStyle}
                   usersById={usersById}
                   columns={columns}
                   onToggle={togglePoint}
@@ -479,6 +453,7 @@ function SortableTopicSection({
                   selectable={selectable}
                   selected={selectable ? !!selectedPointIds?.has(String(point.id)) : false}
                   onToggleSelect={(p, checked) => onTogglePointSelect?.(p, checked)}
+                  selectionActive={selectionActive}
                   decisionCreateStatus={createStatusByPoint?.[`decision:${point.id}`]}
                   taskCreateStatus={createStatusByPoint?.[`task:${point.id}`]}
                 />
@@ -488,17 +463,16 @@ function SortableTopicSection({
 
           {canAdd && (
             showAddPointInput ? (
-              // Editing: a full-width row (same look as the add-task row) with an
-              // inline, borderless text input — click already happened.
-              <div className={styles.addPoint}>
-                <Plus size={16} className={styles.addPointIcon} />
+              // Editing: an inline list row with a borderless input (blue bottom
+              // rule) — plain placeholder, no typing instructions (owner spec).
+              <div className={`${styles.addPoint} ${styles.addPointEditing}`}>
                 <input
                   ref={addPointInputRef}
                   className={styles.addPointInput}
                   autoFocus
                   value={newPointText}
                   aria-label="הוסף נקודה"
-                  placeholder="נקודה לדיון…"
+                  placeholder="נקודה חדשה…"
                   onChange={(e) => setNewPointText(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && newPointText.trim()) { e.preventDefault(); handleAddPoint(); }
@@ -508,8 +482,8 @@ function SortableTopicSection({
                 />
               </div>
             ) : (
-              // Rest state: the WHOLE row is the click target (like the add-task
-              // row); shows only a "+", no label. Clicking anywhere opens editing.
+              // Rest state (mockup .newRow): a quiet "＋ נקודה חדשה…" list row —
+              // the WHOLE row is the click target and opens the inline input.
               <button
                 type="button"
                 className={styles.addPoint}
@@ -520,11 +494,11 @@ function SortableTopicSection({
                   requestAnimationFrame(() => addPointInputRef.current?.focus());
                 }}
               >
-                <Plus size={16} className={styles.addPointIcon} />
+                <Plus size={14} className={styles.addPointIcon} />
+                נקודה חדשה…
               </button>
             )
           )}
-        </div>
         </div>
       )}
     </div>
@@ -553,9 +527,10 @@ export function TopicsTab({
   // the topic tables and each triple-box pane can be hidden per instance.
   // round206 added showSummary (the summary moved into the triple box).
   showTopics = true, showBackground = true, showReferences = true, showSummary = true,
-  // Owners (can('reorderColumns')) may drag-resize the topics columns; the
-  // widths persist per-instance under the shared 'topics' tableId (all users).
-  canReorderColumns = false,
+  // Column drag-resize was removed with the round226 card redesign (no table
+  // grid anymore); the prop is kept for call-site compat.
+  canReorderColumns = false, // eslint-disable-line no-unused-vars -- prop-contract compat
+
   // Board owner (round 47): gates the Hide-columns pill + its "Save to this view"
   // (mirrors the other tabs). Non-owners never see it and get the saved config.
   canManageSettings = false,
@@ -701,13 +676,6 @@ export function TopicsTab({
     onNotify?.(pts.length === 1 ? 'הנקודה הוסתרה' : `${pts.length} נקודות הוסתרו`, 'success');
   };
 
-  // Resizable columns (shared 'topics' tableId → persisted per-instance for all
-  // users). The leading 36px checkbox cell is fixed; name/check/decisions/tasks
-  // resize within their clamps. useColumnWidths returns the grid-template string
-  // for those four; we prepend the fixed lead track. Owners on a non-touch
-  // viewport get the drag handles (canResize); everyone gets the stored widths.
-  const { isMobile } = useViewport();
-
   // --- Hide columns (round 47) ------------------------------------------------
   // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
   // site, persisted to the SHARED saved view
@@ -742,18 +710,6 @@ export function TopicsTab({
   const visibleKeys = useMemo(
     () => TOPIC_COLUMN_KEYS.filter((k) => k === 'name' || !hiddenColumns.has(k)),
     [hiddenColumns]
-  );
-
-  const columnDefs = useMemo(
-    () => visibleKeys.map((k) => ({ key: k, ...W[k] })),
-    [visibleKeys]
-  );
-  const { gridTemplate, startResize } = useColumnWidths('topics', columnDefs);
-  const canResize = !!canReorderColumns && !isMobile;
-  // Shared grid template for the column header + all point rows.
-  const rowStyle = useMemo(
-    () => ({ gridTemplateColumns: `${LEAD_TRACK} ${gridTemplate}` }),
-    [gridTemplate]
   );
 
   // Counter popup state — { kind: 'decision'|'task', point } | null.
@@ -1024,7 +980,6 @@ export function TopicsTab({
               toggleTopicNotForDiscussion={toggleTopicNotForDiscussion}
               renamePoint={renamePoint}
               reorderPoints={reorderPoints}
-              rowStyle={rowStyle}
               columns={visibleKeys}
               canAdd={addTopicOrPoint}
               canEditTopic={editTopicOrPoint}
@@ -1039,12 +994,11 @@ export function TopicsTab({
               onCreatePointDecision={onCreatePointDecision}
               onCreatePointTask={onCreatePointTask}
               onOpenPointItems={onOpenPointItems}
-              canResize={canResize}
-              startResize={startResize}
               selectable={canSelectPoints}
               selectedPointIds={selectedPointIds}
               onTogglePointSelect={togglePointSelect}
               onToggleTopicPoints={toggleTopicPoints}
+              selectionActive={hasPointSelection}
               decisionIdSet={decisionIdSet}
               taskIdSet={taskIdSet}
               pointItemsByPoint={pointItemsByPoint}
