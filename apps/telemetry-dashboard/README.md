@@ -98,13 +98,14 @@ real monday tokens (local dev outside monday simply falls back to the seed).
 | `AXIOM_DATASET` | dataset name (default `app-errors`) |
 | `AXIOM_ORG_ID` | optional Axiom org id header |
 
-OAuth app-identity token (Change #143 continuation — replaces the need for a
-personal `MONDAY_API_TOKEN`; see "Lifecycle events → monday board" below):
+OAuth app-identity token (Change #143, OAuth 2.1 in #144 — replaces the need
+for a personal `MONDAY_API_TOKEN`; see "Lifecycle events → monday board"):
 
 | var | purpose |
 |-----|---------|
 | `MONDAY_CLIENT_ID` | monday app Client ID — used for the `GET /oauth/start` authorize redirect |
 | `BASE_URL` | this app's own stable base URL; builds the OAuth `redirect_uri` (`<BASE_URL>/oauth/callback`) — must match the redirect URI registered in the Developer Center OAuth config exactly |
+| `MONDAY_APP_VERSION_ID` | optional — targets a DRAFT version's OAuth config during testing (`app_version_id` on the authorize URL). The Developer Center's **New OAuth Flow** toggle is per-version; unset targets the live version |
 
 Lifecycle-events additions (all optional — unset keeps the feature inert):
 
@@ -148,20 +149,42 @@ monday account); logger/Axiom ever see ids and enums only. Auth is
 fail-closed: no secrets configured → 401 (only the challenge echo is open).
 A dead board/token/monday outage can never 5xx a webhook.
 
-**Write token — app-identity OAuth (Change #143 continuation):** board writes
-(`create_item` / `create_group`) need a write-scoped monday credential.
-Instead of a personal `MONDAY_API_TOKEN`, the owner authorizes this app's own
-identity **once**: `GET /oauth/start` redirects to monday's consent screen;
-`GET /oauth/callback` exchanges the returned code for an access token (scopes
-`boards:read boards:write me:read`) and stores it in SecureStorage
-(`owner:oauth_token`, `src/services/storage.js`). `src/services/monday-api.js`
-resolves the write token **per call**: the stored OAuth token first, the
-optional `MONDAY_API_TOKEN` env var as a fallback — so the events board can be
-configured (`LIFECYCLE_BOARD_ID`) before the owner has authorized; writes
-simply fail soft until then. If `ALLOWED_ACCOUNT_IDS` is set, `/oauth/callback`
-checks the authorizing account via `me { account { id } }` and **rejects (403,
-does not store)** an account outside the allowlist. Both routes are mounted at
-`/oauth` with no session-token gate — the code exchange is the auth.
+**Write token — app-identity OAuth 2.1 (Change #143 model, #144 migration):**
+board writes (`create_item` / `create_group`) need a write-scoped monday
+credential. Instead of a personal `MONDAY_API_TOKEN`, the owner authorizes
+this app's own identity **once**: `GET /oauth/start` redirects to monday's
+consent screen with a single-use CSRF `state` nonce and a **PKCE S256
+code_challenge** (monday's new OAuth flow requires PKCE; the verifier rides
+in the `oauth_state:` record, 10-min TTL, replay → 400). `GET /oauth/callback`
+consumes the state and exchanges the code at the **new
+`oauth_ms/oauth/token` endpoint** (`grant_type=authorization_code` +
+`code_verifier`; scopes `boards:read boards:write me:read`), storing a token
+RECORD in SecureStorage (`owner:oauth_token`): access token + **rotating
+single-use refresh token** + decoded JWT `exp` + `obtainedAt` (monday's
+6-month lifetime anchor) + status.
+
+`src/services/oauth-token-provider.js` resolves the write token **per call**
+via `src/services/monday-api.js`: proactive refresh when <5 min remain
+(single-flight mutex — a concurrent double-refresh would burn the single-use
+rotation), rotated refresh tokens persisted, `invalid_grant` (incl. the
+6-month death) flags the record `reauth_required` — the Settings tab shows a
+**reauthorize** CTA. The optional `MONDAY_API_TOKEN` env var remains the
+fallback, so writes fail soft until the owner authorizes. A legacy
+bare-string token stored by the pre-2.1 flow is normalized to a non-expiring
+record and keeps working — re-authorize once to gain refresh + revocation.
+If `ALLOWED_ACCOUNT_IDS` is set, `/oauth/callback` checks the authorizing
+account via `me { account { id } }` and **rejects (403, does not store)** an
+account outside the allowlist. Both routes are mounted at `/oauth` with no
+session-token gate — the state nonce + code exchange are the auth.
+**Disconnect:** `POST /api/settings/disconnect` (Settings-tab button) revokes
+both tokens best-effort (`oauth_ms/oauth/revoke`) and always clears the
+stored record.
+
+> **Developer Center prerequisite:** the app version must have the **New
+> OAuth Flow** toggle enabled (OAuth & Permissions tab — per version) and the
+> redirect URI registered exactly as `<BASE_URL>/oauth/callback`. A version
+> on the new flow with legacy code fails with `code_challenge is required`;
+> this code speaks the new flow.
 
 ### Settings tab (board provisioning)
 

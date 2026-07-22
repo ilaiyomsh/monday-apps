@@ -11,7 +11,15 @@ export interface BoardConfig {
   columns: Record<string, string>;
 }
 
+/**
+ * OAuth 2.1 connection state (Change #144): reauth_required surfaces the
+ * 6-month refresh-token death (or an invalid_grant) — the owner must run
+ * /oauth/start again.
+ */
+export type OauthStatus = 'connected' | 'disconnected' | 'reauth_required';
+
 export interface SettingsState {
+  oauthStatus: OauthStatus;
   oauthConnected: boolean;
   board: BoardConfig | null;
 }
@@ -47,6 +55,28 @@ export async function provisionBoard(name?: string): Promise<ProvisionResult> {
     const body = (await res.json().catch(() => ({}))) as { board?: BoardConfig; error?: string };
     if (res.ok && body.board) return { ok: true, board: body.board };
     return { ok: false, error: body.error ?? `http ${res.status}` };
+  } catch (err) {
+    return { ok: false, error: `network: ${String(err)}` };
+  }
+}
+
+export type DisconnectResult = { ok: true; revoked: boolean } | { ok: false; error: string };
+
+/**
+ * POST to disconnect the app's OAuth identity: the server revokes both
+ * tokens (best-effort) and always clears the stored record. Discriminated
+ * result like provisionBoard — never throws for expected failures.
+ */
+export async function disconnectApp(): Promise<DisconnectResult> {
+  try {
+    const res = await fetch('/api/settings/disconnect', {
+      method: 'POST',
+      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const body = (await res.json().catch(() => ({}))) as { status?: string; revoked?: boolean };
+    if (res.ok && body.status === 'disconnected') return { ok: true, revoked: Boolean(body.revoked) };
+    return { ok: false, error: `http ${res.status}` };
   } catch (err) {
     return { ok: false, error: `network: ${String(err)}` };
   }

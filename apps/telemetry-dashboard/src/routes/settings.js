@@ -4,13 +4,21 @@
 // gate as /api/telemetry), so only authenticated (and, if an allowlist is
 // set, allowlisted) monday users reach it.
 //
-//   GET  /api/settings        → { oauthConnected, board: config|null }
-//   POST /api/settings/board  → provision board+columns+group; { board: config }
+//   GET  /api/settings             → { oauthStatus, oauthConnected, board }
+//   POST /api/settings/board       → provision board+columns+group; { board }
+//   POST /api/settings/disconnect  → revoke (best-effort) + clear the stored
+//                                    OAuth record; { status, revoked }
 //
-// Board writes use the owner's OAuth token (resolved per call in monday-api).
-// Without it, provisioning throws MondayApiError('no_write_token'), reported
-// here as 409 { error: 'not_authorized' } so the UI can prompt /oauth/start.
-// Every catch logs (error-guard); the token/config values are never logged.
+// oauthStatus (Change #144, OAuth 2.1): 'connected' | 'disconnected' |
+// 'reauth_required' — the third state surfaces the 6-month refresh-token
+// death (or an invalid_grant) so the UI shows a re-authorize CTA.
+// oauthConnected is kept as a boolean for back-compat.
+//
+// Board writes use the owner's OAuth token (resolved per call in monday-api
+// via the oauth-token-provider). Without it, provisioning throws
+// MondayApiError('no_write_token'), reported here as 409
+// { error: 'not_authorized' } so the UI can prompt /oauth/start.
+// Every catch logs (error-guard); token/config values are never logged.
 //
 // All collaborators are injected — the only app import is asyncHandler.
 
@@ -21,22 +29,23 @@ const TAG = 'settings';
 
 /**
  * @param {object} deps
- * @param {{ getOwnerToken: () => Promise<string|null>, getBoardConfig: () => Promise<object|null> }} deps.storage
+ * @param {{ getBoardConfig: () => Promise<object|null> }} deps.storage
  * @param {{ provision: (opts?: object) => Promise<object> }} deps.provisioner
+ * @param {ReturnType<import('../services/oauth-token-provider.js').createOauthTokenProvider>} deps.tokenProvider
  * @param {object} deps.logger - app logger (`(message, tag, context)` shape)
  * @returns {import('express').Router}
  */
-export function createSettingsRouter({ storage, provisioner, logger }) {
+export function createSettingsRouter({ storage, provisioner, tokenProvider, logger }) {
   const router = express.Router();
 
   router.get(
     '/',
     asyncHandler(async (_req, res) => {
-      const [token, board] = await Promise.all([
-        storage.getOwnerToken(),
+      const [oauthStatus, board] = await Promise.all([
+        tokenProvider.getStatus(),
         storage.getBoardConfig(),
       ]);
-      res.json({ oauthConnected: Boolean(token), board: board ?? null });
+      res.json({ oauthStatus, oauthConnected: oauthStatus === 'connected', board: board ?? null });
     })
   );
 
@@ -61,6 +70,17 @@ export function createSettingsRouter({ storage, provisioner, logger }) {
         }
         res.status(502).json({ error: 'provision_failed' });
       }
+    })
+  );
+
+  router.post(
+    '/disconnect',
+    asyncHandler(async (_req, res) => {
+      // Always 200: the local clear always succeeds; revoked:false only
+      // signals that the best-effort remote revocation did not (see
+      // oauth-token-provider.disconnect — it logs the cause).
+      const { revoked } = await tokenProvider.disconnect();
+      res.json({ status: 'disconnected', revoked });
     })
   );
 
