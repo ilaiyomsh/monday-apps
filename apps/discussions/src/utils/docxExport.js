@@ -490,7 +490,13 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   // EXPORT_FONTS). Defaults to `brand` (Figtree Latin/numerals + Noto Sans Hebrew
   // complex-script), matching the app's on-screen typography and today's output.
   const FONT = (EXPORT_FONTS[template?.font] || EXPORT_FONTS[DEFAULT_EXPORT_FONT]).docx;
-  const run = (text, extra) => new TextRun({ text: String(text ?? ''), rightToLeft: true, ...extra });
+  // round227 (owner request) — pin the font on EVERY run, not only via the
+  // document/heading styles. Table cells and (when Word's theme wins) headings
+  // don't reliably inherit the docDefaults font, so they used to render in a
+  // different typeface than the body. Setting `font` on the run itself makes
+  // body, headings AND table cells all reference the same ascii/hAnsi/cs
+  // triplet. `extra` can still override, but no call site passes `font`.
+  const run = (text, extra) => new TextRun({ text: String(text ?? ''), rightToLeft: true, font: FONT, ...extra });
   const para = (text, extra) => new Paragraph({ ...RTL, children: [run(text, extra)] });
   const heading = (text, level) => new Paragraph({ ...RTL, heading: level, children: [run(text)] });
 

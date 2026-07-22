@@ -414,38 +414,48 @@
   color: var(--primary-text-color, #323338);
 }
 
-/* One topic = a monday board GROUP: a plain colored-title header (no band) with
-   the points rendered below as a bordered table box (mirrors the My Tasks tab). */
+/* round226 stage B (approved mockup) — one topic = a CARD out of the monday-like
+   table frame: bordered, rounded, with a 4px accent bar on the inline-start edge
+   (priority color when set, palette color otherwise — --topic-accent is set
+   inline per topic). The card is dir=rtl, so inline-start = the physical RIGHT. */
 .section {
   position: relative;
   display: flex;
   flex-direction: column;
-  /* round120 — same header→table gap as the Tasks/Previous group headers (their
-     .groupHeader margin-bottom is 18px), so all tabs share one group rhythm. */
-  gap: 18px;
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  border-radius: 10px;
+  background: var(--primary-background-color, #fff);
+  overflow: hidden;
+  border-inline-start: 4px solid var(--topic-accent, hsl(var(--status-default)));
 }
 /* round188 — the inter-topic gap used to come from .wrap's flex `gap` (now 0, so the
    toolbar→content gap can be pinned on the sticky toolbar). Restore the 12px spacing
-   only BETWEEN adjacent topic sections, leaving the toolbar→first-section gap to the
+   only BETWEEN adjacent topic cards, leaving the toolbar→first-card gap to the
    toolbar's own pinned padding-bottom. */
 .section + .section {
   margin-block-start: 12px;
 }
-/* Hidden / "לא לדיון" topic — dim the table body; the eye control stays full. */
-.sectionExcluded .sectionBody {
-  opacity: 0.55;
+/* Hidden / "לא לדיון" topic — the body is collapsed by effectiveOpen; dim the
+   header chrome (the title also dims inline) and keep the reveal actions live. */
+.sectionExcluded .cardHead {
+  background: var(--primary-background-color, #fff);
+}
+.sectionExcluded .headActs {
+  opacity: 1;
 }
 
-/* Header = monday board-group row: chevron + colored title text, no background. */
-.sectionHeader {
+/* Card header (mockup .tHead): the whole tinted row toggles collapse; hover
+   reveals the actions cluster. Tint = 6% of the topic accent over the ground. */
+.cardHead {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
-  /* round120 — no inline padding: the 24px chevron must start exactly on the
-     table's left edge line, like the Tasks/Previous group headers. Relative =
-     anchor for the gutter-floating kebab below. */
-  padding: 0;
+  padding: 8px 12px;
+  min-height: 44px;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--topic-accent, #579bfc) 6%, var(--primary-background-color, #fff));
+  cursor: pointer;
   position: relative;
 }
 /* Whole-header drag (the six-dot grip was removed — the header itself drags the
@@ -459,8 +469,64 @@
   cursor: grabbing;
 }
 
+/* Select-all-in-topic — quiet at rest (hover / active-selection reveal); keeps
+   its width either way so the header never shifts. */
+.headSelect {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 18px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.cardHead:hover .headSelect,
+.headSelect:focus-within,
+.headSelectOn {
+  opacity: 1;
+}
+.headSelect > label { margin: 0; }
+.headSelect > label > :last-child { margin-inline-start: 0; }
+
+/* Hover-revealed header actions cluster (mockup .tActs): נקודה חדשה / rename /
+   eye / kebab-delete / creator avatar. */
+.headActs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.cardHead:hover .headActs,
+.headActs:focus-within {
+  opacity: 1;
+}
+.headActBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.headActBtn:hover {
+  background: var(--primary-background-hover-color, #eceef2);
+  color: var(--primary-text-color, #323338);
+}
+/* A HIDDEN topic's eye stays lit so the restore action is obvious. */
+.headActOn {
+  color: var(--primary-color, #0073ea);
+}
+
 /* Leading collapse caret — neutral grey. Open: points down; collapsed: points
-   toward the leading (right) side in LTR. */
+   toward the leading side. */
 .triangle {
   display: inline-flex;
   align-items: center;
@@ -503,7 +569,7 @@
 .titleInput {
   min-width: 160px;
   max-width: 360px;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
   padding: 4px 10px;
   border: 1px solid var(--primary-color, #0073ea);
@@ -525,11 +591,12 @@
   gap: 8px;
   min-width: 0;
 }
+/* Topic name (mockup .tName): bold, tinted with the card accent. */
 .title {
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 700;
   /* Pin the variable-font weight axis (Noto/Figtree default to light masters). */
-  font-variation-settings: 'wght' 500;
+  font-variation-settings: 'wght' 700;
   color: var(--topic-accent);
   white-space: nowrap;
   overflow: hidden;
@@ -652,93 +719,42 @@
   font-weight: 500;
 }
 
-/* Points table — continuous monday-grid look (no rounded card border): the row
-   separators run edge-to-edge and the only vertical line closing the grid is the
-   last column's own border. The scroll container is the .sectionScroll wrapper
-   (below); .sectionBody is the max-content grid that scrolls inside it. */
-/* Horizontal scroll OWNER for a topic's points table (mirrors TasksTab's
-   `.board` > `.groupScrollInner`). It stays at the pane width (width:100%) and
-   scrolls its max-content child (.sectionBody) INTERNALLY, so a narrowed iframe
-   never pushes the table wider than the pane and no app/view-level horizontal
-   scrollbar appears. The frozen lead/name cells (sticky left:0) pin to THIS
-   scrollport. Previously .sectionBody was BOTH the max-content table AND the
-   overflow-x:auto container, so it sized to its content and grew past the pane
-   (the scroll never engaged) — that was the stray horizontal-scrollbar source. */
-.sectionScroll {
-  width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  direction: ltr;
+/* Card body (mockup .tBody) — the points as a CLEAN LIST: no table grid, no
+   column-header row, no cell borders. */
+.cardBody {
+  padding: 4px 8px 8px;
 }
 
-.sectionBody {
-  display: flex;
-  flex-direction: column;
-  /* round202 — hug the summed track widths ONLY (owner request): the table now
-     ENDS at the last (משימות) column instead of stretching to the pane width,
-     so no row/header line continues past it. The old `min-width: 100%` was what
-     stretched the grid (and its border-top/bottom + row separators) across the
-     whole column. When the dragged tracks sum wider than the board, the box
-     still grows and scrolls under the parent .sectionScroll's overflow-x. */
-  width: max-content;
-  background: var(--primary-background-color, #fff);
-  /* Bounded + rounded on the LEFT (top + left lines); the right edge is closed
-     by the last column's own cell border. direction:ltr anchors the table left. */
-  border-top: 1px solid var(--ui-border-color, #d0d4e4);
-  border-inline-start: 1px solid var(--ui-border-color, #d0d4e4);
-  /* Bottom border CLOSES the table box (curving with the rounded corner), same
-     as the My-Tasks table — without it the grid just fades out under the last
-     row / add-point row. */
-  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
-  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
-  direction: ltr;
-}
-/* The table's own bottom border is the single closing line: the last child must
-   not draw its own border-bottom on top of it (a straight row-border would also
-   overlap the rounded corner and stick out past the radius). Generic child
-   selector on purpose — the point rows' class lives in TopicPointRow.module.css
-   and cross-module class names hash apart in the production build. */
-.sectionBody > :last-child {
-  border-bottom: none;
-}
-
-/* Add-point row — SAME design as the task add-row (.addRow in TaskTable): a
-   full-width, 36px row with the accent color strip; the WHOLE row is the click
-   target (a <button> at rest), and clicking anywhere opens an inline borderless
-   text input. Shows only a "+" (no label). */
+/* Add-point row (mockup .newRow) — a quiet "＋ נקודה חדשה…" list row; the WHOLE
+   row is the click target, and clicking opens an inline borderless input with a
+   blue bottom rule. Plain placeholder, no typing instructions (owner spec). */
 .addPoint {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 36px;
-  /* round133 — align the "+" with the point NAMES: the points grid leads with a
-     fixed 36px checkbox cell and the name cell adds the 1cm/38px inset
-     (round139, approved mock), so the names start 74px from the row edge; the
-     add-row text starts on the same line. */
-  padding: 0 12px 0 74px;
+  min-height: 34px;
+  padding: 4px 8px;
   border: none;
+  border-radius: 8px;
   background: transparent;
-  color: var(--placeholder-color, #9699a6);
+  color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
-  font-size: 14px;
+  font-size: 13.5px;
   text-align: start;
   cursor: pointer;
-  position: relative;
-}
-.addPoint::before {
-  content: '';
-  position: absolute;
-  inset-inline-start: 0;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  background: var(--topic-accent, hsl(var(--status-default)));
-  border-end-start-radius: 6px; /* round100: match the 6px strip width for a clean corner (was 8px) */
+  margin-top: 2px;
+  box-sizing: border-box;
 }
 .addPoint:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
-  color: var(--secondary-text-color, #676879);
+  color: var(--primary-color, #0073ea);
+}
+.addPointEditing {
+  cursor: text;
+}
+.addPointEditing:hover {
+  background: transparent;
 }
 .addPointIcon {
   flex-shrink: 0;
@@ -747,13 +763,12 @@
   flex: 1;
   min-width: 0;
   border: none;
+  border-bottom: 1.5px solid var(--primary-color, #0073ea);
   background: transparent;
   font-size: 14px;
   font-family: var(--font-family);
   color: var(--text-color, #323338);
-  padding: 0;
-  direction: rtl;
-  text-align: left;
+  padding: 2px 0;
 }
 .addPointInput::placeholder {
   color: var(--placeholder-color, #9699a6);
@@ -770,152 +785,22 @@
   direction: rtl;
 }
 
-/* Hover kebab (3-dot) — revealed on header hover (the inner button defaults to
-   opacity:0 from its own module). round120: floated OUT of the flow into the
-   52px white gutter (like monday's group menu), so it no longer pushes the
-   chevron off the table's left edge line and the header layout is identical to
-   the Tasks/Previous group headers. */
+/* Hover kebab (3-dot) — rides inside the header actions cluster; the inner
+   button defaults to opacity:0 from its own module, so re-reveal it with the
+   cluster (the cluster's own opacity handles the rest). */
 .headerKebab {
   display: inline-flex;
   flex-shrink: 0;
-  position: absolute;
-  inset-inline-start: -28px;
-  top: 50%;
-  transform: translateY(-50%);
 }
 .headerKebab button {
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.sectionHeader:hover .headerKebab button {
   opacity: 1;
 }
 
-/* Creator avatar in the group header — hidden until the topic text is hovered. */
+/* Creator avatar in the card header — rides inside the hover actions cluster. */
 .headerAvatar {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-.sectionHeader:hover .headerAvatar {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* Column header row for a topic's points. Uses the SAME FIXED grid as the point
-   rows (rowStyle inline sets grid-template-columns) so each label sits directly
-   above its column:
-     [accent 28px] | (empty name header) | נידונה | החלטות | משימות
-   Plain text labels, no cell fill / no color strip; a thin bottom rule is the
-   only separator. Without `display: grid` the labels collapse into an inline
-   run jammed at the RTL edge. */
-.colHead {
-  display: grid;
-  align-items: stretch;
-  min-height: 36px;
-  background: #ffffff;
-  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
-}
-.colHeadCell {
-  display: flex;
-  align-items: center;
-  padding: 0 8px;
-  min-height: 36px;
-  font-size: 14px;
-  font-weight: 400;
-  color: var(--primary-text-color, #323338);
-  /* round128 — PHYSICAL right border: this cell is direction:rtl, so the old
-     border-inline-end landed on its LEFT while the (ltr) body cells drew on the
-     RIGHT — 1px-offset verticals, a doubled line at the lead boundary and no
-     closing line after the last column. Physical = same side everywhere. */
-  border-right: 1px solid var(--ui-border-color, #d0d4e4);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  direction: rtl;
-}
-.colHeadCenter {
-  justify-content: center;
-}
-/* Leading cell of the column header — hosts the accent color strip rounded at the
-   TOP-left to match the table's rounded-left outer border (S2). */
-.colHeadLead {
-  /* Center the per-topic select-all checkbox in the 36px lead track (mirrors
-     TaskTable's `.selectCell`); the 6px inset strip is the topic accent color. */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  position: relative;
-  border-start-start-radius: 6px;
-  /* Close the lead (checkbox/accent) column with a right rule, matching the
-     Tasks table's frozen `.selectCell` separator (TaskTable `.taskCell`). */
-  border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, see .colHeadCell */
-}
-/* Select-all-in-topic checkbox centered in the column-header lead cell (mirrors
-   TaskTable's `.selectCell > label`): reset the vibe Checkbox wrapper margins and
-   nudge the 16px box to sit visually centered just after the 6px color strip. */
-.colHeadSelect {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.colHeadSelect > label {
-  margin: 0;
-  transform: translateX(2px);
-}
-.colHeadSelect > label > :last-child {
-  margin-inline-start: 0;
-}
-
-/* FROZEN leading column (accent bar) + FROZEN name header — pinned during the
-   rare horizontal scroll (dragged tracks wider than the board), mirroring
-   TaskTable's frozen `.taskFirst`. Both are opaque so scrolled cells don't bleed
-   through; the lead pins at 0, name right after it (the 36px LEAD_TRACK). Header
-   frozen cells stack above the body frozen cells (z-index 3 vs 2). */
-.frozenLead {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  background: #ffffff;
-}
-.colHeadName {
-  justify-content: flex-start;
-  position: sticky;
-  left: 36px;
-  z-index: 3;
-  background: #ffffff;
-}
-
-/* Eye toggle in the group header — hide/show a topic. Sits just to the right of
-   the name (right edge of the name); always visible but subtle, full on hover.
-   When the topic is hidden the eye brightens so the restore action is obvious. */
-.eyeBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin-inline-start: 4px;
-  border: none;
-  background: transparent;
-  color: var(--secondary-text-color, #676879);
-  border-radius: var(--border-radius-small, 4px);
-  cursor: pointer;
-  flex-shrink: 0;
-  opacity: 0.55;
-  transition: opacity 0.12s ease, background 0.12s ease;
-}
-.eyeBtn:hover {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.06);
-}
-.sectionExcluded .eyeBtn {
-  opacity: 1;
-  color: var(--primary-color, #0073ea);
 }
 
 /* Topic-header retry affordance when the topic's optimistic create failed. */
@@ -1023,33 +908,6 @@
 :global(body[data-chrome-narrow="1"]) .toolbar * {
   white-space: nowrap !important;
   flex-wrap: nowrap !important;
-}
-
-/* round113 — while monday's item-card / updates panel is open (chrome-narrow,
-   see round103's detector) the narrowed pane must show NO scrollbars at all
-   (owner request): scrolling itself still works (wheel/trackpad/drag), only
-   the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
-   ::-webkit-scrollbar pseudo. */
-:global(body[data-chrome-narrow="1"]) .sectionScroll {
-  scrollbar-width: none;
-}
-:global(body[data-chrome-narrow="1"]) .sectionScroll::-webkit-scrollbar {
-  display: none;
-}
-
-/* round118 — real ::before bar on the rounded header cell instead of a
-   radius-clipped inset shadow (the shadow smeared a color sliver rightward
-   along the top edge — the "chupchik"). */
-.colHeadLead::before {
-  content: '';
-  position: absolute;
-  inset-inline-start: 0;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  background: var(--topic-accent, hsl(var(--status-default)));
-  border-start-start-radius: 6px;
-  pointer-events: none;
 }
 
 /* round206 (approved mockup) — the TRIPLE BOX: one card, three header titles

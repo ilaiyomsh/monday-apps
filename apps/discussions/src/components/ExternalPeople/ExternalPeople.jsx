@@ -4,6 +4,12 @@ import { externalInitials } from '@generated/utils/externalParticipants.js';
 import styles from './ExternalPeople.module.css';
 
 const POPOVER_W = 240;
+// round227 — cap the inline avatar stack at 5; the rest collapse into a "+N"
+// chip (mirrors the internal participants AvatarGroup). Clicking the stack (or
+// the chip, or — for editors — the "+" edit button) opens a popover listing
+// EVERY external participant, so a read-only viewer can also see the full list,
+// exactly like the internal group's click-to-see-all.
+const MAX_AVATARS = 5;
 
 // round217 — a stable accent color per external name (a deterministic hue), so
 // the initials circle always has a solid colored background instead of the
@@ -29,15 +35,15 @@ export function ExternalPeople({ names = [], canEdit = false, onChange }) {
   const [draft, setDraft] = useState('');
   // round220 — the popover is a PORTAL (position:fixed) so the discussion
   // header's overflow can't clip it (owner-reported: it got cut off). Position
-  // is measured from the "+" trigger and clamped to the viewport.
-  const addBtnRef = useRef(null);
+  // is measured from the whole group (wrapRef) and clamped to the viewport.
+  const wrapRef = useRef(null);
   const popRef = useRef(null);
   const [pos, setPos] = useState(null);
 
-  const openEditor = () => {
-    const rect = addBtnRef.current?.getBoundingClientRect();
+  const toggleList = () => {
+    const rect = wrapRef.current?.getBoundingClientRect();
     if (rect) {
-      // Align the popover's inline-start (RTL: right edge) under the trigger.
+      // Align the popover's inline-start (RTL: right edge) under the group.
       setPos({ top: rect.bottom + 6, left: Math.max(8, rect.right - POPOVER_W) });
     }
     setOpen((o) => !o);
@@ -64,34 +70,53 @@ export function ExternalPeople({ names = [], canEdit = false, onChange }) {
 
   if (!canEdit && names.length === 0) return null;
 
+  // round227 — cap the inline stack at 5; the remainder collapses into a "+N".
+  const shown = names.slice(0, MAX_AVATARS);
+  const overflow = names.length - shown.length;
+
   return (
-    <div className={styles.extWrap}>
-      <div className={styles.extAvatars}>
-        {names.map((name, i) => (
-          <span
-            key={`${name}-${i}`}
-            className={styles.extAvatar}
-            style={{ background: extColor(name) }}
-            title={name}
-            aria-label={name}
-          >
-            {externalInitials(name)}
-          </span>
-        ))}
-        {canEdit && (
-          <button
-            type="button"
-            ref={addBtnRef}
-            className={styles.extAddBtn}
-            onClick={openEditor}
-            aria-expanded={open}
-            aria-label="עריכת משתתפים"
-            title="עריכת משתתפים"
-          >
-            +
-          </button>
-        )}
-      </div>
+    <div className={styles.extWrap} ref={wrapRef}>
+      {names.length > 0 && (
+        // The whole avatar stack is clickable — opens the full list (read-only
+        // viewers included), mirroring the internal participants group.
+        <button
+          type="button"
+          className={styles.extAvatars}
+          onClick={toggleList}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-label="הצג רשימת משתתפים חיצוניים"
+        >
+          {shown.map((name, i) => (
+            <span
+              key={`${name}-${i}`}
+              className={styles.extAvatar}
+              style={{ background: extColor(name) }}
+              title={name}
+              aria-label={name}
+            >
+              {externalInitials(name)}
+            </span>
+          ))}
+          {overflow > 0 && (
+            <span className={styles.extMore} title={`עוד ${overflow}`} aria-label={`ועוד ${overflow} משתתפים`}>
+              +{overflow}
+            </span>
+          )}
+        </button>
+      )}
+      {canEdit && (
+        <button
+          type="button"
+          className={styles.extAddBtn}
+          onClick={toggleList}
+          aria-expanded={open}
+          aria-label="עריכת משתתפים"
+          title="עריכת משתתפים"
+        >
+          +
+        </button>
+      )}
 
       {open && createPortal(
         <>
@@ -109,32 +134,36 @@ export function ExternalPeople({ names = [], canEdit = false, onChange }) {
                 {names.map((name, i) => (
                   <li key={`${name}-${i}`} className={styles.extRow}>
                     <span className={styles.extRowName}>{name}</span>
-                    <button
-                      type="button"
-                      className={styles.extRemove}
-                      onClick={() => removeAt(i)}
-                      aria-label={`הסרת ${name}`}
-                    >
-                      ✕
-                    </button>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className={styles.extRemove}
+                        onClick={() => removeAt(i)}
+                        aria-label={`הסרת ${name}`}
+                      >
+                        ✕
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
             )}
-            <div className={styles.extAddRow}>
-              <input
-                className={styles.extInput}
-                value={draft}
-                placeholder="שם מלא…"
-                autoFocus
-                onChange={(e) => setDraft(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitAdd(); } }}
-                aria-label="שם משתתף חיצוני"
-              />
-              <button type="button" className={styles.extAdd} onClick={commitAdd} disabled={!draft.trim()}>
-                הוסף
-              </button>
-            </div>
+            {canEdit && (
+              <div className={styles.extAddRow}>
+                <input
+                  className={styles.extInput}
+                  value={draft}
+                  placeholder="שם מלא…"
+                  autoFocus
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitAdd(); } }}
+                  aria-label="שם משתתף חיצוני"
+                />
+                <button type="button" className={styles.extAdd} onClick={commitAdd} disabled={!draft.trim()}>
+                  הוסף
+                </button>
+              </div>
+            )}
           </div>
         </>,
         document.body

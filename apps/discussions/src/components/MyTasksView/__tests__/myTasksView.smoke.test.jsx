@@ -67,12 +67,15 @@ describe('MyTasksView — toolbar + builder (smoke)', () => {
     expect(screen.getByText('משימה ב')).toBeTruthy();
   });
 
-  it('round224 — the scope toggle renders with משימות באחריות as the default', () => {
+  it('round227 — the scope toggle: "משימות באחריותי" is the default AND the LEFT (2nd) button', () => {
     render(<MyTasksView />);
-    const mine = screen.getByRole('tab', { name: 'משימות באחריות' });
+    const mine = screen.getByRole('tab', { name: 'משימות באחריותי' });
     const led = screen.getByRole('tab', { name: 'משימות בדיונים שהובלתי' });
     expect(mine.getAttribute('aria-selected')).toBe('true');
     expect(led.getAttribute('aria-selected')).toBe('false');
+    // round227 — "led" is listed FIRST in the rtl track (rightmost); "mine" is
+    // the SECOND tab (leftmost), so a DOM-order compare puts led before mine.
+    expect(led.compareDocumentPosition(mine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('round213 — MOBILE: the builders are replaced by the "סידור לפי" toggle, grouping by status then priority', () => {

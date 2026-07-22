@@ -12,6 +12,29 @@
   /* round221 — overlap like the internal participant avatars (owner request):
      no gap, siblings pulled onto each other with a negative margin. */
   gap: 0;
+  /* round227 — the whole stack is now a click target (opens the full list). */
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+/* round227 — "+N" overflow chip after the 5 shown avatars (mirrors the internal
+   AvatarGroup counter): a neutral initials-circle carrying the overlap. */
+.extMore {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--primary-background-hover-color, #eceef2);
+  color: var(--secondary-text-color, #676879);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 2px var(--primary-background-color, #fff);
+  margin-inline-start: -8px;
 }
 /* round217 — a solid colored initials circle (not the near-white Vibe text
    avatar, which was invisible on the white header).

@@ -13,24 +13,40 @@ function renderRow(props) {
   return render(
     <DndContext>
       <SortableContext items={['7']} strategy={verticalListSortingStrategy}>
-        <TopicPointRow point={POINT} rowStyle={{}} {...props} />
+        <TopicPointRow point={POINT} {...props} />
       </SortableContext>
     </DndContext>
   );
 }
 
-describe('TopicPointRow — fixed decisions/tasks table structure (smoke)', () => {
-  it('round226 — renders the fixed cell order: lead, name, נידונה, תוצרים (unified)', () => {
+describe('TopicPointRow — clean list row structure (round226 stage B smoke)', () => {
+  it('round226b — renders the list order: נידונה check, name, actions, תוצרים (no table cells)', () => {
     renderRow({});
     const row = document.querySelector('.row');
     const classes = [...row.children].map((el) => el.className);
     const idx = (c) => classes.findIndex((cls) => cls.includes(c));
-    expect(idx('lead')).toBeLessThan(idx('nameCell'));
-    expect(idx('nameCell')).toBeLessThan(idx('checkCell'));
-    expect(idx('checkCell')).toBeLessThan(idx('outputsCell'));
-    // the two legacy cells are gone
+    expect(idx('checkCell')).toBeLessThan(idx('nameCell'));
+    expect(idx('nameCell')).toBeLessThan(idx('rowActs'));
+    expect(idx('rowActs')).toBeLessThan(idx('outputsCell'));
+    // the legacy table cells are gone
+    expect(idx('lead')).toBe(-1);
     expect(idx('decisionsCell')).toBe(-1);
     expect(idx('tasksCell')).toBe(-1);
+  });
+
+  it('round226b — the discussed state draws the green check and strikes the name', () => {
+    const { unmount } = renderRow({});
+    // Unchecked: the check button is pressable and unpressed; the row has no done class.
+    const btn = document.querySelector('[aria-label="סמן כנידונה"]');
+    expect(btn).toBeTruthy();
+    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    expect(document.querySelector('.rowDone')).toBeNull();
+    unmount();
+
+    renderRow({ point: { ...POINT, discussed: true } });
+    const on = document.querySelector('[aria-label="נידונה — בטל סימון"]');
+    expect(on.getAttribute('aria-pressed')).toBe('true');
+    expect(document.querySelector('.rowDone')).toBeTruthy();
   });
 
   it('round226 — ONE unified create "+" (תוצר חדש), only when a create callback is provided', () => {
@@ -62,8 +78,13 @@ describe('TopicPointRow — fixed decisions/tasks table structure (smoke)', () =
     unmount();
 
     // zero outputs → no pill at all (quiet cell)
-    renderRow({ decisionCount: 0, taskCount: 0, onOpenTasks });
+    const zero = renderRow({ decisionCount: 0, taskCount: 0, onOpenTasks });
     expect(document.querySelector('[aria-label="הצג תוצרים מהנקודה"]')).toBeNull();
+    zero.unmount();
+
+    // exactly ONE output → the pill ALREADY shows (threshold is >0, not >1)
+    renderRow({ decisionCount: 0, taskCount: 1, onOpenTasks });
+    expect(document.querySelector('[aria-label="הצג תוצרים מהנקודה"]').textContent).toBe('1');
   });
 
   it('shows the create-progress overlay (pending) then the success ✓ (round 52)', () => {

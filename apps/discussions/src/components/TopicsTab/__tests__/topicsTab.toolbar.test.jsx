@@ -81,12 +81,15 @@ describe('TopicsTab — toolbar collapse-all alignment', () => {
     expect(screen.queryByLabelText('פתח הכל')).toBeNull();
   });
 
-  it('renders the discussed column header as "#" (round 52 rename of נידונה)', () => {
+  it('round226b — the card body renders NO column-header row (clean list)', () => {
     render(<TopicsTab discussion={discussion} canEdit />);
-    // round206 — topics start collapsed: expand all first, then the topic's
-    // column-header row shows the check column's title as "#" (not "נידונה").
+    // round206 — topics start collapsed: expand all first. The card redesign
+    // dropped the table's column-header row entirely — no "#"/"תוצרים" header
+    // labels and no legacy "נידונה" title anywhere; the inline add-point row
+    // renders instead.
     fireEvent.click(screen.getByLabelText('פתח הכל'));
-    expect(screen.getByText('#')).toBeTruthy();
+    expect(screen.queryByText('#')).toBeNull();
     expect(screen.queryByText('נידונה')).toBeNull();
+    expect(screen.getByLabelText('הוסף נקודה')).toBeTruthy();
   });
 });
