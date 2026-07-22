@@ -116,6 +116,18 @@
 .tabsRow :global([role="tab"]) * {
   white-space: nowrap;
 }
+/* round217 — kill the stray black focus outline the vibe Tab paints around a
+   just-clicked/keyboard-focused tab (owner screenshot: a black frame appears
+   around some tabs). The active tab already has its own underline indicator,
+   so no focus ring is needed; keyboard users still see the underline move. */
+.tabsRow :global([role="tab"]),
+.tabsRow :global([role="tab"]) *,
+.tabsRow :global([role="tab"]:focus),
+.tabsRow :global([role="tab"]:focus-visible),
+.tabsRow :global([role="tab"]:focus-within) {
+  outline: none !important;
+  box-shadow: none !important;
+}
 /* round114 — zero the FIRST tab's internal leading padding so its label (and
    active underline) start exactly on the gutter line, aligned with the table
    edge below; the other tabs keep their spacing to its right. Covers both the

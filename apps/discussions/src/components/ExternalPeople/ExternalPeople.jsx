@@ -1,7 +1,17 @@
 import React, { useState } from 'react';
-import { Avatar } from '@vibe/core';
 import { externalInitials } from '@generated/utils/externalParticipants.js';
 import styles from './ExternalPeople.module.css';
+
+// round217 — a stable accent color per external name (a deterministic hue), so
+// the initials circle always has a solid colored background instead of the
+// near-white Vibe text-avatar that got "swallowed" on the white header.
+const EXT_COLORS = ['#0073ea', '#00854d', '#a25ddc', '#e2445c', '#fdab3d', '#037f4c', '#5559df', '#ff642e'];
+function extColor(name) {
+  const s = String(name || '');
+  let h = 0;
+  for (let i = 0; i < s.length; i += 1) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return EXT_COLORS[h % EXT_COLORS.length];
+}
 
 /*
  * round211 — EXTERNAL participants (text-only names, not monday users) rendered
@@ -29,8 +39,14 @@ export function ExternalPeople({ names = [], canEdit = false, onChange }) {
     <div className={styles.extWrap}>
       <div className={styles.extAvatars}>
         {names.map((name, i) => (
-          <span key={`${name}-${i}`} className={styles.extAvatar} title={name}>
-            <Avatar size="small" text={externalInitials(name)} type="text" ariaLabel={name} />
+          <span
+            key={`${name}-${i}`}
+            className={styles.extAvatar}
+            style={{ background: extColor(name) }}
+            title={name}
+            aria-label={name}
+          >
+            {externalInitials(name)}
           </span>
         ))}
         {canEdit && (
