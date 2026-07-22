@@ -58,7 +58,7 @@ describe('MyTasksView — Hide columns (owner gating + shared persistence)', () 
   it('owner "Save to this view" persists the current selection to the shared view', () => {
     render(<MyTasksView canManageSettings onNotify={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
-    fireEvent.click(screen.getByText('Save to this view'));
+    fireEvent.click(screen.getByText('שמירה לתצוגה'));
     expect(saveView).toHaveBeenCalledWith({ hiddenColumns: ['priority'] });
   });
 });

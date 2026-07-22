@@ -26,6 +26,7 @@ import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
 import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
 import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
 import { BuilderControl } from './controls/BuilderControl.jsx';
+import { GroupPickList } from './controls/GroupPickList.jsx';
 import { Segment } from './controls/Segment.jsx';
 import { BuilderIcon } from './controls/BuilderIcon.jsx';
 import { HideColumnsControl } from './controls/HideColumnsControl.jsx';
@@ -45,11 +46,11 @@ import { useViewTracking } from '@generated/utils/viewTracking.js';
 import styles from './MyTasksView.module.css';
 import bs from './controls/builder.module.css';
 
-const TYPE_ICON = { status: 'status', date: 'date', text: 'text', relation: 'relation' };
+const TYPE_ICON = { status: 'status', date: 'date', text: 'text', relation: 'relation', person: 'person' };
 
 const firstSortDir = (col) => (SORT_COLUMNS.find((c) => c.key === col) || SORT_COLUMNS[0]).dirs[0].key;
 const firstGroupOrder = (col) => (GROUP_COLUMNS.find((c) => c.key === col) || GROUP_COLUMNS[0]).orders[0].key;
-const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'Choose a date range';
+const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'בחרו טווח תאריכים';
 const rangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
 
 // round215 — mobile-only DndContext wrapper: ONE context over ALL the card
@@ -87,6 +88,11 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  // round224 (owner mockup, approved) — the scope toggle, mirroring the My
+  // Decisions received/affecting toggle: משימות באחריות (default — the classic
+  // assigned-to-me page) ⇄ משימות בדיונים שהובלתי (ALL tasks from discussions I
+  // lead/coordinate; creator counts when a discussion has neither).
+  const [scope, setScope] = useState('mine');
   // Seed a new task from the group it is created in: by-status group -> status,
   // by-priority group -> priority (grp.status holds the label id for both); other
   // groupings (discussion / none / board-group) seed nothing — a task created
@@ -221,7 +227,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     items, loading, loadingMore, hasMore, error, loadMore,
     updateTaskStatus, updateTaskPriority, updateTaskNotes, updateTaskDeadline, updateTaskName,
     softDeleteTasks, createTask,
-  } = useMyTasks({ currentUser, context, search: debouncedSearch, notDoneStatusIds });
+  } = useMyTasks({ currentUser, context, search: debouncedSearch, notDoneStatusIds, scope });
 
   // Branded splash for the initial tasks load. useMinSplash arms when `loading`
   // rises (on mount, as the first page fetches) and holds a short min window so
@@ -486,6 +492,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     status: t('myTasks.colStatus'),
     name: t('myTasks.colName'),
     discussion: t('myTasks.colDiscussion'),
+    person: t('myTasks.colPerson'),
   };
   const field = (mobile, label, seg) => (mobile
     ? <div className={bs.bField} key={label}><div className={bs.bFieldLabel}>{label}</div>{seg}</div>
@@ -497,56 +504,45 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     // Empty state — no column chosen yet: a placeholder segment, like Group's.
     if (!sort.col) {
       const emptySeg = (
-        <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
-          text="Choose a column" placeholder options={colOptions} onPick={setSortCol} />
+        <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
+          text="בחרו עמודה" placeholder options={colOptions} onPick={setSortCol} />
       );
-      return mobile ? field(true, 'Column', emptySeg) : <div className={bs.bRow}>{emptySeg}</div>;
+      return mobile ? field(true, 'עמודה', emptySeg) : <div className={bs.bRow}>{emptySeg}</div>;
     }
     const sc = SORT_COLUMNS.find((c) => c.key === sort.col) || SORT_COLUMNS[0];
     const dir = sc.dirs.find((d) => d.key === sort.dir) || sc.dirs[0];
     const colSeg = (
-      <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+      <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
         icon={TYPE_ICON[sc.type]} text={COL_NAME[sc.key]}
         options={colOptions}
         onPick={setSortCol} />
     );
     const dirSeg = (
-      <Segment id="dir" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Direction" note={sc.note}
+      <Segment id="dir" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="כיוון" note={sc.note}
         icon={dir.icon} text={dir.label}
         options={sc.dirs.map((d) => ({ key: d.key, label: d.label, icon: d.icon, selected: d.key === sort.dir }))}
         onPick={setSortDir} />
     );
     return mobile
-      ? <>{field(true, 'Column', colSeg)}{field(true, 'Direction', dirSeg)}</>
+      ? <>{field(true, 'עמודה', colSeg)}{field(true, 'כיוון', dirSeg)}</>
       : <div className={bs.bRow}>{colSeg}{dirSeg}</div>;
   };
 
   // ---------- Group panel body ----------
-  const renderGroupBody = ({ mobile, openId, setOpenId }) => {
-    const colOptions = GROUP_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === group.col }));
-    if (group.col === 'none') {
-      const colSeg = (
-        <Segment id="gcol" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
-          text="Choose a column" placeholder options={colOptions} onPick={setGroupModePersist} />
-      );
-      return mobile ? field(true, 'Column', colSeg) : <div className={bs.bRow}>{colSeg}</div>;
-    }
-    const gc = GROUP_COLUMNS.find((c) => c.key === group.col) || GROUP_COLUMNS[0];
-    const ord = gc.orders.find((o) => o.key === group.order) || gc.orders[0];
-    const colSeg = (
-      <Segment id="gcol" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
-        icon={TYPE_ICON[gc.type]} text={COL_NAME[gc.key]} options={colOptions} onPick={setGroupModePersist} />
-    );
-    const ordSeg = (
-      <Segment id="gord" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Order"
-        icon={ord.icon} text={ord.label}
-        options={gc.orders.map((o) => ({ key: o.key, label: o.label, icon: o.icon, selected: o.key === group.order }))}
-        onPick={setGroupOrder} />
-    );
-    return mobile
-      ? <>{field(true, 'Column', colSeg)}{field(true, 'Order', ordSeg)}</>
-      : <div className={bs.bRow}>{colSeg}{ordSeg}</div>;
-  };
+  // round224 (owner mockup, approved) — ONE flat radio list: סטטוס (ברירת
+  // מחדל) / אחריות / עדיפות / דיון. No order picker — the order is ALWAYS the
+  // top-down label order (setGroupModePersist pins each column's first order).
+  // A NON-owner's panel closes the moment a column is picked; the owner's stays
+  // open so "שמור" (save-as-default for everyone) is reachable.
+  const renderGroupBody = ({ close }) => (
+    <GroupPickList
+      options={GROUP_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === group.col }))}
+      onPick={setGroupModePersist}
+      close={close}
+      closeOnPick={!canSaveView}
+      defaultKey="status"
+    />
+  );
 
   // ---------- Filter panel body ----------
   const valueChips = (col) => {
@@ -556,7 +552,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const renderFilterRow = (col, i, mobile, openId, setOpenId) => {
     const fcfg = FILTER_COLUMNS.find((c) => c.key === col);
     const colSeg = (
-      <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+      <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
         icon={TYPE_ICON[fcfg.type]} text={COL_NAME[col]}
         options={FILTER_COLUMNS.map((c) => ({
           key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type],
@@ -565,7 +561,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         onPick={(to) => retargetFilterRow(col, to)} />
     );
     const opSeg = (
-      <Segment id={`fop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Condition"
+      <Segment id={`fop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="תנאי"
         text={OP_LABEL[filter[col].op]}
         options={fcfg.ops.map((op) => ({ key: op, label: OP_LABEL[op], selected: filter[col].op === op }))}
         onPick={(op) => setFilterOp(col, op)} />
@@ -575,8 +571,8 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       const f = filter.deadline;
       if (f.op === 'within') {
         valueCtl = (
-          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="When"
-            icon={f.range ? rangeIcon(f.range) : 'date'} text={f.range ? rangeLabel(f.range) : 'Choose a date range'} placeholder={!f.range}
+          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="מתי"
+            icon={f.range ? rangeIcon(f.range) : 'date'} text={f.range ? rangeLabel(f.range) : 'בחרו טווח תאריכים'} placeholder={!f.range}
             options={DEADLINE_RANGES.map((r) => ({ key: r.key, label: r.label, icon: r.icon, selected: f.range === r.key }))}
             onPick={setDeadlineRange} />
         );
@@ -609,8 +605,8 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
             <span className={bs.bWhereLead}>{lead}</span>
             {removeBtn}
           </div>
-          {field(true, 'Column', colSeg)}
-          {field(true, 'Condition', opSeg)}
+          {field(true, 'עמודה', colSeg)}
+          {field(true, 'תנאי', opSeg)}
           {valueCtl ? field(true, 'Value', valueCtl) : null}
         </div>
       );
@@ -672,13 +668,16 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         {/* round208 — mobile toolbar is ICONS-ONLY (owner spec): the new-task
             button collapses to a "+" icon; the other pills are already icon-only
             via the .mobile-app CSS. */}
-        {isMobile ? (
+        {/* round224 — creation stays in the DEFAULT scope only: a task created
+            here is assigned to me and unlinked, so it can never satisfy the
+            "בדיונים שהובלתי" scope; hiding the button avoids a vanishing row. */}
+        {scope === 'mine' && (isMobile ? (
           <IconButton icon={Add} kind="primary" size="small" onClick={startCreateNew} ariaLabel="משימה חדשה" />
         ) : (
           <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
             משימה חדשה
           </Button>
-        )}
+        ))}
 
         {showSearch ? (
           <div className={styles.searchPill}>
@@ -766,6 +765,30 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         )}
 
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
+
+        {/* round224 (owner mockup) — the scope toggle, same placement as the My
+            Decisions toggle (right after Collapse): משימות באחריות (default) ⇄
+            משימות בדיונים שהובלתי. Its own dir="rtl" keeps the default on the
+            right of the track. Desktop only (the mobile toolbar stays minimal). */}
+        {!isMobile && (
+          <div className={styles.subTabs} dir="rtl" role="tablist" aria-label="תחום המשימות">
+            {[
+              { key: 'mine', label: 'משימות באחריות' },
+              { key: 'led', label: 'משימות בדיונים שהובלתי' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={scope === tab.key}
+                className={`${styles.subTab}${scope === tab.key ? ` ${styles.subTabActive}` : ''}`}
+                onClick={() => setScope(tab.key)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Quick-filter battery (round 81) — pushed to the far (right) end of the
             toolbar, monday-battery style: open / done / delayed counts + filter.

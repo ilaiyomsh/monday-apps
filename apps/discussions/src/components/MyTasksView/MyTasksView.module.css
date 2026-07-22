@@ -581,3 +581,44 @@
 :global(body[data-chrome-narrow="1"]) .board::-webkit-scrollbar {
   display: none;
 }
+
+/* round224 — the mine/led scope toggle (mirrors MyDecisionsView.subTabs, with
+   the tasks-blue accent instead of the decisions purple). */
+.subTabs {
+  flex: none;
+  direction: rtl;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  width: fit-content;
+  margin: 0;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.subTab {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  height: 100%;
+  padding: 0 14px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+  line-height: 1;
+  font-family: var(--font-family);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.subTab:hover { color: var(--primary-text-color, #323338); }
+.subTabActive {
+  background: var(--primary-background-color, #ffffff);
+  color: var(--primary-color, #0073ea);
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+.subTabActive:hover { color: var(--primary-color, #0073ea); }

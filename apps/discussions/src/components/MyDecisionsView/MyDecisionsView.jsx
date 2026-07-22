@@ -28,6 +28,7 @@ import { groupMyTasks, ensureGroupColors } from '../MyTasksView/grouping.js';
 import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { BuilderControl } from '../MyTasksView/controls/BuilderControl.jsx';
 import { Segment } from '../MyTasksView/controls/Segment.jsx';
+import { GroupPickList } from '../MyTasksView/controls/GroupPickList.jsx';
 import { BuilderIcon } from '../MyTasksView/controls/BuilderIcon.jsx';
 import { HideColumnsControl } from '../MyTasksView/controls/HideColumnsControl.jsx';
 import {
@@ -76,12 +77,14 @@ const DEC_GROUP_COLUMNS = [
       { key: 'dateAsc', label: 'Date ↑', icon: 'calUp' },
     ],
   },
-  ...GROUP_COLUMNS,
+  // round224 — GROUP_COLUMNS gained 'person' (אחריות) for tasks; decisions have
+  // no responsibility column, so it is excluded here.
+  ...GROUP_COLUMNS.filter((c) => c.key !== 'person'),
 ];
 // Default view = grouped BY DATE, most-recent day first (descending).
 const DEC_DEFAULT_GROUP = { col: 'deadline', order: 'dateDesc' };
 const firstGroupOrder = (col) => (DEC_GROUP_COLUMNS.find((c) => c.key === col) || DEC_GROUP_COLUMNS[0]).orders[0].key;
-const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'Choose a date range';
+const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'בחרו טווח תאריכים';
 const rangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
 
 // Decision-board display names for the shared pipeline's column keys.
@@ -344,56 +347,43 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     const colOptions = SORT_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === sort.col }));
     if (!sort.col) {
       const emptySeg = (
-        <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
-          text="Choose a column" placeholder options={colOptions} onPick={setSortCol} />
+        <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
+          text="בחרו עמודה" placeholder options={colOptions} onPick={setSortCol} />
       );
-      return mobile ? field(true, 'Column', emptySeg) : <div className={bs.bRow}>{emptySeg}</div>;
+      return mobile ? field(true, 'עמודה', emptySeg) : <div className={bs.bRow}>{emptySeg}</div>;
     }
     const sc = SORT_COLUMNS.find((c) => c.key === sort.col) || SORT_COLUMNS[0];
     const dir = sc.dirs.find((d) => d.key === sort.dir) || sc.dirs[0];
     const colSeg = (
-      <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+      <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
         icon={TYPE_ICON[sc.type]} text={COL_NAME[sc.key]}
         options={colOptions}
         onPick={setSortCol} />
     );
     const dirSeg = (
-      <Segment id="dir" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Direction" note={sc.note}
+      <Segment id="dir" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="כיוון" note={sc.note}
         icon={dir.icon} text={dir.label}
         options={sc.dirs.map((d) => ({ key: d.key, label: d.label, icon: d.icon, selected: d.key === sort.dir }))}
         onPick={setSortDir} />
     );
     return mobile
-      ? <>{field(true, 'Column', colSeg)}{field(true, 'Direction', dirSeg)}</>
+      ? <>{field(true, 'עמודה', colSeg)}{field(true, 'כיוון', dirSeg)}</>
       : <div className={bs.bRow}>{colSeg}{dirSeg}</div>;
   };
 
   // ---------- Group panel body ----------
-  const renderGroupBody = ({ mobile, openId, setOpenId }) => {
-    const colOptions = DEC_GROUP_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === group.col }));
-    if (group.col === 'none') {
-      const colSeg = (
-        <Segment id="gcol" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
-          text="Choose a column" placeholder options={colOptions} onPick={setGroupCol} />
-      );
-      return mobile ? field(true, 'Column', colSeg) : <div className={bs.bRow}>{colSeg}</div>;
-    }
-    const gc = DEC_GROUP_COLUMNS.find((c) => c.key === group.col) || DEC_GROUP_COLUMNS[0];
-    const ord = gc.orders.find((o) => o.key === group.order) || gc.orders[0];
-    const colSeg = (
-      <Segment id="gcol" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
-        icon={TYPE_ICON[gc.type]} text={COL_NAME[gc.key]} options={colOptions} onPick={setGroupCol} />
-    );
-    const ordSeg = (
-      <Segment id="gord" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Order"
-        icon={ord.icon} text={ord.label}
-        options={gc.orders.map((o) => ({ key: o.key, label: o.label, icon: o.icon, selected: o.key === group.order }))}
-        onPick={setGroupOrder} />
-    );
-    return mobile
-      ? <>{field(true, 'Column', colSeg)}{field(true, 'Order', ordSeg)}</>
-      : <div className={bs.bRow}>{colSeg}{ordSeg}</div>;
-  };
+  // round224 (owner mockup, approved) — ONE flat radio list, no order picker
+  // (setGroupCol pins each column's first order = the top-down label order);
+  // a NON-owner's panel closes on pick, the owner keeps it open for "שמור".
+  const renderGroupBody = ({ close }) => (
+    <GroupPickList
+      options={DEC_GROUP_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === group.col }))}
+      onPick={setGroupCol}
+      close={close}
+      closeOnPick={!canSaveView}
+      defaultKey="status"
+    />
+  );
 
   // ---------- Filter panel body ----------
   const valueChips = (col) => {
@@ -403,7 +393,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
   const renderFilterRow = (col, i, mobile, openId, setOpenId) => {
     const fcfg = FILTER_COLUMNS.find((c) => c.key === col);
     const colSeg = (
-      <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+      <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
         icon={TYPE_ICON[fcfg.type]} text={COL_NAME[col]}
         options={FILTER_COLUMNS.map((c) => ({
           key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type],
@@ -412,7 +402,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
         onPick={(to) => retargetFilterRow(col, to)} />
     );
     const opSeg = (
-      <Segment id={`fop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Condition"
+      <Segment id={`fop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="תנאי"
         text={OP_LABEL[filter[col].op]}
         options={fcfg.ops.map((op) => ({ key: op, label: OP_LABEL[op], selected: filter[col].op === op }))}
         onPick={(op) => setFilterOp(col, op)} />
@@ -422,8 +412,8 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
       const f = filter.deadline;
       if (f.op === 'within') {
         valueCtl = (
-          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="When"
-            icon={f.range ? rangeIcon(f.range) : 'date'} text={f.range ? rangeLabel(f.range) : 'Choose a date range'} placeholder={!f.range}
+          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="מתי"
+            icon={f.range ? rangeIcon(f.range) : 'date'} text={f.range ? rangeLabel(f.range) : 'בחרו טווח תאריכים'} placeholder={!f.range}
             options={DEADLINE_RANGES.map((r) => ({ key: r.key, label: r.label, icon: r.icon, selected: f.range === r.key }))}
             onPick={setDeadlineRange} />
         );
@@ -456,8 +446,8 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
             <span className={bs.bWhereLead}>{lead}</span>
             {removeBtn}
           </div>
-          {field(true, 'Column', colSeg)}
-          {field(true, 'Condition', opSeg)}
+          {field(true, 'עמודה', colSeg)}
+          {field(true, 'תנאי', opSeg)}
           {valueCtl ? field(true, 'Value', valueCtl) : null}
         </div>
       );

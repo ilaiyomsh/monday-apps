@@ -38,9 +38,9 @@ const DATA = {
 describe('TasksTab — group-by builder (smoke)', () => {
   beforeEach(() => { vp.mobile = false; });
 
-  it('renders the group builder trigger labelled "Group by" (not a @vibe Dropdown)', () => {
+  it('renders the group builder trigger labelled "קבץ לפי" (round224 Hebraization)', () => {
     render(<TasksTab data={DATA} onNewTask={() => {}} />);
-    expect(screen.getByText('Group by')).toBeTruthy();
+    expect(screen.getByText('קבץ לפי')).toBeTruthy();
   });
 
   it('default is NO grouping → tasks render flat, without a status group header', () => {
@@ -50,12 +50,11 @@ describe('TasksTab — group-by builder (smoke)', () => {
     expect(screen.getByText('משימה ב')).toBeTruthy();
   });
 
-  it('mobile: opening the builder + Column segment lists the options and picking אחראי groups by person', () => {
+  it('round224 mobile: the panel is ONE flat list — picking אחראי groups by person immediately', () => {
     vp.mobile = true;
     render(<TasksTab data={DATA} onNewTask={() => {}} />);
-    // pill → panel sheet; no grouping yet, so the Column segment is a placeholder
-    fireEvent.click(screen.getByLabelText('Group by'));
-    fireEvent.click(screen.getByText('Choose a column'));
+    // pill → sheet; the options render DIRECTLY (no Column segment / no order picker)
+    fireEvent.click(screen.getByLabelText('קבץ לפי'));
     expect(screen.getByText('סטאטוס')).toBeTruthy();
     expect(screen.getByText('אחראי')).toBeTruthy();
     fireEvent.click(screen.getByText('אחראי'));

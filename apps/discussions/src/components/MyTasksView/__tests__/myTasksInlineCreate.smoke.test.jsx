@@ -81,7 +81,7 @@ describe('MyTasksView — blue "משימה חדשה" button (inline, top of view
     expect(input.value).toBe('משימה חדשה'); // default (pre-selected in the real row)
   });
 
-  it('typing a name + Enter creates it with prepend + the typed name (no grouping → no seed)', () => {
+  it('typing a name + Enter creates it with prepend + the typed name (round224: default status grouping seeds the topmost status)', () => {
     render(<MyTasksView />);
     fireEvent.click(screen.getByText('משימה חדשה'));
     const input = screen.getByTestId('new-task-input');
@@ -91,7 +91,9 @@ describe('MyTasksView — blue "משימה חדשה" button (inline, top of view
     const arg = spies.createTask.mock.calls[0][0];
     expect(arg.name).toBe('לקנות חלב');
     expect(arg.prepend).toBe(true);
-    expect(arg.status ?? null).toBeNull();
+    // round224 — the default view groups by STATUS top-down, so the new row
+    // (created at the very top) inherits the topmost group's status seed.
+    expect(arg.status).toBe('s1');
     expect(arg.priority ?? null).toBeNull();
   });
 

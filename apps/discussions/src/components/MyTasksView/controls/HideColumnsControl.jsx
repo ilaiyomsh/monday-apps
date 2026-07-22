@@ -20,7 +20,7 @@ import styles from './hideColumns.module.css';
  *  - onToggle(key): flip one column's visibility.
  *  - onToggleAll(show): show (true) / hide (false) every hideable column.
  *  - onSave(): persist the current selection to the shared saved view (owners);
- *    null hides the "Save to this view" button.
+ *    null hides the "שמירה לתצוגה" button.
  *  - label: pill label (default "Hide").
  *
  * Owner-gating lives at the CALL SITE — the pill only renders for owners.
@@ -109,14 +109,14 @@ export function HideColumnsControl({ columns, hidden, onToggle, onToggleAll, onS
           ref={panelRef}
           className={styles.hcPanel}
           role="dialog"
-          aria-label="Display columns"
+          aria-label="הצגת עמודות"
           style={{ position: 'fixed', top: pos.top, left: pos.left, width: PANEL_W, zIndex: 10000 }}
         >
           <div className={styles.hcHead}>
-            <span className={styles.hcTitle}>Display columns</span>
+            <span className={styles.hcTitle}>הצגת עמודות</span>
             {onSave ? (
               <button type="button" className={styles.hcSave} onClick={() => { onSave(); setOpen(false); }}>
-                Save to this view
+                שמירה לתצוגה
               </button>
             ) : null}
           </div>
@@ -126,8 +126,8 @@ export function HideColumnsControl({ columns, hidden, onToggle, onToggleAll, onS
               type="text"
               className={styles.hcSearch}
               value={q}
-              placeholder="Find columns to show/hide"
-              aria-label="Find columns to show/hide"
+              placeholder="חיפוש עמודות להצגה/הסתרה"
+              aria-label="חיפוש עמודות להצגה/הסתרה"
               onChange={(e) => setQ(e.target.value)}
             />
           </div>
@@ -137,9 +137,9 @@ export function HideColumnsControl({ columns, hidden, onToggle, onToggleAll, onS
               checked={allShown}
               indeterminate={someHidden}
               onChange={(e) => onToggleAll(e.target.checked)}
-              ariaLabel="All columns"
+              ariaLabel="כל העמודות"
             />
-            <span className={styles.hcMasterLabel}>All columns — {shownCount} selected</span>
+            <span className={styles.hcMasterLabel}>כל העמודות — {shownCount} מוצגות</span>
           </div>
 
           <div className={styles.hcList}>
@@ -165,7 +165,7 @@ export function HideColumnsControl({ columns, hidden, onToggle, onToggleAll, onS
                 </div>
               );
             })}
-            {visibleRows.length === 0 ? <div className={styles.hcEmpty}>No columns found</div> : null}
+            {visibleRows.length === 0 ? <div className={styles.hcEmpty}>לא נמצאו עמודות</div> : null}
           </div>
         </div>,
         document.body

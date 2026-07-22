@@ -34,15 +34,15 @@ describe('HideColumnsControl — "Display columns" popover', () => {
   it('opens the panel on click and shows the title + Save button', () => {
     setup();
     fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
-    expect(screen.getByText('Display columns')).toBeInTheDocument();
-    expect(screen.getByText('Save to this view')).toBeInTheDocument();
+    expect(screen.getByText('הצגת עמודות')).toBeInTheDocument();
+    expect(screen.getByText('שמירה לתצוגה')).toBeInTheDocument();
   });
 
   it('shows "All columns — N selected" counting every SHOWN column', () => {
     setup({ hidden: new Set(['status']) });
     fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
     // 4 columns total, 1 hidden -> 3 shown/selected (name always counts).
-    expect(screen.getByText('All columns — 3 selected')).toBeInTheDocument();
+    expect(screen.getByText('כל העמודות — 3 מוצגות')).toBeInTheDocument();
   });
 
   it('locks (disables) the primary name column checkbox but no other', () => {
@@ -75,7 +75,7 @@ describe('HideColumnsControl — "Display columns" popover', () => {
   it('the search input filters the column rows', () => {
     setup();
     fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
-    fireEvent.change(screen.getByLabelText('Find columns to show/hide'), { target: { value: 'dead' } });
+    fireEvent.change(screen.getByLabelText('חיפוש עמודות להצגה/הסתרה'), { target: { value: 'dead' } });
     expect(screen.getByText('Deadline')).toBeInTheDocument();
     expect(screen.queryByText('Status')).toBeNull();
   });
@@ -83,7 +83,7 @@ describe('HideColumnsControl — "Display columns" popover', () => {
   it('clicking "Save to this view" calls onSave and closes the panel', () => {
     const { onSave } = setup();
     fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
-    fireEvent.click(screen.getByText('Save to this view'));
+    fireEvent.click(screen.getByText('שמירה לתצוגה'));
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Display columns')).toBeNull();
   });
@@ -91,6 +91,6 @@ describe('HideColumnsControl — "Display columns" popover', () => {
   it('hides the Save button when onSave is null', () => {
     setup({ onSave: null });
     fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
-    expect(screen.queryByText('Save to this view')).toBeNull();
+    expect(screen.queryByText('שמירה לתצוגה')).toBeNull();
   });
 });
