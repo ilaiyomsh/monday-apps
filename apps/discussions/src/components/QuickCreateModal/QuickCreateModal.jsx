@@ -141,10 +141,11 @@ export function QuickCreateModal({
   const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
   const anchorStyle = (anchor && isDesktop)
     ? (() => {
-        const width = Math.min(520, window.innerWidth - 32);
+        // round235 — the shell shrank to a compact 320px popover-like card.
+        const width = Math.min(320, window.innerWidth - 32);
         const centerX = anchor.left + anchor.width / 2;
         const left = Math.max(16, Math.min(centerX - width / 2, window.innerWidth - width - 16));
-        const top = Math.max(16, Math.min(anchor.bottom + 8, window.innerHeight - 380));
+        const top = Math.max(16, Math.min(anchor.bottom + 8, window.innerHeight - 280));
         return { position: 'absolute', top, left, margin: 0 };
       })()
     : undefined;

@@ -139,6 +139,257 @@
 }
 .agendaBox .toolbar::before { display: none; }
 .toolbarSpacer { flex: 1 1 auto; min-width: 8px; }
+
+/* round235 — search + templates moved into the agenda HEADER (the band under it
+   became the topics ribbon). */
+.headTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+  flex-shrink: 0;
+}
+
+/* ---- round235 (approved mockup v3, muted palette) — the TOPICS RIBBON ----
+   Fills the 48px band that held נושא חדש/הסתר/כווץ: every topic is a
+   full-height MUTED status-label; the LEFT edge is a gentle 9px arrow point
+   (toward the next topic, RTL) and the RIGHT edge carries the matching notch
+   so the labels nest. Click selects; ⋮ opens the menu / long-press drags. */
+.agendaBox .ribbon {
+  padding: 0;
+  gap: 0;
+  align-items: stretch;
+}
+.ribbonTile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 14px 0 16px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  clip-path: polygon(100% 0, 9px 0, 0 50%, 9px 100%, 100% 100%, calc(100% - 9px) 50%);
+  /* muted (owner: "צבעים יותר דהויים"): a WASHED tint of the topic's accent. */
+  background: var(--primary-background-hover-color, #f5f6f8);
+  background: color-mix(in srgb, var(--tile-accent, #676879) 22%, var(--primary-background-color, #fff));
+  transition: background-color 0.12s ease;
+}
+.ribbonTile:first-child {
+  /* the rightmost label — flat right edge (nothing nests into it) */
+  clip-path: polygon(100% 0, 9px 0, 0 50%, 9px 100%, 100% 100%);
+}
+.ribbonTile + .ribbonTile,
+.ribbonTile + .ribbonAdd,
+.ribbonTile + .ribbonAddForm {
+  margin-inline-start: -7px;
+}
+.ribbonTile:hover {
+  background: color-mix(in srgb, var(--tile-accent, #676879) 34%, var(--primary-background-color, #fff));
+}
+.ribbonTileOn {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--tile-accent, #676879) 46%, var(--primary-background-color, #fff));
+  box-shadow: inset 0 -3px 0 var(--tile-accent, #676879);
+}
+.ribbonTileExcluded { opacity: 0.55; }
+.ribbonTileExcluded .ribbonName { font-style: italic; }
+.ribbonTileDragging {
+  opacity: 0.85;
+  filter: brightness(1.06);
+  box-shadow: inset 0 0 0 200px rgba(0, 0, 0, 0.05), 0 2px 10px rgba(0, 0, 0, 0.22);
+}
+.ribbonName {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ribbonEye { flex-shrink: 0; color: var(--secondary-text-color, #676879); }
+.ribbonKebab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+  touch-action: none;
+}
+.ribbonTile:hover .ribbonKebab,
+.ribbonKebab:focus-visible {
+  opacity: 1;
+}
+.ribbonKebab:hover { background: rgba(0, 0, 0, 0.12); color: var(--primary-text-color, #323338); }
+.ribbonRenameInput {
+  width: 110px;
+  min-width: 0;
+  height: 26px;
+  border: none;
+  border-radius: 5px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--text-color, #323338);
+  background: var(--primary-background-color, #fff);
+  outline: 2px solid var(--primary-color, #0073ea);
+}
+.ribbonAdd {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 0 14px 0 12px;
+  border: none;
+  background: var(--primary-background-hover-color, #fafbfc);
+  color: var(--secondary-text-color, #676879);
+  font-size: 13px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  clip-path: polygon(100% 0, 9px 0, 0 50%, 9px 100%, 100% 100%, calc(100% - 9px) 50%);
+}
+.ribbonAdd:hover { color: var(--primary-color, #0073ea); background: var(--primary-selected-color, #e6f1fd); }
+.ribbonAddForm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 0 8px 0 10px;
+}
+.ribbonAddInput {
+  height: 30px;
+  width: 150px;
+  border: 1px solid var(--primary-color, #0073ea);
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--text-color, #323338);
+  outline: none;
+  background: var(--primary-background-color, #fff);
+}
+.ribbonAddOk {
+  height: 30px;
+  border: none;
+  border-radius: 6px;
+  padding: 0 12px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-size: 13px;
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+.ribbonAddOk:disabled { opacity: 0.5; cursor: default; }
+
+/* the ⋮ menu (fixed-position under the clicked ⋮) */
+.topicMenuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4490;
+  background: transparent;
+}
+.topicMenu {
+  position: fixed;
+  z-index: 4500;
+  min-width: 160px;
+  max-width: 240px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.topicMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--text-color, #323338);
+  cursor: pointer;
+  text-align: start;
+}
+.topicMenuItem:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.topicMenuDanger { color: var(--negative-color, #d83a52); }
+.topicMenuConfirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--text-color, #323338);
+}
+.topicMenuConfirm > span { flex: 1; min-width: 0; }
+.topicMenuYes,
+.topicMenuNo {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+}
+.topicMenuYes { background: var(--negative-color, #d83a52); color: #fff; }
+.topicMenuNo { background: var(--primary-background-hover-color, #f0f1f3); color: var(--text-color, #323338); }
+.topicMenuPrio {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-top: 1px solid var(--layout-border-color, #e6e9ef);
+  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
+  padding: 4px 0;
+  margin: 2px 0;
+}
+.topicMenuPrioLabel {
+  font-size: 11px;
+  color: var(--secondary-text-color, #676879);
+  padding: 2px 10px;
+}
+.topicMenuPrioOpt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--text-color, #323338);
+  cursor: pointer;
+  text-align: start;
+}
+.topicMenuPrioOpt:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.topicMenuPrioOn { background: var(--primary-selected-color, #e6f1fd); }
+.topicMenuPrioDot {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
 /* round222b/232/234 — the triple box's formatting strip is pinned to the SAME
    48px height as the agenda toolbar row so their bottom borders line up
    EXACTLY, icons vertically centered, one row (nowrap) + clip so it can never
@@ -494,6 +745,41 @@
 .sectionExcluded .headActs {
   opacity: 1;
 }
+
+/* round235 — HEADLESS active section: the ribbon owns the topic chrome, so the
+   section loses its card frame (border, accent bar, radius) and its points
+   render directly in the agenda body (approved mockup). */
+.sectionHeadless {
+  border: none;
+  border-inline-start: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.topicRetryBanner {
+  display: flex;
+  justify-content: flex-start;
+  padding: 4px 8px 8px;
+}
+.excludedNote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px;
+  font-size: 13.5px;
+  color: var(--secondary-text-color, #676879);
+}
+.excludedShowBtn {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary-color, #0073ea);
+  font-size: 12.5px;
+  font-family: var(--font-family);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.excludedShowBtn:hover { background: var(--primary-selected-color, #e6f1fd); }
 
 /* Card header (mockup .tHead): the whole tinted row toggles collapse; hover
    reveals the actions cluster. Tint = 6% of the topic accent over the ground. */
