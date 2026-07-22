@@ -5,7 +5,7 @@ import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { Plus, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { Plus, Eye, EyeOff, Trash2, GripHorizontal } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -30,6 +30,8 @@ import { buildMentionRoster } from '@generated/utils/mention.js';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
 import { getPointItemIds } from '@generated/utils/pointItems.js';
+import { loadLayout, saveLayout, DEFAULT_LAYOUT, ratioFromDrag } from '@generated/utils/discussionLayout.js';
+import logger from '@generated/utils/logger.js';
 import styles from './TopicsTab.module.css';
 
 const NEUTRAL = 'hsl(var(--status-default))';
@@ -809,6 +811,111 @@ export function TopicsTab({
   const [gapBeforeId, setGapBeforeId] = useState(null); // round237 — the insertion gap marker
   const [addWhere, setAddWhere] = useState(null); // round237 — 'start' | 'end' | null
   const [newTopicText, setNewTopicText] = useState('');
+
+  // round241 — per-discussion WIDGET LAYOUT of the split (owner-only writes).
+  //   layout.ratio   → the אג'נדה box's share of the row width (the triple box
+  //                    gets the rest, so growing one shrinks the other).
+  //   layout.stacked → the two boxes stack vertically instead of side-by-side.
+  // editLayout reveals the 6-dot grips + the resize divider on BOTH boxes at
+  // once (owner request: one pencil arms both). Everyone READS the saved layout;
+  // only an owner (canManageSettings) persists changes.
+  const [layout, setLayout] = useState(DEFAULT_LAYOUT);
+  const [editLayout, setEditLayout] = useState(false);
+  const layoutRef = useRef(layout);
+  const splitRowRef = useRef(null);
+  useEffect(() => { layoutRef.current = layout; }, [layout]);
+  useEffect(() => {
+    let alive = true;
+    loadLayout(discussion?.id)
+      .then((l) => { if (alive) setLayout(l); })
+      .catch((err) => logger.warn('TopicsTab', 'טעינת פריסת הדיון נכשלה', err));
+    return () => { alive = false; };
+  }, [discussion?.id]);
+  // A non-owner never edits; if the gate flips off mid-session, drop edit mode.
+  useEffect(() => { if (!canManageSettings) setEditLayout(false); }, [canManageSettings]);
+
+  const applyLayout = (patch, persist = false) => {
+    setLayout((cur) => {
+      const next = { ...cur, ...patch };
+      layoutRef.current = next;
+      if (persist && canManageSettings) saveLayout(discussion?.id, next);
+      return next;
+    });
+  };
+
+  // Horizontal resize: drag the central divider → change the agenda's width
+  // share; the pure ratioFromDrag maps the pointer delta to a clamped ratio.
+  const onDividerPointerDown = (e) => {
+    if (!editLayout || !canManageSettings || layoutRef.current.stacked) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startRatio = layoutRef.current.ratio;
+    const width = splitRowRef.current?.getBoundingClientRect().width || 0;
+    const onMove = (ev) => applyLayout({ ratio: ratioFromDrag(startRatio, ev.clientX - startX, width) });
+    const onUp = (ev) => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      applyLayout({ ratio: ratioFromDrag(startRatio, ev.clientX - startX, width) }, true);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  };
+
+  // 6-dot grip: drag DOWN past a threshold stacks the two boxes, drag UP
+  // unstacks them ("like a dashboard widget"). One persist on release.
+  const onGripPointerDown = (e) => {
+    if (!editLayout || !canManageSettings) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startY = e.clientY;
+    let decided = layoutRef.current.stacked;
+    const onMove = (ev) => {
+      const dy = ev.clientY - startY;
+      if (dy > 60) decided = true;
+      else if (dy < -60) decided = false;
+      if (decided !== layoutRef.current.stacked) applyLayout({ stacked: decided });
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      applyLayout({ stacked: decided }, true);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  };
+
+  // The shared edit-tools cluster rendered inside BOTH box headers (owner-only):
+  // a pencil that toggles edit mode for both boxes at once, plus — while editing
+  // — the 6-dot drag grip. `place` only tags it for per-box styling.
+  const renderLayoutTools = (place) => {
+    if (!canManageSettings) return null;
+    return (
+      <span className={styles.layoutTools} data-place={place} onPointerDown={(e) => e.stopPropagation()}>
+        {editLayout && (
+          <span
+            className={styles.layoutGrip}
+            role="button"
+            tabIndex={-1}
+            aria-label="הזז תיבה (גרור מטה לעימוד, מעלה לצד-לצד)"
+            title="גרור מטה לעימוד התיבות, מעלה לצד-לצד"
+            onPointerDown={onGripPointerDown}
+          >
+            <GripHorizontal size={16} />
+          </span>
+        )}
+        <button
+          type="button"
+          className={`${styles.layoutPencilBtn} ${editLayout ? styles.layoutPencilOn : ''}`}
+          aria-label={editLayout ? 'סיום עריכת פריסה' : 'עריכת פריסת התצוגה'}
+          aria-pressed={editLayout}
+          title={editLayout ? 'סיום עריכת פריסה' : 'עריכת מיקום וגודל התיבות'}
+          onClick={() => setEditLayout((v) => !v)}
+        >
+          <Edit size={15} />
+        </button>
+      </span>
+    );
+  };
   const stableDiscussionSeedRef = useRef(topicColorStartIndex(`discussion:${discussion?.id || 'default'}`));
   const topicAccentMapRef = useRef({});
   const getAccentByTopicId = (topics) => {
@@ -1027,9 +1134,15 @@ export function TopicsTab({
       {/* round200 — the tab splits into two columns: the topic tables on the LEFT
           (ending at the tasks column instead of bleeding right) and the
           "התייחסויות" panel on the RIGHT. */}
-      <div className={styles.splitRow}>
+      <div
+        ref={splitRowRef}
+        className={`${styles.splitRow} ${layout.stacked ? styles.splitRowStacked : ''} ${editLayout ? styles.splitRowEditing : ''}`}
+      >
       {showTopics && (
-      <div className={styles.topicsCol}>
+      <div
+        className={styles.topicsCol}
+        style={layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${layout.ratio} 1 0` }}
+      >
       {/* round218 (approved mockup) — the topics live in an "אג'נדה" CARD
           symmetric to the triple box: same width/border/radius, a gray header
           labeled אג'נדה, and a toolbar strip (נושא חדש · מתבנית · חיפוש · הסתר
@@ -1046,6 +1159,7 @@ export function TopicsTab({
               onApplied={() => refetch({ showLoader: false })}
             />
           )}
+          {renderLayoutTools('agenda')}
         </span>
       </div>
       {/* round235 (approved mockup v3, muted colors) — the TOPICS RIBBON fills
@@ -1240,12 +1354,32 @@ export function TopicsTab({
       </div>
       )}
 
+      {/* round241 — owner-only resize divider between the two boxes (side-by-side
+          + edit mode only). Dragging it re-shares the row width; growing one box
+          shrinks the other. */}
+      {editLayout && canManageSettings && !layout.stacked
+        && showTopics && (showBackground || showReferences || showSummary) && (
+        <div
+          className={styles.splitDivider}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="שינוי רוחב התיבות"
+          title="גרור לשינוי רוחב התיבות"
+          onPointerDown={onDividerPointerDown}
+        >
+          <span className={styles.splitDividerGrip} aria-hidden="true" />
+        </div>
+      )}
+
       {/* round206 (approved mockup) — the TRIPLE BOX on the physical RIGHT:
           one card, three header titles (רקע → התייחסויות → סיכום), each pane
           its own monday Update; owner-hidden panes drop their header. Same
           fixed edit rule (coordinator/creator/lead + owner) gates all three. */}
       {(showBackground || showReferences || showSummary) && (
-      <div className={styles.refPanel}>
+      <div
+        className={styles.refPanel}
+        style={layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${1 - layout.ratio} 1 0` }}
+      >
         <UpdatesTripleBox
           discussionId={discussion?.id}
           canEditBackground={canEditBackground}
@@ -1256,6 +1390,7 @@ export function TopicsTab({
           showSummary={showSummary}
           mentionPeople={mentionPeople}
           resetPaneNonce={paneResetNonce}
+          headerTools={renderLayoutTools('triple')}
         />
       </div>
       )}

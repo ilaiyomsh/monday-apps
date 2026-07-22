@@ -150,6 +150,100 @@
   flex-shrink: 0;
 }
 
+/* ---- round241 — owner-only WIDGET LAYOUT: resize divider, drag grips,
+   stacked mode. The split ratio is driven by inline flex on the two columns
+   (TopicsTab sets `flex: <ratio> 1 0`); these rules cover the edit chrome and
+   the vertical stack. ---- */
+.splitRowStacked {
+  flex-direction: column;
+}
+/* Stacked: the triple box drops its side-by-side sticky/width constraints and
+   becomes a full-width row above/below the agenda box. */
+.splitRowStacked .refPanel {
+  position: static;
+  max-width: none;
+  min-width: 0;
+  margin-inline-end: 0;
+}
+/* The divider is a thin, full-height grab strip between the two boxes; only
+   rendered in edit mode + side-by-side (owner). */
+.splitDivider {
+  flex: 0 0 12px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+.splitDividerGrip {
+  width: 4px;
+  height: 72px;
+  max-height: 60%;
+  border-radius: 3px;
+  background: var(--ui-border-color, #d0d4e4);
+  transition: background-color 0.12s ease;
+}
+.splitDivider:hover .splitDividerGrip,
+.splitRowEditing .splitDivider .splitDividerGrip {
+  background: var(--primary-color, #0073ea);
+}
+/* The pencil (+ 6-dot grip) cluster carried in each box header. */
+.layoutTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.layoutPencilBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.layoutPencilBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--primary-text-color, #323338);
+}
+.layoutPencilOn {
+  background: color-mix(in srgb, var(--primary-color, #0073ea) 14%, transparent);
+  color: var(--primary-color, #0073ea);
+}
+.layoutGrip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--secondary-text-color, #676879);
+  cursor: grab;
+  touch-action: none;
+}
+.layoutGrip:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--primary-text-color, #323338);
+}
+.layoutGrip:active {
+  cursor: grabbing;
+}
+/* In the triple box the header is a flex tab-band (tabs are flex:1), so the
+   tools sit flush at the physical-left end after the last tab. */
+.tripleHeaderTools {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 8px;
+}
+
 /* ---- round235 (approved mockup v3, muted palette) — the TOPICS RIBBON ----
    Fills the 48px band that held נושא חדש/הסתר/כווץ: every topic is a
    full-height MUTED status-label; the LEFT edge is a gentle 9px arrow point
