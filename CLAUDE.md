@@ -162,7 +162,7 @@ packages/shared                     EMPTY STUB — see below
   **monday-api** (any code touching the monday API — validate against the live
   schema, probe in the sandbox), **test-guard** + **error-guard** (every change).
 - Situational: monday-ops, monday-scaffold, integration-scaffold,
-  add-to-status-hub, axiom-sre.
+  add-to-status-hub, axiom-sre, monday-oauth (any monday auth/OAuth work).
 - A platform quirk discovered while working is appended to the owning skill's
   `references/` in the same session.
 
