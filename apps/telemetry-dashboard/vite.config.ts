@@ -25,7 +25,13 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, 'public'),
     emptyOutDir: true,
-    sourcemap: true,
+    // Emit the CLIENT bundle's sourcemaps as SEPARATE .map files WITHOUT the
+    // //# sourceMappingURL comment ('hidden'). The deploy workflow archives +
+    // deletes public/**/*.map before code:push, so client source is never served
+    // (this also fixes the prior sourcemap:true public leak). Maps are kept as a
+    // CI artifact for stack symbolication if client telemetry is enabled. Server
+    // code runs from source (already readable). See docs/LOGGING-ARCHITECTURE.md §6.
+    sourcemap: 'hidden',
   },
   server: {
     port: 5174,
