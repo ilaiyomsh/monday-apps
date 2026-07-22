@@ -11,10 +11,22 @@
   align-items: center;
   gap: 2px;
 }
-/* Native-title tooltip host (mirrors PersonAvatar's .avatarTip). */
+/* round217 — a solid colored initials circle (not the near-white Vibe text
+   avatar, which was invisible on the white header). */
 .extAvatar {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
   cursor: default;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1.5px var(--primary-background-color, #fff);
 }
 
 .extAddBtn {
