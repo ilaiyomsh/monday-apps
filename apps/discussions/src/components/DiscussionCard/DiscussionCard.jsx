@@ -913,7 +913,7 @@ export function DiscussionCard({
               groups right-to-left. Desktop only — the phone keeps its info popover. */}
           {!isMobile && metaOpen && (headerPeopleGroups.length > 0
             || (externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0))) && (
-            <div dir="rtl" className={styles.tabsRoster}>
+            <div dir="rtl" className={`${styles.tabsRoster} ${reserveSettingsSpace ? styles.tabsRosterReserve : ''}`}>
               {headerPeopleGroups.map((g) => {
                 // מנהל (lead) + רשם דיון (coordinator) — and any future single role —
                 // are one-person fields: cap at one and CLOSE the picker after a pick.
