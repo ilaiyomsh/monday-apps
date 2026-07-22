@@ -1,26 +1,14 @@
 import React, { useState } from 'react';
 import { Avatar, Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
-import { Update, Edit } from '@vibe/icons';
+import { Edit } from '@vibe/icons';
 import { Trash2, EyeOff, Eye, MoreHorizontal, Check } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { CreateProgressBar } from '@generated/components/CreateProgressBar';
 import styles from './TopicPointRow.module.css';
 
 function initialsOf(name) {
   return (name || '?').split(' ').map((n) => n[0]).join('').slice(0, 2);
-}
-
-// Open a point's item card on the Updates pane — identical to the Tasks name
-// cell's updates affordance (kind:'updates' renders monday's side panel). A
-// POINT is a subitem, so point.id is a real monday item id; guard the temp id
-// of an optimistic (not-yet-saved) point so it never targets a bogus id.
-// Open the point's item card via the shared helper. monday's SDK has no
-// programmatic close (see utils/itemCard.js), so every click reliably (re)opens.
-function openItemCard(itemId) {
-  if (!itemId || String(itemId).startsWith('temp-')) return;
-  openOrToggleItemCard(itemId);
 }
 
 /* Creator avatar (who created the topic / point). Resolves the user from the
@@ -311,21 +299,13 @@ export function TopicPointRow({
             {excluded ? <Eye size={16} /> : <EyeOff size={16} />}
           </button>
         )}
+        {/* round229 (owner request) — the "עדכונים" (updates) affordance was
+            removed from points/topics: no update can be created on them. */}
         {point.creatorId && (
           <span className={styles.creatorAvatar}>
             <CreatorAvatar userId={point.creatorId} usersById={usersById} size="small" />
           </span>
         )}
-        <button
-          type="button"
-          className={`${styles.rowActBtn} ${styles.updatesBtn}`}
-          title="עדכונים"
-          aria-label="פתח עדכונים"
-          disabled={inert}
-          onClick={(e) => { e.stopPropagation(); if (!inert) openItemCard(point.id); }}
-        >
-          <Update size={18} />
-        </button>
       </span>
 
       {/* round226 (approved mockup) — the UNIFIED "תוצרים" cluster: a quiet count

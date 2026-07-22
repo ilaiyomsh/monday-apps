@@ -242,7 +242,11 @@ function SortableTopicSection({
     if (!t) return;
     addPoint(topic.id, t);
     setNewPointText('');
-    addPointInputRef.current?.focus();
+    // round229 (owner request) — after Enter, the add-point input stays open at
+    // the bottom and RE-FOCUSES so the next point can be typed immediately (no
+    // mouse click). rAF defers past the optimistic re-render that re-inserts the
+    // list, which would otherwise drop focus from the remounted input.
+    requestAnimationFrame(() => addPointInputRef.current?.focus());
   };
 
   const saveTopicTitle = () => {

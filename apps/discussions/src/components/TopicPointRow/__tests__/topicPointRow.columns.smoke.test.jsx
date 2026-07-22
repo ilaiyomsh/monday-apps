@@ -110,4 +110,9 @@ describe('TopicPointRow — clean list row structure (round226 stage B smoke)', 
     renderRow({});
     expect(document.querySelector('[data-variant]')).toBeNull();
   });
+
+  it('round229 — the "עדכונים" (updates) affordance is GONE from a point row', () => {
+    renderRow({});
+    expect(document.querySelector('[aria-label="פתח עדכונים"]')).toBeNull();
+  });
 });
