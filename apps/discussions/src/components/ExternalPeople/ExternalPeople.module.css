@@ -9,24 +9,33 @@
 .extAvatars {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  /* round221 — overlap like the internal participant avatars (owner request):
+     no gap, siblings pulled onto each other with a negative margin. */
+  gap: 0;
 }
 /* round217 — a solid colored initials circle (not the near-white Vibe text
-   avatar, which was invisible on the white header). */
+   avatar, which was invisible on the white header).
+   round221 — bigger (28px) + overlapping, matching the internal avatars. */
 .extAvatar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   color: #fff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   line-height: 1;
   cursor: default;
   flex-shrink: 0;
-  box-shadow: 0 0 0 1.5px var(--primary-background-color, #fff);
+  box-shadow: 0 0 0 2px var(--primary-background-color, #fff);
+  margin-inline-start: -8px;
+}
+/* The rightmost (first, in RTL) avatar has no pull-in; the "+" button keeps a
+   small gap after the overlapped stack. */
+.extAvatar:first-child {
+  margin-inline-start: 0;
 }
 
 .extAddBtn {
