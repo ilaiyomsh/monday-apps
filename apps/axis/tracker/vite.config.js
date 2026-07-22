@@ -49,6 +49,12 @@ export default defineConfig(({ command, mode }) => {
       __IS_RELEASE__: JSON.stringify(process.env.VITE_IS_RELEASE === 'true'),
     },
     build: {
+      // Emit sourcemaps as SEPARATE .map files WITHOUT the //# sourceMappingURL
+      // comment ('hidden') so CI can archive them for stack symbolication
+      // (axiom-sre scripts/symbolicate) while the browser never fetches them.
+      // The deploy workflow archives + deletes build/**/*.map before code:push.
+      // See docs/LOGGING-ARCHITECTURE.md §6.
+      sourcemap: 'hidden',
       outDir: 'build',
       rollupOptions: {
         output: {
