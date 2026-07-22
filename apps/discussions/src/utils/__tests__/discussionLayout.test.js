@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
   clampRatio,
+  clampHeight,
   normalizeLayout,
   ratioFromDrag,
+  heightFromDrag,
   MIN_RATIO,
   MAX_RATIO,
+  MIN_HEIGHT,
+  MAX_HEIGHT,
   DEFAULT_LAYOUT,
 } from '../discussionLayout.js';
 
@@ -26,17 +30,36 @@ describe('discussionLayout — pure layout math (round241)', () => {
     });
   });
 
+  describe('clampHeight', () => {
+    it('passes an in-range height through untouched', () => {
+      expect(clampHeight(600)).toBe(600);
+    });
+    it('clamps below MIN_HEIGHT up and above MAX_HEIGHT down', () => {
+      expect(clampHeight(100)).toBe(MIN_HEIGHT);
+      expect(clampHeight(9000)).toBe(MAX_HEIGHT);
+    });
+    it('returns null (use CSS default) for null/non-finite input', () => {
+      expect(clampHeight(null)).toBeNull();
+      expect(clampHeight(undefined)).toBeNull();
+      expect(clampHeight(NaN)).toBeNull();
+      expect(clampHeight('tall')).toBeNull();
+    });
+  });
+
   describe('normalizeLayout', () => {
     it('returns the default layout for non-object input', () => {
       expect(normalizeLayout(null)).toEqual(DEFAULT_LAYOUT);
       expect(normalizeLayout(undefined)).toEqual(DEFAULT_LAYOUT);
       expect(normalizeLayout(42)).toEqual(DEFAULT_LAYOUT);
     });
-    it('clamps the ratio and coerces stacked to a strict boolean', () => {
-      expect(normalizeLayout({ ratio: 0.9, stacked: true })).toEqual({ ratio: MAX_RATIO, stacked: true });
+    it('clamps ratio + height and coerces stacked to a strict boolean', () => {
+      expect(normalizeLayout({ ratio: 0.9, stacked: true, height: 700 }))
+        .toEqual({ ratio: MAX_RATIO, stacked: true, height: 700 });
       // a truthy-but-not-true stacked must NOT count as stacked
-      expect(normalizeLayout({ ratio: 0.5, stacked: 1 })).toEqual({ ratio: 0.5, stacked: false });
-      expect(normalizeLayout({ ratio: 0.5 })).toEqual({ ratio: 0.5, stacked: false });
+      expect(normalizeLayout({ ratio: 0.5, stacked: 1 })).toEqual({ ratio: 0.5, stacked: false, height: null });
+      // an out-of-range stored height is clamped
+      expect(normalizeLayout({ ratio: 0.5, height: 50 })).toEqual({ ratio: 0.5, stacked: false, height: MIN_HEIGHT });
+      expect(normalizeLayout({ ratio: 0.5 })).toEqual({ ratio: 0.5, stacked: false, height: null });
     });
   });
 
@@ -54,6 +77,15 @@ describe('discussionLayout — pure layout math (round241)', () => {
     it('leaves the ratio unchanged when the container width is zero/unknown', () => {
       expect(ratioFromDrag(0.5, 250, 0)).toBe(0.5);
       expect(ratioFromDrag(0.5, 250, undefined)).toBe(0.5);
+    });
+  });
+
+  describe('heightFromDrag', () => {
+    it('adds a downward drag to the start height and clamps the result', () => {
+      expect(heightFromDrag(600, 120)).toBe(720);   // taller
+      expect(heightFromDrag(600, -120)).toBe(480);  // shorter
+      expect(heightFromDrag(600, -500)).toBe(MIN_HEIGHT); // 100 → clamp up
+      expect(heightFromDrag(1300, 400)).toBe(MAX_HEIGHT); // 1700 → clamp down
     });
   });
 });
