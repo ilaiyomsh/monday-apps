@@ -40,4 +40,24 @@ describe('ExternalPeople', () => {
     fireEvent.click(screen.getByRole('button', { name: 'הסרת יוסי כהן' }));
     expect(onChange).toHaveBeenCalledWith([]);
   });
+
+  it('round227 — caps the inline stack at 5 avatars and shows a "+N" chip for the rest', () => {
+    const names = ['א א', 'ב ב', 'ג ג', 'ד ד', 'ה ה', 'ו ו', 'ז ז']; // 7 names
+    const { container } = render(<ExternalPeople names={names} />);
+    const avatars = container.querySelectorAll(`.${'extAvatar'}`);
+    expect(avatars.length).toBe(5); // only the first 5 render inline
+    expect(screen.getByText('+2')).toBeInTheDocument(); // 7 - 5 = 2 overflow
+  });
+
+  it('round227 — a READ-ONLY viewer can click the stack to see ALL external names', () => {
+    const names = ['יוסי כהן', 'דנה לוי', 'רון מור'];
+    render(<ExternalPeople names={names} canEdit={false} />);
+    // No editor, but the whole stack is a click target that opens the full list.
+    fireEvent.click(screen.getByRole('button', { name: 'הצג רשימת משתתפים חיצוניים' }));
+    const dialog = screen.getByRole('dialog', { name: 'משתתפים' });
+    names.forEach((n) => expect(dialog).toHaveTextContent(n));
+    // Read-only: no add input, no remove buttons.
+    expect(screen.queryByLabelText('שם משתתף חיצוני')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /הסרת/ })).not.toBeInTheDocument();
+  });
 });

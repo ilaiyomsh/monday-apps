@@ -18,12 +18,13 @@ const RichTextEditor = lazy(lazyRetry(() => import('@components/RichTextEditor')
 const AUTOSAVE_DELAY = 1500;
 
 // round225 — the toolbar meta shows ONLY the last-update date + time (owner
-// spec), compact numeric form.
+// spec), compact numeric form. round227 (owner request): DROP the year — just
+// DD/MM HH:MM.
 function formatWhen(value) {
   if (!value) return null;
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
-  const date = d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const date = d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
   const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
   return `${date} ${time}`;
 }

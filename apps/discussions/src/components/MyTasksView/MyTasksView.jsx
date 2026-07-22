@@ -767,14 +767,16 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
 
         {/* round224 (owner mockup) — the scope toggle, same placement as the My
-            Decisions toggle (right after Collapse): משימות באחריות (default) ⇄
-            משימות בדיונים שהובלתי. Its own dir="rtl" keeps the default on the
-            right of the track. Desktop only (the mobile toolbar stays minimal). */}
+            Decisions toggle (right after Collapse): משימות באחריותי (default) ⇄
+            משימות בדיונים שהובלתי. round227 (owner request): "באחריותי" is the
+            LEFT button of the two and stays the default — so in this dir="rtl"
+            track "led" is listed FIRST (lands on the right) and "mine" second
+            (lands on the left). Desktop only (the mobile toolbar stays minimal). */}
         {!isMobile && (
           <div className={styles.subTabs} dir="rtl" role="tablist" aria-label="תחום המשימות">
             {[
-              { key: 'mine', label: 'משימות באחריות' },
               { key: 'led', label: 'משימות בדיונים שהובלתי' },
+              { key: 'mine', label: 'משימות באחריותי' },
             ].map((tab) => (
               <button
                 key={tab.key}

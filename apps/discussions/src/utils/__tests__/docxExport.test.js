@@ -214,6 +214,27 @@ describe('data-driven template (buildExportDoc)', () => {
     return strFromU8(unzipSync(new Uint8Array(await Packer.toBuffer(doc)))['word/document.xml']);
   };
 
+  it('round227 — pins the export font on EVERY run, incl. TABLE cells (was: tables fell back to Word\'s theme font)', async () => {
+    const template = {
+      font: 'brand', // Figtree (Latin) + Noto Sans Hebrew (complex-script)
+      sections: [
+        { key: 'topics', enabled: true, label: 'נושאים לדיון' },
+        { key: 'tasks', enabled: true, label: 'משימות' },
+      ],
+    };
+    const xml = await xmlOf(baseModel(), template);
+    // The document BODY (word/document.xml — not styles.xml) now carries the font
+    // on the runs themselves, so both the Latin (ascii/hAnsi) and Hebrew (cs)
+    // faces are pinned per run.
+    expect(xml).toContain('w:ascii="Figtree"');
+    expect(xml).toContain('w:cs="Noto Sans Hebrew"');
+    // The tasks TABLE region — the element that used to fall back to the theme
+    // font — carries the pinned font too.
+    const tbl = xml.slice(xml.indexOf('<w:tbl'));
+    expect(tbl).toContain('Figtree');
+    expect(tbl).toContain('Noto Sans Hebrew');
+  });
+
   it('omits a section that is disabled', async () => {
     const template = {
       sections: [
