@@ -86,10 +86,13 @@ const eventsBoard = createEventsBoardService({
   logger,
 });
 const provisioner = createBoardProvisioner({ mondayApi, storage, logger });
+const { createAccountSlugResolver } = await import('./services/account-slug.js');
+const slugResolver = createAccountSlugResolver({ mondayApi, logger });
 const lifecycleService = createLifecycleService({
   eventsBoard,
   logger,
   debugRawPayload: env.debugLifecyclePayload,
+  slugResolver,
 });
 
 const app = createApp({

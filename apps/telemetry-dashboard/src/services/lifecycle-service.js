@@ -60,7 +60,27 @@ function normalizeOccurredAt(raw) {
  * @param {typeof fetch} [deps.fetchImpl] - injected for tests; defaults to global fetch
  * @returns {{ handleFeatureEvent: Function, handleAppEvent: Function }}
  */
-export function createLifecycleService({ eventsBoard, logger, fetchImpl, debugRawPayload = false }) {
+export function createLifecycleService({
+  eventsBoard,
+  logger,
+  fetchImpl,
+  debugRawPayload = false,
+  slugResolver = null,
+}) {
+  /**
+   * Best-effort owner-account slug for instance URLs (#145). '' on any
+   * failure/foreign account — enrichment must never break the webhook path.
+   */
+  async function resolveSlug(accountId) {
+    if (!slugResolver || !accountId) return '';
+    try {
+      const slug = await slugResolver.getSlug(accountId);
+      return typeof slug === 'string' ? slug : '';
+    } catch (err) {
+      logger.warn('slug_resolve_failed', TAG, { error: String(err?.message ?? err) });
+      return '';
+    }
+  }
   /** Sanctioned debug exception (see header) — raw body to console only. */
   function dumpRaw(slug, eventId, body) {
     if (!debugRawPayload) return;
@@ -153,11 +173,19 @@ export function createLifecycleService({ eventsBoard, logger, fetchImpl, debugRa
         ackBackToUrl(b.back_to_url, { app: slug, eventId: id });
         return { duplicate: true };
       }
-      const payload = b.payload && typeof b.payload === 'object' ? b.payload : {};
+      // REAL shape (#145, captured live 2026-07-22): monday nests everything
+      // under `data` — { type, data: { payload, back_to_url, app_id,
+      // app_feature_id, app_feature_reference_id, user_id, account_id,
+      // timestamp } }. The legacy top-level read (docs-era assumption) is
+      // kept as a fallback so older/simulated bodies still parse.
+      const d = b.data && typeof b.data === 'object' ? b.data : b;
+      const payload = d.payload && typeof d.payload === 'object' ? d.payload : {};
 
       let feature = '';
       if (payload.app_feature && typeof payload.app_feature.name === 'string') {
         feature = payload.app_feature.name;
+      } else if (typeof d.app_feature_id === 'string' || typeof d.app_feature_id === 'number') {
+        feature = String(d.app_feature_id);
       } else if (typeof payload.appFeatureId === 'string' || typeof payload.appFeatureId === 'number') {
         feature = String(payload.appFeatureId);
       }
@@ -168,20 +196,40 @@ export function createLifecycleService({ eventsBoard, logger, fetchImpl, debugRa
       putId(details, 'itemId', payload.itemId);
       putId(details, 'instanceId', payload.instanceId);
       putId(details, 'appFeatureId', payload.appFeatureId);
+      putId(details, 'object_id', payload.object_id);
+      putId(details, 'source_object_id', payload.source_object_id);
+      putId(details, 'source_workspace_id', payload.source_workspace_id);
+      putId(details, 'app_feature_reference_id', d.app_feature_reference_id);
+      putId(details, 'app_id', d.app_id);
+
+      const accountId = idString(d.account_id ?? b.accountId);
+      const objectId = idString(payload.object_id);
+      // Instance URL — owner-gated slug + the object id (a board-shaped id).
+      const accountSlug = objectId ? await resolveSlug(accountId) : '';
+      const objectUrl =
+        accountSlug && objectId ? `https://${accountSlug}.monday.com/boards/${objectId}` : '';
 
       const evt = {
         category: 'Lifecycle',
         eventType: String(b.type ?? ''),
         appSlug: slug,
         feature,
-        accountId: idString(b.accountId),
-        userId: idString(b.userId),
-        occurredAt: new Date().toISOString(),
+        accountId,
+        userId: idString(d.user_id ?? b.userId),
+        // Feature events carry ids only (owner decision) — identity columns
+        // fill natively on install/subscription events.
+        userName: '',
+        userEmail: '',
+        workspace: idString(payload.workspace_id),
+        objectName: typeof payload.object_name === 'string' ? payload.object_name : '',
+        objectUrl,
+        appVersion: '',
+        occurredAt: normalizeOccurredAt(d.timestamp),
         details,
         eventId: id ?? '',
       };
       const itemId = await record(evt, 'lifecycle');
-      ackBackToUrl(b.back_to_url, { app: slug, eventId: id });
+      ackBackToUrl(d.back_to_url ?? b.back_to_url, { app: slug, eventId: id });
       return { duplicate: false, itemId };
     } catch (err) {
       // Fail-soft: the route already answered 202 — log and resolve.
@@ -227,6 +275,17 @@ export function createLifecycleService({ eventsBoard, logger, fetchImpl, debugRa
       putScalar(details, 'is_trial', subscription.is_trial);
       putScalar(details, 'billing_period', subscription.billing_period);
 
+      // #145: install/subscription payloads natively carry the actor's
+      // identity + the app version — map them to their dedicated columns
+      // (board-only by design; they never reach logger calls).
+      const version =
+        data.version_data && typeof data.version_data === 'object'
+          ? ['major', 'minor', 'patch']
+              .map((k) => data.version_data[k])
+              .filter((v) => typeof v === 'number' || typeof v === 'string')
+              .join('.')
+          : '';
+
       const evt = {
         category,
         eventType: type,
@@ -234,6 +293,12 @@ export function createLifecycleService({ eventsBoard, logger, fetchImpl, debugRa
         feature: '',
         accountId: idString(data.account_id),
         userId: idString(data.user_id),
+        userName: typeof data.user_name === 'string' ? data.user_name : '',
+        userEmail: typeof data.user_email === 'string' ? data.user_email : '',
+        workspace: '',
+        objectName: '',
+        objectUrl: '',
+        appVersion: version,
         occurredAt: normalizeOccurredAt(data.timestamp),
         details,
         eventId: id ?? '',

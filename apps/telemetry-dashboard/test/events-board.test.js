@@ -238,3 +238,82 @@ describe('events-board — fail-soft (failure → null, never a throw, every cat
     expect(logger.warn).toHaveBeenCalledWith('record_event_invalid', 'events_board', {});
   });
 });
+
+// ---------------------------------------------------------------------------
+// #145 — full field mapping: identity, workspace, object name/url, app version
+// ---------------------------------------------------------------------------
+
+describe('buildColumnValues — #145 enrichment columns', () => {
+  const FULL_COLUMNS = {
+    event_time: 'date_1', category: 'color_1', event_type: 'text_1', app: 'text_2',
+    feature: 'text_3', account_id: 'text_4', user_id: 'text_5',
+    user_name: 'text_6', user_email: 'text_7', workspace: 'text_8',
+    object_name: 'text_9', object_url: 'link_1', app_version: 'text_10',
+    details: 'long_text_1', event_id: 'text_11',
+  };
+
+  function fullEvt(overrides = {}) {
+    return {
+      category: 'Lifecycle', eventType: 'AppFeatureObject:create', appSlug: 'axis-tracker',
+      feature: '23902080', accountId: '14334098', userId: '48274917',
+      userName: 'Ilai Owner', userEmail: 'owner@example.com', workspace: '15426602',
+      objectName: 'Tracker', objectUrl: 'https://yomsheni-il.monday.com/boards/18423229216',
+      appVersion: '', occurredAt: '2026-07-22T08:40:56.057Z',
+      details: { object_id: '18423229216' }, eventId: 'ev-1',
+      ...overrides,
+    };
+  }
+
+  it('maps user_name, user_email, workspace, object_name and app_version as text', async () => {
+    const mondayApi = { createItem: vi.fn(async () => 'item-9') };
+    const svc = createEventsBoardService({
+      mondayApi,
+      getConfig: async () => ({ boardId: 'b1', groupId: 'g1', columns: FULL_COLUMNS }),
+      logger: makeLogger(),
+    });
+
+    await svc.recordEvent(fullEvt({ appVersion: '1.2.3' }));
+
+    const cv = mondayApi.createItem.mock.calls[0][0].columnValues;
+    expect(cv.text_6).toBe('Ilai Owner');
+    expect(cv.text_7).toBe('owner@example.com');
+    expect(cv.text_8).toBe('15426602');
+    expect(cv.text_9).toBe('Tracker');
+    expect(cv.text_10).toBe('1.2.3');
+  });
+
+  it('maps object_url as a monday LINK column value {url, text} — and skips it when empty', async () => {
+    const mondayApi = { createItem: vi.fn(async () => 'item-9') };
+    const svc = createEventsBoardService({
+      mondayApi,
+      getConfig: async () => ({ boardId: 'b1', groupId: 'g1', columns: FULL_COLUMNS }),
+      logger: makeLogger(),
+    });
+
+    await svc.recordEvent(fullEvt());
+    let cv = mondayApi.createItem.mock.calls[0][0].columnValues;
+    expect(cv.link_1).toEqual({
+      url: 'https://yomsheni-il.monday.com/boards/18423229216',
+      text: 'Tracker',
+    });
+
+    await svc.recordEvent(fullEvt({ objectUrl: '' }));
+    cv = mondayApi.createItem.mock.calls[1][0].columnValues;
+    expect(cv.link_1).toBeUndefined();
+  });
+
+  it('missing enrichment column ids in the stored map are skipped (old boards keep working)', async () => {
+    const mondayApi = { createItem: vi.fn(async () => 'item-9') };
+    const legacyColumns = { event_type: 'text_1', app: 'text_2' }; // pre-#145 board
+    const svc = createEventsBoardService({
+      mondayApi,
+      getConfig: async () => ({ boardId: 'b1', groupId: 'g1', columns: legacyColumns }),
+      logger: makeLogger(),
+    });
+
+    await svc.recordEvent(fullEvt());
+
+    const cv = mondayApi.createItem.mock.calls[0][0].columnValues;
+    expect(Object.keys(cv).sort()).toEqual(['text_1', 'text_2']);
+  });
+});

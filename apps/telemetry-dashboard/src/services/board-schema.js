@@ -30,6 +30,14 @@ export const BOARD_COLUMNS = Object.freeze([
   { key: 'feature', title: 'Feature', type: 'text' },
   { key: 'account_id', title: 'Account ID', type: 'text' },
   { key: 'user_id', title: 'User ID', type: 'text' },
+  // #145 enrichment — user identity arrives natively on install/subscription
+  // events; feature events carry ids only (owner decision: no API lookup).
+  { key: 'user_name', title: 'User Name', type: 'text' },
+  { key: 'user_email', title: 'User Email', type: 'text' },
+  { key: 'workspace', title: 'Workspace', type: 'text' },
+  { key: 'object_name', title: 'Object Name', type: 'text' },
+  { key: 'object_url', title: 'Object URL', type: 'link' },
+  { key: 'app_version', title: 'App Version', type: 'text' },
   { key: 'details', title: 'Details', type: 'long_text' },
   { key: 'event_id', title: 'Event ID', type: 'text' },
 ]);

@@ -126,3 +126,16 @@ describe('board-provisioner — failures propagate (after logging)', () => {
     await expect(provisioner.provision()).rejects.toMatchObject({ code: 'no_write_token' });
   });
 });
+
+describe('board schema — #145 columns', () => {
+  it('BOARD_COLUMNS carries the 6 enrichment columns with the right types', async () => {
+    const { BOARD_COLUMNS } = await import('../src/services/board-schema.js');
+    const byKey = Object.fromEntries(BOARD_COLUMNS.map((c) => [c.key, c.type]));
+    expect(byKey.user_name).toBe('text');
+    expect(byKey.user_email).toBe('text');
+    expect(byKey.workspace).toBe('text');
+    expect(byKey.object_name).toBe('text');
+    expect(byKey.object_url).toBe('link');
+    expect(byKey.app_version).toBe('text');
+  });
+});
