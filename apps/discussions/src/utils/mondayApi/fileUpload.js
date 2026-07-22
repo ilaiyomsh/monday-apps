@@ -16,6 +16,32 @@ import { api } from './monday-client.js';
 
 const FILE_ENDPOINT = 'https://api.monday.com/v2/file';
 
+// round244 — the JSON value monday documents for emptying a Files column.
+const CLEAR_ALL_VALUE = JSON.stringify({ clear_all: true });
+
+const CLEAR_FILE_MUTATION =
+  `mutation ($board: ID!, $item: ID!, $col: String!, $val: JSON!) {
+     change_column_value (board_id: $board, item_id: $item, column_id: $col, value: $val) { id }
+   }`;
+
+/**
+ * Clear ALL files from a Files column (monday's documented `{"clear_all":true}`
+ * value) via the seamless monday.api() — no token. round244: used before an
+ * export upload so the summary column keeps only the LATEST file instead of
+ * accumulating every past export.
+ * @throws if ids are missing or on a GraphQL error (caller decides best-effort).
+ */
+export async function clearFileColumn({ itemId, columnId, boardId }) {
+  if (!itemId || !columnId || !boardId) {
+    throw new Error('clearFileColumn: itemId, columnId and boardId are required');
+  }
+  await api(
+    CLEAR_FILE_MUTATION,
+    { board: String(boardId), item: String(itemId), col: String(columnId), val: CLEAR_ALL_VALUE },
+    'clearFileColumn',
+  );
+}
+
 const ADD_FILE_MUTATION = (itemId, columnId) =>
   `mutation ($file: File!) {
      add_file_to_column (item_id: ${Number(itemId)}, column_id: "${columnId}", file: $file) { id name url }
@@ -63,7 +89,13 @@ export async function uploadFileToColumn({ itemId, columnId, blob, filename, tok
   }
 
   let json = null;
-  try { json = await res.json(); } catch { /* non-JSON (e.g. HTML error page) */ }
+  try {
+    json = await res.json();
+  } catch (e) {
+    // Non-JSON body (e.g. an HTML error page) — record it; the !json check below
+    // then throws a clear error with the HTTP status.
+    logger.warn('fileUpload', 'תגובת monday להעלאת קובץ אינה JSON', e);
+  }
 
   if (!res.ok || !json || json.errors || json.error_message) {
     const detail = json?.errors?.[0]?.message || json?.error_message || `HTTP ${res.status}`;

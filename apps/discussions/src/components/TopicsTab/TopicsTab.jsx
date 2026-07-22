@@ -1443,7 +1443,6 @@ export function TopicsTab({
           showSummary={showSummary}
           mentionPeople={mentionPeople}
           resetPaneNonce={paneResetNonce}
-          headerTools={renderLayoutTools('triple')}
         />
         {renderHeightHandle()}
       </div>

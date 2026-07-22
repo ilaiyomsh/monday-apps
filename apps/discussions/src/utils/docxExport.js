@@ -39,7 +39,7 @@ import { loadBackgroundUpdateId } from './backgroundStore.js';
 import { getItemUpdate } from './mondayApi/updates.js';
 import { isSummaryHtmlEmpty } from './summaryHtml.js';
 import { parseExternalParticipants } from './externalParticipants.js';
-import { uploadFileToColumnSeamless } from './mondayApi/fileUpload.js';
+import { uploadFileToColumnSeamless, clearFileColumn } from './mondayApi/fileUpload.js';
 import { spliceBodyIntoTemplate } from './docxTemplateMerge.js';
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import logger from './logger.js';
@@ -1036,6 +1036,15 @@ export async function deliverDiscussionDocx(model, filename, { template = DEFAUL
   const uploadAttempted = !!fileColumnId;
   let uploaded = false;
   if (uploadAttempted) {
+    // round244 (owner request) — the summary column keeps only the LATEST export:
+    // clear the prior files first, then upload the fresh one. Clearing is
+    // best-effort (a failure is logged, never blocks the new upload/download).
+    try {
+      const boardId = getBoardId('discussions');
+      if (boardId) await clearFileColumn({ itemId: discussionId, columnId: fileColumnId, boardId });
+    } catch (clearErr) {
+      if (!clearErr?.__loggedId) logger.error('docxExport', 'ניקוי הקבצים הקודמים בעמודת הסיכום נכשל', clearErr);
+    }
     try {
       const file = typeof File !== 'undefined' ? new File([blob], filename, { type: DOCX_MIME }) : blob;
       await uploadFileToColumnSeamless({ itemId: discussionId, columnId: fileColumnId, file });
