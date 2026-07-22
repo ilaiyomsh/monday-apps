@@ -160,7 +160,10 @@
 /* Stacked: the triple box drops its side-by-side sticky/width constraints and
    becomes a full-width row above/below the agenda box. */
 .splitRowStacked .refPanel {
-  position: static;
+  /* relative (not static) so it stays the containing block for the height
+     handle while giving up its side-by-side sticky/width constraints. */
+  position: relative;
+  top: auto;
   max-width: none;
   min-width: 0;
   margin-inline-end: 0;
@@ -242,6 +245,40 @@
   align-items: center;
   flex-shrink: 0;
   padding: 0 8px;
+}
+
+/* round242 — bottom HEIGHT resize handle. The agenda column needs its own
+   positioning context so the handle pins to the box's bottom edge (the refPanel
+   is already position:sticky, which anchors absolute children on its own).
+   Dragging the handle shrinks/grows the shared card height (both boxes stay
+   twins). */
+.topicsCol {
+  position: relative;
+}
+.heightHandle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: row-resize;
+  touch-action: none;
+  z-index: 5;
+}
+.heightHandleGrip {
+  width: 72px;
+  max-width: 40%;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--ui-border-color, #d0d4e4);
+  transition: background-color 0.12s ease;
+}
+.heightHandle:hover .heightHandleGrip,
+.splitRowEditing .heightHandleGrip {
+  background: var(--primary-color, #0073ea);
 }
 
 /* ---- round235 (approved mockup v3, muted palette) — the TOPICS RIBBON ----

@@ -30,7 +30,7 @@ import { buildMentionRoster } from '@generated/utils/mention.js';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
 import { getPointItemIds } from '@generated/utils/pointItems.js';
-import { loadLayout, saveLayout, DEFAULT_LAYOUT, ratioFromDrag } from '@generated/utils/discussionLayout.js';
+import { loadLayout, saveLayout, DEFAULT_LAYOUT, ratioFromDrag, heightFromDrag } from '@generated/utils/discussionLayout.js';
 import logger from '@generated/utils/logger.js';
 import styles from './TopicsTab.module.css';
 
@@ -861,6 +861,40 @@ export function TopicsTab({
     document.addEventListener('pointerup', onUp);
   };
 
+  // round242 — bottom resize handle: drag it to shrink/GROW the shared card
+  // height (both boxes stay twins). The start height is measured from the
+  // handle's own box so the drag tracks the real pixels. One persist on release.
+  const onHeightPointerDown = (e) => {
+    if (!editLayout || !canManageSettings) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startY = e.clientY;
+    const box = e.currentTarget.parentElement;
+    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current.height || 520);
+    const onMove = (ev) => applyLayout({ height: heightFromDrag(startH, ev.clientY - startY) });
+    const onUp = (ev) => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      applyLayout({ height: heightFromDrag(startH, ev.clientY - startY) }, true);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  };
+
+  // The bottom height-resize handle carried inside each box (owner + edit mode).
+  const renderHeightHandle = () => (editLayout && canManageSettings) ? (
+    <span
+      className={styles.heightHandle}
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="שינוי גובה התיבות"
+      title="גרור לשינוי גובה התיבות"
+      onPointerDown={onHeightPointerDown}
+    >
+      <span className={styles.heightHandleGrip} aria-hidden="true" />
+    </span>
+  ) : null;
+
   // 6-dot grip: drag DOWN past a threshold stacks the two boxes, drag UP
   // unstacks them ("like a dashboard widget"). One persist on release.
   const onGripPointerDown = (e) => {
@@ -1137,6 +1171,7 @@ export function TopicsTab({
       <div
         ref={splitRowRef}
         className={`${styles.splitRow} ${layout.stacked ? styles.splitRowStacked : ''} ${editLayout ? styles.splitRowEditing : ''}`}
+        style={layout.height ? { '--split-card-h': `${layout.height}px` } : undefined}
       >
       {showTopics && (
       <div
@@ -1351,6 +1386,7 @@ export function TopicsTab({
       )}
       </div>{/* .agendaBody */}
       </div>{/* .agendaBox */}
+      {renderHeightHandle()}
       </div>
       )}
 
@@ -1392,6 +1428,7 @@ export function TopicsTab({
           resetPaneNonce={paneResetNonce}
           headerTools={renderLayoutTools('triple')}
         />
+        {renderHeightHandle()}
       </div>
       )}
       </div>
