@@ -479,27 +479,25 @@
    with the tab baseline. flex-shrink:0 keeps the avatars from squishing (a
    narrow pane scrolls the row, and chrome-narrow hides the roster entirely). */
 .tabsRoster {
-  margin-inline-start: auto;
+  /* round238 — PHYSICAL margin-left:auto (like .participants), NOT the logical
+     margin-inline-start:auto. This block is dir="rtl", so the logical form
+     resolved to margin-RIGHT:auto and pushed the whole roster LEFT (its right
+     edge sat ~280px off the card edge — the misalignment the owner kept seeing;
+     round236's reserve-mirror never touched this root cause). Physical
+     margin-left:auto hugs the RIGHT edge deterministically, screenshot-verified. */
+  margin-left: auto;
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
   gap: 2px;
   flex-shrink: 0;
-  /* round236 — align the roster's rightmost avatar under the date/time text
-     above it. The date sits inside .dateGroup (padding-inline 16px); the
-     roster's last group has only 4px, so without this the avatars jut ~12px
-     past the date's right edge. Pad the roster's inline-start (physical RIGHT
-     in this dir=rtl block) by the 12px difference so the two rows line up. */
-  padding-inline-start: 12px;
-}
-/* round236 — when the owner-only settings gear is shown, the date row reserves
-   48px on its trailing side (.participantsReserve) so the avatars clear the
-   gear. The roster on the tab line is a SEPARATE row and never got that
-   reserve, so it sat ~48px to the RIGHT of the date row — misaligned. Mirror
-   the EXACT same reserve here so the roster's right edge lands directly under
-   the date/time's right edge (owner request: "צמוד לימין ממש מתחת לתאריך"). */
-.tabsRosterReserve {
-  margin-inline-end: 48px;
+  /* round238 — the date text sits 16px inside its .dateGroup; the roster's last
+     group only has 4px, so pad the roster's inline-start (physical RIGHT in this
+     dir=rtl block) by ~16px so the rightmost group's right edge lands directly
+     under the date/time's right edge (screenshot-measured: 41px date ≈ 41px
+     roster). No settings-gear reserve is needed — the roster sits on the tab
+     line, BELOW the gear, so nothing overlaps it. */
+  padding-inline-start: 16px;
 }
 
 /* One labeled group: BOLD label to the RIGHT (dir=rtl → label is the first child)
