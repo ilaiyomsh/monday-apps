@@ -8,7 +8,6 @@ import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { useDashboardData } from '@generated/hooks/useDashboardData.js';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { aggregateDashboard } from './dashboardAgg.js';
 import {
   WIDGET_IDS, WIDGETS, GRID_COLS, GRID_GAP, LAYOUT_VERSION,
@@ -493,11 +492,14 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
               <button type="button" className={styles.drillClose} onClick={() => setDrill(null)}>סגור ✕</button>
             </div>
             <div className={styles.drillList}>
+              {/* round244 (owner request) — the drill-down rows are READ-ONLY:
+                  clicking a discussion here must NOT open its monday Updates
+                  card. They list name + date only. */}
               {drillView.items.map((it) => (
-                <button key={it.id} type="button" className={styles.drillItem} onClick={() => openOrToggleItemCard(it.id)}>
+                <div key={it.id} className={styles.drillItem}>
                   <span className={styles.drillName}>{it.name}</span>
                   <span className={styles.drillDate}>{fmtDate(it.date)}</span>
-                </button>
+                </div>
               ))}
             </div>
           </div>

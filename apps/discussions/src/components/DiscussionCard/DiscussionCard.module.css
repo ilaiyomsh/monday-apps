@@ -112,6 +112,17 @@
 /* vibe TabList renders role="tablist"; keep it ONE row, never wrapping to a 2nd row. */
 .tabsRow :global([role="tablist"]) {
   flex-wrap: nowrap;
+  /* round244 (owner request) — the active-tab blue underline used to float a
+     few px ABOVE the grey header rule because the tablist was vertically
+     centered in the 44px row while the rule sits at the row's bottom. Stretch
+     the tablist (and each tab) to the FULL row height so the underline lands
+     exactly ON the rule; the label stays centered (align-items:center below). */
+  align-self: stretch;
+  align-items: stretch;
+}
+.tabsRow :global([role="tab"]) {
+  display: flex;
+  align-items: center;
 }
 /* vibe Tab renders role="tab"; never let a tab shrink or its label wrap to a
    second line (that wrapping is what grew the bar height when the iframe

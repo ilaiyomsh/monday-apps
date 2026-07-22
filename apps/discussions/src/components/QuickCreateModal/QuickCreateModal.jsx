@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Text, Button, Flex } from '@vibe/core';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { computeBoundedAnchorStyle } from './anchorBounds.js';
 import styles from './QuickCreateModal.module.css';
 
 /**
@@ -139,22 +140,35 @@ export function QuickCreateModal({
   // the button's center, clamped so the 520px shell never leaves the viewport.
   // Desktop only — the ≤768px bottom-sheet keeps its own layout.
   const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
-  const anchorStyle = (anchor && isDesktop)
-    ? (() => {
-        // round235 — the shell shrank to a compact 320px popover-like card.
-        const width = Math.min(320, window.innerWidth - 32);
-        const centerX = anchor.left + anchor.width / 2;
-        const left = Math.max(16, Math.min(centerX - width / 2, window.innerWidth - width - 16));
-        const top = Math.max(16, Math.min(anchor.bottom + 8, window.innerHeight - 280));
-        return { position: 'absolute', top, left, margin: 0 };
-      })()
-    : undefined;
+  // round243 (round237 point 1) — a per-point "+" open carries the אג'נדה box
+  // bounds (anchor.bounds); when present the card is confined INSIDE the box
+  // (never spilling outside the topics card) instead of clamping to the whole
+  // viewport. The pure computeBoundedAnchorStyle does the geometry.
+  const bounded = (anchor?.bounds && isDesktop)
+    ? computeBoundedAnchorStyle({ anchor, bounds: anchor.bounds })
+    : null;
+  const anchorStyle = bounded
+    ? { position: 'absolute', top: bounded.top, left: bounded.left, width: bounded.width, maxHeight: bounded.maxHeight, overflowY: 'auto', margin: 0 }
+    : (anchor && isDesktop)
+      ? (() => {
+          // round235 — the shell shrank to a compact 320px popover-like card.
+          const width = Math.min(320, window.innerWidth - 32);
+          const centerX = anchor.left + anchor.width / 2;
+          const left = Math.max(16, Math.min(centerX - width / 2, window.innerWidth - width - 16));
+          const top = Math.max(16, Math.min(anchor.bottom + 8, window.innerHeight - 280));
+          return { position: 'absolute', top, left, margin: 0 };
+        })()
+      : undefined;
 
   // Centered layout applies only when no anchor is in effect (an anchored
-  // per-point open always wins; mobile keeps the bottom sheet either way).
-  const overlayClass = (centered && !anchorStyle)
-    ? `${styles.overlay} ${styles.overlayCentered}`
-    : styles.overlay;
+  // per-point open always wins; mobile keeps the bottom sheet either way). A
+  // box-confined open uses a transparent backdrop so it reads as a popover
+  // living inside the agenda card, not a screen-dimming modal.
+  const overlayClass = bounded
+    ? `${styles.overlay} ${styles.overlayBounded}`
+    : (centered && !anchorStyle)
+      ? `${styles.overlay} ${styles.overlayCentered}`
+      : styles.overlay;
 
   return (
     <div className={overlayClass} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>

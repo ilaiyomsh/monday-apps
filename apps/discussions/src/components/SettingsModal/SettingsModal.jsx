@@ -1013,11 +1013,11 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       EVERYONE on this instance. Default-on; unchecking stores an
                       explicit false under preferences.visibleComponents.
                       (The round108 "לוגו" preference row was removed here.) */}
-                  <div className={styles.prefRow}>
+                  <div className={`${styles.prefRow} ${styles.prefRowStack}`}>
                     <div className={styles.prefLabel}>
                       <Text type={"text2"}>רכיבים באפליקציה</Text>
                     </div>
-                    <div className={styles.prefControl}>
+                    <div className={`${styles.prefControl} ${styles.prefControlFull}`}>
                       <div className={styles.componentGrid}>
                         {APP_COMPONENTS.map((c) => (
                           <label key={c.key} className={styles.componentItem}>

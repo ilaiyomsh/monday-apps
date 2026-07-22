@@ -22,6 +22,14 @@
   background: rgba(0, 0, 0, 0.32);
 }
 
+/* round243 (round237 point 1) — a per-point "+" open confined to the agenda box
+   uses a TRANSPARENT backdrop so the card reads as a popover inside the topics
+   card, not a screen-dimming modal (click-away still works — the overlay still
+   covers the viewport to catch the outside click). */
+.overlayBounded {
+  background: transparent;
+}
+
 /* Owner request 2026-07-14: opened from the Tasks/Decisions TAB the box sits
    dead-center of the screen (the round-57 right-leaning placement stays for
    point-anchored / FAB opens). Overrides the .overlay start-pinning + gap. */

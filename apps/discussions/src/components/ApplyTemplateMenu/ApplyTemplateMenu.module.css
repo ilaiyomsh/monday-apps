@@ -25,10 +25,15 @@
 .panel {
   position: absolute;
   top: calc(100% + 4px);
-  inset-inline-start: 0;
+  /* round244 (owner request) — the templates button sits at the header's
+     physical-LEFT (RTL headTools), so opening from inline-start made the 360px
+     panel spill LEFT, OUTSIDE the agenda card. Anchor its inline-END edge to the
+     button instead so the whole card (list + preview + add) opens toward the
+     physical RIGHT, staying inside the agenda box. */
+  inset-inline-end: 0;
   z-index: 4100;
-  width: 360px;
-  max-width: min(360px, calc(100vw - 24px));
+  width: 340px;
+  max-width: min(340px, calc(100vw - 24px));
   background: var(--primary-background-color, #fff);
   border: 1px solid var(--ui-border-color, #c3c6d4);
   border-radius: var(--border-radius-medium, 8px);
@@ -106,7 +111,7 @@
 .progressPop {
   position: absolute;
   top: calc(100% + 6px);
-  inset-inline-start: 0;
+  inset-inline-end: 0;
   z-index: 900;
   width: 240px;
   padding: 10px 12px;

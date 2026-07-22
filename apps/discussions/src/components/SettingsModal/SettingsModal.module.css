@@ -449,10 +449,25 @@
 }
 
 /* round205 — per-component visibility grid in the preferences tab. */
+/* round244 (owner request) — the "רכיבים באפליקציה" row stacks (label on top,
+   controls full-width below) so the checkbox grid spans the whole panel and
+   lays out in several columns instead of a tall, scrolling single column. */
+.prefRowStack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.prefControlFull {
+  flex: 1 1 auto;
+  width: 100%;
+}
 .componentGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px 16px;
+}
+.prefControlFull .componentGrid {
+  width: 100%;
 }
 .componentItem {
   display: inline-flex;
