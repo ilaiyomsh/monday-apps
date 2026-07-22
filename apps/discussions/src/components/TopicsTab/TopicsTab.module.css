@@ -99,7 +99,8 @@
   align-items: center;
   line-height: 20px;
   font-size: 14px;
-  font-weight: 700;
+  /* round221 — NOT bold (owner request); matches the triple-box tab labels. */
+  font-weight: 500;
   color: var(--primary-text-color, #323338);
   background: var(--primary-background-hover-color, #fafbfc);
   border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
@@ -117,6 +118,14 @@
 }
 .agendaBox .toolbar::before { display: none; }
 .toolbarSpacer { flex: 1 1 auto; min-width: 8px; }
+/* round221 — the triple box's formatting strip (RTE .toolbarFlush, global class
+   under non-scoped modules) gets the SAME 8px vertical rhythm as the agenda
+   toolbar row, so its icons sit exactly parallel to the הסתר/כווץ row on the
+   left (owner request: pull it a bit further down). */
+.tripleBox .toolbarFlush {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
 /* The card body holds the topic list + the bottom add-row, with inner padding.
    round220 — a tall min-height so the אג'נדה card takes real vertical space like
    the triple box (its pane is 420px); content scrolls/extends beyond it. */

@@ -167,12 +167,15 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
     if (!items.length) return clear();
     // sel.from is always a valid document position, so coordsAtPos won't throw.
     const coords = ed.view.coordsAtPos(sel.from);
+    // round221 — open to the LEFT of the caret/@ (owner request): anchor the
+    // popup's RIGHT edge at the caret x so the list grows leftward, away from
+    // the typed text, instead of overlapping it toward the @.
     setMention({
       items,
       from,
       to: sel.from,
       index: 0,
-      coords: { top: coords.bottom + 4, left: coords.left },
+      coords: { top: coords.bottom + 4, right: Math.max(8, window.innerWidth - coords.left) },
     });
     return undefined;
   }, []);
@@ -399,7 +402,7 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
           className={styles.mentionPopup}
           role="listbox"
           aria-label="תיוג משתתף"
-          style={{ position: 'fixed', top: mention.coords.top, left: mention.coords.left, zIndex: 10002 }}
+          style={{ position: 'fixed', top: mention.coords.top, right: mention.coords.right, zIndex: 10002 }}
         >
           {mention.items.map((p, i) => (
             <li key={p.id ?? p.name}>
