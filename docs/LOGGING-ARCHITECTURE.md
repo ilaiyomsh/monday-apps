@@ -139,7 +139,7 @@ server sink builds the same shape directly.
 | `corr` | record.correlationId | links duplicates of one error |
 | `err_name`, `err_code` | error | error class + `errorCode`/`status`/`code` |
 | `err_msg` | `scrubMessage(error.message)` | **the only path for `error.message` — always scrubbed**, cap 200 |
-| `stack1` | first stack frame | cap 400 |
+| `stack1` | first stack frame | cap 400; minified — symbolicate via hidden CI sourcemaps (§6) |
 | `ms`, `total_ms`, `step` | context (finite numbers) | timings |
 
 `message` is intentionally a **stable event id**, not free text — usage/health
@@ -161,6 +161,36 @@ This is the load-bearing part of the design. Five layers of defense:
 
 > Access-log hygiene: server request/response helpers log `req.path` (not
 > `req.originalUrl`) so query-string tokens/emails never reach the `url` field.
+
+### Stack symbolication (hidden sourcemaps)
+
+`stack1` ships **minified** (`at Sl (…/assets/index-Brz8XzEh.js:61:29212)`) — a
+single frame, on the same privacy budget as the rest of the wire. To turn that
+back into `GroupColors.jsx:42` **without** fattening the wire or exposing source
+publicly, symbolication happens **off the wire, at read time**:
+
+1. **Client builds emit `sourcemap: 'hidden'`** (Vite `build.sourcemap`). This
+   writes `build/assets/*.js.map` but omits the `//# sourceMappingURL=` comment,
+   so a browser never fetches a map and the deployed JS is byte-for-byte unchanged.
+2. **CI archives the maps, never ships them.** Each client app's deploy workflow,
+   *between Build and `mapps code:push`*, uploads `build/**/*.map` as the artifact
+   **`sourcemaps-<app>-<github.sha>`** (90-day retention) and then **deletes every
+   `.map` from the deploy dir** — with a hard assertion that none remain, so a
+   sourcemap can never reach the CDN. The wire stays a lean single frame; the maps
+   live only in GitHub Actions artifacts, gated by repo access.
+3. **Resolve on demand** with the axiom-sre tool, keyed by the log row's `ver`
+   (`<pkgVersion>+<shortSha>`), which matches the artifact's SHA:
+   ```bash
+   .claude/skills/axiom-sre/scripts/symbolicate \
+     'at Sl (…/assets/index-Brz8XzEh.js:61:29212)' --app discussions --ver 2.3.0+9292e7a
+   # → src/…/GroupColors.jsx:42:10  (loadGroupColors)  + source snippet
+   ```
+   Offline / a locally-built map: pass `--map <path/to.js.map>` instead.
+
+This keeps all five privacy layers intact — maps are never public, the wire is
+unchanged — while making minified frames investigable. Enabled per client app
+(one-app-per-PR); server apps already build `sourcemap: true` but do not deploy
+to a public CDN, so their maps are not a leak vector.
 
 ---
 
@@ -287,6 +317,9 @@ Vite/React/Recharts). It reads (never ingests):
 2. Call `attachAxiomSink()` (client) / `attachAxiomServerSink(logger)` (server) at startup, before render.
 3. Wire `useViewTracking(logger, '<view>')` on each main view; emit a one-shot boot `health`; add a **bucketed** `api_latency` health at the API funnel.
 4. CI: add `VITE_AXIOM_*` to the client deploy workflow (server: `mapps code:env`).
+   For client apps also set `build.sourcemap: 'hidden'` and add the archive+strip
+   steps (upload `build/**/*.map` as `sourcemaps-<app>-<sha>`, then delete the maps
+   before `code:push`) — see §6 "Stack symbolication".
 5. Verify: privacy (no raw `error.message`, no `data`/context leak), the app's tests stay green, build + lint pass.
 
 ---

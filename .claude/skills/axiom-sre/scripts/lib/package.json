@@ -1,0 +1,9 @@
+{
+  "name": "axiom-sre-symbolicate",
+  "private": true,
+  "type": "module",
+  "description": "Deps for scripts/symbolicate — resolve minified app-errors stack frames against hidden CI sourcemaps.",
+  "dependencies": {
+    "@jridgewell/trace-mapping": "0.3.25"
+  }
+}
