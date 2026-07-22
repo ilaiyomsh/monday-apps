@@ -70,6 +70,7 @@
     "noPriority": "No priority",
     "noGroup": "No group",
     "openItem": "Open item",
-    "allTasks": "All tasks"
+    "allTasks": "All tasks",
+    "colPerson": "Responsibility"
   }
 }

@@ -53,16 +53,26 @@ import { MyTasksView } from '../MyTasksView.jsx';
 describe('MyTasksView — toolbar + builder (smoke)', () => {
   beforeEach(() => { vp.mobile = false; });
 
-  it('renders the toolbar pills and tasks (default: NO grouping — one flat group)', () => {
+  it('renders the toolbar pills and tasks (round224 default: GROUP BY STATUS, top-down)', () => {
     render(<MyTasksView />);
     expect(screen.getByText('סינון')).toBeTruthy();
     expect(screen.getByText('סדר')).toBeTruthy();
     expect(screen.getByText('קבץ לפי')).toBeTruthy();
-    // default = no grouping -> a single "all tasks" group, no status headers
-    expect(screen.getByText('כל המשימות')).toBeTruthy();
-    expect(screen.queryByText('בעבודה')).toBeNull();
+    // round224 — the default grouping is STATUS (owner mockup): the mocked
+    // status labels render as group headers; no flat "all tasks" group.
+    expect(screen.queryByText('כל המשימות')).toBeNull();
+    expect(screen.getByText('בעבודה')).toBeTruthy();
+    expect(screen.getByText('בוצע')).toBeTruthy();
     expect(screen.getByText('משימה א')).toBeTruthy();
     expect(screen.getByText('משימה ב')).toBeTruthy();
+  });
+
+  it('round224 — the scope toggle renders with משימות באחריות as the default', () => {
+    render(<MyTasksView />);
+    const mine = screen.getByRole('tab', { name: 'משימות באחריות' });
+    const led = screen.getByRole('tab', { name: 'משימות בדיונים שהובלתי' });
+    expect(mine.getAttribute('aria-selected')).toBe('true');
+    expect(led.getAttribute('aria-selected')).toBe('false');
   });
 
   it('round213 — MOBILE: the builders are replaced by the "סידור לפי" toggle, grouping by status then priority', () => {
