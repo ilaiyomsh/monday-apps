@@ -134,4 +134,21 @@ describe('TopicPointRow — clean list row structure (round226 stage B smoke)', 
     renderRow({ onDelete, point: { ...POINT, notForDiscussion: true } });
     expect(document.querySelector('[aria-label^="מחק נקודה"]')).toBeNull();
   });
+
+  it('round233 — a six-dot drag grip renders at the row START (editable, not hidden)', () => {
+    const { unmount } = renderRow({});
+    expect(document.querySelector('[aria-label^="גרירה לשינוי סדר"]')).toBeTruthy();
+    // first child of the row (rightmost in rtl → the leading edge)
+    expect(document.querySelector('.row').firstElementChild.className).toContain('dragGrip');
+    unmount();
+
+    // Read-only point → no grip.
+    const ro = renderRow({ canEditPoint: false });
+    expect(document.querySelector('[aria-label^="גרירה לשינוי סדר"]')).toBeNull();
+    ro.unmount();
+
+    // Hidden (inert) point → no grip.
+    renderRow({ point: { ...POINT, notForDiscussion: true } });
+    expect(document.querySelector('[aria-label^="גרירה לשינוי סדר"]')).toBeNull();
+  });
 });
