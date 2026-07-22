@@ -71,6 +71,12 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* round245 (owner bug) — the dashboard "shook" while narrowing: a toggling
+     vertical scrollbar changed the canvas width → recomputed widget heights →
+     toggled the scrollbar again (a ResizeObserver feedback loop). Reserving the
+     scrollbar gutter keeps the content width constant whether or not the bar is
+     shown, breaking the loop. */
+  scrollbar-gutter: stable;
   padding: 0 16px 24px;
   direction: ltr;
 }

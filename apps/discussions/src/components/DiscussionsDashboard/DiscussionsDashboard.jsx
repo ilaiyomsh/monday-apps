@@ -152,9 +152,18 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
   useEffect(() => {
     const el = canvasRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return undefined;
-    const ro = new ResizeObserver(() => setCanvasW(el.clientWidth || 0));
+    // round245 — coalesce resize notifications through one rAF and only commit a
+    // CHANGED, integer width. With .scroll's reserved scrollbar gutter this stops
+    // the narrow-screen "shaking" (a ResizeObserver ⇄ scrollbar feedback loop)
+    // and silences the "ResizeObserver loop" console warning.
+    let raf = 0;
+    const ro = new ResizeObserver((entries) => {
+      const w = Math.round(entries[0]?.contentRect?.width || el.clientWidth || 0);
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setCanvasW((prev) => (prev !== w ? w : prev)));
+    });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => { if (raf) cancelAnimationFrame(raf); ro.disconnect(); };
   }, [loading, error, editing]);
 
   const toStored = useCallback((l) => {
