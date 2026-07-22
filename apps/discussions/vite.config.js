@@ -26,6 +26,13 @@ export default defineConfig({
   },
   build: {
     outDir: 'build',
+    // Emit sourcemaps as SEPARATE .map files WITHOUT the //# sourceMappingURL
+    // comment ('hidden'). This lets CI archive the maps as a build artifact for
+    // stack symbolication (axiom-sre `scripts/symbolicate`) WITHOUT the browser
+    // ever fetching them. The maps must NOT reach the CDN — the deploy workflow
+    // uploads them as an artifact and deletes build/**/*.map before code:push.
+    // See docs/LOGGING-ARCHITECTURE.md §6.
+    sourcemap: 'hidden',
     rollupOptions: {
       output: {
         // vite 8 / rolldown expects a function (object form is rejected)
