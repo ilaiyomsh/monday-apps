@@ -7,7 +7,9 @@ const state = vi.hoisted(() => ({
   items: [],
   addTopic: null,
   deleteTopic: null,
+  softDeleteTopic: null,
   renameTopic: null,
+  onNotify: null,
 }));
 
 vi.mock('@generated/hooks/useTopics', () => ({
@@ -22,6 +24,7 @@ vi.mock('@generated/hooks/useTopics', () => ({
     toggleTopicNotForDiscussion: () => {},
     renameTopic: (...a) => state.renameTopic?.(...a),
     deleteTopic: (...a) => state.deleteTopic?.(...a),
+    softDeleteTopic: (...a) => { state.softDeleteTopic?.(...a); return { undo: () => {} }; },
     renamePoint: () => {},
     softDeletePoints: () => ({ undo: () => {}, count: 0 }),
     reorderTopics: () => {},
@@ -57,7 +60,9 @@ describe('TopicsTab — round235 topics ribbon', () => {
     state.items = twoTopics();
     state.addTopic = vi.fn();
     state.deleteTopic = vi.fn();
+    state.softDeleteTopic = vi.fn();
     state.renameTopic = vi.fn();
+    state.onNotify = vi.fn();
   });
 
   it('the old toolbar buttons are GONE (נושא חדש / collapse-all / hide-columns)', () => {
@@ -102,12 +107,17 @@ describe('TopicsTab — round235 topics ribbon', () => {
     expect(state.addTopic).toHaveBeenCalledWith('נושא בהתחלה', {});
   });
 
-  it('round237 — RIGHT-CLICK opens the topic menu; מחיקת נושא → confirm ✓ calls deleteTopic', () => {
-    render(<TopicsTab discussion={discussion} canEdit />);
+  it('round239 — RIGHT-CLICK → מחיקת נושא deletes IMMEDIATELY (no confirm) with an undo toast', () => {
+    render(<TopicsTab discussion={discussion} canEdit onNotify={state.onNotify} />);
     fireEvent.contextMenu(screen.getAllByRole('tab')[0]); // נושא א
     fireEvent.click(screen.getByText('מחיקת נושא'));
-    fireEvent.click(screen.getByLabelText('אישור מחיקה'));
-    expect(state.deleteTopic).toHaveBeenCalledWith('t1');
+    // No confirmation step — it soft-deletes right away…
+    expect(screen.queryByLabelText('אישור מחיקה')).toBeNull();
+    expect(state.softDeleteTopic).toHaveBeenCalledWith('t1');
+    // …and surfaces an undo ("בטל") toast (like point deletion).
+    const notify = state.onNotify.mock.calls.at(-1);
+    expect(notify[0]).toBe('הנושא נמחק');
+    expect(notify[3]).toMatchObject({ label: 'בטל' });
   });
 
   it('round237 — עריכת שם from the right-click menu turns the label into an RTL input; Enter renames', () => {

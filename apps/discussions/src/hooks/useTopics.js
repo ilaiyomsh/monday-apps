@@ -746,6 +746,48 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     return { undo, count: list.length };
   }, []);
 
+  // round239 — soft-delete a TOPIC with an undo window (mirrors softDeletePoints,
+  // owner request: right-click delete no longer confirms — it deletes with a
+  // "בטל" toast). The topic vanishes optimistically; the real delete_item fires
+  // after DELETE_GRACE_MS; undo() cancels it and restores the topic at its
+  // original index. Temp (never-persisted) topics are just removed locally.
+  const softDeleteTopic = useCallback((topicId) => {
+    if (!topicId) return { undo: () => {} };
+    const id = String(topicId);
+    const index = itemsRef.current.findIndex((t) => String(t.id) === id);
+    if (index < 0) return { undo: () => {} };
+    const topic = itemsRef.current[index];
+    setItems((prev) => prev.filter((t) => String(t.id) !== id));
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      if (cancelled) return;
+      (async () => {
+        try {
+          const realId = await resolveRealId(topicId);
+          if (!realId) return; // never persisted — local removal is enough
+          await api(`mutation ($itemId: ID!) { delete_item(item_id: $itemId) { id } }`, { itemId: realId }, 'useTopics.softDeleteTopic');
+        } catch (err) {
+          if (!err?.__loggedId) logger.error('useTopics', 'מחיקת נושא נכשלה', err);
+          fetchTopics({ showLoader: false });
+        }
+      })();
+    }, DELETE_GRACE_MS);
+
+    const undo = () => {
+      if (cancelled) return;
+      cancelled = true;
+      clearTimeout(timer);
+      setItems((prev) => {
+        if (prev.some((t) => String(t.id) === id)) return prev;
+        const next = [...prev];
+        next.splice(Math.min(index, next.length), 0, topic);
+        return next;
+      });
+    };
+    return { undo };
+  }, [fetchTopics, resolveRealId]);
+
   // Reorder TOPICS (drag). Persisted app-side in monday.storage (see topicOrder).
   const reorderTopics = useCallback((orderedIds) => {
     const ids = orderedIds.map(String);
@@ -798,6 +840,7 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
     updateTopicPriority,
     renameTopic,
     deleteTopic,
+    softDeleteTopic,
     renamePoint,
     deletePoint,
     softDeletePoints,
