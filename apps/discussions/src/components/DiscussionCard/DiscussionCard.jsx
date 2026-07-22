@@ -91,6 +91,9 @@ export function DiscussionCard({
   initialTab = null,
   initialTabDiscussionId = null,
   onInitialTabReady = null,
+  // round230 — bumps on every produced-link activation; forces the ניהול-דיון
+  // landing state (background pane active + topics collapsed) via TopicsTab.
+  deepLinkNonce = 0,
   canManageSettings = false,
 }) {
   const { currentUser } = useMondayContext();
@@ -463,6 +466,14 @@ export function DiscussionCard({
     const nextTab = normalizeTabName(initialTab);
     if (nextTab) setActiveTab(nextTab);
   }, [discussion?.id, initialTab, initialTabDiscussionId]);
+
+  // round230 — every produced-link activation forces the ניהול-דיון tab (the
+  // collapse-all + background-pane reset is driven from TopicsTab via the same
+  // nonce). Runs only when the nonce actually bumps (>0), so a manual open never
+  // yanks the user's tab.
+  useEffect(() => {
+    if (deepLinkNonce > 0) setActiveTab('topics');
+  }, [deepLinkNonce]);
 
   // round132 — deep-link readiness: report up (App drops its splash overlay)
   // only once the deep-linked discussion's data is COMPLETE — the card details
@@ -960,7 +971,8 @@ export function DiscussionCard({
             addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditBackground={canEditBackgroundPane} canEditReferences={canEditReferencesPane} canEditSummary={canEditSummaryPane} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
             showTopics={showTopicsTables} showBackground={showBackground} showReferences={showReferences} showSummary={showSummaryPane}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
-            decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus} />
+            decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus}
+            resetViewNonce={deepLinkNonce} />
         </div>
         )}
         {activeTab === 'tasks' && (

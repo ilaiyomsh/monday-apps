@@ -92,4 +92,15 @@ describe('TopicsTab — toolbar collapse-all alignment', () => {
     expect(screen.queryByText('נידונה')).toBeNull();
     expect(screen.getByLabelText('הוסף נקודה')).toBeTruthy();
   });
+
+  it('round230 — a produced-link activation (resetViewNonce bump) re-collapses all topics', () => {
+    const { rerender } = render(<TopicsTab discussion={discussion} canEdit resetViewNonce={0} />);
+    // Expand the (default-collapsed) topic so its open state is observable via
+    // the inline add-point row.
+    fireEvent.click(screen.getByLabelText('פתח הכל'));
+    expect(screen.getByLabelText('הוסף נקודה')).toBeTruthy(); // topic is open
+    // A link activation bumps the nonce → the tab FORCES every topic collapsed.
+    rerender(<TopicsTab discussion={discussion} canEdit resetViewNonce={1} />);
+    expect(screen.queryByLabelText('הוסף נקודה')).toBeNull(); // collapsed again
+  });
 });
