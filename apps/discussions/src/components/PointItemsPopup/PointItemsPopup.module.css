@@ -124,3 +124,16 @@
   color: var(--placeholder-color, #9699a6);
   font-size: 14px;
 }
+
+/* round226 — kind tag in the unified תוצרים popup. */
+.kindTag {
+  margin-inline-start: auto;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--secondary-text-color, #676879);
+  background: var(--primary-background-hover-color, #f0f1f3);
+  border-radius: 8px;
+  padding: 1px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}

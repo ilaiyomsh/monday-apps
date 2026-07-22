@@ -349,64 +349,38 @@ export function TopicPointRow({
         </div>
       )}
 
-      {/* החלטות — dashed create + counter pill (round 47: hideable). The "+"
-          passes its own rect so the create box opens right under it (item 12);
-          both buttons are unclickable on a hidden row (item 11). */}
-      {showCol('decisions') && (
-        <div className={`${styles.linkCell} ${styles.decisionsCell}`} onClick={stop}>
-          {onCreateDecision && (
+      {/* round226 (approved mockup) — the UNIFIED "תוצרים" cell replaces the two
+          decisions/tasks cells: a quiet count pill (tasks+decisions, shown only
+          when >0; breakdown in the tooltip) that opens the combined popup, and a
+          ghost round "+" revealed on row hover that opens the ONE create box
+          (משימה default, החלטה via its toggle). Hidden-row inertness kept. */}
+      {(showCol('outputs') || showCol('decisions') || showCol('tasks')) && (
+        <div className={`${styles.linkCell} ${styles.outputsCell}`} onClick={stop}>
+          {(taskCount + decisionCount) > 0 && (
             <button
               type="button"
-              className={`${styles.createBtn} ${styles.createDecision}`}
-              title="החלטה חדשה"
-              aria-label="החלטה חדשה מהנקודה"
+              className={styles.outCount}
+              title={`${taskCount} משימות · ${decisionCount} החלטות`}
+              aria-label="הצג תוצרים מהנקודה"
               disabled={inert}
-              onClick={(e) => onCreateDecision(point, e.currentTarget.getBoundingClientRect())}
+              onClick={() => (onOpenTasks || onOpenDecisions)?.(point)}
+            >
+              {taskCount + decisionCount}
+            </button>
+          )}
+          {(onCreateTask || onCreateDecision) && (
+            <button
+              type="button"
+              className={styles.outAdd}
+              title="תוצר חדש (משימה או החלטה)"
+              aria-label="תוצר חדש מהנקודה"
+              disabled={inert}
+              onClick={(e) => (onCreateTask || onCreateDecision)(point, e.currentTarget.getBoundingClientRect())}
             >
               +
             </button>
           )}
-          <button
-            type="button"
-            className={`${styles.counter} ${decisionCount > 0 ? styles.counterDecisionOn : ''}`}
-            title="הצג החלטות"
-            aria-label="הצג החלטות מהנקודה"
-            disabled={inert}
-            onClick={() => onOpenDecisions?.(point)}
-          >
-            {decisionCount}
-          </button>
-          <CreateProgressBar status={decisionCreateStatus} variant="decision" />
-        </div>
-      )}
-
-      {/* משימות — dashed create + counter pill (round 47: hideable). Same
-          anchor-pass + hidden-row inertness as the decisions cell. */}
-      {showCol('tasks') && (
-        <div className={`${styles.linkCell} ${styles.tasksCell}`} onClick={stop}>
-          {onCreateTask && (
-            <button
-              type="button"
-              className={`${styles.createBtn} ${styles.createTask}`}
-              title="משימה חדשה"
-              aria-label="משימה חדשה מהנקודה"
-              disabled={inert}
-              onClick={(e) => onCreateTask(point, e.currentTarget.getBoundingClientRect())}
-            >
-              +
-            </button>
-          )}
-          <button
-            type="button"
-            className={`${styles.counter} ${taskCount > 0 ? styles.counterTaskOn : ''}`}
-            title="הצג משימות"
-            aria-label="הצג משימות מהנקודה"
-            disabled={inert}
-            onClick={() => onOpenTasks?.(point)}
-          >
-            {taskCount}
-          </button>
-          <CreateProgressBar status={taskCreateStatus} variant="task" />
+          <CreateProgressBar status={taskCreateStatus || decisionCreateStatus} variant={taskCreateStatus ? 'task' : 'decision'} />
         </div>
       )}
     </div>

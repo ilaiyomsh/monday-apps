@@ -85,7 +85,10 @@ export function QuickCreateModal({
   }, [open, onClose]);
 
   const isDecision = mode === 'decision';
-  const showToggle = !scopedPoint; // mockup: fabShowToggle = !pointId
+  // round226 (approved mockup — unified תוצרים): the משימה/החלטה toggle shows
+  // for POINT-SCOPED creates too (the point's single + opens ONE box, task
+  // default). It hides only when a side is capability-disabled at the callsite.
+  const showToggle = allowTask && allowDecision;
   const scopeLabel = useMemo(() => {
     if (scopedPoint?.name) return `משויך לנקודה: ${scopedPoint.name}`;
     if (discussion?.name) return `דיון: ${discussion.name}`;

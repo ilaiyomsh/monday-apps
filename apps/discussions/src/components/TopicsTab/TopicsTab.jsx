@@ -47,7 +47,9 @@ const NEUTRAL = 'hsl(var(--status-default))';
 // useColumnWidths under the shared 'topics' tableId (owner-draggable, persisted
 // for all users). Widths/clamps come from constants/columnWidths TOPICS_COLUMN_WIDTHS.
 const LEAD_TRACK = '36px';
-const TOPIC_COLUMN_KEYS = ['name', 'check', 'decisions', 'tasks'];
+// round226 — the decisions+tasks columns merged into ONE 'outputs' (תוצרים)
+// column (approved mockup): one quiet counter (sum) + one create "+".
+const TOPIC_COLUMN_KEYS = ['name', 'check', 'outputs'];
 
 // Per-topic priority box — identical look to the status column: FIXED width,
 // centered label, white text on the status color (label text + colors come from
@@ -435,7 +437,7 @@ function SortableTopicSection({
               }
               // Round 52 — the "discussed" checkbox column's header shows "#"
               // (display/label only; the column id/alias 'check' is unchanged).
-              const headLabel = k === 'check' ? '#' : k === 'decisions' ? 'החלטות' : 'משימות';
+              const headLabel = k === 'check' ? '#' : 'תוצרים';
               return (
                 <span
                   key={k}
@@ -473,8 +475,7 @@ function SortableTopicSection({
                   // quick-create task flow links the new task to the topic too.
                   onCreateDecision={onCreatePointDecision ? (p, anchor) => onCreatePointDecision({ ...point, topicId: topic.id }, anchor) : undefined}
                   onCreateTask={onCreatePointTask ? (p, anchor) => onCreatePointTask({ ...point, topicId: topic.id }, anchor) : undefined}
-                  onOpenDecisions={(p) => onOpenPointItems('decision', p)}
-                  onOpenTasks={(p) => onOpenPointItems('task', p)}
+                  onOpenTasks={(p) => onOpenPointItems('outputs', p)}
                   selectable={selectable}
                   selected={selectable ? !!selectedPointIds?.has(String(point.id)) : false}
                   onToggleSelect={(p, checked) => onTogglePointSelect?.(p, checked)}
@@ -719,8 +720,7 @@ export function TopicsTab({
   const columnList = [
     { key: 'name', label: 'נקודה לדיון', icon: 'text', locked: true },
     { key: 'check', label: '#', icon: 'check' }, // round 52: displayed title "#" (was "נידונה")
-    { key: 'decisions', label: 'החלטות', icon: 'relation' },
-    { key: 'tasks', label: 'משימות', icon: 'relation' },
+    { key: 'outputs', label: 'תוצרים', icon: 'relation' },
   ];
   const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
   const [hiddenColumns, setHiddenColumns] = useState(
@@ -778,7 +778,18 @@ export function TopicsTab({
   // objects; the ids come from the store (parent-owned) so they stay correct.
   const popupItems = useMemo(() => {
     if (!popup || !livePopupPoint) return [];
-    const ids = getPointItemIds(pointItemsByPoint, livePopupPoint._realId || livePopupPoint.id, popup.kind);
+    const realId = livePopupPoint._realId || livePopupPoint.id;
+    // round226 — the unified תוצרים popup lists the point's TASKS then DECISIONS,
+    // each tagged with its kind for the type chip.
+    if (popup.kind === 'outputs') {
+      const tBy = new Map((tasksItems || []).map((x) => [String(x.id), x]));
+      const dBy = new Map((decisionsItems || []).map((x) => [String(x.id), x]));
+      return [
+        ...getPointItemIds(pointItemsByPoint, realId, 'task').map((id) => tBy.get(String(id))).filter(Boolean).map((x) => ({ ...x, _outKind: 'task' })),
+        ...getPointItemIds(pointItemsByPoint, realId, 'decision').map((id) => dBy.get(String(id))).filter(Boolean).map((x) => ({ ...x, _outKind: 'decision' })),
+      ];
+    }
+    const ids = getPointItemIds(pointItemsByPoint, realId, popup.kind);
     const source = popup.kind === 'decision' ? (decisionsItems || []) : (tasksItems || []);
     const byId = new Map(source.map((x) => [String(x.id), x]));
     return ids.map((id) => byId.get(String(id))).filter(Boolean);

@@ -516,3 +516,46 @@
 .creatorAvatar:focus-within {
   opacity: 1;
 }
+
+/* round226 — unified תוצרים cell: quiet count pill + ghost round + (hover). */
+.outputsCell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  position: relative;
+  min-width: 56px;
+}
+.outCount {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #6b4ee6;
+  background: rgba(107, 78, 230, 0.09);
+  border: 1px solid rgba(107, 78, 230, 0.22);
+  border-radius: 999px;
+  padding: 1px 9px;
+  line-height: 1.5;
+  cursor: pointer;
+  font-family: var(--font-family);
+}
+.outCount:hover { background: rgba(107, 78, 230, 0.16); }
+.outCount:disabled { cursor: default; opacity: 0.5; }
+.outAdd {
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s;
+}
+.row:hover .outAdd { opacity: 1; }
+.outAdd:hover { background: var(--primary-background-hover-color, #e6f1fd); color: var(--primary-color, #0073ea); }
+.outAdd:disabled { opacity: 0; cursor: default; }
