@@ -35,6 +35,7 @@ They are never interchangeable:
 | OAuth token exchange (`client_secret` param) | **Client Secret** | token endpoint POST |
 | App-lifecycle webhooks (install/uninstall/subscription) | **Client Secret** | telemetry-dashboard `middlewares/webhook-auth.js` |
 | Board webhooks, integration-recipe JWTs (`shortLivedToken`), custom-trigger subscribe/unsubscribe, monetization | **Signing Secret** | integration-scaffold `authentication.js.template` |
+| **Feature-level lifecycle webhooks** (`update_app_lifecycle_subscription` deliveries) | **Signing Secret** — LIVE-VERIFIED 2026-07-22 via a dual-secret map test (the signing-secret entry verified; the client-secret entry did not) | telemetry-dashboard `middlewares/webhook-auth.js` + `LIFECYCLE_SIGNING_SECRETS` env map |
 
 Symptom map: sessionToken verified with the SIGNING secret → "invalid
 signature". Webhook verified with the CLIENT secret → 401s on every
@@ -141,7 +142,26 @@ cross-app source, synced FROM the reference app after review. Divergences
 must be deliberate and commented (deadline-confirm's per-account tenancy,
 sync-calender's per-config records).
 
-## 6. Troubleshooting
+## 6. Lifecycle webhooks — live-verified facts (2026-07-22)
+
+- **Payload shape**: everything nests under `data` —
+  `{type, data:{payload:{object_id, object_name, workspace_id, source_object_id,
+  tracing_data}, back_to_url, app_id, app_feature_id, app_feature_reference_id,
+  user_id, account_id, timestamp}}`. Docs-era top-level reads get empties.
+  Ack goes to `data.back_to_url` (POST `{"success":true}`).
+- **Feature ids are PER APP VERSION** — register subscriptions per feature
+  entity id (`entity_type: "appFeature"`); an app can carry multiple features
+  (tracker: AppFeatureObject 23902080 + AppFeatureBoardView 23902079).
+  **AppFeatureObject has a `create` event; AppFeatureBoardView does NOT**
+  (delete/duplicate/restore only) — creating a board-view instance fires nothing.
+- The signing secret of EVERY app (client-side included) lives on its Dev
+  Center **General Settings / Basic Information** page — nothing is stored on
+  the sending app; the RECEIVER holds the verification map.
+- Raw-capture runbook: telemetry-dashboard's `DEBUG_LIFECYCLE_PAYLOAD=1` env
+  flag dumps verified webhook bodies to the monday-code console only
+  (`mapps code:logs -i <versionId> -t console -s live` — History mode hangs).
+
+## 7. Troubleshooting
 
 Full table + Axiom probes: `references/troubleshooting.md`. Headlines:
 `code_challenge is required` → version is on the new flow, code is legacy
