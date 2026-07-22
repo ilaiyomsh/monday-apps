@@ -926,6 +926,12 @@ export function TopicsTab({
       <div className={styles.splitRow}>
       {showTopics && (
       <div className={styles.topicsCol}>
+      {/* round218 (approved mockup) — the topics live in an "אג'נדה" CARD
+          symmetric to the triple box: same width/border/radius, a gray header
+          labeled אג'נדה, and a toolbar strip (נושא חדש · מתבנית · חיפוש · הסתר
+          · כווץ) mirroring the triple box's formatting bar. */}
+      <div className={styles.agendaBox}>
+      <div className={styles.agendaHead}>אג'נדה</div>
       {/* round206 — the features row lives INSIDE the topics column so the
           triple box's top edge aligns with it (approved mockup). */}
       <div className={styles.toolbar}>
@@ -961,6 +967,7 @@ export function TopicsTab({
             />
           )}
         </div>
+        <div className={styles.toolbarSpacer} />
         {/* round132 — toolbar Search (shared SearchPill). */}
         <SearchPill value={search} onChange={setSearch} />
         {/* Hide columns (round 47) — owners only. Non-owners never see it and
@@ -978,6 +985,7 @@ export function TopicsTab({
           <CollapseAllButton collapsed={!anyOpen} onClick={toggleAll} />
         )}
       </div>
+      <div className={styles.agendaBody}>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTopicDragEnd}>
         <SortableContext items={visibleTopics.map((t) => String(t.id))} strategy={verticalListSortingStrategy}>
           {visibleTopics.map((topic) => (
@@ -1031,10 +1039,11 @@ export function TopicsTab({
       {addTopicOrPoint && items.length > 0 && (
         <div className={styles.bottomAddRow}>
           {!addingTopicBottom ? (
-            <button type="button" className={styles.bottomAddBtn} onClick={() => setAddingTopicBottom(true)}>
-              <Plus size={16} aria-hidden="true" />
+            /* round218 — identical to the top "נושא חדש" (owner request): same
+               primary button in both places. */
+            <Button kind={"primary"} size={"small"} onClick={() => setAddingTopicBottom(true)}>
               נושא חדש
-            </button>
+            </Button>
           ) : (
             <div className={styles.addTopicRow}>
               <TextField
@@ -1061,6 +1070,8 @@ export function TopicsTab({
       {items.length === 0 && !addingTopic && (
         <div className={styles.empty}>אין נושאים לדיון זה</div>
       )}
+      </div>{/* .agendaBody */}
+      </div>{/* .agendaBox */}
       </div>
       )}
 

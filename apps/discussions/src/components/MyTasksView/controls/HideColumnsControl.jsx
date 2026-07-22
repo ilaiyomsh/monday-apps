@@ -27,7 +27,7 @@ import styles from './hideColumns.module.css';
  */
 const PANEL_W = 320;
 
-export function HideColumnsControl({ columns, hidden, onToggle, onToggleAll, onSave, label = 'Hide' }) {
+export function HideColumnsControl({ columns, hidden, onToggle, onToggleAll, onSave, label = 'הסתר' }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState(null);
   const [q, setQ] = useState('');

@@ -77,6 +77,39 @@
   flex: 1;
   min-width: 0;
 }
+
+/* round218 (approved mockup) — the "אג'נדה" card wrapping the topics, symmetric
+   to the triple box: same border/radius/shadow, a gray header, and the toolbar
+   strip flush under it. */
+.agendaBox {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  background: var(--primary-background-color, #fff);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+.agendaHead {
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary-text-color, #323338);
+  background: var(--primary-background-hover-color, #fafbfc);
+  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
+}
+/* Inside the card the toolbar is NOT independently sticky (the card scrolls as
+   one unit, mirroring the triple box) — override the shared sticky rule and its
+   scroll-cover pseudo-element, and add side padding so it sits inside the card. */
+.agendaBox .toolbar {
+  position: static;
+  padding: 8px 14px;
+  z-index: auto;
+}
+.agendaBox .toolbar::before { display: none; }
+.toolbarSpacer { flex: 1 1 auto; min-width: 8px; }
+/* The card body holds the topic list + the bottom add-row, with inner padding. */
+.agendaBody {
+  padding: 0 14px 14px;
+}
 .refPanel {
   /* round216 — the owner wants the box WIDER (toward the left) and TALLER:
      the column takes a larger share of the row and a higher cap. */

@@ -559,35 +559,35 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
               type="text"
               autoFocus
               value={search}
-              placeholder="Search"
+              placeholder="חיפוש"
               onChange={(e) => setSearch(e.target.value)}
               onBlur={() => { if (!search) setSearchOpen(false); }}
-              aria-label="Search"
+              aria-label="חיפוש"
             />
           </div>
         ) : (
           <button type="button" className={styles.pill} onClick={() => setSearchOpen(true)}>
             <Search className={styles.pillIcon} />
-            <span>Search</span>
+            <span>חיפוש</span>
           </button>
         )}
 
         <BuilderControl
-          icon={Filter} label="Filter" title="Filter by" mobile={isMobile} width={isMobile ? undefined : 620}
+          icon={Filter} label="סינון" title="סינון לפי" mobile={isMobile} width={isMobile ? undefined : 620}
           applied={fc > 0} badge={fc}
           onClear={fc > 0 ? clearFilter : null}
           onSave={canSaveView ? saveFilterView : null}
           renderBody={renderFilterBody}
         />
         <BuilderControl
-          icon={Sort} label="Sort" title="Sort by" mobile={isMobile} width={isMobile ? undefined : 360}
+          icon={Sort} label="סדר" title="סדר לפי" mobile={isMobile} width={isMobile ? undefined : 360}
           applied={sort.active} badge={1}
           onClear={sort.active ? clearSort : null}
           onSave={canSaveView ? saveSortView : null}
           renderBody={renderSortBody}
         />
         <BuilderControl
-          icon={Group} label="Group by" title="Group items by" mobile={isMobile} width={isMobile ? undefined : 360}
+          icon={Group} label="קבץ לפי" title="קבץ לפי" mobile={isMobile} width={isMobile ? undefined : 360}
           applied={group.col !== 'none'} badge={1}
           onClear={group.col !== 'none' ? clearGroup : null}
           onSave={canSaveView ? saveGroupView : null}

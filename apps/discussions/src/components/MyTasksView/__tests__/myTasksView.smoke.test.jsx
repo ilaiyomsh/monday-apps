@@ -55,9 +55,9 @@ describe('MyTasksView — toolbar + builder (smoke)', () => {
 
   it('renders the toolbar pills and tasks (default: NO grouping — one flat group)', () => {
     render(<MyTasksView />);
-    expect(screen.getByText('Filter')).toBeTruthy();
-    expect(screen.getByText('Sort')).toBeTruthy();
-    expect(screen.getByText('Group by')).toBeTruthy();
+    expect(screen.getByText('סינון')).toBeTruthy();
+    expect(screen.getByText('סדר')).toBeTruthy();
+    expect(screen.getByText('קבץ לפי')).toBeTruthy();
     // default = no grouping -> a single "all tasks" group, no status headers
     expect(screen.getByText('כל המשימות')).toBeTruthy();
     expect(screen.queryByText('בעבודה')).toBeNull();
@@ -69,9 +69,9 @@ describe('MyTasksView — toolbar + builder (smoke)', () => {
     vp.mobile = true;
     render(<MyTasksView />);
     // No Filter/Sort/Group builders on the phone.
-    expect(screen.queryByLabelText('Sort')).toBeNull();
-    expect(screen.queryByLabelText('Filter')).toBeNull();
-    expect(screen.queryByLabelText('Group by')).toBeNull();
+    expect(screen.queryByLabelText('סדר')).toBeNull();
+    expect(screen.queryByLabelText('סינון')).toBeNull();
+    expect(screen.queryByLabelText('קבץ לפי')).toBeNull();
     // Default: grouped top-down by STATUS (the mocked labels are group headers).
     const pill = screen.getByRole('button', { name: 'החלפת הסידור בין סטטוס לעדיפות' });
     expect(pill.textContent).toContain('סטטוס');
