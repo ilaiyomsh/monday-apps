@@ -913,7 +913,7 @@ export function DiscussionCard({
               groups right-to-left. Desktop only — the phone keeps its info popover. */}
           {!isMobile && metaOpen && (headerPeopleGroups.length > 0
             || (externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0))) && (
-            <div dir="rtl" className={`${styles.tabsRoster} ${reserveSettingsSpace ? styles.tabsRosterReserve : ''}`}>
+            <div dir="rtl" className={styles.tabsRoster}>
               {headerPeopleGroups.map((g) => {
                 // מנהל (lead) + רשם דיון (coordinator) — and any future single role —
                 // are one-person fields: cap at one and CLOSE the picker after a pick.
@@ -940,10 +940,11 @@ export function DiscussionCard({
               })}
               {/* round211 — EXTERNAL participants (text-only names): same group
                   styling; the stack caps at 5 + "+N" and click-to-list-all
-                  (round227). round222 — labeled just "משתתפים". */}
+                  (round227). round238 — labeled "משתתפים חיצוניים" (was just
+                  "משתתפים", which duplicated the internal-participants label). */}
               {externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0) && (
                 <div className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
-                  <span className={styles.peopleGroupLabel}>משתתפים</span>
+                  <span className={styles.peopleGroupLabel}>משתתפים חיצוניים</span>
                   <ExternalPeople
                     names={externalNames}
                     canEdit={canEditExternalParticipants}
