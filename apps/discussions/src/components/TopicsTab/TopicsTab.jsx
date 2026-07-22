@@ -823,6 +823,9 @@ export function TopicsTab({
   const [editLayout, setEditLayout] = useState(false);
   const layoutRef = useRef(layout);
   const splitRowRef = useRef(null);
+  // round243 — the agenda box element, so a per-point "+" create can be confined
+  // inside its bounds (round237 point 1).
+  const agendaBoxRef = useRef(null);
   useEffect(() => { layoutRef.current = layout; }, [layout]);
   useEffect(() => {
     let alive = true;
@@ -1121,11 +1124,25 @@ export function TopicsTab({
   // Create-from-point callbacks — rendered only when the parent provided the
   // handler (the parent gates by the createDecision/createTask capabilities).
   // `anchor` = the clicked "+" button's rect, so the create box opens under it.
+  // round243 — attach the agenda box's bounds to the "+" rect so the quick-create
+  // card opens confined INSIDE the topics card (round237 point 1). Copies the
+  // rect fields into a plain object (DOMRect props aren't enumerable) + bounds.
+  const withAgendaBounds = (anchor) => {
+    if (!anchor) return anchor;
+    const b = agendaBoxRef.current?.getBoundingClientRect();
+    return {
+      left: anchor.left, top: anchor.top, right: anchor.right,
+      bottom: anchor.bottom, width: anchor.width, height: anchor.height,
+      bounds: b
+        ? { left: b.left, top: b.top, right: b.right, bottom: b.bottom, width: b.width, height: b.height }
+        : null,
+    };
+  };
   const onCreatePointDecision = typeof onCreateFromPoint === 'function'
-    ? (point, anchor) => onCreateFromPoint('decision', point, anchor)
+    ? (point, anchor) => onCreateFromPoint('decision', point, withAgendaBounds(anchor))
     : undefined;
   const onCreatePointTask = typeof onCreateFromPoint === 'function'
-    ? (point, anchor) => onCreateFromPoint('task', point, anchor)
+    ? (point, anchor) => onCreateFromPoint('task', point, withAgendaBounds(anchor))
     : undefined;
   const onOpenPointItems = (kind, point) => setPopup({ kind, point });
 
@@ -1182,7 +1199,7 @@ export function TopicsTab({
           symmetric to the triple box: same width/border/radius, a gray header
           labeled אג'נדה, and a toolbar strip (נושא חדש · מתבנית · חיפוש · הסתר
           · כווץ) mirroring the triple box's formatting bar. */}
-      <div className={styles.agendaBox}>
+      <div className={styles.agendaBox} ref={agendaBoxRef}>
       {/* round237 — "אג'נדה" on the RIGHT (start); the search was removed; the
           templates control (with preview) sits on the LEFT (end). */}
       <div className={styles.agendaHead} dir="rtl">
