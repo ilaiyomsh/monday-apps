@@ -198,8 +198,27 @@
 .ribbonTileExcluded .ribbonName { font-style: italic; }
 /* the ORIGINAL slot fades while its ghost is dragged */
 .ribbonTileGhosted { opacity: 0.3; }
-/* the insertion GAP opens between neighbours where the drop will land */
-.ribbonTileGapBefore { margin-inline-start: 46px; }
+/* round239 — a visible SEPARATOR BAR opens between two neighbours at the drop
+   point: a real flex item that pushes the tiles apart, so it reads as "the
+   topic will land here, between the piece on its right and the piece on its
+   left." Animated width for a smooth open. */
+.ribbonDropBar {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 4px;
+  margin: 4px 14px;
+  border-radius: 3px;
+  background: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color, #0073ea) 22%, transparent);
+  animation: ribbonDropPulse 0.9s ease-in-out infinite;
+}
+@keyframes ribbonDropPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ribbonDropBar { animation: none; }
+}
 /* the drag GHOST — a faded clone that follows the cursor */
 .ribbonGhost {
   position: fixed;

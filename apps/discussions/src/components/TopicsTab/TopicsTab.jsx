@@ -601,7 +601,7 @@ export function TopicsTab({
   const {
     items, loading, addTopic, addPoint, retryCreate, togglePoint, refetch,
     togglePointNotForDiscussion, toggleTopicNotForDiscussion, updateTopicPriority,
-    renameTopic, deleteTopic, renamePoint, softDeletePoints, reorderTopics, reorderPoints,
+    renameTopic, deleteTopic, softDeleteTopic, renamePoint, softDeletePoints, reorderTopics, reorderPoints,
   } = useTopics(discussion.id, { onSuccess: onNotify, onLoading: onNotifyLoading, onDismiss: onDismissToast });
   useEffect(() => { onLoadingChange?.(loading); }, [loading, onLoadingChange]);
 
@@ -703,6 +703,17 @@ export function TopicsTab({
     if (!deleteTopicOrPoint || !point) return;
     const { undo } = softDeletePoints([point]);
     onNotify?.('הנקודה נמחקה', 'success', 6000, { label: 'בטל', onClick: undo });
+  };
+  // round239 (owner request) — right-click "מחיקת נושא" deletes IMMEDIATELY with
+  // an undo toast (like a point), no "?למחוק" confirmation step.
+  const deleteTopicWithUndo = (topic) => {
+    if (!deleteTopicOrPoint || !topic) return;
+    if (activeTopicId != null && String(activeTopicId) === String(topic.id)) {
+      const rest = items.filter((t) => String(t.id) !== String(topic.id));
+      setActiveTopicId(rest[0] ? String(rest[0].id) : null);
+    }
+    const { undo } = softDeleteTopic(topic.id);
+    onNotify?.('הנושא נמחק', 'success', 6000, { label: 'בטל', onClick: undo });
   };
   // Bulk hide — set every selected point's "not for discussion" flag.
   // Gated by canHide (lead/coordinator/owner only — item 10).
@@ -1080,11 +1091,17 @@ export function TopicsTab({
             isActive ? styles.ribbonTileOn : '',
             excluded ? styles.ribbonTileExcluded : '',
             draggingTopicId === topicId ? styles.ribbonTileGhosted : '',
-            gapBeforeId === topicId ? styles.ribbonTileGapBefore : '',
           ].filter(Boolean).join(' ');
+          // round239 — during a drag, a visible SEPARATOR BAR opens between the
+          // two neighbours where the drop will land (dropping there places the
+          // topic exactly between them). Rendered before the hovered tile.
+          const dropBar = draggingTopicId && gapBeforeId === topicId
+            ? <span key={`drop-${topicId}`} className={styles.ribbonDropBar} aria-hidden="true" />
+            : null;
           return (
+            <React.Fragment key={topicId}>
+            {dropBar}
             <div
-              key={topicId}
               data-ribbon-topic={topicId}
               className={tileClass}
               style={{ '--tile-accent': prioColor || `hsl(var(${accentVar}))`, zIndex: ribbonTopics.length - i }}
@@ -1124,8 +1141,12 @@ export function TopicsTab({
               )}
               {excluded && <EyeOff size={12} className={styles.ribbonEye} aria-label="נושא מוסתר" />}
             </div>
+            </React.Fragment>
           );
         })}
+        {/* round239 — dropping at the END shows the separator bar after the last
+            topic (gapBeforeId null while dragging). */}
+        {draggingTopicId && gapBeforeId == null && <span className={styles.ribbonDropBar} aria-hidden="true" />}
         {/* round237 — the "+" at the END (leftmost): completes the puzzle at the
             end of the discussion; opens an inline editable box. */}
         {addTopicOrPoint && (addWhere === 'end' ? (
@@ -1248,73 +1269,54 @@ export function TopicsTab({
           <>
             <div className={styles.topicMenuBackdrop} onClick={() => setTopicMenu(null)} />
             <div className={styles.topicMenu} style={{ left: topicMenu.x, top: topicMenu.y }} dir="rtl" role="menu">
-              {topicMenu.confirm ? (
-                <div className={styles.topicMenuConfirm}>
-                  <span>למחוק את «{t.name}»?</span>
-                  <button
-                    type="button"
-                    className={styles.topicMenuYes}
-                    aria-label="אישור מחיקה"
-                    onClick={() => { setTopicMenu(null); deleteTopic(t.id); }}
-                  >
-                    ✓
-                  </button>
-                  <button type="button" className={styles.topicMenuNo} aria-label="ביטול" onClick={() => setTopicMenu(null)}>
-                    ✕
-                  </button>
-                </div>
-              ) : (
-                <>
-                  {editTopicOrPoint && (
+              {editTopicOrPoint && (
+                <button
+                  type="button"
+                  className={styles.topicMenuItem}
+                  onClick={() => { setRenamingTopicId(String(t.id)); setTopicMenu(null); }}
+                >
+                  <Edit size={15} /> עריכת שם
+                </button>
+              )}
+              {canHide && (
+                <button
+                  type="button"
+                  className={styles.topicMenuItem}
+                  onClick={() => {
+                    setTopicMenu(null);
+                    toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(t.id, !excluded);
+                  }}
+                >
+                  {excluded ? <Eye size={15} /> : <EyeOff size={15} />} {excluded ? 'הצג נושא' : 'הסתר נושא'}
+                </button>
+              )}
+              {priorityMapped && editTopicOrPoint && (priorityOpts.options || []).length > 0 && (
+                <div className={styles.topicMenuPrio}>
+                  <span className={styles.topicMenuPrioLabel}>עדיפות</span>
+                  {(priorityOpts.options || []).map((opt) => (
                     <button
+                      key={opt.id}
                       type="button"
-                      className={styles.topicMenuItem}
-                      onClick={() => { setRenamingTopicId(String(t.id)); setTopicMenu(null); }}
-                    >
-                      <Edit size={15} /> עריכת שם
-                    </button>
-                  )}
-                  {canHide && (
-                    <button
-                      type="button"
-                      className={styles.topicMenuItem}
+                      className={`${styles.topicMenuPrioOpt} ${t.priority === opt.id ? styles.topicMenuPrioOn : ''}`}
                       onClick={() => {
                         setTopicMenu(null);
-                        toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(t.id, !excluded);
+                        updateTopicPriority && updateTopicPriority(t.id, t.priority === opt.id ? null : opt.id);
                       }}
                     >
-                      {excluded ? <Eye size={15} /> : <EyeOff size={15} />} {excluded ? 'הצג נושא' : 'הסתר נושא'}
+                      <span className={styles.topicMenuPrioDot} style={{ background: opt.color }} />
+                      {opt.label}
                     </button>
-                  )}
-                  {priorityMapped && editTopicOrPoint && (priorityOpts.options || []).length > 0 && (
-                    <div className={styles.topicMenuPrio}>
-                      <span className={styles.topicMenuPrioLabel}>עדיפות</span>
-                      {(priorityOpts.options || []).map((opt) => (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          className={`${styles.topicMenuPrioOpt} ${t.priority === opt.id ? styles.topicMenuPrioOn : ''}`}
-                          onClick={() => {
-                            setTopicMenu(null);
-                            updateTopicPriority && updateTopicPriority(t.id, t.priority === opt.id ? null : opt.id);
-                          }}
-                        >
-                          <span className={styles.topicMenuPrioDot} style={{ background: opt.color }} />
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  {deleteTopicOrPoint && (
-                    <button
-                      type="button"
-                      className={`${styles.topicMenuItem} ${styles.topicMenuDanger}`}
-                      onClick={() => setTopicMenu((cur) => (cur ? { ...cur, confirm: true } : cur))}
-                    >
-                      <Trash2 size={15} /> מחיקת נושא
-                    </button>
-                  )}
-                </>
+                  ))}
+                </div>
+              )}
+              {deleteTopicOrPoint && (
+                <button
+                  type="button"
+                  className={`${styles.topicMenuItem} ${styles.topicMenuDanger}`}
+                  onClick={() => { setTopicMenu(null); deleteTopicWithUndo(t); }}
+                >
+                  <Trash2 size={15} /> מחיקת נושא
+                </button>
               )}
             </div>
           </>
