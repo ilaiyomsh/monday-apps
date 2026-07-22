@@ -51,7 +51,13 @@ const APP_VIEW_KEY = 'discussions_app_view';
 // Round 45 — hard cap on the INITIAL boot loader: if any of the three boot
 // datasets stalls, reveal the app anyway after this window so the user is never
 // stuck on the white loading screen.
-const BOOT_MAX_WAIT_MS = 8000;
+// round222 — raised 8s → 20s (owner: the boot animation must run until the
+// discussions actually finish loading, not end while they're still streaming
+// in). This is a pure SAFETY cap now — reveal is gated on the discussions list
+// alone (prefetchDiscussions), which resolves the moment its first page is in,
+// so a normal load reveals well under this ceiling and only a genuinely stalled
+// network waits it out.
+const BOOT_MAX_WAIT_MS = 20000;
 
 // Round 50 — MINIMUM branded-splash window (ms). The loader runs at least this
 // long on boot AND on every view transition, so the animation is clearly
@@ -519,16 +525,20 @@ export default function App() {
       if (wait === 0) setBootDataReady(true);
       else minTimer = setTimeout(() => setBootDataReady(true), wait);
     };
-    // Load all three in parallel; `settle` maps success OR error to a resolved
-    // void so one failed fetch never blocks the reveal.
+    // `settle` maps success OR error to a resolved void so a failed fetch never
+    // blocks the reveal.
     const settle = (p) => Promise.resolve(p).then(() => {}, () => {});
-    Promise.all([
-      settle(prefetchDiscussions()),
-      settle(prefetchMyTasks({ currentUser, context })),
-      settle(prefetchMyDecisions('decider', { currentUser, context })),
-      settle(prefetchDashboard({ currentUser, context })),
-    ]).then(reveal)
-      // settle() maps every fetch to a resolved void, so only reveal() itself
+    // round222 — reveal is gated on the DISCUSSIONS list alone (the view the
+    // user lands on): the animation stays up until its first page is really in,
+    // so the list is populated the instant the splash lifts — no "animation ends
+    // then discussions keep loading" gap (owner-reported). The personal-view /
+    // dashboard caches warm in parallel but no longer hold the splash (they have
+    // their own in-view loaders), so a slow dashboard can't delay first paint.
+    settle(prefetchMyTasks({ currentUser, context }));
+    settle(prefetchMyDecisions('decider', { currentUser, context }));
+    settle(prefetchDashboard({ currentUser, context }));
+    settle(prefetchDiscussions()).then(reveal)
+      // settle() maps the fetch to a resolved void, so only reveal() itself
       // could reject here — log it; the BOOT_MAX_WAIT_MS timer still reveals.
       .catch((err) => logger.error('App', 'חשיפת האפליקציה אחרי הטעינה נכשלה', err));
     // SAFETY: never leave the user stuck on the loader — reveal after the hard
