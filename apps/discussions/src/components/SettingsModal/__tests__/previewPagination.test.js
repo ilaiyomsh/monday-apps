@@ -115,4 +115,29 @@ describe('patchPageNumbers', () => {
     patchPageNumbers(stage);
     expect(stage.querySelector('p').textContent).toBe('עמוד 3 מתוך 7');
   });
+
+  it('round219 — elevates the page-number paragraph above behind-text footer art', () => {
+    const stage = document.createElement('div');
+    const sec = document.createElement('section');
+    sec.className = 'docx';
+    const pageP = document.createElement('p');
+    const s1 = document.createElement('span'); s1.textContent = 'עמוד ';
+    const s2 = document.createElement('span'); s2.textContent = ' מתוך ';
+    pageP.append(s1, s2);
+    // a plain footer paragraph WITHOUT a page number must stay untouched
+    const otherP = document.createElement('p');
+    otherP.textContent = 'כותרת תחתונה';
+    sec.append(pageP, otherP);
+    stage.appendChild(sec);
+
+    patchPageNumbers(stage);
+
+    // The page-number paragraph joins the positioned layer with a positive z-index
+    // so a behind-doc footer banner (z-index 0) can't paint over it.
+    expect(pageP.style.position).toBe('relative');
+    expect(Number(pageP.style.zIndex)).toBeGreaterThan(0);
+    // A non-page-number paragraph is left alone (no elevation forced on all text).
+    expect(otherP.style.position).toBe('');
+    expect(otherP.style.zIndex).toBe('');
+  });
 });

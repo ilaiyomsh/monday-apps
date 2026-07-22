@@ -158,26 +158,20 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
     subscribePeopleColumns, getPeopleColumnsVersion, getPeopleColumnsVersion
   );
 
-  // round212 — "אין מרכז דיון": an instance-level switch (stored on the
-  // permissions blob) that drops the coordinator column from the matrix AND
-  // from the whole app (create modal, discussion header).
-  const noCoordinator = permissions?.noCoordinator === true;
-  const toggleNoCoordinator = (value) =>
-    setPermissions((prev) => ({ ...prev, noCoordinator: value === true }));
-
+  // round219 — the coordinator ("מרכז דיון") column is now driven PURELY by the
+  // board mapping (buildTierRoles): it appears as a role column iff that people
+  // column is mapped, labeled with its mapped title, and simply doesn't exist
+  // otherwise. The old instance-level `permissions.noCoordinator` switch (and its
+  // checkbox + sentence) was removed — mapping is the single source of truth.
   const tierRoles = useMemo(() => {
     const map = {};
     for (const tier of TIERS) {
       const boardKey = TIER_BOARD_KEY[tier.id];
-      let roles = buildTierRoles(boardKey, columns);
-      if (tier.id === 'disc' && noCoordinator) {
-        roles = roles.filter((r) => r.alias !== 'discussionCoordinatorID');
-      }
-      map[tier.id] = roles;
+      map[tier.id] = buildTierRoles(boardKey, columns);
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [columns, peopleColumnsVersion, noCoordinator]);
+  }, [columns, peopleColumnsVersion]);
 
   const roleGroups = useMemo(() => ([
     { tier: { id: 'system', label: 'כללי' }, roles: [{ key: SYSTEM_ROLE_KEY, boardKey: 'system', alias: 'system', title: 'כללי' }] },
@@ -276,16 +270,6 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
               <div className={styles.mxTitle}>{tier.title}</div>
               <div className={styles.mxSubRow}>
                 <span className={styles.mxSub}>{tier.sub}</span>
-                {tier.id === 'disc' && (
-                  <label className={styles.noCoordRow}>
-                    <input
-                      type="checkbox"
-                      checked={noCoordinator}
-                      onChange={(e) => toggleNoCoordinator(e.target.checked)}
-                    />
-                    במופע הזה לא עובדים עם מרכז דיון (הסתר מהטבלה ומהאפליקציה)
-                  </label>
-                )}
               </div>
               <table className={styles.mxTable}>
                 <thead>
@@ -363,23 +347,21 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
           </table>
         </div>
 
-        {/* ===== app roles — user assignment ===== */}
+        {/* ===== app roles — user assignment (round219: compact) ===== */}
         <div className={styles.appRolesSec}>
           <div className={styles.mxTitle}>תפקידי האפליקציה — שיוך משתמשים</div>
-          <div className={styles.mxSubRow}><span className={styles.mxSub}>הקצאת משתמשים מכל רחבי החשבון לשלושת תפקידי האפליקציה</span></div>
           <div className={styles.appRolesGrid}>
             <div className={styles.appRoleCard}>
-              <div className={styles.appRoleHead}><span className={`${styles.appRoleBadge} ${styles.badgeOwner}`}>OWNERS + MEMBERS</span> אנשים בלוח</div>
+              <div className={styles.appRoleHead}><span className={`${styles.appRoleBadge} ${styles.badgeOwner}`}>OWNERS · MEMBERS</span> אנשים בלוח</div>
               <Text type="text3" color="secondary" className={styles.appRoleDesc}>
-                בעלי הלוח (כתר כחול) שולטים בהכל ועוקפים את הטבלאות; חברים מקבלים את הרשאות התפקידים למעלה.
-                ניהול — הוספה, הסרה והחלפת כתר — בלחיצה:
+                בעלי הלוח (כתר) עוקפים את הטבלאות; חברים מקבלים את הרשאות התפקידים.
               </Text>
               <BoardPeoplePicker />
             </div>
             <div className={styles.appRoleCard}>
               <div className={styles.appRoleHead}><span className={`${styles.appRoleBadge} ${styles.badgeSuper}`}>SUPER MEMBERS</span> חברי-על</div>
               <Text type="text3" color="secondary" className={styles.appRoleDesc}>
-                חברים רגילים עם שתי יכולות נוספות בלבד: יצירת תבניות והוספת סוגי דיון (נעולות ✓ בטבלת המערכת).
+                חברים + יצירת תבניות והוספת סוגי דיון.
               </Text>
               <PersonPicker
                 selected={permissions?.superMembers || []}

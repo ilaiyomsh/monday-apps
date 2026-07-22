@@ -73,6 +73,9 @@ const LIVE_SAMPLE_INPUTS = {
   summaryHtml:
     '<h3>עיקרי הדיון</h3><p>סיכום הדיון יופיע כאן — כולל <strong>הדגשות</strong>, <em>הטיות</em> ורשימות.</p>' +
     '<ul><li>נקודה מרכזית ראשונה</li><li>נקודה מרכזית שנייה</li></ul>',
+  // round219 — the Background box sample; same converter as the summary.
+  backgroundHtml:
+    '<p>רקע והקשר לדיון יופיעו כאן — הנסיבות שקדמו לישיבה והמטרות שהוגדרו.</p>',
   // round200 — the References box sample; same converter as the summary.
   referencesHtml:
     '<p><strong>דנה כהן:</strong> מבקשת לבחון מחדש את מסגרת התקציב.</p>' +
@@ -389,6 +392,13 @@ export default function ExportPreview({ template, assets, model = null, modelKey
           </div>
         );
       }
+      case 'background':
+        return (
+          <div key="background" className={styles.docSection}>
+            <div className={styles.h2}>רקע</div>
+            <p className={styles.para}>רקע והקשר לדיון יופיעו כאן — הנסיבות שקדמו לישיבה והמטרות שהוגדרו.</p>
+          </div>
+        );
       case 'topics':
         return (
           <div key="topics" className={styles.docSection}>

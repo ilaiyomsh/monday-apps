@@ -341,17 +341,18 @@
   margin-bottom: 8px;
 }
 .mxSub { font-size: 12px; color: var(--secondary-text-color, #9699a6); }
-.noCoordRow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--primary-text-color, #50546e);
-  cursor: pointer;
-}
 
 .mxTable { border-collapse: collapse; width: 100%; }
 .mxTable th, .mxTable td { border: 1px solid var(--ui-border-color, #e6e9f2); font-size: 13px; }
+/* round219 — the role-header row stays FROZEN at the top of the shared scroll
+   container (.matrixScroll) while that table's body scrolls beneath it, up to
+   the end of the table. border-collapse drops a sticky cell's own borders, so
+   the header edges are redrawn with an inset box-shadow. */
+.mxTable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
 .mxRoleTh {
   background: #f6f7fb;
   color: #50546e;
@@ -359,8 +360,15 @@
   padding: 7px 8px;
   text-align: center;
   white-space: nowrap;
+  box-shadow:
+    inset 0 -1px 0 var(--ui-border-color, #e6e9f2),
+    inset 0 1px 0 var(--ui-border-color, #e6e9f2);
 }
-.mxActionTh { border: none !important; background: transparent; width: 240px; }
+.mxActionTh {
+  border: none !important;
+  background: var(--primary-background-color, #fff);
+  width: 240px;
+}
 .mxRoleName { vertical-align: middle; }
 .mxRoleSmall { display: block; font-weight: 500; color: #9699a6; font-size: 10.5px; margin-top: 1px; }
 .mxRoleHidden { opacity: 0.45; }
@@ -415,33 +423,47 @@
   line-height: 1.6;
 }
 
-/* ===== app roles (bottom) ===== */
+/* ===== app roles (bottom) — round219: simpler, tighter, more elegant ===== */
 .appRolesSec {
-  border-top: 2px solid var(--ui-border-color, #e6e9f2);
-  padding-top: 16px;
+  border-top: 1px solid var(--ui-border-color, #e6e9f2);
+  padding-top: 14px;
   margin-top: 4px;
 }
 .appRolesGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 12px;
   align-items: start;
 }
 .appRoleCard {
   border: 1px solid var(--ui-border-color, #e6e9f2);
-  border-radius: 12px;
-  padding: 14px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .appRoleHead {
-  font-size: 13.5px;
+  font-size: 12.5px;
   font-weight: 700;
   color: var(--primary-text-color, #323338);
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
 }
-.appRoleBadge { font-size: 10px; font-weight: 800; border-radius: 8px; padding: 2px 8px; }
+.appRoleBadge {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  border-radius: 6px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
 .badgeOwner { background: #ffe9d9; color: #b25000; }
 .badgeSuper { background: #efe5ff; color: #6c3fc9; }
-.appRoleDesc { display: block; margin-bottom: 10px; line-height: 1.55; }
+/* One concise line — the long paragraph was replaced (round219). */
+.appRoleDesc { display: block; line-height: 1.45; font-size: 11.5px; }
+
+@media (max-width: 620px) {
+  .appRolesGrid { grid-template-columns: 1fr; }
+}

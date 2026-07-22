@@ -9,6 +9,7 @@ import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import {
   ensurePeopleColumns,
   getColumnTitle,
+  isColumnMapped,
   subscribe as subscribePeopleColumns,
   getVersion as getPeopleColumnsVersion,
 } from '@generated/utils/mondayApi/peopleColumns.js';
@@ -111,7 +112,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const can = usePermission({ canManageSettings, currentUser });
   const canAddType = can('addDiscussionTypes');
   const { templates, participantTemplates, typeTemplates, typeColor, assignRandomTypeColor } = useTemplates();
-  const { settings, updateSettings, permissions } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const previousTasksMode =
     settings?.preferences?.previousTasksMode || PREVIOUS_TASKS_MODES.LINKED_DISCUSSION;
   const [name, setName] = useState('');
@@ -923,9 +924,10 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                   {lead.length > 0 && <FieldClearButton onClear={() => setLead([])} label={`ניקוי ${leadLabel}`} />}
                 </div>
               </div>
-              {/* round212 — an instance can opt OUT of the coordinator role
-                  (permissions.noCoordinator): the field drops from the form. */}
-              {!permissions?.noCoordinator && (
+              {/* round219 — the coordinator field appears iff the מרכז דיון
+                  column is MAPPED (isColumnMapped); unmapped → it drops from the
+                  form, mirroring the header + permissions matrix. */}
+              {isColumnMapped('discussions', 'discussionCoordinatorID') && (
                 <div className={styles.field}>
                   <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
                   <div className={styles.fieldWrap}>

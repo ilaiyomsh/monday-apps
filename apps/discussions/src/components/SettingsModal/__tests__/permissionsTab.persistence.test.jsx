@@ -162,19 +162,37 @@ describe('PermissionsTab persistence round-trip', () => {
     ).toBe(true);
   });
 
-  it('round212: the no-coordinator switch drops the coordinator column and persists', async () => {
+  it('round219: the coordinator column is driven by MAPPING — present when mapped, no switch/sentence', async () => {
+    // COLUMNS maps discussionCoordinatorID (people) → the column is present, and
+    // the old "לא עובדים עם מרכז דיון" sentence + checkbox are gone (round219).
     renderHarness();
     await waitFor(() => expect(screen.getByText('save')).toBeTruthy());
     await act(async () => {}); // flush the always-on seed effect
 
-    // The coordinator column starts present in the discussion matrix.
     expect(screen.getByTestId('mx-discussions:discussionCoordinatorID-editSummary')).toBeTruthy();
+    expect(screen.queryByText(/לא עובדים עם מרכז דיון/)).toBeNull();
 
-    await act(async () => { fireEvent.click(screen.getByRole('checkbox')); });
-    expect(screen.queryByTestId('mx-discussions:discussionCoordinatorID-editSummary')).toBeNull();
-
+    // Saving never writes a noCoordinator flag anymore.
     await act(async () => { fireEvent.click(screen.getByText('save')); });
-    expect(lastWritten().permissions.noCoordinator).toBe(true);
+    expect(lastWritten().permissions.noCoordinator).toBeUndefined();
+  });
+
+  it('round219: an UNMAPPED coordinator column simply does not appear', async () => {
+    const cols = { ...COLUMNS, discussions: { ...COLUMNS.discussions } };
+    delete cols.discussions.discussionCoordinatorID;
+    render(
+      <MondayContext.Provider value={{ context: { instanceId: 'inst1' }, currentUser: null, isMobile: false }}>
+        <PermissionsTab
+          permissions={{ ...DEFAULT_PERMISSIONS, enabled: true, roles: JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED)) }}
+          setPermissions={() => {}}
+          columns={cols}
+        />
+      </MondayContext.Provider>
+    );
+    await act(async () => {});
+    expect(screen.queryByTestId('mx-discussions:discussionCoordinatorID-editSummary')).toBeNull();
+    // The other role columns are unaffected.
+    expect(screen.getByTestId('mx-discussions:discussionLeadID-editSummary')).toBeTruthy();
   });
 
   it('seeds the new מרכז דיון (coordinator) role on mount', async () => {

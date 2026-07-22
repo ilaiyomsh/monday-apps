@@ -20,6 +20,7 @@ import { getColumns } from '@api/board-config-store.js';
 import {
   ensurePeopleColumns,
   getColumnTitle,
+  isColumnMapped,
   subscribe as subscribePeopleColumns,
   getVersion as getPeopleColumnsVersion,
 } from '@api/peopleColumns.js';
@@ -233,7 +234,7 @@ export function DiscussionCard({
   // lead/owner path, so each granular boolean equals the old canEdit — behavior
   // is unchanged.
   const { can, canEdit, ready: permsReady } = usePermissions(data, { canManageSettings, currentUser });
-  const { settings, permissions } = useSettings();
+  const { settings } = useSettings();
   const { typeTemplates } = useTemplates();
 
   // Granular discussion-tier caps (each defaults to the legacy creator/lead/owner
@@ -370,12 +371,15 @@ export function DiscussionCard({
   // see the columns that actually have people. The live titles resolve via
   // ensurePeopleColumns (falling back to the schema title until they arrive).
   const headerPeopleGroups = useMemo(() => {
-    // round212 — an instance can opt OUT of the coordinator role entirely
-    // (permissions.noCoordinator, set in the permissions tab): the מרכז דיון
-    // group drops from the header alongside the matrix column and create modal.
+    // round219 — the מרכז דיון (coordinator) group appears iff that column is
+    // MAPPED (isColumnMapped); an unmapped coordinator column simply drops from
+    // the header, mirroring the permissions matrix. Replaces the old
+    // permissions.noCoordinator switch — mapping is the single source of truth.
     const defs = [
       { alias: 'discussionLeadID', fallback: 'מנהל דיון' },
-      ...(permissions?.noCoordinator ? [] : [{ alias: 'discussionCoordinatorID', fallback: 'מרכז דיון' }]),
+      ...(isColumnMapped('discussions', 'discussionCoordinatorID')
+        ? [{ alias: 'discussionCoordinatorID', fallback: 'מרכז דיון' }]
+        : []),
       { alias: 'participantsID', fallback: 'משתתפים' },
     ];
     return defs
@@ -387,7 +391,7 @@ export function DiscussionCard({
       .filter((d) => editDiscussionFields || d.people.length > 0);
     // peopleColumnsVersion recomputes the titles once the live columns load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.discussionLeadID, data.discussionCoordinatorID, data.participantsID, peopleColumnsVersion, editDiscussionFields, permissions?.noCoordinator]);
+  }, [data.discussionLeadID, data.discussionCoordinatorID, data.participantsID, peopleColumnsVersion, editDiscussionFields]);
 
   // Inline editing of the title (double-click to edit).
   const [editingTitle, setEditingTitle] = useState(false);
