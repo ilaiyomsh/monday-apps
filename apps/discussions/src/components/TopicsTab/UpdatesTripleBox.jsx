@@ -289,6 +289,10 @@ export function UpdatesTripleBox({
   // round230 — bumps on a produced-link activation: jump to the רקע (background)
   // pane so the link always lands with the background box open.
   resetPaneNonce = 0,
+  // round241 — owner-only layout edit-tools (pencil + 6-dot grip) rendered in
+  // the tab band so the triple box carries the same edit affordance as the
+  // agenda box (owner request: a pencil on each box). Null for non-owners.
+  headerTools = null,
 }) {
   const background = useBackground(showBackground ? discussionId : null);
   const references = useReferences(showReferences ? discussionId : null);
@@ -336,6 +340,7 @@ export function UpdatesTripleBox({
             {p.title}
           </button>
         ))}
+        {headerTools && <span className={styles.tripleHeaderTools}>{headerTools}</span>}
       </div>
       {panes.map((p) => (
         <UpdatePane
