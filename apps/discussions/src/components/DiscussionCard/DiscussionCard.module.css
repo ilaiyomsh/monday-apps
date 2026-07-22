@@ -485,6 +485,21 @@
   flex-wrap: nowrap;
   gap: 2px;
   flex-shrink: 0;
+  /* round236 — align the roster's rightmost avatar under the date/time text
+     above it. The date sits inside .dateGroup (padding-inline 16px); the
+     roster's last group has only 4px, so without this the avatars jut ~12px
+     past the date's right edge. Pad the roster's inline-start (physical RIGHT
+     in this dir=rtl block) by the 12px difference so the two rows line up. */
+  padding-inline-start: 12px;
+}
+/* round236 — when the owner-only settings gear is shown, the date row reserves
+   48px on its trailing side (.participantsReserve) so the avatars clear the
+   gear. The roster on the tab line is a SEPARATE row and never got that
+   reserve, so it sat ~48px to the RIGHT of the date row — misaligned. Mirror
+   the EXACT same reserve here so the roster's right edge lands directly under
+   the date/time's right edge (owner request: "צמוד לימין ממש מתחת לתאריך"). */
+.tabsRosterReserve {
+  margin-inline-end: 48px;
 }
 
 /* One labeled group: BOLD label to the RIGHT (dir=rtl → label is the first child)
