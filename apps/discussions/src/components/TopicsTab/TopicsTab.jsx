@@ -25,6 +25,7 @@ import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
 import { UpdatesTripleBox } from './UpdatesTripleBox.jsx';
+import { computeRibbonDropTarget } from './ribbonDrop.js';
 import { buildMentionRoster } from '@generated/utils/mention.js';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
@@ -940,15 +941,17 @@ export function TopicsTab({
     const onMove = (ev) => {
       if (!armed) return;
       if (ghostRef.current) { ghostRef.current.style.left = ev.clientX + 'px'; ghostRef.current.style.top = ev.clientY + 'px'; }
-      // RTL row: the drop lands BEFORE the first tile whose center the cursor
-      // has crossed to its left.
-      const tiles = ribbonElRef.current ? [...ribbonElRef.current.querySelectorAll('[data-ribbon-topic]')] : [];
-      let before = null;
-      for (const tl of tiles) {
-        if (tl.getAttribute('data-ribbon-topic') === topicId) continue;
-        const r = tl.getBoundingClientRect();
-        if (ev.clientX < r.left + r.width / 2) before = tl.getAttribute('data-ribbon-topic');
-      }
+      // round239 fix — DIRECTION-AGNOSTIC drop target. The old loop overwrote
+      // its result and always ended on the last (rightmost) tile, so only the
+      // right-edge gap ever opened. Instead: measure every OTHER tile's centre,
+      // detect reading direction from the tiles themselves (DOM order == logical
+      // order == visibleTopics), map x → a monotonic "reading key" (rtl ⇒ -x),
+      // and the drop lands BEFORE the FIRST tile whose centre is past the cursor
+      // in reading order. Works for any topic, not just the rightmost pair.
+      const others = (ribbonElRef.current ? [...ribbonElRef.current.querySelectorAll('[data-ribbon-topic]')] : [])
+        .map((el) => { const r = el.getBoundingClientRect(); return { id: el.getAttribute('data-ribbon-topic'), mid: r.left + r.width / 2 }; })
+        .filter((t) => t.id !== topicId);
+      const before = computeRibbonDropTarget(others, ev.clientX);
       gapBefore = before;
       setGapBeforeId(before);
     };
