@@ -913,9 +913,9 @@ export function DiscussionCard({
                     only when the column is mapped and there's something to show/edit. */}
                 {metaOpen && externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0) && (
                   <div className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
-                    <span className={styles.peopleGroupLabel}>
-                      {getColumnTitle('discussions', 'externalParticipantsID') || 'משתתפים חיצוניים'}
-                    </span>
+                    {/* round222 — owner: this group is labeled just "משתתפים"
+                        in the discussion header (not "משתתפים חיצוניים"). */}
+                    <span className={styles.peopleGroupLabel}>משתתפים</span>
                     <ExternalPeople
                       names={externalNames}
                       canEdit={canEditExternalParticipants}
