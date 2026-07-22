@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useEditor, useEditorState, EditorContent } from '@tiptap/react';
 // round206 — selection bubble (owner request): a dark floating menu with the
 // core formatting actions pops over any text selection, so formatting never
@@ -11,6 +12,7 @@ import { TextAlign } from '@tiptap/extension-text-align';
 import { TaskList } from '@tiptap/extension-task-list';
 import { TaskItem } from '@tiptap/extension-task-item';
 import { Placeholder } from '@tiptap/extension-placeholder';
+import { matchMentionQuery, filterMentionRoster } from '@generated/utils/mention.js';
 import {
   Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListChecks,
   Link2, AlignRight, AlignCenter, AlignLeft, AlignJustify, ALargeSmall, ChevronDown, Check, Baseline,
@@ -64,9 +66,28 @@ const ALIGNS = [
  *   extraToolbarActions  — node appended at the toolbar's far end (e.g. the
  *                          📎 attach-file action of the triple box).
  */
-export default function RichTextEditor({ initialValue = '', onChange, onReady, placeholder = '', editable = true, variant = 'default', extraToolbarActions = null }) {
+/*
+ * round220 — @-mention (triple box, owner request). Typing "@" opens a popup of
+ * discussion participants (`mentionPeople`, ordered lead→coordinator→participants
+ * by the caller); filtering by what's typed after the @. Selecting one replaces
+ * the "@query" with the participant's name in BOLD (no @) — so it needs NO special
+ * serialization or export handling: it's just `<strong>name</strong>` in the saved
+ * HTML, which the docx converter already renders bold. Purely additive: with an
+ * empty `mentionPeople` (summary / other editors) nothing changes.
+ */
+export default function RichTextEditor({ initialValue = '', onChange, onReady, placeholder = '', editable = true, variant = 'default', extraToolbarActions = null, mentionPeople = [] }) {
+  // Latest closures/data reachable from the editor's create-time callbacks.
+  const mentionPeopleRef = useRef(mentionPeople);
+  mentionPeopleRef.current = Array.isArray(mentionPeople) ? mentionPeople : [];
+  const refreshMentionRef = useRef(() => {});
+  const selectMentionRef = useRef(() => {});
+  const [mention, setMention] = useState(null); // { items, index, from, to, coords }
+  const mentionRef = useRef(null);
+  mentionRef.current = mention;
+
   const editor = useEditor({
     editable,
+    onSelectionUpdate: ({ editor: e }) => refreshMentionRef.current(e),
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
@@ -83,9 +104,20 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
     content: initialValue || '',
     editorProps: {
       attributes: { class: styles.content, dir: 'rtl', 'aria-label': 'עורך סיכום הדיון' },
+      // round220 — intercept nav keys while the @-mention popup is open (before
+      // ProseMirror inserts a newline / moves the caret).
+      handleKeyDown: (_view, event) => {
+        const m = mentionRef.current;
+        if (!m) return false;
+        if (event.key === 'ArrowDown') { setMention((p) => (p ? { ...p, index: (p.index + 1) % p.items.length } : p)); return true; }
+        if (event.key === 'ArrowUp') { setMention((p) => (p ? { ...p, index: (p.index - 1 + p.items.length) % p.items.length } : p)); return true; }
+        if (event.key === 'Enter' || event.key === 'Tab') { selectMentionRef.current(m.index); return true; }
+        if (event.key === 'Escape') { setMention(null); return true; }
+        return false;
+      },
     },
     onCreate: ({ editor }) => onReady?.(editor.getHTML()),
-    onUpdate: ({ editor }) => onChange?.(editor.getHTML()),
+    onUpdate: ({ editor }) => { onChange?.(editor.getHTML()); refreshMentionRef.current(editor); },
   });
 
   // Keep the editor's editability in sync if the prop flips (e.g. permissions
@@ -115,6 +147,65 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
   const [menu, setMenu] = useState(null); // 'size' | 'color' | 'align' | 'link' | null
   const [linkUrl, setLinkUrl] = useState('');
   const barRef = useRef(null);
+  const mentionPopupRef = useRef(null);
+
+  // round220 — recompute the @-mention popup from the caret context. Returns
+  // early (clearing any open popup) when there are no mention people, the editor
+  // is read-only, or the caret isn't sitting right after an "@token".
+  const refreshMention = useCallback((ed) => {
+    const people = mentionPeopleRef.current;
+    const clear = () => setMention((m) => (m ? null : m));
+    if (!ed || !ed.isEditable || !people.length) return clear();
+    const sel = ed.state.selection;
+    if (!sel.empty) return clear();
+    const start = sel.$from.start();
+    const textBefore = ed.state.doc.textBetween(start, sel.from, '\n', '\0');
+    const match = matchMentionQuery(textBefore);
+    if (!match) return clear();
+    const from = sel.from - match.query.length - 1; // the "@" position
+    const items = filterMentionRoster(people, match.query);
+    if (!items.length) return clear();
+    // sel.from is always a valid document position, so coordsAtPos won't throw.
+    const coords = ed.view.coordsAtPos(sel.from);
+    setMention({
+      items,
+      from,
+      to: sel.from,
+      index: 0,
+      coords: { top: coords.bottom + 4, left: coords.left },
+    });
+    return undefined;
+  }, []);
+  refreshMentionRef.current = refreshMention;
+
+  // Replace the "@query" with the chosen participant's name in BOLD (+ a plain
+  // trailing space), then close the popup. No @ and no special node — the saved
+  // HTML is just <strong>name</strong>, so export renders it bold automatically.
+  const selectMention = useCallback((idx) => {
+    const m = mentionRef.current;
+    if (!m || !editor) return;
+    const person = m.items[idx] || m.items[0];
+    if (!person) return;
+    editor.chain().focus()
+      .deleteRange({ from: m.from, to: m.to })
+      .insertContent([
+        { type: 'text', marks: [{ type: 'bold' }], text: person.name },
+        { type: 'text', text: ' ' },
+      ])
+      .run();
+    setMention(null);
+  }, [editor]);
+  selectMentionRef.current = selectMention;
+
+  // Close the mention popup on an outside click.
+  useEffect(() => {
+    if (!mention) return undefined;
+    const onDown = (e) => {
+      if (mentionPopupRef.current && !mentionPopupRef.current.contains(e.target)) setMention(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [mention]);
 
   useEffect(() => {
     if (!menu) return undefined;
@@ -298,6 +389,34 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
       )}
 
       <EditorContent editor={editor} className={styles.editorWrap} />
+
+      {/* round220 — @-mention popup: participant list at the caret. Portalled so
+          the pane's overflow never clips it. Keyboard nav is handled in the
+          editor's handleKeyDown; mousedown selects without stealing focus. */}
+      {editable && mention && createPortal(
+        <ul
+          ref={mentionPopupRef}
+          className={styles.mentionPopup}
+          role="listbox"
+          aria-label="תיוג משתתף"
+          style={{ position: 'fixed', top: mention.coords.top, left: mention.coords.left, zIndex: 10002 }}
+        >
+          {mention.items.map((p, i) => (
+            <li key={p.id ?? p.name}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={i === mention.index}
+                className={`${styles.mentionItem} ${i === mention.index ? styles.mentionItemActive : ''}`}
+                onMouseDown={(e) => { e.preventDefault(); selectMention(i); }}
+              >
+                {p.name}
+              </button>
+            </li>
+          ))}
+        </ul>,
+        document.body
+      )}
     </div>
   );
 }

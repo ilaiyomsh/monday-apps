@@ -33,7 +33,7 @@ function formatWhen(value) {
  * preparation links. Mounted HIDDEN when inactive so a mid-typing draft
  * survives switching headers.
  */
-function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, withLinks = false, active }) {
+function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, withLinks = false, active, mentionPeople = [] }) {
   const { html, loading, author, updatedAt, save, saveErrorCode } = hook;
 
   const draftRef = useRef(null);
@@ -157,6 +157,7 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
               editable={canEdit}
               variant="flush"
               extraToolbarActions={attachAction}
+              mentionPeople={mentionPeople}
             />
           </Suspense>
         )}
@@ -259,6 +260,9 @@ export function UpdatesTripleBox({
   // the legacy single canEdit so old call sites/tests keep working.
   canEditBackground = null, canEditReferences = null, canEditSummary = null,
   showBackground = true, showReferences = true, showSummary = true,
+  // round220 — participants offered by the @-mention popup (lead→coordinator→
+  // participants, deduped; built by the caller). Empty ⇒ no mention affordance.
+  mentionPeople = [],
 }) {
   const background = useBackground(showBackground ? discussionId : null);
   const references = useReferences(showReferences ? discussionId : null);
@@ -308,6 +312,7 @@ export function UpdatesTripleBox({
           filesAlias={p.filesAlias}
           withLinks={p.withLinks === true}
           active={activeKey === p.key}
+          mentionPeople={mentionPeople}
         />
       ))}
     </div>

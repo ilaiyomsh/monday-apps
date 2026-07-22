@@ -32,6 +32,7 @@ import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { TOPICS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
 import { UpdatesTripleBox } from './UpdatesTripleBox.jsx';
+import { buildMentionRoster } from '@generated/utils/mention.js';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
 import { getPointItemIds } from '@generated/utils/pointItems.js';
@@ -587,6 +588,13 @@ export function TopicsTab({
   } = useTopics(discussion.id, { onSuccess: onNotify, onLoading: onNotifyLoading, onDismiss: onDismissToast });
   useEffect(() => { onLoadingChange?.(loading); }, [loading, onLoadingChange]);
 
+  // round220 — the @-mention roster for the triple box: the discussion's people,
+  // ordered lead → coordinator → participants and deduped by id (names only).
+  const mentionPeople = useMemo(
+    () => buildMentionRoster(discussion),
+    [discussion?.discussionLeadID, discussion?.discussionCoordinatorID, discussion?.participantsID],
+  );
+
   // round132 — toolbar Search (shared SearchPill): a topic whose NAME matches
   // stays whole; otherwise it survives only with its matching points; topics
   // with no match at all drop. Render-only — the source `items` (and thus the
@@ -1089,6 +1097,7 @@ export function TopicsTab({
           showBackground={showBackground}
           showReferences={showReferences}
           showSummary={showSummary}
+          mentionPeople={mentionPeople}
         />
       </div>
       )}

@@ -52,13 +52,14 @@
 .extBackdrop {
   position: fixed;
   inset: 0;
-  z-index: 999;
+  z-index: 10000;
 }
+/* round220 — PORTALLED to document.body (position:fixed) so the discussion
+   header's overflow can't clip it; top/left come from the trigger rect (inline
+   style), viewport-clamped in ExternalPeople.jsx. */
 .extPopover {
-  position: absolute;
-  top: calc(100% + 6px);
-  inset-inline-start: 0;
-  z-index: 1000;
+  position: fixed;
+  z-index: 10001;
   width: 240px;
   background: var(--primary-background-color, #fff);
   border-radius: 10px;

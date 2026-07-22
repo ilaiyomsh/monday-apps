@@ -245,3 +245,40 @@
   background: #55565e;
   margin: 0 3px;
 }
+
+/* round220 — @-mention popup: participant list anchored at the caret (portalled,
+   position:fixed from RichTextEditor.jsx). */
+.mentionPopup {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  min-width: 180px;
+  max-width: 280px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--primary-background-color, #fff);
+  border-radius: 8px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--ui-border-color, #e6e9ef);
+  direction: rtl;
+}
+.mentionItem {
+  display: block;
+  width: 100%;
+  text-align: start;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mentionItem:hover,
+.mentionItemActive {
+  background: var(--primary-selected-color, #e6f1fd);
+  color: var(--primary-color, #0073ea);
+}
