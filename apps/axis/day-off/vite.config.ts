@@ -20,7 +20,15 @@ export default defineConfig({
   // instances → "Invalid hook call" the moment an app-core component (e.g.
   // MondayProvider) calls a hook. Force a single copy from this project's root.
   resolve: { dedupe: ['react', 'react-dom', 'react/jsx-runtime'] },
-  build: { outDir: 'dist' },
+  build: {
+    // Emit sourcemaps as SEPARATE .map files WITHOUT the //# sourceMappingURL
+    // comment ('hidden') so CI can archive them for stack symbolication
+    // (axiom-sre scripts/symbolicate) while the browser never fetches them.
+    // The deploy workflow archives + deletes dist/**/*.map before code:push.
+    // See docs/LOGGING-ARCHITECTURE.md §6.
+    sourcemap: 'hidden',
+    outDir: 'dist',
+  },
   test: {
     environment: 'jsdom',
     globals: true,
