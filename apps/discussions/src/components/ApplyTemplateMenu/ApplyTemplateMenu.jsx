@@ -19,6 +19,9 @@ export function ApplyTemplateMenu({ discussionId, onApplied }) {
   const { currentUser } = useMondayContext();
   const [open, setOpen] = useState(false);
   const [applying, setApplying] = useState(false);
+  // round237 — the panel PREVIEWS a template before adding: a list on the right,
+  // the selected template's topics/points on the left, then an "add" button.
+  const [selectedId, setSelectedId] = useState(null);
   // Item 8 — real per-create progress ({done,total}) for the branded bar shown
   // while the template's topics/points are created one by one.
   const [progress, setProgress] = useState(null);
@@ -30,7 +33,14 @@ export function ApplyTemplateMenu({ discussionId, onApplied }) {
     return () => window.removeEventListener('pointerdown', close);
   }, [open]);
 
+  // Default the preview to the first template whenever the panel opens.
+  useEffect(() => {
+    if (open && selectedId == null && templates.length) setSelectedId(templates[0].id);
+  }, [open, selectedId, templates]);
+
   if (!templates.length) return null;
+
+  const selected = templates.find((t) => t.id === selectedId) || templates[0];
 
   const apply = async (template) => {
     setOpen(false);
@@ -66,19 +76,46 @@ export function ApplyTemplateMenu({ discussionId, onApplied }) {
         disabled={applying}
         onClick={(e) => { e.stopPropagation(); setOpen((p) => !p); }}
       >
-        מתבנית
+        תבניות
       </Button>
       {open && (
-        <ul className={styles.menu} role="listbox" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-          {templates.map((t) => (
-            <li key={t.id}>
-              <button type="button" className={styles.item} onClick={() => apply(t)}>
-                <span className={styles.itemName}>{t.name}</span>
-                <span className={styles.itemMeta}>{t.topics.length} נושאים · {countPoints(t)} נקודות</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <div className={styles.panel} dir="rtl" role="dialog" aria-label="תבניות נושאים" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+          <div className={styles.panelBody}>
+            <ul className={styles.list} role="listbox" aria-label="רשימת תבניות">
+              {templates.map((t) => (
+                <li key={t.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selected?.id === t.id}
+                    className={`${styles.item} ${selected?.id === t.id ? styles.itemOn : ''}`}
+                    onClick={() => setSelectedId(t.id)}
+                  >
+                    <span className={styles.itemName}>{t.name}</span>
+                    <span className={styles.itemMeta}>{t.topics.length} נושאים · {countPoints(t)} נקודות</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {/* round237 — live PREVIEW of the selected template before adding. */}
+            <div className={styles.preview}>
+              <div className={styles.previewHead}>תצוגה מקדימה — {selected?.name}</div>
+              {(selected?.topics || []).map((tp, ti) => (
+                <div key={ti} className={styles.previewTopic}>
+                  <span className={styles.previewTopicName}>• {tp.name}</span>
+                  {(tp.points || []).map((p, pi) => (
+                    <span key={pi} className={styles.previewPoint}>– {p}</span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={styles.panelFoot}>
+            <Button kind="primary" size="small" disabled={!selected} onClick={() => selected && apply(selected)}>
+              הוסף לדיון
+            </Button>
+          </div>
+        </div>
       )}
       {/* Item 8 — branded progress while the template's topics/points are
           created sequentially (real done/total from createTopicsFromTemplate). */}
