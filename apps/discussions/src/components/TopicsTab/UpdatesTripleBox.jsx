@@ -179,7 +179,10 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
   );
 
   return (
-    <div style={active ? undefined : { display: 'none' }}>
+    // round234 — the active pane fills the card's FIXED frame (flex column);
+    // attachments/footer live inside it, so every pane has the exact same
+    // size and switching headers can never move or resize the box.
+    <div className={styles.paneWrap} style={active ? undefined : { display: 'none' }}>
       <div className={styles.paneEditor}>
         {!loading && (
           <Suspense fallback={null}>

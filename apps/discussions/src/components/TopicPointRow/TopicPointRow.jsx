@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Avatar, Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
 import { Edit } from '@vibe/icons';
-import { Trash2, EyeOff, Eye, MoreHorizontal, Check } from 'lucide-react';
+import { Trash2, EyeOff, Eye, MoreHorizontal, Check, GripVertical } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { CreateProgressBar } from '@generated/components/CreateProgressBar';
@@ -129,8 +129,11 @@ export function TopicPointRow({
   // actions cluster. Resolved from usersById via point.creatorId.
   usersById,
   onToggle, onToggleNotForDiscussion, onRename,
+  // round232 (owner request) — per-point DELETE: a hover trash button to the
+  // LEFT of the creator avatar (replaces the multi-select-checkbox delete path).
+  // Soft-delete with an undo toast lives in the parent; omitted ⇒ no trash.
+  onDelete,
   // Optimistic-create error affordance: retry re-runs a failed point create.
-  // (Deletion is via the נושאים tab's multi-select bulk delete.)
   onRetryCreate,
   // Granular discussion-tier caps. Each equals the legacy canEdit while the
   // permissions feature is off, so behavior is unchanged. point edit (rename +
@@ -180,8 +183,9 @@ export function TopicPointRow({
   // name is never hideable). Undefined ⇒ show everything.
   const showCol = (k) => !columns || columns.includes(k);
 
-  // Whole-row drag (native monday feel): the sortable listeners/attributes ride
-  // on the ROW itself when the point is editable — no six-dot grip.
+  // round233 (owner request) — drag is initiated by an explicit SIX-DOT GRIP at
+  // the row's leading (right, in RTL) edge, not the whole row. The sortable node
+  // is still the row (setNodeRef); only the listeners/attributes move to the grip.
   const dragProps = canEditPoint && !inert ? { ...attributes, ...listeners } : {};
 
   const rowClass = [
@@ -189,12 +193,23 @@ export function TopicPointRow({
     discussed ? styles.rowDone : '',
     excluded ? styles.excluded : '',
     failed ? styles.rowFailed : '',
-    canEditPoint ? styles.rowDraggable : '',
     selectionActive ? styles.rowSelecting : '',
   ].filter(Boolean).join(' ');
 
   return (
-    <div ref={setNodeRef} style={style} className={rowClass} {...dragProps}>
+    <div ref={setNodeRef} style={style} className={rowClass}>
+      {/* round233 — six-dot drag grip at the RIGHT (leading, rtl) edge; hold and
+          drag to reorder the point up/down. Hover-revealed, grab cursor. */}
+      {canEditPoint && !inert && (
+        <span
+          className={styles.dragGrip}
+          title="גרירה לשינוי סדר"
+          aria-label={`גרירה לשינוי סדר הנקודה: ${point.name}`}
+          {...dragProps}
+        >
+          <GripVertical size={16} />
+        </span>
+      )}
       {/* Selection checkbox — hover-revealed (kept visible while selected /
           while a selection is active anywhere), so the clean list stays quiet
           at rest but multi-select keeps working exactly as before. */}
@@ -305,6 +320,20 @@ export function TopicPointRow({
           <span className={styles.creatorAvatar}>
             <CreatorAvatar userId={point.creatorId} usersById={usersById} size="small" />
           </span>
+        )}
+        {/* round232 (owner request) — per-point DELETE trash, to the LEFT of the
+            creator avatar (last in this rtl cluster ⇒ leftmost). Soft-delete +
+            undo lives in the parent. Inert on a hidden row (item 11). */}
+        {onDelete && !inert && (
+          <button
+            type="button"
+            className={`${styles.rowActBtn} ${styles.deleteBtn}`}
+            title="מחיקת נקודה"
+            aria-label={`מחק נקודה: ${point.name}`}
+            onClick={(e) => { e.stopPropagation(); onDelete(point); }}
+          >
+            <Trash2 size={16} />
+          </button>
         )}
       </span>
 

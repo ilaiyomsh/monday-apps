@@ -36,4 +36,27 @@ describe('UpdatesTripleBox — round230 deep-link pane reset', () => {
     expect(tabSelected('רקע')).toBe('true');
     expect(tabSelected('סיכום')).toBe('false');
   });
+
+  it('round234 — every pane wrapper carries paneWrap (fills the fixed frame); only the active one is visible', async () => {
+    const { container } = render(<UpdatesTripleBox discussionId="D1" canEdit />);
+    await waitFor(() => expect(tabSelected('רקע')).toBe('true'));
+
+    // All three panes are mounted with the SAME frame-filling class — that
+    // class (flex column, flex:1) is what makes every pane the exact same
+    // size inside the fixed card, so switching headers can never resize it.
+    const wraps = container.querySelectorAll('.paneWrap');
+    expect(wraps.length).toBe(3);
+
+    // Exactly one pane visible; the others are display:none (not unmounted).
+    const visible = [...wraps].filter((w) => w.style.display !== 'none');
+    expect(visible.length).toBe(1);
+
+    // Switching to סיכום flips visibility without unmounting anything.
+    fireEvent.click(screen.getByRole('tab', { name: 'סיכום' }));
+    const after = [...container.querySelectorAll('.paneWrap')];
+    expect(after.length).toBe(3);
+    expect(after.filter((w) => w.style.display !== 'none').length).toBe(1);
+    expect(after[2].style.display).not.toBe('none'); // סיכום is the third pane
+    expect(after[0].style.display).toBe('none');
+  });
 });

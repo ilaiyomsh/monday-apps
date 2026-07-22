@@ -19,10 +19,26 @@
 .row:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
 }
-/* Whole-row drag affordance (the row itself is the drag handle). grab cursor on
-   the draggable areas; interactive controls keep their own pointer cursor. */
-.rowDraggable { cursor: grab; }
-.rowDraggable:active { cursor: grabbing; }
+/* round233 — six-dot drag grip at the row's leading (right, in RTL) edge. Hover-
+   revealed, grab cursor; touch-action:none lets the PointerSensor claim vertical
+   drags on touch. It is the ONLY drag handle now (the whole-row drag was removed). */
+.dragGrip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  color: var(--placeholder-color, #9699a6);
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.row:hover .dragGrip,
+.dragGrip:focus-visible {
+  opacity: 1;
+}
+.dragGrip:active { cursor: grabbing; }
 
 /* Hidden ("לא לדיון") point — dimmed + italic (mockup .pt.hidden2). */
 .excluded .nameCell {
@@ -289,6 +305,11 @@
 .rowActBtn:hover {
   background: var(--primary-background-hover-color, #e6e9ef);
   color: var(--primary-color, #0073ea);
+}
+/* round232 — the per-point delete trash turns red on hover (destructive). */
+.deleteBtn:hover {
+  background: var(--negative-color-selected, #fce9ec);
+  color: var(--negative-color, #d83a52);
 }
 .updatesBtn:disabled { cursor: default; }
 

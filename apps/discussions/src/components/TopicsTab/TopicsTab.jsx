@@ -173,7 +173,7 @@ function SortableTopicSection({
   canAdd = true, canEditTopic = true, canHideTopic = true, canDelete = true, canCheck = true,
   priorityMapped = false, priorityOptions, priorityLabelById, priorityColorById, updateTopicPriority,
   // Decisions/tasks-from-point wiring (threaded from TopicsTab).
-  onCreatePointDecision, onCreatePointTask, onOpenPointItems,
+  onCreatePointDecision, onCreatePointTask, onOpenPointItems, onDeletePoint,
   // Multi-select (Round 7): when `selectable`, each point row reveals a checkbox
   // on hover (pinned visible while a selection is active); selection is tracked
   // by point id in the parent. The card header hosts a select-all-in-topic
@@ -441,6 +441,7 @@ function SortableTopicSection({
                   onToggle={togglePoint}
                   onToggleNotForDiscussion={togglePointNotForDiscussion}
                   onRename={renamePoint}
+                  onDelete={canDelete ? onDeletePoint : undefined}
                   onRetryCreate={onRetryCreate}
                   canEditPoint={canEditTopic}
                   canHidePoint={canHideTopic}
@@ -613,10 +614,13 @@ export function TopicsTab({
     [tasksItems]
   );
 
-  // ---- Multi-select of POINTS (Round 7) — a checkbox per point + a floating
-  // bulk bar (delete / hide the selected points). Offered when the user can edit
-  // or delete points; while permissions are off this equals the legacy gate. ----
-  const canSelectPoints = !!(deleteTopicOrPoint || editTopicOrPoint);
+  // ---- Multi-select of POINTS (Round 7) — was a per-point checkbox + a floating
+  // bulk bar (delete / hide). round232 (owner request): the checkboxes are GONE —
+  // deletion is a per-point trash button (left of the creator avatar) and hiding
+  // is the per-point eye, so selection is DISABLED. The selection machinery below
+  // stays inert (no checkbox ⇒ selectedPointIds never fills ⇒ the bulk bar never
+  // shows) rather than being ripped out. ----
+  const canSelectPoints = false;
   const [selectedPointIds, setSelectedPointIds] = useState(() => new Set());
   // Map of point id -> its point object (for resolving the selection to actions).
   const pointById = useMemo(() => {
@@ -672,6 +676,13 @@ export function TopicsTab({
     const { undo, count } = softDeletePoints(pts);
     const msg = count === 1 ? 'הנקודה נמחקה' : `${count} נקודות נמחקו`;
     onNotify?.(msg, 'success', 6000, { label: 'בטל', onClick: undo });
+  };
+  // round232 (owner request) — per-point delete from the row's trash button:
+  // one soft-delete + an undo toast (same restore window as the old bulk path).
+  const deletePoint = (point) => {
+    if (!deleteTopicOrPoint || !point) return;
+    const { undo } = softDeletePoints([point]);
+    onNotify?.('הנקודה נמחקה', 'success', 6000, { label: 'בטל', onClick: undo });
   };
   // Bulk hide — set every selected point's "not for discussion" flag.
   // Gated by canHide (lead/coordinator/owner only — item 10).
@@ -1017,6 +1028,7 @@ export function TopicsTab({
               onCreatePointDecision={onCreatePointDecision}
               onCreatePointTask={onCreatePointTask}
               onOpenPointItems={onOpenPointItems}
+              onDeletePoint={deletePoint}
               selectable={canSelectPoints}
               selectedPointIds={selectedPointIds}
               onTogglePointSelect={togglePointSelect}
