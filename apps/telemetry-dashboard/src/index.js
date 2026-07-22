@@ -86,7 +86,11 @@ const eventsBoard = createEventsBoardService({
   logger,
 });
 const provisioner = createBoardProvisioner({ mondayApi, storage, logger });
-const lifecycleService = createLifecycleService({ eventsBoard, logger });
+const lifecycleService = createLifecycleService({
+  eventsBoard,
+  logger,
+  debugRawPayload: env.debugLifecyclePayload,
+});
 
 const app = createApp({
   telemetry,

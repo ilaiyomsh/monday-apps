@@ -77,6 +77,9 @@ export function getEnv() {
     // JSON map appSlug → Signing Secret (feature-level lifecycle webhooks).
     // Empty map = fail-closed 401 on POST /api/webhooks/lifecycle.
     lifecycleSigningSecrets: parseJsonObject(process.env.LIFECYCLE_SIGNING_SECRETS),
+    // Debug: dump each verified webhook's RAW body to the monday-code console
+    // (never Axiom — see lifecycle-service privacy contract). '1' = on.
+    debugLifecyclePayload: process.env.DEBUG_LIFECYCLE_PAYLOAD === '1',
     // JSON map appSlug → Client Secret (app-level install/subscription webhooks).
     // Empty map = fail-closed 401 on POST /api/webhooks/app-events.
     appEventsClientSecrets: parseJsonObject(process.env.APP_EVENTS_CLIENT_SECRETS),
