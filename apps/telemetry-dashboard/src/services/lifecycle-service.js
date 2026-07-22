@@ -10,6 +10,12 @@
 // - details are built from strict allowlists below and go ONLY to the board
 //   (the owner's private monday account — account names allowed there BY
 //   DESIGN, but they must never reach Axiom via the logger).
+// - SANCTIONED DEBUG EXCEPTION: when the operator sets
+//   DEBUG_LIFECYCLE_PAYLOAD=1 (opts.debugRawPayload), the raw body is logged
+//   ONCE per event at INFO level ('debug_lifecycle_raw'). INFO does not ship
+//   to Axiom (WARN/ERROR-only policy, no alwaysShip) — it reaches ONLY the
+//   monday-code console (`mapps code:logs`). For mapping/debugging sessions;
+//   keep the flag OFF in steady state.
 //
 // All collaborators are injected — this module imports nothing.
 
@@ -54,7 +60,19 @@ function normalizeOccurredAt(raw) {
  * @param {typeof fetch} [deps.fetchImpl] - injected for tests; defaults to global fetch
  * @returns {{ handleFeatureEvent: Function, handleAppEvent: Function }}
  */
-export function createLifecycleService({ eventsBoard, logger, fetchImpl }) {
+export function createLifecycleService({ eventsBoard, logger, fetchImpl, debugRawPayload = false }) {
+  /** Sanctioned debug exception (see header) — raw body to console only. */
+  function dumpRaw(slug, eventId, body) {
+    if (!debugRawPayload) return;
+    let raw = '';
+    try {
+      raw = JSON.stringify(body).slice(0, 8000);
+    } catch {
+      // Circular/unserializable body — dump what String() gives us.
+      raw = String(body);
+    }
+    logger.info('debug_lifecycle_raw', TAG, { app: slug, eventId, raw });
+  }
   const doFetch = fetchImpl ?? globalThis.fetch;
 
   // Dedup LRU: eventId → seen-at. Capped at DEDUP_CAP, oldest entry evicted
@@ -126,6 +144,7 @@ export function createLifecycleService({ eventsBoard, logger, fetchImpl }) {
     const id = eventId ?? null;
     try {
       const b = body && typeof body === 'object' ? body : {};
+      dumpRaw(slug, id, b);
       if (isDuplicate(id)) {
         // A redelivery means monday did not accept our previous ack — ack
         // again (recording stays at-most-once) so the redelivery loop ends
@@ -185,6 +204,7 @@ export function createLifecycleService({ eventsBoard, logger, fetchImpl }) {
     const slug = String(appSlug ?? '');
     const id = eventId ?? null;
     try {
+      dumpRaw(slug, id, body && typeof body === 'object' ? body : {});
       if (isDuplicate(id)) {
         logger.debug('duplicate_event', TAG, { app: slug, eventId: id });
         return { duplicate: true };

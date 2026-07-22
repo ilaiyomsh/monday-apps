@@ -32,11 +32,16 @@ function makeEventsBoard({ recordEventImpl } = {}) {
   };
 }
 
-function makeService({ eventsBoard, logger, fetchImpl } = {}) {
+function makeService({ eventsBoard, logger, fetchImpl, debugRawPayload } = {}) {
   const log = logger ?? makeLogger();
   const board = eventsBoard === null ? null : (eventsBoard ?? makeEventsBoard());
   const doFetch = fetchImpl ?? vi.fn(async () => ({ ok: true, status: 200 }));
-  const service = createLifecycleService({ eventsBoard: board, logger: log, fetchImpl: doFetch });
+  const service = createLifecycleService({
+    eventsBoard: board,
+    logger: log,
+    fetchImpl: doFetch,
+    debugRawPayload,
+  });
   return { service, logger: log, eventsBoard: board, fetchImpl: doFetch };
 }
 
@@ -605,5 +610,44 @@ describe('fail-soft', () => {
     expect(notConfiguredWarns).toHaveLength(2);
     expect(logger.error).not.toHaveBeenCalled();
     expect(logger.track).not.toHaveBeenCalled();
+  });
+});
+
+describe('debugRawPayload — env-gated raw capture (console-only, never ships)', () => {
+  it('when ENABLED, handleFeatureEvent logs the FULL raw body once as debug_lifecycle_raw', async () => {
+    const { service, logger } = makeService({ debugRawPayload: true });
+
+    await service.handleFeatureEvent({ appSlug: 'axis-tracker', body: featureBody(), eventId: 'ev-raw-1' });
+
+    const call = logger.info.mock.calls.find((c) => c[0] === 'debug_lifecycle_raw');
+    expect(call).toBeTruthy();
+    expect(call[1]).toBe('lifecycle');
+    // The raw dump must carry the WHOLE body (incl. keys the allowlist drops)
+    // so the operator can see everything monday actually sends.
+    expect(call[2].raw).toContain('user_email');
+    expect(call[2].raw).toContain('AppFeatureBoardView:delete');
+  });
+
+  it('when ENABLED, handleAppEvent logs the raw body too', async () => {
+    const { service, logger } = makeService({ debugRawPayload: true });
+
+    await service.handleAppEvent({
+      appSlug: 'axis-tracker',
+      body: { type: 'install', data: { app_id: 1, user_id: 2, account_id: 3 } },
+      eventId: 'ev-raw-2',
+    });
+
+    const call = logger.info.mock.calls.find((c) => c[0] === 'debug_lifecycle_raw');
+    expect(call).toBeTruthy();
+    expect(call[2].raw).toContain('account_id');
+  });
+
+  it('by DEFAULT (flag absent) no debug_lifecycle_raw log is ever emitted', async () => {
+    const { service, logger } = makeService();
+
+    await service.handleFeatureEvent({ appSlug: 'axis-tracker', body: featureBody(), eventId: 'ev-raw-3' });
+
+    expect(logger.info.mock.calls.find((c) => c[0] === 'debug_lifecycle_raw')).toBeUndefined();
+    expect(allLoggerArgs(logger)).not.toContain('user_email');
   });
 });
