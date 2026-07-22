@@ -1,5 +1,48 @@
 # Changelog - telemetry-dashboard
 
+## 0.4.0 — 2026-07-22
+
+- **Board-writes OAuth migrated to monday OAuth 2.1 (Change #144).** The
+  owner-authorize flow was broken in production (`code_challenge is required`
+  — this app's version enforces monday's new flow while the code spoke the
+  legacy one). `/oauth/start` now issues a single-use CSRF `state` nonce
+  (deadline-confirm's `oauth_state:` pattern; 10-min TTL, replay → 400) plus
+  a PKCE S256 `code_challenge`; the verifier rides in the state record.
+- `src/services/monday-oauth-client.js` (new): the ONE owner of the
+  `oauth_ms` endpoints — code exchange (`grant_type` + `code_verifier`),
+  refresh, best-effort revoke, and the JWT `exp` decode (decode-only, never
+  verify; scheduling-only). Never logs; errors carry machine codes.
+- **Token record replaces the bare string** under `owner:oauth_token`:
+  `{ v:2, accessToken, refreshToken, expiresAt, obtainedAt, refreshedAt,
+  status }`. monday's new tokens EXPIRE and refresh tokens are single-use +
+  rotating with a 6-month max lifetime from the original authorization. A
+  legacy bare-string token still stored is normalized to a v1 record
+  (non-expiring, never refreshed) and keeps working.
+- `src/services/oauth-token-provider.js` (new): proactive refresh at <5 min
+  to expiry (sync-calender's `ensureMicrosoftAccessToken` shape), SINGLE-
+  FLIGHT mutex + in-mutex re-read (a concurrent double-refresh would burn
+  the single-use rotation), rotated-refresh persistence with `obtainedAt`
+  preserved, `invalid_grant` → record flagged `reauth_required` (the
+  Settings UI shows a re-authorize CTA), transient failure → stale-but-valid
+  token. 401-retry-once deliberately NOT implemented (token resolved
+  per-request + the cushion; revisit only on real Axiom 401 evidence).
+- **Disconnect (revocation):** `POST /api/settings/disconnect` (session-
+  gated) revokes both tokens best-effort at `oauth_ms/oauth/revoke` and
+  ALWAYS clears the stored record; Settings gained a Disconnect button and a
+  third `reauth_required` state. `GET /api/settings` now returns
+  `oauthStatus: 'connected'|'disconnected'|'reauth_required'`
+  (`oauthConnected` boolean kept for back-compat).
+- `MONDAY_APP_VERSION_ID` env (optional): targets a DRAFT version's OAuth
+  config during testing via `app_version_id` (deadline-confirm's idiom) —
+  the New OAuth Flow toggle is per-version in the Developer Center.
+- Tests: 61 new/updated across oauth router (PKCE challenge derivation,
+  state replay/expiry), oauth client (param shapes, error mapping), token
+  provider (rotation, mutex single-flight, invalid_grant, stale-but-valid),
+  storage (record round-trip, legacy normalization, state TTL boundary) and
+  settings routes (3 statuses, disconnect). Mutation spot-checks: 4 seeded
+  bugs killed (state-delete removal, TTL boundary flip, wrong challenge
+  source, disabled state gate).
+
 ## 0.3.0 — 2026-07-19
 
 - **Lifecycle events board config moved from env → in-app Settings, provisioned

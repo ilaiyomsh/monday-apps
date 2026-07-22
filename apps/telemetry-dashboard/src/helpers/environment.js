@@ -56,6 +56,10 @@ export function getEnv() {
     // (`${baseUrl}/oauth/callback`) — must match the redirect URI registered
     // in the monday Developer Center OAuth config exactly.
     baseUrl: process.env.BASE_URL || '',
+    // OAuth config (scopes/redirects + the New OAuth Flow toggle) is per app
+    // version — during draft testing the authorize request targets this
+    // version instead of the live one (deadline-confirm's idiom).
+    oauthAppVersionId: process.env.MONDAY_APP_VERSION_ID || '',
 
     // --- Lifecycle events → monday board (all inert by default) -----------
     // Optional fallback: a personal monday API token used to WRITE items on
