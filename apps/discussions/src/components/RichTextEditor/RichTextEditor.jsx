@@ -15,7 +15,7 @@ import { Placeholder } from '@tiptap/extension-placeholder';
 import { matchMentionQuery, filterMentionRoster } from '@generated/utils/mention.js';
 import {
   Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListChecks,
-  Link2, AlignRight, AlignCenter, AlignLeft, AlignJustify, ALargeSmall, ChevronDown, Check, Baseline,
+  Link2, AlignRight, AlignCenter, AlignLeft, AlignJustify, ALargeSmall, ChevronDown, Check, Baseline, Search,
 } from 'lucide-react';
 import styles from './RichTextEditor.module.css';
 
@@ -109,10 +109,14 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
       handleKeyDown: (_view, event) => {
         const m = mentionRef.current;
         if (!m) return false;
+        if (event.key === 'Escape') { setMention(null); return true; }
+        // With zero matches let the editor handle keys normally (Enter breaks the
+        // line → the @token ends → the popup clears); only nav/select when there
+        // are items to act on.
+        if (!m.items.length) return false;
         if (event.key === 'ArrowDown') { setMention((p) => (p ? { ...p, index: (p.index + 1) % p.items.length } : p)); return true; }
         if (event.key === 'ArrowUp') { setMention((p) => (p ? { ...p, index: (p.index - 1 + p.items.length) % p.items.length } : p)); return true; }
         if (event.key === 'Enter' || event.key === 'Tab') { selectMentionRef.current(m.index); return true; }
-        if (event.key === 'Escape') { setMention(null); return true; }
         return false;
       },
     },
@@ -164,14 +168,17 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
     if (!match) return clear();
     const from = sel.from - match.query.length - 1; // the "@" position
     const items = filterMentionRoster(people, match.query);
-    if (!items.length) return clear();
     // sel.from is always a valid document position, so coordsAtPos won't throw.
     const coords = ed.view.coordsAtPos(sel.from);
     // round221 — open to the LEFT of the caret/@ (owner request): anchor the
     // popup's RIGHT edge at the caret x so the list grows leftward, away from
     // the typed text, instead of overlapping it toward the @.
+    // round223 — keep the popup open even with zero matches (its search box shows
+    // the query + an empty state) so typing keeps narrowing; the token ending
+    // (space/backspacing the @) clears it via matchMentionQuery returning null.
     setMention({
       items,
+      query: match.query,
       from,
       to: sel.from,
       index: 0,
@@ -397,27 +404,38 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
           the pane's overflow never clips it. Keyboard nav is handled in the
           editor's handleKeyDown; mousedown selects without stealing focus. */}
       {editable && mention && createPortal(
-        <ul
+        <div
           ref={mentionPopupRef}
           className={styles.mentionPopup}
-          role="listbox"
-          aria-label="תיוג משתתף"
           style={{ position: 'fixed', top: mention.coords.top, right: mention.coords.right, zIndex: 10002 }}
         >
-          {mention.items.map((p, i) => (
-            <li key={p.id ?? p.name}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={i === mention.index}
-                className={`${styles.mentionItem} ${i === mention.index ? styles.mentionItemActive : ''}`}
-                onMouseDown={(e) => { e.preventDefault(); selectMention(i); }}
-              >
-                {p.name}
-              </button>
-            </li>
-          ))}
-        </ul>,
+          {/* round223 — a search box pinned at the TOP that mirrors the query
+              typed after @ (the editor keeps focus, so the FIRST letter lands
+              here automatically — no click needed — and the list narrows). */}
+          <div className={styles.mentionSearch}>
+            <Search size={14} aria-hidden="true" />
+            {mention.query
+              ? <span className={styles.mentionSearchText}>{mention.query}</span>
+              : <span className={styles.mentionSearchPh}>הקלידו כדי לסנן…</span>}
+          </div>
+          <ul className={styles.mentionList} role="listbox" aria-label="תיוג משתתף">
+            {mention.items.length === 0 ? (
+              <li className={styles.mentionEmpty}>אין תוצאות</li>
+            ) : mention.items.map((p, i) => (
+              <li key={p.id ?? p.name}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={i === mention.index}
+                  className={`${styles.mentionItem} ${i === mention.index ? styles.mentionItemActive : ''}`}
+                  onMouseDown={(e) => { e.preventDefault(); selectMention(i); }}
+                >
+                  {p.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>,
         document.body
       )}
     </div>

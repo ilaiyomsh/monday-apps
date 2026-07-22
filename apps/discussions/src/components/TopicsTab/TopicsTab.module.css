@@ -111,20 +111,28 @@
    shared sticky rule + its scroll-cover pseudo-element. */
 .agendaBox .toolbar {
   position: static;
-  padding: 8px 14px;
+  /* round222b — pin the row height so it matches the triple box's formatting
+     strip EXACTLY; vertical padding gives way to the fixed height + centering. */
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: 0 14px;
   z-index: auto;
   background: var(--primary-background-color, #fff);
   border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
 }
 .agendaBox .toolbar::before { display: none; }
 .toolbarSpacer { flex: 1 1 auto; min-width: 8px; }
-/* round221 — the triple box's formatting strip (RTE .toolbarFlush, global class
-   under non-scoped modules) gets the SAME 8px vertical rhythm as the agenda
-   toolbar row, so its icons sit exactly parallel to the הסתר/כווץ row on the
-   left (owner request: pull it a bit further down). */
+/* round222b — the triple box's formatting strip (RTE .toolbarFlush, global class
+   under non-scoped modules) is pinned to the SAME 48px height as the agenda
+   toolbar row so their bottom borders line up EXACTLY, and its icons are
+   vertically CENTERED between the tab band above and the strip's bottom border
+   (owner request). Vertical padding → 0 (the fixed height + align-items:center
+   from the base .toolbar do the centering); horizontal padding kept. */
 .tripleBox .toolbarFlush {
-  padding-top: 8px;
-  padding-bottom: 8px;
+  min-height: 48px;
+  box-sizing: border-box;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 /* The card body holds the topic list + the bottom add-row, with inner padding.
    round220 — a tall min-height so the אג'נדה card takes real vertical space like

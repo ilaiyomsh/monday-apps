@@ -22,7 +22,7 @@ describe('ExternalPeople', () => {
 
   it('read-only: no "+" editor; and renders nothing when empty', () => {
     const { container, rerender } = render(<ExternalPeople names={['א ב']} canEdit={false} />);
-    expect(screen.queryByRole('button', { name: 'עריכת משתתפים חיצוניים' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'עריכת משתתפים' })).not.toBeInTheDocument();
     rerender(<ExternalPeople names={[]} canEdit={false} />);
     expect(container.firstChild).toBeNull();
   });
@@ -30,7 +30,7 @@ describe('ExternalPeople', () => {
   it('editor: adds a typed name on Enter and removes via ✕, reporting the full list', () => {
     const onChange = vi.fn();
     render(<ExternalPeople names={['יוסי כהן']} canEdit onChange={onChange} />);
-    fireEvent.click(screen.getByRole('button', { name: 'עריכת משתתפים חיצוניים' }));
+    fireEvent.click(screen.getByRole('button', { name: 'עריכת משתתפים' }));
 
     const input = screen.getByLabelText('שם משתתף חיצוני');
     fireEvent.change(input, { target: { value: ' דנה לוי ' } });
