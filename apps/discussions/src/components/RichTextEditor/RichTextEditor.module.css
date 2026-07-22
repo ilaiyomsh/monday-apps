@@ -246,20 +246,48 @@
   margin: 0 3px;
 }
 
-/* round220 — @-mention popup: participant list anchored at the caret (portalled,
-   position:fixed from RichTextEditor.jsx). */
+/* round220/223 — @-mention popup: a pinned search box (round223) over a
+   scrollable participant list, anchored at the caret (portalled, position:fixed
+   from RichTextEditor.jsx). */
 .mentionPopup {
-  list-style: none;
   margin: 0;
   padding: 4px;
-  min-width: 180px;
-  max-width: 280px;
-  max-height: 260px;
-  overflow-y: auto;
+  min-width: 200px;
+  max-width: 300px;
   background: var(--primary-background-color, #fff);
   border-radius: 8px;
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.18), 0 0 0 1px var(--ui-border-color, #e6e9ef);
   direction: rtl;
+}
+/* Search box mirroring the @query — pinned above the scrolling list. */
+.mentionSearch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  margin-bottom: 4px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  color: var(--secondary-text-color, #676879);
+  background: var(--primary-background-hover-color, #f6f7fb);
+  font-size: 13px;
+  min-height: 30px;
+}
+.mentionSearchText { color: var(--primary-text-color, #323338); }
+.mentionSearchPh { color: var(--secondary-text-color, #9699a6); }
+/* The scrollable list (round223 — owner: it must scroll down). */
+.mentionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.mentionEmpty {
+  padding: 10px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--secondary-text-color, #9699a6);
 }
 .mentionItem {
   display: block;

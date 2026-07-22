@@ -27,6 +27,16 @@ describe('buildMentionRoster', () => {
     expect(buildMentionRoster(null)).toEqual([]);
     expect(buildMentionRoster({})).toEqual([]);
   });
+
+  it('round223 — appends EXTERNAL (text-only) participants after the mapped people', () => {
+    const roster = buildMentionRoster({
+      discussionLeadID: [{ id: 1, name: 'לאה מובילה' }],
+      externalParticipantsID: 'אורח א, אורח ב',
+    });
+    expect(roster.map((p) => p.name)).toEqual(['לאה מובילה', 'אורח א', 'אורח ב']);
+    // external names have no monday id → keyed by name.
+    expect(roster[1].id).toBe('name:אורח א');
+  });
 });
 
 describe('matchMentionQuery', () => {

@@ -3,28 +3,32 @@
  * Kept framework-free so the caret-token detection and roster shaping are unit
  * tested without TipTap/jsdom.
  */
+import { parseExternalParticipants } from './externalParticipants.js';
 
 // The discussion people columns offered by the mention popup, in priority order:
 // lead → coordinator → participants (round218 owner spec).
 export const MENTION_ROLE_ALIASES = ['discussionLeadID', 'discussionCoordinatorID', 'participantsID'];
 
 /**
- * Build the mention roster from a discussion's people columns: ordered by
- * MENTION_ROLE_ALIASES and deduped by id (names only). A person with no id is
- * keyed by name so duplicates still collapse. Returns [{ id, name }].
+ * Build the mention roster from a discussion: its people columns (ordered by
+ * MENTION_ROLE_ALIASES) followed by the text-only EXTERNAL participants
+ * (round223 — owner: external names are taggable too). Deduped by id; a person
+ * with no id (and every external name) is keyed by name so duplicates collapse.
+ * Returns [{ id, name }].
  */
 export function buildMentionRoster(discussion, aliases = MENTION_ROLE_ALIASES) {
   const byId = new Map();
+  const add = (name, id) => {
+    if (!name) return;
+    const key = id != null ? String(id) : `name:${name}`;
+    if (!byId.has(key)) byId.set(key, { id: id != null ? String(id) : key, name });
+  };
   for (const alias of aliases) {
     const list = Array.isArray(discussion?.[alias]) ? discussion[alias] : [];
-    for (const p of list) {
-      const name = p?.name;
-      if (!name) continue;
-      const id = p?.id != null ? String(p.id) : null;
-      const key = id || `name:${name}`;
-      if (!byId.has(key)) byId.set(key, { id: id || key, name });
-    }
+    for (const p of list) add(p?.name, p?.id != null ? p.id : null);
   }
+  // External participants (text-only names, no monday id) — keyed by name.
+  for (const name of parseExternalParticipants(discussion?.externalParticipantsID)) add(name, null);
   return [...byId.values()];
 }
 

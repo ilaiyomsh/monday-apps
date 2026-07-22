@@ -85,8 +85,8 @@ export function ExternalPeople({ names = [], canEdit = false, onChange }) {
             className={styles.extAddBtn}
             onClick={openEditor}
             aria-expanded={open}
-            aria-label="עריכת משתתפים חיצוניים"
-            title="עריכת משתתפים חיצוניים"
+            aria-label="עריכת משתתפים"
+            title="עריכת משתתפים"
           >
             +
           </button>
@@ -100,10 +100,10 @@ export function ExternalPeople({ names = [], canEdit = false, onChange }) {
             ref={popRef}
             className={styles.extPopover}
             role="dialog"
-            aria-label="משתתפים חיצוניים"
+            aria-label="משתתפים"
             style={pos ? { top: pos.top, left: pos.left } : undefined}
           >
-            <div className={styles.extTitle}>משתתפים חיצוניים</div>
+            <div className={styles.extTitle}>משתתפים</div>
             {names.length > 0 && (
               <ul className={styles.extList}>
                 {names.map((name, i) => (
