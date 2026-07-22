@@ -84,33 +84,38 @@ describe('TopicsTab — round235 topics ribbon', () => {
     expect(screen.getAllByRole('tab')[1].getAttribute('aria-selected')).toBe('true');
   });
 
-  it('"+ נושא" opens the inline input and adds at the ribbon END (position bottom)', () => {
+  it('round237 — the "+" at the END opens an inline editable box; Enter appends (position bottom)', () => {
     render(<TopicsTab discussion={discussion} canEdit />);
-    fireEvent.click(screen.getByLabelText('נושא חדש'));
-    const input = screen.getByLabelText('שם הנושא החדש');
+    fireEvent.click(screen.getByLabelText('נושא בסוף הדיון'));
+    const input = screen.getByLabelText('שם הנושא החדש (בסוף הדיון)');
     fireEvent.change(input, { target: { value: 'נושא חדש לגמרי' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(state.addTopic).toHaveBeenCalledWith('נושא חדש לגמרי', { position: 'bottom' });
   });
 
-  it('the ⋮ opens the topic menu; מחיקת נושא → confirm ✓ calls deleteTopic', () => {
+  it('round237 — the "+" at the START opens an inline box; Enter PREPENDS (no position)', () => {
     render(<TopicsTab discussion={discussion} canEdit />);
-    // pointerdown+pointerup (short press) on the ⋮ opens the menu.
-    const kebab = screen.getByLabelText('אפשרויות הנושא: נושא א');
-    fireEvent.pointerDown(kebab);
-    fireEvent.pointerUp(document);
+    fireEvent.click(screen.getByLabelText('נושא בתחילת הדיון'));
+    const input = screen.getByLabelText('שם הנושא החדש (בתחילת הדיון)');
+    fireEvent.change(input, { target: { value: 'נושא בהתחלה' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(state.addTopic).toHaveBeenCalledWith('נושא בהתחלה', {});
+  });
+
+  it('round237 — RIGHT-CLICK opens the topic menu; מחיקת נושא → confirm ✓ calls deleteTopic', () => {
+    render(<TopicsTab discussion={discussion} canEdit />);
+    fireEvent.contextMenu(screen.getAllByRole('tab')[0]); // נושא א
     fireEvent.click(screen.getByText('מחיקת נושא'));
     fireEvent.click(screen.getByLabelText('אישור מחיקה'));
     expect(state.deleteTopic).toHaveBeenCalledWith('t1');
   });
 
-  it('עריכת שם from the menu turns the label into an input; Enter renames', () => {
+  it('round237 — עריכת שם from the right-click menu turns the label into an RTL input; Enter renames', () => {
     render(<TopicsTab discussion={discussion} canEdit />);
-    const kebab = screen.getByLabelText('אפשרויות הנושא: נושא ב');
-    fireEvent.pointerDown(kebab);
-    fireEvent.pointerUp(document);
+    fireEvent.contextMenu(screen.getAllByRole('tab')[1]); // נושא ב
     fireEvent.click(screen.getByText('עריכת שם'));
     const input = screen.getByLabelText('ערוך שם נושא');
+    expect(input.getAttribute('dir')).not.toBe('ltr'); // RTL editing (owner request)
     fireEvent.change(input, { target: { value: 'נושא ב מעודכן' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(state.renameTopic).toHaveBeenCalledWith('t2', 'נושא ב מעודכן');
@@ -132,10 +137,13 @@ describe('TopicsTab — round235 topics ribbon', () => {
     expect(screen.queryByText('נקודה ב1')).toBeNull();
   });
 
-  it('no topics → no ribbon labels and the empty note renders', () => {
+  it('no topics → no ribbon labels (but the + buttons stay) and the empty note renders', () => {
     state.items = [];
     render(<TopicsTab discussion={discussion} canEdit />);
     expect(screen.queryAllByRole('tab').length).toBe(0);
+    // both end "+" buttons are always present so a first topic can be added
+    expect(screen.getByLabelText('נושא בתחילת הדיון')).toBeTruthy();
+    expect(screen.getByLabelText('נושא בסוף הדיון')).toBeTruthy();
     expect(screen.getByText('אין נושאים לדיון זה')).toBeTruthy();
   });
 });

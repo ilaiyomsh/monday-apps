@@ -44,12 +44,10 @@ describe('TopicsTab — round235 topic priority via the ribbon ⋮ menu (smoke)'
     expect(tabs[1].style.getPropertyValue('--tile-accent')).toContain('--topic-color-');
   });
 
-  it('the ⋮ menu lists the priority options and picking one writes it', () => {
+  it('round237 — the right-click menu lists the priority options and picking one writes it', () => {
     spies.updateTopicPriority = vi.fn();
     render(<TopicsTab discussion={{ id: 'D1' }} canEdit />);
-    const kebab = screen.getByLabelText('אפשרויות הנושא: נושא ב');
-    fireEvent.pointerDown(kebab);
-    fireEvent.pointerUp(document);
+    fireEvent.contextMenu(screen.getAllByRole('tab')[1]); // נושא ב
     expect(screen.getByText('עדיפות')).toBeTruthy();
     fireEvent.click(screen.getByText('גבוה'));
     expect(spies.updateTopicPriority).toHaveBeenCalledWith('t2', 'p1');

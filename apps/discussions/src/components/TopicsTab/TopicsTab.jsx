@@ -5,7 +5,7 @@ import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { Plus, Eye, EyeOff, MoreVertical, Trash2 } from 'lucide-react';
+import { Plus, Eye, EyeOff, Trash2 } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -23,7 +23,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { useTopics } from '@generated/hooks/useTopics';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
-import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
 import { UpdatesTripleBox } from './UpdatesTripleBox.jsx';
 import { buildMentionRoster } from '@generated/utils/mention.js';
@@ -613,22 +612,9 @@ export function TopicsTab({
     [discussion?.discussionLeadID, discussion?.discussionCoordinatorID, discussion?.participantsID],
   );
 
-  // round132 — toolbar Search (shared SearchPill): a topic whose NAME matches
-  // stays whole; otherwise it survives only with its matching points; topics
-  // with no match at all drop. Render-only — the source `items` (and thus the
-  // stored order / selection maps) are untouched.
-  const [search, setSearch] = useState('');
-  const visibleTopics = useMemo(() => {
-    const q = search.trim();
-    if (!q) return items;
-    return items
-      .map((t) => {
-        if (matchesSearch(t.name, q)) return t;
-        const pts = (t._subitems || []).filter((p) => matchesSearch(p.name, q));
-        return pts.length ? { ...t, _subitems: pts } : null;
-      })
-      .filter(Boolean);
-  }, [items, search]);
+  // round237 — search removed from the agenda header (owner request); the ribbon
+  // shows every topic as a label (no scrolling to browse), so a filter is moot.
+  const visibleTopics = items;
 
   const priorityMapped = !!getColumns('topics')?.topicPriorityID?.id;
   const priorityOpts = useStatusOptions('topics', 'topicPriorityID');
@@ -805,12 +791,11 @@ export function TopicsTab({
   // sections model.
   const [activeTopicId, setActiveTopicId] = useState(null);
   const activeInitRef = useRef(null);
-  const pendingActivateLastRef = useRef(false);
   const [renamingTopicId, setRenamingTopicId] = useState(null);
   const [topicMenu, setTopicMenu] = useState(null); // { topicId, x, y, confirm }
-  const [ribbonPreview, setRibbonPreview] = useState(null); // ids during a ribbon drag
   const [draggingTopicId, setDraggingTopicId] = useState(null);
-  const [addingTopic, setAddingTopic] = useState(false);
+  const [gapBeforeId, setGapBeforeId] = useState(null); // round237 — the insertion gap marker
+  const [addWhere, setAddWhere] = useState(null); // round237 — 'start' | 'end' | null
   const [newTopicText, setNewTopicText] = useState('');
   const stableDiscussionSeedRef = useRef(topicColorStartIndex(`discussion:${discussion?.id || 'default'}`));
   const topicAccentMapRef = useRef({});
@@ -865,19 +850,23 @@ export function TopicsTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetViewNonce]);
 
-  // The ribbon adds topics at the END (leftmost); activate the new topic as
-  // soon as the optimistic item lands in `items`.
-  const handleAddTopic = () => {
-    if (!newTopicText.trim()) return;
-    pendingActivateLastRef.current = true;
-    addTopic(newTopicText.trim(), { position: 'bottom' });
+  // round237 — the "+" exists at BOTH ends: 'start' (rightmost, beginning of the
+  // discussion) prepends; 'end' (leftmost) appends. Activate the new topic once
+  // the optimistic item lands in `items`.
+  const pendingActivateWhereRef = useRef(null);
+  const handleAddTopic = (where) => {
+    const w = where || addWhere;
+    if (!newTopicText.trim()) { setAddWhere(null); setNewTopicText(''); return; }
+    pendingActivateWhereRef.current = w === 'start' ? 'start' : 'end';
+    addTopic(newTopicText.trim(), w === 'start' ? {} : { position: 'bottom' });
     setNewTopicText('');
-    setAddingTopic(false);
+    setAddWhere(null);
   };
   useEffect(() => {
-    if (!pendingActivateLastRef.current || items.length === 0) return;
-    pendingActivateLastRef.current = false;
-    setActiveTopicId(String(items[items.length - 1].id));
+    const w = pendingActivateWhereRef.current;
+    if (!w || items.length === 0) return;
+    pendingActivateWhereRef.current = null;
+    setActiveTopicId(String(w === 'start' ? items[0].id : items[items.length - 1].id));
   }, [items]);
 
   // The ACTIVE topic — falls back to the first visible one when the selected
@@ -893,58 +882,82 @@ export function TopicsTab({
   // ONE reorderTopics persist happens on drop. Disabled while a search filter
   // is active (the ribbon then shows a partial list — reordering it would be
   // ambiguous).
-  const ribbonTopics = useMemo(() => {
-    if (!ribbonPreview) return visibleTopics;
-    const byId = new Map(visibleTopics.map((t) => [String(t.id), t]));
-    return ribbonPreview.map((id) => byId.get(id)).filter(Boolean);
-  }, [visibleTopics, ribbonPreview]);
+  const ribbonTopics = visibleTopics;
+  const ribbonElRef = useRef(null);
 
-  const canDragRibbon = editTopicOrPoint && !search.trim();
-  const ribbonDragStateRef = useRef(null);
-  const handleKebabPointerDown = (e, topic) => {
-    e.stopPropagation();
+  const canDragRibbon = editTopicOrPoint;
+  const ghostRef = useRef(null);
+  const clearGhost = () => { if (ghostRef.current) { ghostRef.current.remove(); ghostRef.current = null; } };
+
+  // round237 — RIGHT-CLICK on a topic opens the edit/delete menu at the cursor.
+  const handleTileContextMenu = (e, topic) => {
+    e.preventDefault();
+    if (!(editTopicOrPoint || deleteTopicOrPoint || canHide)) return;
+    setTopicMenu({
+      topicId: String(topic.id),
+      x: Math.max(10, Math.min(e.clientX, (typeof window !== 'undefined' ? window.innerWidth : 9999) - 180)),
+      y: e.clientY + 4,
+      confirm: false,
+    });
+  };
+
+  // round237 — LEFT long-press (>~0.55s) starts a GHOST drag: a faded clone
+  // follows the cursor and the ribbon opens a spacing GAP at the drop point;
+  // the ONE reorderTopics persist happens on drop. Disabled while searching
+  // (partial list ⇒ ambiguous order) or when editing is off.
+  const handleTilePointerDown = (e, topic) => {
+    if (e.button !== 0 || renamingTopicId === topic.id || !canDragRibbon) return;
     const topicId = String(topic.id);
-    const kebabEl = e.currentTarget;
-    const state = { dragging: false, order: visibleTopics.map((t) => String(t.id)) };
-    ribbonDragStateRef.current = state;
-    const timer = canDragRibbon ? setTimeout(() => {
-      state.dragging = true;
-      setDraggingTopicId(topicId);
-      setRibbonPreview(state.order);
+    const startX = e.clientX, startY = e.clientY;
+    const tileEl = e.currentTarget;
+    let armed = false;
+    let gapBefore = null;
+    const timer = setTimeout(() => {
+      armed = true;
       setTopicMenu(null);
-    }, 450) : null;
+      setDraggingTopicId(topicId);
+      const g = document.createElement('div');
+      g.className = styles.ribbonGhost;
+      g.textContent = topic.name || '';
+      g.style.background = getComputedStyle(tileEl).backgroundColor;
+      g.style.left = startX + 'px';
+      g.style.top = startY + 'px';
+      document.body.appendChild(g);
+      ghostRef.current = g;
+    }, 560);
 
     const onMove = (ev) => {
-      if (!state.dragging) return;
-      const under = document.elementFromPoint(ev.clientX, ev.clientY);
-      const overTile = under && under.closest('[data-ribbon-topic]');
-      if (!overTile) return;
-      const overId = overTile.getAttribute('data-ribbon-topic');
-      if (overId === topicId) return;
-      const from = state.order.indexOf(topicId);
-      const to = state.order.indexOf(overId);
-      if (from < 0 || to < 0 || from === to) return;
-      state.order = arrayMove(state.order, from, to);
-      setRibbonPreview(state.order);
+      if (!armed) return;
+      if (ghostRef.current) { ghostRef.current.style.left = ev.clientX + 'px'; ghostRef.current.style.top = ev.clientY + 'px'; }
+      // RTL row: the drop lands BEFORE the first tile whose center the cursor
+      // has crossed to its left.
+      const tiles = ribbonElRef.current ? [...ribbonElRef.current.querySelectorAll('[data-ribbon-topic]')] : [];
+      let before = null;
+      for (const tl of tiles) {
+        if (tl.getAttribute('data-ribbon-topic') === topicId) continue;
+        const r = tl.getBoundingClientRect();
+        if (ev.clientX < r.left + r.width / 2) before = tl.getAttribute('data-ribbon-topic');
+      }
+      gapBefore = before;
+      setGapBeforeId(before);
     };
     const onUp = () => {
-      if (timer) clearTimeout(timer);
+      clearTimeout(timer);
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
-      if (state.dragging) {
+      if (armed) {
+        clearGhost();
         setDraggingTopicId(null);
-        setRibbonPreview(null);
-        reorderTopics(state.order);
-      } else {
-        const r = kebabEl.getBoundingClientRect();
-        setTopicMenu((cur) => (cur?.topicId === topicId ? null : {
-          topicId,
-          x: Math.max(10, r.right - 160),
-          y: r.bottom + 5,
-          confirm: false,
-        }));
+        const order = visibleTopics.map((t) => String(t.id));
+        const from = order.indexOf(topicId);
+        if (from > -1) {
+          order.splice(from, 1);
+          const to = gapBefore != null ? order.indexOf(String(gapBefore)) : -1;
+          if (to > -1) order.splice(to, 0, topicId); else order.push(topicId);
+          reorderTopics(order);
+        }
+        setGapBeforeId(null);
       }
-      ribbonDragStateRef.current = null;
     };
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
@@ -1008,12 +1021,11 @@ export function TopicsTab({
           labeled אג'נדה, and a toolbar strip (נושא חדש · מתבנית · חיפוש · הסתר
           · כווץ) mirroring the triple box's formatting bar. */}
       <div className={styles.agendaBox}>
-      {/* round235 — the header hosts the search + templates (the old toolbar
-          buttons under it are gone; the ribbon took that band). */}
-      <div className={styles.agendaHead}>
-        אג'נדה
+      {/* round237 — "אג'נדה" on the RIGHT (start); the search was removed; the
+          templates control (with preview) sits on the LEFT (end). */}
+      <div className={styles.agendaHead} dir="rtl">
+        <span>אג'נדה</span>
         <span className={styles.headTools}>
-          <SearchPill value={search} onChange={setSearch} />
           {addTopicOrPoint && (
             <ApplyTemplateMenu
               discussionId={discussion.id}
@@ -1027,7 +1039,36 @@ export function TopicsTab({
           full-height muted status-label with a gentle 9px arrow point toward
           the NEXT topic (left, RTL). Click = select; ⋮ = menu (rename /
           priority / hide / delete); LONG-PRESS the ⋮ = horizontal drag. */}
-      <div className={`${styles.toolbar} ${styles.ribbon}`}>
+      <div className={`${styles.toolbar} ${styles.ribbon}`} ref={ribbonElRef}>
+        {/* round237 — the "+" at the START (rightmost): a puzzle piece that
+            completes the first topic's back edge; opens an inline editable box. */}
+        {addTopicOrPoint && (addWhere === 'start' ? (
+          <div className={styles.ribbonAddForm}>
+            <input
+              className={styles.ribbonAddInput}
+              autoFocus
+              value={newTopicText}
+              placeholder="שם הנושא…"
+              aria-label="שם הנושא החדש (בתחילת הדיון)"
+              onChange={(e) => setNewTopicText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); handleAddTopic('start'); }
+                if (e.key === 'Escape') { setAddWhere(null); setNewTopicText(''); }
+              }}
+              onBlur={() => handleAddTopic('start')}
+            />
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={styles.ribbonAdd}
+            title="נושא בתחילת הדיון"
+            aria-label="נושא בתחילת הדיון"
+            onClick={() => { setAddWhere('start'); setNewTopicText(''); }}
+          >
+            <Plus size={15} />
+          </button>
+        ))}
         {ribbonTopics.map((topic, i) => {
           const topicId = String(topic.id);
           const prioColor = topic.priority != null ? priorityOpts.colorById?.[topic.priority] : null;
@@ -1038,7 +1079,8 @@ export function TopicsTab({
             styles.ribbonTile,
             isActive ? styles.ribbonTileOn : '',
             excluded ? styles.ribbonTileExcluded : '',
-            draggingTopicId === topicId ? styles.ribbonTileDragging : '',
+            draggingTopicId === topicId ? styles.ribbonTileGhosted : '',
+            gapBeforeId === topicId ? styles.ribbonTileGapBefore : '',
           ].filter(Boolean).join(' ');
           return (
             <div
@@ -1051,6 +1093,8 @@ export function TopicsTab({
               tabIndex={0}
               onClick={() => { setActiveTopicId(topicId); setTopicMenu(null); }}
               onKeyDown={(e) => { if (e.key === 'Enter') setActiveTopicId(topicId); }}
+              onContextMenu={(e) => handleTileContextMenu(e, topic)}
+              onPointerDown={(e) => handleTilePointerDown(e, topic)}
               title={topic.name}
             >
               {renamingTopicId === topicId ? (
@@ -1079,54 +1123,36 @@ export function TopicsTab({
                 <span className={styles.ribbonName}>{topic.name}</span>
               )}
               {excluded && <EyeOff size={12} className={styles.ribbonEye} aria-label="נושא מוסתר" />}
-              {(editTopicOrPoint || deleteTopicOrPoint || canHide) && renamingTopicId !== topicId && (
-                <button
-                  type="button"
-                  className={styles.ribbonKebab}
-                  title="אפשרויות (לחיצה ארוכה — גרירה)"
-                  aria-label={`אפשרויות הנושא: ${topic.name}`}
-                  onPointerDown={(e) => handleKebabPointerDown(e, topic)}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <MoreVertical size={14} />
-                </button>
-              )}
             </div>
           );
         })}
-        {addTopicOrPoint && (addingTopic ? (
-          <div className={styles.ribbonAddForm}>
+        {/* round237 — the "+" at the END (leftmost): completes the puzzle at the
+            end of the discussion; opens an inline editable box. */}
+        {addTopicOrPoint && (addWhere === 'end' ? (
+          <div className={`${styles.ribbonAddForm} ${styles.ribbonAddFormEnd}`}>
             <input
               className={styles.ribbonAddInput}
               autoFocus
               value={newTopicText}
               placeholder="שם הנושא…"
-              aria-label="שם הנושא החדש"
+              aria-label="שם הנושא החדש (בסוף הדיון)"
               onChange={(e) => setNewTopicText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); handleAddTopic(); }
-                if (e.key === 'Escape') { setAddingTopic(false); setNewTopicText(''); }
+                if (e.key === 'Enter') { e.preventDefault(); handleAddTopic('end'); }
+                if (e.key === 'Escape') { setAddWhere(null); setNewTopicText(''); }
               }}
-              onBlur={() => { if (!newTopicText.trim()) { setAddingTopic(false); setNewTopicText(''); } }}
+              onBlur={() => handleAddTopic('end')}
             />
-            <button
-              type="button"
-              className={styles.ribbonAddOk}
-              onClick={handleAddTopic}
-              disabled={!newTopicText.trim()}
-            >
-              הוסף
-            </button>
           </div>
         ) : (
           <button
             type="button"
-            className={styles.ribbonAdd}
-            title="נושא חדש"
-            aria-label="נושא חדש"
-            onClick={() => setAddingTopic(true)}
+            className={`${styles.ribbonAdd} ${styles.ribbonAddEnd}`}
+            title="נושא בסוף הדיון"
+            aria-label="נושא בסוף הדיון"
+            onClick={() => { setAddWhere('end'); setNewTopicText(''); }}
           >
-            <Plus size={14} /> נושא
+            <Plus size={15} />
           </button>
         ))}
       </div>
@@ -1182,7 +1208,7 @@ export function TopicsTab({
       </DndContext>
       )}
 
-      {items.length === 0 && !addingTopic && (
+      {items.length === 0 && !addWhere && (
         <div className={styles.empty}>אין נושאים לדיון זה</div>
       )}
       </div>{/* .agendaBody */}
