@@ -71,10 +71,15 @@ export function QuickCreateModal({
     setDeadline(null);
   }, [open, initialMode, allowDecision, allowTask]);
 
-  // Focus the text input on open (matches NewTaskModal).
+  // round229 (owner request) — focus the text input the moment the card opens
+  // AND every time the משימה/החלטה toggle switches, so the user can type
+  // immediately without clicking into the field. rAF defers the focus to after
+  // the (re)render so the anchored/re-keyed input actually receives it.
   useEffect(() => {
-    if (open && inputRef.current) inputRef.current.focus();
-  }, [open]);
+    if (!open) return undefined;
+    const id = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [open, mode]);
 
   // Escape closes the modal.
   useEffect(() => {

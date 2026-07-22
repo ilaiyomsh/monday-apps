@@ -372,6 +372,20 @@ export default function App() {
   const [deepLinkSplash, setDeepLinkSplash] = useState(() => Boolean(readLaunchParams().discussionId));
   const deepLinkArmedRef = useRef(Boolean(launchParams.discussionId));
 
+  // round230 (owner request) — a produced link should ALWAYS land the recipient
+  // on ניהול דיון with the רקע (background) box active and the topics/points
+  // collapsed. This nonce bumps on every genuine link activation (launchParams
+  // only change when the app receives discussionId/tab — ordinary monday
+  // `location` events without those params leave it untouched), and is threaded
+  // to DiscussionCard → TopicsTab → UpdatesTripleBox to FORCE that landing
+  // state, so it holds even when the discussion is already open on another
+  // pane/expanded — not just by relying on the fresh-open defaults.
+  const [deepLinkNonce, setDeepLinkNonce] = useState(0);
+  useEffect(() => {
+    if (!launchParams.discussionId) return;
+    setDeepLinkNonce((n) => n + 1);
+  }, [launchParams.discussionId, launchParams.tab]);
+
   // round207 — the discussion whose per-discussion export dialog is open (null
   // = closed). Export is a FIXED rule (creator/lead/coordinator + board owner,
   // exportGate.js), no longer the exportDocs matrix capability.
@@ -1009,6 +1023,7 @@ export default function App() {
             initialTab={createdTabTarget?.tab ?? launchParams.tab}
             initialTabDiscussionId={createdTabTarget?.id ?? launchParams.discussionId}
             onInitialTabReady={handleDeepLinkReady}
+            deepLinkNonce={createdTabTarget ? 0 : deepLinkNonce}
             canManageSettings={canManageSettings}
           />
         )}

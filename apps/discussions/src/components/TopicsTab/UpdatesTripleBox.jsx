@@ -283,6 +283,9 @@ export function UpdatesTripleBox({
   // round220 — participants offered by the @-mention popup (lead→coordinator→
   // participants, deduped; built by the caller). Empty ⇒ no mention affordance.
   mentionPeople = [],
+  // round230 — bumps on a produced-link activation: jump to the רקע (background)
+  // pane so the link always lands with the background box open.
+  resetPaneNonce = 0,
 }) {
   const background = useBackground(showBackground ? discussionId : null);
   const references = useReferences(showReferences ? discussionId : null);
@@ -303,6 +306,15 @@ export function UpdatesTripleBox({
   useEffect(() => {
     if (panes.length && !panes.some((p) => p.key === activeKey)) setActiveKey(panes[0].key);
   }, [panes, activeKey]);
+
+  // round230 — a produced-link activation jumps to the רקע (background) pane so
+  // the link lands with the background box open (falls back to the first visible
+  // pane if the owner hid רקע). Guarded on >0 so it never fires on a normal open.
+  useEffect(() => {
+    if (resetPaneNonce <= 0) return;
+    setActiveKey(panes.some((p) => p.key === 'background') ? 'background' : (panes[0]?.key || 'background'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetPaneNonce]);
 
   if (!panes.length) return null;
 

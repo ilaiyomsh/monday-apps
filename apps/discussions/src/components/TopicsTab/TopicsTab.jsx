@@ -242,7 +242,11 @@ function SortableTopicSection({
     if (!t) return;
     addPoint(topic.id, t);
     setNewPointText('');
-    addPointInputRef.current?.focus();
+    // round229 (owner request) — after Enter, the add-point input stays open at
+    // the bottom and RE-FOCUSES so the next point can be typed immediately (no
+    // mouse click). rAF defers past the optimistic re-render that re-inserts the
+    // list, which would otherwise drop focus from the remounted input.
+    requestAnimationFrame(() => addPointInputRef.current?.focus());
   };
 
   const saveTopicTitle = () => {
@@ -556,6 +560,9 @@ export function TopicsTab({
   // round132 — reports useTopics' loading flag up to DiscussionCard, which
   // gates the deep-link splash (App) until the topics data is actually ready.
   onLoadingChange = null,
+  // round230 — bumps on every produced-link activation: forces the ניהול-דיון
+  // landing state — collapse ALL topics/points + open the רקע pane.
+  resetViewNonce = 0,
 }) {
   const {
     items, loading, addTopic, addPoint, retryCreate, togglePoint, refetch,
@@ -812,6 +819,22 @@ export function TopicsTab({
     setCollapsed(seed);
   }, [loading, discussion?.id, items]);
 
+  // round230 — a produced-link activation (resetViewNonce bump) FORCES the
+  // ניהול-דיון landing state regardless of any current in-view state: collapse
+  // ALL topics/points, and signal the triple box to open on the רקע pane
+  // (paneResetNonce). Guarded on >0 so it never fires on a normal open.
+  const [paneResetNonce, setPaneResetNonce] = useState(0);
+  useEffect(() => {
+    if (resetViewNonce <= 0) return;
+    const seed = {};
+    items.forEach((t) => { seed[t.id] = true; });
+    setCollapsed(seed);
+    setPaneResetNonce((n) => n + 1);
+    // items are read at fire time; keying on them would re-collapse on every
+    // optimistic change — the nonce is the intended, sole trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetViewNonce]);
+
   const isOpen = (id) => collapsed[id] !== true;
   const anyOpen = items.some((t) => t.notForDiscussion !== true && isOpen(t.id));
   const toggleAll = () => {
@@ -1063,6 +1086,7 @@ export function TopicsTab({
           showReferences={showReferences}
           showSummary={showSummary}
           mentionPeople={mentionPeople}
+          resetPaneNonce={paneResetNonce}
         />
       </div>
       )}
