@@ -1,12 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Skeleton, Button, TextField, Dialog, DialogContentContainer, Text, Checkbox } from '@vibe/core';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Skeleton, Button, Dialog, DialogContentContainer, Text, Checkbox } from '@vibe/core';
 import { CloseSmall, DropdownChevronDown, Edit } from '@vibe/icons';
-import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { Plus, Eye, EyeOff } from 'lucide-react';
+import { Plus, Eye, EyeOff, MoreVertical, Trash2 } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -24,7 +23,6 @@ import { CSS } from '@dnd-kit/utilities';
 import { useTopics } from '@generated/hooks/useTopics';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
-import { HideColumnsControl } from '@generated/components/MyTasksView/controls/HideColumnsControl.jsx';
 import { SearchPill, matchesSearch } from '@generated/components/SearchPill';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
 import { UpdatesTripleBox } from './UpdatesTripleBox.jsx';
@@ -189,6 +187,10 @@ function SortableTopicSection({
   // ('decision:<id>' / 'task:<id>' → 'pending' | 'success' | 'error'). Drives the
   // inline CreateProgressBar on the matching תוצרים cluster.
   createStatusByPoint,
+  // round235 (approved mockup) — the topics RIBBON owns the topic-level chrome
+  // (name, rename, priority, hide, delete, drag), so the single ACTIVE section
+  // renders HEADLESS: no card head, points always visible, no card frame.
+  headless = false,
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(topic.id) });
   const accentTri = `var(${accent})`;
@@ -275,11 +277,42 @@ function SortableTopicSection({
       ref={setNodeRef}
       style={style}
       dir="rtl"
-      className={`${styles.section} ${excluded ? styles.sectionExcluded : ''}`}
+      className={`${styles.section} ${excluded ? styles.sectionExcluded : ''} ${headless ? styles.sectionHeadless : ''}`}
     >
+      {/* round235 — headless mode: the ribbon owns the topic chrome. A failed
+          background create keeps its retry affordance as a slim banner, and a
+          hidden topic shows a restore notice instead of its points. */}
+      {headless && topicFailed && onRetryCreate && (
+        <div className={styles.topicRetryBanner}>
+          <button
+            type="button"
+            className={styles.topicRetryBtn}
+            onClick={() => onRetryCreate(topic.id)}
+            title="שמירת הנושא נכשלה — נסה שוב"
+          >
+            שמירה נכשלה · נסה שוב
+          </button>
+        </div>
+      )}
+      {headless && excluded && (
+        <div className={styles.excludedNote}>
+          <EyeOff size={14} />
+          <span>הנושא מוסתר («לא לדיון»)</span>
+          {canHideTopic && (
+            <button
+              type="button"
+              className={styles.excludedShowBtn}
+              onClick={() => toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(topic.id, false)}
+            >
+              הצג נושא
+            </button>
+          )}
+        </div>
+      )}
       {/* Card header — the WHOLE tinted row toggles collapse (deferred so a
           double-click rename on the title can cancel it); controls stop
           propagation. Hover reveals the actions cluster (mockup .tActs). */}
+      {!headless && (
       <div
         className={`${styles.cardHead} ${canEditTopic ? styles.sectionHeaderDraggable : ''}`}
         {...headerDragProps}
@@ -427,8 +460,9 @@ function SortableTopicSection({
           />
         )}
       </div>
+      )}
 
-      {effectiveOpen && (
+      {(headless ? !excluded : effectiveOpen) && (
         <div className={styles.cardBody}>
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handlePointDragEnd}>
             <SortableContext items={points.map((p) => String(p.id))} strategy={verticalListSortingStrategy}>
@@ -702,28 +736,13 @@ export function TopicsTab({
   // never hideable. Applied at the render layer — a hidden column drops its
   // header cell, its per-row cell, AND its grid track (via columnDefs below);
   // widths persist per key, so a re-shown column returns at its stored width.
-  const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('topics', { canManageSettings });
-  const columnList = [
-    { key: 'name', label: 'נקודה לדיון', icon: 'text', locked: true },
-    { key: 'check', label: '#', icon: 'check' }, // round 52: displayed title "#" (was "נידונה")
-    { key: 'outputs', label: 'תוצרים', icon: 'relation' },
-  ];
-  const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
-  const [hiddenColumns, setHiddenColumns] = useState(
+  // round235 — the HideColumnsControl UI left the toolbar (the ribbon owns that
+  // band now; owner: "תעלים את הכפתורים... הסתר"), but a previously-SAVED
+  // hidden-columns view still applies to every point row.
+  const { view: savedView } = useSavedViews('topics', { canManageSettings });
+  const [hiddenColumns] = useState(
     () => new Set(Array.isArray(savedView?.hiddenColumns) ? savedView.hiddenColumns : [])
   );
-  const toggleColumn = useCallback((key) => setHiddenColumns((prev) => {
-    const next = new Set(prev);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    return next;
-  }), []);
-  const showAllColumns = useCallback((show) => {
-    setHiddenColumns(show ? new Set() : new Set(hideableKeys));
-  }, [hideableKeys]);
-  const saveHiddenColumns = useCallback(() => {
-    saveView({ hiddenColumns: [...hiddenColumns] });
-    onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
-  }, [saveView, hiddenColumns, onNotify]);
   // Visible column keys — 'name' always kept; the other three drop when hidden.
   const visibleKeys = useMemo(
     () => TOPIC_COLUMN_KEYS.filter((k) => k === 'name' || !hiddenColumns.has(k)),
@@ -781,8 +800,16 @@ export function TopicsTab({
   const { users } = useUsers(creatorIds);
   const usersById = useMemo(() => Object.fromEntries(users.map((u) => [String(u.id), u])), [users]);
 
-  const [collapsed, setCollapsed] = useState({});
-  const collapseInitRef = useRef(null);
+  // round235 (approved mockup) — ONE topic is ACTIVE at a time; the ribbon
+  // selects it and its points render below. Replaces the collapse-all/stacked
+  // sections model.
+  const [activeTopicId, setActiveTopicId] = useState(null);
+  const activeInitRef = useRef(null);
+  const pendingActivateLastRef = useRef(false);
+  const [renamingTopicId, setRenamingTopicId] = useState(null);
+  const [topicMenu, setTopicMenu] = useState(null); // { topicId, x, y, confirm }
+  const [ribbonPreview, setRibbonPreview] = useState(null); // ids during a ribbon drag
+  const [draggingTopicId, setDraggingTopicId] = useState(null);
   const [addingTopic, setAddingTopic] = useState(false);
   const [newTopicText, setNewTopicText] = useState('');
   const stableDiscussionSeedRef = useRef(topicColorStartIndex(`discussion:${discussion?.id || 'default'}`));
@@ -816,70 +843,111 @@ export function TopicsTab({
   // header control still works; a small press-move starts the group drag.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
+  // round235 — entering a discussion (or switching) lands on the FIRST topic.
   useEffect(() => {
     if (loading) return;
-    if (collapseInitRef.current === discussion?.id) return;
-    collapseInitRef.current = discussion?.id;
-    // round206 (owner request, approved mockup): every topic starts COLLAPSED
-    // on entering the ניהול-דיון view / switching discussions. Manual
-    // collapse/expand (chevron, title click, collapse-all) keeps writing
-    // per-topic flags into `collapsed` from here on. Newly-added topics are
-    // not in the seed map, so they open expanded — ready for typing points.
-    const seed = {};
-    items.forEach((t) => { seed[t.id] = true; });
-    setCollapsed(seed);
+    if (activeInitRef.current === discussion?.id) return;
+    activeInitRef.current = discussion?.id;
+    setActiveTopicId(items[0] ? String(items[0].id) : null);
   }, [loading, discussion?.id, items]);
 
-  // round230 — a produced-link activation (resetViewNonce bump) FORCES the
-  // ניהול-דיון landing state regardless of any current in-view state: collapse
-  // ALL topics/points, and signal the triple box to open on the רקע pane
-  // (paneResetNonce). Guarded on >0 so it never fires on a normal open.
+  // round230/235 — a produced-link activation (resetViewNonce bump) FORCES the
+  // ניהול-דיון landing state: back to the FIRST topic, and signal the triple
+  // box to open on the רקע pane (paneResetNonce). Guarded on >0 so it never
+  // fires on a normal open.
   const [paneResetNonce, setPaneResetNonce] = useState(0);
   useEffect(() => {
     if (resetViewNonce <= 0) return;
-    const seed = {};
-    items.forEach((t) => { seed[t.id] = true; });
-    setCollapsed(seed);
+    setActiveTopicId(items[0] ? String(items[0].id) : null);
     setPaneResetNonce((n) => n + 1);
-    // items are read at fire time; keying on them would re-collapse on every
+    // items are read at fire time; keying on them would re-reset on every
     // optimistic change — the nonce is the intended, sole trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetViewNonce]);
 
-  const isOpen = (id) => collapsed[id] !== true;
-  const anyOpen = items.some((t) => t.notForDiscussion !== true && isOpen(t.id));
-  const toggleAll = () => {
-    if (anyOpen) { const c = {}; items.forEach((t) => { c[t.id] = true; }); setCollapsed(c); }
-    else setCollapsed({});
-  };
-
+  // The ribbon adds topics at the END (leftmost); activate the new topic as
+  // soon as the optimistic item lands in `items`.
   const handleAddTopic = () => {
     if (!newTopicText.trim()) return;
-    addTopic(newTopicText.trim());
+    pendingActivateLastRef.current = true;
+    addTopic(newTopicText.trim(), { position: 'bottom' });
     setNewTopicText('');
     setAddingTopic(false);
   };
+  useEffect(() => {
+    if (!pendingActivateLastRef.current || items.length === 0) return;
+    pendingActivateLastRef.current = false;
+    setActiveTopicId(String(items[items.length - 1].id));
+  }, [items]);
 
-  // round198 — a SECOND add-topic entry under the LAST group (owner request), so
-  // a long topics list doesn't force scrolling back to the top toolbar.
-  // round201 — passes position:'bottom' so the new topic actually lands (and is
-  // persisted) BELOW the last group, not prepended like the toolbar button.
-  const [addingTopicBottom, setAddingTopicBottom] = useState(false);
-  const [newTopicBottomText, setNewTopicBottomText] = useState('');
-  const handleAddTopicBottom = () => {
-    if (!newTopicBottomText.trim()) return;
-    addTopic(newTopicBottomText.trim(), { position: 'bottom' });
-    setNewTopicBottomText('');
-    setAddingTopicBottom(false);
-  };
+  // The ACTIVE topic — falls back to the first visible one when the selected
+  // id vanished (deleted / filtered out by search).
+  const activeTopic = useMemo(() => {
+    const found = visibleTopics.find((t) => String(t.id) === String(activeTopicId));
+    return found || visibleTopics[0] || null;
+  }, [visibleTopics, activeTopicId]);
 
-  const handleTopicDragEnd = ({ active, over }) => {
-    if (!over || active.id === over.id) return;
-    const ids = items.map((t) => String(t.id));
-    const oldIndex = ids.indexOf(String(active.id));
-    const newIndex = ids.indexOf(String(over.id));
-    if (oldIndex < 0 || newIndex < 0) return;
-    reorderTopics(arrayMove(ids, oldIndex, newIndex));
+  // ---- ribbon drag (long-press on the ⋮) ------------------------------------
+  // Long-press (450ms) on a label's ⋮ arms a horizontal drag; a short click
+  // opens the topic menu. During the drag a local preview order renders; the
+  // ONE reorderTopics persist happens on drop. Disabled while a search filter
+  // is active (the ribbon then shows a partial list — reordering it would be
+  // ambiguous).
+  const ribbonTopics = useMemo(() => {
+    if (!ribbonPreview) return visibleTopics;
+    const byId = new Map(visibleTopics.map((t) => [String(t.id), t]));
+    return ribbonPreview.map((id) => byId.get(id)).filter(Boolean);
+  }, [visibleTopics, ribbonPreview]);
+
+  const canDragRibbon = editTopicOrPoint && !search.trim();
+  const ribbonDragStateRef = useRef(null);
+  const handleKebabPointerDown = (e, topic) => {
+    e.stopPropagation();
+    const topicId = String(topic.id);
+    const kebabEl = e.currentTarget;
+    const state = { dragging: false, order: visibleTopics.map((t) => String(t.id)) };
+    ribbonDragStateRef.current = state;
+    const timer = canDragRibbon ? setTimeout(() => {
+      state.dragging = true;
+      setDraggingTopicId(topicId);
+      setRibbonPreview(state.order);
+      setTopicMenu(null);
+    }, 450) : null;
+
+    const onMove = (ev) => {
+      if (!state.dragging) return;
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      const overTile = under && under.closest('[data-ribbon-topic]');
+      if (!overTile) return;
+      const overId = overTile.getAttribute('data-ribbon-topic');
+      if (overId === topicId) return;
+      const from = state.order.indexOf(topicId);
+      const to = state.order.indexOf(overId);
+      if (from < 0 || to < 0 || from === to) return;
+      state.order = arrayMove(state.order, from, to);
+      setRibbonPreview(state.order);
+    };
+    const onUp = () => {
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      if (state.dragging) {
+        setDraggingTopicId(null);
+        setRibbonPreview(null);
+        reorderTopics(state.order);
+      } else {
+        const r = kebabEl.getBoundingClientRect();
+        setTopicMenu((cur) => (cur?.topicId === topicId ? null : {
+          topicId,
+          x: Math.max(10, r.right - 160),
+          y: r.bottom + 5,
+          confirm: false,
+        }));
+      }
+      ribbonDragStateRef.current = null;
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
   };
 
   // Create-from-point callbacks — rendered only when the parent provided the
@@ -940,70 +1008,140 @@ export function TopicsTab({
           labeled אג'נדה, and a toolbar strip (נושא חדש · מתבנית · חיפוש · הסתר
           · כווץ) mirroring the triple box's formatting bar. */}
       <div className={styles.agendaBox}>
-      <div className={styles.agendaHead}>אג'נדה</div>
-      {/* round206 — the features row lives INSIDE the topics column so the
-          triple box's top edge aligns with it (approved mockup). */}
-      <div className={styles.toolbar}>
-        <div className={styles.toolbarLeft}>
-          {addTopicOrPoint && (!addingTopic ? (
-            <Button kind={"primary"} size={"small"} onClick={() => setAddingTopic(true)}>
-              נושא חדש
-            </Button>
-          ) : (
-            <div className={styles.addTopicRow}>
-              <TextField
-                autoFocus
-                value={newTopicText}
-                onChange={(v) => setNewTopicText(v)}
-                placeholder="שם נושא"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); handleAddTopic(); }
-                  if (e.key === 'Escape') { setAddingTopic(false); setNewTopicText(''); }
-                }}
-              />
-              <Button kind={"primary"} size={"small"} onClick={handleAddTopic} disabled={!newTopicText.trim()}>
-                הוסף
-              </Button>
-              <Button kind={"tertiary"} size={"small"} onClick={() => { setAddingTopic(false); setNewTopicText(''); }}>
-                ביטול
-              </Button>
-            </div>
-          ))}
-          {addTopicOrPoint && !addingTopic && (
+      {/* round235 — the header hosts the search + templates (the old toolbar
+          buttons under it are gone; the ribbon took that band). */}
+      <div className={styles.agendaHead}>
+        אג'נדה
+        <span className={styles.headTools}>
+          <SearchPill value={search} onChange={setSearch} />
+          {addTopicOrPoint && (
             <ApplyTemplateMenu
               discussionId={discussion.id}
               onApplied={() => refetch({ showLoader: false })}
             />
           )}
-        </div>
-        <div className={styles.toolbarSpacer} />
-        {/* round132 — toolbar Search (shared SearchPill). */}
-        <SearchPill value={search} onChange={setSearch} />
-        {/* Hide columns (round 47) — owners only. Non-owners never see it and
-            always get the saved config applied to every topic's points table. */}
-        {canManageSettings && (
-          <HideColumnsControl
-            columns={columnList}
-            hidden={hiddenColumns}
-            onToggle={toggleColumn}
-            onToggleAll={showAllColumns}
-            onSave={canSaveView ? saveHiddenColumns : null}
-          />
-        )}
-        {items.length > 0 && (
-          <CollapseAllButton collapsed={!anyOpen} onClick={toggleAll} />
-        )}
+        </span>
+      </div>
+      {/* round235 (approved mockup v3, muted colors) — the TOPICS RIBBON fills
+          the 48px band that used to hold נושא חדש/הסתר/כווץ: every topic is a
+          full-height muted status-label with a gentle 9px arrow point toward
+          the NEXT topic (left, RTL). Click = select; ⋮ = menu (rename /
+          priority / hide / delete); LONG-PRESS the ⋮ = horizontal drag. */}
+      <div className={`${styles.toolbar} ${styles.ribbon}`}>
+        {ribbonTopics.map((topic, i) => {
+          const topicId = String(topic.id);
+          const prioColor = topic.priority != null ? priorityOpts.colorById?.[topic.priority] : null;
+          const accentVar = accentByTopicId[topic.id] || '--topic-color-1';
+          const isActive = activeTopic && String(activeTopic.id) === topicId;
+          const excluded = topic.notForDiscussion === true;
+          const tileClass = [
+            styles.ribbonTile,
+            isActive ? styles.ribbonTileOn : '',
+            excluded ? styles.ribbonTileExcluded : '',
+            draggingTopicId === topicId ? styles.ribbonTileDragging : '',
+          ].filter(Boolean).join(' ');
+          return (
+            <div
+              key={topicId}
+              data-ribbon-topic={topicId}
+              className={tileClass}
+              style={{ '--tile-accent': prioColor || `hsl(var(${accentVar}))`, zIndex: ribbonTopics.length - i }}
+              role="tab"
+              aria-selected={!!isActive}
+              tabIndex={0}
+              onClick={() => { setActiveTopicId(topicId); setTopicMenu(null); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') setActiveTopicId(topicId); }}
+              title={topic.name}
+            >
+              {renamingTopicId === topicId ? (
+                <input
+                  className={styles.ribbonRenameInput}
+                  autoFocus
+                  defaultValue={topic.name || ''}
+                  aria-label="ערוך שם נושא"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const v = e.currentTarget.value.trim();
+                      if (v && v !== topic.name && renameTopic) renameTopic(topic.id, v);
+                      setRenamingTopicId(null);
+                    }
+                    if (e.key === 'Escape') { e.preventDefault(); setRenamingTopicId(null); }
+                  }}
+                  onBlur={(e) => {
+                    const v = e.currentTarget.value.trim();
+                    if (v && v !== topic.name && renameTopic) renameTopic(topic.id, v);
+                    setRenamingTopicId(null);
+                  }}
+                />
+              ) : (
+                <span className={styles.ribbonName}>{topic.name}</span>
+              )}
+              {excluded && <EyeOff size={12} className={styles.ribbonEye} aria-label="נושא מוסתר" />}
+              {(editTopicOrPoint || deleteTopicOrPoint || canHide) && renamingTopicId !== topicId && (
+                <button
+                  type="button"
+                  className={styles.ribbonKebab}
+                  title="אפשרויות (לחיצה ארוכה — גרירה)"
+                  aria-label={`אפשרויות הנושא: ${topic.name}`}
+                  onPointerDown={(e) => handleKebabPointerDown(e, topic)}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreVertical size={14} />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {addTopicOrPoint && (addingTopic ? (
+          <div className={styles.ribbonAddForm}>
+            <input
+              className={styles.ribbonAddInput}
+              autoFocus
+              value={newTopicText}
+              placeholder="שם הנושא…"
+              aria-label="שם הנושא החדש"
+              onChange={(e) => setNewTopicText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); handleAddTopic(); }
+                if (e.key === 'Escape') { setAddingTopic(false); setNewTopicText(''); }
+              }}
+              onBlur={() => { if (!newTopicText.trim()) { setAddingTopic(false); setNewTopicText(''); } }}
+            />
+            <button
+              type="button"
+              className={styles.ribbonAddOk}
+              onClick={handleAddTopic}
+              disabled={!newTopicText.trim()}
+            >
+              הוסף
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={styles.ribbonAdd}
+            title="נושא חדש"
+            aria-label="נושא חדש"
+            onClick={() => setAddingTopic(true)}
+          >
+            <Plus size={14} /> נושא
+          </button>
+        ))}
       </div>
       <div className={styles.agendaBody}>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleTopicDragEnd}>
-        <SortableContext items={visibleTopics.map((t) => String(t.id))} strategy={verticalListSortingStrategy}>
-          {visibleTopics.map((topic) => (
+      {activeTopic && (
+      <DndContext sensors={sensors} collisionDetection={closestCenter}>
+        <SortableContext items={[String(activeTopic.id)]} strategy={verticalListSortingStrategy}>
+          {[activeTopic].map((topic) => (
             <SortableTopicSection
               key={topic.id}
+              headless
               topic={topic}
               accent={accentByTopicId[topic.id] || '--topic-color-1'}
-              open={isOpen(topic.id)}
-              onToggleOpen={() => setCollapsed((p) => ({ ...p, [topic.id]: !p[topic.id] }))}
+              open
+              onToggleOpen={() => {}}
               usersById={usersById}
               renameTopic={renameTopic}
               onRetryCreate={retryCreate}
@@ -1042,37 +1180,6 @@ export function TopicsTab({
           ))}
         </SortableContext>
       </DndContext>
-
-      {/* round198 — bottom "נושא חדש": adds a group below the bottom group. */}
-      {addTopicOrPoint && items.length > 0 && (
-        <div className={styles.bottomAddRow}>
-          {!addingTopicBottom ? (
-            /* round218 — identical to the top "נושא חדש" (owner request): same
-               primary button in both places. */
-            <Button kind={"primary"} size={"small"} onClick={() => setAddingTopicBottom(true)}>
-              נושא חדש
-            </Button>
-          ) : (
-            <div className={styles.addTopicRow}>
-              <TextField
-                autoFocus
-                value={newTopicBottomText}
-                onChange={(v) => setNewTopicBottomText(v)}
-                placeholder="שם נושא"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); handleAddTopicBottom(); }
-                  if (e.key === 'Escape') { setAddingTopicBottom(false); setNewTopicBottomText(''); }
-                }}
-              />
-              <Button kind={"primary"} size={"small"} onClick={handleAddTopicBottom} disabled={!newTopicBottomText.trim()}>
-                הוסף
-              </Button>
-              <Button kind={"tertiary"} size={"small"} onClick={() => { setAddingTopicBottom(false); setNewTopicBottomText(''); }}>
-                ביטול
-              </Button>
-            </div>
-          )}
-        </div>
       )}
 
       {items.length === 0 && !addingTopic && (
@@ -1103,6 +1210,90 @@ export function TopicsTab({
       </div>
       )}
       </div>
+
+      {/* round235 — the ribbon ⋮ menu: rename / priority / hide / delete (with
+          inline confirm). Fixed-position under the clicked ⋮; a transparent
+          backdrop closes it. */}
+      {topicMenu && (() => {
+        const t = items.find((x) => String(x.id) === String(topicMenu.topicId));
+        if (!t) return null;
+        const excluded = t.notForDiscussion === true;
+        return (
+          <>
+            <div className={styles.topicMenuBackdrop} onClick={() => setTopicMenu(null)} />
+            <div className={styles.topicMenu} style={{ left: topicMenu.x, top: topicMenu.y }} dir="rtl" role="menu">
+              {topicMenu.confirm ? (
+                <div className={styles.topicMenuConfirm}>
+                  <span>למחוק את «{t.name}»?</span>
+                  <button
+                    type="button"
+                    className={styles.topicMenuYes}
+                    aria-label="אישור מחיקה"
+                    onClick={() => { setTopicMenu(null); deleteTopic(t.id); }}
+                  >
+                    ✓
+                  </button>
+                  <button type="button" className={styles.topicMenuNo} aria-label="ביטול" onClick={() => setTopicMenu(null)}>
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {editTopicOrPoint && (
+                    <button
+                      type="button"
+                      className={styles.topicMenuItem}
+                      onClick={() => { setRenamingTopicId(String(t.id)); setTopicMenu(null); }}
+                    >
+                      <Edit size={15} /> עריכת שם
+                    </button>
+                  )}
+                  {canHide && (
+                    <button
+                      type="button"
+                      className={styles.topicMenuItem}
+                      onClick={() => {
+                        setTopicMenu(null);
+                        toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(t.id, !excluded);
+                      }}
+                    >
+                      {excluded ? <Eye size={15} /> : <EyeOff size={15} />} {excluded ? 'הצג נושא' : 'הסתר נושא'}
+                    </button>
+                  )}
+                  {priorityMapped && editTopicOrPoint && (priorityOpts.options || []).length > 0 && (
+                    <div className={styles.topicMenuPrio}>
+                      <span className={styles.topicMenuPrioLabel}>עדיפות</span>
+                      {(priorityOpts.options || []).map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className={`${styles.topicMenuPrioOpt} ${t.priority === opt.id ? styles.topicMenuPrioOn : ''}`}
+                          onClick={() => {
+                            setTopicMenu(null);
+                            updateTopicPriority && updateTopicPriority(t.id, t.priority === opt.id ? null : opt.id);
+                          }}
+                        >
+                          <span className={styles.topicMenuPrioDot} style={{ background: opt.color }} />
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {deleteTopicOrPoint && (
+                    <button
+                      type="button"
+                      className={`${styles.topicMenuItem} ${styles.topicMenuDanger}`}
+                      onClick={() => setTopicMenu((cur) => (cur ? { ...cur, confirm: true } : cur))}
+                    >
+                      <Trash2 size={15} /> מחיקת נושא
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </>
+        );
+      })()}
 
       <PointItemsPopup
         open={!!popup}
