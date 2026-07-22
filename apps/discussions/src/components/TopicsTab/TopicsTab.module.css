@@ -1142,3 +1142,31 @@
 .attachToolbarBtn:hover {
   background: var(--primary-background-hover-color, #e6e9ef);
 }
+
+/* round225 — last-edit meta in the WHITE area at the formatting toolbar's right
+   end (owner spec): editor initials avatar · date+time · save state. */
+.paneToolbarMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-inline-start: 8px;
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  white-space: nowrap;
+}
+.paneMetaAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.paneMetaWhen { direction: ltr; font-variant-numeric: tabular-nums; }
+.paneMetaState { display: inline-flex; align-items: center; gap: 4px; }
