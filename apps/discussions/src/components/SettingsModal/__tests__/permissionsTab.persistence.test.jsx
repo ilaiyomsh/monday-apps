@@ -91,6 +91,12 @@ function lastWritten() {
   return JSON.parse(calls[calls.length - 1][1]);
 }
 
+// round246 — every permission table is COLLAPSED by default; open its section
+// (by clicking the header button whose name matches) before touching its cells.
+async function openSection(nameRe) {
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: nameRe })); });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   storageState.value = JSON.stringify({
@@ -125,6 +131,7 @@ describe('PermissionsTab persistence round-trip', () => {
     renderHarness();
     await waitFor(() => expect(screen.getByText('save')).toBeTruthy());
     await act(async () => {}); // flush the always-on seed effect
+    await openSection(/דיון ונושאים/); // round246 — the tier table is collapsed by default
 
     // round212 — the matrix: the discussion-creator × כתיבת סיכום cell is a ✓
     // cell (seeded editSummary:true). Clicking it flips the grant to false.
@@ -148,6 +155,7 @@ describe('PermissionsTab persistence round-trip', () => {
     renderHarness();
     await waitFor(() => expect(screen.getByText('save')).toBeTruthy());
     await act(async () => {}); // flush the always-on seed effect
+    await openSection(/מערכת/); // round246 — the system table is collapsed by default
 
     // round212 — the system matrix: the Members × יצירת דיון cell writes the
     // system:system pseudo-role.
@@ -168,6 +176,7 @@ describe('PermissionsTab persistence round-trip', () => {
     renderHarness();
     await waitFor(() => expect(screen.getByText('save')).toBeTruthy());
     await act(async () => {}); // flush the always-on seed effect
+    await openSection(/דיון ונושאים/); // round246 — the tier table is collapsed by default
 
     expect(screen.getByTestId('mx-discussions:discussionCoordinatorID-editSummary')).toBeTruthy();
     expect(screen.queryByText(/לא עובדים עם מרכז דיון/)).toBeNull();
@@ -190,6 +199,7 @@ describe('PermissionsTab persistence round-trip', () => {
       </MondayContext.Provider>
     );
     await act(async () => {});
+    await openSection(/דיון ונושאים/); // round246 — the tier table is collapsed by default
     expect(screen.queryByTestId('mx-discussions:discussionCoordinatorID-editSummary')).toBeNull();
     // The other role columns are unaffected.
     expect(screen.getByTestId('mx-discussions:discussionLeadID-editSummary')).toBeTruthy();

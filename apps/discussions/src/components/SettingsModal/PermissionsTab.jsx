@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useEffect, useSyncExternalStore } from 'react';
 import { Button, Text } from '@vibe/core';
-import { Download } from '@vibe/icons';
+import { Download, DropdownChevronDown } from '@vibe/icons';
+import { groupCapabilities } from './permissionsGrouping.js';
 import { buildPermissionsSummaryModel, downloadPermissionsSummary } from '../../utils/permissionsSummaryDoc.js';
 import { getBoardId } from '../../utils/mondayApi/board-config-store.js';
 import { getBoardPeople } from '../../utils/mondayApi/subscribers.js';
@@ -201,6 +202,16 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
       return { ...prev, roles };
     });
 
+  // round246 (owner request) — every permission table is COLLAPSED by default
+  // and opens on click. `expanded` holds the ids of the open sections.
+  const [expanded, setExpanded] = useState(() => new Set());
+  const toggleSection = (id) =>
+    setExpanded((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+
   // round203 — "הורדת סיכום הרשאות" (Word).
   const [downloading, setDownloading] = useState(false);
   const handleDownloadSummary = async () => {
@@ -242,6 +253,49 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
     );
   };
 
+  // round246 — a tier's cap rows, grouped by component with a SUB-HEADING row
+  // per group (shown only when the tier has more than one group).
+  const renderGroupedTbody = (roles, caps) => {
+    const groups = groupCapabilities(caps);
+    const showSub = groups.length > 1;
+    return (
+      <tbody>
+        {groups.map((grp) => (
+          <React.Fragment key={grp.group}>
+            {showSub && (
+              <tr className={styles.mxGroupRow}>
+                <td className={styles.mxGroupCell} colSpan={roles.length + 1}>{grp.label}</td>
+              </tr>
+            )}
+            {grp.caps.map((cap) => (
+              <tr key={cap.id}>
+                <td className={styles.mxAction}>{cap.label}</td>
+                {roles.map((role) => renderCell(role.key, cap.id, isRoleHidden(role.key)))}
+              </tr>
+            ))}
+          </React.Fragment>
+        ))}
+      </tbody>
+    );
+  };
+
+  // round246 — a collapsible section header (chevron + title + optional caption).
+  const sectionHead = (id, title, sub) => {
+    const open = expanded.has(id);
+    return (
+      <button
+        type="button"
+        className={styles.secHead}
+        onClick={() => toggleSection(id)}
+        aria-expanded={open}
+      >
+        <DropdownChevronDown className={`${styles.secChevron} ${open ? '' : styles.secChevronClosed}`} />
+        <span className={styles.mxTitle}>{title}</span>
+        {sub && <span className={styles.secSub}>{sub}</span>}
+      </button>
+    );
+  };
+
   const systemCaps = CAPABILITIES.filter((c) => c.tier === 'system');
 
   return (
@@ -260,17 +314,40 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
           </Button>
         </div>
 
-        {/* ===== per-tier ✓ matrices ===== */}
+        {/* ===== per-tier ✓ matrices (round246 — each COLLAPSED by default,
+             cap rows grouped by component with sub-headings) ===== */}
         {TIERS.map((tier) => {
           const roles = tierRoles[tier.id] || [];
           const caps = CAPABILITIES.filter((c) => c.tier === tier.id);
+          const open = expanded.has(tier.id);
+          // round246 (owner request) — the "שדות משימה" tier no longer shows a
+          // view/edit column matrix; instead a plain-language card states the
+          // effective rule. (Enforcement is unchanged — see the note.)
+          if (tier.id === 'task') {
+            return (
+              <div key={tier.id} className={styles.mxSec}>
+                {sectionHead(tier.id, tier.title, tier.sub)}
+                {open && (
+                  <div className={styles.taskRuleCard}>
+                    <div className={styles.taskRuleLine}>
+                      <span className={`${styles.taskRuleBadge} ${styles.badgeView}`}>צפייה</span>
+                      <span>כל מי שהשתתף בדיון רואה את המשימות שהיו בו.</span>
+                    </div>
+                    <div className={styles.taskRuleLine}>
+                      <span className={`${styles.taskRuleBadge} ${styles.badgeEdit}`}>עריכה</span>
+                      <span>יוצר הדיון, מנהל הדיון, מרכז הדיון והאחראי על המשימה יכולים לערוך אותה.</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          }
           if (!roles.length || !caps.length) return null;
           return (
             <div key={tier.id} className={styles.mxSec}>
-              <div className={styles.mxTitle}>{tier.title}</div>
-              <div className={styles.mxSubRow}>
-                <span className={styles.mxSub}>{tier.sub}</span>
-              </div>
+              {sectionHead(tier.id, tier.title, tier.sub)}
+              {open && (
+              <>
               <table className={styles.mxTable}>
                 <thead>
                   <tr>
@@ -294,14 +371,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
                     })}
                   </tr>
                 </thead>
-                <tbody>
-                  {caps.map((cap) => (
-                    <tr key={cap.id}>
-                      <td className={styles.mxAction}>{cap.label}</td>
-                      {roles.map((role) => renderCell(role.key, cap.id, isRoleHidden(role.key)))}
-                    </tr>
-                  ))}
-                </tbody>
+                {renderGroupedTbody(roles, caps)}
               </table>
               {tier.id === 'disc' && (
                 <div className={styles.mxNote}>
@@ -309,14 +379,16 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
                   בעלי הלוח (Owners) תמיד מורשים הכל ואינם מוגבלים ע"י הטבלאות.
                 </div>
               )}
+              </>
+              )}
             </div>
           );
         })}
 
         {/* ===== system tier: Members / Super Members / Owners ===== */}
         <div className={styles.mxSec}>
-          <div className={styles.mxTitle}>מערכת (כלל-האפליקציה)</div>
-          <div className={styles.mxSubRow}><span className={styles.mxSub}>פעולות גלובליות — לפי תפקיד האפליקציה</span></div>
+          {sectionHead('system', 'מערכת (כלל-האפליקציה)', 'פעולות גלובליות — לפי תפקיד האפליקציה')}
+          {expanded.has('system') && (
           <table className={styles.mxTable}>
             <thead>
               <tr>
@@ -345,6 +417,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
               ))}
             </tbody>
           </table>
+          )}
         </div>
 
         {/* ===== app roles — user assignment (round219: compact) ===== */}

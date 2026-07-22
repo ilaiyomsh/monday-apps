@@ -326,13 +326,82 @@
   text-align: right;
 }
 
-.mxSec { margin-bottom: 26px; }
+.mxSec { margin-bottom: 18px; }
 .mxTitle {
   font-size: 14.5px;
   font-weight: 700;
   color: var(--primary-text-color, #323338);
   margin-bottom: 2px;
 }
+
+/* round246 — collapsible section header: chevron + title + optional caption.
+   The whole strip is the toggle; tables render only when the section is open. */
+.secHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 8px;
+  background: var(--primary-background-hover-color, #f7f8fa);
+  cursor: pointer;
+  text-align: start;
+}
+.secHead:hover { background: var(--primary-background-hover-color, #f0f1f3); }
+.secHead .mxTitle { margin-bottom: 0; }
+.secChevron {
+  flex-shrink: 0;
+  color: var(--secondary-text-color, #676879);
+  transition: transform 0.15s ease;
+}
+/* chevron points down when open; rotate to point at the start (RTL: right) when closed */
+.secChevronClosed { transform: rotate(90deg); }
+.secSub {
+  font-size: 12px;
+  color: var(--secondary-text-color, #9699a6);
+  margin-inline-start: auto;
+  text-align: end;
+}
+
+/* round246 — sub-heading row inside a matrix, one per component group. */
+.mxGroupRow td.mxGroupCell {
+  background: var(--primary-background-hover-color, #eef0f4);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--secondary-text-color, #676879);
+  text-align: start;
+  padding: 6px 10px;
+}
+
+/* round246 — the "שדות משימה" tier's plain-language rule card (no matrix). */
+.taskRuleCard {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--primary-background-color, #fff);
+}
+.taskRuleLine {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--primary-text-color, #323338);
+}
+.taskRuleBadge {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: #fff;
+}
+.badgeView { background: var(--secondary-text-color, #676879); }
+.badgeEdit { background: var(--primary-color, #0073ea); }
 .mxSubRow {
   display: flex;
   align-items: center;
