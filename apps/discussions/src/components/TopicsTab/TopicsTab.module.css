@@ -88,27 +88,41 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
   overflow: hidden;
 }
+/* round220 — the header row's height is pinned to the SAME rhythm as the triple
+   box's tab band (.tripleTabs: tab padding 10px + ~20px line = 40px), so the two
+   cards' header bars line up exactly. */
 .agendaHead {
-  padding: 12px 16px;
+  padding: 10px 16px;
+  min-height: 40px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  line-height: 20px;
   font-size: 14px;
   font-weight: 700;
   color: var(--primary-text-color, #323338);
   background: var(--primary-background-hover-color, #fafbfc);
   border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
 }
-/* Inside the card the toolbar is NOT independently sticky (the card scrolls as
-   one unit, mirroring the triple box) — override the shared sticky rule and its
-   scroll-cover pseudo-element, and add side padding so it sits inside the card. */
+/* round220 — the toolbar sits in the SAME design as the triple box's formatting
+   tool-strip: a flush full-width white band with a bottom border under the
+   header, NOT independently sticky (the card scrolls as one unit). Override the
+   shared sticky rule + its scroll-cover pseudo-element. */
 .agendaBox .toolbar {
   position: static;
   padding: 8px 14px;
   z-index: auto;
+  background: var(--primary-background-color, #fff);
+  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
 }
 .agendaBox .toolbar::before { display: none; }
 .toolbarSpacer { flex: 1 1 auto; min-width: 8px; }
-/* The card body holds the topic list + the bottom add-row, with inner padding. */
+/* The card body holds the topic list + the bottom add-row, with inner padding.
+   round220 — a tall min-height so the אג'נדה card takes real vertical space like
+   the triple box (its pane is 420px); content scrolls/extends beyond it. */
 .agendaBody {
-  padding: 0 14px 14px;
+  padding: 12px 14px 14px;
+  min-height: 420px;
 }
 .refPanel {
   /* round216 — the owner wants the box WIDER (toward the left) and TALLER:
