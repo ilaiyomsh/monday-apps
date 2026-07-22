@@ -198,6 +198,11 @@ export const DEFAULT_EXPORT_TEMPLATE = {
         { key: 'previousText', enabled: true, label: 'דיון קודם' },
       ],
     },
+    // round219 — the רקע (background) box from the Topics tab's triple box;
+    // rendered through the same HTML→docx converter as the summary/references.
+    // Placed right after the metadata so it reads as the discussion's context;
+    // seedExportTemplate back-fills it into previously-stored templates.
+    { key: 'background', enabled: true, label: 'רקע' },
     { key: 'topics', enabled: true, label: 'נושאים לדיון' },
     { key: 'summary', enabled: true, label: 'סיכום' },
     // round200 — the References (התייחסויות) box from the Topics tab; rendered

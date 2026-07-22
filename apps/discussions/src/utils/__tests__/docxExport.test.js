@@ -292,6 +292,24 @@ describe('data-driven template (buildExportDoc)', () => {
     expect(xml).toContain('אין התייחסויות.');
   });
 
+  it('renders the background section through the HTML converter (round219)', async () => {
+    const model = buildDiscussionModel({
+      discussion: { name: 'ד' },
+      backgroundHtml: '<p>רקע-בדיקה-מיוחד</p><ul><li>הקשר-לבדיקה</li></ul>',
+    });
+    const template = { sections: [{ key: 'background', enabled: true, label: 'רקע' }] };
+    const xml = await xmlOf(model, template);
+    expect(xml).toContain('רקע');              // section heading
+    expect(xml).toContain('רקע-בדיקה-מיוחד');  // rich body survived
+    expect(xml).toContain('הקשר-לבדיקה');      // list item survived
+  });
+
+  it('renders "אין רקע." when the background box is empty (round219)', async () => {
+    const template = { sections: [{ key: 'background', enabled: true, label: 'רקע' }] };
+    const xml = await xmlOf(baseModel(), template);
+    expect(xml).toContain('אין רקע.');
+  });
+
   it('renders a decisions table with only מס׳/החלטה/מחליט — no date/status columns (round193)', async () => {
     const model = buildDiscussionModel({
       discussion: { name: 'ד' },

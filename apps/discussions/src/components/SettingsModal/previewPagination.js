@@ -137,12 +137,23 @@ export function patchPageNumbers(stage) {
   sections.forEach((sec, idx) => {
     sec.querySelectorAll('p').forEach((p) => {
       const t = p.textContent || '';
-      if (t.includes('עמוד') && t.includes('מתוך') && !/\d/.test(t)) {
+      if (!(t.includes('עמוד') && t.includes('מתוך'))) return;
+      if (!/\d/.test(t)) {
         p.querySelectorAll('span').forEach((s) => {
           if (s.textContent === 'עמוד ') s.textContent = `עמוד ${idx + 1}`;
           else if (s.textContent === ' מתוך ') s.textContent = ` מתוך ${total}`;
         });
       }
+      // round219 — elevate the page-number paragraph above behind-text footer
+      // art. reanchorFloatingDrawings gives a behind-doc banner an ABSOLUTE box
+      // at z-index 0; a non-elevated (flow / z-index:auto) paragraph paints
+      // BEFORE that positioned box, so the banner covers the number — the
+      // preview-only clipping the owner reported (the exported Word draws
+      // behind-text art behind text by definition, so the file is fine). Putting
+      // the paragraph in the positioned layer with a positive z-index keeps it
+      // on top in the preview too.
+      p.style.position = 'relative';
+      p.style.zIndex = '5';
     });
   });
 }

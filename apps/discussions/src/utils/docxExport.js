@@ -35,6 +35,7 @@ import { getColumns, getBoardId } from './mondayApi/board-config-store.js';
 import { DEFAULT_EXPORT_TEMPLATE, EXPORT_FONTS, DEFAULT_EXPORT_FONT } from './mondayApi/boards.config.js';
 import { loadSummaryUpdateId } from './summaryStore.js';
 import { loadReferencesUpdateId } from './referencesStore.js';
+import { loadBackgroundUpdateId } from './backgroundStore.js';
 import { getItemUpdate } from './mondayApi/updates.js';
 import { isSummaryHtmlEmpty } from './summaryHtml.js';
 import { parseExternalParticipants } from './externalParticipants.js';
@@ -187,7 +188,7 @@ function formatHeDate(value) {
  * shaping is testable without docx. The summary stays as HTML (`summaryHtml`) and
  * is converted to docx inside renderDocx (needs the docx classes + DOMParser).
  */
-export function buildDiscussionModel({ discussion, topics = [], summaryHtml = '', referencesHtml = '', tasks = [], decisions = [], previousDiscussionName = '', typeLabel = '' }) {
+export function buildDiscussionModel({ discussion, topics = [], summaryHtml = '', referencesHtml = '', backgroundHtml = '', tasks = [], decisions = [], previousDiscussionName = '', typeLabel = '' }) {
   const participants = Array.isArray(discussion?.participantsID) ? discussion.participantsID : [];
   const lead = Array.isArray(discussion?.discussionLeadID) ? discussion.discussionLeadID : [];
   // "סוג" is a status column — its value is a label id; the caller resolves the
@@ -209,6 +210,8 @@ export function buildDiscussionModel({ discussion, topics = [], summaryHtml = ''
     // round200 — the References (התייחסויות) box HTML; converted to docx like
     // the summary (bold/lists survive; the template font applies to its runs).
     referencesHtml: referencesHtml || '',
+    // round219 — the רקע (background) box HTML; same HTML→docx converter.
+    backgroundHtml: backgroundHtml || '',
     // round191 — the exported tasks table is ordered by RESPONSIBLE (owner request):
     // all of one person's tasks together, then the next. Stable sort by assignee
     // text (Hebrew collation); tasks with no assignee sort last.
@@ -438,6 +441,21 @@ async function fetchReferencesHtml(discussionId) {
   }
 }
 
+// round219 — the רקע (background) box lives in its own single monday Update
+// (backgroundStore tracks its id), exactly like the summary/references. Same
+// HTML-in-update read; rendered through the same HTML→docx converter.
+async function fetchBackgroundHtml(discussionId) {
+  try {
+    const updateId = await loadBackgroundUpdateId(discussionId);
+    if (!updateId) return '';
+    const update = await getItemUpdate(discussionId, updateId);
+    return update?.body || '';
+  } catch (err) {
+    if (!err?.__loggedId) logger.warn('docxExport', 'טעינת הרקע לייצוא נכשלה', err);
+    return '';
+  }
+}
+
 /* ----------------------------------------------------------- docx render */
 
 function buildFilename(discussion) {
@@ -658,6 +676,15 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     return out;
   };
 
+  // round219 — the Background (רקע) box, same HTML→docx converter as the
+  // summary/references so its rich formatting survives with the template font.
+  const buildBackground = (section) => {
+    const out = [heading(section?.label || 'רקע', HeadingLevel.HEADING_2)];
+    if (isSummaryHtmlEmpty(model.backgroundHtml)) out.push(para('אין רקע.'));
+    else out.push(...htmlToParagraphs(model.backgroundHtml));
+    return out;
+  };
+
   const buildTasks = (section) => {
     // `keepNext` keeps the heading with the first table row; combined with keepNext
     // on every cell paragraph + cantSplit on every row, Word keeps the whole table
@@ -772,6 +799,7 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     if (!section || section.enabled === false) continue;
     switch (section.key) {
       case 'meta': children.push(...buildMeta(section)); break;
+      case 'background': children.push(...buildBackground(section)); break;
       case 'topics': children.push(...buildTopics(section)); break;
       case 'summary': children.push(...buildSummary(section)); break;
       case 'references': children.push(...buildReferences(section)); break;
@@ -928,10 +956,11 @@ export async function assembleDiscussionModel(discussion) {
   if (!discussion?.id) throw new Error('assembleDiscussionModel: discussion is required');
   const discussionId = String(discussion.id);
 
-  const [topics, summaryHtml, referencesHtml, currentTasks, decisions, previous, fullDiscussion] = await Promise.all([
+  const [topics, summaryHtml, referencesHtml, backgroundHtml, currentTasks, decisions, previous, fullDiscussion] = await Promise.all([
     fetchTopicsForExport(discussionId),
     fetchSummaryHtml(discussionId),
     fetchReferencesHtml(discussionId),
+    fetchBackgroundHtml(discussionId),
     fetchTasksOfDiscussion(discussionId),
     fetchDecisionsOfDiscussion(discussionId),
     resolvePreviousDiscussion(discussionId),
@@ -949,6 +978,7 @@ export async function assembleDiscussionModel(discussion) {
     topics,
     summaryHtml,
     referencesHtml,
+    backgroundHtml,
     tasks: mergeTasksForExport(currentTasks, previousTasks),
     decisions,
     previousDiscussionName: previous?.name || '',

@@ -83,6 +83,8 @@ function FontPicker({ value, onChange }) {
 
 const SECTION_NAMES = {
   meta: 'פרטי דיון',
+  // round219 — the רקע (background) box from the Topics tab's triple box.
+  background: 'רקע',
   topics: 'נושאים לדיון',
   summary: 'סיכום',
   // round200 — the References box from the Topics tab.
@@ -124,8 +126,17 @@ function SortableSectionRow({ section, onToggle, onExpandToggle, expanded, child
         <button type="button" className={styles.grip} {...attributes} {...listeners} aria-label="גרור לשינוי סדר">
           <GripVertical size={16} />
         </button>
-        <Toggle isSelected={section.enabled !== false} onChange={onToggle} ariaLabel={`הצג ${SECTION_NAMES[section.key] || section.key}`} />
+        {/* round219 — name first (leading/right), toggle to its LEFT; the toggle
+            reads "כן/לא" instead of on/off, and the row is compact so every
+            component fits on one screen without scrolling. */}
         <span className={styles.sectionName}>{SECTION_NAMES[section.key] || section.key}</span>
+        <Toggle
+          isSelected={section.enabled !== false}
+          onChange={onToggle}
+          onOverrideText="כן"
+          offOverrideText="לא"
+          ariaLabel={`הצג ${SECTION_NAMES[section.key] || section.key}`}
+        />
         {expandable && (
           <button type="button" className={`${styles.expandBtn} ${expanded ? styles.expandOpen : ''}`} onClick={onExpandToggle} aria-label="עוד">
             <ChevronDown size={16} />
@@ -327,6 +338,7 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={sections.map((s) => s.key)} strategy={verticalListSortingStrategy}>
+          <div className={styles.sectionList}>
           {sections.map((section) => (
             <SortableSectionRow
               key={section.key}
@@ -347,6 +359,7 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
               )}
             </SortableSectionRow>
           ))}
+          </div>
         </SortableContext>
       </DndContext>
 
