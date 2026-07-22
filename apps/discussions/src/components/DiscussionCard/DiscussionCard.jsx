@@ -878,9 +878,9 @@ export function DiscussionCard({
                 )}
                 {(headerPeopleGroups.length > 0
                   || (externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0))) && (
-                  /* round227 (owner request) — a DOWN chevron: clicking opens the
-                     role-holders + participants BELOW the date row (see the
-                     .metaRoster band), not inline. Rotates 180° (points up) when
+                  /* round227/231 (owner request) — a DOWN chevron: clicking opens
+                     the role-holders + participants on the TAB-NAMES line, pinned
+                     to its end (see .tabsRoster). Rotates 180° (points up) when
                      open. */
                   <button
                     type="button"
@@ -898,52 +898,6 @@ export function DiscussionCard({
             )
           )}
         </div>
-        {/* round227 (owner request) — the role-holders + participants roster opens
-            as a horizontal band BELOW the title/date row, spanning the white area
-            (dir=rtl → packs under the date on the right, extends left toward the
-            tabs). Desktop only — the phone keeps its info popover. */}
-        {!isMobile && metaOpen && (headerPeopleGroups.length > 0
-          || (externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0))) && (
-          <div dir="rtl" className={styles.metaRoster}>
-            {headerPeopleGroups.map((g) => {
-              // מנהל (lead) + רשם דיון (coordinator) — and any future single role —
-              // are one-person fields: cap at one and CLOSE the picker after a pick.
-              // Only משתתפים (participants) is multi-select, so it stays open.
-              const singleRole = g.alias !== 'participantsID';
-              return (
-                <div key={g.alias} className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
-                  <span className={styles.peopleGroupLabel}>{g.title}</span>
-                  {editDiscussionFields ? (
-                    <PersonPicker
-                      selected={g.people}
-                      onChange={(p) => persistPeople(g.alias, p)}
-                      single={singleRole}
-                      closeOnSelect={singleRole}
-                      boardKey="discussions"
-                      accountWide
-                    />
-                  ) : (
-                    /* round227 — cap the avatar stack at 5 + a "+N" (AvatarGroup). */
-                    <PersonList people={g.people} size="sm" showNames={false} max={5} />
-                  )}
-                </div>
-              );
-            })}
-            {/* round211 — EXTERNAL participants (text-only names): same group
-                styling; the stack caps at 5 + "+N" and click-to-list-all
-                (round227). round222 — labeled just "משתתפים". */}
-            {externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0) && (
-              <div className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
-                <span className={styles.peopleGroupLabel}>משתתפים</span>
-                <ExternalPeople
-                  names={externalNames}
-                  canEdit={canEditExternalParticipants}
-                  onChange={persistExternalParticipants}
-                />
-              </div>
-            )}
-          </div>
-        )}
         <div className={styles.tabsRow} dir="ltr">
           <TabsContext activeTabId={activeIndex}>
             {/* round205 — the strip renders only the OWNER-VISIBLE components
@@ -952,6 +906,53 @@ export function DiscussionCard({
               {visibleTabs.map((t) => <Tab key={t.key}>{t.label}</Tab>)}
             </TabList>
           </TabsContext>
+          {/* round231 (approved mockup) — the role-holders + participants roster
+              sits on the SAME line as the tab names, pinned to the END (physical
+              right in this ltr row), sharing the tab baseline + bottom rule. The
+              date-row chevron toggles it (metaOpen). Its own dir=rtl orders the
+              groups right-to-left. Desktop only — the phone keeps its info popover. */}
+          {!isMobile && metaOpen && (headerPeopleGroups.length > 0
+            || (externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0))) && (
+            <div dir="rtl" className={styles.tabsRoster}>
+              {headerPeopleGroups.map((g) => {
+                // מנהל (lead) + רשם דיון (coordinator) — and any future single role —
+                // are one-person fields: cap at one and CLOSE the picker after a pick.
+                // Only משתתפים (participants) is multi-select, so it stays open.
+                const singleRole = g.alias !== 'participantsID';
+                return (
+                  <div key={g.alias} className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
+                    <span className={styles.peopleGroupLabel}>{g.title}</span>
+                    {editDiscussionFields ? (
+                      <PersonPicker
+                        selected={g.people}
+                        onChange={(p) => persistPeople(g.alias, p)}
+                        single={singleRole}
+                        closeOnSelect={singleRole}
+                        boardKey="discussions"
+                        accountWide
+                      />
+                    ) : (
+                      /* round227 — cap the avatar stack at 5 + a "+N" (AvatarGroup). */
+                      <PersonList people={g.people} size="sm" showNames={false} max={5} />
+                    )}
+                  </div>
+                );
+              })}
+              {/* round211 — EXTERNAL participants (text-only names): same group
+                  styling; the stack caps at 5 + "+N" and click-to-list-all
+                  (round227). round222 — labeled just "משתתפים". */}
+              {externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0) && (
+                <div className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
+                  <span className={styles.peopleGroupLabel}>משתתפים</span>
+                  <ExternalPeople
+                    names={externalNames}
+                    canEdit={canEditExternalParticipants}
+                    onChange={persistExternalParticipants}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
