@@ -343,12 +343,17 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
     : seg);
 
   // ---------- Sort panel body ----------
-  const renderSortBody = ({ mobile, openId, setOpenId }) => {
+  const renderSortBody = ({ mobile, openId, setOpenId, close }) => {
     const colOptions = SORT_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === sort.col }));
+    // round228 (owner request) — a NON-owner (no "שמור") can't persist a sort
+    // default, so picking a column CLOSES the panel (mirrors the group-by
+    // picker); the default direction applies, and a re-open still lets them
+    // tweak the direction.
+    const pickColMaybeClose = (col) => { setSortCol(col); if (!canSaveView) close?.(); };
     if (!sort.col) {
       const emptySeg = (
         <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
-          text="בחרו עמודה" placeholder options={colOptions} onPick={setSortCol} />
+          text="בחרו עמודה" placeholder options={colOptions} onPick={pickColMaybeClose} />
       );
       return mobile ? field(true, 'עמודה', emptySeg) : <div className={bs.bRow}>{emptySeg}</div>;
     }
@@ -358,7 +363,7 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
       <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
         icon={TYPE_ICON[sc.type]} text={COL_NAME[sc.key]}
         options={colOptions}
-        onPick={setSortCol} />
+        onPick={pickColMaybeClose} />
     );
     const dirSeg = (
       <Segment id="dir" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="כיוון" note={sc.note}

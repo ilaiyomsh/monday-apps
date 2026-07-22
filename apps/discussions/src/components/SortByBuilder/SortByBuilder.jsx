@@ -42,13 +42,19 @@ export function SortByBuilder({ options = [], value, onChange, onClear, onSave, 
     ? <div className={bs.bField} key={label}><div className={bs.bFieldLabel}>{label}</div>{seg}</div>
     : seg);
 
-  const renderBody = ({ mobile: m, openId, setOpenId }) => {
+  const renderBody = ({ mobile: m, openId, setOpenId, close }) => {
+    // round228 (owner request) — a NON-owner (no "שמור") can't persist a sort
+    // default, so the panel CLOSES the moment they pick a column (mirrors the
+    // group-by picker). The column's default direction applies; owners keep the
+    // panel open so "שמור" stays reachable, and re-opening still lets a non-owner
+    // tweak the direction (only the COLUMN pick auto-closes).
+    const pickColMaybeClose = (v) => { pickCol(v); if (!onSave) close?.(); };
     const colSeg = (
       <Segment
         id="scol" openId={openId} setOpenId={setOpenId} mobile={m} sheetTitle="עמודה"
         icon={current?.icon} text={current?.label || 'בחרו עמודה'} placeholder={!current}
         options={options.map((o) => ({ key: o.value, label: o.label, icon: o.icon, selected: o.value === col }))}
-        onPick={pickCol} />
+        onPick={pickColMaybeClose} />
     );
     if (!current) {
       return m ? field(true, 'עמודה', colSeg) : <div className={bs.bRow}>{colSeg}</div>;
