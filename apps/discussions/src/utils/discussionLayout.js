@@ -4,19 +4,20 @@
  * persists in monday.storage per discussion.
  *
  * Stored shape (key `discussions_layout_${discussionId}`):
- *   { ratio: number, stacked: boolean, agendaHeight: number|null, tripleHeight: number|null }
+ *   { ratio: number, stacked: boolean, boxHeight: number|null }
  *   - ratio        → the AGENDA (first / physical-left) box's share of the row
  *                    width, 0..1, clamped to [MIN_RATIO, MAX_RATIO]. The triple
  *                    box gets the rest, so growing one shrinks the other (owner spec).
+ *                    WIDTH is per-box adjustable via this ratio (round269 keeps it).
  *   - stacked      → when true the two boxes stack vertically (full width) instead
  *                    of sitting side-by-side ("drag the box down, like a dashboard
  *                    widget").
- *   - agendaHeight → the AGENDA box's card height in px, clamped to
- *   - tripleHeight → the TRIPLE box's card height in px, clamped to
- *                    [MIN_HEIGHT, MAX_HEIGHT]. Each box resizes INDEPENDENTLY
- *                    (round251: shrinking one no longer drags the other). null ⇒
- *                    use the responsive CSS default (--split-card-h).
- *                    Legacy single `height` migrates into BOTH on read.
+ *   - boxHeight    → round269 (owner request): ONE SHARED card height (px) for
+ *                    BOTH boxes, clamped to [MIN_HEIGHT, MAX_HEIGHT], so the two
+ *                    are ALWAYS the same height (dragging either resizes both).
+ *                    null ⇒ use the responsive CSS default (--split-card-h).
+ *                    Legacy per-box `agendaHeight`/`tripleHeight` (round251) and
+ *                    the older single `height` migrate into `boxHeight` on read.
  *
  * Owner-only WRITES are enforced at the call site (only canManageSettings passes
  * a real save); everyone READS the saved layout, so the owner's arrangement is
@@ -36,7 +37,7 @@ export const MIN_RATIO = 0.25;
 export const MAX_RATIO = 0.75;
 export const MIN_HEIGHT = 360;
 export const MAX_HEIGHT = 1400;
-export const DEFAULT_LAYOUT = { ratio: 0.5, stacked: false, agendaHeight: null, tripleHeight: null };
+export const DEFAULT_LAYOUT = { ratio: 0.5, stacked: false, boxHeight: null };
 
 function key(discussionId) {
   return `${STORAGE_KEY_BASE}_${discussionId}`;
@@ -69,18 +70,21 @@ export function clampHeight(h) {
   return n;
 }
 
-/** Coerce any stored/partial value into a valid
- *  { ratio, stacked, agendaHeight, tripleHeight }. A legacy single `height`
- *  (pre-round251, shared) seeds both per-box heights when the new keys are
- *  absent, so an owner's saved twin height survives the upgrade. */
+/** Coerce any stored/partial value into a valid { ratio, stacked, boxHeight }.
+ *  round269 — a single SHARED boxHeight. Legacy per-box heights (agendaHeight /
+ *  tripleHeight, round251) and the older single `height` migrate into it on read:
+ *  the first present value wins (agenda's, then triple's, then the old single),
+ *  so an owner's saved height survives the upgrade. */
 export function normalizeLayout(raw) {
   if (!raw || typeof raw !== 'object') return { ...DEFAULT_LAYOUT };
-  const legacy = clampHeight(raw.height);
+  const migrated = raw.boxHeight != null ? raw.boxHeight
+    : raw.agendaHeight != null ? raw.agendaHeight
+      : raw.tripleHeight != null ? raw.tripleHeight
+        : raw.height;
   return {
     ratio: clampRatio(raw.ratio != null ? raw.ratio : DEFAULT_LAYOUT.ratio),
     stacked: raw.stacked === true,
-    agendaHeight: clampHeight(raw.agendaHeight != null ? raw.agendaHeight : legacy),
-    tripleHeight: clampHeight(raw.tripleHeight != null ? raw.tripleHeight : legacy),
+    boxHeight: clampHeight(migrated),
   };
 }
 
@@ -99,8 +103,7 @@ export function ratioFromDrag(startRatio, deltaPx, containerWidth) {
  * New card height for ONE box after a bottom resize-handle drag: `startHeightPx`
  * is that box's measured height at drag start, `deltaPx` the vertical pointer
  * delta (+ve = downward = taller). Result is clamped to [MIN_HEIGHT, MAX_HEIGHT].
- * round251 — each box carries its own height, so this drives agendaHeight OR
- * tripleHeight, never both.
+ * round269 — drives the single SHARED boxHeight (both boxes resize together).
  */
 export function heightFromDrag(startHeightPx, deltaPx) {
   return clampHeight(Number(startHeightPx) + deltaPx);

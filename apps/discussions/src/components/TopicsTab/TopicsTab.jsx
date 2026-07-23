@@ -804,9 +804,9 @@ export function TopicsTab({
   //   layout.ratio        → the אג'נדה box's share of the row width (the triple
   //                         box gets the rest, so growing one shrinks the other).
   //   layout.stacked      → the two boxes stack vertically instead of side-by-side.
-  //   layout.agendaHeight → the אג'נדה box's own height in px (round251).
-  //   layout.tripleHeight → the triple box's own height in px — each resizes
-  //                         INDEPENDENTLY, so shrinking one leaves the other put.
+  //   layout.boxHeight    → round269: ONE SHARED height (px) for BOTH boxes, so
+  //                         they are always the same height (dragging either box's
+  //                         handle/corner resizes both). WIDTH stays per-box (ratio).
   // editLayout reveals the 6-dot grips + the resize divider on BOTH boxes at
   // once (owner request: one pencil arms both). Everyone READS the saved layout;
   // only an owner (canManageSettings) persists changes.
@@ -855,25 +855,24 @@ export function TopicsTab({
     document.addEventListener('pointerup', onUp);
   };
 
-  // round242 — bottom resize handle: drag it to shrink/GROW a box's card height.
-  // round251 (owner request) — each box owns its OWN height (`which` =
-  // 'agenda'|'triple' → agendaHeight|tripleHeight), so shrinking one no longer
-  // drags the other. The start height is measured from the handle's own box so
-  // the drag tracks the real pixels. One persist on release.
-  const heightKey = (which) => (which === 'triple' ? 'tripleHeight' : 'agendaHeight');
-  const onHeightPointerDown = (e, which) => {
+  // round242 — bottom resize handle: drag it to shrink/GROW the box card height.
+  // round269 (owner request) — height is UNIFORM: both boxes share ONE height
+  // (`boxHeight`), so dragging either box's handle resizes BOTH identically —
+  // never a state where one is taller than the other. The start height is
+  // measured from the dragged box so the drag tracks real pixels. `which` is
+  // kept only to tag which handle fired. One persist on release.
+  const onHeightPointerDown = (e /* , which */) => {
     if (!editLayout || !canManageSettings) return;
     e.preventDefault();
     e.stopPropagation();
     const startY = e.clientY;
     const box = e.currentTarget.parentElement;
-    const k = heightKey(which);
-    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current[k] || 520);
-    const onMove = (ev) => applyLayout({ [k]: heightFromDrag(startH, ev.clientY - startY) });
+    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current.boxHeight || 520);
+    const onMove = (ev) => applyLayout({ boxHeight: heightFromDrag(startH, ev.clientY - startY) });
     const onUp = (ev) => {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
-      applyLayout({ [k]: heightFromDrag(startH, ev.clientY - startY) }, true);
+      applyLayout({ boxHeight: heightFromDrag(startH, ev.clientY - startY) }, true);
     };
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
@@ -897,7 +896,7 @@ export function TopicsTab({
   // corner and drag out/in to resize BOTH dimensions at once — horizontal moves
   // the split ratio (grow one, shrink the other), vertical moves the shared
   // height. Reuses the same pure ratioFromDrag / heightFromDrag math.
-  const onCornerPointerDown = (e, which) => {
+  const onCornerPointerDown = (e /* , which */) => {
     if (!editLayout || !canManageSettings) return;
     e.preventDefault();
     e.stopPropagation();
@@ -906,16 +905,15 @@ export function TopicsTab({
     const startRatio = layoutRef.current.ratio;
     const width = splitRowRef.current?.getBoundingClientRect().width || 0;
     const box = e.currentTarget.parentElement;
-    const k = heightKey(which);
-    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current[k] || 520);
+    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current.boxHeight || 520);
     const commit = (ev, persist) => {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
       const patch = {
-        // pointer moving physically RIGHT always grows the agenda's share.
+        // pointer moving physically RIGHT always grows the agenda's share (WIDTH,
+        // per-box). round269 — vertical drag resizes the SHARED boxHeight (both).
         ratio: ratioFromDrag(startRatio, dx, width),
-        // round251 — vertical drag resizes ONLY this box's own height.
-        [k]: heightFromDrag(startH, dy),
+        boxHeight: heightFromDrag(startH, dy),
       };
       // round250 (owner request "can't drag left/right") — a horizontal corner
       // drag while STACKED brings the boxes back side-by-side so the width
@@ -1246,7 +1244,7 @@ export function TopicsTab({
         style={{
           // round251 — height is PER-BOX: the agenda column carries its own var,
           // so resizing it never touches the triple box.
-          ...(layout.agendaHeight ? { '--split-card-h': `${layout.agendaHeight}px` } : null),
+          ...(layout.boxHeight ? { '--split-card-h': `${layout.boxHeight}px` } : null),
           ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${layout.ratio} 1 0` }),
         }}
       >
@@ -1501,7 +1499,7 @@ export function TopicsTab({
         style={{
           // round251 — the triple box carries its OWN height var, independent of
           // the agenda box.
-          ...(layout.tripleHeight ? { '--split-card-h': `${layout.tripleHeight}px` } : null),
+          ...(layout.boxHeight ? { '--split-card-h': `${layout.boxHeight}px` } : null),
           ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${1 - layout.ratio} 1 0` }),
         }}
       >
