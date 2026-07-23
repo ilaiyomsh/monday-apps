@@ -63,14 +63,9 @@
 }
 
 .menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  inset-inline-start: 0;
-  z-index: 30;
   min-width: 150px;
   margin: 0;
   padding: 4px;
-  list-style: none;
   direction: rtl;
   background: var(--primary-background-color, #fff);
   border: 1px solid var(--ui-border-color, #d0d4e4);
@@ -78,7 +73,20 @@
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
 }
 
-.menu li { margin: 0; }
+/* round253 — the dropdown is portalled to <body> with fixed coords set inline,
+   so it escapes every ancestor's overflow/stacking (owner: menus were hidden
+   behind the editor pane below). */
+.menuPortal {
+  position: fixed;
+}
+
+.menuList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.menuList li { margin: 0; }
 
 .menuItem {
   width: 100%;
@@ -218,16 +226,25 @@
   gap: 4px;
 }
 
-/* round206 — selection bubble: dark pill with core formatting actions. */
+/* round206/253 — selection bubble: dark floating panel. round253 — it can now
+   grow a second row (color swatches / link input), so it is a COLUMN whose top
+   row is the inline action strip. */
 .bubble {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: min(92vw, 640px);
   background: #2b2c33;
   border-radius: 8px;
   padding: 4px 6px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
   z-index: 3000;
+}
+.bubbleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
 }
 .bubble .btn {
   color: #ffffff;
@@ -244,6 +261,22 @@
   height: 16px;
   background: #55565e;
   margin: 0 3px;
+}
+/* current font-size read-out between the A-/A+ steppers */
+.bubbleSizeVal {
+  min-width: 18px;
+  text-align: center;
+  color: #ffffff;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+/* second row inside the bubble (color swatches / link input) */
+.bubbleSubRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px 2px;
+  border-top: 1px solid #45464e;
 }
 
 /* round220/223 — @-mention popup: a pinned search box (round223) over a
