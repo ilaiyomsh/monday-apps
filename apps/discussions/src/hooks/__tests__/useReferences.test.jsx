@@ -63,4 +63,23 @@ describe('useReferences', () => {
     expect(store.clearReferencesUpdateId).toHaveBeenCalledWith('d1');
     expect(result.current.html).toBe('');
   });
+
+  it('round270 — ensureUpdate creates the box update ONCE, exposes its id, and reuses it', async () => {
+    store.loadReferencesUpdateId.mockResolvedValue(null);
+    api.createUpdate.mockResolvedValue({ id: 'u5' });
+    const { result } = renderHook(() => useReferences('d1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let id;
+    await act(async () => { id = await result.current.ensureUpdate(); });
+    expect(id).toBe('u5');
+    expect(api.createUpdate).toHaveBeenCalledTimes(1);
+    expect(store.saveReferencesUpdateId).toHaveBeenCalledWith('d1', 'u5');
+    expect(result.current.updateId).toBe('u5');
+
+    // a second call must REUSE the id, never create a duplicate update.
+    await act(async () => { id = await result.current.ensureUpdate(); });
+    expect(id).toBe('u5');
+    expect(api.createUpdate).toHaveBeenCalledTimes(1);
+  });
 });

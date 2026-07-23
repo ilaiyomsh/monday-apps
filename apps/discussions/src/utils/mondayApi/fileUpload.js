@@ -61,6 +61,29 @@ export async function uploadFileToColumnSeamless({ itemId, columnId, file }) {
   return data?.add_file_to_column || null;
 }
 
+const ADD_FILE_TO_UPDATE_MUTATION = (updateId) =>
+  `mutation ($file: File!) {
+     add_file_to_update (update_id: ${Number(updateId)}, file: $file) { id name url }
+   }`;
+
+/**
+ * round270 — upload a File onto an UPDATE via the SEAMLESS monday.api() (no
+ * token, no client-side secret), the same proven path as the summary-export
+ * column upload: the File is passed as the $file GraphQL variable, the SDK ships
+ * it to the parent monday window over postMessage (structured-clone preserves
+ * File/Blob), and the parent performs the multipart /v2/file upload with the
+ * user's session. `add_file_to_update` takes the same $file variable as
+ * `add_file_to_column`, so documents attach to the box's own update.
+ * @returns {Promise<{id:string,name?:string,url?:string}|null>}
+ * @throws if updateId is missing or on a GraphQL/soft error (caller reports it).
+ */
+export async function uploadFileToUpdateSeamless({ updateId, file }) {
+  if (!updateId) throw new Error('uploadFileToUpdateSeamless: updateId is required');
+  if (!file) throw new Error('uploadFileToUpdateSeamless: file is required');
+  const data = await api(ADD_FILE_TO_UPDATE_MUTATION(updateId), { file }, 'uploadFileToUpdateSeamless');
+  return data?.add_file_to_update || null;
+}
+
 /**
  * @returns {Promise<{id:string,name?:string,url?:string}>} the created asset
  * @throws if no token / column, on network/CORS failure, or on a GraphQL error.

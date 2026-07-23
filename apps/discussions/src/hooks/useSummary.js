@@ -25,6 +25,9 @@ export function useSummary(discussionId) {
   const [saveErrorCode, setSaveErrorCode] = useState(null);
   const [meta, setMeta] = useState({ author: null, updatedAt: null });
   const updateIdRef = useRef(null);
+  // round270 — the box's update id, mirrored into state so the documents bar
+  // (which attaches files to THIS update) re-renders when it resolves/creates.
+  const [updateId, setUpdateId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,6 +41,7 @@ export function useSummary(discussionId) {
       }
       setLoading(true);
       updateIdRef.current = null;
+      setUpdateId(null);
       try {
         const storedId = await loadSummaryUpdateId(discussionId);
         if (cancelled) return;
@@ -53,6 +57,7 @@ export function useSummary(discussionId) {
 
         if (update) {
           updateIdRef.current = String(update.id);
+          setUpdateId(String(update.id));
           setHtml(toEditorHtml(update.body || ''));
           setMeta({
             author: update.creator?.name || null,
@@ -103,6 +108,7 @@ export function useSummary(discussionId) {
       }
 
       updateIdRef.current = String(update.id);
+      setUpdateId(String(update.id));
       await saveSummaryUpdateId(discussionId, update.id);
       setHtml(toEditorHtml(update.body ?? body));
       setMeta({
@@ -124,6 +130,26 @@ export function useSummary(discussionId) {
     }
   }, [discussionId]);
 
+  // round270 — create the box's update on demand so a document can attach even
+  // before any text was saved. A single space keeps the body non-empty (monday
+  // requires one); the next text save overwrites it in place. Returns the update
+  // id (existing or freshly created), or null on failure.
+  const ensureUpdate = useCallback(async () => {
+    if (updateIdRef.current) return updateIdRef.current;
+    if (!discussionId) return null;
+    try {
+      const update = await createUpdate(discussionId, ' ');
+      if (!update) return null;
+      updateIdRef.current = String(update.id);
+      setUpdateId(String(update.id));
+      await saveSummaryUpdateId(discussionId, update.id);
+      return updateIdRef.current;
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('useSummary', 'יצירת עדכון הסיכום לצירוף מסמך נכשלה', err);
+      return null;
+    }
+  }, [discussionId]);
+
   return {
     html,
     loading,
@@ -132,5 +158,7 @@ export function useSummary(discussionId) {
     author: meta.author,
     updatedAt: meta.updatedAt,
     save,
+    updateId,
+    ensureUpdate,
   };
 }

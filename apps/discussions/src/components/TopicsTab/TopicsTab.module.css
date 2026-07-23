@@ -1605,3 +1605,126 @@
 }
 .paneMetaWhen { direction: ltr; font-variant-numeric: tabular-nums; }
 .paneMetaState { display: inline-flex; align-items: center; gap: 4px; }
+
+/* round270 — the "מסמכים" bar: a text-less, LEFT-pinned row of type-colored file
+   icons, rendered directly under the toolbar (RichTextEditor belowToolbar slot)
+   and above the text. Present only when there are documents. Documents live on
+   the pane's monday UPDATE (owner model B). */
+.docBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ui-border-color, #eef0f4);
+  background: var(--primary-background-color, #fff);
+  /* pinned to the LEFT of the box (owner request); in this RTL box flex-end = left */
+  justify-content: flex-end;
+}
+.docIcon {
+  position: relative;
+  width: 28px;
+  height: 32px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.docIcon:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2);
+}
+/* a subtle "dog-ear" so the square reads as a document */
+.docIcon::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  inset-inline-start: 0;
+  border-width: 0 8px 8px 0;
+  border-style: solid;
+  border-color: transparent rgba(255, 255, 255, 0.55) transparent transparent;
+  border-radius: 0 6px 0 0;
+}
+
+/* document preview overlay (image/pdf inline; else download-only) */
+.docPreviewOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4200;
+  background: rgba(0, 0, 0, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.docPreview {
+  width: min(640px, 94vw);
+  max-height: 88vh;
+  background: var(--primary-background-color, #fff);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+.docPreviewHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ui-border-color, #eef0f4);
+}
+.docPreviewName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--primary-text-color, #323338);
+}
+.docPreviewActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.docDownload {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  text-decoration: none;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+.docPreviewClose {
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+}
+.docPreviewClose:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.docPreviewBody {
+  flex: 1;
+  min-height: 280px;
+  background: #f3f4f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+}
+.docPreviewImg { max-width: 100%; max-height: 84vh; object-fit: contain; }
+.docPreviewFrame { width: 100%; height: 70vh; border: none; background: #fff; }
+.docPreviewNote { color: var(--secondary-text-color, #676879); font-size: 13.5px; padding: 24px; text-align: center; }

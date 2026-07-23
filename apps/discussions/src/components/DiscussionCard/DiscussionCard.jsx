@@ -970,7 +970,7 @@ export function DiscussionCard({
         {(showTopicsTables || showBackground || showReferences || showSummaryPane) && (
         <div className={activeTab === 'topics' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'topics' ? undefined : 'none' }}>
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} onLoadingChange={handleTopicsLoadingChange}
-            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditBackground={canEditBackgroundPane} canEditReferences={canEditReferencesPane} canEditSummary={canEditSummaryPane} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditBackground={canEditBackgroundPane} canEditReferences={canEditReferencesPane} canEditSummary={canEditSummaryPane} canAttachDocuments={canEditTitle} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
             showTopics={showTopicsTables} showBackground={showBackground} showReferences={showReferences} showSummary={showSummaryPane}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
             decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus}
