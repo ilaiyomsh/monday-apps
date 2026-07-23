@@ -528,7 +528,7 @@ export function TemplateManagerModal() {
     && !typeOptions.some((opt) => (opt.label || '').trim().toLowerCase() === trimmedTypeSearch.toLowerCase());
 
   return (
-    <div className={styles.panel} dir="ltr">
+    <div className={styles.panel} dir="rtl">
       {view === 'edit' && (
         <div className={styles.panelHeader}>
           <button type="button" className={styles.backBtn} onClick={backToList} aria-label="חזרה">

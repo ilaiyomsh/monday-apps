@@ -1048,10 +1048,11 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               <TabPanel className={styles.tabPanelFill}>
                 {/* Templates manager — persists on its own (independent of the
                     Settings "שמור"); owner-only since it lives inside Settings.
-                    round247 — full RTL (owner request). */}
-                <div dir="rtl" className={styles.rtlPanel}>
-                  <TemplatesPanel />
-                </div>
+                    round247/round249 — RTL now comes from the panel's own dir
+                    (TemplateManagerModal), NOT a wrapper div: the round247
+                    wrapper broke the flex-height chain so the editor list could
+                    not scroll. TemplatesPanel is a direct flex child again. */}
+                <TemplatesPanel />
               </TabPanel>
 
               <TabPanel className={styles.tabPanelFill}>

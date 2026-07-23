@@ -17,6 +17,7 @@
  */
 import { api, formatValue } from './mondayApi/monday-client.js';
 import { getBoardId, getColumns } from './mondayApi/board-config-store.js';
+import { saveTopicOrder } from './topicOrder.js';
 import logger from './logger.js';
 
 function pointName(point) {
@@ -147,9 +148,9 @@ export function sanitizeTypeTemplate(template, id) {
  *
  * @returns {Promise<{topics:number, points:number}>} how many were created.
  */
-export async function createTopicsFromTemplate(discussionId, template, { onProgress, creatorId = null } = {}) {
+export async function createTopicsFromTemplate(discussionId, template, { onProgress, creatorId = null, existingTopicIds = [] } = {}) {
   const clean = sanitizeTemplate(template);
-  if (!discussionId || !clean.topics.length) return { topics: 0, points: 0 };
+  if (!discussionId || !clean.topics.length) return { topics: 0, points: 0, topicIds: [] };
 
   const boardId = getBoardId('topics');
   const relation = getColumns('topics')?.discussionLinkID; // board_relation: topic -> discussion
@@ -165,6 +166,7 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
 
   let topicsCreated = 0;
   let pointsCreated = 0;
+  const createdTopicIds = []; // in TEMPLATE order — used to persist the ribbon order below
   const total = clean.topics.reduce((n, t) => n + 1 + t.points.length, 0);
   let done = 0;
   const report = () => {
@@ -211,6 +213,7 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
       continue;
     }
     topicsCreated += 1;
+    createdTopicIds.push(String(topicId));
     done += 1;
     report();
 
@@ -235,7 +238,23 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
     }
   }
 
-  return { topics: topicsCreated, points: pointsCreated };
+  // round250 — persist the ribbon order so the template lands correctly in the
+  // RTL ribbon (items[0] = rightmost): EXISTING topics keep their place, then the
+  // template's topics are appended AFTER them in TEMPLATE order. Because the
+  // ribbon is RTL this puts the whole template block to the LEFT of existing
+  // topics (owner request E), with the template's FIRST topic to the right of its
+  // second, etc. (owner request D). On a fresh discussion (existingTopicIds=[])
+  // this simply orders the template topics first-to-last = right-to-left.
+  if (createdTopicIds.length) {
+    try {
+      await saveTopicOrder(discussionId, [...existingTopicIds.map(String), ...createdTopicIds]);
+    } catch (err) {
+      // best-effort: a failed order save just leaves the API/default order.
+      logger.warn('createTopicsFromTemplate', 'שמירת סדר הנושאים מהתבנית נכשלה', err);
+    }
+  }
+
+  return { topics: topicsCreated, points: pointsCreated, topicIds: createdTopicIds };
 }
 
 /*

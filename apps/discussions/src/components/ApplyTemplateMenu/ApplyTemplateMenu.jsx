@@ -14,7 +14,7 @@ import styles from './ApplyTemplateMenu.module.css';
  * topic's points) under the given discussion, then calls onApplied() so the
  * caller can refetch. Hidden entirely when there are no templates.
  */
-export function ApplyTemplateMenu({ discussionId, onApplied }) {
+export function ApplyTemplateMenu({ discussionId, onApplied, existingTopicIds = [] }) {
   const { templates } = useTemplates();
   const { currentUser } = useMondayContext();
   const [open, setOpen] = useState(false);
@@ -52,6 +52,9 @@ export function ApplyTemplateMenu({ discussionId, onApplied }) {
         onProgress: setProgress,
         // round115 — stamp the applying user as creator of the created topics/points.
         creatorId: currentUser?.id != null ? String(currentUser.id) : null,
+        // round250 — keep existing topics in place; the template appends AFTER
+        // them (to the LEFT in the RTL ribbon), first-topic-first.
+        existingTopicIds,
       });
       logger.info('ApplyTemplateMenu', `נוצרו ${topics} נושאים ו-${points} נקודות מתבנית "${template.name}"`);
       if (onApplied) await onApplied();
