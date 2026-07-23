@@ -49,6 +49,15 @@ const LAST_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 // "creator" role in resolveCan) — it isn't rendered as a column here.
 const RENDERED_COLUMNS = ['responsibilityID', 'taskCreatorID', 'deadlineID', 'statusID', 'discussionLinkID', 'taskNotesID', 'priorityID'];
 
+// round272 — is the current user among a task's responsibility people? Drives
+// the "משימות של אחרים" scope, which is the led-discussion tasks MINUS the ones
+// the user is responsible for. Pure, so it's unit-testable.
+export function isUserResponsible(task, userId) {
+  const people = task?.responsibilityID;
+  if (!Array.isArray(people) || userId == null) return false;
+  return people.some((p) => String(p?.id) === String(userId));
+}
+
 // Resolve the current user's person id as a string, tolerant of the few shapes
 // monday's context exposes it in (currentUser.id, context.user.id).
 export function resolveUserId(currentUser, context) {
@@ -207,11 +216,14 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     // led → their linked tasks); one full load, no cursor, client-side search.
     // All the inline edit/delete handlers below operate on the same `items`
     // state, so they work unchanged in this scope too.
-    if (scope === 'led') {
+    if (scope === 'led' || scope === 'others') {
       try {
         setLoading(true);
-        const full = await fetchLedTasksPage(userId);
+        let full = await fetchLedTasksPage(userId);
         if (reqId !== reqIdRef.current) return;
+        // round272 — "משימות של אחרים": same led-discussion source, minus the
+        // tasks the current user is responsible for (those are "המשימות שלי").
+        if (scope === 'others') full = full.filter((tk) => !isUserResponsible(tk, userId));
         const q = (search || '').trim();
         setItems(q ? full.filter((tk) => (tk.name || '').includes(q)) : full);
         setCursor(null);

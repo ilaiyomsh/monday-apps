@@ -660,7 +660,33 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
               <ArrowLeft size={20} aria-hidden="true" />
             </button>
           )}
-          <h1 className={styles.viewTitle}>המשימות שלי</h1>
+          {/* round272 (owner spec, MOBILE only) — beside the title, a scope toggle:
+              "המשימות שלי" (default, RIGHT) ⇄ "משימות של אחרים" (LEFT) — the tasks
+              in discussions I lead/coordinate/created that are NOT assigned to me.
+              In this dir="rtl" track the first button ('mine') lands on the right
+              and the second ('others') to its left, matching the owner's layout.
+              Desktop keeps its own toolbar scope toggle (led/mine) unchanged. */}
+          {isMobile ? (
+            <div className={styles.scopeToggleMobile} dir="rtl" role="tablist" aria-label="תחום המשימות">
+              {[
+                { key: 'mine', label: 'המשימות שלי' },
+                { key: 'others', label: 'משימות של אחרים' },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={scope === tab.key}
+                  className={`${styles.subTab}${scope === tab.key ? ` ${styles.subTabActive}` : ''}`}
+                  onClick={() => setScope(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <h1 className={styles.viewTitle}>המשימות שלי</h1>
+          )}
         </div>
       )}
 
