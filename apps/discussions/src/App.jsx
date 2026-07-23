@@ -24,6 +24,7 @@ import { prefetchMyTasks } from './hooks/useMyTasks.js';
 import { prefetchMyDecisions } from './hooks/useMyDecisions.js';
 import { prefetchDashboard } from './hooks/useDashboardData.js';
 import { prefetchDiscussions } from './hooks/useDiscussions.js';
+import { useUsageTracker } from './hooks/useUsageTracker.js';
 import logger from './utils/logger.js';
 import { installChromeNarrowWatcher } from './utils/chromeNarrow.js';
 import { ToastContainer } from './components/Toast';
@@ -217,6 +218,10 @@ async function copyText(text) {
 
 export default function App() {
   const { context, currentUser, isMobile } = useMondayContext();
+  // round265 — lightweight usage tracking (entries + button-action counts) for the
+  // owner-only "מדדי שימוש" tab. One click listener + throttled storage flush; see
+  // hooks/useUsageTracker.js. No effect on render/perf of the rest of the app.
+  useUsageTracker(context?.user?.id ?? currentUser?.id);
   // Global root class driving the responsive layout. Keyed on the monday mobile
   // app flag (NOT viewport width) so an item-card / updates panel that narrows
   // the board-view iframe never flips the app into its mobile layout. The CSS

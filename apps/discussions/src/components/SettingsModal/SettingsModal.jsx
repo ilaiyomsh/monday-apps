@@ -27,6 +27,7 @@ import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js'
 import SearchablePicker from './SearchablePicker';
 import PermissionsTab from './PermissionsTab.jsx';
 import ExportTemplateTab from './ExportTemplateTab.jsx';
+import { UsageMetricsTab } from '@generated/components/UsageMetricsTab';
 import { TemplateManagerModal as TemplatesPanel } from '@generated/components/TemplateManagerModal';
 import { SetupWizard } from '../SetupWizard';
 import logger from '../../utils/logger.js';
@@ -178,7 +179,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   const [permissions, setPermissions] = useState(seedPermissions(draft.permissions));
   const [selectedRoleKey, setSelectedRoleKey] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState(0); // 0 = מיפוי, 1 = העדפות, 2 = תבניות, 3 = תבנית ייצוא, 4 = הרשאות
+  const [activeTab, setActiveTab] = useState(0); // 0 = מיפוי, 1 = העדפות, 2 = תבניות, 3 = תבנית ייצוא, 4 = הרשאות, 5 = מדדי שימוש
   // round256 — the Templates tab (2) widens to the export size while its type
   // editor is on the "תבנית ייצוא" sub-tab (TemplateManagerModal reports this).
   const [openBoardKey, setOpenBoardKey] = useState(null);
@@ -730,6 +731,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               <Tab onClick={() => setActiveTab(2)}>תבניות</Tab>
               <Tab onClick={() => setActiveTab(3)}>תבנית ייצוא</Tab>
               <Tab onClick={() => setActiveTab(4)}>הרשאות</Tab>
+              <Tab onClick={() => setActiveTab(5)}>מדדי שימוש</Tab>
             </TabList>
             <TabPanels className={styles.tabPanels}>
               <TabPanel className={styles.tabPanelFill}>
@@ -1086,6 +1088,13 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                   selectedRoleKey={selectedRoleKey}
                   onSelectRole={setSelectedRoleKey}
                 />
+              </TabPanel>
+
+              {/* round265 — owner-only usage metrics dashboard. It's inside the
+                  owner-only settings modal; `active` gates the data read to when
+                  the tab is actually open. */}
+              <TabPanel className={styles.tabPanelFill}>
+                <UsageMetricsTab active={activeTab === 5} />
               </TabPanel>
             </TabPanels>
           </TabsContext>
