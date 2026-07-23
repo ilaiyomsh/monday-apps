@@ -375,6 +375,23 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
     return true;
   }
 
+  // round249 (owner approval 2026-07-23) — the discussion's creator / lead
+  // (מנהל דיון) / coordinator (מרכז דיון) may EDIT any TASK of their discussion,
+  // mirroring the decision override above and matching the permissions-screen
+  // rule card (round246): "edit = discussion creator / manager / coordinator /
+  // task owner". The task OWNER (responsible) is already covered by the item's
+  // own role scan; this adds the discussion roles. Delete (deleteTask) stays
+  // with the matrix / task owner. Applies only when the task is resolved WITH
+  // its parent discussion in ctx (the in-discussion Tasks tab); My-Tasks (no
+  // discussion) is unaffected.
+  if (
+    itemBoardKey === 'tasks' &&
+    capability !== 'deleteTask' &&
+    isCreatorOrLead(discussion, myId)
+  ) {
+    return true;
+  }
+
   // 6. Resolve: an explicit grant wins outright; otherwise inherited defaults
   //    survive only when no held role explicitly revokes.
   return explicitGranted || (defaultGranted && !denied);

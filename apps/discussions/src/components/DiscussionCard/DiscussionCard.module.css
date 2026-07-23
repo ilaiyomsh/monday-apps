@@ -61,9 +61,9 @@
      keeps the original 24px inset. */
   inset-inline-start: var(--content-gutter-start, 52px);
   inset-inline-end: var(--section-rule-inset-wide, 24px);
-  /* round248 — 2px so the nudged blue active-underline overlaps the rule
-     cleanly even with ±1px rounding. */
-  height: 2px;
+  /* round249 — back to the original 1px rule (owner request); the thicker blue
+     active-underline straddles it symmetrically (see the active ::after). */
+  height: 1px;
   background: var(--ui-border-color, #d0d4e4);
   pointer-events: none;
   z-index: 0;
@@ -110,11 +110,14 @@
 }
 .tabsRow :global([class*="tabWrapper"][class*="active_"]::after) {
   z-index: 2;
-  /* round248 (owner request) — the vibe active underline sits a few px ABOVE
-     the header rule even with the tablist bottom-aligned (the ::after is drawn
-     just under the label, not at the tab's border-box bottom). Nudge it down so
-     it seats exactly on the (slightly thickened) black rule below the tabs. */
-  transform: translateY(3px);
+  /* round249 (owner request) — center the (thicker) blue underline ON the 1px
+     black header rule so it protrudes symmetrically a touch above AND below it.
+     The tablist is bottom-aligned (flex-end), so the tab wrapper's bottom edge
+     sits on the rule; a 4px bar pinned bottom:-2px straddles it 2px each side. */
+  bottom: -2px;
+  height: 4px;
+  border-radius: 2px;
+  transform: none;
 }
 /* vibe TabList renders role="tablist"; keep it ONE row, never wrapping to a 2nd row. */
 .tabsRow :global([role="tablist"]) {

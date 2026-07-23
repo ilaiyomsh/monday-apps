@@ -472,14 +472,19 @@ describe('C. creator/lead override vs revoke — strictCreatorLead flag', () => 
     expect(resolveCan('editDiscussionFields', ctx, opts)).toBe(true);
   });
 
-  it('task cap editTaskStatus:false on a role the creator holds → DENY regardless of override', () => {
-    // Task caps are excluded from the creator/lead override entirely.
+  it('task cap editTaskStatus:false on a task role the user holds → DENY (discussion-role override does NOT apply to a task-only user)', () => {
+    // Task caps are excluded from the DISCUSSION creator/lead CONTENT override
+    // (that override is discussion-tier only). round249 added a SEPARATE override
+    // for the discussion's creator/lead/coordinator on in-discussion tasks — but
+    // here ME holds NO discussion role (creator/lead are OTHER), only the task
+    // creator role with an explicit false, so that override doesn't fire and the
+    // explicit revoke denies.
     const opts = {
       permissions: enabledRoles({ 'tasks:taskCreatorID': { capabilities: { editTaskStatus: false } } }),
     };
     const ctx = {
       boardKey: 'tasks',
-      discussion: disc({ creator: [person(ME)] }),
+      discussion: disc({ creator: [person(OTHER)], lead: [person(OTHER)] }),
       item: task({ creator: [person(ME)] }),
       currentUserId: ME,
     };
@@ -842,6 +847,36 @@ describe('resolveCan — decision tier', () => {
     for (const cap of [...DECISION_EDIT_CAPS, 'deleteDecision']) {
       expect(resolveCan(cap, ctx, opts)).toBe(true);
     }
+  });
+});
+
+// ===========================================================================
+// resolveCan — task tier: the discussion's creator/lead/coordinator may EDIT
+// any in-discussion task (round249, owner approval) — mirrors the decision
+// override; delete stays with the matrix / task owner.
+// ===========================================================================
+describe('resolveCan — task tier: discussion manager edits in-discussion tasks (round249)', () => {
+  const on = { permissions: ENABLED_SEEDED, canManageSettings: false };
+  const TASK_EDIT_CAPS = ['editTaskStatus', 'editTaskPriority', 'editTaskDeadline', 'editTaskAssignee', 'editTaskName'];
+
+  it('the discussion LEAD (manager) may edit any task of the discussion, but NOT delete it', () => {
+    // ME leads the discussion but is neither the task creator nor its responsible.
+    const ctx = {
+      discussion: disc({ lead: [person(ME)] }),
+      item: task({ creator: [person(OTHER)], responsible: [person(OTHER)] }),
+      currentUserId: ME,
+    };
+    for (const cap of TASK_EDIT_CAPS) expect(resolveCan(cap, ctx, on)).toBe(true);
+    expect(resolveCan('deleteTask', ctx, on)).toBe(false);
+  });
+
+  it('a user who is neither a discussion role nor the task owner cannot edit the task', () => {
+    const ctx = {
+      discussion: disc({ lead: [person(OTHER)] }),
+      item: task({ creator: [person(OTHER)], responsible: [person(OTHER)] }),
+      currentUserId: ME,
+    };
+    for (const cap of TASK_EDIT_CAPS) expect(resolveCan(cap, ctx, on)).toBe(false);
   });
 });
 

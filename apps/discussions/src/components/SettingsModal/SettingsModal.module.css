@@ -123,12 +123,6 @@
   background: var(--primary-background-color, #fff);
 }
 
-/* round247 — RTL wrapper for the templates panel (owner request): fill the
-   panel and let logical text-alignment resolve to the right. */
-.rtlPanel {
-  width: 100%;
-  text-align: start;
-}
 .body {
   flex: 1 1 auto;
   min-height: 0;
