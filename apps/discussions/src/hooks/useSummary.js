@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { createUpdate, editUpdate, getItemUpdate } from '@api/updates.js';
+import { createUpdate, editUpdate, getItemUpdate, deleteUpdate } from '@api/updates.js';
 import {
   loadSummaryUpdateId,
   saveSummaryUpdateId,
@@ -150,6 +150,38 @@ export function useSummary(discussionId) {
     }
   }, [discussionId]);
 
+  // round271 — clear ALL of the box's documents while KEEPING its text. monday
+  // has no per-file delete on an update, so the only way to drop files is to
+  // delete the whole update; we first read its persisted body, delete it, then
+  // recreate it with the same body — text survives, every file is removed.
+  // Returns true on success. (The recreate resets the update's author/timestamp.)
+  const clearDocuments = useCallback(async () => {
+    const uid = updateIdRef.current;
+    if (!uid || !discussionId) return false;
+    try {
+      const current = await getItemUpdate(discussionId, uid);
+      const body = current?.body ?? toMondayHtml(html || '');
+      await deleteUpdate(uid);
+      const recreated = await createUpdate(discussionId, body || ' ');
+      if (!recreated) {
+        logger.error('useSummary', 'מחיקת מסמכי הסיכום נכשלה — לא נוצר עדכון חדש');
+        return false;
+      }
+      updateIdRef.current = String(recreated.id);
+      setUpdateId(String(recreated.id));
+      await saveSummaryUpdateId(discussionId, recreated.id);
+      setHtml(toEditorHtml(recreated.body ?? body));
+      setMeta({
+        author: recreated.creator?.name || null,
+        updatedAt: recreated.updated_at || recreated.created_at || null,
+      });
+      return true;
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('useSummary', 'מחיקת מסמכי הסיכום נכשלה', err);
+      return false;
+    }
+  }, [discussionId, html]);
+
   return {
     html,
     loading,
@@ -160,5 +192,6 @@ export function useSummary(discussionId) {
     save,
     updateId,
     ensureUpdate,
+    clearDocuments,
   };
 }
