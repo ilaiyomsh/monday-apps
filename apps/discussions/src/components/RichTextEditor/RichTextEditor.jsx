@@ -85,7 +85,7 @@ const ALIGNS = [
  * HTML, which the docx converter already renders bold. Purely additive: with an
  * empty `mentionPeople` (summary / other editors) nothing changes.
  */
-export default function RichTextEditor({ initialValue = '', onChange, onReady, placeholder = '', editable = true, variant = 'default', extraToolbarActions = null, mentionPeople = [] }) {
+export default function RichTextEditor({ initialValue = '', onChange, onReady, placeholder = '', editable = true, variant = 'default', extraToolbarActions = null, belowToolbar = null, mentionPeople = [] }) {
   // Latest closures/data reachable from the editor's create-time callbacks.
   const mentionPeopleRef = useRef(mentionPeople);
   mentionPeopleRef.current = Array.isArray(mentionPeople) ? mentionPeople : [];
@@ -386,6 +386,11 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
         {extraToolbarActions && <span className={styles.toolbarExtra}>{extraToolbarActions}</span>}
       </div>
       )}
+
+      {/* round268 — host-provided strip rendered directly UNDER the toolbar and
+          ABOVE the text (e.g. the triple-box "מסמכים" bar). Rendered for read-only
+          viewers too (they have no toolbar), so documents are always visible. */}
+      {belowToolbar}
 
       {/* round253 — the active toolbar dropdown, portalled to <body> at fixed
           coords so the editor pane(s) below can never overlap/clip it. */}

@@ -610,6 +610,11 @@ export const COLUMN_SCHEMA = {
     externalParticipantsID: { type: 'long_text', title: 'משתתפים חיצוניים' },
     // File column the exported summary .docx is uploaded into (add_file_to_column).
     summaryFileID: { type: 'file', title: 'קובץ סיכום (DOCS)' },
+    // round268 — a SINGLE files column backing the triple-box "מסמכים" bar
+    // (רקע/התייחסויות/סיכום share it). The 📎 in the box toolbar uploads/removes
+    // through monday's native dialog; the bar shows each file as a text-less,
+    // type-colored icon. Unmapped ⇒ the bar + 📎 simply hide.
+    discussionDocumentsID: { type: 'file', title: 'מסמכים' },
     // round216 — the three triple-box files columns (קבצי רקע/התייחסויות/סיכום,
     // rounds 204/206) were REMOVED from the schema + mapping (owner request):
     // with no mapped column the 📎 attach button and file chips simply hide.

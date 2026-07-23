@@ -1,5 +1,6 @@
 import React, { lazy, Suspense, useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { Check, Loader2, AlertCircle, Paperclip, Plus, X, FileText, Link2 } from 'lucide-react';
+import { Check, Loader2, AlertCircle, Paperclip, Plus, X, Link2, Download } from 'lucide-react';
+import { fileKind, fileKindColor } from '@generated/utils/fileKind.js';
 import { useBackground } from '@generated/hooks/useBackground.js';
 import { useReferences } from '@generated/hooks/useReferences.js';
 import { useSummary } from '@generated/hooks/useSummary.js';
@@ -44,7 +45,7 @@ function editorInitials(name) {
  * preparation links. Mounted HIDDEN when inactive so a mid-typing draft
  * survives switching headers.
  */
-function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, withLinks = false, active, mentionPeople = [] }) {
+function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = false, filesAlias, withLinks = false, active, mentionPeople = [] }) {
   const { html, loading, author, updatedAt, save, saveErrorCode } = hook;
 
   const draftRef = useRef(null);
@@ -95,6 +96,7 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
   // ---- pane FILES (mapped files column, native monday upload dialog) ----
   const filesColumnId = getColumns('discussions')?.[filesAlias]?.id || null;
   const [files, setFiles] = useState([]);
+  const [preview, setPreview] = useState(null); // { name, url } | null — open document preview
   const refreshFiles = useCallback(async () => {
     if (!discussionId || !filesColumnId) { setFiles([]); return; }
     try {
@@ -146,12 +148,35 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
   const when = formatWhen(updatedAt);
   const showLoader = loading || !editorReady;
 
-  // 📎 — inside the FORMATTING TOOLBAR (owner request), per pane's own column.
-  const attachAction = canEdit && filesColumnId ? (
-    <button type="button" className={styles.attachToolbarBtn} onClick={uploadFile} title="צרף קובץ" aria-label="צרף קובץ">
-      <Paperclip size={15} />
-      <span>צרף קובץ</span>
+  // round268 — 📎 is a MINIMALIST icon-only button at the toolbar's far end. It
+  // opens monday's NATIVE files dialog which handles BOTH upload AND removal, so
+  // no custom per-file delete is needed. Shown only to creator/coordinator/lead/
+  // owner (canAttach); everyone else can still view + download from the bar.
+  const attachAction = canAttach && filesColumnId ? (
+    <button type="button" className={styles.attachToolbarBtn} onClick={uploadFile} title="הוספת/הסרת מסמכים" aria-label="הוספת/הסרת מסמכים">
+      <Paperclip size={16} />
     </button>
+  ) : null;
+
+  // round268 — the DOCUMENTS bar: a text-less, LEFT-pinned row of type-colored
+  // square icons, rendered directly under the toolbar and above the text (via
+  // RichTextEditor's belowToolbar slot). Hover shows the filename; a single click
+  // opens the preview (from which the file downloads). Renders only when the box
+  // has documents, so an empty box keeps the text flush under the toolbar.
+  const documentsBar = files.length > 0 ? (
+    <div className={styles.docBar} dir="rtl">
+      {files.map((f) => (
+        <button
+          key={f.assetId || f.name}
+          type="button"
+          className={styles.docIcon}
+          style={{ background: fileKindColor(f.name) }}
+          title={f.name}
+          aria-label={`מסמך: ${f.name}`}
+          onClick={() => setPreview({ name: f.name, url: f.url })}
+        />
+      ))}
+    </div>
   ) : null;
 
   // round225 (owner spec) — the last-edit meta lives in the WHITE area at the
@@ -195,6 +220,7 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
               editable={canEdit}
               variant="flush"
               extraToolbarActions={<>{attachAction}{toolbarMeta}</>}
+              belowToolbar={documentsBar}
               mentionPeople={mentionPeople}
             />
           </Suspense>
@@ -206,15 +232,11 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
         )}
       </div>
 
-      {(files.length > 0 || links.length > 0 || (withLinks && canEdit)) && (
+      {/* round268 — files moved to the top documents bar; this area now holds
+          only the רקע preparation LINKS. */}
+      {(links.length > 0 || (withLinks && canEdit)) && (
         <div className={styles.paneAttachments}>
           <div className={styles.attachRow}>
-            {files.map((f) => (
-              <span key={f.assetId || f.name} className={styles.attachChip}>
-                <FileText size={13} />
-                {f.url ? <a href={f.url} target="_blank" rel="noreferrer">{f.name}</a> : <span>{f.name}</span>}
-              </span>
-            ))}
             {links.map((l) => (
               <span key={l.id} className={styles.attachChip}>
                 <Link2 size={13} />
@@ -264,6 +286,41 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
           </span>
         </div>
       )}
+
+      {/* round268 — document preview overlay: image/PDF render inline; other types
+          show a download-only fallback. Either way there's a הורדה button. */}
+      {preview && (
+        <div
+          className={styles.docPreviewOverlay}
+          dir="rtl"
+          onClick={(e) => { if (e.target === e.currentTarget) setPreview(null); }}
+        >
+          <div className={styles.docPreview} role="dialog" aria-modal="true" aria-label={`תצוגה מקדימה: ${preview.name}`}>
+            <div className={styles.docPreviewHead}>
+              <span className={styles.docPreviewName} title={preview.name}>{preview.name}</span>
+              <span className={styles.docPreviewActions}>
+                {preview.url && (
+                  <a className={styles.docDownload} href={preview.url} target="_blank" rel="noreferrer" download>
+                    <Download size={15} /> הורדה
+                  </a>
+                )}
+                <button type="button" className={styles.docPreviewClose} onClick={() => setPreview(null)} aria-label="סגירה">×</button>
+              </span>
+            </div>
+            <div className={styles.docPreviewBody}>
+              {!preview.url ? (
+                <span className={styles.docPreviewNote}>הקובץ אינו זמין לתצוגה.</span>
+              ) : fileKind(preview.name) === 'image' ? (
+                <img src={preview.url} alt={preview.name} className={styles.docPreviewImg} />
+              ) : fileKind(preview.name) === 'pdf' ? (
+                <iframe title={preview.name} src={preview.url} className={styles.docPreviewFrame} />
+              ) : (
+                <span className={styles.docPreviewNote}>אין תצוגה מקדימה לסוג קובץ זה — לחצו על "הורדה".</span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -279,6 +336,10 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
  */
 export function UpdatesTripleBox({
   discussionId, canEdit = false,
+  // round268 — who may ADD/REMOVE documents (the 📎). A fixed rule: discussion
+  // creator / coordinator / lead / owner (computed in DiscussionCard). Everyone
+  // else still sees the documents bar and can preview + download.
+  canAttach = false,
   // round212 — PER-PANE write gates (matrix capabilities); null falls back to
   // the legacy single canEdit so old call sites/tests keep working.
   canEditBackground = null, canEditReferences = null, canEditSummary = null,
@@ -303,9 +364,11 @@ export function UpdatesTripleBox({
   const editSummaryPane = canEditSummary ?? canEdit;
 
   const panes = useMemo(() => [
-    showBackground && { key: 'background', title: 'רקע', hook: background, canEdit: editBackground, placeholder: 'כתבו כאן רקע והכנה לדיון…', filesAlias: 'backgroundFilesID', withLinks: true },
-    showReferences && { key: 'references', title: 'התייחסויות', hook: references, canEdit: editReferences, placeholder: 'כתבו כאן התייחסויות של משתתפי הדיון…', filesAlias: 'referencesFilesID' },
-    showSummary && { key: 'summary', title: 'סיכום', hook: summary, canEdit: editSummaryPane, placeholder: 'כתבו כאן את סיכום הדיון…', filesAlias: 'summaryFilesID' },
+    // round268 — all three panes share ONE files column (discussionDocumentsID),
+    // so the "מסמכים" bar shows the same documents in every pane of the box.
+    showBackground && { key: 'background', title: 'רקע', hook: background, canEdit: editBackground, placeholder: 'כתבו כאן רקע והכנה לדיון…', filesAlias: 'discussionDocumentsID', withLinks: true },
+    showReferences && { key: 'references', title: 'התייחסויות', hook: references, canEdit: editReferences, placeholder: 'כתבו כאן התייחסויות של משתתפי הדיון…', filesAlias: 'discussionDocumentsID' },
+    showSummary && { key: 'summary', title: 'סיכום', hook: summary, canEdit: editSummaryPane, placeholder: 'כתבו כאן את סיכום הדיון…', filesAlias: 'discussionDocumentsID' },
   ].filter(Boolean), [showBackground, showReferences, showSummary, background, references, summary, editBackground, editReferences, editSummaryPane]);
 
   const [activeKey, setActiveKey] = useState(panes[0]?.key || 'background');
@@ -349,6 +412,7 @@ export function UpdatesTripleBox({
           hook={p.hook}
           placeholder={p.placeholder}
           canEdit={p.canEdit}
+          canAttach={canAttach}
           filesAlias={p.filesAlias}
           withLinks={p.withLinks === true}
           active={activeKey === p.key}
