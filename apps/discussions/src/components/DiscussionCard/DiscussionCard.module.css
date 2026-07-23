@@ -110,14 +110,12 @@
 }
 .tabsRow :global([class*="tabWrapper"][class*="active_"]::after) {
   z-index: 2;
-  /* round249 (owner request) — center the (thicker) blue underline ON the 1px
-     black header rule so it protrudes symmetrically a touch above AND below it.
-     The tablist is bottom-aligned (flex-end), so the tab wrapper's bottom edge
-     sits on the rule; a 4px bar pinned bottom:-2px straddles it 2px each side. */
-  bottom: -2px;
-  height: 4px;
-  border-radius: 2px;
-  transform: none;
+  /* round250 — round249's bottom/height override moved the bar into the row's
+     overflow-y:hidden clip zone, so it vanished. Keep vibe's own ::after box and
+     only NUDGE it down (transform, which the row does not clip) so the blue
+     underline sits ON the 1px black rule. (Below-the-rule protrusion is clipped
+     by the horizontally-scrollable tab row, so it seats on the line, not under.) */
+  transform: translateY(3px);
 }
 /* vibe TabList renders role="tablist"; keep it ONE row, never wrapping to a 2nd row. */
 .tabsRow :global([role="tablist"]) {

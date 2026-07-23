@@ -903,7 +903,7 @@ export function TopicsTab({
   // the split ratio (grow one, shrink the other), vertical moves the shared
   // height. Reuses the same pure ratioFromDrag / heightFromDrag math.
   const onCornerPointerDown = (e) => {
-    if (!editLayout || !canManageSettings || layoutRef.current.stacked) return;
+    if (!editLayout || !canManageSettings) return;
     e.preventDefault();
     e.stopPropagation();
     const startX = e.clientX;
@@ -912,11 +912,22 @@ export function TopicsTab({
     const width = splitRowRef.current?.getBoundingClientRect().width || 0;
     const box = e.currentTarget.parentElement;
     const startH = box ? box.getBoundingClientRect().height : (layoutRef.current.height || 520);
-    const commit = (ev, persist) => applyLayout({
-      // pointer moving physically RIGHT always grows the agenda's share.
-      ratio: ratioFromDrag(startRatio, ev.clientX - startX, width),
-      height: heightFromDrag(startH, ev.clientY - startY),
-    }, persist);
+    const commit = (ev, persist) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      const patch = {
+        // pointer moving physically RIGHT always grows the agenda's share.
+        ratio: ratioFromDrag(startRatio, dx, width),
+        height: heightFromDrag(startH, dy),
+      };
+      // round250 (owner request "can't drag left/right") — a horizontal corner
+      // drag while STACKED brings the boxes back side-by-side so the width
+      // actually changes (a stacked column can't show a width split).
+      if (layoutRef.current.stacked && Math.abs(dx) > 12 && Math.abs(dx) >= Math.abs(dy)) {
+        patch.stacked = false;
+      }
+      applyLayout(patch, persist);
+    };
     const onMove = (ev) => commit(ev, false);
     const onUp = (ev) => {
       document.removeEventListener('pointermove', onMove);
@@ -926,9 +937,10 @@ export function TopicsTab({
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
   };
-  // The bottom-inner corner grip (side-by-side + edit mode only). `place` tags
-  // which box so the CSS pins it to that box's inner corner + resize cursor.
-  const renderCornerHandle = (place) => (editLayout && canManageSettings && !layout.stacked) ? (
+  // The bottom-inner corner grip (edit mode). Shown in BOTH layouts: side-by-side
+  // it resizes width+height; stacked, a horizontal drag also un-stacks (round250)
+  // so width becomes adjustable again. `place` tags the box for CSS.
+  const renderCornerHandle = (place) => (editLayout && canManageSettings) ? (
     <span
       className={`${styles.cornerHandle} ${place === 'agenda' ? styles.cornerAgenda : styles.cornerTriple}`}
       role="separator"
@@ -1249,6 +1261,7 @@ export function TopicsTab({
             <ApplyTemplateMenu
               discussionId={discussion.id}
               onApplied={() => refetch({ showLoader: false })}
+              existingTopicIds={items.map((t) => String(t.id))}
             />
           )}
           {renderLayoutTools('agenda')}
@@ -1357,8 +1370,10 @@ export function TopicsTab({
             topic (gapBeforeId null while dragging). */}
         {draggingTopicId && gapBeforeId == null && <span className={styles.ribbonDropBar} aria-hidden="true" />}
         {/* round237 — the "+" at the END (leftmost): completes the puzzle at the
-            end of the discussion; opens an inline editable box. */}
-        {addTopicOrPoint && (addWhere === 'end' ? (
+            end of the discussion; opens an inline editable box. round250 (owner
+            request) — when there are NO topics yet, show only the single START
+            "+" (rightmost); the end "+" appears once at least one topic exists. */}
+        {addTopicOrPoint && ribbonTopics.length > 0 && (addWhere === 'end' ? (
           <div className={`${styles.ribbonAddForm} ${styles.ribbonAddFormEnd}`}>
             <input
               className={styles.ribbonAddInput}

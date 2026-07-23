@@ -147,13 +147,19 @@ describe('TopicsTab — round235 topics ribbon', () => {
     expect(screen.queryByText('נקודה ב1')).toBeNull();
   });
 
-  it('no topics → no ribbon labels (but the + buttons stay) and the empty note renders', () => {
+  it('round250 — no topics → ONLY the start "+" (rightmost) shows; the end "+" is hidden until a topic exists', () => {
     state.items = [];
     render(<TopicsTab discussion={discussion} canEdit />);
     expect(screen.queryAllByRole('tab').length).toBe(0);
-    // both end "+" buttons are always present so a first topic can be added
+    // Empty agenda: a single "+" at the start (rightmost in the RTL ribbon).
+    expect(screen.getByLabelText('נושא בתחילת הדיון')).toBeTruthy();
+    expect(screen.queryByLabelText('נושא בסוף הדיון')).toBeNull();
+    expect(screen.getByText('אין נושאים לדיון זה')).toBeTruthy();
+  });
+
+  it('round250 — WITH topics the end "+" reappears (add at end of discussion)', () => {
+    render(<TopicsTab discussion={discussion} canEdit />);
     expect(screen.getByLabelText('נושא בתחילת הדיון')).toBeTruthy();
     expect(screen.getByLabelText('נושא בסוף הדיון')).toBeTruthy();
-    expect(screen.getByText('אין נושאים לדיון זה')).toBeTruthy();
   });
 });
