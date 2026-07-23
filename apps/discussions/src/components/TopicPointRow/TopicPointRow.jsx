@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Avatar, Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
-import { Trash2, EyeOff, Eye, MoreHorizontal, Check, GripVertical } from 'lucide-react';
+import { Trash2, EyeOff, Eye, MoreHorizontal, Check, GripVertical, Plus } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { CreateProgressBar } from '@generated/components/CreateProgressBar';
@@ -295,13 +295,14 @@ export function TopicPointRow({
         )}
       </span>
 
-      {/* round260 (owner request) — a single centered cluster. The edit-pencil
-          and hide-eye buttons were REMOVED (edit = click the text). RTL order
-          (right → left): [+ create] [count] [creator] [delete]. Visibility:
-          the "+" is ALWAYS shown; the count is ALWAYS shown when >0; the creator
-          avatar and the delete trash stay hover-revealed (as before). A trailing
-          flex spacer balances the name (flex:1) so the whole cluster sits in the
-          MIDDLE of the row, close to the point text. */}
+      {/* round260/261 — a single centered cluster. RTL order (right → left):
+          [+ create] [count] [creator] [delete]. round261 (owner request) — every
+          slot has a FIXED reserved width so the "+" sits at the SAME position in
+          every row whether or not a count/creator exists (symmetric). The "+" is
+          always visible; the count shows only when >0 (inside its reserved slot);
+          creator + delete stay hover-revealed. Icons are rounded-squares. A
+          trailing flex spacer balances the name (flex:1) so the cluster sits in
+          the MIDDLE of the row, close to the point text. */}
       <span className={styles.pointCluster} onClick={stop} onPointerDown={stop}>
         {(showCol('outputs') || showCol('decisions') || showCol('tasks')) && (
           <>
@@ -314,42 +315,49 @@ export function TopicPointRow({
                 disabled={inert}
                 onClick={(e) => (onCreateTask || onCreateDecision)(point, e.currentTarget.getBoundingClientRect())}
               >
-                +
+                <Plus size={17} strokeWidth={2.5} />
               </button>
             )}
-            {(taskCount + decisionCount) > 0 && (
-              <button
-                type="button"
-                className={styles.outCount}
-                title={`${taskCount} משימות · ${decisionCount} החלטות`}
-                aria-label="הצג תוצרים מהנקודה"
-                disabled={inert}
-                onClick={() => (onOpenTasks || onOpenDecisions)?.(point)}
-              >
-                {taskCount + decisionCount}
-              </button>
-            )}
+            {/* count slot — ALWAYS reserved (empty when 0) so the + never shifts. */}
+            <span className={styles.countSlot}>
+              {(taskCount + decisionCount) > 0 && (
+                <button
+                  type="button"
+                  className={styles.outCount}
+                  title={`${taskCount} משימות · ${decisionCount} החלטות`}
+                  aria-label="הצג תוצרים מהנקודה"
+                  disabled={inert}
+                  onClick={() => (onOpenTasks || onOpenDecisions)?.(point)}
+                >
+                  {taskCount + decisionCount}
+                </button>
+              )}
+            </span>
           </>
         )}
-        {/* creator avatar — hover-revealed (round260 order: after the count). */}
-        {point.creatorId && (
-          <span className={`${styles.creatorAvatar} ${styles.hoverOnly}`}>
-            <CreatorAvatar userId={point.creatorId} usersById={usersById} size="small" />
-          </span>
-        )}
-        {/* per-point DELETE trash — leftmost, hover-revealed. Soft-delete + undo
-            lives in the parent. Inert on a hidden row. */}
-        {onDelete && !inert && (
-          <button
-            type="button"
-            className={`${styles.rowActBtn} ${styles.deleteBtn} ${styles.hoverOnly}`}
-            title="מחיקת נקודה"
-            aria-label={`מחק נקודה: ${point.name}`}
-            onClick={(e) => { e.stopPropagation(); onDelete(point); }}
-          >
-            <Trash2 size={16} />
-          </button>
-        )}
+        {/* creator slot — reserved width, hover-revealed (order: after the count). */}
+        <span className={`${styles.creatorSlot} ${styles.hoverOnly}`}>
+          {point.creatorId && (
+            <span className={styles.creatorAvatar}>
+              <CreatorAvatar userId={point.creatorId} usersById={usersById} size="small" />
+            </span>
+          )}
+        </span>
+        {/* delete slot — reserved width, leftmost. Soft-delete + undo lives in the
+            parent. Inert on a hidden row. */}
+        <span className={styles.deleteSlot}>
+          {onDelete && !inert && (
+            <button
+              type="button"
+              className={`${styles.iconBtn} ${styles.deleteBtn} ${styles.hoverOnly}`}
+              title="מחיקת נקודה"
+              aria-label={`מחק נקודה: ${point.name}`}
+              onClick={(e) => { e.stopPropagation(); onDelete(point); }}
+            >
+              <Trash2 size={17} />
+            </button>
+          )}
+        </span>
         <CreateProgressBar status={taskCreateStatus || decisionCreateStatus} variant={taskCreateStatus ? 'task' : 'decision'} />
       </span>
 

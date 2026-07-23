@@ -137,7 +137,7 @@ describe('TopicPointRow — clean list row structure (round226 stage B smoke)', 
     expect(document.querySelector('[aria-label^="מחק נקודה"]')).toBeNull();
   });
 
-  it('round260 — inside the cluster the RTL order is +, count, creator, delete', () => {
+  it('round260/261 — DOM order (rtl right→left) is +, count, creator, delete', () => {
     renderRow({
       onCreateTask: vi.fn(),
       onDelete: vi.fn(),
@@ -147,16 +147,30 @@ describe('TopicPointRow — clean list row structure (round226 stage B smoke)', 
       usersById: { 99: { name: 'דנה' } },
     });
     const cluster = document.querySelector('.pointCluster');
-    const kids = [...cluster.children];
-    const add = kids.findIndex((el) => el.getAttribute('aria-label') === 'תוצר חדש מהנקודה');
-    const count = kids.findIndex((el) => el.getAttribute('aria-label') === 'הצג תוצרים מהנקודה');
-    const creator = kids.findIndex((el) => el.className.includes('creatorAvatar'));
-    const del = kids.findIndex((el) => (el.getAttribute('aria-label') || '').startsWith('מחק נקודה'));
-    expect(add).toBeGreaterThanOrEqual(0);
-    // DOM order = RTL right→left: + first (rightmost), then count, creator, delete (leftmost).
-    expect(add).toBeLessThan(count);
-    expect(count).toBeLessThan(creator);
-    expect(creator).toBeLessThan(del);
+    // round261 — count/creator/delete now live inside fixed-width reserved slots,
+    // so compare true document order (not just direct children).
+    const add = cluster.querySelector('[aria-label="תוצר חדש מהנקודה"]');
+    const count = cluster.querySelector('[aria-label="הצג תוצרים מהנקודה"]');
+    const creator = cluster.querySelector('.creatorAvatar');
+    const del = cluster.querySelector('[aria-label^="מחק נקודה"]');
+    expect(add && count && creator && del).toBeTruthy();
+    const before = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(before(add, count)).toBe(true);
+    expect(before(count, creator)).toBe(true);
+    expect(before(creator, del)).toBe(true);
+  });
+
+  it('round261 — the + slot layout is symmetric: reserved count slot exists even with 0 outputs', () => {
+    // With zero outputs the count pill is absent, but its reserved slot stays,
+    // so the + keeps its position (no shift between rows with/without a count).
+    const { unmount } = renderRow({ onCreateTask: vi.fn(), decisionCount: 0, taskCount: 0 });
+    expect(document.querySelector('.countSlot')).toBeTruthy();
+    expect(document.querySelector('[aria-label="הצג תוצרים מהנקודה"]')).toBeNull();
+    unmount();
+    // With outputs the same slot now holds the pill.
+    renderRow({ onCreateTask: vi.fn(), decisionCount: 1, taskCount: 1 });
+    const slot = document.querySelector('.countSlot');
+    expect(slot.querySelector('[aria-label="הצג תוצרים מהנקודה"]')).toBeTruthy();
   });
 
   it('round260 — clicking the point text enters inline edit (the pencil button is gone)', () => {
