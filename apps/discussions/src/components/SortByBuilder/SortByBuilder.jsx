@@ -42,34 +42,40 @@ export function SortByBuilder({ options = [], value, onChange, onClear, onSave, 
     ? <div className={bs.bField} key={label}><div className={bs.bFieldLabel}>{label}</div>{seg}</div>
     : seg);
 
-  const renderBody = ({ mobile: m, openId, setOpenId }) => {
+  const renderBody = ({ mobile: m, openId, setOpenId, close }) => {
+    // round228 (owner request) — a NON-owner (no "שמור") can't persist a sort
+    // default, so the panel CLOSES the moment they pick a column (mirrors the
+    // group-by picker). The column's default direction applies; owners keep the
+    // panel open so "שמור" stays reachable, and re-opening still lets a non-owner
+    // tweak the direction (only the COLUMN pick auto-closes).
+    const pickColMaybeClose = (v) => { pickCol(v); if (!onSave) close?.(); };
     const colSeg = (
       <Segment
-        id="scol" openId={openId} setOpenId={setOpenId} mobile={m} sheetTitle="Column"
-        icon={current?.icon} text={current?.label || 'Choose a column'} placeholder={!current}
+        id="scol" openId={openId} setOpenId={setOpenId} mobile={m} sheetTitle="עמודה"
+        icon={current?.icon} text={current?.label || 'בחרו עמודה'} placeholder={!current}
         options={options.map((o) => ({ key: o.value, label: o.label, icon: o.icon, selected: o.value === col }))}
-        onPick={pickCol} />
+        onPick={pickColMaybeClose} />
     );
     if (!current) {
-      return m ? field(true, 'Column', colSeg) : <div className={bs.bRow}>{colSeg}</div>;
+      return m ? field(true, 'עמודה', colSeg) : <div className={bs.bRow}>{colSeg}</div>;
     }
     const dirs = current.dirs || [];
     const dir = dirs.find((d) => d.key === value?.dir) || dirs[0];
     const dirSeg = dirs.length ? (
       <Segment
-        id="sdir" openId={openId} setOpenId={setOpenId} mobile={m} sheetTitle="Direction" note={current.note}
+        id="sdir" openId={openId} setOpenId={setOpenId} mobile={m} sheetTitle="כיוון" note={current.note}
         icon={dir?.icon} text={dir?.label}
         options={dirs.map((d) => ({ key: d.key, label: d.label, icon: d.icon, selected: d.key === (value?.dir ?? dir?.key) }))}
         onPick={pickDir} />
     ) : null;
     return m
-      ? <>{field(true, 'Column', colSeg)}{dirSeg ? field(true, 'Direction', dirSeg) : null}</>
+      ? <>{field(true, 'עמודה', colSeg)}{dirSeg ? field(true, 'כיוון', dirSeg) : null}</>
       : <div className={bs.bRow}>{colSeg}{dirSeg}</div>;
   };
 
   return (
     <BuilderControl
-      icon={Sort} label="Sort" title="Sort by"
+      icon={Sort} label="סדר" title="סדר לפי"
       applied={applied} badge={1} mobile={mobile}
       onClear={applied ? onClear : null}
       onSave={onSave}

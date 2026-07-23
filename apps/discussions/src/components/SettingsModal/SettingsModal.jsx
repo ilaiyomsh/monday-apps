@@ -3,7 +3,7 @@ import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, Ta
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible } from '../../utils/mondayApi/boards.config.js';
 
 // Round 78: the effective auto-fill role list for a tasks access column
 // (taskViewersID / taskEditorsID) — the stored preference, or the default when
@@ -24,7 +24,6 @@ export function toggleAccessRoleSource(preferences, accessAlias, roleAlias) {
 import { api } from '../../utils/mondayApi/monday-client.js';
 import { detectManagedColumnId } from '../../utils/mondayApi/managedColumns.js';
 import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js';
-import { fileToLogoDataUrl } from '../../utils/imageLogo.js';
 import SearchablePicker from './SearchablePicker';
 import PermissionsTab from './PermissionsTab.jsx';
 import ExportTemplateTab from './ExportTemplateTab.jsx';
@@ -38,9 +37,25 @@ import styles from './SettingsModal.module.css';
 // keys added to the schema after the instance was last saved (so new sections/
 // fields appear). A shallow merge over the default is enough for the top-level
 // keys; `sections` is taken verbatim when present (the user owns its order).
-function seedExportTemplate(stored) {
+export function seedExportTemplate(stored) {
   const base = { ...DEFAULT_EXPORT_TEMPLATE, ...(stored || {}) };
   if (!Array.isArray(base.sections) || !base.sections.length) base.sections = DEFAULT_EXPORT_TEMPLATE.sections;
+  // Clone so we never mutate a shared constant / the stored object, then back-fill
+  // any section key added to the schema after this instance last saved (round192:
+  // 'decisions'). Each missing key is inserted near its DEFAULT position; the order
+  // of keys the user already has is preserved (they own that order).
+  base.sections = base.sections.map((s) => ({ ...s }));
+  // round203 — drop RETIRED section keys (e.g. 'freeText' — "פתיחה") that an
+  // older instance still carries; only keys in the current schema survive.
+  const defaultKeys = new Set(DEFAULT_EXPORT_TEMPLATE.sections.map((s) => s.key));
+  base.sections = base.sections.filter((s) => defaultKeys.has(s?.key));
+  const present = new Set(base.sections.map((s) => s?.key));
+  DEFAULT_EXPORT_TEMPLATE.sections.forEach((def, idx) => {
+    if (!present.has(def.key)) {
+      base.sections.splice(Math.min(idx, base.sections.length), 0, { ...def });
+      present.add(def.key);
+    }
+  });
   base.header = { ...DEFAULT_EXPORT_TEMPLATE.header, ...(stored?.header || {}) };
   base.footer = { ...DEFAULT_EXPORT_TEMPLATE.footer, ...(stored?.footer || {}) };
   return base;
@@ -140,7 +155,7 @@ export function resolveMultiColView(typedOptions, selectedIds, colTitles = {}) {
  * alias→real-column-id mapping that the SDK reads, then persist via
  * SettingsContext.updateSettings (monday.storage, per instance).
  */
-export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false }) {
+export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false, contained = false }) {
   const { settings, updateSettings, isConfigured } = useSettings();
   const { context } = useMondayContext();
   // settings is null until a mapping is stored; seed the editable draft from an
@@ -177,7 +192,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // configured — never during the first-run forced modal.
   const [showTopUp, setShowTopUp] = useState(false);
   const fileInputRef = useRef(null);
-  const logoInputRef = useRef(null); // round108 — hidden picker for the header logo
 
   // re-seed local draft from the live settings whenever the modal opens
   useEffect(() => {
@@ -367,6 +381,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     'discussionLeadID',
     'discussionCoordinatorID', // מרכז דיון — optional people column / full role
     'participantsID',
+    'externalParticipantsID', // round211 — משתתפים חיצוניים (long_text, comma-separated names)
     'creationDateID',
     'discussionDateID',
     'discussionTypeID',
@@ -598,22 +613,16 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     }
   };
 
-  // round108 — owner uploads a brand logo shown at the top-right of the
-  // discussion header. We downscale it to a small data-URI (self-contained, no
-  // asset hosting) and stash it on preferences.logoUrl; "שמור" persists it.
-  const handleLogoFile = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = ''; // allow re-picking the same file
-    if (!file) return;
-    try {
-      const dataUrl = await fileToLogoDataUrl(file, { maxPx: 320 });
-      setPreferences((p) => ({ ...p, logoUrl: dataUrl }));
-    } catch (err) {
-      logger.error('SettingsModal', 'טעינת הלוגו נכשלה', err);
-    }
-  };
-
   if (!isOpen) return null;
+
+  // round178 — `contained` scopes the overlay to the right discussion-card pane
+  // (absolute, not fixed) so the settings box opens CENTERED within that pane and
+  // dims only its tabs (owner request). Full-screen otherwise (e.g. the boot gate).
+  // round197 — the Export-template tab BREAKS OUT of containment (owner request):
+  // its box fills the whole app iframe, so the contained (card-pane-scoped)
+  // overlay is dropped while that tab is active and the viewport-fixed overlay
+  // takes over; every other tab keeps the contained behavior.
+  const overlayClass = `${styles.overlay} ${contained && activeTab !== 3 ? styles.overlayContained : ''}`;
 
   // round147 — templates-only mode: a super member ("חבר-על") opens the gear to
   // manage templates and NOTHING else — no mapping, no preferences, no
@@ -621,7 +630,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // settings save/footer machinery is deliberately absent here.
   if (templatesOnly) {
     return (
-      <div className={styles.overlay} onClick={(e) => {
+      <div className={overlayClass} onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}>
         <div
@@ -654,7 +663,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // so the re-seed effect refreshes the mapping view with the fresh config.
   if (showTopUp) {
     return (
-      <div className={styles.overlay} onClick={(e) => {
+      <div className={overlayClass} onClick={(e) => {
         if (e.target === e.currentTarget) setShowTopUp(false);
       }}>
         <div
@@ -684,11 +693,11 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   }
 
   return (
-    <div className={styles.overlay} onClick={(e) => {
+    <div className={overlayClass} onClick={(e) => {
       if (e.target === e.currentTarget) onClose();
     }}>
       <div
-        className={`${styles.modal} ${activeTab <= 2 ? styles.modalFixed : ''} ${activeTab >= 3 ? styles.modalWide : ''}`}
+        className={`${styles.modal} ${activeTab <= 2 ? styles.modalFixed : ''} ${activeTab === 3 ? styles.modalExport : ''} ${activeTab === 4 ? styles.modalWide : ''}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -711,7 +720,8 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
             </TabList>
             <TabPanels className={styles.tabPanels}>
               <TabPanel className={styles.tabPanelFill}>
-          <div className={styles.body}>
+          {/* round247 — the מיפוי panel is full RTL (owner request). */}
+          <div className={styles.body} dir="rtl">
             {/* Post-install entry to the config-aware SetupWizard. Shown only when
                 the instance is already configured (never in the first-run forced
                 modal, which has the wizard as its landing screen). */}
@@ -789,7 +799,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                             // the live { id, name } options (see resolveMultiColView).
                             const { labelByVal, chipName, remaining } = resolveMultiColView(typedOptions, selectedIds, col.colTitles);
                             return (
-                              <div key={alias} className={styles.colRow}>
+                              <div key={alias} className={`${styles.colRow} ${styles.colRowWide}`}>
                                 <div className={styles.colLabel}>
                                   <Text type={"text2"}>{col.title || alias}</Text>
                                 </div>
@@ -961,7 +971,8 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               </TabPanel>
 
               <TabPanel className={styles.tabPanelFill}>
-                <div className={styles.prefs}>
+                {/* round247 — the העדפות panel is full RTL (owner request). */}
+                <div className={styles.prefs} dir="rtl">
                   {/* How the "הנחיות קודמות" tab resolves its tasks — via the linked
                       previous discussion, or by the discussion TYPE (taskTypeID). */}
                   <div className={styles.prefRow}>
@@ -999,43 +1010,36 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                   {/* round108 — brand logo shown at the top-right of every discussion
                       header. Owner-only (this whole modal is owner-gated). Stored as
                       a downscaled data-URI on preferences.logoUrl; "שמור" persists it. */}
-                  <div className={styles.prefRow}>
+                  {/* round205 — per-component visibility (owner request; this
+                      whole modal is owner-gated): which app surfaces exist for
+                      EVERYONE on this instance. Default-on; unchecking stores an
+                      explicit false under preferences.visibleComponents.
+                      (The round108 "לוגו" preference row was removed here.) */}
+                  <div className={`${styles.prefRow} ${styles.prefRowStack}`}>
                     <div className={styles.prefLabel}>
-                      <Text type={"text2"}>לוגו בכותרת הדיון</Text>
+                      <Text type={"text2"}>רכיבים באפליקציה</Text>
                     </div>
-                    <div className={styles.prefControl}>
-                      <Flex align="center" gap={12} wrap>
-                        {preferences.logoUrl && (
-                          <img
-                            src={preferences.logoUrl}
-                            alt="תצוגה מקדימה של הלוגו"
-                            style={{ height: 32, maxWidth: 140, objectFit: 'contain', border: '1px solid var(--ui-border-color, #d0d4e4)', borderRadius: 4, padding: 2 }}
-                          />
-                        )}
-                        <Button
-                          kind="secondary"
-                          size="small"
-                          onClick={() => logoInputRef.current?.click()}
-                        >
-                          {preferences.logoUrl ? 'החלף לוגו' : 'העלה לוגו'}
-                        </Button>
-                        {preferences.logoUrl && (
-                          <Button
-                            kind="tertiary"
-                            size="small"
-                            onClick={() => setPreferences((p) => ({ ...p, logoUrl: null }))}
-                          >
-                            הסר
-                          </Button>
-                        )}
-                        <input
-                          ref={logoInputRef}
-                          type="file"
-                          accept="image/*"
-                          style={{ display: 'none' }}
-                          onChange={handleLogoFile}
-                        />
-                      </Flex>
+                    <div className={`${styles.prefControl} ${styles.prefControlFull}`}>
+                      <div className={styles.componentGrid}>
+                        {APP_COMPONENTS.map((c) => (
+                          <label key={c.key} className={styles.componentItem}>
+                            <input
+                              type="checkbox"
+                              checked={isComponentVisible(preferences, c.key)}
+                              onChange={(e) =>
+                                setPreferences((p) => ({
+                                  ...p,
+                                  visibleComponents: {
+                                    ...(p.visibleComponents || {}),
+                                    [c.key]: e.target.checked ? true : false,
+                                  },
+                                }))
+                              }
+                            />
+                            <Text type={"text2"}>{c.label}</Text>
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1043,7 +1047,11 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
 
               <TabPanel className={styles.tabPanelFill}>
                 {/* Templates manager — persists on its own (independent of the
-                    Settings "שמור"); owner-only since it lives inside Settings. */}
+                    Settings "שמור"); owner-only since it lives inside Settings.
+                    round247/round249 — RTL now comes from the panel's own dir
+                    (TemplateManagerModal), NOT a wrapper div: the round247
+                    wrapper broke the flex-height chain so the editor list could
+                    not scroll. TemplatesPanel is a direct flex child again. */}
                 <TemplatesPanel />
               </TabPanel>
 
@@ -1093,9 +1101,15 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
             <Button kind={"tertiary"} onClick={onClose}>ביטול</Button>
             <Button kind={"primary"} loading={saving} onClick={handleSave}>שמור</Button>
           </Flex>
-          <div className={styles.versionLabel} dir="ltr">
-            <Text type={"text3"} color={"secondary"}>{getVersionLabel()}</Text>
-          </div>
+          {/* round191 — version badge is OWNERS ONLY (owner request). This footer only
+              renders in the full (owner) modal — non-owners get the templatesOnly early
+              return above with no footer — but gate it explicitly so a future refactor
+              can't leak the version/sha to non-owners. */}
+          {!templatesOnly && (
+            <div className={styles.versionLabel} dir="ltr">
+              <Text type={"text3"} color={"secondary"}>{getVersionLabel()}</Text>
+            </div>
+          )}
         </div>
       </div>
     </div>

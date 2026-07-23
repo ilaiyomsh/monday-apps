@@ -222,6 +222,10 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
 
   return (
     <div className={styles.root}>
+      {/* round188 — KPI column + chart share one desktop ROW; the drill-down list
+          (below) is a sibling of this row so it renders full-width BELOW the widgets,
+          not squeezed into a third column. */}
+      <div className={styles.topRow}>
       {/* KPI cards — total · בוצעו (done set) · בעיכוב (computed, deadline-based). */}
       <div className={styles.kpiGrid}>
         <Box className={styles.kpiCard} rounded="medium" dir="ltr">
@@ -247,7 +251,14 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
         </Box>
       </div>
 
-      {/* Column chart */}
+      {/* Column chart. round196 — when there are no tasks the CARD still renders,
+          completely empty except a "טרם נוצרו משימות" note (owner request), instead
+          of the widgets floating over a bare background. */}
+      {!hasChart && (
+        <Box className={`${styles.chartCard} ${styles.chartCardEmpty}`} rounded="medium" shadow="xs" border>
+          <span className={styles.chartEmptyMsg}>טרם נוצרו משימות</span>
+        </Box>
+      )}
       {hasChart && (
         <Box className={styles.chartCard} rounded="medium" shadow="xs" border>
           <div className={styles.chartBody}>
@@ -319,6 +330,7 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
           </div>
         </Box>
       )}
+      </div>
 
       {/* Tasks for the selected bar */}
       {selected && filteredTasks.length > 0 && (
@@ -360,11 +372,6 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
         </div>
       )}
 
-      {items.length === 0 && (
-        <div className={styles.empty}>
-          אין מספיק נתונים להצגת אפקטיביות
-        </div>
-      )}
     </div>
   );
 }

@@ -87,18 +87,29 @@ describe('DiscussionList — exportDocs gate on the row export control', () => {
     expect(within(menu).getByText('ייצוא')).toBeTruthy();
   });
 
-  it('shows "ייצוא" for the discussion creator (feature on, non-owner)', () => {
+  it('shows "ייצוא" for the discussion creator (fixed rule, non-owner)', () => {
     currentRow.discussionCreatorID = [{ id: '999' }];
-    const permissions = { enabled: true, version: 1, roles: {} };
-    renderList({ permissions, canManageSettings: false, currentUser: { id: '999' } });
+    renderList({ canManageSettings: false, currentUser: { id: '999' } });
     const menu = openRowMenu();
     expect(within(menu).getByText('ייצוא')).toBeTruthy();
   });
 
-  it('hides "ייצוא" for a non-creator/lead/owner when the feature is on', () => {
-    // Feature ON, no role grants exportDocs, user is neither creator nor lead nor
-    // owner → default bucket creatorLeadOwner → DENY → export item withheld.
-    const permissions = { enabled: true, version: 1, roles: {} };
+  it('shows "ייצוא" for the coordinator (round207 — joined the fixed rule)', () => {
+    currentRow.discussionCoordinatorID = [{ id: '999' }];
+    renderList({ canManageSettings: false, currentUser: { id: '999' } });
+    const menu = openRowMenu();
+    expect(within(menu).getByText('ייצוא')).toBeTruthy();
+  });
+
+  it('hides "ייצוא" for everyone else — even with an exportDocs matrix grant (round207 fixed rule)', () => {
+    // round207: export is a FIXED rule (creator/lead/coordinator + owner); a
+    // matrix exportDocs grant (e.g. participants) no longer surfaces the action.
+    const permissions = {
+      enabled: true,
+      version: 1,
+      roles: { 'discussions:participantsID': { capabilities: { exportDocs: true } } },
+    };
+    currentRow.participantsID = [{ id: '999' }];
     renderList({ permissions, canManageSettings: false, currentUser: { id: '999' } });
     const menu = openRowMenu();
     expect(within(menu).queryByText('ייצוא')).toBeNull();

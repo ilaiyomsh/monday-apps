@@ -151,7 +151,11 @@
   flex-wrap: wrap;
   flex: none;
   background: var(--primary-background-color, #ffffff);
-  padding: var(--spacing-small, 8px) var(--spacing-medium, 16px) var(--spacing-small, 8px);
+  /* round180 — extra top padding (~1cm) so the toolbar row starts lower and isn't
+     glued to the top edge of the PersonalShell white card (owner request).
+     round188 — toolbar→content gap (bottom 20px) pinned HERE on the sticky toolbar;
+     the scroll-away gap on .groupScrollInner is zeroed, so the gap is constant. */
+  padding: 32px var(--spacing-medium, 16px) 20px;
   padding-inline-start: var(--content-gutter-start, 52px); /* round114 — first pill on the table edge line */
   /* Round 90 — keep the toolbar frozen at the top on scroll (it already sits
      above the scrolling .board; sticky guards against any view-level scroll). */
@@ -168,7 +172,9 @@
   overflow: auto;
   direction: ltr;
   margin-inline-start: var(--content-gutter-start, 52px); /* round114 — shared white gutter */
-  margin-inline-end: 0;
+  /* round184 — symmetric right inset (owner request): row separators stop a bit
+     before the right edge instead of bleeding to it, matching the other tables. */
+  margin-inline-end: var(--section-rule-inset-wide, 24px);
 }
 /* Shared horizontal extent: as wide as the widest group table, never narrower
    than the viewport, so all groups scroll in unison. */
@@ -176,7 +182,9 @@
   width: max-content;
   min-width: 100%;
   direction: ltr;
-  padding-block: var(--spacing-small, 8px) 0;
+  /* round188 — was `8px 0`; zeroed so the toolbar→content gap lives entirely in the
+     sticky toolbar's pinned padding-bottom and stays constant on scroll. */
+  padding-block: 0;
 }
 
 /* Base pill — plain by default, light hover (matches monday's Search pill). */
@@ -393,6 +401,13 @@
    (owner request): scrolling itself still works (wheel/trackpad/drag), only
    the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
    ::-webkit-scrollbar pseudo. */
+/* round169 — the board's vertical scrollbar is visible from the first moment
+   (owner request), overriding the global transparent-until-hover default. */
+.board::-webkit-scrollbar-thumb:vertical {
+  background: var(--ui-border-color, #c3c6d4);
+  background-clip: padding-box;
+}
+
 :global(body[data-chrome-narrow="1"]) .board {
   scrollbar-width: none;
 }

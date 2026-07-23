@@ -19,6 +19,16 @@
   gap: var(--spacing-medium, 16px);
 }
 
+/* round188 — KPI column + chart live in this row wrapper (was directly on .root).
+   The bar-click drill-down list is a sibling of .topRow under .root, so it renders
+   full-width BELOW the widgets instead of becoming a squeezed third column when the
+   desktop row layout is active. Base = stacked (mobile); desktop = side-by-side. */
+.topRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-large, 24px);
+}
+
 /* KPI cards */
 .kpiGrid {
   display: grid;
@@ -26,11 +36,44 @@
   gap: var(--spacing-medium, 16px);
 }
 
-/* Auto-fitting grid on desktop (three cards: total · בוצעו · בעיכוב); gated on
-   `.is-desktop` (not viewport width) so an item-card panel narrowing the iframe
-   doesn't drop it to a single column. */
+/* round183 — desktop layout (owner request): the 3 KPI tiles STACK VERTICALLY on
+   the LEFT (order top→bottom: סה"כ משימות · בוצעו · בעיכוב — the JSX order), and the
+   bar chart sits to their RIGHT and is TALLER. Gated on `.is-desktop` (not viewport
+   width) so a docked item-card panel keeps the mobile stacked layout. The tiles
+   keep their exact size (single-column grid, fixed width, min-height unchanged);
+   round188 — `.topRow` (not `.root`) becomes the row so the drill-down list stays
+   full-width below; the chart card takes the remaining width. */
+:global(.is-desktop) .topRow {
+  flex-direction: row;
+  /* round185 — stretch so the chart card is EXACTLY as tall as the KPI column
+     (owner request): its top edge aligns with the top tile (סה"כ משימות) and its
+     bottom edge with the lowest tile (בעיכוב). The KPI column defines the height
+     (its 3 fixed-size tiles + gaps); the chart card stretches to match. */
+  align-items: stretch;
+}
 :global(.is-desktop) .kpiGrid {
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  grid-template-columns: 1fr; /* single column → the 3 tiles stack vertically */
+  width: 240px;
+  flex: none;
+}
+/* The chart card fills the stretched row height and flows the chart into the space
+   left of the toolbar (no fixed height — it tracks the KPI column). */
+:global(.is-desktop) .chartCard {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+:global(.is-desktop) .chartBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+:global(.is-desktop) .chartContainer {
+  flex: 1;
+  min-height: 0;
+  height: auto; /* fill the card height instead of a fixed value */
 }
 
 /* dir="ltr" on the card puts the accent stripe physically on the left; the body
@@ -171,6 +214,10 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-small, 12px);
+  /* round189 — breathing room below the revealed items so the last row doesn't touch
+     the bottom edge of the white card. Sized to match the gap between the chart widget
+     and the group title below it (the .root/.topRow gap, --spacing-large 24px). */
+  margin-block-end: var(--spacing-large, 24px);
 }
 
 .filteredHeader {
@@ -182,11 +229,13 @@
 .filteredTitle {
   margin: 0;
   font-size: 18px;
-  font-weight: 700;
-  /* Match the Tasks/Previous-Tasks group titles — force the variable-font weight
-     axis so the Hebrew label renders bold and uniform across all task tables. */
-  font-variation-settings: 'wght' 700;
-  color: var(--text-color, #323338);
+  /* round189 — match the board group titles used everywhere else (TasksTab
+     .groupTitle): medium weight (500, NOT bold) and the secondary-text grey. The
+     inline selectedColor still tints status selections; person selections fall back
+     to this grey, exactly like a normal group header. */
+  font-weight: 500;
+  font-variation-settings: 'wght' 500;
+  color: var(--secondary-text-color, #676879);
 }
 
 .taskStack {
@@ -200,7 +249,21 @@
   direction: ltr;
 }
 
-/* empty state */
+/* round196 — no-tasks state: the chart card renders EMPTY (no toolbar, no plot)
+   with a single centered note. Same card chrome, so the desktop row still
+   stretches it to the KPI column height; the min-height covers mobile/stacked. */
+.chartCardEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+}
+.chartEmptyMsg {
+  color: var(--secondary-text-color, #676879);
+  font-size: 15px;
+}
+
+/* empty state (unused since round196 — kept only if re-referenced) */
 .empty {
   text-align: center;
   padding: var(--spacing-xxl, 48px) 0;

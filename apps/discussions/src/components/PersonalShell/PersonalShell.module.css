@@ -1,0 +1,96 @@
+/* round170/round173/round178 — personal-area shell: a flush-LEFT horizontal
+   segmented switcher at the top; the active view fills the rest. (round174's left
+   vertical rail was reverted per owner request.)
+   round179 — the shell no longer sits inside ONE white card. The switcher now
+   FLOATS on the grey backdrop (the same --frame-backdrop the framed-card look
+   uses, inherited from `.appShell`), and each active view sits in its OWN white
+   card below (`.body`). This gives a clear separation between the switcher and the
+   content and reduces visual load in the top-left corner. */
+.shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  background: transparent;
+}
+/* Switcher row — floats directly on the grey backdrop: no white fill, no border,
+   no card frame. Just the segmented pill sitting on grey. */
+.header {
+  flex: none;
+  display: flex;
+  direction: ltr;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 2px 4px 12px;
+  background: transparent;
+}
+.tabs {
+  display: inline-flex;
+  /* natural RTL reading order: דשבורד (right) → … → חזרה לדיונים (left) */
+  direction: rtl;
+  /* round180 — the pill background is transparent so it is IDENTICAL to the grey
+     backdrop it floats on (owner request): no visible container, only the active
+     segment's white card stands out. */
+  background: transparent;
+  border-radius: 11px;
+  padding: 4px;
+  gap: 3px;
+}
+.tab {
+  border: none;
+  background: transparent;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-family: var(--font-family);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.tab:hover {
+  color: var(--primary-text-color, #323338);
+}
+.tabActive {
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-color, #0073ea);
+  font-weight: 800;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+/* The back control is a 4th segment: identical tab styling, plus a left arrow
+   after its label (icon sits on the LEFT since the group is RTL). */
+.tabBack {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+/* The active view — its OWN white card floating on the grey backdrop, with the
+   same framed-card chrome (border/radius/shadow) as the discussions frame, keyed
+   off the `--frame-*` custom properties inherited from `.appShell`. */
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--frame-border, #e6e9ef);
+  border-radius: var(--frame-radius, 16px);
+  box-shadow: var(--frame-shadow, 0 8px 26px rgba(20, 30, 60, 0.1));
+  overflow: hidden;
+}
+/* round175 parity — when monday's item-card / updates panel docks and narrows the
+   iframe (body[data-chrome-narrow]; see utils/chromeNarrow.js), flatten the card's
+   PHYSICAL-RIGHT edge so it meets the panel flush (no gap, rounded corner, or
+   shadow seam). Self-clears when the panel closes. */
+:global(body[data-chrome-narrow="1"]) .body {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+/* On a real mobile app the back label is dropped to save width (icon only). */
+:global(.mobile-app) .tabBack span {
+  display: none;
+}
+:global(.mobile-app) .tab {
+  padding: 8px 12px;
+}

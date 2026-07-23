@@ -33,6 +33,12 @@ vi.mock('@generated/hooks/useStatusOptions', () => ({
 vi.mock('../MyTasksTable.jsx', () => ({
   MyTasksTable: ({ tasks }) => <div data-testid="table">{tasks.map((t) => <div key={t.id}>{t.name}</div>)}</div>,
 }));
+// round208 — mobile renders MyTasksCardList instead of the table; keep it dumb
+// too (its own behavior is pinned in myTasksCardList.test.jsx) so card chip
+// texts (e.g. the empty "עדיפות" chip) don't collide with builder options here.
+vi.mock('../MyTasksCardList.jsx', () => ({
+  MyTasksCardList: ({ tasks }) => <div data-testid="cards">{tasks.map((t) => <div key={t.id}>{t.name}</div>)}</div>,
+}));
 // No saved view / no save permission — the smoke test runs without the
 // Settings/Monday providers the real hook needs.
 // The permission resolver reads MondayContext + SettingsContext (mocked only
@@ -47,41 +53,48 @@ import { MyTasksView } from '../MyTasksView.jsx';
 describe('MyTasksView — toolbar + builder (smoke)', () => {
   beforeEach(() => { vp.mobile = false; });
 
-  it('renders the toolbar pills and tasks (default: NO grouping — one flat group)', () => {
+  it('renders the toolbar pills and tasks (round224 default: GROUP BY STATUS, top-down)', () => {
     render(<MyTasksView />);
-    expect(screen.getByText('Filter')).toBeTruthy();
-    expect(screen.getByText('Sort')).toBeTruthy();
-    expect(screen.getByText('Group by')).toBeTruthy();
-    // default = no grouping -> a single "all tasks" group, no status headers
-    expect(screen.getByText('כל המשימות')).toBeTruthy();
-    expect(screen.queryByText('בעבודה')).toBeNull();
+    expect(screen.getByText('סינון')).toBeTruthy();
+    expect(screen.getByText('סדר')).toBeTruthy();
+    expect(screen.getByText('קבץ לפי')).toBeTruthy();
+    // round224 — the default grouping is STATUS (owner mockup): the mocked
+    // status labels render as group headers; no flat "all tasks" group.
+    expect(screen.queryByText('כל המשימות')).toBeNull();
+    expect(screen.getByText('בעבודה')).toBeTruthy();
+    expect(screen.getByText('בוצע')).toBeTruthy();
     expect(screen.getByText('משימה א')).toBeTruthy();
     expect(screen.getByText('משימה ב')).toBeTruthy();
   });
 
-  it('opens the Sort builder (mobile sheet) EMPTY — placeholder column, no direction yet', () => {
-    vp.mobile = true;
+  it('round227 — the scope toggle: "משימות באחריותי" is the default AND the LEFT (2nd) button', () => {
     render(<MyTasksView />);
-    fireEvent.click(screen.getByLabelText('Sort')); // icon-only pill -> opens sheet
-    expect(screen.getByText('Sort by')).toBeTruthy();             // sheet title
-    expect(screen.getByText('Choose a column')).toBeTruthy();     // empty placeholder
-    expect(screen.queryByText('Direction')).toBeNull();           // no direction until a column is picked
-    // picking a column activates the sort and reveals the direction segment
-    fireEvent.click(screen.getByText('Choose a column'));
-    fireEvent.click(screen.getByText('עדיפות'));
-    expect(screen.getByText('Direction')).toBeTruthy();
-    expect(screen.getByText('Label order')).toBeTruthy();
+    const mine = screen.getByRole('tab', { name: 'משימות באחריותי' });
+    const led = screen.getByRole('tab', { name: 'משימות בדיונים שהובלתי' });
+    expect(mine.getAttribute('aria-selected')).toBe('true');
+    expect(led.getAttribute('aria-selected')).toBe('false');
+    // round227 — "led" is listed FIRST in the rtl track (rightmost); "mine" is
+    // the SECOND tab (leftmost), so a DOM-order compare puts led before mine.
+    expect(led.compareDocumentPosition(mine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('opens the Filter builder (mobile sheet) EMPTY — no pre-seeded Where row; "+ New filter" adds one', () => {
+  it('round213 — MOBILE: the builders are replaced by the "סידור לפי" toggle, grouping by status then priority', () => {
     vp.mobile = true;
     render(<MyTasksView />);
-    fireEvent.click(screen.getByLabelText('Filter'));
-    expect(screen.getByText('Filter by')).toBeTruthy();
-    expect(screen.queryByText('Where')).toBeNull();                          // empty default
-    expect(screen.getByText('No filters — showing all tasks')).toBeTruthy();
-    fireEvent.click(screen.getByText('+ New filter'));
-    expect(screen.getByText('Where')).toBeTruthy();
+    // No Filter/Sort/Group builders on the phone.
+    expect(screen.queryByLabelText('סדר')).toBeNull();
+    expect(screen.queryByLabelText('סינון')).toBeNull();
+    expect(screen.queryByLabelText('קבץ לפי')).toBeNull();
+    // Default: grouped top-down by STATUS (the mocked labels are group headers).
+    const pill = screen.getByRole('button', { name: 'החלפת הסידור בין סטטוס לעדיפות' });
+    expect(pill.textContent).toContain('סטטוס');
+    expect(screen.getByText('בעבודה')).toBeTruthy();
+    expect(screen.getByText('בוצע')).toBeTruthy();
+    // One tap flips the toggle to PRIORITY grouping.
+    fireEvent.click(pill);
+    expect(pill.textContent).toContain('עדיפות');
+    expect(screen.getByText('דחוף')).toBeTruthy();
+    expect(screen.queryByText('בעבודה')).toBeNull();
   });
 });
 

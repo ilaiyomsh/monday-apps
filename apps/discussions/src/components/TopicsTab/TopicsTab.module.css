@@ -1,8 +1,11 @@
 .wrap {
   display: flex;
   flex-direction: column;
-  /* Tightened inter-topic gap (was 24px) — proportional to the 14–18px text. */
-  gap: 12px;
+  /* round188 — was 12px; the toolbar→content gap moved into the sticky toolbar's
+     pinned padding-bottom so it stays constant on scroll (see .toolbar). Zeroing the
+     wrap gap also removes it from BETWEEN topic sections, so restore that inter-topic
+     gap on the sections themselves via .section margin (below). */
+  gap: 0;
   /* Full width (broke out of the 90% frame) so the point tables run to the RIGHT
      edge; a left inset keeps content off the edge, the right stays flush. */
   width: 100%;
@@ -21,15 +24,31 @@
   justify-content: flex-start;
   gap: 8px;
   width: 100%;
-  /* round138 — identical toolbar rhythm in all four discussion tabs (owner
-     request): same 4px block padding as the Tasks/Previous/Decisions toolbars,
-     and margin so pills sit exactly 20px above the content below
-     (4px padding + 12px wrap gap + 4px margin), like the Tasks tab
-     (4px padding + 16px root gap). Pills are 14px via the shared components;
-     pinned here so the row can never drift per-tab. */
+  /* round138 — identical toolbar rhythm in all four discussion tabs (owner request);
+     pills are 14px via the shared components, pinned here so the row can never drift.
+     round188 — the Topics toolbar now FREEZES on scroll like the other three tabs
+     (owner request: it used to scroll up and disappear). Sticky to the DiscussionCard
+     .body scroll container; opaque bg + z-index cover the topic tables scrolling
+     underneath, and the whole toolbar→content gap (20px) is pinned on padding-bottom
+     so it stays constant on scroll (matching Tasks/Previous/Decisions). */
   font-size: 14px;
-  padding-block: 4px;
-  margin-block-end: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--primary-background-color, #ffffff);
+  padding-top: 4px;
+  padding-bottom: 20px;
+}
+/* Cover the scroll container's (.body) top padding band above the pinned toolbar
+   so scrolled topic tables can't peek above it (mirrors the Tasks tab). */
+.toolbar::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  bottom: 100%;
+  height: var(--spacing-large, 24px);
+  background: var(--primary-background-color, #ffffff);
+  pointer-events: none;
 }
 /* Leading controls (new-topic + apply-template); the trailing collapse-all sits
    right after them in one left-aligned cluster (like the My Tasks toolbar). */
@@ -46,31 +65,927 @@
   flex: 1;
 }
 
-/* One topic = a monday board GROUP: a plain colored-title header (no band) with
-   the points rendered below as a bordered table box (mirrors the My Tasks tab). */
+/* round200 — two-column layout: topic tables LEFT (ending at the tasks column
+   instead of bleeding right) + the התייחסויות panel RIGHT. The wrap is dir=ltr,
+   so DOM order [tables, panel] puts the panel on the physical RIGHT. */
+.splitRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  /* --split-card-h is the DEFAULT card height, inherited by both columns; it
+     fills most of the iframe viewport, never below a usable floor, and long
+     content scrolls INSIDE each card instead of growing it. round251 — each
+     column (.topicsCol / .refPanel) may OVERRIDE this var inline with its own
+     saved height, so the two boxes resize independently. */
+  --split-card-h: max(520px, calc(100vh - 280px));
+}
+.topicsCol {
+  flex: 1;
+  min-width: 0;
+}
+
+/* round218 (approved mockup) — the "אג'נדה" card wrapping the topics, symmetric
+   to the triple box: same border/radius/shadow, a gray header, and the toolbar
+   strip flush under it. */
+.agendaBox {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  background: var(--primary-background-color, #fff);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  /* round234 — fixed card frame (shared with the triple box): header + toolbar
+     stay pinned, the topic list scrolls inside .agendaBody. */
+  height: var(--split-card-h);
+  display: flex;
+  flex-direction: column;
+}
+/* round220 — the header row's height is pinned to the SAME rhythm as the triple
+   box's tab band (.tripleTabs: tab padding 10px + ~20px line = 40px), so the two
+   cards' header bars line up exactly. */
+.agendaHead {
+  padding: 0 16px;
+  /* round232 (owner request) — the agenda header and the triple box's tab band
+     are pinned to the SAME exact height (border-box, includes the 1px bottom
+     rule) so the two boxes' headers line up perfectly. */
+  height: 44px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  line-height: 20px;
+  font-size: 14px;
+  /* round221 — NOT bold (owner request); matches the triple-box tab labels. */
+  font-weight: 500;
+  color: var(--primary-text-color, #323338);
+  background: var(--primary-background-hover-color, #fafbfc);
+  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
+}
+/* round220 — the toolbar sits in the SAME design as the triple box's formatting
+   tool-strip: a flush full-width white band with a bottom border under the
+   header, NOT independently sticky (the card scrolls as one unit). Override the
+   shared sticky rule + its scroll-cover pseudo-element. */
+.agendaBox .toolbar {
+  position: static;
+  /* round222b/round232 — pin the row to an EXACT fixed height (border-box,
+     includes the 1px bottom rule) so it matches the triple box's formatting
+     strip perfectly; vertical padding gives way to the fixed height + centering. */
+  height: 48px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  padding: 0 14px;
+  overflow: hidden;
+  z-index: auto;
+  background: var(--primary-background-color, #fff);
+  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
+}
+.agendaBox .toolbar::before { display: none; }
+.toolbarSpacer { flex: 1 1 auto; min-width: 8px; }
+
+/* round235 — search + templates moved into the agenda HEADER (the band under it
+   became the topics ribbon). */
+.headTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+  flex-shrink: 0;
+}
+
+/* ---- round241 — owner-only WIDGET LAYOUT: resize divider, drag grips,
+   stacked mode. The split ratio is driven by inline flex on the two columns
+   (TopicsTab sets `flex: <ratio> 1 0`); these rules cover the edit chrome and
+   the vertical stack. ---- */
+.splitRowStacked {
+  flex-direction: column;
+}
+/* Stacked: the triple box drops its side-by-side sticky/width constraints and
+   becomes a full-width row above/below the agenda box. */
+.splitRowStacked .refPanel {
+  /* relative (not static) so it stays the containing block for the height
+     handle while giving up its side-by-side sticky/width constraints. */
+  position: relative;
+  top: auto;
+  max-width: none;
+  min-width: 0;
+  margin-inline-end: 0;
+}
+/* The divider is a thin, full-height grab strip between the two boxes; only
+   rendered in edit mode + side-by-side (owner). */
+.splitDivider {
+  flex: 0 0 12px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: col-resize;
+  touch-action: none;
+}
+.splitDividerGrip {
+  width: 4px;
+  height: 72px;
+  max-height: 60%;
+  border-radius: 3px;
+  background: var(--ui-border-color, #d0d4e4);
+  transition: background-color 0.12s ease;
+}
+.splitDivider:hover .splitDividerGrip,
+.splitRowEditing .splitDivider .splitDividerGrip {
+  background: var(--primary-color, #0073ea);
+}
+/* The pencil (+ 6-dot grip) cluster carried in each box header. */
+.layoutTools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.layoutPencilBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.layoutPencilBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--primary-text-color, #323338);
+}
+.layoutPencilOn {
+  background: color-mix(in srgb, var(--primary-color, #0073ea) 14%, transparent);
+  color: var(--primary-color, #0073ea);
+}
+.layoutGrip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--secondary-text-color, #676879);
+  cursor: grab;
+  touch-action: none;
+}
+.layoutGrip:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--primary-text-color, #323338);
+}
+.layoutGrip:active {
+  cursor: grabbing;
+}
+/* In the triple box the header is a flex tab-band (tabs are flex:1), so the
+   tools sit flush at the physical-left end after the last tab. */
+.tripleHeaderTools {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 8px;
+}
+
+/* round242 — bottom HEIGHT resize handle. The agenda column needs its own
+   positioning context so the handle pins to the box's bottom edge (the refPanel
+   is already position:sticky, which anchors absolute children on its own).
+   Dragging the handle shrinks/grows the shared card height (both boxes stay
+   twins). */
+.topicsCol {
+  position: relative;
+}
+.heightHandle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: row-resize;
+  touch-action: none;
+  z-index: 5;
+}
+.heightHandleGrip {
+  width: 72px;
+  max-width: 40%;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--ui-border-color, #d0d4e4);
+  transition: background-color 0.12s ease;
+}
+.heightHandle:hover .heightHandleGrip,
+.splitRowEditing .heightHandleGrip {
+  background: var(--primary-color, #0073ea);
+}
+
+/* round248 — 2D corner resize grip at each box's bottom-INNER corner. Dragging
+   it changes the split ratio (width) + shared height together. */
+.cornerHandle {
+  position: absolute;
+  bottom: -4px;
+  width: 20px;
+  height: 20px;
+  z-index: 6;
+  touch-action: none;
+}
+.cornerAgenda { right: -4px; cursor: nwse-resize; }
+.cornerTriple { left: -4px; cursor: nesw-resize; }
+.cornerHandle::after {
+  content: '';
+  position: absolute;
+  bottom: 6px;
+  width: 9px;
+  height: 9px;
+  border-style: solid;
+  border-color: var(--ui-border-color, #d0d4e4);
+  transition: border-color 0.12s ease;
+}
+.cornerAgenda::after { right: 6px; border-width: 0 2px 2px 0; }
+.cornerTriple::after { left: 6px; border-width: 0 0 2px 2px; }
+.cornerHandle:hover::after,
+.splitRowEditing .cornerHandle::after {
+  border-color: var(--primary-color, #0073ea);
+}
+
+/* ---- round235 (approved mockup v3, muted palette) — the TOPICS RIBBON ----
+   Fills the 48px band that held נושא חדש/הסתר/כווץ: every topic is a
+   full-height MUTED status-label; the LEFT edge is a gentle 9px arrow point
+   (toward the next topic, RTL) and the RIGHT edge carries the matching notch
+   so the labels nest. Click selects; ⋮ opens the menu / long-press drags. */
+/* round237 (approved mockup) — FLAT-triangle puzzle ribbon. Each topic is a
+   near-rectangle whose LEFT edge is a shallow (8px) triangle point toward the
+   next topic and whose RIGHT edge is the matching shallow notch — so the pieces
+   INTERLOCK. A thin flex gap shows white between them (owner: close, elegant
+   separator — not overlapping). */
+.agendaBox .ribbon {
+  padding: 5px 6px;
+  gap: 1.5px;
+  align-items: stretch;
+  overflow: visible; /* the drag ghost + insertion gap need room */
+  /* round252 — the ribbon must lay out RIGHT-TO-LEFT. The outer .wrap is dir="ltr"
+     (it pins the physical column order: topics LEFT, panel RIGHT), and the ribbon
+     inherited that LTR, so the flex main-axis ran left→right — items[0] landed on
+     the LEFT. Every bit of ribbon logic assumes the opposite (items[0] rightmost):
+     the tiles' arrow points left toward the NEXT tile, the start "+" belongs on
+     the right and the end "+" (order:999) on the left, and a template appends its
+     new topics to the LEFT of the existing ones (saved order [existing, created],
+     first template topic nearest the existing = rightmost of the new group). Only
+     an RTL container delivers all of that; without it the whole ribbon rendered
+     mirrored (owner: templates added on the right, first topic leftmost). The drag
+     drop-math (computeRibbonDropTarget) auto-detects direction, so it follows. */
+  direction: rtl;
+}
+.ribbonTile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 34px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+  clip-path: polygon(100% 0, 8px 0, 0 50%, 8px 100%, 100% 100%, calc(100% - 8px) 50%);
+  /* round244 (owner request) — the NON-active tiles are FADED (a light wash of
+     their own accent); only the ACTIVE tile shows its color at full strength
+     (below). This gives a clear strong-vs-faded contrast in the ribbon. */
+  background: color-mix(in srgb, var(--tile-accent, #676879) 18%, var(--primary-background-color, #fff));
+  color: color-mix(in srgb, var(--primary-text-color, #323338) 72%, var(--primary-background-color, #fff));
+  transition: background-color 0.12s ease, color 0.12s ease, opacity 0.12s ease, margin 0.12s ease;
+}
+.ribbonTile:hover {
+  background: color-mix(in srgb, var(--tile-accent, #676879) 30%, var(--primary-background-color, #fff));
+}
+/* round244 — the ACTIVE topic is VIVID: its accent at full strength with white
+   text (monday status-label convention), so it stands out while the rest stay
+   faded in their own colors. */
+.ribbonTileOn,
+.ribbonTileOn:hover {
+  font-weight: 700;
+  color: #fff;
+  background: var(--tile-accent, #676879);
+  box-shadow: inset 0 -3px 0 color-mix(in srgb, #000 20%, var(--tile-accent, #676879));
+}
+.ribbonTileOn .ribbonName { color: #fff; }
+.ribbonTileOn .ribbonEye { color: rgba(255, 255, 255, 0.85); }
+.ribbonTileExcluded { opacity: 0.55; }
+.ribbonTileExcluded .ribbonName { font-style: italic; }
+/* the ORIGINAL slot fades while its ghost is dragged */
+.ribbonTileGhosted { opacity: 0.3; }
+/* round239 — a visible SEPARATOR BAR opens between two neighbours at the drop
+   point: a real flex item that pushes the tiles apart, so it reads as "the
+   topic will land here, between the piece on its right and the piece on its
+   left." Animated width for a smooth open. */
+.ribbonDropBar {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 4px;
+  margin: 4px 14px;
+  border-radius: 3px;
+  background: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color, #0073ea) 22%, transparent);
+  animation: ribbonDropPulse 0.9s ease-in-out infinite;
+}
+@keyframes ribbonDropPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ribbonDropBar { animation: none; }
+}
+/* the drag GHOST — a faded clone that follows the cursor */
+.ribbonGhost {
+  position: fixed;
+  z-index: 9000;
+  pointer-events: none;
+  opacity: 0.78;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  height: 34px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary-text-color, #323338);
+  clip-path: polygon(100% 0, 8px 0, 0 50%, 8px 100%, 100% 100%, calc(100% - 8px) 50%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  transform: translate(-50%, -50%);
+}
+.ribbonName {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ribbonEye { flex-shrink: 0; color: var(--secondary-text-color, #676879); }
+.ribbonRenameInput {
+  width: 110px;
+  min-width: 0;
+  height: 26px;
+  border: none;
+  border-radius: 5px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--text-color, #323338);
+  background: var(--primary-background-color, #fff);
+  /* round237 — full RTL inside the rename box (owner request). */
+  direction: rtl;
+  text-align: right;
+  outline: 2px solid var(--primary-color, #0073ea);
+}
+/* the "+" at BOTH ends — same flat-triangle piece that completes the puzzle
+   (start = right edge → beginning of discussion; end = left edge → end). */
+.ribbonAdd {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 38px;
+  padding: 0;
+  border: none;
+  background: var(--primary-background-hover-color, #fafbfc);
+  color: var(--secondary-text-color, #676879);
+  font-size: 17px;
+  font-family: var(--font-family);
+  cursor: pointer;
+  clip-path: polygon(100% 0, 8px 0, 0 50%, 8px 100%, 100% 100%, calc(100% - 8px) 50%);
+}
+.ribbonAddEnd { order: 999; } /* leftmost — end-of-discussion "+" */
+.ribbonAdd:hover { color: var(--primary-color, #0073ea); background: var(--primary-selected-color, #e6f1fd); }
+/* the inline add — looks like a TOPIC PIECE with an editable box already inside;
+   Enter or clicking elsewhere (blur) commits. */
+.ribbonAddForm {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  padding: 0 16px;
+  background: color-mix(in srgb, var(--primary-color, #0073ea) 16%, var(--primary-background-color, #fff));
+  clip-path: polygon(100% 0, 8px 0, 0 50%, 8px 100%, 100% 100%, calc(100% - 8px) 50%);
+}
+.ribbonAddFormEnd { order: 999; }
+.ribbonAddInput {
+  height: 26px;
+  width: 130px;
+  border: none;
+  border-radius: 5px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-family);
+  color: var(--text-color, #323338);
+  background: var(--primary-background-color, #fff);
+  direction: rtl;
+  text-align: right;
+  outline: 2px solid var(--primary-color, #0073ea);
+}
+
+/* the ⋮ menu (fixed-position under the clicked ⋮) */
+.topicMenuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 4490;
+  background: transparent;
+}
+.topicMenu {
+  position: fixed;
+  z-index: 4500;
+  min-width: 160px;
+  max-width: 240px;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.topicMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--text-color, #323338);
+  cursor: pointer;
+  text-align: start;
+}
+.topicMenuItem:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.topicMenuDanger { color: var(--negative-color, #d83a52); }
+.topicMenuConfirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--text-color, #323338);
+}
+.topicMenuConfirm > span { flex: 1; min-width: 0; }
+.topicMenuYes,
+.topicMenuNo {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+}
+.topicMenuYes { background: var(--negative-color, #d83a52); color: #fff; }
+.topicMenuNo { background: var(--primary-background-hover-color, #f0f1f3); color: var(--text-color, #323338); }
+.topicMenuPrio {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-top: 1px solid var(--layout-border-color, #e6e9ef);
+  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
+  padding: 4px 0;
+  margin: 2px 0;
+}
+.topicMenuPrioLabel {
+  font-size: 11px;
+  color: var(--secondary-text-color, #676879);
+  padding: 2px 10px;
+}
+.topicMenuPrioOpt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--text-color, #323338);
+  cursor: pointer;
+  text-align: start;
+}
+.topicMenuPrioOpt:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.topicMenuPrioOn { background: var(--primary-selected-color, #e6f1fd); }
+.topicMenuPrioDot {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+/* round222b/232/234 — the triple box's formatting strip is pinned to the SAME
+   48px height as the agenda toolbar row so their bottom borders line up
+   EXACTLY, icons vertically centered, one row (nowrap) + clip so it can never
+   grow past the agenda toolbar, no matter which pane is active.
+   round234 FIX: the old selector `.tripleBox .toolbarFlush` NEVER matched in a
+   production build — CSS modules hash class names PER FILE, so this file's
+   `toolbarFlush_xxx` ≠ RichTextEditor's `toolbarFlush_yyy` (it only "worked"
+   in vitest, whose classNameStrategy is non-scoped). Target the editor
+   toolbar's stable role attribute instead — never a foreign module's class. */
+.tripleBox [role='toolbar'] {
+  height: 48px;
+  box-sizing: border-box;
+  padding-top: 0;
+  padding-bottom: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  /* Same rule color as the agenda toolbar's bottom border (was ui-border). */
+  border-bottom-color: var(--layout-border-color, #e6e9ef);
+  /* Pin the strip to the pane top while the editor content scrolls under it
+     (.paneEditor is the scroller) — mirrors the agenda's frozen toolbar. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+/* The card body holds the topic list + the bottom add-row, with inner padding.
+   round234 — the card frame is FIXED (--split-card-h, shared with the triple
+   box); a long topic list scrolls INSIDE the body instead of growing the card,
+   so the two boxes' bottom edges always stay flush. */
+.agendaBody {
+  padding: 12px 14px 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.refPanel {
+  /* round216 — the owner wants the box WIDER (toward the left) and TALLER:
+     the column takes a larger share of the row and a higher cap. */
+  flex: 0 0 46%;
+  min-width: 360px;
+  max-width: 720px;
+  /* Freeze the panel while the topics scroll. round206: the box top aligns
+     with the features row (the toolbar lives inside the topics column now),
+     so it sticks right at the scroll container's top. */
+  position: sticky;
+  top: 4px;
+  align-self: flex-start;
+  /* Keep it clear of the tab's right inset (round184 rule line). */
+  margin-inline-end: var(--section-rule-inset-wide, 24px);
+  /* round204 — the column now stacks TWO collapsible boxes (רקע above
+     התייחסויות). */
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* round204 (approved mockup) — collapsible update-box shell: a bordered card
+   whose whole header row is the open/close toggle; closed by default. */
+.sideBox {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  background: var(--primary-background-color, #fff);
+  overflow: hidden;
+}
+.sideHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-family);
+  text-align: start;
+}
+.sideHead:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+.sideChev {
+  color: var(--secondary-text-color, #676879);
+  flex-shrink: 0;
+  transition: transform var(--motion-productive-medium, 0.2s) ease;
+}
+.sideChevOpen {
+  transform: rotate(180deg);
+}
+.sideHint {
+  margin-inline-start: auto;
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  background: var(--primary-background-hover-color, #f0f1f3);
+  border-radius: 10px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.sideBody {
+  border-top: 1px solid var(--layout-border-color, #e6e9ef);
+  padding: 12px 14px 14px;
+}
+
+/* round204 — the רקע box's preparation files/links block. */
+.attachBlock {
+  margin-top: 12px;
+}
+.attachHead {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--secondary-text-color, #676879);
+  margin-bottom: 8px;
+}
+.attachRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.attachChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+}
+.attachChip a {
+  color: var(--primary-color, #0073ea);
+  text-decoration: none;
+}
+.attachChip a:hover {
+  text-decoration: underline;
+}
+.attachX {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: transparent;
+  color: var(--placeholder-color, #9699a6);
+  cursor: pointer;
+  padding: 0;
+}
+.attachX:hover {
+  color: var(--negative-color, #d83a52);
+}
+.attachBtns {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.attachAddBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px dashed var(--ui-border-color, #c3c6d4);
+  background: transparent;
+  border-radius: var(--border-radius-small, 4px);
+  padding: 4px 12px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.attachAddBtn:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--primary-text-color, #323338);
+}
+.attachAddBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.linkForm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.linkInput {
+  flex: 1;
+  min-width: 120px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  padding: 5px 8px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--primary-text-color, #323338);
+  direction: ltr;
+  text-align: left;
+}
+.linkInput:focus-visible {
+  outline: none;
+  border-color: var(--primary-color, #0073ea);
+}
+.refTitle {
+  font-size: 18px;
+  font-weight: 500;
+  font-variation-settings: 'wght' 500;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+}
+.refStatus {
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  /* round202 — the chip sits at the box's bottom-LEFT (inline end in rtl),
+     also when the meta text isn't rendered. */
+  margin-inline-start: auto;
+}
+/* round202 — footer row under the references box: meta (right) + status (left). */
+.refFooterRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  min-height: 18px;
+}
+.refSaved {
+  color: var(--positive-color, #258750);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.refError {
+  color: var(--negative-color, #d83a52);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.refErrorBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: var(--negative-color, #d83a52);
+  cursor: pointer;
+}
+.refErrorBtn:hover { text-decoration: underline; }
+.refSpin { animation: refSpin 0.8s linear infinite; }
+@keyframes refSpin { to { transform: rotate(360deg); } }
+/* The editor brings its own bordered frame (like the Summary tab); this wrapper
+   just reserves space and anchors the brand loader overlay. */
+.refBox {
+  position: relative;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+.refLoader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary-background-color, #fff);
+  z-index: 1;
+}
+.refMeta {
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+}
+/* Narrow contexts: when the discussions selector squeezes the card, or on
+   phones, stack the panel BELOW the tables instead of crushing both columns. */
+:global(body[data-list-open="1"]) .splitRow,
+:global(.mobile-app) .splitRow {
+  flex-direction: column;
+}
+:global(body[data-list-open="1"]) .refPanel,
+:global(.mobile-app) .refPanel {
+  position: static;
+  flex: none;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+/* round234 — stacked (narrow/mobile) columns: the shared fixed frame gives way
+   to natural heights (two viewport-tall cards stacked would be unusable);
+   the editor keeps its classic 420px so it doesn't collapse. */
+:global(body[data-list-open="1"]) .agendaBox,
+:global(.mobile-app) .agendaBox,
+:global(body[data-list-open="1"]) .tripleBox,
+:global(.mobile-app) .tripleBox {
+  height: auto;
+}
+:global(body[data-list-open="1"]) .agendaBody,
+:global(.mobile-app) .agendaBody {
+  overflow-y: visible;
+  min-height: 420px;
+}
+:global(body[data-list-open="1"]) .paneEditor,
+:global(.mobile-app) .paneEditor {
+  flex: none;
+  height: 420px;
+}
+
+/* round198 — bottom add-group entry (monday's "+ הוספת קבוצה" pattern): a ghost
+   dashed button under the LAST group, aligned to the tables' left edge. */
+.bottomAddRow {
+  margin-top: 16px;
+  display: flex;
+}
+.bottomAddBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  font-size: 14px;
+  font-family: var(--font-family);
+  direction: rtl;
+  cursor: pointer;
+}
+.bottomAddBtn:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--primary-text-color, #323338);
+}
+
+/* round226 stage B (approved mockup) — one topic = a CARD out of the monday-like
+   table frame: bordered, rounded, with a 4px accent bar on the inline-start edge
+   (priority color when set, palette color otherwise — --topic-accent is set
+   inline per topic). The card is dir=rtl, so inline-start = the physical RIGHT. */
 .section {
   position: relative;
   display: flex;
   flex-direction: column;
-  /* round120 — same header→table gap as the Tasks/Previous group headers (their
-     .groupHeader margin-bottom is 18px), so all tabs share one group rhythm. */
-  gap: 18px;
+  border: 1px solid var(--layout-border-color, #e6e9ef);
+  border-radius: 10px;
+  background: var(--primary-background-color, #fff);
+  overflow: hidden;
+  border-inline-start: 4px solid var(--topic-accent, hsl(var(--status-default)));
 }
-/* Hidden / "לא לדיון" topic — dim the table body; the eye control stays full. */
-.sectionExcluded .sectionBody {
-  opacity: 0.55;
+/* round188 — the inter-topic gap used to come from .wrap's flex `gap` (now 0, so the
+   toolbar→content gap can be pinned on the sticky toolbar). Restore the 12px spacing
+   only BETWEEN adjacent topic cards, leaving the toolbar→first-card gap to the
+   toolbar's own pinned padding-bottom. */
+.section + .section {
+  margin-block-start: 12px;
+}
+/* Hidden / "לא לדיון" topic — the body is collapsed by effectiveOpen; dim the
+   header chrome (the title also dims inline) and keep the reveal actions live. */
+.sectionExcluded .cardHead {
+  background: var(--primary-background-color, #fff);
+}
+.sectionExcluded .headActs {
+  opacity: 1;
 }
 
-/* Header = monday board-group row: chevron + colored title text, no background. */
-.sectionHeader {
+/* round235 — HEADLESS active section: the ribbon owns the topic chrome, so the
+   section loses its card frame (border, accent bar, radius) and its points
+   render directly in the agenda body (approved mockup). */
+.sectionHeadless {
+  border: none;
+  border-inline-start: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.topicRetryBanner {
+  display: flex;
+  justify-content: flex-start;
+  padding: 4px 8px 8px;
+}
+.excludedNote {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 14px 10px;
+  font-size: 13.5px;
+  color: var(--secondary-text-color, #676879);
+}
+.excludedShowBtn {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--primary-color, #0073ea);
+  font-size: 12.5px;
+  font-family: var(--font-family);
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.excludedShowBtn:hover { background: var(--primary-selected-color, #e6f1fd); }
+
+/* Card header (mockup .tHead): the whole tinted row toggles collapse; hover
+   reveals the actions cluster. Tint = 6% of the topic accent over the ground. */
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   width: 100%;
-  /* round120 — no inline padding: the 24px chevron must start exactly on the
-     table's left edge line, like the Tasks/Previous group headers. Relative =
-     anchor for the gutter-floating kebab below. */
-  padding: 0;
+  padding: 8px 12px;
+  min-height: 44px;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--topic-accent, #579bfc) 6%, var(--primary-background-color, #fff));
+  cursor: pointer;
   position: relative;
 }
 /* Whole-header drag (the six-dot grip was removed — the header itself drags the
@@ -84,8 +999,64 @@
   cursor: grabbing;
 }
 
+/* Select-all-in-topic — quiet at rest (hover / active-selection reveal); keeps
+   its width either way so the header never shifts. */
+.headSelect {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  width: 18px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.cardHead:hover .headSelect,
+.headSelect:focus-within,
+.headSelectOn {
+  opacity: 1;
+}
+.headSelect > label { margin: 0; }
+.headSelect > label > :last-child { margin-inline-start: 0; }
+
+/* Hover-revealed header actions cluster (mockup .tActs): נקודה חדשה / rename /
+   eye / kebab-delete / creator avatar. */
+.headActs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.cardHead:hover .headActs,
+.headActs:focus-within {
+  opacity: 1;
+}
+.headActBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background-color 0.1s ease, color 0.1s ease;
+}
+.headActBtn:hover {
+  background: var(--primary-background-hover-color, #eceef2);
+  color: var(--primary-text-color, #323338);
+}
+/* A HIDDEN topic's eye stays lit so the restore action is obvious. */
+.headActOn {
+  color: var(--primary-color, #0073ea);
+}
+
 /* Leading collapse caret — neutral grey. Open: points down; collapsed: points
-   toward the leading (right) side in LTR. */
+   toward the leading side. */
 .triangle {
   display: inline-flex;
   align-items: center;
@@ -128,7 +1099,7 @@
 .titleInput {
   min-width: 160px;
   max-width: 360px;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
   padding: 4px 10px;
   border: 1px solid var(--primary-color, #0073ea);
@@ -150,11 +1121,12 @@
   gap: 8px;
   min-width: 0;
 }
+/* Topic name (mockup .tName): bold, tinted with the card accent. */
 .title {
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 700;
   /* Pin the variable-font weight axis (Noto/Figtree default to light masters). */
-  font-variation-settings: 'wght' 500;
+  font-variation-settings: 'wght' 700;
   color: var(--topic-accent);
   white-space: nowrap;
   overflow: hidden;
@@ -277,94 +1249,42 @@
   font-weight: 500;
 }
 
-/* Points table — continuous monday-grid look (no rounded card border): the row
-   separators run edge-to-edge and the only vertical line closing the grid is the
-   last column's own border. The scroll container is the .sectionScroll wrapper
-   (below); .sectionBody is the max-content grid that scrolls inside it. */
-/* Horizontal scroll OWNER for a topic's points table (mirrors TasksTab's
-   `.board` > `.groupScrollInner`). It stays at the pane width (width:100%) and
-   scrolls its max-content child (.sectionBody) INTERNALLY, so a narrowed iframe
-   never pushes the table wider than the pane and no app/view-level horizontal
-   scrollbar appears. The frozen lead/name cells (sticky left:0) pin to THIS
-   scrollport. Previously .sectionBody was BOTH the max-content table AND the
-   overflow-x:auto container, so it sized to its content and grew past the pane
-   (the scroll never engaged) — that was the stray horizontal-scrollbar source. */
-.sectionScroll {
-  width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  direction: ltr;
+/* Card body (mockup .tBody) — the points as a CLEAN LIST: no table grid, no
+   column-header row, no cell borders. */
+.cardBody {
+  padding: 4px 8px 8px;
 }
 
-.sectionBody {
-  display: flex;
-  flex-direction: column;
-  /* Fill to the board width and hug the summed track widths — same as
-     TaskTable's `.taskTable`. With `name` now a fixed-px track (not a fill
-     track), this keeps the grid spanning the full width (row separators run to
-     the right edge) while letting name shrink/expand freely on drag. When the
-     dragged tracks sum wider than the board, the box grows past 100% and scrolls
-     under the parent .sectionScroll's overflow-x. */
-  width: max-content;
-  min-width: 100%;
-  background: var(--primary-background-color, #fff);
-  /* Bounded + rounded on the LEFT (top + left lines), OPEN on the right so the row
-     separators run to the right edge. direction:ltr anchors the table left. */
-  border-top: 1px solid var(--ui-border-color, #d0d4e4);
-  border-inline-start: 1px solid var(--ui-border-color, #d0d4e4);
-  /* Bottom border CLOSES the table box (curving with the rounded corner), same
-     as the My-Tasks table — without it the grid just fades out under the last
-     row / add-point row. */
-  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
-  border-radius: var(--border-radius-medium, 8px) 0 0 var(--border-radius-medium, 8px);
-  direction: ltr;
-}
-/* The table's own bottom border is the single closing line: the last child must
-   not draw its own border-bottom on top of it (a straight row-border would also
-   overlap the rounded corner and stick out past the radius). Generic child
-   selector on purpose — the point rows' class lives in TopicPointRow.module.css
-   and cross-module class names hash apart in the production build. */
-.sectionBody > :last-child {
-  border-bottom: none;
-}
-
-/* Add-point row — SAME design as the task add-row (.addRow in TaskTable): a
-   full-width, 36px row with the accent color strip; the WHOLE row is the click
-   target (a <button> at rest), and clicking anywhere opens an inline borderless
-   text input. Shows only a "+" (no label). */
+/* Add-point row (mockup .newRow) — a quiet "＋ נקודה חדשה…" list row; the WHOLE
+   row is the click target, and clicking opens an inline borderless input with a
+   blue bottom rule. Plain placeholder, no typing instructions (owner spec). */
 .addPoint {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 36px;
-  /* round133 — align the "+" with the point NAMES: the points grid leads with a
-     fixed 36px checkbox cell and the name cell adds the 1cm/38px inset
-     (round139, approved mock), so the names start 74px from the row edge; the
-     add-row text starts on the same line. */
-  padding: 0 12px 0 74px;
+  min-height: 34px;
+  padding: 4px 8px;
   border: none;
+  border-radius: 8px;
   background: transparent;
-  color: var(--placeholder-color, #9699a6);
+  color: var(--secondary-text-color, #676879);
   font-family: var(--font-family);
-  font-size: 14px;
+  font-size: 13.5px;
   text-align: start;
   cursor: pointer;
-  position: relative;
-}
-.addPoint::before {
-  content: '';
-  position: absolute;
-  inset-inline-start: 0;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  background: var(--topic-accent, hsl(var(--status-default)));
-  border-end-start-radius: 6px; /* round100: match the 6px strip width for a clean corner (was 8px) */
+  margin-top: 2px;
+  box-sizing: border-box;
 }
 .addPoint:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
-  color: var(--secondary-text-color, #676879);
+  color: var(--primary-color, #0073ea);
+}
+.addPointEditing {
+  cursor: text;
+}
+.addPointEditing:hover {
+  background: transparent;
 }
 .addPointIcon {
   flex-shrink: 0;
@@ -373,13 +1293,12 @@
   flex: 1;
   min-width: 0;
   border: none;
+  border-bottom: 1.5px solid var(--primary-color, #0073ea);
   background: transparent;
   font-size: 14px;
   font-family: var(--font-family);
   color: var(--text-color, #323338);
-  padding: 0;
-  direction: rtl;
-  text-align: left;
+  padding: 2px 0;
 }
 .addPointInput::placeholder {
   color: var(--placeholder-color, #9699a6);
@@ -396,152 +1315,22 @@
   direction: rtl;
 }
 
-/* Hover kebab (3-dot) — revealed on header hover (the inner button defaults to
-   opacity:0 from its own module). round120: floated OUT of the flow into the
-   52px white gutter (like monday's group menu), so it no longer pushes the
-   chevron off the table's left edge line and the header layout is identical to
-   the Tasks/Previous group headers. */
+/* Hover kebab (3-dot) — rides inside the header actions cluster; the inner
+   button defaults to opacity:0 from its own module, so re-reveal it with the
+   cluster (the cluster's own opacity handles the rest). */
 .headerKebab {
   display: inline-flex;
   flex-shrink: 0;
-  position: absolute;
-  inset-inline-start: -28px;
-  top: 50%;
-  transform: translateY(-50%);
 }
 .headerKebab button {
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.sectionHeader:hover .headerKebab button {
   opacity: 1;
 }
 
-/* Creator avatar in the group header — hidden until the topic text is hovered. */
+/* Creator avatar in the card header — rides inside the hover actions cluster. */
 .headerAvatar {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-}
-.sectionHeader:hover .headerAvatar {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-/* Column header row for a topic's points. Uses the SAME FIXED grid as the point
-   rows (rowStyle inline sets grid-template-columns) so each label sits directly
-   above its column:
-     [accent 28px] | (empty name header) | נידונה | החלטות | משימות
-   Plain text labels, no cell fill / no color strip; a thin bottom rule is the
-   only separator. Without `display: grid` the labels collapse into an inline
-   run jammed at the RTL edge. */
-.colHead {
-  display: grid;
-  align-items: stretch;
-  min-height: 36px;
-  background: #ffffff;
-  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
-}
-.colHeadCell {
-  display: flex;
-  align-items: center;
-  padding: 0 8px;
-  min-height: 36px;
-  font-size: 14px;
-  font-weight: 400;
-  color: var(--primary-text-color, #323338);
-  /* round128 — PHYSICAL right border: this cell is direction:rtl, so the old
-     border-inline-end landed on its LEFT while the (ltr) body cells drew on the
-     RIGHT — 1px-offset verticals, a doubled line at the lead boundary and no
-     closing line after the last column. Physical = same side everywhere. */
-  border-right: 1px solid var(--ui-border-color, #d0d4e4);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  direction: rtl;
-}
-.colHeadCenter {
-  justify-content: center;
-}
-/* Leading cell of the column header — hosts the accent color strip rounded at the
-   TOP-left to match the table's rounded-left outer border (S2). */
-.colHeadLead {
-  /* Center the per-topic select-all checkbox in the 36px lead track (mirrors
-     TaskTable's `.selectCell`); the 6px inset strip is the topic accent color. */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  position: relative;
-  border-start-start-radius: 6px;
-  /* Close the lead (checkbox/accent) column with a right rule, matching the
-     Tasks table's frozen `.selectCell` separator (TaskTable `.taskCell`). */
-  border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, see .colHeadCell */
-}
-/* Select-all-in-topic checkbox centered in the column-header lead cell (mirrors
-   TaskTable's `.selectCell > label`): reset the vibe Checkbox wrapper margins and
-   nudge the 16px box to sit visually centered just after the 6px color strip. */
-.colHeadSelect {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.colHeadSelect > label {
-  margin: 0;
-  transform: translateX(2px);
-}
-.colHeadSelect > label > :last-child {
-  margin-inline-start: 0;
-}
-
-/* FROZEN leading column (accent bar) + FROZEN name header — pinned during the
-   rare horizontal scroll (dragged tracks wider than the board), mirroring
-   TaskTable's frozen `.taskFirst`. Both are opaque so scrolled cells don't bleed
-   through; the lead pins at 0, name right after it (the 36px LEAD_TRACK). Header
-   frozen cells stack above the body frozen cells (z-index 3 vs 2). */
-.frozenLead {
-  position: sticky;
-  left: 0;
-  z-index: 3;
-  background: #ffffff;
-}
-.colHeadName {
-  justify-content: flex-start;
-  position: sticky;
-  left: 36px;
-  z-index: 3;
-  background: #ffffff;
-}
-
-/* Eye toggle in the group header — hide/show a topic. Sits just to the right of
-   the name (right edge of the name); always visible but subtle, full on hover.
-   When the topic is hidden the eye brightens so the restore action is obvious. */
-.eyeBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  margin-inline-start: 4px;
-  border: none;
-  background: transparent;
-  color: var(--secondary-text-color, #676879);
-  border-radius: var(--border-radius-small, 4px);
-  cursor: pointer;
-  flex-shrink: 0;
-  opacity: 0.55;
-  transition: opacity 0.12s ease, background 0.12s ease;
-}
-.eyeBtn:hover {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.06);
-}
-.sectionExcluded .eyeBtn {
-  opacity: 1;
-  color: var(--primary-color, #0073ea);
 }
 
 /* Topic-header retry affordance when the topic's optimistic create failed. */
@@ -651,29 +1440,151 @@
   flex-wrap: nowrap !important;
 }
 
-/* round113 — while monday's item-card / updates panel is open (chrome-narrow,
-   see round103's detector) the narrowed pane must show NO scrollbars at all
-   (owner request): scrolling itself still works (wheel/trackpad/drag), only
-   the bars are hidden. Firefox: scrollbar-width; WebKit/Chromium: the
-   ::-webkit-scrollbar pseudo. */
-:global(body[data-chrome-narrow="1"]) .sectionScroll {
-  scrollbar-width: none;
+/* round206 (approved mockup) — the TRIPLE BOX: one card, three header titles
+   (רקע → התייחסויות → סיכום). The card top aligns with the features row (the
+   toolbar moved inside the topics column, so .splitRow starts at its top). */
+.tripleBox {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  background: var(--primary-background-color, #fff);
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  /* round234 — the SAME fixed frame as the agenda card: identical total height,
+     so the two boxes are exact twins and switching panes can never move or
+     resize the box (every pane fills the same fixed space). */
+  height: var(--split-card-h);
+  display: flex;
+  flex-direction: column;
 }
-:global(body[data-chrome-narrow="1"]) .sectionScroll::-webkit-scrollbar {
-  display: none;
+.tripleTabs {
+  display: flex;
+  /* round232 — pinned to the SAME exact height as the agenda header (border-box,
+     includes the 1px bottom rule) so the two boxes' headers line up perfectly. */
+  height: 44px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--layout-border-color, #e6e9ef);
+  background: var(--primary-background-hover-color, #fafbfc);
 }
-
-/* round118 — real ::before bar on the rounded header cell instead of a
-   radius-clipped inset shadow (the shadow smeared a color sliver rightward
-   along the top edge — the "chupchik"). */
-.colHeadLead::before {
+.tripleTab {
+  flex: 1;
+  /* round232 — vertical padding → 0; the fixed band height + center alignment
+     do the vertical centering, so the tab labels sit exactly mid-band. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  color: var(--secondary-text-color, #676879);
+  background: none;
+  border: none;
+  cursor: pointer;
+  position: relative;
+}
+.tripleTab:hover {
+  color: var(--primary-text-color, #323338);
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.tripleTabActive {
+  color: var(--primary-color, #0073ea);
+  font-weight: 600;
+  background: var(--primary-background-color, #fff);
+}
+.tripleTabActive::after {
   content: '';
   position: absolute;
-  inset-inline-start: 0;
-  top: 0;
-  bottom: 0;
-  width: 6px;
-  background: var(--topic-accent, hsl(var(--status-default)));
-  border-start-start-radius: 6px;
-  pointer-events: none;
+  bottom: -1px;
+  right: 12%;
+  left: 12%;
+  height: 2px;
+  background: var(--primary-color, #0073ea);
+  border-radius: 2px;
 }
+/* round234 — the ACTIVE pane fills the card's fixed frame as a column:
+   editor stretches, attachments/footer sit INSIDE the frame at the bottom
+   (they used to render BELOW the fixed area, so panes had different heights
+   and switching tabs made the whole box jump). Inactive panes keep their
+   inline display:none. */
+.paneWrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* Pane internals — the editor is variant='flush' (its toolbar is the strip
+   glued under the headers); fill the frame + anchor the brand loader. */
+.paneEditor {
+  position: relative;
+  /* round234 — was a fixed 420px; now flexes to fill the shared card frame so
+     ALL panes are exactly the same size; long content scrolls inside (the
+     formatting strip stays pinned via the sticky rule above). */
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.paneAttachments {
+  padding: 0 14px 12px;
+  flex-shrink: 0;
+}
+.paneFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--primary-background-hover-color, #f0f1f3);
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  min-height: 18px;
+}
+/* 📎 inside the formatting toolbar (host-provided action). */
+.attachToolbarBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: var(--primary-color, #0073ea);
+  font-size: 13px;
+  font-family: var(--font-family);
+  border-radius: var(--border-radius-small, 4px);
+  padding: 4px 8px;
+  cursor: pointer;
+  direction: rtl;
+}
+.attachToolbarBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+}
+
+/* round225 — last-edit meta in the WHITE area at the formatting toolbar's right
+   end (owner spec): editor initials avatar · date+time · save state. */
+.paneToolbarMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-inline-start: 8px;
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  white-space: nowrap;
+}
+.paneMetaAvatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.paneMetaWhen { direction: ltr; font-variant-numeric: tabular-nums; }
+.paneMetaState { display: inline-flex; align-items: center; gap: 4px; }

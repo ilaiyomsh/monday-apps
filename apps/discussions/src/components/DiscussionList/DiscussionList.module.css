@@ -6,38 +6,228 @@
   background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
 }
 
-/* Sticky header */
+/* round175 (variant B) — the header's own card frame (border/radius/shadow/gap)
+   was removed for a flatter, smoother look (owner request). The controls now sit
+   directly on the list background, separated from the rows below by a single
+   hairline. */
 .header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  flex: none;
   background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
-}
-.header::after {
-  content: '';
-  display: block;
-  height: 1px;
-  background: var(--ui-border-color, #d0d4e4);
-  margin-inline: var(--section-rule-inset, 16px);
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
 }
 
 .headerInner {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-small, 8px);
-  padding: var(--spacing-medium, 16px);
-  /* Gap between the filters and the header rule below them. */
-  padding-bottom: var(--spacing-medium, 12px);
+  /* round190 — align the icon row with the discussion title on the right (the
+     DiscussionCard header starts its 36px title 16px below the card top) and make
+     the three white gaps UNIFORM at 16px: card-top→icon-row (this top padding),
+     icon-row→separator (this bottom padding), and separator→first-discussion
+     (.list padding-top). The icon controls are 36px tall = the title's min-height,
+     so both rows sit at the same height. */
+  padding: 16px 14px;
 }
 
-.titleRow {
+/* round176 — the top card is ONE icon-only row (owner request). Actions cluster
+   on the RIGHT (dir=rtl); the personal-area entry on the far LEFT (space-between).
+   All controls are transparent icon buttons except the blue "+" (create). */
+.bar {
+  display: flex;
+  direction: rtl;
+  align-items: center;
+  gap: 10px;
+}
+.actions {
+  display: inline-flex;
+  direction: rtl;
+  align-items: center;
+  gap: 6px;
+}
+/* round177 — always-open search bar filling the gap between the action cluster
+   and the personal avatar. Its magnifier (`.searchIcon`, inset-inline-start) sits
+   on the RTL-leading RIGHT edge, immediately left of the calendar toggle. */
+.searchBar {
+  flex: 1;
+  min-width: 0;
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  /* Two nav buttons + gear + view toggle + "חדש" can overrun the narrow
-     sidebar — degrade by wrapping instead of overflowing. */
-  flex-wrap: wrap;
-  row-gap: var(--spacing-xs, 4px);
+}
+/* Transparent icon button — no resting background; a subtle grey only on hover /
+   while its popover is open. */
+.iconBtn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.iconBtn:hover,
+.iconBtnOpen {
+  background: var(--primary-background-hover-color, #f4f5f8);
+  color: var(--primary-text-color, #323338);
+}
+/* "+" — the only filled control: creates a discussion. */
+.plusBtn {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 9px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  cursor: pointer;
+}
+.plusBtn:hover { background: var(--primary-hover-color, #0060b9); }
+.popAnchor {
+  position: relative;
+  display: inline-flex;
+}
+/* Small count badge over the filter icon (top-inline-start corner). */
+.iconBadge {
+  position: absolute;
+  top: 2px;
+  inset-inline-start: 2px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 20px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 800;
+  line-height: 15px;
+  text-align: center;
+}
+/* Personal-area entry (far LEFT): the user avatar with a left arrow to its LEFT.
+   dir=rtl + DOM order [avatar, chevron] ⇒ avatar right, chevron (←) left. */
+.personalBtn {
+  direction: rtl;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border: none;
+  border-radius: 20px;
+  background: transparent;
+  cursor: pointer;
+}
+.personalBtn:hover { background: var(--primary-background-hover-color, #f4f5f8); }
+.personalChevron { flex: none; color: var(--secondary-text-color, #676879); }
+.personalAvatar { flex: none; display: inline-flex; align-items: center; }
+.personalAvatar :global(.MuiAvatar-root),
+.personalAvatar :global([class*="avatar"]) { width: 30px; height: 30px; font-size: 12px; }
+
+.filterBadge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 20px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.filterBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.filterPanel {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-start: 0;
+  z-index: 41;
+  width: 260px;
+  max-width: 78vw;
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(20, 30, 60, 0.16);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.filterField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+/* round198 — a filter row = the select + a per-row X that clears just it. */
+.filterFieldRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.filterFieldRow > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.filterClearBtn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.filterClearBtn:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--negative-color, #d83a52);
+}
+.filterClearBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+/* Footer: "נקה הכל" as a link-style action at the panel's END (left, in RTL). */
+.filterPanelFooter {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.filterClearAll {
+  border: none;
+  background: transparent;
+  padding: 4px 6px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  color: var(--primary-color, #0073ea);
+  cursor: pointer;
+  border-radius: var(--border-radius-small, 4px);
+}
+.filterClearAll:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.filterClearAll:disabled {
+  color: var(--secondary-text-color, #676879);
+  opacity: 0.5;
+  cursor: default;
+}
+.filterFieldLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--secondary-text-color, #676879);
 }
 
 .title {
@@ -89,14 +279,16 @@
 }
 .search {
   width: 100%;
-  height: 32px;
+  /* round172 — match the uniform control height + radius of the card. */
+  height: var(--ctl-h, 34px);
   padding: 0 8px;
   padding-inline-start: 30px;
   /* room for the clear-X pinned at the inline-end (left in RTL) */
   padding-inline-end: 28px;
-  border: 1px solid var(--ui-border-color, #c3c6d4);
-  border-radius: var(--border-radius-small, 4px);
-  background: var(--primary-background-color, #fff);
+  /* variant B — flat: no border, subtle grey fill (matches the other controls). */
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--primary-background-hover-color, #f1f2f6);
   color: var(--text-color, #323338);
   font-size: var(--font-size-general-label, 14px);
   font-family: var(--font-family);
@@ -104,6 +296,7 @@
 .search:focus-visible {
   outline: none;
   border-color: var(--primary-color, #0073ea);
+  background: var(--primary-background-color, #fff);
   box-shadow: 0 0 0 1px var(--primary-color, #0073ea);
 }
 
@@ -311,7 +504,9 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--spacing-xs, 4px);
+  /* round190 — mirror .list's 16px top padding so the first row doesn't jump down
+     when the skeleton is swapped for real content. */
+  padding: 16px 4px 4px;
 }
 
 /* Plain, empty initial-load placeholder for the LEFT list (round 46). The list
@@ -333,7 +528,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px;
+  /* round190 — top padding 16px so the gap from the separator line to the topmost
+     discussion matches the two header gaps above it (uniform 16px). Sides/bottom
+     stay 8px. */
+  padding: 16px 8px 8px;
 }
 
 /* Row wrapper — full width, anchors the absolutely-positioned kebab over the card. */

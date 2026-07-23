@@ -66,6 +66,18 @@ export function getColumnTitle(boardKey, alias) {
   return found?.title || null;
 }
 
+/**
+ * Whether an alias is MAPPED to a real board column in the active config (its
+ * stored mapping carries an `id`). Synchronous, from the published settings —
+ * unlike getColumnTitle it does NOT need the live columns to have loaded. Used
+ * to drive column-conditional UI (e.g. the "מרכז דיון" role appears only when
+ * that column is mapped — round219, replacing the old permissions.noCoordinator
+ * switch).
+ */
+export function isColumnMapped(boardKey, alias) {
+  return !!getColumns(boardKey)?.[alias]?.id;
+}
+
 // ---- load (once, deduped) ----
 /**
  * Fetch the discussions + tasks boards' columns and cache the people ones.

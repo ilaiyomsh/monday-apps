@@ -22,7 +22,10 @@ export function PointItemsPopup({ open, kind, point, items = [], onClose }) {
   if (!open) return null;
 
   const isDecision = kind === 'decision';
-  const title = isDecision ? 'החלטות מהנקודה' : 'משימות מהנקודה';
+  // round226 — the unified תוצרים popup lists the point's tasks AND decisions,
+  // each row tagged by its kind (item._outKind).
+  const isOutputs = kind === 'outputs';
+  const title = isOutputs ? 'תוצרים מהנקודה' : isDecision ? 'החלטות מהנקודה' : 'משימות מהנקודה';
 
   return (
     <div className={styles.overlay} onClick={() => onClose?.()} dir="rtl">
@@ -45,12 +48,18 @@ export function PointItemsPopup({ open, kind, point, items = [], onClose }) {
         <div className={styles.body}>
           {/* NAMES ONLY — the leading bar is fixed decision/task chrome (a color
               marker), not item data. */}
-          {items.map((item) => (
-            <div key={item.id} className={styles.item}>
-              <span className={`${styles.bar} ${isDecision ? styles.barDecision : styles.barTask}`} aria-hidden="true" />
-              <span className={styles.text}>{item.name}</span>
-            </div>
-          ))}
+          {items.map((item) => {
+            const rowIsDecision = isOutputs ? item._outKind === 'decision' : isDecision;
+            return (
+              <div key={`${item._outKind || kind}-${item.id}`} className={styles.item}>
+                <span className={`${styles.bar} ${rowIsDecision ? styles.barDecision : styles.barTask}`} aria-hidden="true" />
+                <span className={styles.text}>{item.name}</span>
+                {isOutputs && (
+                  <span className={styles.kindTag}>{rowIsDecision ? 'החלטה' : 'משימה'}</span>
+                )}
+              </div>
+            );
+          })}
           {items.length === 0 && (
             <div className={styles.empty}>אין פריטים עדיין — צור חדש עם כפתור ה־+</div>
           )}

@@ -9,6 +9,7 @@ import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import {
   ensurePeopleColumns,
   getColumnTitle,
+  isColumnMapped,
   subscribe as subscribePeopleColumns,
   getVersion as getPeopleColumnsVersion,
 } from '@generated/utils/mondayApi/peopleColumns.js';
@@ -18,6 +19,7 @@ import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
 import { createTopicsFromTemplate, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
+import { parseExternalParticipants, formatExternalParticipants } from '@generated/utils/externalParticipants.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { PartyProgress } from '@generated/components/PartyProgress';
@@ -123,6 +125,10 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const [lead, setLead] = useState([]);
   const [coordinator, setCoordinator] = useState([]);
   const [participants, setParticipants] = useState([]);
+  // round211 — EXTERNAL participants: text-only names (not monday users), kept
+  // as a names array; persisted comma-separated to the mapped long_text column.
+  const [externalParticipants, setExternalParticipants] = useState([]);
+  const [externalDraft, setExternalDraft] = useState('');
 
   // People-column field labels come from the LIVE board column titles (not the
   // Settings-only schema titles), so e.g. מרכז דיון shows as "רשם דיון" when
@@ -294,6 +300,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         );
         setCoordinator(src?.discussionCoordinatorID || []);
         setParticipants(src?.participantsID || []);
+        setExternalParticipants(parseExternalParticipants(src?.externalParticipantsID));
         // discussionTypeID is now the dropdown label TEXT (or null/empty).
         setDiscussionType(src?.discussionTypeID || null);
         // The source discussion is the continuation's "previous discussion".
@@ -309,6 +316,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       setLead(full.discussionLeadID || []);
       setCoordinator(full.discussionCoordinatorID || []);
       setParticipants(full.participantsID || []);
+      setExternalParticipants(parseExternalParticipants(full.externalParticipantsID));
       setDiscussionType(full.discussionTypeID || null);
       setPreviousDiscussionId('none');
 
@@ -450,6 +458,12 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       if (lead.length) payload.discussionLeadID = lead;
       if (coordinator.length) payload.discussionCoordinatorID = coordinator;
       if (participants.length) payload.participantsID = participants;
+      // round211 — external (text-only) participants. On EDIT always send (an
+      // empty string clears the column); on CREATE only when something was
+      // typed. Unmapped column → the SDK skips the alias, like the people cols.
+      if (externalParticipants.length || isEdit) {
+        payload.externalParticipantsID = formatExternalParticipants(externalParticipants);
+      }
       // "סוג" dropdown: only ever WRITE a label that ACTUALLY EXISTS on the
       // column. Options come from useDropdownOptions (the board's real labels),
       // so this blocks the inline "add new type" free-text affordance from
@@ -560,6 +574,8 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       setLead([]);
       setCoordinator([]);
       setParticipants([]);
+      setExternalParticipants([]);
+      setExternalDraft('');
       setDiscussionType(null);
       setTypeTopics(null);
       setPreviousDiscussionId('none');
@@ -575,6 +591,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         discussionLeadID: lead,
         discussionCoordinatorID: coordinator,
         participantsID: participants,
+        externalParticipantsID: formatExternalParticipants(externalParticipants),
         // round127 — carry the just-saved link so the refreshed card doesn't
         // keep showing the pre-edit previous discussion (the write succeeded;
         // only the hand-back omitted it).
@@ -588,6 +605,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         discussionLeadID: lead,
         discussionCoordinatorID: coordinator,
         participantsID: participants,
+        externalParticipantsID: formatExternalParticipants(externalParticipants),
       }, { isEdit, isDuplicate });
     } catch (err) {
       logger.error('CreateDiscussionModal', isEdit ? 'שגיאה בעדכון הדיון' : 'שגיאה ביצירת הדיון', err);
@@ -906,13 +924,18 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                   {lead.length > 0 && <FieldClearButton onClear={() => setLead([])} label={`ניקוי ${leadLabel}`} />}
                 </div>
               </div>
-              <div className={styles.field}>
-                <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
-                <div className={styles.fieldWrap}>
-                  <PersonPicker selected={coordinator} onChange={setCoordinator} bordered single closeOnSelect boardKey="discussions" accountWide />
-                  {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
+              {/* round219 — the coordinator field appears iff the מרכז דיון
+                  column is MAPPED (isColumnMapped); unmapped → it drops from the
+                  form, mirroring the header + permissions matrix. */}
+              {isColumnMapped('discussions', 'discussionCoordinatorID') && (
+                <div className={styles.field}>
+                  <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
+                  <div className={styles.fieldWrap}>
+                    <PersonPicker selected={coordinator} onChange={setCoordinator} bordered single closeOnSelect boardKey="discussions" accountWide />
+                    {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className={styles.field}>
                 <div className={styles.labelRow}>
                   <Text type="text2" className={styles.label}>{fieldLabels.participants}</Text>
@@ -963,6 +986,54 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                 </div>
               </div>
             </div>
+
+            {/* round211 — משתתפים חיצוניים (text-only names, not monday users;
+                never assignable to tasks). Shown only when the long_text column
+                is mapped in Settings. Type a full name + Enter/הוסף → chip. */}
+            {Boolean(getColumns('discussions')?.externalParticipantsID?.id) && (
+              <div className={`${styles.row} ${styles.rowSingle}`}>
+                <div className={styles.field}>
+                  <Text type="text2" className={styles.label}>
+                    {getColumnTitle('discussions', 'externalParticipantsID') || 'משתתפים חיצוניים'}
+                  </Text>
+                  <div className={styles.extPeopleBox}>
+                    {externalParticipants.map((n, i) => (
+                      <span key={`${n}-${i}`} className={styles.extPersonChip}>
+                        {n}
+                        <button
+                          type="button"
+                          className={styles.extPersonRemove}
+                          onClick={() => setExternalParticipants((list) => list.filter((_, j) => j !== i))}
+                          aria-label={`הסרת ${n}`}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                    <input
+                      className={styles.extPersonInput}
+                      value={externalDraft}
+                      placeholder={externalParticipants.length ? 'שם נוסף…' : 'שם מלא… (Enter להוספה)'}
+                      onChange={(e) => setExternalDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && externalDraft.trim()) {
+                          e.preventDefault();
+                          setExternalParticipants((list) => [...list, externalDraft.trim()]);
+                          setExternalDraft('');
+                        }
+                      }}
+                      onBlur={() => {
+                        if (externalDraft.trim()) {
+                          setExternalParticipants((list) => [...list, externalDraft.trim()]);
+                          setExternalDraft('');
+                        }
+                      }}
+                      aria-label="הוספת משתתף חיצוני"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Row 4: דיון קודם (previous discussion). */}
             {!hidePreviousDiscussion && (
