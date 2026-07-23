@@ -125,15 +125,19 @@
   font-size: 14px;
 }
 
-/* round226 — kind tag in the unified תוצרים popup. */
-.kindTag {
-  margin-inline-start: auto;
-  font-size: 10.5px;
-  font-weight: 600;
+/* round262 — the unified תוצרים popup is grouped by kind: a section per kind,
+   each with a heading ("משימות" / "החלטות") over its rows. */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.group + .group {
+  margin-top: 6px;
+}
+.groupHead {
+  font-size: 13px;
+  font-weight: 700;
   color: var(--secondary-text-color, #676879);
-  background: var(--primary-background-hover-color, #f0f1f3);
-  border-radius: 8px;
-  padding: 1px 8px;
-  white-space: nowrap;
-  flex-shrink: 0;
+  padding: 2px 2px 0;
 }
