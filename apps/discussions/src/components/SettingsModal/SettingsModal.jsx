@@ -799,7 +799,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                             // the live { id, name } options (see resolveMultiColView).
                             const { labelByVal, chipName, remaining } = resolveMultiColView(typedOptions, selectedIds, col.colTitles);
                             return (
-                              <div key={alias} className={styles.colRow}>
+                              <div key={alias} className={`${styles.colRow} ${styles.colRowWide}`}>
                                 <div className={styles.colLabel}>
                                   <Text type={"text2"}>{col.title || alias}</Text>
                                 </div>
