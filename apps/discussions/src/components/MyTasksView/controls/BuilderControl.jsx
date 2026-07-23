@@ -41,9 +41,11 @@ export function BuilderControl({
   if (mobile) {
     return (
       <>
+        {/* round208 — an ACTIVE control is signalled by the stronger background
+            alone (bPillApplied); the old badge dot was dropped (owner spec:
+            no extra marks or numbers on the mobile icons). */}
         <button type="button" ref={triggerRef} className={pillClass} onClick={() => setOpen(true)} aria-label={label}>
           <Icon className={styles.bPillIcon} />
-          {applied ? <span className={styles.bBadgeDot} /> : null}
         </button>
         {open && (
           <>
@@ -52,15 +54,15 @@ export function BuilderControl({
               <div className={styles.bGrab} />
               <div className={styles.bSHead}>
                 <span className={styles.bSTitle}>{title}</span>
-                <button type="button" className={styles.bSClose} onClick={close} aria-label="Close">
+                <button type="button" className={styles.bSClose} onClick={close} aria-label="סגירה">
                   <BuilderIcon name="x" size={18} />
                 </button>
               </div>
               <div className={styles.bSBody}>{renderBody({ mobile: true, openId, setOpenId, close })}</div>
               {onClear || onSave ? (
                 <div className={styles.bSFoot}>
-                  {onSave ? <button type="button" className={styles.bGhostBtn} onClick={() => { onSave(); close(); }}>Save</button> : null}
-                  {onClear ? <button type="button" className={styles.bGhostBtn} onClick={() => { onClear(); }}>Clear</button> : null}
+                  {onSave ? <button type="button" className={styles.bGhostBtn} onClick={() => { onSave(); close(); }}>שמור</button> : null}
+                  {onClear ? <button type="button" className={styles.bGhostBtn} onClick={() => { onClear(); }}>נקה</button> : null}
                 </div>
               ) : null}
             </div>
@@ -86,8 +88,8 @@ export function BuilderControl({
             <div className={styles.bHead}>
               <span className={styles.bTitle}>{title}</span>
               <span className={styles.bHeadActions}>
-                {onSave ? <button type="button" className={styles.bClear} onClick={onSave}>Save</button> : null}
-                {onClear ? <button type="button" className={styles.bClear} onClick={onClear}>Clear</button> : null}
+                {onSave ? <button type="button" className={styles.bClear} onClick={onSave}>שמור</button> : null}
+                {onClear ? <button type="button" className={styles.bClear} onClick={onClear}>נקה</button> : null}
               </span>
             </div>
             {renderBody({ mobile: false, openId, setOpenId, close })}
@@ -98,7 +100,9 @@ export function BuilderControl({
       <button type="button" ref={triggerRef} className={pillClass} onMouseDown={updatePosition}>
         <Icon className={styles.bPillIcon} />
         <span>{label}</span>
-        {applied && badge != null ? <span className={styles.bPillCount}>/ {badge}</span> : null}
+        {/* round183 — the "/ N" count suffix was removed (owner request); an
+            active control is signalled by the darker background alone
+            (styles.bPillApplied via pillClass), no slash + number. */}
       </button>
     </Dialog>
   );

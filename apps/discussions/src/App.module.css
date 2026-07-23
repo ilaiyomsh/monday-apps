@@ -1,4 +1,14 @@
 /* Outer shell: a top view-toggle bar (Discussions ⇄ My Tasks) over the body. */
+/* round164 — "framed card" look (owner decision 2026-07-19): the whole app view
+   floats as a single rounded, bordered, shadowed card on a light-grey backdrop.
+   This is a PURELY OUTER frame — the shell provides the backdrop + padding, and
+   the content wrapper (`.root` for discussions) gets the card chrome. Nothing
+   inside (tables, dashboard, cards) changes. Tunable via the `--frame-*` custom
+   properties below.
+   round179 — the PERSONAL area is deliberately NOT one white card: its switcher
+   floats on this grey backdrop and each view sits in its own white card (owned by
+   PersonalShell). So the personal branch uses `.appShellPersonal` — a chrome-less
+   flex wrapper — instead of a framed content wrapper. */
 .appShell {
   height: 100vh; /* fallback for browsers without small-viewport units */
   height: 100svh; /* avoids clipping under mobile browser chrome */
@@ -6,6 +16,55 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box;
+  --frame-pad: 14px;
+  --frame-radius: 16px;
+  --frame-border: var(--layout-border-color, #e6e9ef);
+  --frame-shadow: 0 8px 26px rgba(20, 30, 60, 0.10);
+  --frame-backdrop: #eceef3;
+  padding: var(--frame-pad);
+  background: var(--frame-backdrop);
+}
+/* The framed card itself — shared by every view's content wrapper. `overflow:
+   hidden` + the radius clip the inner content's square corners to the rounded
+   frame; the shadow lifts it off the backdrop. NOTE: CSS Modules here are
+   non-scoped, so `.root` is a shared class across many components — the
+   discussions branch carries a dedicated `.appFrame` class instead of relying
+   on its `.root`. */
+.appFrame {
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--frame-border);
+  border-radius: var(--frame-radius);
+  box-shadow: var(--frame-shadow);
+  overflow: hidden;
+}
+/* round166b — anchor the desktop divider handle (position:absolute, below) to the
+   discussions frame. MUST live on `.appFrame` (unique to the App shell), NOT on
+   the shared, non-scoped `.root` class: putting `position: relative` on `.root`
+   leaked onto every component's root (DiscussionCard, tabs, …) and disrupted the
+   sticky discussion-card header. `.appFrame` is on the same App root div, so the
+   divider still anchors correctly. */
+.appFrame {
+  position: relative;
+}
+/* round175 — when monday's item-card / updates panel docks and narrows the iframe
+   (body[data-chrome-narrow]; see utils/chromeNarrow.js — the canonical panel-open
+   signal), flatten the frame's PHYSICAL-RIGHT edge (the panel always docks on the
+   right, regardless of the app's RTL) so the floating card meets the panel flush —
+   no grey padding gap, rounded corner, or shadow seam. Self-clears when the panel
+   closes and the width returns. */
+:global(body[data-chrome-narrow="1"]) .appShell {
+  padding-right: 0;
+}
+:global(body[data-chrome-narrow="1"]) .appFrame {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  border-right: none;
+}
+/* Real monday mobile app: tighten the frame so it doesn't eat scarce space. */
+:global(.mobile-app) .appShell {
+  --frame-pad: 6px;
+  --frame-radius: 12px;
 }
 .appViewBar {
   flex-shrink: 0;
@@ -38,7 +97,10 @@
   color: var(--primary-color, #0073ea);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
-.appShellBody {
+/* round179 — chrome-less wrapper for the personal area: only flex sizing, NO card
+   frame (no bg/border/radius/shadow). PersonalShell renders its switcher directly
+   on the grey `.appShell` backdrop and puts each view in its own white card. */
+.appShellPersonal {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -112,15 +174,18 @@
 /* A thin transparent strip centered on the list/card divider; hovering it
    reveals the collapse button. */
 :global(.is-desktop) .dividerHandle {
-  position: fixed;
+  position: absolute;
   top: 0;
-  /* Centered ON the divider line. The toggle is a plain always-clickable
-     button (a fixed element on top of the sidebar), so the whole circle works
-     even where it straddles the column edge. */
+  /* round166 — the grab zone sits on the CARD side of the seam, not straddling
+     it. Straddling (translateX(-50%), 28px) put the handle's left half over the
+     list's right-edge scrollbar and stole its pointer, so the bar couldn't be
+     clicked (owner: "duplication between resizing and scrolling"). Anchoring the
+     handle's inline-start AT the seam and extending into the card frees the
+     scrollbar; the visible resize line (::before) is pinned back to the seam. */
   inset-inline-start: var(--sidebar-w, 320px);
-  transform: translateX(-50%);
+  transform: translateX(0);
   height: 100%;
-  width: 28px;
+  width: 16px;
   z-index: 1000;
   display: block;
 }
@@ -133,8 +198,9 @@
   content: '';
   position: absolute;
   top: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  /* Pinned to the handle's inline-start = the list/card seam (the handle now
+     extends into the card from the seam, so the line stays on the true edge). */
+  inset-inline-start: 0;
   height: 100%;
   width: 2px;
   background: var(--ui-border-color, #d0d4e4);
@@ -236,6 +302,9 @@
      actually visible as a corner. Only the corner sliver of this gray ever
      shows — the card fills the pane. */
   background: var(--allgrey-background-color, #f6f7fb);
+  /* round178 — anchor the CONTAINED SettingsModal overlay to this pane so the
+     settings box centers within it and dims only its tabs (not the whole app). */
+  position: relative;
 }
 
 /* mobile: panes toggle via .hiddenMobile; both show side-by-side on md+ */

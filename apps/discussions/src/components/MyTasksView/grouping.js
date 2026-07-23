@@ -25,7 +25,7 @@ import { isValidStatus } from '../../constants/statusConfig.js';
  *   items  — the tasks in the group
  */
 
-export const GROUP_MODES = ['none', 'discussion', 'status', 'priority', 'deadline'];
+export const GROUP_MODES = ['none', 'discussion', 'status', 'priority', 'deadline', 'person'];
 
 export const NO_STATUS = '__none__';
 export const NO_PRIORITY = '__no_priority__';
@@ -315,6 +315,10 @@ export function groupMyTasks(tasks, mode, opts = {}) {
         return groupByPriority(list, opts);
       case 'deadline':
         return groupByDate(list, opts);
+      // round224 — "אחריות": group by the responsibility people (owner mockup).
+      // Reuses the tabs' person-group engine (same bucket keys/labels).
+      case 'person':
+        return groupTabTasks(list, { by: 'person', order: opts.order === 'azDesc' ? 'azDesc' : 'azAsc' });
       case 'group':
         return groupByBoardGroup(list, opts);
       default:

@@ -2,9 +2,10 @@ import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallba
 import { createPortal } from 'react-dom';
 import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscussions';
 import { Button, Text, IconButton } from '@vibe/core';
-import { Calendar, CloseSmall, Search, Settings } from '@vibe/icons';
+import { CloseSmall, Search } from '@vibe/icons';
 import { HighlightedText } from '@generated/components/HighlightedText';
-import { BarChart3, Check, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { PersonAvatar } from '@generated/components/PersonAvatar';
+import { Calendar, Check, ChevronLeft, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Plus, Settings, Trash2, X } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
 import { fmtTimeLabel, buildMonthOptions } from '@generated/utils/dateTime.js';
 import { rangeForView } from '@generated/utils/calendarDates.js';
@@ -12,6 +13,7 @@ import { discussionAccentColor } from '@generated/constants/discussionColors.js'
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { usePermission, useIsSuperMember } from '@generated/hooks/usePermission.js';
+import { canExportDiscussion } from '../../utils/exportGate.js';
 import styles from './DiscussionList.module.css';
 
 /* List-row subtitle: short weekday + "DD/MM", plus " · HH:MM" when the date
@@ -366,7 +368,7 @@ function DiscussionContextMenu({ item, x, y, actions, onClose }) {
 
 export function DiscussionList({
   onSelect, selectedId, onCreateNew, onEdit, onCopyLink, onDuplicate, onExport, onDelete,
-  exportingId, canManageSettings, onOpenSettings, onOpenMyTasks, onOpenMyDecisions, onOpenDashboard, currentUser = null,
+  exportingId, canManageSettings, onOpenSettings, onOpenPersonal, currentUser = null,
   // Calendar view — nav state lives in App (predates round136's removal of the
   // refreshKey remount; keeping it there is still correct).
   viewMode = 'list', onViewModeChange, calendarAnchor, calendarMode, onCalendarNavigate, onCreateAt,
@@ -385,6 +387,15 @@ export function DiscussionList({
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [typeFilter, setTypeFilter] = useState('all'); // 'all' or a status label id (string)
+  // round170 — the two filter cells were consolidated into ONE "סינון" button
+  // that opens a small popover holding the type (+ month, in list view) selects.
+  const [filterOpen, setFilterOpen] = useState(false);
+  // Active-filter count for the button badge. round177 — the month selector is a
+  // NATIVE default (it opens on the current month), so it never contributes to the
+  // badge (owner: "הסינון של החודש הנוכחי הוא נייטיבי"); only an explicit type
+  // filter counts. MUST be declared AFTER typeFilter — referencing it earlier is a
+  // temporal-dead-zone crash. round171 fix.
+  const activeFilterCount = typeFilter !== 'all' ? 1 : 0;
   const [debouncedSearch, setDebouncedSearch] = useState('');
   // Right-click context menu (round 33) — {item, x, y} while open. A single
   // instance serves BOTH the list rows and the calendar chips (both live inside
@@ -444,13 +455,13 @@ export function DiscussionList({
     (item) => can('editDiscussionFields', { discussion: item }),
     [can]
   );
-  // DOCS-export is its own capability (default creator/lead/owner). Gate the row
-  // kebab / calendar export item per-discussion, mirroring canEditItem. While the
-  // feature is off it resolves via the legacy creator/lead/owner path → identical
-  // to before this gate existed (owners bypass).
+  // round207 (owner decision) — export is a FIXED rule, no longer the exportDocs
+  // matrix capability: only the discussion's creator, lead (מנהל) and
+  // coordinator (מרכז) — plus board owners — see the "ייצוא" action, which now
+  // opens the per-discussion export dialog.
   const canExportItem = useCallback(
-    (item) => can('exportDocs', { discussion: item }),
-    [can]
+    (item) => canExportDiscussion(item, { canManageSettings, currentUser }),
+    [canManageSettings, currentUser]
   );
   // System-tier caps (global, not item-bound). While the feature is off both
   // resolve allow-all → buttons always shown (identical to today). Owners bypass.
@@ -532,150 +543,168 @@ export function DiscussionList({
       {/* round131 — the 4px gradient accent bar was removed (owner request). */}
       <div className={styles.header}>
         <div className={styles.headerInner}>
-          {/* Mockup buttons row: personal-view nav (outline) at inline-start,
-              chrome (gear + view toggle) and the primary "חדש" at inline-end. */}
-          <div className={styles.titleRow}>
-            <div className={styles.titleActions}>
-              {/* round128 — "המשימות שלי" sits LEFT of "ההחלטות שלי" (owner request). */}
-              {onOpenMyTasks && (
-                <Button kind={"secondary"} size={"small"} onClick={onOpenMyTasks}>
-                  המשימות שלי
-                </Button>
-              )}
-              {onOpenMyDecisions && (
-                <Button kind={"secondary"} size={"small"} onClick={onOpenMyDecisions}>
-                  ההחלטות שלי
-                </Button>
-              )}
-              {/* round152/153 — entry to the discussions dashboard, alongside the
-                  personal-view nav. round153: icon-only square button (owner
-                  request — the graph glyph, no "דשבורד" label). */}
-              {onOpenDashboard && (
-                <IconButton
-                  icon={BarChart3}
-                  size={"small"}
-                  kind={"tertiary"}
-                  ariaLabel="דשבורד דיונים"
-                  tooltipContent="דשבורד דיונים"
-                  onClick={onOpenDashboard}
-                />
-              )}
-            </div>
-            <div className={styles.titleActions}>
-              {(canManageSettings || isSuper) && (
-                <IconButton
-                  icon={Settings}
-                  size={"small"}
-                  kind={"tertiary"}
-                  ariaLabel={canManageSettings ? 'הגדרות' : 'ניהול תבניות'}
-                  onClick={onOpenSettings}
-                />
-              )}
-              {onViewModeChange && (
-                <IconButton
-                  icon={isCalendar ? List : Calendar}
-                  size={"small"}
-                  kind={"tertiary"}
-                  ariaLabel={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
-                  tooltipContent={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
-                  onClick={() => onViewModeChange(isCalendar ? 'list' : 'calendar')}
-                />
-              )}
+          {/* round176/round177 — ONE row (owner request). Right→left: the action
+              cluster + (blue, create) · settings · filter · calendar; then an
+              ALWAYS-OPEN search bar that flexes to fill the gap toward the far-LEFT
+              personal-area entry (avatar + a left arrow to its LEFT). All controls
+              are transparent icon buttons except the blue +. */}
+          <div className={styles.bar} data-testid="filter-bar">
+            <div className={styles.actions}>
               {canCreateDiscussion && (
-                <Button kind={"primary"} size={"small"} onClick={onCreateNew}>
-                  חדש
-                </Button>
+                <button
+                  type="button"
+                  className={styles.plusBtn}
+                  onClick={onCreateNew}
+                  aria-label="דיון חדש"
+                  title="דיון חדש"
+                >
+                  <Plus size={20} aria-hidden="true" />
+                </button>
+              )}
+              {(canManageSettings || isSuper) && (
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  aria-label={canManageSettings ? 'הגדרות' : 'ניהול תבניות'}
+                  title={canManageSettings ? 'הגדרות' : 'ניהול תבניות'}
+                  onClick={onOpenSettings}
+                >
+                  <Settings size={19} aria-hidden="true" />
+                </button>
+              )}
+              <div className={styles.popAnchor}>
+                <button
+                  type="button"
+                  className={`${styles.iconBtn} ${filterOpen ? styles.iconBtnOpen : ''}`}
+                  onClick={() => setFilterOpen((o) => !o)}
+                  aria-haspopup="dialog"
+                  aria-expanded={filterOpen}
+                  aria-label="סינון"
+                  title="סינון"
+                >
+                  <Filter size={19} aria-hidden="true" />
+                  {activeFilterCount > 0 && <span className={styles.iconBadge}>{activeFilterCount}</span>}
+                </button>
+                {filterOpen && (
+                  <>
+                    <div className={styles.filterBackdrop} onClick={() => setFilterOpen(false)} />
+                    <div className={styles.filterPanel} role="dialog" aria-label="סינון דיונים" dir="rtl">
+                      {/* round198 — every filter row carries an X that clears JUST
+                          that row, and a "נקה הכל" footer clears every filter. */}
+                      <div className={styles.filterField}>
+                        <div className={styles.filterFieldLabel}>סוג הדיון</div>
+                        <div className={styles.filterFieldRow}>
+                          <FilterSelect
+                            options={typeDropdownOptions}
+                            value={typeFilter}
+                            onChange={(val) => setTypeFilter(val ?? 'all')}
+                            ariaLabel="סינון לפי סוג"
+                            fieldLabel="סוג הדיון"
+                            icon={Filter}
+                            searchable
+                          />
+                          <button
+                            type="button"
+                            className={styles.filterClearBtn}
+                            onClick={() => setTypeFilter('all')}
+                            disabled={typeFilter === 'all'}
+                            aria-label="בטל סינון לפי סוג"
+                            title="בטל סינון לפי סוג"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      {!isCalendar && (
+                        <div className={styles.filterField}>
+                          <div className={styles.filterFieldLabel}>חודש</div>
+                          <div className={styles.filterFieldRow}>
+                            <FilterSelect
+                              options={monthDropdownOptions}
+                              value={monthFilter}
+                              onChange={(val) => setMonthFilter(val ?? 'all')}
+                              ariaLabel="סינון לפי חודש"
+                              icon={Filter}
+                            />
+                            <button
+                              type="button"
+                              className={styles.filterClearBtn}
+                              onClick={() => setMonthFilter('all')}
+                              disabled={monthFilter === 'all'}
+                              aria-label="בטל סינון לפי חודש"
+                              title="בטל סינון לפי חודש"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      <div className={styles.filterPanelFooter}>
+                        <button
+                          type="button"
+                          className={styles.filterClearAll}
+                          onClick={() => { setTypeFilter('all'); setMonthFilter('all'); }}
+                          disabled={typeFilter === 'all' && (isCalendar || monthFilter === 'all')}
+                        >
+                          נקה הכל
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              {onViewModeChange && (
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  aria-label={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
+                  title={isCalendar ? 'תצוגת רשימה' : 'תצוגת לוח שנה'}
+                  onClick={() => onViewModeChange(isCalendar ? 'list' : 'calendar')}
+                >
+                  {isCalendar ? <List size={19} aria-hidden="true" /> : <Calendar size={19} aria-hidden="true" />}
+                </button>
               )}
             </div>
-          </div>
-          {isCalendar ? (
-            <div className={styles.calendarFilterRow} data-testid="calendar-filter-row">
-              <div className={styles.searchWrap}>
-                <Search className={styles.searchIcon} aria-hidden="true" />
-                <input
-                  type="text"
-                  className={styles.search}
-                  aria-label="חיפוש דיון"
-                  placeholder="חיפוש דיון"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {/* clear-X — pinned to the input's LEFT edge (inline-end in RTL) */}
-                {search ? (
-                  <button
-                    type="button"
-                    className={styles.searchClear}
-                    aria-label="נקה חיפוש"
-                    onClick={() => setSearch('')}
-                  >
-                    <CloseSmall size={16} />
-                  </button>
-                ) : null}
-              </div>
-              <div className={styles.calendarTypeCell}>
-                <FilterSelect
-                  options={typeDropdownOptions}
-                  value={typeFilter}
-                  onChange={(val) => setTypeFilter(val ?? 'all')}
-                  ariaLabel="סינון לפי סוג"
-                  fieldLabel="סוג הדיון"
-                  icon={Filter}
-                  searchable
-                />
-              </div>
+            {/* Always-open search bar — fills the gap; magnifier on its right edge
+                (RTL leading), immediately to the LEFT of the calendar toggle. */}
+            <div className={styles.searchBar}>
+              <Search className={styles.searchIcon} aria-hidden="true" />
+              <input
+                type="text"
+                className={styles.search}
+                aria-label="חיפוש דיון"
+                placeholder=""
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search ? (
+                <button
+                  type="button"
+                  className={styles.searchClear}
+                  aria-label="נקה חיפוש"
+                  onClick={() => setSearch('')}
+                >
+                  <CloseSmall size={16} />
+                </button>
+              ) : null}
             </div>
-          ) : (
-            <>
-              <div className={styles.searchWrap}>
-                <Search className={styles.searchIcon} aria-hidden="true" />
-                <input
-                  type="text"
-                  className={styles.search}
-                  aria-label="חיפוש דיון"
-                  placeholder="חיפוש דיון"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                {/* clear-X — pinned to the input's LEFT edge (inline-end in RTL) */}
-                {search ? (
-                  <button
-                    type="button"
-                    className={styles.searchClear}
-                    aria-label="נקה חיפוש"
-                    onClick={() => setSearch('')}
-                  >
-                    <CloseSmall size={16} />
-                  </button>
-                ) : null}
-              </div>
-              {/* Full-width filter chips (round 38): each stretches to fill half
-                  the row so together they span the search-input width above. Order
-                  (DOM = RTL): סוג הדיון on the right (start), month on the left
-                  (end). Both carry a funnel icon. */}
-              <div className={styles.filterRow}>
-                <div className={styles.filterCell}>
-                  <FilterSelect
-                    options={typeDropdownOptions}
-                    value={typeFilter}
-                    onChange={(val) => setTypeFilter(val ?? 'all')}
-                    ariaLabel="סינון לפי סוג"
-                    fieldLabel="סוג הדיון"
-                    icon={Filter}
-                    searchable
-                  />
-                </div>
-                <div className={styles.filterCell}>
-                  <FilterSelect
-                    options={monthDropdownOptions}
-                    value={monthFilter}
-                    onChange={(val) => setMonthFilter(val ?? 'all')}
-                    ariaLabel="סינון לפי חודש"
-                    icon={Filter}
-                  />
-                </div>
-              </div>
-            </>
-          )}
+            {onOpenPersonal && (
+              <button
+                type="button"
+                className={styles.personalBtn}
+                onClick={onOpenPersonal}
+                aria-label="האזור האישי"
+                title="האזור האישי"
+              >
+                {currentUser && (
+                  <span className={styles.personalAvatar} aria-hidden="true">
+                    <PersonAvatar person={currentUser} size="sm" showName={false} />
+                  </span>
+                )}
+                <ChevronLeft size={18} aria-hidden="true" className={styles.personalChevron} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

@@ -9,6 +9,20 @@ import { buildPeriods, summarize, aggregateDashboard, PERIOD_CONFIG } from '../d
 const NOW = new Date(2026, 6, 17, 12, 0); // 17 Jul 2026 (Fri), noon
 
 describe('buildPeriods', () => {
+  it('day = 7 trailing days, ending with today, keyed/labelled per-day (round158)', () => {
+    const { unit, buckets, from } = buildPeriods('day', NOW);
+    expect(unit).toBe('day');
+    expect(buckets.length).toBe(PERIOD_CONFIG.day.count); // 7
+    const last = buckets[buckets.length - 1];
+    expect(last.start.getFullYear()).toBe(2026);
+    expect(last.start.getMonth()).toBe(6);
+    expect(last.start.getDate()).toBe(17);     // last bucket is today (17 Jul)
+    expect(last.key).toBe('2026-07-17');       // per-day key (Y-M-D)
+    expect(last.label).toBe('17/07');          // per-day label (DD/MM)
+    expect(buckets[0].start.getDate()).toBe(11); // 6 days before 17 Jul
+    expect(from.getTime()).toBe(buckets[0].start.getTime());
+  });
+
   it('week = 8 trailing weeks, Sunday-started, ending with the week of `now`', () => {
     const { unit, buckets, from } = buildPeriods('week', NOW);
     expect(unit).toBe('week');
@@ -71,10 +85,21 @@ function fixture() {
 }
 
 describe('aggregateDashboard — defaults & scope', () => {
-  it('opens on the week preset (unit + axis label)', () => {
+  it('opens on the day preset (unit + axis label) — round158', () => {
     const r = aggregateDashboard(fixture(), { now: NOW }); // no preset → default
-    expect(r.unit).toBe('week');
-    expect(r.axisLabel).toBe('לפי שבוע');
+    expect(r.unit).toBe('day');
+    expect(r.axisLabel).toBe('לפי יום');
+  });
+
+  it('day preset shows 7 daily buckets and scopes to the trailing week', () => {
+    const r = aggregateDashboard(fixture(), { preset: 'day', now: NOW });
+    expect(r.byPeriod.length).toBe(7);
+    expect(r.totalDiscussions).toBe(1);        // only disc 2 (12 Jul) is within 11–17 Jul
+    const d12 = r.byPeriod.find((b) => b.key === '2026-07-12');
+    expect(d12.count).toBe(1);
+    expect(d12.items[0].id).toBe('2');
+    // disc 1 (5 Jul) falls outside the 7-day window
+    expect(r.byPeriod.some((b) => b.key === '2026-07-05')).toBe(false);
   });
 
   it('counts only in-window discussions and their tasks/decisions', () => {

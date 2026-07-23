@@ -1,7 +1,7 @@
 {
   "name": "discussions-app",
   "private": true,
-  "version": "2.2.1",
+  "version": "2.3.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -31,6 +31,7 @@
     "@vibe/core": "4.2.5",
     "@vibe/icons": "^4.1.0",
     "docx": "^9.7.1",
+    "docx-preview": "^0.4.0",
     "fflate": "^0.8.3",
     "file-saver": "^2.0.5",
     "i18next": "^26.3.0",

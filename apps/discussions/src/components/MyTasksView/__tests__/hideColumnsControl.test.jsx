@@ -33,21 +33,21 @@ function setup(props = {}) {
 describe('HideColumnsControl — "Display columns" popover', () => {
   it('opens the panel on click and shows the title + Save button', () => {
     setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
-    expect(screen.getByText('Display columns')).toBeInTheDocument();
-    expect(screen.getByText('Save to this view')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
+    expect(screen.getByText('הצגת עמודות')).toBeInTheDocument();
+    expect(screen.getByText('שמירה לתצוגה')).toBeInTheDocument();
   });
 
   it('shows "All columns — N selected" counting every SHOWN column', () => {
     setup({ hidden: new Set(['status']) });
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
     // 4 columns total, 1 hidden -> 3 shown/selected (name always counts).
-    expect(screen.getByText('All columns — 3 selected')).toBeInTheDocument();
+    expect(screen.getByText('כל העמודות — 3 מוצגות')).toBeInTheDocument();
   });
 
   it('locks (disables) the primary name column checkbox but no other', () => {
     setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
     // @vibe Checkbox renders a real <input type="checkbox"> (its ariaLabel does
     // not map to an accessible name here), so query the portal DOM directly. The
     // locked name row is the ONLY disabled column checkbox.
@@ -59,14 +59,14 @@ describe('HideColumnsControl — "Display columns" popover', () => {
 
   it('toggling a column (via its label button) calls onToggle(key)', () => {
     const { onToggle } = setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
     fireEvent.click(screen.getByRole('button', { name: 'Status' }));
     expect(onToggle).toHaveBeenCalledWith('status');
   });
 
   it('the master checkbox hides all when everything is currently shown', () => {
     const { onToggleAll } = setup(); // all shown
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
     const master = document.querySelector('.hcMasterRow input[type="checkbox"]');
     fireEvent.click(master);
     expect(onToggleAll).toHaveBeenCalledWith(false);
@@ -74,23 +74,23 @@ describe('HideColumnsControl — "Display columns" popover', () => {
 
   it('the search input filters the column rows', () => {
     setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
-    fireEvent.change(screen.getByLabelText('Find columns to show/hide'), { target: { value: 'dead' } });
+    fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
+    fireEvent.change(screen.getByLabelText('חיפוש עמודות להצגה/הסתרה'), { target: { value: 'dead' } });
     expect(screen.getByText('Deadline')).toBeInTheDocument();
     expect(screen.queryByText('Status')).toBeNull();
   });
 
   it('clicking "Save to this view" calls onSave and closes the panel', () => {
     const { onSave } = setup();
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
-    fireEvent.click(screen.getByText('Save to this view'));
+    fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
+    fireEvent.click(screen.getByText('שמירה לתצוגה'));
     expect(onSave).toHaveBeenCalledTimes(1);
     expect(screen.queryByText('Display columns')).toBeNull();
   });
 
   it('hides the Save button when onSave is null', () => {
     setup({ onSave: null });
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
-    expect(screen.queryByText('Save to this view')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
+    expect(screen.queryByText('שמירה לתצוגה')).toBeNull();
   });
 });

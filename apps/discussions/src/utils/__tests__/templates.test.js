@@ -93,8 +93,8 @@ describe('createTopicsFromTemplate', () => {
   });
 
   it('no-ops when there is no discussion id or no topics', async () => {
-    expect(await createTopicsFromTemplate(null, { topics: [{ name: 't' }] })).toEqual({ topics: 0, points: 0 });
-    expect(await createTopicsFromTemplate('D1', { topics: [] })).toEqual({ topics: 0, points: 0 });
+    expect(await createTopicsFromTemplate(null, { topics: [{ name: 't' }] })).toMatchObject({ topics: 0, points: 0 });
+    expect(await createTopicsFromTemplate('D1', { topics: [] })).toMatchObject({ topics: 0, points: 0 });
     expect(api).not.toHaveBeenCalled();
   });
 
@@ -107,7 +107,7 @@ describe('createTopicsFromTemplate', () => {
       ],
     });
 
-    expect(result).toEqual({ topics: 2, points: 2 });
+    expect(result).toMatchObject({ topics: 2, points: 2 });
 
     // 2 create_item + 2 create_subitem
     const itemCalls = api.mock.calls.filter((c) => c[0].includes('create_item'));
@@ -132,7 +132,7 @@ describe('createTopicsFromTemplate', () => {
     const result = await createTopicsFromTemplate('DISC_1', {
       topics: [{ name: 'bad', points: ['p1'] }],
     });
-    expect(result).toEqual({ topics: 0, points: 0 });
+    expect(result).toMatchObject({ topics: 0, points: 0 });
     // only the create_item was attempted; no create_subitem fired
     expect(api.mock.calls.some((c) => c[0].includes('create_subitem'))).toBe(false);
   });

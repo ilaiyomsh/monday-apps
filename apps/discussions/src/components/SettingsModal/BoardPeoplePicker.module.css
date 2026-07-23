@@ -5,7 +5,7 @@
 .root {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 6px;
   /* Separator/spacing provided by the pinned .peopleFooter wrapper in
      PermissionsTab — keep this compact (no own border/margin). */
 }
@@ -199,21 +199,26 @@
   background: var(--negative-color-selected, #fce6e9);
 }
 
+/* round220 — each row is a bordered picker FIELD (label + avatars) so the
+   OWNERS/MEMBERS card reads like the SUPER MEMBERS card's bordered PersonPicker.
+   The .root gap (6px) spaces the two fields. */
 .peopleRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  padding: 3px 8px;
-  border: none;
-  background: transparent;
-  border-radius: var(--border-radius-small, 4px);
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  background: var(--primary-background-color, #fff);
+  border-radius: var(--border-radius-medium, 8px);
   cursor: pointer;
   text-align: start;
 }
 
 .peopleRow:hover:not(:disabled) {
+  border-color: var(--primary-color, #0073ea);
   background: var(--primary-background-hover-color, #f0f3ff);
 }
 

@@ -1,7 +1,12 @@
 .root {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-medium, 16px);
+  /* round188 — the toolbar→content gap must stay CONSTANT while scrolling. The
+     old flex `gap` sat in normal flow BELOW the sticky toolbar, so it scrolled
+     away (gap shrank). Zero it here and pin the whole gap on the sticky toolbar's
+     padding-bottom instead (see .toolbar), so the gap is identical at every scroll
+     position. */
+  gap: 0;
   /* Full width (the tab pane broke out of the 90% frame) so the board's row
      separators run to the RIGHT edge of the view. A left inset keeps the toolbar
      off the edge; the right stays flush (the board bleeds right). */
@@ -36,7 +41,11 @@
   top: 0;
   z-index: 20;
   background: var(--primary-background-color, #ffffff);
-  padding-block: 4px;
+  /* round188 — the whole toolbar→content gap lives HERE (in the sticky element's
+     own padding-bottom), not in the parent flex `gap` which scrolls away. 20px
+     bottom pins the gap so it is identical at every scroll position. */
+  padding-top: 4px;
+  padding-bottom: 20px;
   font-size: 14px; /* round138 — pinned; identical toolbar row in all four tabs */
 }
 /* Cover the scroll container's (.body) top padding band above the pinned toolbar
@@ -69,6 +78,12 @@
 .batterySlot {
   margin-inline-start: auto;
   margin-inline-end: 0.5cm;
+}
+/* round180 — while the discussions selector panel is open the card is narrow, so
+   hide the colored quick-filter battery; it returns only once the tabs area is
+   expanded (the list collapsed). Mirrors the body[data-list-open] flag set in App. */
+:global(body[data-list-open="1"]) .batterySlot {
+  display: none !important;
 }
 
 .groupSelect {

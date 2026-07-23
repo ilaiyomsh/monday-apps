@@ -1,3 +1,7 @@
+// Pin an east-of-UTC timezone (the app's real user base) so the date-formatting
+// tests can actually catch UTC/local day-shift regressions (round195).
+process.env.TZ = 'Asia/Jerusalem';
+
 import { describe, it, expect } from 'vitest';
 import { Packer } from 'docx';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -135,6 +139,48 @@ describe('buildDiscussionModel', () => {
     expect(model.summaryHtml).toBe('');
     expect(model.tasks).toEqual([]);
   });
+
+  it('formats a local-midnight Date to the SAME calendar day — no UTC day-shift (round195)', () => {
+    // parseValue('date') returns LOCAL midnight for date-only monday values; with
+    // the old getUTC* formatting this rendered 06.06.2026 in Asia/Jerusalem.
+    const model = buildDiscussionModel({ discussion: { discussionDateID: new Date(2026, 5, 7) } });
+    expect(model.dateText).toBe('07.06.2026');
+  });
+
+  it('shapes decisions into plain strings — decider names, date, status label (round192)', () => {
+    const model = buildDiscussionModel({
+      discussion: {},
+      decisions: [
+        { name: 'החלטה א', decider: [{ id: '1', name: 'דנה' }, { id: '2', name: 'יוסי' }], date: new Date('2026-07-03T00:00:00Z'), status: 'אושר' },
+        { name: 'החלטה ב', decider: [], date: null, status: '' },
+      ],
+    });
+    expect(model.decisions).toEqual([
+      { name: 'החלטה א', deciderText: 'דנה, יוסי', dateText: expect.any(String), status: 'אושר' },
+      { name: 'החלטה ב', deciderText: '', dateText: '', status: '' },
+    ]);
+  });
+
+  it('defaults decisions to an empty array when none are given (round192)', () => {
+    expect(buildDiscussionModel({ discussion: {} }).decisions).toEqual([]);
+  });
+
+  it('orders tasks by responsible, grouping each person together, empty-assignee last (round191)', () => {
+    const model = buildDiscussionModel({
+      discussion: {},
+      tasks: [
+        { id: '1', name: 'עילי-ראשונה', assignees: [{ id: 'a', name: 'עילי' }], status: 'x' },
+        { id: '2', name: 'ללא-אחראי', assignees: [], status: 'x' },
+        { id: '3', name: 'עידו-אחת', assignees: [{ id: 'b', name: 'עידו' }], status: 'x' },
+        { id: '4', name: 'עילי-שנייה', assignees: [{ id: 'a', name: 'עילי' }], status: 'x' },
+      ],
+    });
+    // 'עידו' < 'עילי' (ד before ל); the two 'עילי' keep their input order (stable
+    // sort); the assignee-less task sorts last.
+    expect(model.tasks.map((t) => t.name)).toEqual([
+      'עידו-אחת', 'עילי-ראשונה', 'עילי-שנייה', 'ללא-אחראי',
+    ]);
+  });
 });
 
 describe('renderDocx', () => {
@@ -167,6 +213,27 @@ describe('data-driven template (buildExportDoc)', () => {
     const { doc } = await __testHooks.buildExportDoc(model, template);
     return strFromU8(unzipSync(new Uint8Array(await Packer.toBuffer(doc)))['word/document.xml']);
   };
+
+  it('round227 — pins the export font on EVERY run, incl. TABLE cells (was: tables fell back to Word\'s theme font)', async () => {
+    const template = {
+      font: 'brand', // Figtree (Latin) + Noto Sans Hebrew (complex-script)
+      sections: [
+        { key: 'topics', enabled: true, label: 'נושאים לדיון' },
+        { key: 'tasks', enabled: true, label: 'משימות' },
+      ],
+    };
+    const xml = await xmlOf(baseModel(), template);
+    // The document BODY (word/document.xml — not styles.xml) now carries the font
+    // on the runs themselves, so both the Latin (ascii/hAnsi) and Hebrew (cs)
+    // faces are pinned per run.
+    expect(xml).toContain('w:ascii="Figtree"');
+    expect(xml).toContain('w:cs="Noto Sans Hebrew"');
+    // The tasks TABLE region — the element that used to fall back to the theme
+    // font — carries the pinned font too.
+    const tbl = xml.slice(xml.indexOf('<w:tbl'));
+    expect(tbl).toContain('Figtree');
+    expect(tbl).toContain('Noto Sans Hebrew');
+  });
 
   it('omits a section that is disabled', async () => {
     const template = {
@@ -205,16 +272,79 @@ describe('data-driven template (buildExportDoc)', () => {
     expect(xml).not.toContain('משתתפים'); // disabled field absent
   });
 
-  it('renders a free-text section title and body', async () => {
+  // round203 — the freeText ("פתיחה") section was retired: a stale stored
+  // template that still carries it must render NOTHING for it.
+  it('ignores a retired freeText section left in a stored template', async () => {
     const template = {
       sections: [
-        { key: 'freeText', enabled: true, title: 'הערות', body: 'שורה א\nשורה ב' },
+        { key: 'freeText', enabled: true, title: 'הערות', body: 'שורה א' },
+        { key: 'summary', enabled: true },
       ],
     };
     const xml = await xmlOf(baseModel(), template);
-    expect(xml).toContain('הערות');
-    expect(xml).toContain('שורה א');
-    expect(xml).toContain('שורה ב');
+    expect(xml).not.toContain('הערות');
+    expect(xml).not.toContain('שורה א');
+    expect(xml).toContain('סיכום'); // the rest of the template still renders
+  });
+
+  it('tasks table has the 5 columns and NO "מדיון קודם" column (round191)', async () => {
+    const template = { sections: [{ key: 'tasks', enabled: true, label: 'משימות' }] };
+    const xml = await xmlOf(baseModel(), template);
+    expect(xml).toContain('אחראי');   // assignee header kept
+    expect(xml).toContain('סטטוס');    // status header kept
+    expect(xml).not.toContain('מדיון קודם'); // the removed column header
+  });
+
+  it('renders the references section through the HTML converter (round200)', async () => {
+    const model = buildDiscussionModel({
+      discussion: { name: 'ד' },
+      referencesHtml: '<p><strong>דנה כהן:</strong> הערת-בדיקה-מיוחדת</p><ul><li>סעיף-ראשון-לבדיקה</li></ul>',
+    });
+    const template = { sections: [{ key: 'references', enabled: true, label: 'התייחסויות' }] };
+    const xml = await xmlOf(model, template);
+    expect(xml).toContain('התייחסויות');          // section heading
+    expect(xml).toContain('הערת-בדיקה-מיוחדת');   // rich body survived
+    expect(xml).toContain('סעיף-ראשון-לבדיקה');   // list item survived
+  });
+
+  it('renders "אין התייחסויות." when the references box is empty (round200)', async () => {
+    const template = { sections: [{ key: 'references', enabled: true, label: 'התייחסויות' }] };
+    const xml = await xmlOf(baseModel(), template);
+    expect(xml).toContain('אין התייחסויות.');
+  });
+
+  it('renders the background section through the HTML converter (round219)', async () => {
+    const model = buildDiscussionModel({
+      discussion: { name: 'ד' },
+      backgroundHtml: '<p>רקע-בדיקה-מיוחד</p><ul><li>הקשר-לבדיקה</li></ul>',
+    });
+    const template = { sections: [{ key: 'background', enabled: true, label: 'רקע' }] };
+    const xml = await xmlOf(model, template);
+    expect(xml).toContain('רקע');              // section heading
+    expect(xml).toContain('רקע-בדיקה-מיוחד');  // rich body survived
+    expect(xml).toContain('הקשר-לבדיקה');      // list item survived
+  });
+
+  it('renders "אין רקע." when the background box is empty (round219)', async () => {
+    const template = { sections: [{ key: 'background', enabled: true, label: 'רקע' }] };
+    const xml = await xmlOf(baseModel(), template);
+    expect(xml).toContain('אין רקע.');
+  });
+
+  it('renders a decisions table with only מס׳/החלטה/מחליט — no date/status columns (round193)', async () => {
+    const model = buildDiscussionModel({
+      discussion: { name: 'ד' },
+      decisions: [{ name: 'החלטה חשובה', decider: [{ id: '1', name: 'דנה' }], date: new Date('2026-07-03T00:00:00Z'), status: 'אושר' }],
+    });
+    const template = { sections: [{ key: 'decisions', enabled: true, label: 'החלטות' }] };
+    const xml = await xmlOf(model, template);
+    expect(xml).toContain('מחליט');        // decider column header kept
+    expect(xml).toContain('החלטה חשובה');  // the decision text
+    expect(xml).toContain('דנה');          // decider name
+    // round193 — date + status columns were removed from the decisions table
+    expect(xml).not.toContain('תאריך');    // no date column header
+    expect(xml).not.toContain('סטאטוס');   // no status column header
+    expect(xml).not.toContain('אושר');     // status value no longer rendered
   });
 });
 

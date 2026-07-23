@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('../monday-client.js', () => ({ api: vi.fn(async () => ({})) }));
 
 import { setActiveConfig } from '../board-config-store.js';
-import { getColumnTitle } from '../peopleColumns.js';
+import { getColumnTitle, isColumnMapped } from '../peopleColumns.js';
 
 describe('peopleColumns.getColumnTitle', () => {
   it('returns null (does NOT throw) when the alias is unmapped', () => {
@@ -24,5 +24,28 @@ describe('peopleColumns.getColumnTitle', () => {
     // No live columns cached yet → null (callers fall back to the schema title).
     // The assertion that matters is that getColumns() resolves at all.
     expect(getColumnTitle('discussions', 'discussionLeadID')).toBeNull();
+  });
+});
+
+describe('peopleColumns.isColumnMapped (round219)', () => {
+  it('is TRUE only when the alias carries a mapped id in the active config', () => {
+    setActiveConfig({
+      boards: {},
+      columns: { discussions: { discussionCoordinatorID: { id: 'people_c' } } },
+    });
+    expect(isColumnMapped('discussions', 'discussionCoordinatorID')).toBe(true);
+  });
+
+  it('is FALSE for an unmapped alias (no entry) and for an entry without an id', () => {
+    setActiveConfig({
+      boards: {},
+      columns: { discussions: { discussionCoordinatorID: { title: 'מרכז דיון' } } },
+    });
+    // Entry exists but has no `id` → not mapped.
+    expect(isColumnMapped('discussions', 'discussionCoordinatorID')).toBe(false);
+    // Wholly absent alias → not mapped.
+    expect(isColumnMapped('discussions', 'discussionLeadID')).toBe(false);
+    // Unknown board → not mapped (does not throw).
+    expect(isColumnMapped('nope', 'whatever')).toBe(false);
   });
 });
