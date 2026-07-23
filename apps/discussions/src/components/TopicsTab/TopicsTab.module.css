@@ -525,6 +525,25 @@
 }
 .topicMenuItem:hover { background: var(--primary-background-hover-color, #f5f6f8); }
 .topicMenuDanger { color: var(--negative-color, #d83a52); }
+
+/* round267 — the topic creator avatar + name header row at the top of the ⋮ menu. */
+.topicMenuCreator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 8px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.topicMenuCreatorName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-text-color, #323338);
+}
 .topicMenuConfirm {
   display: flex;
   align-items: center;
