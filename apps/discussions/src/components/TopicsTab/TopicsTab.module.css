@@ -850,13 +850,15 @@
   font-size: 12px;
   color: var(--secondary-text-color, #676879);
 }
-/* Narrow contexts: when the discussions selector squeezes the card, or on
-   phones, stack the panel BELOW the tables instead of crushing both columns. */
-:global(body[data-list-open="1"]) .splitRow,
+/* round255 (owner request) — when the discussions side-list is open, BOTH boxes
+   must stay visible; previously data-list-open STACKED them, which pushed the
+   triple box below the fold so only the agenda showed. Now the list-open state
+   keeps the DEFAULT side-by-side layout (the two columns simply compress). Only
+   a true phone (.mobile-app) stacks the panel below the tables — there is no
+   horizontal room for two columns on a phone. */
 :global(.mobile-app) .splitRow {
   flex-direction: column;
 }
-:global(body[data-list-open="1"]) .refPanel,
 :global(.mobile-app) .refPanel {
   position: static;
   flex: none;
@@ -864,21 +866,17 @@
   max-width: none;
   min-width: 0;
 }
-/* round234 — stacked (narrow/mobile) columns: the shared fixed frame gives way
-   to natural heights (two viewport-tall cards stacked would be unusable);
-   the editor keeps its classic 420px so it doesn't collapse. */
-:global(body[data-list-open="1"]) .agendaBox,
+/* round234 — stacked (phone) columns: the shared fixed frame gives way to
+   natural heights (two viewport-tall cards stacked would be unusable); the
+   editor keeps its classic 420px so it doesn't collapse. */
 :global(.mobile-app) .agendaBox,
-:global(body[data-list-open="1"]) .tripleBox,
 :global(.mobile-app) .tripleBox {
   height: auto;
 }
-:global(body[data-list-open="1"]) .agendaBody,
 :global(.mobile-app) .agendaBody {
   overflow-y: visible;
   min-height: 420px;
 }
-:global(body[data-list-open="1"]) .paneEditor,
 :global(.mobile-app) .paneEditor {
   flex: none;
   height: 420px;

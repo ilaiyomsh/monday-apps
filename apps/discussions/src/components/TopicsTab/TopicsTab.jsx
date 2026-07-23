@@ -1094,7 +1094,7 @@ export function TopicsTab({
   }, [visibleTopics, activeTopicId]);
 
   // ---- ribbon drag (long-press on the ⋮) ------------------------------------
-  // Long-press (450ms) on a label's ⋮ arms a horizontal drag; a short click
+  // Long-press (280ms, round255) on a label's ⋮ arms a horizontal drag; a short click
   // opens the topic menu. During the drag a local preview order renders; the
   // ONE reorderTopics persist happens on drop. Disabled while a search filter
   // is active (the ribbon then shows a partial list — reordering it would be
@@ -1118,7 +1118,7 @@ export function TopicsTab({
     });
   };
 
-  // round237 — LEFT long-press (>~0.55s) starts a GHOST drag: a faded clone
+  // round237 — LEFT long-press (280ms, round255) starts a GHOST drag: a faded clone
   // follows the cursor and the ribbon opens a spacing GAP at the drop point;
   // the ONE reorderTopics persist happens on drop. Disabled while searching
   // (partial list ⇒ ambiguous order) or when editing is off.
@@ -1141,7 +1141,9 @@ export function TopicsTab({
       g.style.top = startY + 'px';
       document.body.appendChild(g);
       ghostRef.current = g;
-    }, 560);
+      // round255 (owner request) — HALVE the long-press arm delay (560 → 280ms)
+      // so a topic becomes draggable in half the time.
+    }, 280);
 
     const onMove = (ev) => {
       if (!armed) return;

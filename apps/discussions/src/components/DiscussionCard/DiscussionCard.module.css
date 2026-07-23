@@ -119,8 +119,10 @@
      seated on the black rule does NOT move — the thicker bar stays symmetric on
      the rule. Both transforms scale with the browser/monday zoom, so the bar
      keeps sitting on the rule at any zoom level (a fixed px `bottom`/`height`
-     would drift). */
-  transform: translateY(3px) scaleY(2);
+     would drift). round255 — owner still found it faint; DOUBLE it again
+     (scaleY 2 → 4) so the active bar reads clearly, still resting centered on
+     the rule. */
+  transform: translateY(3px) scaleY(4);
 }
 /* vibe TabList renders role="tablist"; keep it ONE row, never wrapping to a 2nd row. */
 .tabsRow :global([role="tablist"]) {
