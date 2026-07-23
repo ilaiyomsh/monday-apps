@@ -13,6 +13,7 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from 
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
+import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { countPoints } from '@generated/utils/templates.js';
 import { useDropdownOptions, addDropdownLabel } from '@generated/hooks/useDropdownOptions.js';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
@@ -216,7 +217,8 @@ function draftToTemplate(draft) {
  * People pickers for a role column appear ONLY when that column is mapped in
  * Settings (the "יוצר" creator column is intentionally never shown/edited here).
  */
-export function TemplateManagerModal() {
+export function TemplateManagerModal({ onExportWide } = {}) {
+  const { settings } = useSettings();
   const {
     templates,
     participantTemplates,
@@ -270,12 +272,15 @@ export function TemplateManagerModal() {
   // Item 18 — per-type default decider: when true, NEW decisions in discussions
   // of this type default their מחליט to the discussion's מנהל דיון.
   const [typeDeciderIsLead, setTypeDeciderIsLead] = useState(false);
-  // round254 — per-type export template (config on the TypeTemplate) + its own
-  // brand assets (own keyed store). When disabled the type uses the system default.
-  const [typeExportEnabled, setTypeExportEnabled] = useState(false);
-  const [typeExportTemplate, setTypeExportTemplate] = useState(null); // seeded object when enabled
+  // round256 — the type editor is split into 3 sub-tabs: roles / agenda / export.
+  const [typeSubTab, setTypeSubTab] = useState('roles'); // 'roles' | 'agenda' | 'export'
+  // round254/256 — per-type export template (config on the TypeTemplate) + its own
+  // brand assets. The export tab ALWAYS shows (default = the system template);
+  // it is persisted as the type's OWN only if the user edits it here (dirty).
+  const [typeExportTemplate, setTypeExportTemplate] = useState(null); // seeded object
   const [typeExportAssets, setTypeExportAssets] = useState(null);
   const [typeExportAssetError, setTypeExportAssetError] = useState(null);
+  const [typeExportDirty, setTypeExportDirty] = useState(false);
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -356,11 +361,12 @@ export function TemplateManagerModal() {
     setTypeParticipants(existing?.participants || []);
     setTypeColorDraft(typeColorName(typeName));
     setTypeDeciderIsLead(existing?.deciderIsLead === true);
-    // round254 — seed the per-type export template + assets. A stored config
-    // means "use a dedicated template"; else the type falls back to the system.
-    const hasExport = !!existing?.exportTemplate;
-    setTypeExportEnabled(hasExport);
-    setTypeExportTemplate(hasExport ? seedExportTemplate(existing.exportTemplate) : null);
+    // round256 — always open on the roles sub-tab; the export tab seeds from the
+    // type's OWN template if it has one, otherwise from the system default
+    // (settings.exportTemplate) → the built-in default. Not dirty until edited.
+    setTypeSubTab('roles');
+    setTypeExportDirty(false);
+    setTypeExportTemplate(seedExportTemplate(existing?.exportTemplate || settings?.exportTemplate || null));
     setTypeExportAssetError(null);
     setTypeExportAssets(null);
     Promise.resolve(loadTypeExportAssets?.(typeName))
@@ -378,12 +384,24 @@ export function TemplateManagerModal() {
     setTypeParticipants([]);
     setTypeColorDraft(null);
     setTypeDeciderIsLead(false);
-    setTypeExportEnabled(false);
+    setTypeSubTab('roles');
     setTypeExportTemplate(null);
     setTypeExportAssets(null);
     setTypeExportAssetError(null);
+    setTypeExportDirty(false);
     setIsNew(false);
   };
+
+  // round256 — any user edit inside the export sub-tab marks it dirty, so save
+  // persists the type's OWN template/assets (otherwise it stays on the system
+  // default). These wrap the plain setters passed to ExportTemplateTab.
+  const setTypeExportTemplateDirty = (updater) => { setTypeExportDirty(true); setTypeExportTemplate(updater); };
+  const setTypeExportAssetsDirty = (updater) => { setTypeExportDirty(true); setTypeExportAssets(updater); };
+  // Ask the host (SettingsModal) to widen the modal while the export sub-tab is
+  // open, so it gets the same room as the system export-template screen.
+  useEffect(() => {
+    onExportWide?.(view === 'edit' && kind === 'types' && typeSubTab === 'export');
+  }, [onExportWide, view, kind, typeSubTab]);
 
   // ---- topic draft mutations (keyed by stable _uid, never by index) ----
   const update = (fn) => setDraft((d) => fn(d));
@@ -467,15 +485,20 @@ export function TemplateManagerModal() {
         if (isNew) await createParticipantTemplate(payload);
         else await updateParticipantTemplate(pDraft.id, payload);
       } else {
-        // round254 — persist the per-type export ASSETS first (quota-checked). On
-        // an over-quota error, keep the editor open with the message rather than
-        // saving a template that references binaries we couldn't store.
-        if (typeExportEnabled) {
+        // round256 — the export tab always shows (default = system template). We
+        // persist the type's OWN template only when the user EDITED it here
+        // (typeExportDirty); otherwise keep whatever was stored (null ⇒ the type
+        // keeps following the system default, so future system changes propagate).
+        const existingType = typeTemplates.find((t) => t.discussionType === draft.discussionType);
+        if (typeExportDirty) {
+          // persist the per-type export ASSETS first (quota-checked). On an
+          // over-quota error, keep the editor open with the message.
           try {
             await saveTypeExportAssets(draft.discussionType, typeExportAssets);
           } catch (err) {
             logger.error('TemplateManagerModal', 'שמירת נכסי הייצוא של הסוג נכשלה', err);
             setTypeExportAssetError(err?.message || 'שמירת נכסי הייצוא נכשלה');
+            setTypeSubTab('export'); // surface the error on the right tab
             return; // the finally below clears `saving`
           }
         }
@@ -489,8 +512,9 @@ export function TemplateManagerModal() {
           participants: typeParticipants,
           // item 18 — per-type default decider (מחליט = מנהל הדיון)
           deciderIsLead: typeDeciderIsLead,
-          // round254 — the per-type export template CONFIG (null ⇒ system default).
-          exportTemplate: typeExportEnabled ? typeExportTemplate : null,
+          // round256 — edited-here ⇒ store the type's own template; else preserve
+          // the existing value (null ⇒ follow the system default).
+          exportTemplate: typeExportDirty ? typeExportTemplate : (existingType?.exportTemplate ?? null),
         });
         // Persist the chosen color for this type.
         if (typeColorDraft) await setTypeColor(draft.discussionType, typeColorDraft);
@@ -893,102 +917,108 @@ export function TemplateManagerModal() {
             </div>
           </>
         ) : (
-          /* types editor — the type name + its color circle live in the header
-             (name shown ONCE); here just the people (mapped columns only) + the
-             unified topics editor. */
+          /* round256 — types editor as 3 sub-tabs: בעלי תפקידים / אג'נדה / תבנית
+             ייצוא. The type name + color circle live in the header (shown once). */
           <>
-            <div className={styles.peopleRow}>
-              {leadMapped && (
-                <div className={styles.peopleCol}>
-                  <Text type="text2" className={styles.label}>{roleTitle('discussionLeadID', 'מוביל דיון')}</Text>
-                  <PersonPicker selected={typeLead} onChange={setTypeLead} bordered />
-                </div>
-              )}
-              {coordinatorMapped && (
-                <div className={styles.peopleCol}>
-                  <Text type="text2" className={styles.label}>{roleTitle('discussionCoordinatorID', 'מרכז דיון')}</Text>
-                  <PersonPicker selected={typeCoordinator} onChange={setTypeCoordinator} bordered />
-                </div>
-              )}
-              {participantsMapped && (
-                <div className={styles.peopleCol}>
-                  <Text type="text2" className={styles.label}>{roleTitle('participantsID', 'משתתפים')}</Text>
-                  <PersonPicker selected={typeParticipants} onChange={setTypeParticipants} bordered />
-                </div>
-              )}
+            <div className={`${styles.tabs} ${styles.subTabs}`} role="tablist">
+              <button
+                type="button" role="tab" aria-selected={typeSubTab === 'roles'}
+                className={`${styles.tab} ${typeSubTab === 'roles' ? styles.tabActive : ''}`}
+                onClick={() => setTypeSubTab('roles')}
+              >בעלי תפקידים</button>
+              <button
+                type="button" role="tab" aria-selected={typeSubTab === 'agenda'}
+                className={`${styles.tab} ${typeSubTab === 'agenda' ? styles.tabActive : ''}`}
+                onClick={() => setTypeSubTab('agenda')}
+              >אג'נדה</button>
+              <button
+                type="button" role="tab" aria-selected={typeSubTab === 'export'}
+                className={`${styles.tab} ${typeSubTab === 'export' ? styles.tabActive : ''}`}
+                onClick={() => setTypeSubTab('export')}
+              >תבנית ייצוא</button>
             </div>
 
-            {/* Item 18 — per-type default decider toggle. Prominent (owner
-                request 2026-07-14): RTL row between the role pickers and the
-                topics template, bold label + a bigger accent checkbox. */}
-            <label className={styles.deciderDefaultRow}>
-              <input
-                type="checkbox"
-                className={styles.deciderDefaultCheckbox}
-                checked={typeDeciderIsLead}
-                onChange={(e) => setTypeDeciderIsLead(e.target.checked)}
-              />
-              <span className={styles.deciderDefaultLabel}>בהחלטה חדשה, המחליט כברירת מחדל הוא מנהל הדיון</span>
-            </label>
+            {typeSubTab === 'roles' && (
+              <>
+                <div className={styles.peopleRow}>
+                  {leadMapped && (
+                    <div className={styles.peopleCol}>
+                      <Text type="text2" className={styles.label}>{roleTitle('discussionLeadID', 'מוביל דיון')}</Text>
+                      <PersonPicker selected={typeLead} onChange={setTypeLead} bordered />
+                    </div>
+                  )}
+                  {coordinatorMapped && (
+                    <div className={styles.peopleCol}>
+                      <Text type="text2" className={styles.label}>{roleTitle('discussionCoordinatorID', 'מרכז דיון')}</Text>
+                      <PersonPicker selected={typeCoordinator} onChange={setTypeCoordinator} bordered />
+                    </div>
+                  )}
+                  {participantsMapped && (
+                    <div className={styles.peopleCol}>
+                      <Text type="text2" className={styles.label}>{roleTitle('participantsID', 'משתתפים')}</Text>
+                      <PersonPicker selected={typeParticipants} onChange={setTypeParticipants} bordered />
+                    </div>
+                  )}
+                </div>
 
-            <Text type="text2" className={styles.sectionLabel}>נושאים קבועים</Text>
-            <div className={styles.topicsWrap}>
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onTopicsDragEnd}>
-                <SortableContext items={draft.topics.map((t) => t._uid)} strategy={verticalListSortingStrategy}>
-                  {draft.topics.map((topic) => (
-                    <SortableTopicCard
-                      key={topic._uid}
-                      topic={topic}
-                      sensors={sensors}
-                      canRemove={draft.topics.length > 1}
-                      onSetName={setTopicName}
-                      onRemove={removeTopic}
-                      onAddPoint={addPoint}
-                      onRemovePoint={removePoint}
-                      onSetPoint={setPoint}
-                      onPointsDragEnd={onPointsDragEnd}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
-            </div>
-
-            <Button kind="secondary" size="small" leftIcon={Plus} onClick={addTopic} className={styles.addTopicBtn}>
-              הוסף נושא
-            </Button>
-
-            {/* round254 — a per-type EXPORT TEMPLATE. When enabled it carries all
-                the same components as the system export template and OVERRIDES it
-                for discussions of this type. */}
-            <div className={styles.typeExportSection}>
-              <label className={styles.deciderDefaultRow}>
-                <input
-                  type="checkbox"
-                  className={styles.deciderDefaultCheckbox}
-                  checked={typeExportEnabled}
-                  onChange={(e) => {
-                    const on = e.target.checked;
-                    setTypeExportEnabled(on);
-                    if (on && !typeExportTemplate) setTypeExportTemplate(seedExportTemplate(null));
-                    if (!on) setTypeExportAssetError(null);
-                  }}
-                />
-                <span className={styles.deciderDefaultLabel}>תבנית ייצוא ייעודית לסוג זה (גוברת על תבנית המערכת)</span>
-              </label>
-              {typeExportEnabled && typeExportTemplate && (
-                <div className={styles.typeExportEditor}>
-                  <ExportTemplateTab
-                    template={typeExportTemplate}
-                    setTemplate={setTypeExportTemplate}
-                    assets={typeExportAssets}
-                    setAssets={setTypeExportAssets}
-                    assetError={typeExportAssetError}
-                    previewModel={null}
-                    previewModelKey={null}
+                {/* Item 18 — per-type default decider toggle. */}
+                <label className={styles.deciderDefaultRow}>
+                  <input
+                    type="checkbox"
+                    className={styles.deciderDefaultCheckbox}
+                    checked={typeDeciderIsLead}
+                    onChange={(e) => setTypeDeciderIsLead(e.target.checked)}
                   />
+                  <span className={styles.deciderDefaultLabel}>בהחלטה חדשה, המחליט כברירת מחדל הוא מנהל הדיון</span>
+                </label>
+              </>
+            )}
+
+            {typeSubTab === 'agenda' && (
+              <>
+                <Text type="text2" className={styles.sectionLabel}>נושאים קבועים</Text>
+                <div className={styles.topicsWrap}>
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onTopicsDragEnd}>
+                    <SortableContext items={draft.topics.map((t) => t._uid)} strategy={verticalListSortingStrategy}>
+                      {draft.topics.map((topic) => (
+                        <SortableTopicCard
+                          key={topic._uid}
+                          topic={topic}
+                          sensors={sensors}
+                          canRemove={draft.topics.length > 1}
+                          onSetName={setTopicName}
+                          onRemove={removeTopic}
+                          onAddPoint={addPoint}
+                          onRemovePoint={removePoint}
+                          onSetPoint={setPoint}
+                          onPointsDragEnd={onPointsDragEnd}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
                 </div>
-              )}
-            </div>
+                <Button kind="secondary" size="small" leftIcon={Plus} onClick={addTopic} className={styles.addTopicBtn}>
+                  הוסף נושא
+                </Button>
+              </>
+            )}
+
+            {/* round256 — the export tab ALWAYS shows (no checkbox). It seeds from
+                the system template by default; editing it here saves a template
+                specific to this type (overriding the system at export time). */}
+            {typeSubTab === 'export' && typeExportTemplate && (
+              <div className={styles.typeExportFull}>
+                <ExportTemplateTab
+                  template={typeExportTemplate}
+                  setTemplate={setTypeExportTemplateDirty}
+                  assets={typeExportAssets}
+                  setAssets={setTypeExportAssetsDirty}
+                  assetError={typeExportAssetError}
+                  previewModel={null}
+                  previewModelKey={null}
+                />
+              </div>
+            )}
           </>
         )}
       </div>

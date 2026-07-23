@@ -178,7 +178,10 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   const [permissions, setPermissions] = useState(seedPermissions(draft.permissions));
   const [selectedRoleKey, setSelectedRoleKey] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState(0); // 0 = מיפוי, 1 = העדפות, 2 = הרשאות
+  const [activeTab, setActiveTab] = useState(0); // 0 = מיפוי, 1 = העדפות, 2 = תבניות, 3 = תבנית ייצוא, 4 = הרשאות
+  // round256 — the Templates tab (2) widens to the export size while its type
+  // editor is on the "תבנית ייצוא" sub-tab (TemplateManagerModal reports this).
+  const [templatesExportWide, setTemplatesExportWide] = useState(false);
   const [openBoardKey, setOpenBoardKey] = useState(null);
   const [boardOptions, setBoardOptions] = useState([]);
   const [loadingBoards, setLoadingBoards] = useState(false);
@@ -697,7 +700,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       if (e.target === e.currentTarget) onClose();
     }}>
       <div
-        className={`${styles.modal} ${activeTab <= 2 ? styles.modalFixed : ''} ${activeTab === 3 ? styles.modalExport : ''} ${activeTab === 4 ? styles.modalWide : ''}`}
+        className={`${styles.modal} ${activeTab <= 2 && !(activeTab === 2 && templatesExportWide) ? styles.modalFixed : ''} ${activeTab === 3 || (activeTab === 2 && templatesExportWide) ? styles.modalExport : ''} ${activeTab === 4 ? styles.modalWide : ''}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -1052,7 +1055,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                     (TemplateManagerModal), NOT a wrapper div: the round247
                     wrapper broke the flex-height chain so the editor list could
                     not scroll. TemplatesPanel is a direct flex child again. */}
-                <TemplatesPanel />
+                <TemplatesPanel onExportWide={setTemplatesExportWide} />
               </TabPanel>
 
               <TabPanel className={styles.tabPanelFill}>
