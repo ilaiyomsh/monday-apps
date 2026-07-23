@@ -713,17 +713,16 @@
   color: var(--primary-text-color, #323338);
 }
 
-/* round254 — per-type export template section inside the type editor: a divider
-   above the enable toggle, and a framed area holding the embedded ExportTemplateTab. */
-.typeExportSection {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+/* round256 — the type editor's 3 sub-tabs (roles / agenda / export) sit at the
+   top of the editor body, a touch below the header. */
+.subTabs {
+  margin-bottom: 14px;
 }
-.typeExportEditor {
-  margin-top: 10px;
-  border: 1px solid var(--ui-border-color, #e6e9ef);
-  border-radius: 8px;
-  padding: 10px;
-  background: var(--primary-background-hover-color, #f6f7fb);
+/* The export sub-tab hands the full width/height to the embedded system
+   ExportTemplateTab (the host modal widens to the export size via onExportWide). */
+.typeExportFull {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }

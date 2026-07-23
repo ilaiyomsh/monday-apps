@@ -437,35 +437,43 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
       {editable && (
         <BubbleMenu editor={editor} className={styles.bubble} options={{ placement: 'top' }}>
           <div className={styles.bubbleRow}>
-            <Btn label="מודגש" active={st.bold} onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={15} /></Btn>
-            <Btn label="נטוי" active={st.italic} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={15} /></Btn>
-            <Btn label="קו תחתון" active={st.underline} onClick={() => editor.chain().focus().toggleUnderline().run()}><Underline size={15} /></Btn>
-            <Btn label="קו חוצה" active={st.strike} onClick={() => editor.chain().focus().toggleStrike().run()}><Strikethrough size={15} /></Btn>
+            <Btn label="מודגש" active={st.bold} onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={14} /></Btn>
+            <Btn label="נטוי" active={st.italic} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={14} /></Btn>
+            <Btn label="קו תחתון" active={st.underline} onClick={() => editor.chain().focus().toggleUnderline().run()}><Underline size={14} /></Btn>
+            <Btn label="קו חוצה" active={st.strike} onClick={() => editor.chain().focus().toggleStrike().run()}><Strikethrough size={14} /></Btn>
             <span className={styles.bubbleSep} aria-hidden="true" />
             {/* font size ± (round253) */}
-            <Btn label="הקטן גופן" onClick={() => stepSize(-1)}><Minus size={15} /></Btn>
+            <Btn label="הקטן גופן" onClick={() => stepSize(-1)}><Minus size={14} /></Btn>
             <span className={styles.bubbleSizeVal} aria-hidden="true">{st.fontSize ? parseInt(st.fontSize, 10) : 16}</span>
-            <Btn label="הגדל גופן" onClick={() => stepSize(1)}><Plus size={15} /></Btn>
+            <Btn label="הגדל גופן" onClick={() => stepSize(1)}><Plus size={14} /></Btn>
             <span className={styles.bubbleSep} aria-hidden="true" />
             {/* text color (round253) — toggles a swatch row inside the bubble */}
             <Btn label="צבע טקסט" active={bubbleSub === 'color'} onClick={() => setBubbleSub(bubbleSub === 'color' ? null : 'color')}>
-              <Baseline size={15} style={st.color ? { color: st.color } : undefined} />
+              <Baseline size={14} style={st.color ? { color: st.color } : undefined} />
             </Btn>
             <span className={styles.bubbleSep} aria-hidden="true" />
-            {/* alignment (round253) — inline buttons, no dropdown */}
-            {ALIGNS.map((a) => (
-              <Btn key={a.key} label={a.label} active={st.align === a.key} onClick={() => editor.chain().focus().setTextAlign(a.key).run()}>
-                <a.Icon size={15} />
-              </Btn>
-            ))}
+            {/* alignment (round257) — a SINGLE toggle; the 4 options open in a
+                sub-row below, so the main bar stays narrow. */}
+            <Btn label="יישור" active={bubbleSub === 'align' || !!st.align} onClick={() => setBubbleSub(bubbleSub === 'align' ? null : 'align')}>
+              <ActiveAlignIcon size={14} />
+            </Btn>
             <span className={styles.bubbleSep} aria-hidden="true" />
             {/* link (round253) — moved here from the toolbar */}
-            <Btn label="קישור" active={st.link || bubbleSub === 'link'} onClick={openBubbleLink}><Link2 size={15} /></Btn>
+            <Btn label="קישור" active={st.link || bubbleSub === 'link'} onClick={openBubbleLink}><Link2 size={14} /></Btn>
             <span className={styles.bubbleSep} aria-hidden="true" />
-            <Btn label="רשימת תבליטים" active={st.bullet} onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={15} /></Btn>
-            <Btn label="רשימה ממוספרת" active={st.ordered} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered size={15} /></Btn>
-            <Btn label="צ׳קליסט" active={st.task} onClick={() => editor.chain().focus().toggleTaskList().run()}><ListChecks size={15} /></Btn>
+            <Btn label="רשימת תבליטים" active={st.bullet} onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={14} /></Btn>
+            <Btn label="רשימה ממוספרת" active={st.ordered} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered size={14} /></Btn>
+            <Btn label="צ׳קליסט" active={st.task} onClick={() => editor.chain().focus().toggleTaskList().run()}><ListChecks size={14} /></Btn>
           </div>
+          {bubbleSub === 'align' && (
+            <div className={styles.bubbleSubRow} dir="rtl">
+              {ALIGNS.map((a) => (
+                <Btn key={a.key} label={a.label} active={st.align === a.key} onClick={() => { editor.chain().focus().setTextAlign(a.key).run(); setBubbleSub(null); }}>
+                  <a.Icon size={15} />
+                </Btn>
+              ))}
+            </div>
+          )}
           {bubbleSub === 'color' && (
             <div className={styles.bubbleSubRow} dir="rtl">{renderSwatches()}</div>
           )}
