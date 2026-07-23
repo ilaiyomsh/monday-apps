@@ -33,7 +33,7 @@
      clipped-bust glyph) — no CSS border/background here anymore. */
 }
 
-/* Clickable wrapper around a compact AvatarGroup — resets button chrome so only
+/* Clickable wrapper around a compact avatar stack — resets button chrome so only
    the avatars show, but the whole group is a single click target. */
 .expandTrigger {
   display: inline-flex;
@@ -43,6 +43,53 @@
   border: none;
   background: none;
   cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* round263 — our own overlapping, NO-WRAP people stack (replaces @vibe's
+   AvatarGroup, which wrapped to a 2nd line in narrow cells and doubled the row
+   height). Up to `max` avatars then a "+N" overflow chip; a single line always. */
+.compactStack {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+.stackItem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  /* white ring so overlapping avatars read as separate discs */
+  box-shadow: 0 0 0 2px var(--primary-background-color, #fff);
+}
+.stackItem + .stackItem {
+  margin-inline-start: -8px;
+}
+/* "+N" overflow disc, styled like an avatar (round263 — e.g. "+6"). */
+.overflowChip {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--secondary-text-color, #676879);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-family);
+  line-height: 1;
+}
+.overflowChipMd {
+  width: 32px;
+  height: 32px;
+  font-size: 12.5px;
+}
+
+/* round263 — named-row people (name + avatar): single line, never wraps. */
+.namedRow {
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
 }
 
 /* Popover body: one row per person (photo + name), scrolls if the list is long. */
