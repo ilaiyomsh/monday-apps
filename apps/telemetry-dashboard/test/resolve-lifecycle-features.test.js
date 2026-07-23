@@ -15,6 +15,7 @@ import {
 import {
   planRegistrations,
   verifySubscriptions,
+  isLiveImmutableError,
 } from '../scripts/register-lifecycle-subscriptions.mjs';
 
 // Real `mapps app-version:list -i 11459177` output captured 2026-07-22,
@@ -247,6 +248,21 @@ describe('planRegistrations', () => {
     expect(jobs).toHaveLength(0);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('AppFeatureNope');
+  });
+});
+
+describe('isLiveImmutableError', () => {
+  it('recognizes the real 403 message from monday (captured 2026-07-24)', () => {
+    expect(
+      isLiveImmutableError(
+        'monday API errors: [{"message":"Lifecycle subscriptions cannot be modified for live app versions"}]'
+      )
+    ).toBe(true);
+  });
+
+  it('does not swallow other failures', () => {
+    expect(isLiveImmutableError('monday API HTTP 500: upstream exploded')).toBe(false);
+    expect(isLiveImmutableError(undefined)).toBe(false);
   });
 });
 

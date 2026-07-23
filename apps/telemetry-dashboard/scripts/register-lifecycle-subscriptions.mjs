@@ -175,12 +175,24 @@ ${eventLines}
 }`;
 }
 
-function buildVerifyQuery(appId) {
+// version_id is undocumented but real (schema-introspected 2026-07-24) and
+// REQUIRED for correctness: without it the query does NOT return the union
+// of all versions' subscriptions (a draft registered seconds earlier came
+// back empty), so verification must ask per version explicitly.
+function buildVerifyQuery(appId, versionId) {
   return `query {
-  get_app_lifecycle_subscriptions(app_id: ${JSON.stringify(String(appId))}) {
+  get_app_lifecycle_subscriptions(app_id: ${JSON.stringify(String(appId))}, version_id: ${JSON.stringify(String(versionId))}) {
     id entity_id event_type webhook_url is_sync
   }
 }`;
+}
+
+// monday forbids touching live versions' subscriptions (403 FORBIDDEN_EXCEPTION,
+// discovered 2026-07-24 — earlier live registrations were also wiped server-side).
+// Drafts are the only registrable state, so this failure mode is expected and
+// reported as a skip, not a failure.
+export function isLiveImmutableError(message) {
+  return /cannot be modified for live app versions/i.test(String(message ?? ''));
 }
 
 function loadConfig() {
@@ -262,42 +274,52 @@ async function main() {
   console.log(`${jobs.length} feature registration(s) planned across ${new Set(jobs.map((j) => j.appId)).size} app(s)`);
 
   const failures = [...warnings];
-  const jobsByApp = new Map();
+  const liveSkips = [];
+  // Group per (app, version): registration is per feature, but verification
+  // must query per version (see buildVerifyQuery).
+  const jobsByVersion = new Map();
   for (const job of jobs) {
-    if (!jobsByApp.has(job.appId)) jobsByApp.set(job.appId, []);
-    jobsByApp.get(job.appId).push(job);
+    const key = `${job.appId}::${job.versionId}`;
+    if (!jobsByVersion.has(key)) jobsByVersion.set(key, []);
+    jobsByVersion.get(key).push(job);
   }
 
-  for (const [appId, appJobs] of jobsByApp) {
-    const label = appJobs[0].appName || appId;
-    let registeredAny = false;
+  for (const versionJobs of jobsByVersion.values()) {
+    const { appId, versionId, versionStatus } = versionJobs[0];
+    const label = `${versionJobs[0].appName || appId}/${versionStatus}`;
+    const registered = [];
 
-    for (const job of appJobs) {
+    for (const job of versionJobs) {
       const mutation = buildRegisterMutation(job, webhookUrl);
       if (dryRun) {
-        console.log(`\n[${label}] planned mutation for ${job.entityId} (${job.versionStatus} ${job.kind}):\n${mutation}`);
+        console.log(`\n[${label}] planned mutation for ${job.entityId} (${job.kind}):\n${mutation}`);
         continue;
       }
-      console.log(`\n[${label}] registering ${job.events.length} ${job.kind} events for feature ${job.entityId} (${job.versionStatus})…`);
+      console.log(`\n[${label}] registering ${job.events.length} ${job.kind} events for feature ${job.entityId}…`);
       try {
         const data = await graphql(token, mutation);
         console.log(`  ok — ${data.update_app_lifecycle_subscription.length} subscriptions returned`);
-        registeredAny = true;
+        registered.push(job);
       } catch (err) {
-        console.error(`[${label}] registration failed for ${job.entityId}: ${err.message}`);
-        failures.push(`${label}/${job.entityId}`);
+        if (isLiveImmutableError(err.message)) {
+          console.warn(`  live version is immutable — skipped (monday forbids modifying live subscriptions; the draft carries them instead)`);
+          liveSkips.push(`${label}/${job.entityId}`);
+        } else {
+          console.error(`[${label}] registration failed for ${job.entityId}: ${err.message}`);
+          failures.push(`${label}/${job.entityId}`);
+        }
       }
     }
 
-    if (!dryRun && registeredAny) {
+    if (!dryRun && registered.length > 0) {
       try {
-        const data = await graphql(token, buildVerifyQuery(appId));
-        const problems = verifySubscriptions(data.get_app_lifecycle_subscriptions, appJobs, webhookUrl);
+        const data = await graphql(token, buildVerifyQuery(appId, versionId));
+        const problems = verifySubscriptions(data.get_app_lifecycle_subscriptions, registered, webhookUrl);
         if (problems.length > 0) {
           for (const p of problems) console.error(`  VERIFY FAIL ${p}`);
           failures.push(...problems);
         } else {
-          console.log(`[${label}] verified: all ${appJobs.length} feature(s) fully subscribed at ${webhookUrl}`);
+          console.log(`[${label}] verified: all ${registered.length} feature(s) fully subscribed at ${webhookUrl}`);
         }
       } catch (err) {
         console.error(`[${label}] verification query failed: ${err.message}`);
@@ -306,6 +328,9 @@ async function main() {
     }
   }
 
+  if (liveSkips.length > 0) {
+    console.warn(`\n${liveSkips.length} live-version feature(s) skipped (immutable): ${liveSkips.join(', ')}`);
+  }
   if (failures.length > 0) {
     console.error(`\ndone with ${failures.length} failure(s)`);
     process.exit(1);
