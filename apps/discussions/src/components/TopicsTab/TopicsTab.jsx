@@ -1335,6 +1335,15 @@ export function TopicsTab({
               tabIndex={0}
               onClick={() => { setActiveTopicId(topicId); setTopicMenu(null); }}
               onKeyDown={(e) => { if (e.key === 'Enter') setActiveTopicId(topicId); }}
+              // round267 (owner request) — LEFT double-click on a topic tile opens
+              // its inline rename (same editor the ⋮/right-click "עריכת שם" opens).
+              onDoubleClick={(e) => {
+                if (!editTopicOrPoint) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setTopicMenu(null);
+                setRenamingTopicId(topicId);
+              }}
               onContextMenu={(e) => handleTileContextMenu(e, topic)}
               onPointerDown={(e) => handleTilePointerDown(e, topic)}
               title={topic.name}
@@ -1523,6 +1532,19 @@ export function TopicsTab({
           <>
             <div className={styles.topicMenuBackdrop} onClick={() => setTopicMenu(null)} />
             <div className={styles.topicMenu} style={{ left: topicMenu.x, top: topicMenu.y }} dir="rtl" role="menu">
+              {/* round267 (owner request) — the topic CREATOR's avatar + name at
+                  the top of the menu, above "עריכת שם". Shown only for a topic that
+                  has a creator; topics generated from a template/duplicate/type
+                  default carry no creator (see createTopicsFromTemplate), so no
+                  avatar appears for them. */}
+              {t.creatorId && (
+                <div className={styles.topicMenuCreator}>
+                  <CreatorAvatar userId={t.creatorId} usersById={usersById} size="small" />
+                  <span className={styles.topicMenuCreatorName}>
+                    {usersById[String(t.creatorId)]?.name || 'יוצר הנושא'}
+                  </span>
+                </div>
+              )}
               {editTopicOrPoint && (
                 <button
                   type="button"

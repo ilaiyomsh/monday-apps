@@ -114,7 +114,8 @@
 }
 
 .body {
-  padding: 8px 10px 10px;
+  /* round266 — tighter paddings so the from-"+" card is scaled to the agenda box. */
+  padding: 6px 10px 8px;
   overflow: visible;
 }
 
@@ -150,7 +151,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 8px;
   align-items: start;
 }
 
@@ -296,7 +297,7 @@
 }
 
 .footer {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 @media (max-width: 768px) {

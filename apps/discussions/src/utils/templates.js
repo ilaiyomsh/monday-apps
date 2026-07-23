@@ -159,7 +159,7 @@ export function sanitizeTypeTemplate(template, id) {
  *
  * @returns {Promise<{topics:number, points:number}>} how many were created.
  */
-export async function createTopicsFromTemplate(discussionId, template, { onProgress, creatorId = null, existingTopicIds = [] } = {}) {
+export async function createTopicsFromTemplate(discussionId, template, { onProgress, existingTopicIds = [] } = {}) {
   const clean = sanitizeTemplate(template);
   if (!discussionId || !clean.topics.length) return { topics: 0, points: 0, topicIds: [] };
 
@@ -167,11 +167,12 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
   const relation = getColumns('topics')?.discussionLinkID; // board_relation: topic -> discussion
   const topicDispCol = getColumns('topics')?.topicNotForDiscussionID; // "האם להציג?" (item)
   const pointDispCol = getColumns('topics')?.pointNotForDiscussionID; // "האם להציג?" (subitem)
-  // round115 — creator + creation-date columns, stamped on every topic/point
-  // created from a template (mirrors useTopics.addTopic/addPoint). creatorId is
-  // passed by the caller (the user applying the template).
-  const topicCreatorCol = getColumns('topics')?.topicCreatorID;
-  const pointCreatorCol = getColumns('topics')?.pointCreatorID;
+  // round115 — creation-date columns, stamped on every topic/point created from a
+  // template (mirrors useTopics.addTopic/addPoint).
+  // round267 (owner request) — the CREATOR column is intentionally NOT stamped
+  // here: template/duplicate/type-default topics are generated, not authored by a
+  // person, so they carry NO creator (and thus show no creator avatar). Only a
+  // MANUALLY typed topic (useTopics.addTopic) gets a creator.
   const topicCreatedCol = getColumns('topics')?.topicCreationDateID;
   const pointCreatedCol = getColumns('topics')?.pointCreationDateID;
 
@@ -202,9 +203,6 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
     if (topicDispCol?.id) {
       columnValues[topicDispCol.id] = formatValue('checkbox', true);
     }
-    if (topicCreatorCol?.id && creatorId) {
-      columnValues[topicCreatorCol.id] = formatValue('people', [creatorId]);
-    }
     if (topicCreatedCol?.id) {
       columnValues[topicCreatedCol.id] = formatValue('date', new Date());
     }
@@ -229,9 +227,6 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
     report();
 
     const pointCv = pointDispCol?.id ? { [pointDispCol.id]: formatValue('checkbox', true) } : {};
-    if (pointCreatorCol?.id && creatorId) {
-      pointCv[pointCreatorCol.id] = formatValue('people', [creatorId]);
-    }
     if (pointCreatedCol?.id) {
       pointCv[pointCreatedCol.id] = formatValue('date', new Date());
     }
