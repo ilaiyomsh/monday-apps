@@ -49,7 +49,7 @@ export const PREVIOUS_TASKS_MODES = {
  * components appear automatically on existing instances.
  */
 export const APP_COMPONENTS = [
-  { key: 'previous', label: 'הנחיות קודמות' },
+  { key: 'previous', label: 'דיונים קודמים' },
   { key: 'background', label: 'רקע' },
   { key: 'references', label: 'התייחסויות' },
   { key: 'summary', label: 'סיכום' },

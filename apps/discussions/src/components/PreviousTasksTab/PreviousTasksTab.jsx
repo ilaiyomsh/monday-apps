@@ -634,7 +634,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       ) : tasks.length === 0 ? (
         <div className={styles.emptyState}>
           <Text type={"text2"} color={"secondary"}>
-            {byType ? 'לא נמצאו הנחיות מסוג דיון זה' : 'לא נמצאו הנחיות בדיון הקודם'}
+            {byType ? 'לא נמצאו משימות מסוג דיון זה' : 'לא נמצאו משימות בדיון הקודם'}
           </Text>
         </div>
       ) : (

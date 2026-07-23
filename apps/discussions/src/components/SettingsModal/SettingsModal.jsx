@@ -992,7 +992,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       previous discussion, or by the discussion TYPE (taskTypeID). */}
                   <div className={styles.prefRow}>
                     <div className={styles.prefLabel}>
-                      <Text type={"text2"}>מקור המשימות בהנחיות קודמות</Text>
+                      <Text type={"text2"}>מקור המשימות בדיונים קודמים</Text>
                     </div>
                     <div className={styles.prefControl}>
                       <ButtonGroup

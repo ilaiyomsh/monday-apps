@@ -52,7 +52,7 @@ const TAB_KEYS = ['previous', 'topics', 'tasks', 'decisions', 'effectiveness'];
 // round205 — labels + visibility-component key per tab (the tab list is now
 // DYNAMIC: an owner may hide components in Settings → העדפות).
 const TAB_DEFS = [
-  { key: 'previous', label: 'הנחיות קודמות' },
+  { key: 'previous', label: 'דיונים קודמים' },
   { key: 'topics', label: 'ניהול דיון' },
   { key: 'tasks', label: 'משימות' },
   { key: 'decisions', label: 'החלטות' },
