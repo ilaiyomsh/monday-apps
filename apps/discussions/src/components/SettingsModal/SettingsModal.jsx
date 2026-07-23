@@ -181,7 +181,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   const [activeTab, setActiveTab] = useState(0); // 0 = מיפוי, 1 = העדפות, 2 = תבניות, 3 = תבנית ייצוא, 4 = הרשאות
   // round256 — the Templates tab (2) widens to the export size while its type
   // editor is on the "תבנית ייצוא" sub-tab (TemplateManagerModal reports this).
-  const [templatesExportWide, setTemplatesExportWide] = useState(false);
   const [openBoardKey, setOpenBoardKey] = useState(null);
   const [boardOptions, setBoardOptions] = useState([]);
   const [loadingBoards, setLoadingBoards] = useState(false);
@@ -630,7 +629,12 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // while its type editor is on the "תבנית ייצוא" sub-tab. Without lifting the
   // contained overlay here, .modalExport is applied but the overlay still
   // clamps the modal small (owner: "עדיין מאוד קטן").
-  const exportWide = activeTab === 3 || (activeTab === 2 && templatesExportWide);
+  // round264 (owner request) — the ENTIRE settings modal (every tab) is always
+  // full-size and full-viewport, exactly like the export-template tab. `exportWide`
+  // remains the single flag for "full viewport + non-contained overlay + .modalExport";
+  // it is now always on, so mapping/preferences/templates/permissions all open at the
+  // same large size as the export tab.
+  const exportWide = true;
   const overlayClass = `${styles.overlay} ${contained && !exportWide ? styles.overlayContained : ''}`;
 
   // round147 — templates-only mode: a super member ("חבר-על") opens the gear to
@@ -1061,7 +1065,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                     (TemplateManagerModal), NOT a wrapper div: the round247
                     wrapper broke the flex-height chain so the editor list could
                     not scroll. TemplatesPanel is a direct flex child again. */}
-                <TemplatesPanel onExportWide={setTemplatesExportWide} />
+                <TemplatesPanel />
               </TabPanel>
 
               <TabPanel className={styles.tabPanelFill}>
