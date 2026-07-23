@@ -176,7 +176,8 @@ publicly, symbolication happens **off the wire, at read time**:
    *between Build and `mapps code:push`*, uploads `build/**/*.map` as the artifact
    **`sourcemaps-<app>-<github.sha>`** (90-day retention) and then **deletes every
    `.map` from the deploy dir** — with a hard assertion that none remain, so a
-   sourcemap can never reach the CDN. The wire stays a lean single frame; the maps
+   sourcemap is never served to the browser (the CDN for client apps, the server's
+   static `public/` for server apps). The wire stays a lean single frame; the maps
    live only in GitHub Actions artifacts, gated by repo access.
 3. **Resolve on demand** with the axiom-sre tool, keyed by the log row's `ver`
    (`<pkgVersion>+<shortSha>`), which matches the artifact's SHA:
@@ -188,9 +189,22 @@ publicly, symbolication happens **off the wire, at read time**:
    Offline / a locally-built map: pass `--map <path/to.js.map>` instead.
 
 This keeps all five privacy layers intact — maps are never public, the wire is
-unchanged — while making minified frames investigable. Enabled per client app
-(one-app-per-PR); server apps already build `sourcemap: true` but do not deploy
-to a public CDN, so their maps are not a leak vector.
+unchanged — while making minified frames investigable.
+
+**Coverage (shipped to draft 2026-07-22, one-app-per-PR).** All eight apps do
+this. The five **client** apps (discussions, planner, tracker, day-off,
+team-people-column) archive their whole build's maps. The three **server** apps
+(deadline-confirm, sync-calender, telemetry-dashboard) run their server code
+**from source** (`node ./src/index.js`, unbundled) — so server stacks are already
+readable and are **not** symbolicated; only their browser-served **client** bundle
+(admin SPA / dashboard UI under `public/`) gets the `'hidden'` + archive + strip
+treatment. For those three this also **closed a prior leak** — they built
+`sourcemap: true` and served the maps publicly. Today only `deadline-confirm`'s
+client ships telemetry; the other two were done to close the leak and future-proof.
+The artifact is `sourcemaps-<app>-<sha>` where `<app>` is the log row's `app`
+value (`VITE_AXIOM_APP`), so a `ver` from any row resolves directly. Re-mapping is
+automatic — every deploy archives fresh maps keyed by that commit's SHA; nothing is
+mapped by hand. **Live** picks up the maps on the next `develop`→`main` release.
 
 ---
 
