@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   createUpdate: vi.fn(),
   editUpdate: vi.fn(),
   getItemUpdate: vi.fn(),
+  deleteUpdate: vi.fn(),
 }));
 vi.mock('@api/updates.js', () => api);
 
@@ -81,5 +82,24 @@ describe('useBackground', () => {
     await act(async () => { id = await result.current.ensureUpdate(); });
     expect(id).toBe('u5');
     expect(api.createUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('round271 — clearDocuments deletes the update and recreates it with the SAME body (text kept)', async () => {
+    store.loadBackgroundUpdateId.mockResolvedValue('u1');
+    api.getItemUpdate.mockResolvedValue({ id: 'u1', body: '<p>טקסט</p>', creator: { name: 'דנה' } });
+    api.deleteUpdate.mockResolvedValue({ id: 'u1' });
+    api.createUpdate.mockResolvedValue({ id: 'u2', body: '<p>טקסט</p>' });
+    const { result } = renderHook(() => useBackground('d1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let ok;
+    await act(async () => { ok = await result.current.clearDocuments(); });
+    expect(ok).toBe(true);
+    expect(api.deleteUpdate).toHaveBeenCalledWith('u1');
+    // recreated with the SAME body, so the box text survives the file-clear.
+    expect(api.createUpdate).toHaveBeenCalledWith('d1', '<p>טקסט</p>');
+    // the fresh update id is persisted + exposed.
+    expect(store.saveBackgroundUpdateId).toHaveBeenCalledWith('d1', 'u2');
+    expect(result.current.updateId).toBe('u2');
   });
 });

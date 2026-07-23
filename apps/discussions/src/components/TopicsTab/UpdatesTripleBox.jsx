@@ -50,7 +50,7 @@ function editorInitials(name) {
  * on an update, so the bar is add + preview + download only (no per-file remove).
  */
 function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = false, withLinks = false, active, mentionPeople = [] }) {
-  const { html, loading, author, updatedAt, save, saveErrorCode, updateId, ensureUpdate } = hook;
+  const { html, loading, author, updatedAt, save, saveErrorCode, updateId, ensureUpdate, clearDocuments } = hook;
 
   const draftRef = useRef(null);
   const savedRef = useRef(null);
@@ -101,6 +101,8 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = fals
   const [files, setFiles] = useState([]);
   const [preview, setPreview] = useState(null); // { name, url } | null — open document preview
   const [uploading, setUploading] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false); // round271 — >1-file delete warning
+  const [clearing, setClearing] = useState(false);
   const fileInputRef = useRef(null);
   const refreshFiles = useCallback(async (idOverride) => {
     const uid = idOverride || updateId;
@@ -136,6 +138,27 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = fals
       if (!err?.__loggedId) logger.error('UpdatesTripleBox', 'העלאת המסמך לעדכון נכשלה', err);
     } finally {
       setUploading(false);
+    }
+  };
+
+  // round271 — delete. monday has no per-file delete on an update, so removing a
+  // document clears ALL of the box's documents at once (the text is kept). When
+  // there is MORE THAN ONE file we warn first; a single file deletes immediately.
+  const requestDeleteFiles = () => {
+    if (files.length > 1) { setConfirmClear(true); return; }
+    doClearDocuments();
+  };
+  const doClearDocuments = async () => {
+    setConfirmClear(false);
+    if (!clearDocuments) return;
+    setClearing(true);
+    try {
+      const ok = await clearDocuments();
+      if (ok) setFiles([]);
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('UpdatesTripleBox', 'מחיקת מסמכי התיבה נכשלה', err);
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -195,15 +218,28 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = fals
   const documentsBar = files.length > 0 ? (
     <div className={styles.docBar} dir="rtl">
       {files.map((f) => (
-        <button
-          key={f.assetId || f.name}
-          type="button"
-          className={styles.docIcon}
-          style={{ background: fileKindColor(f.name) }}
-          title={f.name}
-          aria-label={`מסמך: ${f.name}`}
-          onClick={() => setPreview({ name: f.name, url: f.url })}
-        />
+        <span key={f.assetId || f.name} className={styles.docItem}>
+          <button
+            type="button"
+            className={styles.docIcon}
+            style={{ background: fileKindColor(f.name) }}
+            title={f.name}
+            aria-label={`מסמך: ${f.name}`}
+            onClick={() => setPreview({ name: f.name, url: f.url })}
+          />
+          {canAttach && (
+            <button
+              type="button"
+              className={styles.docDel}
+              disabled={clearing}
+              onClick={requestDeleteFiles}
+              title="מחיקת מסמך"
+              aria-label={`מחיקת מסמך: ${f.name}`}
+            >
+              <X size={10} />
+            </button>
+          )}
+        </span>
       ))}
     </div>
   ) : null;
@@ -346,6 +382,28 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = fals
               ) : (
                 <span className={styles.docPreviewNote}>אין תצוגה מקדימה לסוג קובץ זה — לחצו על "הורדה".</span>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* round271 — delete confirmation, shown ONLY when the box holds more than
+          one document (monday clears them all at once; a single file skips this). */}
+      {confirmClear && (
+        <div
+          className={styles.docPreviewOverlay}
+          dir="rtl"
+          onClick={(e) => { if (e.target === e.currentTarget) setConfirmClear(false); }}
+        >
+          <div className={styles.docConfirm} role="alertdialog" aria-modal="true" aria-label="מחיקת מסמכים">
+            <div className={styles.docConfirmTitle}>מחיקת מסמכים</div>
+            <div className={styles.docConfirmBody}>
+              בתיבה זו יש <b>{files.length}</b> מסמכים. ל-monday אין אפשרות למחוק מסמך בודד מעדכון,
+              ולכן המחיקה תסיר את <b>כל</b> המסמכים בתיבה (הטקסט יישמר). להמשיך?
+            </div>
+            <div className={styles.docConfirmActions}>
+              <button type="button" className={styles.docConfirmCancel} onClick={() => setConfirmClear(false)}>ביטול</button>
+              <button type="button" className={styles.docConfirmDanger} onClick={doClearDocuments} disabled={clearing}>מחק הכל</button>
             </div>
           </div>
         </div>
