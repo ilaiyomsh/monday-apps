@@ -20,18 +20,20 @@ function renderRow(props) {
 }
 
 describe('TopicPointRow — clean list row structure (round226 stage B smoke)', () => {
-  it('round226b — renders the list order: נידונה check, name, actions, תוצרים (no table cells)', () => {
+  it('round260 — renders the list order: check, name, centered action cluster, spacer (no table cells)', () => {
     renderRow({});
     const row = document.querySelector('.row');
     const classes = [...row.children].map((el) => el.className);
     const idx = (c) => classes.findIndex((cls) => cls.includes(c));
     expect(idx('checkCell')).toBeLessThan(idx('nameCell'));
-    expect(idx('nameCell')).toBeLessThan(idx('rowActs'));
-    expect(idx('rowActs')).toBeLessThan(idx('outputsCell'));
-    // the legacy table cells are gone
+    // round260 — the actions live in one .pointCluster, followed by a flex
+    // .clusterSpacer that balances the name (flex:1) so the cluster is centered.
+    expect(idx('nameCell')).toBeLessThan(idx('pointCluster'));
+    expect(idx('pointCluster')).toBeLessThan(idx('clusterSpacer'));
+    // the legacy table cells / split action+outputs cells are gone
     expect(idx('lead')).toBe(-1);
-    expect(idx('decisionsCell')).toBe(-1);
-    expect(idx('tasksCell')).toBe(-1);
+    expect(idx('rowActs')).toBe(-1);
+    expect(idx('outputsCell')).toBe(-1);
   });
 
   it('round226b — the discussed state draws the green check and strikes the name', () => {
@@ -133,6 +135,44 @@ describe('TopicPointRow — clean list row structure (round226 stage B smoke)', 
     // Hidden (notForDiscussion) row is inert → no trash even with a handler.
     renderRow({ onDelete, point: { ...POINT, notForDiscussion: true } });
     expect(document.querySelector('[aria-label^="מחק נקודה"]')).toBeNull();
+  });
+
+  it('round260 — inside the cluster the RTL order is +, count, creator, delete', () => {
+    renderRow({
+      onCreateTask: vi.fn(),
+      onDelete: vi.fn(),
+      decisionCount: 1,
+      taskCount: 1,
+      point: { ...POINT, creatorId: '99' },
+      usersById: { 99: { name: 'דנה' } },
+    });
+    const cluster = document.querySelector('.pointCluster');
+    const kids = [...cluster.children];
+    const add = kids.findIndex((el) => el.getAttribute('aria-label') === 'תוצר חדש מהנקודה');
+    const count = kids.findIndex((el) => el.getAttribute('aria-label') === 'הצג תוצרים מהנקודה');
+    const creator = kids.findIndex((el) => el.className.includes('creatorAvatar'));
+    const del = kids.findIndex((el) => (el.getAttribute('aria-label') || '').startsWith('מחק נקודה'));
+    expect(add).toBeGreaterThanOrEqual(0);
+    // DOM order = RTL right→left: + first (rightmost), then count, creator, delete (leftmost).
+    expect(add).toBeLessThan(count);
+    expect(count).toBeLessThan(creator);
+    expect(creator).toBeLessThan(del);
+  });
+
+  it('round260 — clicking the point text enters inline edit (the pencil button is gone)', () => {
+    renderRow({});
+    // the hover pencil button was removed…
+    expect(document.querySelector('[aria-label="ערוך שם נקודה: נקודה לבדיקה"]')).toBeNull();
+    // …and a single click on the name opens the inline editor input.
+    expect(document.querySelector('[aria-label="ערוך שם נקודה"]')).toBeNull();
+    fireEvent.click(document.querySelector('.name'));
+    expect(document.querySelector('[aria-label="ערוך שם נקודה"]')).toBeTruthy();
+  });
+
+  it('round260 — a read-only point does NOT enter edit on click', () => {
+    renderRow({ canEditPoint: false });
+    fireEvent.click(document.querySelector('.name'));
+    expect(document.querySelector('[aria-label="ערוך שם נקודה"]')).toBeNull();
   });
 
   it('round233 — a six-dot drag grip renders at the row START (editable, not hidden)', () => {

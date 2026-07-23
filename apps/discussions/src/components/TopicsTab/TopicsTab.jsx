@@ -5,7 +5,7 @@ import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { Plus, Eye, EyeOff, Trash2, GripHorizontal } from 'lucide-react';
+import { Plus, EyeOff, Trash2, GripHorizontal } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -162,7 +162,7 @@ function SortableTopicSection({
   // POINT via multi-select bulk delete — the per-point trash was removed.)
   onRetryCreate,
   deleteTopic, addPoint, togglePoint,
-  togglePointNotForDiscussion, toggleTopicNotForDiscussion,
+  toggleTopicNotForDiscussion,
   renamePoint, reorderPoints,
   // Visible column keys (round 47 Hide) — 'name' is always present; a hidden
   // check/outputs key drops that element from every point row.
@@ -425,17 +425,7 @@ function SortableTopicSection({
               <Edit size={16} />
             </button>
           )}
-          {canHideTopic && (
-            <button
-              type="button"
-              className={`${styles.headActBtn} ${excluded ? styles.headActOn : ''}`}
-              onClick={(e) => { e.stopPropagation(); toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(topic.id, !excluded); }}
-              aria-label={excluded ? 'הצג נושא' : 'הסתר נושא'}
-              title={excluded ? 'הצג נושא' : 'הסתר נושא'}
-            >
-              {excluded ? <Eye size={16} /> : <EyeOff size={16} />}
-            </button>
-          )}
+          {/* round260 (owner request) — topic hide button removed. */}
           {canDelete && (
             <RowKebabMenu
               excluded={excluded}
@@ -475,12 +465,10 @@ function SortableTopicSection({
                   usersById={usersById}
                   columns={columns}
                   onToggle={togglePoint}
-                  onToggleNotForDiscussion={togglePointNotForDiscussion}
                   onRename={renamePoint}
                   onDelete={canDelete ? onDeletePoint : undefined}
                   onRetryCreate={onRetryCreate}
                   canEditPoint={canEditTopic}
-                  canHidePoint={canHideTopic}
                   canCheck={canCheck}
                   decisionCount={getPointItemIds(pointItemsByPoint, point._realId || point.id, 'decision')
                     .filter((id) => decisionIdSet.has(String(id))).length}
@@ -1434,7 +1422,6 @@ export function TopicsTab({
               deleteTopic={deleteTopic}
               addPoint={addPoint}
               togglePoint={applyTogglePoint}
-              togglePointNotForDiscussion={togglePointNotForDiscussion}
               toggleTopicNotForDiscussion={toggleTopicNotForDiscussion}
               renamePoint={renamePoint}
               reorderPoints={reorderPoints}
@@ -1532,7 +1519,6 @@ export function TopicsTab({
       {topicMenu && (() => {
         const t = items.find((x) => String(x.id) === String(topicMenu.topicId));
         if (!t) return null;
-        const excluded = t.notForDiscussion === true;
         return (
           <>
             <div className={styles.topicMenuBackdrop} onClick={() => setTopicMenu(null)} />
@@ -1546,18 +1532,8 @@ export function TopicsTab({
                   <Edit size={15} /> עריכת שם
                 </button>
               )}
-              {canHide && (
-                <button
-                  type="button"
-                  className={styles.topicMenuItem}
-                  onClick={() => {
-                    setTopicMenu(null);
-                    toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(t.id, !excluded);
-                  }}
-                >
-                  {excluded ? <Eye size={15} /> : <EyeOff size={15} />} {excluded ? 'הצג נושא' : 'הסתר נושא'}
-                </button>
-              )}
+              {/* round260 (owner request) — the "הסתר/הצג נושא" menu item was
+                  removed; topic hiding is no longer offered in the UI. */}
               {priorityMapped && editTopicOrPoint && (priorityOpts.options || []).length > 0 && (
                 <div className={styles.topicMenuPrio}>
                   <span className={styles.topicMenuPrioLabel}>עדיפות</span>
