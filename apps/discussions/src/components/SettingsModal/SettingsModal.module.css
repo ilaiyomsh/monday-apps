@@ -213,11 +213,11 @@
 
 .cols {
   display: grid;
-  /* round252 — the mapping wasted a lot of space: a fixed 2-column grid left the
-     wide modal half-empty and pushed every board into a tall scroll. Auto-fill
-     packs as many ~220px cells as fit (3–4 across on a wide modal, gracefully
-     down to 1 when narrow), so the same fields cover far less vertical area. */
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  /* round264 (owner request) — EXACTLY 4 columns per row. `minmax(0, 1fr)` fixes
+     every track at ¼ of the row, so a field keeps that same width even when its
+     row has fewer than 4 fields (the missing tracks stay empty rather than
+     stretching the present fields). */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-top: 6px;
   align-items: start;
