@@ -281,6 +281,35 @@
   background: var(--primary-color, #0073ea);
 }
 
+/* round248 — 2D corner resize grip at each box's bottom-INNER corner. Dragging
+   it changes the split ratio (width) + shared height together. */
+.cornerHandle {
+  position: absolute;
+  bottom: -4px;
+  width: 20px;
+  height: 20px;
+  z-index: 6;
+  touch-action: none;
+}
+.cornerAgenda { right: -4px; cursor: nwse-resize; }
+.cornerTriple { left: -4px; cursor: nesw-resize; }
+.cornerHandle::after {
+  content: '';
+  position: absolute;
+  bottom: 6px;
+  width: 9px;
+  height: 9px;
+  border-style: solid;
+  border-color: var(--ui-border-color, #d0d4e4);
+  transition: border-color 0.12s ease;
+}
+.cornerAgenda::after { right: 6px; border-width: 0 2px 2px 0; }
+.cornerTriple::after { left: 6px; border-width: 0 0 2px 2px; }
+.cornerHandle:hover::after,
+.splitRowEditing .cornerHandle::after {
+  border-color: var(--primary-color, #0073ea);
+}
+
 /* ---- round235 (approved mockup v3, muted palette) — the TOPICS RIBBON ----
    Fills the 48px band that held נושא חדש/הסתר/כווץ: every topic is a
    full-height MUTED status-label; the LEFT edge is a gentle 9px arrow point
