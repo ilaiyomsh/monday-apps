@@ -898,6 +898,46 @@ export function TopicsTab({
     </span>
   ) : null;
 
+  // round248 (owner request) — a CORNER resize grip: grab a box's bottom-inner
+  // corner and drag out/in to resize BOTH dimensions at once — horizontal moves
+  // the split ratio (grow one, shrink the other), vertical moves the shared
+  // height. Reuses the same pure ratioFromDrag / heightFromDrag math.
+  const onCornerPointerDown = (e) => {
+    if (!editLayout || !canManageSettings || layoutRef.current.stacked) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startRatio = layoutRef.current.ratio;
+    const width = splitRowRef.current?.getBoundingClientRect().width || 0;
+    const box = e.currentTarget.parentElement;
+    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current.height || 520);
+    const commit = (ev, persist) => applyLayout({
+      // pointer moving physically RIGHT always grows the agenda's share.
+      ratio: ratioFromDrag(startRatio, ev.clientX - startX, width),
+      height: heightFromDrag(startH, ev.clientY - startY),
+    }, persist);
+    const onMove = (ev) => commit(ev, false);
+    const onUp = (ev) => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      commit(ev, true);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+  };
+  // The bottom-inner corner grip (side-by-side + edit mode only). `place` tags
+  // which box so the CSS pins it to that box's inner corner + resize cursor.
+  const renderCornerHandle = (place) => (editLayout && canManageSettings && !layout.stacked) ? (
+    <span
+      className={`${styles.cornerHandle} ${place === 'agenda' ? styles.cornerAgenda : styles.cornerTriple}`}
+      role="separator"
+      aria-label="שינוי גודל התיבה (רוחב וגובה)"
+      title="גרור את הפינה לשינוי רוחב וגובה"
+      onPointerDown={onCornerPointerDown}
+    />
+  ) : null;
+
   // 6-dot grip: drag DOWN past a threshold stacks the two boxes, drag UP
   // unstacks them ("like a dashboard widget"). One persist on release.
   const onGripPointerDown = (e) => {
@@ -1404,6 +1444,7 @@ export function TopicsTab({
       </div>{/* .agendaBody */}
       </div>{/* .agendaBox */}
       {renderHeightHandle()}
+      {renderCornerHandle('agenda')}
       </div>
       )}
 
@@ -1445,6 +1486,7 @@ export function TopicsTab({
           resetPaneNonce={paneResetNonce}
         />
         {renderHeightHandle()}
+        {renderCornerHandle('triple')}
       </div>
       )}
       </div>
