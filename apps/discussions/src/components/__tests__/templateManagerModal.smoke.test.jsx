@@ -61,6 +61,9 @@ const fns = () => ({
   typeColorName: () => 'done-green',
   setTypeColor: vi.fn().mockResolvedValue(true),
   assignRandomTypeColor: vi.fn().mockResolvedValue('done-green'),
+  // round254 — per-type export template assets (config rides on the type template).
+  loadTypeExportAssets: vi.fn().mockResolvedValue({ headerLogo: null, footerLogo: null, templateDocx: null }),
+  saveTypeExportAssets: vi.fn().mockResolvedValue({ headerLogo: null, footerLogo: null, templateDocx: null }),
 });
 
 function setup({ templates = [], participantTemplates = [], typeTemplates = [], extra = {} } = {}) {

@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { monday } from '../utils/mondayApi/monday-client.js';
 import { useMondayContext } from './MondayContext.jsx';
 import { sanitizeTemplate, sanitizeParticipantTemplate, sanitizeTypeTemplate } from '../utils/templates.js';
+import { loadTypeExportAssets as loadTypeExportAssetsAt, saveTypeExportAssets as saveTypeExportAssetsAt } from '../utils/exportAssets.js';
 import { stableColorForKey, randomPaletteColor, colorNameToCss } from '../constants/mondayPalette.js';
 import logger from '../utils/logger.js';
 
@@ -32,8 +33,10 @@ function genId() {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
       return `tpl_${crypto.randomUUID()}`;
     }
-  } catch {
-    /* fall through to the time+random id below */
+  } catch (err) {
+    // crypto.randomUUID unavailable / insecure context — fall through to the
+    // time+random id below (non-fatal).
+    logger.warn('TemplatesContext', 'יצירת מזהה עם crypto.randomUUID נכשלה — משתמשים בחלופה', err);
   }
   return `tpl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -121,8 +124,9 @@ export function TemplatesProvider({ children }) {
       } else {
         commit([]);
       }
-    } catch {
+    } catch (err) {
       // storage unavailable / parse error — start empty, never block the app.
+      logger.warn('TemplatesContext', 'טעינת תבניות הנושאים נכשלה — מתחילים ריק', err);
       commit([]);
     }
 
@@ -136,7 +140,8 @@ export function TemplatesProvider({ children }) {
       } else {
         commitParticipants([]);
       }
-    } catch {
+    } catch (err) {
+      logger.warn('TemplatesContext', 'טעינת תבניות המשתתפים נכשלה — מתחילים ריק', err);
       commitParticipants([]);
     }
 
@@ -151,7 +156,8 @@ export function TemplatesProvider({ children }) {
       } else {
         commitTypes([]);
       }
-    } catch {
+    } catch (err) {
+      logger.warn('TemplatesContext', 'טעינת תבניות סוגי הדיון נכשלה — מתחילים ריק', err);
       commitTypes([]);
     }
 
@@ -164,7 +170,8 @@ export function TemplatesProvider({ children }) {
       } else {
         commitTypeColors({});
       }
-    } catch {
+    } catch (err) {
+      logger.warn('TemplatesContext', 'טעינת צבעי סוגי הדיון נכשלה — מתחילים ריק', err);
       commitTypeColors({});
     }
 
@@ -364,6 +371,18 @@ export function TemplatesProvider({ children }) {
     [persistTypeColors]
   );
 
+  // round254 — per-type export ASSETS (logos + uploaded .docx) live in their own
+  // keyed store; the CONFIG lives on the TypeTemplate.exportTemplate. Both wrappers
+  // bind the current instance context so callers pass only the type name.
+  const loadTypeExportAssets = useCallback(
+    (typeName) => loadTypeExportAssetsAt(context, typeName),
+    [context]
+  );
+  const saveTypeExportAssets = useCallback(
+    (typeName, assets) => saveTypeExportAssetsAt(context, typeName, assets),
+    [context]
+  );
+
   return (
     <TemplatesContext.Provider
       value={{
@@ -384,6 +403,8 @@ export function TemplatesProvider({ children }) {
         typeColorName,
         setTypeColor,
         assignRandomTypeColor,
+        loadTypeExportAssets,
+        saveTypeExportAssets,
       }}
     >
       {children}

@@ -104,15 +104,24 @@ export function sanitizeParticipantTemplate(template, id) {
  * one shot. Persisted in its own monday.storage key by TemplatesContext.
  *
  * Shape:
- *   TypeTemplate = { id, discussionType: string, topics: Topic[], lead, coordinator, participants: Person[] }
+ *   TypeTemplate = { id, discussionType: string, topics: Topic[], lead, coordinator,
+ *                    participants: Person[], deciderIsLead: boolean,
+ *                    exportTemplate: object|null }
  *
  * `discussionType` is REQUIRED (it is the key — the label TEXT) — sanitize
  * returns null when it is missing so callers can drop malformed entries.
+ *
+ * round254 — `exportTemplate` (object|null): a per-type export-template CONFIG
+ * that OVERRIDES the system default at export time (null ⇒ use the system
+ * default). Stored raw here (a plain config object); the export dialog runs it
+ * through seedExportTemplate for validation/back-fill, so this file needs no
+ * knowledge of the export-template schema.
  */
 export function sanitizeTypeTemplate(template, id) {
   const dt = typeKey(template?.discussionType);
   if (!dt) return null;
   const topics = Array.isArray(template?.topics) ? template.topics : [];
+  const exp = template?.exportTemplate;
   return {
     id: id || template?.id || null,
     discussionType: dt,
@@ -122,6 +131,8 @@ export function sanitizeTypeTemplate(template, id) {
     // item 18 — per-type default decider flag (מחליט = מנהל הדיון). Strict
     // boolean so a stored junk value can never truthy its way in.
     deciderIsLead: template?.deciderIsLead === true,
+    // round254 — a non-array object is kept as-is; anything else ⇒ null (default).
+    exportTemplate: (exp && typeof exp === 'object' && !Array.isArray(exp)) ? exp : null,
     topics: topics
       .map((topic) => ({
         name: (topic?.name || '').trim(),

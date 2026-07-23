@@ -712,3 +712,18 @@
   font-weight: 600;
   color: var(--primary-text-color, #323338);
 }
+
+/* round254 — per-type export template section inside the type editor: a divider
+   above the enable toggle, and a framed area holding the embedded ExportTemplateTab. */
+.typeExportSection {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.typeExportEditor {
+  margin-top: 10px;
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--primary-background-hover-color, #f6f7fb);
+}

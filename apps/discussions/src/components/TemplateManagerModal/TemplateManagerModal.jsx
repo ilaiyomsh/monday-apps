@@ -18,6 +18,8 @@ import { useDropdownOptions, addDropdownLabel } from '@generated/hooks/useDropdo
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { MONDAY_COLOR_NAMES, colorNameToCss } from '@generated/constants/mondayPalette.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
+import ExportTemplateTab from '@generated/components/SettingsModal/ExportTemplateTab.jsx';
+import { seedExportTemplate } from '@generated/components/SettingsModal/SettingsModal.jsx';
 import logger from '@generated/utils/logger.js';
 import styles from './TemplateManagerModal.module.css';
 
@@ -232,6 +234,8 @@ export function TemplateManagerModal() {
     typeColorName,
     setTypeColor,
     assignRandomTypeColor,
+    loadTypeExportAssets,
+    saveTypeExportAssets,
   } = useTemplates();
   // "סוג דיון" is a DROPDOWN column — its labels are the assignable types.
   const { options: typeOptions } = useDropdownOptions('discussions', 'discussionTypeID');
@@ -266,6 +270,12 @@ export function TemplateManagerModal() {
   // Item 18 — per-type default decider: when true, NEW decisions in discussions
   // of this type default their מחליט to the discussion's מנהל דיון.
   const [typeDeciderIsLead, setTypeDeciderIsLead] = useState(false);
+  // round254 — per-type export template (config on the TypeTemplate) + its own
+  // brand assets (own keyed store). When disabled the type uses the system default.
+  const [typeExportEnabled, setTypeExportEnabled] = useState(false);
+  const [typeExportTemplate, setTypeExportTemplate] = useState(null); // seeded object when enabled
+  const [typeExportAssets, setTypeExportAssets] = useState(null);
+  const [typeExportAssetError, setTypeExportAssetError] = useState(null);
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
@@ -346,6 +356,16 @@ export function TemplateManagerModal() {
     setTypeParticipants(existing?.participants || []);
     setTypeColorDraft(typeColorName(typeName));
     setTypeDeciderIsLead(existing?.deciderIsLead === true);
+    // round254 — seed the per-type export template + assets. A stored config
+    // means "use a dedicated template"; else the type falls back to the system.
+    const hasExport = !!existing?.exportTemplate;
+    setTypeExportEnabled(hasExport);
+    setTypeExportTemplate(hasExport ? seedExportTemplate(existing.exportTemplate) : null);
+    setTypeExportAssetError(null);
+    setTypeExportAssets(null);
+    Promise.resolve(loadTypeExportAssets?.(typeName))
+      .then((a) => { if (a) setTypeExportAssets(a); })
+      .catch((err) => logger.warn('TemplateManagerModal', 'טעינת נכסי הייצוא של הסוג נכשלה', err));
     setIsNew(!existing);
     setView('edit');
   };
@@ -358,6 +378,10 @@ export function TemplateManagerModal() {
     setTypeParticipants([]);
     setTypeColorDraft(null);
     setTypeDeciderIsLead(false);
+    setTypeExportEnabled(false);
+    setTypeExportTemplate(null);
+    setTypeExportAssets(null);
+    setTypeExportAssetError(null);
     setIsNew(false);
   };
 
@@ -443,6 +467,18 @@ export function TemplateManagerModal() {
         if (isNew) await createParticipantTemplate(payload);
         else await updateParticipantTemplate(pDraft.id, payload);
       } else {
+        // round254 — persist the per-type export ASSETS first (quota-checked). On
+        // an over-quota error, keep the editor open with the message rather than
+        // saving a template that references binaries we couldn't store.
+        if (typeExportEnabled) {
+          try {
+            await saveTypeExportAssets(draft.discussionType, typeExportAssets);
+          } catch (err) {
+            logger.error('TemplateManagerModal', 'שמירת נכסי הייצוא של הסוג נכשלה', err);
+            setTypeExportAssetError(err?.message || 'שמירת נכסי הייצוא נכשלה');
+            return; // the finally below clears `saving`
+          }
+        }
         // types: keyed by discussionType (name) — upsert replaces any existing entry.
         await upsertTypeTemplate({
           id: draft.id,
@@ -453,6 +489,8 @@ export function TemplateManagerModal() {
           participants: typeParticipants,
           // item 18 — per-type default decider (מחליט = מנהל הדיון)
           deciderIsLead: typeDeciderIsLead,
+          // round254 — the per-type export template CONFIG (null ⇒ system default).
+          exportTemplate: typeExportEnabled ? typeExportTemplate : null,
         });
         // Persist the chosen color for this type.
         if (typeColorDraft) await setTypeColor(draft.discussionType, typeColorDraft);
@@ -918,6 +956,39 @@ export function TemplateManagerModal() {
             <Button kind="secondary" size="small" leftIcon={Plus} onClick={addTopic} className={styles.addTopicBtn}>
               הוסף נושא
             </Button>
+
+            {/* round254 — a per-type EXPORT TEMPLATE. When enabled it carries all
+                the same components as the system export template and OVERRIDES it
+                for discussions of this type. */}
+            <div className={styles.typeExportSection}>
+              <label className={styles.deciderDefaultRow}>
+                <input
+                  type="checkbox"
+                  className={styles.deciderDefaultCheckbox}
+                  checked={typeExportEnabled}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setTypeExportEnabled(on);
+                    if (on && !typeExportTemplate) setTypeExportTemplate(seedExportTemplate(null));
+                    if (!on) setTypeExportAssetError(null);
+                  }}
+                />
+                <span className={styles.deciderDefaultLabel}>תבנית ייצוא ייעודית לסוג זה (גוברת על תבנית המערכת)</span>
+              </label>
+              {typeExportEnabled && typeExportTemplate && (
+                <div className={styles.typeExportEditor}>
+                  <ExportTemplateTab
+                    template={typeExportTemplate}
+                    setTemplate={setTypeExportTemplate}
+                    assets={typeExportAssets}
+                    setAssets={setTypeExportAssets}
+                    assetError={typeExportAssetError}
+                    previewModel={null}
+                    previewModelKey={null}
+                  />
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>
