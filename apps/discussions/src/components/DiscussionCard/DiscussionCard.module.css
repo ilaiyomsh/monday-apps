@@ -112,10 +112,15 @@
   z-index: 2;
   /* round250 — round249's bottom/height override moved the bar into the row's
      overflow-y:hidden clip zone, so it vanished. Keep vibe's own ::after box and
-     only NUDGE it down (transform, which the row does not clip) so the blue
-     underline sits ON the 1px black rule. (Below-the-rule protrusion is clipped
-     by the horizontally-scrollable tab row, so it seats on the line, not under.) */
-  transform: translateY(3px);
+     only TRANSFORM it (transforms are not clipped at this position) so the blue
+     underline sits ON the 1px black rule.
+     round252 (owner request) — DOUBLE the bar's thickness. scaleY(2) grows it
+     about its OWN vertical centre, so the centre that translateY(3px) already
+     seated on the black rule does NOT move — the thicker bar stays symmetric on
+     the rule. Both transforms scale with the browser/monday zoom, so the bar
+     keeps sitting on the rule at any zoom level (a fixed px `bottom`/`height`
+     would drift). */
+  transform: translateY(3px) scaleY(2);
 }
 /* vibe TabList renders role="tablist"; keep it ONE row, never wrapping to a 2nd row. */
 .tabsRow :global([role="tablist"]) {

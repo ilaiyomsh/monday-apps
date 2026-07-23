@@ -52,14 +52,26 @@ describe('discussionLayout — pure layout math (round241)', () => {
       expect(normalizeLayout(undefined)).toEqual(DEFAULT_LAYOUT);
       expect(normalizeLayout(42)).toEqual(DEFAULT_LAYOUT);
     });
-    it('clamps ratio + height and coerces stacked to a strict boolean', () => {
-      expect(normalizeLayout({ ratio: 0.9, stacked: true, height: 700 }))
-        .toEqual({ ratio: MAX_RATIO, stacked: true, height: 700 });
+    it('clamps ratio + per-box heights and coerces stacked to a strict boolean', () => {
+      expect(normalizeLayout({ ratio: 0.9, stacked: true, agendaHeight: 700, tripleHeight: 800 }))
+        .toEqual({ ratio: MAX_RATIO, stacked: true, agendaHeight: 700, tripleHeight: 800 });
       // a truthy-but-not-true stacked must NOT count as stacked
-      expect(normalizeLayout({ ratio: 0.5, stacked: 1 })).toEqual({ ratio: 0.5, stacked: false, height: null });
-      // an out-of-range stored height is clamped
-      expect(normalizeLayout({ ratio: 0.5, height: 50 })).toEqual({ ratio: 0.5, stacked: false, height: MIN_HEIGHT });
-      expect(normalizeLayout({ ratio: 0.5 })).toEqual({ ratio: 0.5, stacked: false, height: null });
+      expect(normalizeLayout({ ratio: 0.5, stacked: 1 }))
+        .toEqual({ ratio: 0.5, stacked: false, agendaHeight: null, tripleHeight: null });
+      // each box's out-of-range height is clamped INDEPENDENTLY
+      expect(normalizeLayout({ ratio: 0.5, agendaHeight: 50, tripleHeight: 9000 }))
+        .toEqual({ ratio: 0.5, stacked: false, agendaHeight: MIN_HEIGHT, tripleHeight: MAX_HEIGHT });
+      expect(normalizeLayout({ ratio: 0.5 }))
+        .toEqual({ ratio: 0.5, stacked: false, agendaHeight: null, tripleHeight: null });
+    });
+    it('round251 — migrates a legacy shared `height` into BOTH per-box heights', () => {
+      // a pre-round251 saved layout carried a single shared `height`; it seeds
+      // both boxes so the owner's saved size survives the upgrade.
+      expect(normalizeLayout({ ratio: 0.5, height: 700 }))
+        .toEqual({ ratio: 0.5, stacked: false, agendaHeight: 700, tripleHeight: 700 });
+      // an explicit per-box height wins over the legacy shared value.
+      expect(normalizeLayout({ ratio: 0.5, height: 700, agendaHeight: 900 }))
+        .toEqual({ ratio: 0.5, stacked: false, agendaHeight: 900, tripleHeight: 700 });
     });
   });
 

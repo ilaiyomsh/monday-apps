@@ -72,10 +72,11 @@
   display: flex;
   align-items: flex-start;
   gap: 24px;
-  /* round234 — ONE shared card height drives BOTH boxes (agenda + triple), so
-     they are always pixel-identical twins: same top, same bottom, same bands.
-     Fills most of the iframe viewport, never below a usable floor; long content
-     scrolls INSIDE each card instead of growing it. */
+  /* --split-card-h is the DEFAULT card height, inherited by both columns; it
+     fills most of the iframe viewport, never below a usable floor, and long
+     content scrolls INSIDE each card instead of growing it. round251 — each
+     column (.topicsCol / .refPanel) may OVERRIDE this var inline with its own
+     saved height, so the two boxes resize independently. */
   --split-card-h: max(520px, calc(100vh - 280px));
 }
 .topicsCol {
@@ -325,6 +326,18 @@
   gap: 1.5px;
   align-items: stretch;
   overflow: visible; /* the drag ghost + insertion gap need room */
+  /* round252 — the ribbon must lay out RIGHT-TO-LEFT. The outer .wrap is dir="ltr"
+     (it pins the physical column order: topics LEFT, panel RIGHT), and the ribbon
+     inherited that LTR, so the flex main-axis ran left→right — items[0] landed on
+     the LEFT. Every bit of ribbon logic assumes the opposite (items[0] rightmost):
+     the tiles' arrow points left toward the NEXT tile, the start "+" belongs on
+     the right and the end "+" (order:999) on the left, and a template appends its
+     new topics to the LEFT of the existing ones (saved order [existing, created],
+     first template topic nearest the existing = rightmost of the new group). Only
+     an RTL container delivers all of that; without it the whole ribbon rendered
+     mirrored (owner: templates added on the right, first topic leftmost). The drag
+     drop-math (computeRibbonDropTarget) auto-detects direction, so it follows. */
+  direction: rtl;
 }
 .ribbonTile {
   position: relative;

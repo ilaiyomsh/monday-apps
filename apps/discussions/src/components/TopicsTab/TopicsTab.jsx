@@ -813,9 +813,12 @@ export function TopicsTab({
   const [newTopicText, setNewTopicText] = useState('');
 
   // round241 — per-discussion WIDGET LAYOUT of the split (owner-only writes).
-  //   layout.ratio   → the אג'נדה box's share of the row width (the triple box
-  //                    gets the rest, so growing one shrinks the other).
-  //   layout.stacked → the two boxes stack vertically instead of side-by-side.
+  //   layout.ratio        → the אג'נדה box's share of the row width (the triple
+  //                         box gets the rest, so growing one shrinks the other).
+  //   layout.stacked      → the two boxes stack vertically instead of side-by-side.
+  //   layout.agendaHeight → the אג'נדה box's own height in px (round251).
+  //   layout.tripleHeight → the triple box's own height in px — each resizes
+  //                         INDEPENDENTLY, so shrinking one leaves the other put.
   // editLayout reveals the 6-dot grips + the resize divider on BOTH boxes at
   // once (owner request: one pencil arms both). Everyone READS the saved layout;
   // only an owner (canManageSettings) persists changes.
@@ -864,35 +867,39 @@ export function TopicsTab({
     document.addEventListener('pointerup', onUp);
   };
 
-  // round242 — bottom resize handle: drag it to shrink/GROW the shared card
-  // height (both boxes stay twins). The start height is measured from the
-  // handle's own box so the drag tracks the real pixels. One persist on release.
-  const onHeightPointerDown = (e) => {
+  // round242 — bottom resize handle: drag it to shrink/GROW a box's card height.
+  // round251 (owner request) — each box owns its OWN height (`which` =
+  // 'agenda'|'triple' → agendaHeight|tripleHeight), so shrinking one no longer
+  // drags the other. The start height is measured from the handle's own box so
+  // the drag tracks the real pixels. One persist on release.
+  const heightKey = (which) => (which === 'triple' ? 'tripleHeight' : 'agendaHeight');
+  const onHeightPointerDown = (e, which) => {
     if (!editLayout || !canManageSettings) return;
     e.preventDefault();
     e.stopPropagation();
     const startY = e.clientY;
     const box = e.currentTarget.parentElement;
-    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current.height || 520);
-    const onMove = (ev) => applyLayout({ height: heightFromDrag(startH, ev.clientY - startY) });
+    const k = heightKey(which);
+    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current[k] || 520);
+    const onMove = (ev) => applyLayout({ [k]: heightFromDrag(startH, ev.clientY - startY) });
     const onUp = (ev) => {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
-      applyLayout({ height: heightFromDrag(startH, ev.clientY - startY) }, true);
+      applyLayout({ [k]: heightFromDrag(startH, ev.clientY - startY) }, true);
     };
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
   };
 
   // The bottom height-resize handle carried inside each box (owner + edit mode).
-  const renderHeightHandle = () => (editLayout && canManageSettings) ? (
+  const renderHeightHandle = (which) => (editLayout && canManageSettings) ? (
     <span
       className={styles.heightHandle}
       role="separator"
       aria-orientation="horizontal"
-      aria-label="שינוי גובה התיבות"
-      title="גרור לשינוי גובה התיבות"
-      onPointerDown={onHeightPointerDown}
+      aria-label="שינוי גובה התיבה"
+      title="גרור לשינוי גובה התיבה"
+      onPointerDown={(e) => onHeightPointerDown(e, which)}
     >
       <span className={styles.heightHandleGrip} aria-hidden="true" />
     </span>
@@ -902,7 +909,7 @@ export function TopicsTab({
   // corner and drag out/in to resize BOTH dimensions at once — horizontal moves
   // the split ratio (grow one, shrink the other), vertical moves the shared
   // height. Reuses the same pure ratioFromDrag / heightFromDrag math.
-  const onCornerPointerDown = (e) => {
+  const onCornerPointerDown = (e, which) => {
     if (!editLayout || !canManageSettings) return;
     e.preventDefault();
     e.stopPropagation();
@@ -911,14 +918,16 @@ export function TopicsTab({
     const startRatio = layoutRef.current.ratio;
     const width = splitRowRef.current?.getBoundingClientRect().width || 0;
     const box = e.currentTarget.parentElement;
-    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current.height || 520);
+    const k = heightKey(which);
+    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current[k] || 520);
     const commit = (ev, persist) => {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
       const patch = {
         // pointer moving physically RIGHT always grows the agenda's share.
         ratio: ratioFromDrag(startRatio, dx, width),
-        height: heightFromDrag(startH, dy),
+        // round251 — vertical drag resizes ONLY this box's own height.
+        [k]: heightFromDrag(startH, dy),
       };
       // round250 (owner request "can't drag left/right") — a horizontal corner
       // drag while STACKED brings the boxes back side-by-side so the width
@@ -946,7 +955,7 @@ export function TopicsTab({
       role="separator"
       aria-label="שינוי גודל התיבה (רוחב וגובה)"
       title="גרור את הפינה לשינוי רוחב וגובה"
-      onPointerDown={onCornerPointerDown}
+      onPointerDown={(e) => onCornerPointerDown(e, place)}
     />
   ) : null;
 
@@ -1240,12 +1249,16 @@ export function TopicsTab({
       <div
         ref={splitRowRef}
         className={`${styles.splitRow} ${layout.stacked ? styles.splitRowStacked : ''} ${editLayout ? styles.splitRowEditing : ''}`}
-        style={layout.height ? { '--split-card-h': `${layout.height}px` } : undefined}
       >
       {showTopics && (
       <div
         className={styles.topicsCol}
-        style={layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${layout.ratio} 1 0` }}
+        style={{
+          // round251 — height is PER-BOX: the agenda column carries its own var,
+          // so resizing it never touches the triple box.
+          ...(layout.agendaHeight ? { '--split-card-h': `${layout.agendaHeight}px` } : null),
+          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${layout.ratio} 1 0` }),
+        }}
       >
       {/* round218 (approved mockup) — the topics live in an "אג'נדה" CARD
           symmetric to the triple box: same width/border/radius, a gray header
@@ -1458,7 +1471,7 @@ export function TopicsTab({
       )}
       </div>{/* .agendaBody */}
       </div>{/* .agendaBox */}
-      {renderHeightHandle()}
+      {renderHeightHandle('agenda')}
       {renderCornerHandle('agenda')}
       </div>
       )}
@@ -1487,7 +1500,12 @@ export function TopicsTab({
       {(showBackground || showReferences || showSummary) && (
       <div
         className={styles.refPanel}
-        style={layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${1 - layout.ratio} 1 0` }}
+        style={{
+          // round251 — the triple box carries its OWN height var, independent of
+          // the agenda box.
+          ...(layout.tripleHeight ? { '--split-card-h': `${layout.tripleHeight}px` } : null),
+          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${1 - layout.ratio} 1 0` }),
+        }}
       >
         <UpdatesTripleBox
           discussionId={discussion?.id}
@@ -1500,7 +1518,7 @@ export function TopicsTab({
           mentionPeople={mentionPeople}
           resetPaneNonce={paneResetNonce}
         />
-        {renderHeightHandle()}
+        {renderHeightHandle('triple')}
         {renderCornerHandle('triple')}
       </div>
       )}
