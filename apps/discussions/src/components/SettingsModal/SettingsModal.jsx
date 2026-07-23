@@ -625,7 +625,13 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // its box fills the whole app iframe, so the contained (card-pane-scoped)
   // overlay is dropped while that tab is active and the viewport-fixed overlay
   // takes over; every other tab keeps the contained behavior.
-  const overlayClass = `${styles.overlay} ${contained && activeTab !== 3 ? styles.overlayContained : ''}`;
+  // round258 — the export template needs the FULL-SCREEN overlay (not the
+  // contained one). That's the system export tab (3) AND the Templates tab (2)
+  // while its type editor is on the "תבנית ייצוא" sub-tab. Without lifting the
+  // contained overlay here, .modalExport is applied but the overlay still
+  // clamps the modal small (owner: "עדיין מאוד קטן").
+  const exportWide = activeTab === 3 || (activeTab === 2 && templatesExportWide);
+  const overlayClass = `${styles.overlay} ${contained && !exportWide ? styles.overlayContained : ''}`;
 
   // round147 — templates-only mode: a super member ("חבר-על") opens the gear to
   // manage templates and NOTHING else — no mapping, no preferences, no
@@ -700,7 +706,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       if (e.target === e.currentTarget) onClose();
     }}>
       <div
-        className={`${styles.modal} ${activeTab <= 2 && !(activeTab === 2 && templatesExportWide) ? styles.modalFixed : ''} ${activeTab === 3 || (activeTab === 2 && templatesExportWide) ? styles.modalExport : ''} ${activeTab === 4 ? styles.modalWide : ''}`}
+        className={`${styles.modal} ${activeTab <= 2 && !exportWide ? styles.modalFixed : ''} ${exportWide ? styles.modalExport : ''} ${activeTab === 4 ? styles.modalWide : ''}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
