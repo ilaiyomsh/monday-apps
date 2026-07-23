@@ -25,6 +25,9 @@ export function useBackground(discussionId) {
   const [saveErrorCode, setSaveErrorCode] = useState(null);
   const [meta, setMeta] = useState({ author: null, updatedAt: null });
   const updateIdRef = useRef(null);
+  // round270 — the box's update id, mirrored into state so the documents bar
+  // (which attaches files to THIS update) re-renders when it resolves/creates.
+  const [updateId, setUpdateId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,6 +41,7 @@ export function useBackground(discussionId) {
       }
       setLoading(true);
       updateIdRef.current = null;
+      setUpdateId(null);
       try {
         const storedId = await loadBackgroundUpdateId(discussionId);
         if (cancelled) return;
@@ -53,6 +57,7 @@ export function useBackground(discussionId) {
 
         if (update) {
           updateIdRef.current = String(update.id);
+          setUpdateId(String(update.id));
           setHtml(toEditorHtml(update.body || ''));
           setMeta({
             author: update.creator?.name || null,
@@ -103,6 +108,7 @@ export function useBackground(discussionId) {
       }
 
       updateIdRef.current = String(update.id);
+      setUpdateId(String(update.id));
       await saveBackgroundUpdateId(discussionId, update.id);
       setHtml(toEditorHtml(update.body ?? body));
       setMeta({
@@ -124,6 +130,26 @@ export function useBackground(discussionId) {
     }
   }, [discussionId]);
 
+  // round270 — create the box's update on demand so a document can attach even
+  // before any text was saved. A single space keeps the body non-empty (monday
+  // requires one); the next text save overwrites it in place. Returns the update
+  // id (existing or freshly created), or null on failure.
+  const ensureUpdate = useCallback(async () => {
+    if (updateIdRef.current) return updateIdRef.current;
+    if (!discussionId) return null;
+    try {
+      const update = await createUpdate(discussionId, ' ');
+      if (!update) return null;
+      updateIdRef.current = String(update.id);
+      setUpdateId(String(update.id));
+      await saveBackgroundUpdateId(discussionId, update.id);
+      return updateIdRef.current;
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('useBackground', 'יצירת עדכון הרקע לצירוף מסמך נכשלה', err);
+      return null;
+    }
+  }, [discussionId]);
+
   return {
     html,
     loading,
@@ -132,6 +158,8 @@ export function useBackground(discussionId) {
     author: meta.author,
     updatedAt: meta.updatedAt,
     save,
+    updateId,
+    ensureUpdate,
   };
 }
 

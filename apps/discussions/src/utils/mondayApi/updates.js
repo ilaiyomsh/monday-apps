@@ -58,6 +58,38 @@ export async function getItemUpdate(itemId, updateId) {
   return data?.items?.[0]?.updates?.[0] ?? null;
 }
 
+/**
+ * round270 — list the files (assets) attached to ONE update of an item, for the
+ * triple-box "מסמכים" bar. Documents live ON the update itself (owner model B):
+ * a client-side `add_file_to_update` puts them there, and `update.assets` reads
+ * them back — both plain seamless-scope operations, no token.
+ * @returns {Promise<Array<{assetId:string,name:string,url:string|null,extension:string|null}>>}
+ *          [] when there is no update, it has no files, or on failure.
+ */
+export async function getUpdateFiles(itemId, updateId) {
+  if (!itemId || !updateId) return [];
+  const data = await api(
+    `query ($itemIds: [ID!], $updateIds: [ID!]) {
+       items(ids: $itemIds) {
+         id
+         updates(ids: $updateIds, limit: 1) {
+           id
+           assets { id name url public_url file_extension }
+         }
+       }
+     }`,
+    { itemIds: [String(itemId)], updateIds: [String(updateId)] },
+    'getUpdateFiles'
+  );
+  const assets = data?.items?.[0]?.updates?.[0]?.assets || [];
+  return assets.map((a) => ({
+    assetId: String(a.id),
+    name: a.name || 'קובץ',
+    url: a.public_url || a.url || null,
+    extension: a.file_extension || null,
+  }));
+}
+
 /** Delete an update by id. Returns the deleted Update or null. */
 export async function deleteUpdate(updateId) {
   const data = await api(

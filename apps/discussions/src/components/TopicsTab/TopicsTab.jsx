@@ -552,6 +552,8 @@ export function TopicsTab({
   canEditBackground = false,
   canEditReferences = false,
   canEditSummary = false,
+  // round270 — who may add documents in the triple box (creator/coord/lead/owner).
+  canAttachDocuments = false,
   // round205 — owner-configurable component visibility (Settings → העדפות):
   // the topic tables and each triple-box pane can be hidden per instance.
   // round206 added showSummary (the summary moved into the triple box).
@@ -1505,6 +1507,7 @@ export function TopicsTab({
       >
         <UpdatesTripleBox
           discussionId={discussion?.id}
+          canAttach={canAttachDocuments}
           canEditBackground={canEditBackground}
           canEditReferences={canEditReferences}
           canEditSummary={canEditSummary}

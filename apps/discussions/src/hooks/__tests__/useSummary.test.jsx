@@ -99,4 +99,21 @@ describe('useSummary save', () => {
     await act(async () => { ok = await result.current.save('<p>x</p>'); });
     expect(ok).toBe(false);
   });
+
+  it('round270 — ensureUpdate creates the box update ONCE, exposes its id, and reuses it', async () => {
+    createUpdate.mockResolvedValue(update({ id: 'NEW' }));
+    const { result } = await mounted();
+
+    let id;
+    await act(async () => { id = await result.current.ensureUpdate(); });
+    expect(id).toBe('NEW');
+    expect(createUpdate).toHaveBeenCalledTimes(1);
+    expect(saveSummaryUpdateId).toHaveBeenCalledWith('D1', 'NEW');
+    expect(result.current.updateId).toBe('NEW');
+
+    // a second call must REUSE the id, never create a duplicate update.
+    await act(async () => { id = await result.current.ensureUpdate(); });
+    expect(id).toBe('NEW');
+    expect(createUpdate).toHaveBeenCalledTimes(1);
+  });
 });
