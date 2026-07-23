@@ -622,3 +622,26 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 .subTabActive:hover { color: var(--primary-color, #0073ea); }
+
+/* round272 — MOBILE scope toggle in the view header: "המשימות שלי" (right,
+   default) ⇄ "משימות של אחרים" (left). Reuses the .subTab/.subTabActive button
+   look; the container is tuned for the narrow header row. */
+.scopeToggleMobile {
+  flex: 1 1 auto;
+  min-width: 0;
+  direction: rtl;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  height: 34px;
+  box-sizing: border-box;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.scopeToggleMobile .subTab {
+  flex: 1 1 0;
+  justify-content: center;
+  padding: 0 10px;
+  font-size: 13px;
+}

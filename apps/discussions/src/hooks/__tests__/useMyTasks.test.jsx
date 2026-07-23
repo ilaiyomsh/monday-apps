@@ -70,7 +70,7 @@ vi.mock('../../utils/mondayApi/monday-client.js', () => ({
   cvSelection: vi.fn(() => 'id'),
 }));
 
-import { useMyTasks, buildMyTasksWhere, resolveUserId } from '../useMyTasks.js';
+import { useMyTasks, buildMyTasksWhere, resolveUserId, isUserResponsible } from '../useMyTasks.js';
 import { writeViewCache, makeViewCacheKey } from '../../utils/viewCache.js';
 
 const page = (items, cursor = null) => ({ items, cursor });
@@ -113,6 +113,21 @@ describe('buildMyTasksWhere', () => {
   });
   it('omits empty search', () => {
     expect(buildMyTasksWhere({ userId: '42', search: '   ' })).toEqual({ responsibilityID: '42' });
+  });
+});
+
+describe('isUserResponsible (round272 — "משימות של אחרים" filter)', () => {
+  it('is true when the user is among the responsibility people (id type-tolerant)', () => {
+    expect(isUserResponsible({ responsibilityID: [{ id: '5' }, { id: '7' }] }, '7')).toBe(true);
+    // number id vs string userId, and string id vs number userId — both coerced.
+    expect(isUserResponsible({ responsibilityID: [{ id: 7 }] }, '7')).toBe(true);
+    expect(isUserResponsible({ responsibilityID: [{ id: '9' }] }, 9)).toBe(true);
+  });
+  it('is false when the user is absent, the column is empty/missing, or no userId', () => {
+    expect(isUserResponsible({ responsibilityID: [{ id: '5' }] }, '7')).toBe(false);
+    expect(isUserResponsible({ responsibilityID: [] }, '7')).toBe(false);
+    expect(isUserResponsible({}, '7')).toBe(false);
+    expect(isUserResponsible({ responsibilityID: [{ id: '7' }] }, null)).toBe(false);
   });
 });
 
