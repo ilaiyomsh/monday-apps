@@ -72,10 +72,11 @@
   display: flex;
   align-items: flex-start;
   gap: 24px;
-  /* round234 — ONE shared card height drives BOTH boxes (agenda + triple), so
-     they are always pixel-identical twins: same top, same bottom, same bands.
-     Fills most of the iframe viewport, never below a usable floor; long content
-     scrolls INSIDE each card instead of growing it. */
+  /* --split-card-h is the DEFAULT card height, inherited by both columns; it
+     fills most of the iframe viewport, never below a usable floor, and long
+     content scrolls INSIDE each card instead of growing it. round251 — each
+     column (.topicsCol / .refPanel) may OVERRIDE this var inline with its own
+     saved height, so the two boxes resize independently. */
   --split-card-h: max(520px, calc(100vh - 280px));
 }
 .topicsCol {
