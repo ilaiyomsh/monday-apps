@@ -68,7 +68,17 @@ describe('sanitizeTypeTemplate', () => {
       coordinator: [{ id: 12, kind: 'person', name: 'מרכז' }],
       participants: [{ id: 11, kind: 'person', name: 'א' }],
       deciderIsLead: false, // item 18 — defaults off unless explicitly true
+      exportTemplate: null, // round254 — no per-type export template ⇒ null (system default)
     });
+  });
+
+  it('round254 — keeps a per-type export template object, rejects non-objects', () => {
+    const exp = { defaultFormat: 'docx', sections: [{ key: 'meta', enabled: true }] };
+    expect(sanitizeTypeTemplate({ discussionType: 'סוג', exportTemplate: exp }, 'id').exportTemplate).toEqual(exp);
+    // arrays / primitives / missing ⇒ null (fall back to the system default)
+    expect(sanitizeTypeTemplate({ discussionType: 'סוג', exportTemplate: [1, 2] }, 'id').exportTemplate).toBeNull();
+    expect(sanitizeTypeTemplate({ discussionType: 'סוג', exportTemplate: 'x' }, 'id').exportTemplate).toBeNull();
+    expect(sanitizeTypeTemplate({ discussionType: 'סוג' }, 'id').exportTemplate).toBeNull();
   });
 
   it('requires a non-empty type text; empty/missing returns null (dropped)', () => {
