@@ -3,6 +3,7 @@ import { api, parseValue, cvSelection } from '../../utils/mondayApi/monday-clien
 import { getColumns } from '../../utils/mondayApi/board-config-store.js';
 import { משימות1Board, דיונים1Board } from '@api/BoardSDK.js';
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions';
+import { pickLatestPreviousId } from './previousScope.js';
 import logger from '@generated/utils/logger.js';
 
 // Map a linked task item (from the discussion-side relation query) into the
@@ -31,7 +32,7 @@ function mapTaskItems(linkedItems = [], taskColumns = {}) {
  * the exact points the tab used to clear its multi-selection (discussion
  * switch / type re-resolution).
  */
-export function usePreviousTasksData(discussion, byType, { onResetSelection } = {}) {
+export function usePreviousTasksData(discussion, byType, { onResetSelection, scope = 'all' } = {}) {
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [previousDiscussionID, setPreviousDiscussion] = useState({ id: null, name: null });
@@ -227,11 +228,13 @@ export function usePreviousTasksData(discussion, byType, { onResetSelection } = 
     return () => { cancelled = true; };
   }, [previousDiscussionId, byType]);
 
-  // By-type tasks loader: server-side filter the TASKS board by taskTypeID =
-  // the current discussion's mapped type label id (BoardSDK formats the status
-  // any_of rule). Returns ALL tasks of that type across discussions.
+  // By-type tasks loader — scope='all' ("כל הדיונים הקודמים"): server-side filter
+  // the TASKS board by taskTypeID = the current discussion's mapped type label id
+  // (BoardSDK formats the status any_of rule). Returns ALL tasks of that type
+  // across discussions. (round274 — the scope='last' path loads only the most
+  // recent previous occurrence instead; see the effect below.)
   useEffect(() => {
-    if (!byType) return;
+    if (!byType || scope === 'last') return;
     const taskTypeId = typeFilter.taskTypeId;
     if (taskTypeId == null) { setTasks([]); return; }
     let cancelled = false;
@@ -255,7 +258,62 @@ export function usePreviousTasksData(discussion, byType, { onResetSelection } = 
 
     load();
     return () => { cancelled = true; };
-  }, [byType, typeFilter.taskTypeId]);
+  }, [byType, typeFilter.taskTypeId, scope]);
+
+  // round274 — by-type tasks loader, scope='last' ("הפעם האחרונה"): find the MOST
+  // RECENT previous discussion sharing this type, then read ITS tasks off the
+  // tasksBoardLinkID relation (the same discussion-side read the linked mode uses).
+  // The default scope, so the tab opens on the latest occurrence, not everything.
+  useEffect(() => {
+    if (!byType || scope !== 'last') return;
+    const typeText = discussion?.discussionTypeID || null;
+    if (!typeText || !discussion?.id) { setTasks([]); return; }
+    let cancelled = false;
+
+    async function load() {
+      const discussionsColumns = getColumns('discussions');
+      const tasksBoardLinkId = discussionsColumns?.tasksBoardLinkID?.id;
+      const taskColumns = getColumns('tasks') || {};
+      const RENDERED = ['responsibilityID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID'];
+      const taskCols = RENDERED.map((alias) => taskColumns?.[alias]?.id).filter(Boolean);
+      const taskCv = cvSelection(RENDERED.map((alias) => taskColumns?.[alias]?.type));
+      if (!tasksBoardLinkId) { setTasks([]); return; }
+      try {
+        setTasksLoading(true);
+        // discussions sharing this type (id + date), pick the latest OTHER one.
+        const dres = await new דיונים1Board().items()
+          .withColumns(['discussionTypeID', 'discussionDateID'])
+          .withPagination({ limit: 200 })
+          .execute();
+        const sameType = (dres.items || []).filter((d) => d.discussionTypeID === typeText);
+        const lastId = pickLatestPreviousId(sameType, discussion.id);
+        if (!lastId) { if (!cancelled) setTasks([]); return; }
+        const data = await api(
+          `query ($discussionId: ID!, $relationCol: [String!], $taskCols: [String!]) {
+            items(ids: [$discussionId]) {
+              column_values(ids: $relationCol) {
+                ... on BoardRelationValue {
+                  linked_items { id name created_at column_values(ids: $taskCols) { ${taskCv} } }
+                }
+              }
+            }
+          }`,
+          { discussionId: String(lastId), relationCol: [tasksBoardLinkId], taskCols },
+          'PreviousTasksTab.loadLatestTypeTasks'
+        );
+        const linkedTasks = data?.items?.[0]?.column_values?.[0]?.linked_items || [];
+        if (!cancelled) setTasks(mapTaskItems(linkedTasks, taskColumns));
+      } catch (err) {
+        logger.error('PreviousTasksTab', 'Failed to load latest-occurrence tasks', err);
+        if (!cancelled) setTasks([]);
+      } finally {
+        if (!cancelled) setTasksLoading(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [byType, scope, discussion?.id, discussion?.discussionTypeID]);
 
   return {
     tasks, setTasks, tasksLoading,

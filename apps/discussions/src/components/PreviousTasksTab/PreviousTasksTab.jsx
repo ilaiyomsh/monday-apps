@@ -111,6 +111,12 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     mode === PREVIOUS_TASKS_MODES.DISCUSSION_TYPE
     || (mode === PREVIOUS_TASKS_MODES.AUTO && !!discussion?.discussionTypeID);
 
+  // round274 — by-type scope: 'last' ("הפעם האחרונה", default) shows only the most
+  // recent previous discussion of this type; 'all' ("כל הדיונים הקודמים") shows
+  // every occurrence. Meaningless in linked mode (a single previous discussion),
+  // so the toolbar shows the pill only when byType.
+  const [scope, setScope] = useState('last');
+
   // Data layer (round146 split): mode-resolved task list + previous-discussion
   // link/picker plumbing live in usePreviousTasksData; the optimistic update
   // handlers live in taskUpdaters.js. Behavior unchanged.
@@ -119,7 +125,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     resolving, picking, setPicking, discussionOptions, savingPrev, setPrevious,
     previousDiscussionId, previousDiscussionLabel,
     typeFilter, typeMapsLoading,
-  } = usePreviousTasksData(discussion, byType, { onResetSelection: () => setSelectedIds(new Set()) });
+  } = usePreviousTasksData(discussion, byType, { onResetSelection: () => setSelectedIds(new Set()), scope });
   const {
     updateName, updateStatus, updatePriority, updateAssignee, updateDeadline,
     updateStatusBatch, updateAssigneeBatch, updateDeadlineBatch,
@@ -559,6 +565,20 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
           <span className={styles.prevChipLabel}>{byType ? 'סוג דיון' : 'דיון קודם'}</span>
           <span className={styles.prevChipName}>{byType ? typeFilter.label : previousDiscussionLabel}</span>
         </div>
+        {/* round274 — by-type scope toggle, folded into the toolbar as a compact
+            pill (owner spec: one top row). Only shown in by-type mode. */}
+        {byType && (
+          <button
+            type="button"
+            className={styles.scopePill}
+            dir="rtl"
+            onClick={() => { setScope((s) => (s === 'last' ? 'all' : 'last')); setSelectedIds(new Set()); }}
+            title="החלפת טווח התצוגה בין הפעם האחרונה לכל הדיונים הקודמים"
+          >
+            טווח: <b>{scope === 'last' ? 'הפעם האחרונה' : 'כל הדיונים הקודמים'}</b>
+            <span className={styles.scopePillChev} aria-hidden="true">▾</span>
+          </button>
+        )}
         <div className={styles.toolbarActions} dir="ltr">
           <SearchPill value={search} onChange={setSearch} />
           <BuilderControl

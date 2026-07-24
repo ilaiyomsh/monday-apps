@@ -101,6 +101,25 @@
   white-space: nowrap;
 }
 
+/* round274 — the by-type scope toggle, folded into the toolbar as a compact
+   pill (Filter/Sort language). Click cycles הפעם האחרונה ⇄ כל הדיונים הקודמים. */
+.scopePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: 13.5px;
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+.scopePill:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.scopePill b { font-weight: 600; color: var(--primary-color, #0073ea); }
+.scopePillChev { opacity: 0.55; font-size: 11px; }
+
 /* Centered "no previous discussion" state with a picker. */
 .noPrevious {
   display: flex;
