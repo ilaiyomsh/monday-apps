@@ -994,7 +994,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
               <div className={`${styles.row} ${styles.rowSingle}`}>
                 <div className={styles.field}>
                   <Text type="text2" className={styles.label}>
-                    {getColumnTitle('discussions', 'externalParticipantsID') || 'משתתפים חיצוניים'}
+                    {/* round278 — always "משתתפים חיצוניים", matching DiscussionCard's
+                        hardcoded label (round238). The mapped monday column is titled
+                        "משתתפים", so deriving from its title showed the wrong (generic)
+                        name in the create/duplicate card. */}
+                    משתתפים חיצוניים
                   </Text>
                   <div className={styles.extPeopleBox}>
                     {externalParticipants.map((n, i) => (
