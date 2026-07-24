@@ -217,18 +217,24 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = fals
   // has documents, so an empty box keeps the text flush under the toolbar.
   const documentsBar = files.length > 0 ? (
     <div className={styles.docBar} dir="rtl">
-      {files.map((f) => (
+      {files.map((f) => {
+        // round284 fix — monday returns the asset `name` WITHOUT the extension
+        // (it lives in the separate `extension` field), so keying the type off
+        // `name` alone yielded a blank glyph for Word/Excel/PPT. Prefer the
+        // explicit extension; fall back to the name (which may carry a dotted ext).
+        const kindKey = f.extension || f.name;
+        return (
         <span key={f.assetId || f.name} className={styles.docItem}>
           <button
             type="button"
             className={styles.docIcon}
-            style={{ background: fileKindColor(f.name) }}
+            style={{ background: fileKindColor(kindKey) }}
             title={f.name}
             aria-label={`מסמך: ${f.name}`}
-            onClick={() => setPreview({ name: f.name, url: f.url })}
+            onClick={() => setPreview({ name: f.name, url: f.url, extension: f.extension })}
           >
             {/* round283 — the type glyph (W/X/PDF/P) on the colored square. */}
-            <span className={styles.docIconLabel}>{fileKindLabel(f.name)}</span>
+            <span className={styles.docIconLabel}>{fileKindLabel(kindKey)}</span>
           </button>
           {canAttach && (
             <button
@@ -243,7 +249,8 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = fals
             </button>
           )}
         </span>
-      ))}
+        );
+      })}
     </div>
   ) : null;
 
@@ -378,9 +385,9 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = fals
             <div className={styles.docPreviewBody}>
               {!preview.url ? (
                 <span className={styles.docPreviewNote}>הקובץ אינו זמין לתצוגה.</span>
-              ) : fileKind(preview.name) === 'image' ? (
+              ) : fileKind(preview.extension || preview.name) === 'image' ? (
                 <img src={preview.url} alt={preview.name} className={styles.docPreviewImg} />
-              ) : fileKind(preview.name) === 'pdf' ? (
+              ) : fileKind(preview.extension || preview.name) === 'pdf' ? (
                 <iframe title={preview.name} src={preview.url} className={styles.docPreviewFrame} />
               ) : (
                 <span className={styles.docPreviewNote}>אין תצוגה מקדימה לסוג קובץ זה — לחצו על "הורדה".</span>
