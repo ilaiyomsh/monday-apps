@@ -1744,6 +1744,58 @@
 .docPreviewFrame { width: 100%; height: 70vh; border: none; background: #fff; }
 .docPreviewNote { color: var(--secondary-text-color, #676879); font-size: 13.5px; padding: 24px; text-align: center; }
 
+/* round285 — compact download popup that REPLACES the inline preview: a small
+   centered card with the file-type glyph, the name, and one download button. */
+.docDownloadCard {
+  position: relative;
+  width: min(360px, 92vw);
+  background: var(--primary-background-color, #fff);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 30px 26px 26px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+.docDownloadCard .docPreviewClose { position: absolute; top: 8px; inset-inline-start: 8px; }
+.docDownloadIcon {
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 18px;
+  direction: ltr;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+.docDownloadName {
+  font-weight: 700;
+  font-size: 14.5px;
+  color: var(--primary-text-color, #323338);
+  word-break: break-word;
+  max-width: 100%;
+}
+.docDownloadBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+  text-decoration: none;
+  border-radius: 9px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+.docDownloadBtn:hover { filter: brightness(0.96); }
+
 /* round271 — per-icon delete affordance (× on hover) + all-files delete confirm.
    monday has no per-file delete on an update, so removing clears the whole box. */
 .docItem {

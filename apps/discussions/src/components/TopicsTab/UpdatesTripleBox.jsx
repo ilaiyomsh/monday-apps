@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { Check, Loader2, AlertCircle, Paperclip, Plus, X, Link2, Download } from 'lucide-react';
-import { fileKind, fileKindColor, fileKindLabel } from '@generated/utils/fileKind.js';
+import { fileKindColor, fileKindLabel } from '@generated/utils/fileKind.js';
 import { useBackground } from '@generated/hooks/useBackground.js';
 import { useReferences } from '@generated/hooks/useReferences.js';
 import { useSummary } from '@generated/hooks/useSummary.js';
@@ -362,37 +362,33 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = fals
         </div>
       )}
 
-      {/* round268 — document preview overlay: image/PDF render inline; other types
-          show a download-only fallback. Either way there's a הורדה button. */}
+      {/* round285 (owner request) — clicking a document no longer renders an
+          inline preview (the empty preview area for xlsx/word looked bad). It
+          opens a COMPACT popup: the file-type glyph + name + a single download
+          button. */}
       {preview && (
         <div
           className={styles.docPreviewOverlay}
           dir="rtl"
           onClick={(e) => { if (e.target === e.currentTarget) setPreview(null); }}
         >
-          <div className={styles.docPreview} role="dialog" aria-modal="true" aria-label={`תצוגה מקדימה: ${preview.name}`}>
-            <div className={styles.docPreviewHead}>
-              <span className={styles.docPreviewName} title={preview.name}>{preview.name}</span>
-              <span className={styles.docPreviewActions}>
-                {preview.url && (
-                  <a className={styles.docDownload} href={preview.url} target="_blank" rel="noreferrer" download>
-                    <Download size={15} /> הורדה
-                  </a>
-                )}
-                <button type="button" className={styles.docPreviewClose} onClick={() => setPreview(null)} aria-label="סגירה">×</button>
-              </span>
-            </div>
-            <div className={styles.docPreviewBody}>
-              {!preview.url ? (
-                <span className={styles.docPreviewNote}>הקובץ אינו זמין לתצוגה.</span>
-              ) : fileKind(preview.extension || preview.name) === 'image' ? (
-                <img src={preview.url} alt={preview.name} className={styles.docPreviewImg} />
-              ) : fileKind(preview.extension || preview.name) === 'pdf' ? (
-                <iframe title={preview.name} src={preview.url} className={styles.docPreviewFrame} />
-              ) : (
-                <span className={styles.docPreviewNote}>אין תצוגה מקדימה לסוג קובץ זה — לחצו על "הורדה".</span>
-              )}
-            </div>
+          <div className={styles.docDownloadCard} role="dialog" aria-modal="true" aria-label={`הורדת מסמך: ${preview.name}`}>
+            <button type="button" className={styles.docPreviewClose} onClick={() => setPreview(null)} aria-label="סגירה">×</button>
+            <span
+              className={styles.docDownloadIcon}
+              style={{ background: fileKindColor(preview.extension || preview.name) }}
+              aria-hidden="true"
+            >
+              {fileKindLabel(preview.extension || preview.name)}
+            </span>
+            <span className={styles.docDownloadName} title={preview.name}>{preview.name}</span>
+            {preview.url ? (
+              <a className={styles.docDownloadBtn} href={preview.url} target="_blank" rel="noreferrer" download>
+                <Download size={16} /> הורדת הקובץ
+              </a>
+            ) : (
+              <span className={styles.docPreviewNote}>הקובץ אינו זמין להורדה.</span>
+            )}
           </div>
         </div>
       )}
