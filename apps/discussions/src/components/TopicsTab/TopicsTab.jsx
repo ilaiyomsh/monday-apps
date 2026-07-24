@@ -24,6 +24,7 @@ import { useTopics } from '@generated/hooks/useTopics';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
+import { EmptyState } from '@generated/components/EmptyState';
 import { UpdatesTripleBox } from './UpdatesTripleBox.jsx';
 import { computeRibbonDropTarget } from './ribbonDrop.js';
 import { buildMentionRoster } from '@generated/utils/mention.js';
@@ -1465,7 +1466,7 @@ export function TopicsTab({
       )}
 
       {items.length === 0 && !addWhere && (
-        <div className={styles.empty}>אין נושאים לדיון זה</div>
+        <EmptyState>אין נושאים לדיון זה</EmptyState>
       )}
       </div>{/* .agendaBody */}
       </div>{/* .agendaBox */}

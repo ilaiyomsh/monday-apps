@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Skeleton, Button, Checkbox } from '@vibe/core';
 import { DropdownChevronDown, Filter } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
+import { EmptyState } from '@generated/components/EmptyState';
 import { useColumnOrder } from '@generated/hooks/useColumnOrder.js';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -396,7 +397,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   if (!boardMapped) {
     return (
       <div className={styles.decisionsRoot}>
-        <div className={styles.decEmptyState}>לוח ההחלטות טרם הוגדר — מפו אותו בהגדרות</div>
+        <EmptyState>לוח ההחלטות טרם הוגדר — מפו אותו בהגדרות</EmptyState>
       </div>
     );
   }
@@ -664,7 +665,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
 
       <div className={styles.decBoard}>
         {items.length === 0 && !canCreateDecision ? (
-          <div className={styles.decEmptyRow}>אין החלטות עדיין</div>
+          <EmptyState>אין החלטות עדיין</EmptyState>
         ) : !isGrouped ? (
           renderDecisionTable(filteredDecisions, true, `${groupBy}_all`)
         ) : (

@@ -195,12 +195,6 @@
   gap: 28px;
 }
 
-.emptyState {
-  text-align: center;
-  padding-top: var(--spacing-xl, 48px);
-  padding-bottom: var(--spacing-xl, 48px);
-}
-
 .groupHeader {
   display: flex;
   align-items: center;

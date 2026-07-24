@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, IconButton } from '@vibe/core';
 import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall, Add } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
+import { EmptyState } from '@generated/components/EmptyState';
 import { ArrowLeft } from 'lucide-react';
 import { useMyTasks } from '@generated/hooks/useMyTasks.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
@@ -843,10 +844,10 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       ) : error ? (
         <div className={styles.empty}>{t('myTasks.error')}</div>
       ) : (items.length === 0 && !creatingNew) ? (
-        <div className={styles.empty}>
-          <div className={styles.emptyTitle}>{t('myTasks.empty')}</div>
+        <EmptyState>
+          {t('myTasks.empty')}
           <div className={styles.emptyHint}>{t('myTasks.emptyHint')}</div>
-        </div>
+        </EmptyState>
       ) : (
         <div className={styles.groupScrollInner}>
           <div className={styles.groupStack}>

@@ -4,6 +4,7 @@ import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscuss
 import { Button, Text, IconButton } from '@vibe/core';
 import { CloseSmall, Search } from '@vibe/icons';
 import { HighlightedText } from '@generated/components/HighlightedText';
+import { EmptyState } from '@generated/components/EmptyState';
 import { PersonAvatar } from '@generated/components/PersonAvatar';
 import { Calendar, Check, ChevronLeft, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Plus, Settings, Trash2, X } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
@@ -729,9 +730,7 @@ export function DiscussionList({
           // empty area (NO branded splash) while it settles — never the animation.
           <div className={styles.listLoading} aria-hidden="true" />
         ) : items.length === 0 ? (
-          <div className={styles.empty}>
-            <Text color={"secondary"}>לא נמצאו דיונים</Text>
-          </div>
+          <EmptyState>לא נמצאו דיונים</EmptyState>
         ) : (
           <div className={styles.list}>
             {items.map((item, idx) => {

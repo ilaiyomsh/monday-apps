@@ -99,16 +99,120 @@ function mergeColumnsWithSchema(stored) {
 // Column-type sections for the mapping screen (discussions + tasks). Fields are
 // bucketed by their monday column TYPE into ordered sections, each with a Hebrew
 // header. A field whose type matches no section falls into the trailing "אחר".
+// round280 — ordered + titled to match the APPROVED master–detail mockup: this
+// is now the rail's TYPE-FOLDER order and the folder Hebrew names. A checkbox
+// ("סימונים") group was added (topics carries checkbox fields that previously
+// fell into "אחר"). Consumed only by the mapping tab.
 const COLUMN_TYPE_GROUPS = [
   { key: 'people', title: 'אנשים', types: ['people', 'person', 'multiple_person'] },
+  { key: 'status', title: 'סטטוסים', types: ['status', 'color'] },
+  { key: 'dropdown', title: 'רשימות נפתחות', types: ['dropdown'] },
   { key: 'date', title: 'תאריכים', types: ['date'] },
-  { key: 'status', title: 'סטטוס', types: ['status', 'color'] },
-  { key: 'dropdown', title: 'רשימה נפתחת', types: ['dropdown'] },
-  { key: 'relation', title: 'חיבורי לוחות', types: ['board_relation', 'connect_boards'] },
-  { key: 'file', title: 'קבצים', types: ['file'] },
+  { key: 'relation', title: 'קישורי לוחות', types: ['board_relation', 'connect_boards'] },
   { key: 'text', title: 'טקסט', types: ['text', 'long_text'] },
-  { key: 'formula', title: 'נוסחאות ושיקופים', types: ['formula', 'mirror', 'lookup'] },
+  { key: 'checkbox', title: 'סימונים', types: ['checkbox', 'boolean'] },
+  { key: 'file', title: 'קבצים', types: ['file'] },
+  { key: 'formula', title: 'שדות מחושבים', types: ['formula', 'mirror', 'lookup'] },
 ];
+
+// Per-folder presentation metadata (accent hue + glyph) for the mapping rail /
+// detail header — copied from the approved mockup's `I{…}` icon map and `--t-*`
+// hues. `other` is the trailing fallback bucket's presentation.
+const TYPE_META = {
+  people: { hue: 'people', icon: 'people' },
+  status: { hue: 'status', icon: 'status' },
+  dropdown: { hue: 'dropdown', icon: 'dropdown' },
+  date: { hue: 'date', icon: 'date' },
+  relation: { hue: 'relation', icon: 'relation' },
+  text: { hue: 'text', icon: 'text' },
+  checkbox: { hue: 'checkbox', icon: 'checkbox' },
+  file: { hue: 'file', icon: 'file' },
+  formula: { hue: 'computed', icon: 'computed' },
+  other: { hue: 'computed', icon: 'text' },
+};
+
+// Inline type-glyph paths (24×24, currentColor stroke) — verbatim from the
+// approved mockup so the rail/detail icons match it exactly.
+const TYPE_ICON_PATHS = {
+  people: (
+    <>
+      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 6.2a3 3 0 0 1 0 5.6M17.5 19a5.5 5.5 0 0 0-3-4.9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </>
+  ),
+  date: (
+    <>
+      <rect x="4" y="5.5" width="16" height="14" rx="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M4 9.5h16M8 3.5v4M16 3.5v4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </>
+  ),
+  status: (
+    <>
+      <circle cx="12" cy="12" r="7.2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8.5 12.2l2.4 2.3 4.6-4.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  dropdown: (
+    <>
+      <rect x="4" y="6" width="16" height="12" rx="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8.5 11l3.5 3 3.5-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  relation: (
+    <path d="M10 14a3.5 3.5 0 0 0 5 0l2.5-2.5a3.5 3.5 0 0 0-5-5L11 8M14 10a3.5 3.5 0 0 0-5 0l-2.5 2.5a3.5 3.5 0 0 0 5 5L13 16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  ),
+  text: (
+    <path d="M5 7h14M5 12h14M5 17h9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  ),
+  checkbox: (
+    <>
+      <rect x="4.5" y="4.5" width="15" height="15" rx="3.2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8.5 12l2.4 2.3 4.6-4.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  file: (
+    <path d="M13 4H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9l-6-5ZM13 4v5h6" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+  ),
+  computed: (
+    <path d="M7 5h10L11 12l6 7H7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  ),
+};
+
+function TypeIcon({ name, size = 19 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      {TYPE_ICON_PATHS[name] || TYPE_ICON_PATHS.text}
+    </svg>
+  );
+}
+
+// Compact circular progress ring (mapped/total) — inline SVG with a
+// stroke-dasharray arc, exactly like the mockup. 30×30, r=12.
+function ProgressRing({ frac, color, label }) {
+  const r = 12;
+  const circ = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(1, frac || 0));
+  const off = circ * (1 - clamped);
+  return (
+    <span className={styles.mapRing}>
+      <svg width="30" height="30" viewBox="0 0 30 30">
+        <circle cx="15" cy="15" r={r} fill="none" stroke="var(--ui-border-color, #e6e9ef)" strokeWidth="3.4" />
+        <circle
+          cx="15"
+          cy="15"
+          r={r}
+          fill="none"
+          stroke={color}
+          strokeWidth="3.4"
+          strokeLinecap="round"
+          strokeDasharray={circ.toFixed(1)}
+          strokeDashoffset={off.toFixed(1)}
+        />
+      </svg>
+      <span className={styles.mapRingNum}>{label}</span>
+    </span>
+  );
+}
 
 // Which section a column type belongs to (falls back to a trailing "אחר").
 function typeGroupKey(type) {
@@ -182,7 +286,12 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   const [activeTab, setActiveTab] = useState(0); // 0 = מיפוי, 1 = העדפות, 2 = תבניות, 3 = תבנית ייצוא, 4 = הרשאות, 5 = מדדי שימוש
   // round256 — the Templates tab (2) widens to the export size while its type
   // editor is on the "תבנית ייצוא" sub-tab (TemplateManagerModal reports this).
-  const [openBoardKey, setOpenBoardKey] = useState(null);
+  // round280 — master–detail mapping UI: the selected board tab and the selected
+  // type-folder in the rail, plus a field-title search. `null` folder ⇒ default
+  // to the first non-empty folder (resolved at render, never via setState-in-render).
+  const [selectedBoardKey, setSelectedBoardKey] = useState('discussions');
+  const [selectedFolderKey, setSelectedFolderKey] = useState(null);
+  const [mapQuery, setMapQuery] = useState('');
   const [boardOptions, setBoardOptions] = useState([]);
   const [loadingBoards, setLoadingBoards] = useState(false);
   const [columnsByBoardId, setColumnsByBoardId] = useState({});
@@ -209,7 +318,9 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       loadExportAssets(context)
         .then(setExportAssets)
         .catch((err) => logger.warn('SettingsModal', 'טעינת נכסי הייצוא נכשלה', err));
-      setOpenBoardKey(null);
+      setSelectedBoardKey('discussions');
+      setSelectedFolderKey(null);
+      setMapQuery('');
     }
   }, [isOpen, settings, context]);
 
@@ -616,6 +727,52 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     }
   };
 
+  // round280 — mapping master–detail view model. These read the same `columns`
+  // draft + alias lists the accordion used, so persistence is untouched.
+  const settingsFieldsFor = (boardKey) =>
+    boardKey === 'discussions'
+      ? DISCUSSIONS_SETTINGS_FIELDS
+      : boardKey === 'tasks'
+        ? TASKS_SETTINGS_FIELDS
+        : boardKey === 'topics'
+          ? TOPICS_SETTINGS_FIELDS
+          : boardKey === 'decisions'
+            ? DECISIONS_SETTINGS_FIELDS
+            : Object.keys(columns?.[boardKey] || {});
+
+  const entriesFor = (boardKey) =>
+    settingsFieldsFor(boardKey)
+      .map((alias) => [alias, columns?.[boardKey]?.[alias]])
+      .filter(([, col]) => Boolean(col));
+
+  // A field counts as "mapped" when it has a real column id (multi-people aliases
+  // also count when any of their ids is set) — mirrors the mockup's ring math.
+  const aliasMapped = (alias, col) => {
+    if (MULTI_PEOPLE_ALIASES.has(alias)) {
+      return (Array.isArray(col?.ids) && col.ids.length > 0) || Boolean(String(col?.id || '').trim());
+    }
+    return Boolean(String(col?.id || '').trim());
+  };
+
+  // Group a board's entries into ordered, non-empty type folders (trailing "אחר").
+  const foldersFor = (boardKey) => {
+    const entries = entriesFor(boardKey);
+    const groups = [...COLUMN_TYPE_GROUPS, { key: 'other', title: 'אחר', types: [] }];
+    return groups
+      .map((g) => ({
+        key: g.key,
+        title: g.title,
+        entries: entries.filter(([, col]) => typeGroupKey(col.type) === g.key),
+      }))
+      .filter((f) => f.entries.length > 0);
+  };
+
+  const folderCounts = (folderEntries) => {
+    const total = folderEntries.length;
+    const mapped = folderEntries.filter(([alias, col]) => aliasMapped(alias, col)).length;
+    return { total, mapped, full: total > 0 && mapped === total };
+  };
+
   if (!isOpen) return null;
 
   // round178 — `contained` scopes the overlay to the right discussion-card pane
@@ -735,69 +892,27 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
             </TabList>
             <TabPanels className={styles.tabPanels}>
               <TabPanel className={styles.tabPanelFill}>
-          {/* round247 — the מיפוי panel is full RTL (owner request). */}
-          <div className={styles.body} dir="rtl">
-            {/* Post-install entry to the config-aware SetupWizard. Shown only when
-                the instance is already configured (never in the first-run forced
-                modal, which has the wizard as its landing screen). */}
-            {isConfigured && (
-              <div className={styles.topupEntry}>
-                <div className={styles.topupText}>
-                  <Text type={"text2"} weight={"medium"}>הוספת / השלמת לוחות ועמודות</Text>
-                  <Text type={"text3"} color={"secondary"}>
-                    יצירת לוחות שחסרים והשלמת עמודות חסרות — בלי לפגוע במיפוי הקיים.
-                  </Text>
-                </div>
-                <Button kind={"secondary"} size={"small"} onClick={() => setShowTopUp(true)}>
-                  פתיחת האשף
-                </Button>
-              </div>
-            )}
-            {Object.keys(boards || {}).map((boardKey) => (
-              <div key={boardKey} className={styles.board}>
-                <button
-                  type="button"
-                  className={styles.accordionHeader}
-                  onClick={() => setOpenBoardKey((prev) => (prev === boardKey ? null : boardKey))}
-                >
-                  <span className={styles.accordionTitle}>{BOARD_ROLE_TITLES[boardKey] || boardKey}</span>
-                  <span
-                    className={`${styles.accordionChevron} ${openBoardKey === boardKey ? styles.accordionChevronOpen : ''}`}
-                    aria-hidden="true"
-                  >
-                    ▾
-                  </span>
-                </button>
+          {/* round280 — master–detail mapping (approved mockup). Board tabs +
+              global ring on top; a type-folder rail on the right; the selected
+              folder's dense field rows on the left. `renderRow` and the whole
+              persistence model (columns/setColId/addMultiColId/handleSave) are
+              reused verbatim — only the layout around them changed. */}
+          <div className={styles.mapShell} dir="rtl">
+            {(() => {
+              const boardKeys = Object.keys(boards || {});
+              const boardKey = boardKeys.includes(selectedBoardKey)
+                ? selectedBoardKey
+                : (boardKeys[0] || 'discussions');
+              const entries = entriesFor(boardKey);
+              const ownBoardId = String(boards?.[boardKey]?.id || '');
+              const folders = foldersFor(boardKey);
+              const activeFolderKey = folders.some((f) => f.key === selectedFolderKey)
+                ? selectedFolderKey
+                : (folders[0]?.key || null);
+              const query = mapQuery.trim().toLowerCase();
+              const gCounts = folderCounts(entries);
 
-                {openBoardKey === boardKey && (
-                  <div className={styles.accordionContent}>
-                    <div className={styles.boardId}>
-                      <Text type={"text3"} color={"secondary"}>לוח</Text>
-                      <SearchablePicker
-                        options={boardOptions.map((option) => ({ id: option.value, name: option.label }))}
-                        value={String(boards[boardKey].id || '')}
-                        onChange={(id) => setBoardId(boardKey, id)}
-                        placeholder={loadingBoards ? 'טוען לוחות' : 'חפש ובחר לוח'}
-                        isLoading={loadingBoards}
-                        disabled={loadingBoards}
-                      />
-                    </div>
-                    <div className={styles.cols}>
-                      {(() => {
-                        const aliases = boardKey === 'discussions'
-                          ? DISCUSSIONS_SETTINGS_FIELDS
-                          : boardKey === 'tasks'
-                            ? TASKS_SETTINGS_FIELDS
-                            : boardKey === 'topics'
-                              ? TOPICS_SETTINGS_FIELDS
-                              : boardKey === 'decisions'
-                                ? DECISIONS_SETTINGS_FIELDS
-                                : Object.keys(columns?.[boardKey] || {});
-                        const entries = aliases
-                          .map((alias) => [alias, columns?.[boardKey]?.[alias]])
-                          .filter(([, col]) => Boolean(col));
-                        const ownBoardId = String(boards?.[boardKey]?.id || '');
-                        const renderRow = ([alias, col]) => {
+              const renderRow = ([alias, col]) => {
                           // subitem-level fields map against the SUBITEMS board's columns
                           const boardId = SUBITEM_FIELDS.has(alias)
                             ? String(subitemsBoardByBoard[ownBoardId] || '')
@@ -926,62 +1041,167 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                           </div>
                         );
 
-                        // Topics board: split into item-level ("נושא") and
-                        // subitem-level ("נקודה") column groups so it's clear which
-                        // board each mapping targets.
-                        if (boardKey === 'topics') {
-                          const itemEntries = entries.filter(([alias]) => !SUBITEM_FIELDS.has(alias));
-                          const subEntries = entries.filter(([alias]) => SUBITEM_FIELDS.has(alias));
-                          return (
-                            <>
-                              <div className={styles.colGroupTitle}>
-                                <Text type={"text2"} weight={"medium"}>עמודות נושא (אייטם)</Text>
-                              </div>
-                              {itemEntries.map(renderRow)}
-                              <div className={styles.colGroupTitle}>
-                                <Text type={"text2"} weight={"medium"}>עמודות נקודה (סאב־אייטם)</Text>
-                                <Text type={"text3"} color={"secondary"}>נקודה = סאב־אייטם תחת הנושא. עמודות אלו ממופות מלוח הסאב־אייטמים.</Text>
-                              </div>
-                              {subEntries.map(renderRow)}
-                            </>
-                          );
-                        }
+              // Rows to show: search hits across the whole board, else the
+              // selected folder's fields (order preserved from the alias list).
+              const activeFolder = folders.find((f) => f.key === activeFolderKey);
+              const searching = query.length > 0;
+              const shownEntries = searching
+                ? entries.filter(([alias, col]) => String(col?.title || alias).toLowerCase().includes(query))
+                : (activeFolder ? activeFolder.entries : []);
+              // The tasks "status" folder keeps the "סטאטוס בוצע" multi-select
+              // appended right after the status column (existing behavior).
+              const showDoneStatus = !searching && boardKey === 'tasks' && activeFolderKey === 'status';
+              const detailMeta = activeFolder ? (TYPE_META[activeFolder.key] || TYPE_META.other) : TYPE_META.other;
+              const detailCounts = folderCounts(activeFolder ? activeFolder.entries : []);
 
-                        // discussions + tasks: bucket the fields into typed
-                        // sections (אנשים / תאריכים / סטטוס / חיבורי לוחות / …),
-                        // preserving each section's field order. Empty sections
-                        // are skipped; unmatched types fall into a trailing "אחר".
-                        const sections = [...COLUMN_TYPE_GROUPS, { key: 'other', title: 'אחר', types: [] }];
-                        return sections.map((group) => {
-                          const groupEntries = entries.filter(
-                            ([, col]) => typeGroupKey(col.type) === group.key
-                          );
-                          if (!groupEntries.length) return null;
-                          // On the tasks board, render the "סטאטוס בוצע" multi-select
-                          // right after the status column so they sit side by side.
-                          const isTasksStatus = boardKey === 'tasks' && group.key === 'status';
-                          return (
-                            <React.Fragment key={group.key}>
-                              <div className={styles.colGroupTitle}>
-                                <Text type={"text2"} weight={"medium"}>{group.title}</Text>
-                              </div>
-                              {groupEntries.map((entry) => (
-                                isTasksStatus && entry[0] === 'statusID' ? (
-                                  <React.Fragment key="statusID">
-                                    {renderRow(entry)}
-                                    {renderDoneStatusRow()}
-                                  </React.Fragment>
-                                ) : renderRow(entry)
-                              ))}
-                            </React.Fragment>
-                          );
-                        });
-                      })()}
+              const rowsBody = (
+                <div className={styles.mapRows}>
+                  {shownEntries.length === 0 ? (
+                    <div className={styles.mapEmpty}>{searching ? 'לא נמצאו שדות' : 'אין שדות בקטגוריה זו'}</div>
+                  ) : (
+                    shownEntries.map((entry) => (
+                      showDoneStatus && entry[0] === 'statusID' ? (
+                        <React.Fragment key="statusID">
+                          {renderRow(entry)}
+                          {renderDoneStatusRow()}
+                        </React.Fragment>
+                      ) : renderRow(entry)
+                    ))
+                  )}
+                </div>
+              );
+
+              return (
+                <>
+                  <div className={styles.mapHead}>
+                    <div className={styles.mapTabs} role="tablist" aria-label="לוחות">
+                      {boardKeys.map((bk) => {
+                        const on = bk === boardKey;
+                        return (
+                          <button
+                            key={bk}
+                            type="button"
+                            role="tab"
+                            aria-selected={on}
+                            className={`${styles.mapTab} ${on ? styles.mapTabOn : ''}`}
+                            onClick={() => { setSelectedBoardKey(bk); setSelectedFolderKey(null); setMapQuery(''); }}
+                          >
+                            {BOARD_ROLE_TITLES[bk] || bk}
+                            <span className={styles.mapTabCount}>{entriesFor(bk).length}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className={styles.mapSp} />
+                    <div className={styles.mapSearch}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+                        <path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                      <input
+                        value={mapQuery}
+                        onChange={(e) => setMapQuery(e.target.value)}
+                        placeholder="חיפוש שדה…"
+                        aria-label="חיפוש שדה"
+                      />
+                    </div>
+                    <div className={styles.mapGring}>
+                      <ProgressRing
+                        frac={gCounts.total ? gCounts.mapped / gCounts.total : 0}
+                        color="var(--primary-color, #0073ea)"
+                        label={`${Math.round(gCounts.total ? (gCounts.mapped / gCounts.total) * 100 : 0)}%`}
+                      />
+                      <div className={styles.mapGringLab}>
+                        ממופה<b>{gCounts.mapped}/{gCounts.total}</b>
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  <div className={styles.mapStrip}>
+                    <div className={styles.mapBoardPick}>
+                      <Text type={"text3"} color={"secondary"}>לוח</Text>
+                      <SearchablePicker
+                        options={boardOptions.map((option) => ({ id: option.value, name: option.label }))}
+                        value={String(boards?.[boardKey]?.id || '')}
+                        onChange={(id) => setBoardId(boardKey, id)}
+                        placeholder={loadingBoards ? 'טוען לוחות' : 'חפש ובחר לוח'}
+                        isLoading={loadingBoards}
+                        disabled={loadingBoards}
+                      />
+                    </div>
+                    {isConfigured && (
+                      <Button kind={"secondary"} size={"small"} onClick={() => setShowTopUp(true)}>
+                        הוספת / השלמת לוחות ועמודות
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className={styles.mapBody}>
+                    <div className={styles.mapRail} role="tablist" aria-label="סוגי עמודות">
+                      {folders.map((f) => {
+                        const meta = TYPE_META[f.key] || TYPE_META.other;
+                        const c = folderCounts(f.entries);
+                        const on = f.key === activeFolderKey && !searching;
+                        return (
+                          <button
+                            key={f.key}
+                            type="button"
+                            role="tab"
+                            aria-selected={on}
+                            className={`${styles.mapRentry} ${on ? styles.mapRentryOn : ''}`}
+                            onClick={() => { setSelectedFolderKey(f.key); setMapQuery(''); }}
+                          >
+                            <span
+                              className={styles.mapRicon}
+                              style={{ background: `var(--t-${meta.hue}-bg)`, color: `var(--t-${meta.hue})` }}
+                            >
+                              <TypeIcon name={meta.icon} />
+                            </span>
+                            <span className={styles.mapRtext}>
+                              <span className={styles.mapRname}>{f.title}</span>
+                            </span>
+                            <ProgressRing
+                              frac={c.total ? c.mapped / c.total : 0}
+                              color={c.full ? 'var(--positive-color, #00854d)' : `var(--t-${meta.hue})`}
+                              label={`${c.mapped}/${c.total}`}
+                            />
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className={styles.mapDetail}>
+                      <div className={styles.mapDhead}>
+                        {searching ? (
+                          <div className={styles.mapDheadL}>
+                            <span className={styles.mapDttl}>תוצאות חיפוש</span>
+                            <span className={styles.mapDcnt}>{shownEntries.length} שדות</span>
+                          </div>
+                        ) : activeFolder ? (
+                          <div className={styles.mapDheadL}>
+                            <span
+                              className={styles.mapRicon}
+                              style={{ background: `var(--t-${detailMeta.hue}-bg)`, color: `var(--t-${detailMeta.hue})` }}
+                            >
+                              <TypeIcon name={detailMeta.icon} />
+                            </span>
+                            <span>
+                              <div className={styles.mapDttl}>{activeFolder.title}</div>
+                              <div className={styles.mapDcnt}>{detailCounts.mapped} מתוך {detailCounts.total} ממופה</div>
+                            </span>
+                          </div>
+                        ) : (
+                          <div className={styles.mapDheadL}>
+                            <span className={styles.mapDttl}>מיפוי עמודות</span>
+                          </div>
+                        )}
+                      </div>
+                      {rowsBody}
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
               </TabPanel>
 

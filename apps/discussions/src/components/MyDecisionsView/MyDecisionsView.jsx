@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { Button } from '@vibe/core';
 import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
+import { EmptyState } from '@generated/components/EmptyState';
 import { ArrowLeft } from 'lucide-react';
 import { useMyDecisions } from '@generated/hooks/useMyDecisions.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
@@ -648,12 +649,10 @@ export function MyDecisionsView({ canManageSettings = false, onBackToDiscussions
       ) : error ? (
         <div className={styles.empty}>אירעה שגיאה בטעינת ההחלטות</div>
       ) : items.length === 0 ? (
-        <div className={styles.empty}>
-          <div className={styles.emptyTitle}>
-            {subTab === 'affected' ? 'אין החלטות שמשפיעות עליך' : 'אין החלטות שאתה מחליט בהן'}
-          </div>
+        <EmptyState>
+          {subTab === 'affected' ? 'אין החלטות שמשפיעות עליך' : 'אין החלטות שאתה מחליט בהן'}
           <div className={styles.emptyHint}>החלטות חדשות שייוחסו אליך יופיעו כאן</div>
-        </div>
+        </EmptyState>
       ) : (
         <div className={styles.groupScrollInner}>
           <div className={styles.groupStack}>
