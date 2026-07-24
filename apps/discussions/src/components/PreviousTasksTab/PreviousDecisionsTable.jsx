@@ -27,12 +27,16 @@ export function PreviousDecisionsTable({
   // group's header color is threaded down to MyDecisionsTable as the row tint,
   // exactly like the personal "ההחלטות שלי" grouped tables. Presentational only.
   color,
+  // round286 — column show/hide (owner "הסתר"), a Set of hidden column keys
+  // applied at MyDecisionsTable's final render layer (order/width preserved).
+  hiddenColumns,
 }) {
   const d = data || {};
   return (
     <MyDecisionsTable
       decisions={decisions}
       color={color}
+      hiddenColumns={hiddenColumns}
       canDecision={canDecision}
       canManageSettings={canManageSettings}
       onStatusChange={d.updateDecisionStatus}

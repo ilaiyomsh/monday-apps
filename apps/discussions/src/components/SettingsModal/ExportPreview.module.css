@@ -223,7 +223,10 @@
    (#4F6B8F, white bold), hairline #D9D9D9 borders, centered cells except the name
    column. Fixed layout + RTL so it reads like the Word output. */
 .table {
-  width: 100%;
+  /* round286 — mirror the .docx: the table is ~80% wide and CENTERED on the
+     page (not full width), with balanced cell padding on all sides. */
+  width: 80%;
+  margin-inline: auto;
   border-collapse: collapse;
   table-layout: fixed;
   font-size: 11px;
@@ -232,7 +235,7 @@
 .table th,
 .table td {
   border: 1px solid #d9d9d9;
-  padding: 3px 6px;
+  padding: 6px 9px;
   text-align: center;
   vertical-align: middle;
   overflow: hidden;
