@@ -1,0 +1,51 @@
+/* round275 — read-only decisions table in the "דיונים קודמים" tab. */
+.wrap {
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: 10px;
+  overflow: auto;
+  background: var(--primary-background-color, #fff);
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.table thead th {
+  background: var(--primary-background-hover-color, #f6f7fb);
+  color: var(--secondary-text-color, #676879);
+  font-weight: 600;
+  font-size: 12.5px;
+  text-align: right;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+  white-space: nowrap;
+}
+.table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ui-border-color, #eef0f4);
+  font-size: 13.5px;
+  vertical-align: middle;
+}
+.table tbody tr:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.name { font-weight: 600; color: var(--primary-text-color, #323338); }
+.frozen {
+  position: sticky;
+  inset-inline-end: 0;
+  background: var(--primary-background-color, #fff);
+  box-shadow: -6px 0 6px -6px rgba(0, 0, 0, 0.12);
+}
+.table thead .frozen { background: var(--primary-background-hover-color, #f6f7fb); }
+.table tbody tr:hover .frozen { background: var(--primary-background-hover-color, #f5f6f8); }
+.chip {
+  display: inline-block;
+  border-radius: 6px;
+  padding: 4px 12px;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 84px;
+  text-align: center;
+}
+.empty { color: var(--secondary-text-color, #676879); }
+.date { color: var(--secondary-text-color, #676879); direction: ltr; text-align: right; font-variant-numeric: tabular-nums; }
+.source { color: var(--secondary-text-color, #676879); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

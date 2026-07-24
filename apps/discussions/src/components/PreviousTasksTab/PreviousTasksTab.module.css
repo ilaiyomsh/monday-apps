@@ -120,6 +120,54 @@
 .scopePill b { font-weight: 600; color: var(--primary-color, #0073ea); }
 .scopePillChev { opacity: 0.55; font-size: 11px; }
 
+/* round275 — content mode toggle (משימות/החלטות), segmented, in the toolbar. */
+.modeSeg {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+  height: 36px;
+  box-sizing: border-box;
+}
+.modeSegBtn {
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 0 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.modeSegBtn:hover { color: var(--text-color, #323338); }
+.modeSegOn {
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-color, #0073ea);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+}
+
+/* round275 — decisions quick-filter battery (one chip per tracking label). */
+.decBattery { display: inline-flex; align-items: center; gap: 6px; }
+.decChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+.decChip:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.decChipOn { background: #eaf2fe; border-color: var(--primary-color, #0073ea); }
+.decDot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
 /* Centered "no previous discussion" state with a picker. */
 .noPrevious {
   display: flex;
