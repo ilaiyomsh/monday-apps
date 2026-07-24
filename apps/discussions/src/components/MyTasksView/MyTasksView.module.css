@@ -464,8 +464,10 @@
 /* round213 — elegant mobile top: a tight title row and the toolbar as a
    floating rounded card (instead of the full-width white strip). */
 :global(.mobile-app) .viewHeader {
-  padding: 10px 18px 8px;
-  padding-inline-start: 18px;
+  /* round276 — 12px side insets so the scope toggle's edges line up EXACTLY with
+     the toolbar bar below it (which uses margin: 0 12px). */
+  padding: 10px 12px 8px;
+  padding-inline-start: 12px;
 }
 :global(.mobile-app) .viewTitle {
   font-size: 20px;
@@ -633,10 +635,13 @@
   display: flex;
   align-items: stretch;
   gap: 4px;
-  height: 34px;
+  /* round276 — match the toolbar bar below EXACTLY in size: its pills are 32px
+     (--toolbar-pill-h) + 6px top/bottom padding = 44px tall, radius 14px. The
+     12px viewHeader side insets already align this bar's width to the toolbar. */
+  height: 44px;
   box-sizing: border-box;
-  padding: 4px;
-  border-radius: 8px;
+  padding: 6px;
+  border-radius: 14px;
   background: var(--primary-background-hover-color, #f0f1f3);
 }
 .scopeToggleMobile .subTab {
