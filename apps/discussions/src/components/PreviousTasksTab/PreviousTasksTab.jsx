@@ -745,7 +745,9 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       ) : tasks.length === 0 ? (
         <div className={styles.emptyState}>
           <Text type={"text2"} color={"secondary"}>
-            {byType ? 'לא נמצאו משימות מסוג דיון זה' : 'לא נמצאו משימות בדיון הקודם'}
+            {byType
+              ? `אין משימות שנוצרו ${scope === 'all' ? 'בדיונים האחרונים' : 'בדיון האחרון'} מסוג זה`
+              : 'לא נמצאו משימות בדיון הקודם'}
           </Text>
         </div>
       ) : (
@@ -816,7 +818,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         ) : filteredDecisions.length === 0 ? (
           <div className={styles.emptyState}>
             <Text type={"text2"} color={"secondary"}>
-              {(allDecisions || []).length === 0 ? 'לא נמצאו החלטות בדיונים קודמים' : 'לא נמצאו החלטות התואמות לסינון'}
+              {(allDecisions || []).length === 0
+                ? (byType
+                    ? `אין החלטות שנוצרו ${scope === 'all' ? 'בדיונים האחרונים' : 'בדיון האחרון'} מסוג זה`
+                    : 'לא נמצאו החלטות בדיונים קודמים')
+                : 'לא נמצאו החלטות התואמות לסינון'}
             </Text>
           </div>
         ) : (
