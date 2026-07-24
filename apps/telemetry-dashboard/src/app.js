@@ -126,6 +126,27 @@ export function createApp({
     }
   });
 
+  // Error drill-down: the raw occurrences behind one Top-errors row, so the
+  // operator sees full per-event context in the dashboard instead of leaving
+  // for Axiom. Same session gate as /api/telemetry. err_name is required (400)
+  // and is escaped downstream (queries.js) before it reaches APL.
+  app.get('/api/telemetry/error-detail', requireSession, async (req, res) => {
+    const errName = String(req.query.err_name ?? '').trim();
+    if (!errName) {
+      return res.status(400).json({ error: 'err_name_required' });
+    }
+    try {
+      const result = await telemetry.getErrorDetail(String(req.query.window ?? '7d'), errName);
+      res.json(result);
+    } catch (err) {
+      logger.error('telemetry_detail_error', 'http', {
+        path: req.path,
+        error: err instanceof Error ? err : new Error(String(err)),
+      });
+      res.status(502).json({ error: 'telemetry_unavailable' });
+    }
+  });
+
   // --- Settings (board provisioning + status) — same session gate ---------
   // Owner-scoped configuration of the lifecycle events board. Behind
   // requireSession (+ allowlist) exactly like /api/telemetry.
