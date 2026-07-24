@@ -195,23 +195,6 @@
   gap: 28px;
 }
 
-.emptyState {
-  /* Centered across the FULL view, not the content box: the .root carries a
-     ~52px inline-start gutter, so a plain text-align:center sat ~26px off to the
-     side. Pull the box back over the gutter and widen it by the same amount, then
-     flex-center — so the message lands at the true horizontal center. */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  min-height: 260px;
-  margin-inline-start: calc(-1 * var(--content-gutter-start, 52px));
-  width: calc(100% + var(--content-gutter-start, 52px));
-  padding-top: var(--spacing-xl, 48px);
-  padding-bottom: var(--spacing-xl, 48px);
-  box-sizing: border-box;
-}
-
 .groupHeader {
   display: flex;
   align-items: center;

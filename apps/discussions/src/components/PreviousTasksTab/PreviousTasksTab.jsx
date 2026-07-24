@@ -4,6 +4,7 @@ import { DropdownChevronDown, Filter } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS } from '@generated/components/GroupByBuilder';
+import { EmptyState } from '@generated/components/EmptyState';
 // Varied stable group-title colors (owner request 2026-07-14) — shared engine.
 import { ensureGroupColors, groupTabTasks } from '@generated/components/MyTasksView/grouping.js';
 import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
@@ -552,13 +553,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   if (byType && !typeFilter.taskTypeId) {
     return (
       <div className={styles.root}>
-        <div className={styles.noPrevious}>
-          <Text type={"text2"} color={"secondary"}>
-            {!discussion?.discussionTypeID
-              ? 'לא הוגדר סוג לדיון זה'
-              : 'לא נמצאו משימות מסוג דיון זה'}
-          </Text>
-        </div>
+        <EmptyState bleedStart>
+          {!discussion?.discussionTypeID
+            ? 'לא הוגדר סוג לדיון זה'
+            : 'לא נמצאו משימות מסוג דיון זה'}
+        </EmptyState>
       </div>
     );
   }
@@ -743,13 +742,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       {tasksLoading ? (
         <PreviousTasksSkeleton showToolbar={false} />
       ) : tasks.length === 0 ? (
-        <div className={styles.emptyState}>
-          <Text type={"text2"} color={"secondary"}>
-            {byType
-              ? `אין משימות שנוצרו ${scope === 'all' ? 'בדיונים האחרונים' : 'בדיון האחרון'} מסוג זה`
-              : 'לא נמצאו משימות בדיון הקודם'}
-          </Text>
-        </div>
+        <EmptyState bleedStart>
+          {byType
+            ? `אין משימות שנוצרו ${scope === 'all' ? 'בדיונים האחרונים' : 'בדיון האחרון'} מסוג זה`
+            : 'לא נמצאו משימות בדיון הקודם'}
+        </EmptyState>
       ) : (
         <div className={styles.board}>
         <div className={styles.groupScrollInner}>
@@ -816,15 +813,13 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         decisionsLoading ? (
           <PreviousTasksSkeleton showToolbar={false} />
         ) : filteredDecisions.length === 0 ? (
-          <div className={styles.emptyState}>
-            <Text type={"text2"} color={"secondary"}>
-              {(allDecisions || []).length === 0
-                ? (byType
-                    ? `אין החלטות שנוצרו ${scope === 'all' ? 'בדיונים האחרונים' : 'בדיון האחרון'} מסוג זה`
-                    : 'לא נמצאו החלטות בדיונים קודמים')
-                : 'לא נמצאו החלטות התואמות לסינון'}
-            </Text>
-          </div>
+          <EmptyState bleedStart>
+            {(allDecisions || []).length === 0
+              ? (byType
+                  ? `אין החלטות שנוצרו ${scope === 'all' ? 'בדיונים האחרונים' : 'בדיון האחרון'} מסוג זה`
+                  : 'לא נמצאו החלטות בדיונים קודמים')
+              : 'לא נמצאו החלטות התואמות לסינון'}
+          </EmptyState>
         ) : (
           <div className={styles.board}>
             <PreviousDecisionsTable

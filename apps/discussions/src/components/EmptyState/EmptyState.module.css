@@ -1,0 +1,35 @@
+/* Shared empty / not-found message for main content views.
+   CSS Modules run non-scoped here, so class names are plain and deliberately
+   distinctive to avoid collisions. */
+
+.emptyStateRoot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: clamp(220px, 40vh, 380px);
+  padding: 32px 16px;
+}
+
+.emptyStateText {
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--secondary-text-color, #676879);
+  line-height: 1.4;
+  text-wrap: balance;
+}
+
+.emptyStateIcon {
+  margin-bottom: 12px;
+  color: var(--secondary-text-color, #676879);
+}
+
+/* When the parent view carries an inline-start gutter, pull the box back over
+   it so the message centers across the FULL view width. */
+.emptyStateBleedStart {
+  margin-inline-start: calc(-1 * var(--content-gutter-start, 52px));
+  width: calc(100% + var(--content-gutter-start, 52px));
+}
