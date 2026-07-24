@@ -1,5 +1,26 @@
 # Changelog - telemetry-dashboard
 
+## 2026-07-24 — Dashboard polish: LTR time, clearer axes, refined chrome
+
+### 💅 Design
+
+- **Time now always reads LEFT→RIGHT** (earliest → latest), even when the host
+  monday account is Hebrew/RTL. The page is pinned `dir="ltr"` (`index.html` +
+  a `direction: ltr` body rule) and the "Errors over time" X-axis is explicitly
+  non-reversed, so e.g. Jan 2026 sits to the LEFT of Jun 2026.
+- **Readable axes.** The time-series X-axis had duplicate, crowded day labels
+  ("Jul 18 Jul 18"): ticks are now chosen as one representative bucket per day
+  (per hour for the 24h window) and thinned to ~8 evenly-spaced, non-colliding
+  labels. Axis tick text moved from the faint `muted` ink to `textSecondary` at
+  12px, the Y-axis carries an `errors` unit label, and tick lines are drawn on
+  the baseline — the X and Y values are legible at a glance.
+- **More elegant chrome.** Stacked-area bands now use a soft vertical gradient
+  fill; KPI tiles gained a slim semantic accent rail (red on Errors, amber on
+  Error rate), uppercase micro-labels, a larger radius and a subtle hover lift;
+  card headers get a hairline divider; the chart legend is separated by a top
+  rule with slightly larger swatches. Client-only (presentational) changes — no
+  data, endpoint, or server behavior touched.
+
 ## 2026-07-22 — Client sourcemaps for stack symbolication
 
 ### 🔧 Infrastructure
