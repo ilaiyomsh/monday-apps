@@ -32,6 +32,8 @@ import { משימות1Board } from '@api/BoardSDK.js';
 import { TaskTable } from '@generated/components/TaskTable';
 import { PreviousTasksSkeleton } from '@generated/components/PreviousTasksSkeleton';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
+import { usePreviousDecisions } from './usePreviousDecisions.js';
+import { PreviousDecisionsTable } from './PreviousDecisionsTable.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
 // Quick-filter status battery (round 81) — shared buckets + presentation chip.
@@ -116,6 +118,30 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // every occurrence. Meaningless in linked mode (a single previous discussion),
   // so the toolbar shows the pill only when byType.
   const [scope, setScope] = useState('last');
+
+  // round275 — content mode: 'tasks' (default) or 'decisions'. The mode toggle
+  // sits in the toolbar (right after the source chip, per the approved layout)
+  // and swaps the whole view: tasks table + tasks toolbar features ⇄ a read-only
+  // decisions table + a decisions search + a tracking-label quick-filter battery.
+  const [contentMode, setContentMode] = useState('tasks');
+  const [decSearch, setDecSearch] = useState('');
+  const [decQuick, setDecQuick] = useState(null); // a decisionTrackingID label id, or null
+  const tracking = useStatusOptions('decisions', 'decisionTrackingID');
+  const { decisions: allDecisions, loading: decisionsLoading } =
+    usePreviousDecisions(discussion, { byType, scope, enabled: contentMode === 'decisions' });
+  const filteredDecisions = useMemo(() => {
+    let rows = allDecisions || [];
+    const q = decSearch.trim();
+    if (q) rows = rows.filter((d) => (d.name || '').includes(q));
+    if (decQuick != null) rows = rows.filter((d) => String(d.decisionTrackingID) === String(decQuick));
+    return rows;
+  }, [allDecisions, decSearch, decQuick]);
+  // Tracking-label chips for the decisions quick-filter battery (owner-configured
+  // labels + colors, e.g. התקבלה / מיושמת חלקית / מיושמת במלואה).
+  const trackingChips = useMemo(
+    () => (tracking.options || []).map((o) => ({ id: o.id, label: o.label, color: o.color })),
+    [tracking.options]
+  );
 
   // Data layer (round146 split): mode-resolved task list + previous-discussion
   // link/picker plumbing live in usePreviousTasksData; the optimistic update
@@ -565,6 +591,22 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
           <span className={styles.prevChipLabel}>{byType ? 'סוג דיון' : 'דיון קודם'}</span>
           <span className={styles.prevChipName}>{byType ? typeFilter.label : previousDiscussionLabel}</span>
         </div>
+        {/* round275 — content mode toggle (משימות/החלטות), right after the source
+            chip per the owner's order: source → mode → scope → features. */}
+        <div className={styles.modeSeg} dir="rtl" role="tablist" aria-label="סוג התוכן">
+          {[{ key: 'tasks', label: 'משימות' }, { key: 'decisions', label: 'החלטות' }].map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              role="tab"
+              aria-selected={contentMode === m.key}
+              className={`${styles.modeSegBtn}${contentMode === m.key ? ` ${styles.modeSegOn}` : ''}`}
+              onClick={() => { setContentMode(m.key); setSelectedIds(new Set()); }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
         {/* round274 — by-type scope toggle, folded into the toolbar as a compact
             pill (owner spec: one top row). Only shown in by-type mode. */}
         {byType && (
@@ -579,6 +621,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
             <span className={styles.scopePillChev} aria-hidden="true">▾</span>
           </button>
         )}
+        {contentMode === 'tasks' && (
         <div className={styles.toolbarActions} dir="ltr">
           <SearchPill value={search} onChange={setSearch} />
           <BuilderControl
@@ -628,13 +671,37 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
             <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
           )}
         </div>
-        {/* Quick-filter battery (round 81) — last flex child + auto start-margin
-            pushes it to the RIGHT edge (LTR layout); the rest stay on the left. */}
+        )}
+        {/* round275 — decisions feature cluster: search + a tracking-label quick
+            filter (התקבלה / מיושמת חלקית / מיושמת במלואה — owner-configured labels). */}
+        {contentMode === 'decisions' && (
+          <div className={styles.toolbarActions} dir="ltr">
+            <SearchPill value={decSearch} onChange={setDecSearch} />
+            <div className={styles.decBattery} dir="rtl" role="group" aria-label="סינון מהיר לפי מעקב החלטה">
+              {trackingChips.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`${styles.decChip}${String(decQuick) === String(c.id) ? ` ${styles.decChipOn}` : ''}`}
+                  onClick={() => setDecQuick((q) => (String(q) === String(c.id) ? null : c.id))}
+                  title={`הצג ${c.label}`}
+                >
+                  <span className={styles.decDot} style={{ background: c.color || 'hsl(var(--status-default))' }} />
+                  <span>{c.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {/* Quick-filter battery (round 81) — tasks only; pushed to the RIGHT edge. */}
+        {contentMode === 'tasks' && (
         <div className={styles.batterySlot}>
           <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
         </div>
+        )}
       </div>
 
+      {contentMode === 'tasks' && (<>
       <SelectionActionBar count={selectedIds.size} onClear={clearSelection} ariaLabel="פעולות על משימות נבחרות">
         {/* "Move to next discussion" carries tasks forward along the
             discussion-to-discussion link — meaningless in by-type mode,
@@ -715,6 +782,24 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         </div>
         </div>
         </div>
+      )}
+      </>)}
+
+      {/* round275 — decisions mode: read-only decisions from previous discussions. */}
+      {contentMode === 'decisions' && (
+        decisionsLoading ? (
+          <PreviousTasksSkeleton showToolbar={false} />
+        ) : filteredDecisions.length === 0 ? (
+          <div className={styles.emptyState}>
+            <Text type={"text2"} color={"secondary"}>
+              {(allDecisions || []).length === 0 ? 'לא נמצאו החלטות בדיונים קודמים' : 'לא נמצאו החלטות התואמות לסינון'}
+            </Text>
+          </div>
+        ) : (
+          <div className={styles.board}>
+            <PreviousDecisionsTable decisions={filteredDecisions} />
+          </div>
+        )
       )}
     </div>
   );
