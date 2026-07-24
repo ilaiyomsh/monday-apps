@@ -846,10 +846,29 @@
   }
 }
 
-/* round286 (owner-approved mockup) — boards-RIGHT / types-LEFT mapping layout.
-   RIGHT column = the boards list; LEFT column = search + column-type chips at the
-   top and the selected type's fields (or the board picker) below. No percent ring,
-   no per-folder count badges. */
+/* round287 (owner request) — mapping layout: BOARDS as a horizontal row at the
+   TOP (with the search); column TYPES as a vertical list in the LEFT column; the
+   selected type's fields fill the pane to its right. No percent ring, no per-type
+   count badges. */
+.mapTop {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.mapTop .mapSearch input {
+  width: 100%;
+  max-width: none;
+}
+.mapBoardsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .mapBody2 {
   flex: 1 1 auto;
   min-height: 0;
@@ -857,28 +876,29 @@
   gap: 14px;
   padding-top: 12px;
 }
-.mapLeft {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  order: 1;
-}
-.mapBoards {
-  width: 180px;
+/* LEFT — the vertical column-type list. In this RTL flex row the HIGHER order
+   renders on the LEFT (verified via the approved mockup), so types = order:2. */
+.mapTypesCol {
+  width: 184px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 6px;
   order: 2;
+  overflow: auto;
 }
-.mapBoardsLbl {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--secondary-text-color, #676879);
-  padding: 2px 4px 4px;
+/* RIGHT — the fields pane, a bordered card that fills + scrolls. */
+.mapBody2 .mapDetail {
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: 12px;
+  padding: 4px 6px 10px;
 }
+
+/* Board button (top row). */
 .mapBd {
   display: flex;
   align-items: center;
@@ -890,7 +910,7 @@
   font-size: 13.5px;
   font-weight: 700;
   text-align: start;
-  padding: 10px 12px;
+  padding: 9px 14px;
   border-radius: 10px;
   cursor: pointer;
 }
@@ -900,27 +920,22 @@
   border-color: var(--primary-color, #0073ea);
   color: var(--primary-color, #0073ea);
 }
-.mapBoards :global(button) { margin-top: 4px; }
 
-/* Column-type chips row (top-left). "לוח" is the first chip = the board itself. */
-.mapTypes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  flex-shrink: 0;
-}
+/* Column-type button — a full-width row inside the left column. */
 .mapTy {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
+  width: 100%;
   border: 1px solid var(--ui-border-color, #e6e9ef);
   background: var(--primary-background-color, #fff);
   color: var(--primary-text-color, #1c1f3b);
   font-family: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 700;
-  padding: 7px 13px;
-  border-radius: 20px;
+  text-align: start;
+  padding: 9px 12px;
+  border-radius: 10px;
   cursor: pointer;
 }
 .mapTy:hover { background: var(--primary-background-hover-color, #f5f6f8); }
@@ -930,28 +945,15 @@
   color: #fff;
 }
 .mapTyDot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 .mapTyOn .mapTyDot { background: #fff !important; }
 
-/* In the new layout the fields pane is a bordered card that fills + scrolls; the
-   old rail/detail split border is dropped, and the search spans the pane width. */
-.mapLeft .mapSearch input {
-  width: 100%;
-  max-width: none;
-}
-.mapLeft .mapDetail {
-  flex: 1 1 auto;
-  min-height: 0;
-  border: 1px solid var(--ui-border-color, #e6e9ef);
-  border-radius: 12px;
-  padding: 4px 6px 10px;
-}
 @media (max-width: 640px) {
   .mapBody2 { flex-direction: column; }
-  .mapBoards { width: 100%; order: 0; flex-direction: row; flex-wrap: wrap; }
-  .mapBoardsLbl { width: 100%; }
+  .mapTypesCol { width: 100%; order: 0; flex-direction: row; flex-wrap: wrap; }
+  .mapTypesCol .mapTy { width: auto; }
 }

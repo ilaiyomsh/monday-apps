@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { BrandLoader } from '@generated/components/BrandLoader';
 import { loadUsageData, buildSeries, averageDailyUsers } from '@generated/utils/usageMetrics.js';
 import logger from '@generated/utils/logger.js';
@@ -68,6 +68,15 @@ export function UsageMetricsTab({ active }) {
 
   const hasData = series.length > 0;
   const lineColor = metric === 'actions' ? '#6b4ee6' : '#0073ea';
+  // round288 — short axis tick labels so the X values are readable instead of
+  // clipped ISO strings: day/week bucket "YYYY-MM-DD" → "DD/MM"; month
+  // "YYYY-MM" → "MM/YY".
+  const fmtTick = (b) => {
+    const s = String(b ?? '');
+    const p = s.split('-');
+    if (granularity === 'month') return p.length >= 2 ? `${p[1]}/${p[0].slice(2)}` : s;
+    return p.length >= 3 ? `${p[2]}/${p[1]}` : s;
+  };
 
   return (
     <div className={styles.root} dir="rtl">
@@ -115,24 +124,53 @@ export function UsageMetricsTab({ active }) {
       {hasData ? (
         <div className={styles.chartWrap}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={series} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e6e9ef" />
-              <XAxis dataKey="bucket" tick={{ fontSize: 12 }} reversed />
-              <YAxis allowDecimals={false} tick={{ fontSize: 12 }} width={40} />
+            <AreaChart data={series} margin={{ top: 12, right: 22, left: 6, bottom: 14 }}>
+              <defs>
+                <linearGradient id="usageFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={lineColor} stopOpacity={0.18} />
+                  <stop offset="100%" stopColor={lineColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              {/* round288 — readable, elegant axes: horizontal grid only; short
+                  date ticks (DD/MM); bold tick text; edge padding so the first/last
+                  X label isn't clipped; a wider Y gutter. */}
+              <CartesianGrid strokeDasharray="3 3" stroke="#e6e9ef" vertical={false} />
+              <XAxis
+                dataKey="bucket"
+                reversed
+                tickFormatter={fmtTick}
+                tick={{ fontSize: 13, fontWeight: 600, fill: '#676879' }}
+                tickMargin={10}
+                height={34}
+                axisLine={{ stroke: '#c3c6d4' }}
+                tickLine={{ stroke: '#c3c6d4' }}
+                interval="preserveStartEnd"
+                minTickGap={28}
+                padding={{ left: 16, right: 16 }}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fontSize: 13, fontWeight: 600, fill: '#676879' }}
+                tickMargin={6}
+                width={46}
+                axisLine={false}
+                tickLine={false}
+              />
               <Tooltip
-                labelFormatter={(v) => v}
+                labelFormatter={fmtTick}
                 formatter={(v) => [v, metric === 'actions' ? 'פעולות' : 'כניסות']}
               />
-              <Line
+              <Area
                 type="monotone"
                 dataKey="value"
                 stroke={lineColor}
                 strokeWidth={2.5}
-                dot={{ r: 3 }}
+                fill="url(#usageFill)"
+                dot={{ r: 3, fill: lineColor }}
                 activeDot={{ r: 5 }}
                 isAnimationActive={false}
               />
-            </LineChart>
+            </AreaChart>
           </ResponsiveContainer>
         </div>
       ) : (
