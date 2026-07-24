@@ -186,34 +186,6 @@ function TypeIcon({ name, size = 19 }) {
   );
 }
 
-// Compact circular progress ring (mapped/total) — inline SVG with a
-// stroke-dasharray arc, exactly like the mockup. 30×30, r=12.
-function ProgressRing({ frac, color, label }) {
-  const r = 12;
-  const circ = 2 * Math.PI * r;
-  const clamped = Math.max(0, Math.min(1, frac || 0));
-  const off = circ * (1 - clamped);
-  return (
-    <span className={styles.mapRing}>
-      <svg width="30" height="30" viewBox="0 0 30 30">
-        <circle cx="15" cy="15" r={r} fill="none" stroke="var(--ui-border-color, #e6e9ef)" strokeWidth="3.4" />
-        <circle
-          cx="15"
-          cy="15"
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="3.4"
-          strokeLinecap="round"
-          strokeDasharray={circ.toFixed(1)}
-          strokeDashoffset={off.toFixed(1)}
-        />
-      </svg>
-      <span className={styles.mapRingNum}>{label}</span>
-    </span>
-  );
-}
-
 // Which section a column type belongs to (falls back to a trailing "אחר").
 function typeGroupKey(type) {
   const t = String(type || '').toLowerCase().replace(/-/g, '_');
@@ -749,15 +721,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       .map((alias) => [alias, columns?.[boardKey]?.[alias]])
       .filter(([, col]) => Boolean(col));
 
-  // A field counts as "mapped" when it has a real column id (multi-people aliases
-  // also count when any of their ids is set) — mirrors the mockup's ring math.
-  const aliasMapped = (alias, col) => {
-    if (MULTI_PEOPLE_ALIASES.has(alias)) {
-      return (Array.isArray(col?.ids) && col.ids.length > 0) || Boolean(String(col?.id || '').trim());
-    }
-    return Boolean(String(col?.id || '').trim());
-  };
-
   // Group a board's entries into ordered, non-empty type folders (trailing "אחר").
   const foldersFor = (boardKey) => {
     const entries = entriesFor(boardKey);
@@ -769,12 +732,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
         entries: entries.filter(([, col]) => typeGroupKey(col.type) === g.key),
       }))
       .filter((f) => f.entries.length > 0);
-  };
-
-  const folderCounts = (folderEntries) => {
-    const total = folderEntries.length;
-    const mapped = folderEntries.filter(([alias, col]) => aliasMapped(alias, col)).length;
-    return { total, mapped, full: total > 0 && mapped === total };
   };
 
   if (!isOpen) return null;
@@ -918,7 +875,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                 ? selectedFolderKey
                 : (folders[0]?.key || null);
               const query = mapQuery.trim().toLowerCase();
-              const gCounts = folderCounts(entries);
 
               const renderRow = ([alias, col]) => {
                           // subitem-level fields map against the SUBITEMS board's columns
@@ -1060,7 +1016,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               // appended right after the status column (existing behavior).
               const showDoneStatus = !searching && boardKey === 'tasks' && activeFolderKey === 'status';
               const detailMeta = activeFolder ? (TYPE_META[activeFolder.key] || TYPE_META.other) : TYPE_META.other;
-              const detailCounts = folderCounts(activeFolder ? activeFolder.entries : []);
 
               const rowsBody = (
                 <div className={styles.mapRows}>
@@ -1079,132 +1034,138 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                 </div>
               );
 
+              // round286 (owner-approved mockup) — mapping is a boards-RIGHT /
+              // types-LEFT master-detail: pick a board on the right; its column
+              // TYPES appear as chips at the top-left ("לוח" is the first type =
+              // the board picker itself); picking a type opens its fields below.
+              // No percent ring, no per-folder count badges (owner request).
+              const boardSelected = selectedFolderKey === 'board' && !searching;
               return (
                 <>
-                  <div className={styles.mapHead}>
-                    <div className={styles.mapTabs} role="tablist" aria-label="לוחות">
+                  <div className={styles.mapBody2}>
+                    {/* LEFT — search + column-type chips + fields (or board picker) */}
+                    <div className={styles.mapLeft}>
+                      <div className={styles.mapSearch}>
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+                          <path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                        </svg>
+                        <input
+                          value={mapQuery}
+                          onChange={(e) => setMapQuery(e.target.value)}
+                          placeholder="חיפוש שדה…"
+                          aria-label="חיפוש שדה"
+                        />
+                      </div>
+
+                      <div className={styles.mapTypes} role="tablist" aria-label="סוגי עמודות">
+                        {/* "לוח" — the board itself, first/topmost type. */}
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={boardSelected}
+                          className={`${styles.mapTy} ${boardSelected ? styles.mapTyOn : ''}`}
+                          onClick={() => { setSelectedFolderKey('board'); setMapQuery(''); }}
+                        >
+                          <span className={styles.mapTyDot} style={{ background: 'var(--t-blue, #3b5bdb)' }} />
+                          לוח
+                        </button>
+                        {folders.map((f) => {
+                          const meta = TYPE_META[f.key] || TYPE_META.other;
+                          const on = !boardSelected && !searching && f.key === activeFolderKey;
+                          return (
+                            <button
+                              key={f.key}
+                              type="button"
+                              role="tab"
+                              aria-selected={on}
+                              className={`${styles.mapTy} ${on ? styles.mapTyOn : ''}`}
+                              onClick={() => { setSelectedFolderKey(f.key); setMapQuery(''); }}
+                            >
+                              <span className={styles.mapTyDot} style={{ background: `var(--t-${meta.hue})` }} />
+                              {f.title}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className={styles.mapDetail}>
+                        {boardSelected ? (
+                          <>
+                            <div className={styles.mapDhead}>
+                              <div className={styles.mapDheadL}>
+                                <span>
+                                  <div className={styles.mapDttl}>לוח</div>
+                                  <div className={styles.mapDcnt}>בחירת לוח ה-monday שממופה ל{BOARD_ROLE_TITLES[boardKey] || boardKey}</div>
+                                </span>
+                              </div>
+                            </div>
+                            <div className={styles.mapBoardPick}>
+                              <SearchablePicker
+                                options={boardOptions.map((option) => ({ id: option.value, name: option.label }))}
+                                value={String(boards?.[boardKey]?.id || '')}
+                                onChange={(id) => setBoardId(boardKey, id)}
+                                placeholder={loadingBoards ? 'טוען לוחות' : 'חפש ובחר לוח'}
+                                isLoading={loadingBoards}
+                                disabled={loadingBoards}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className={styles.mapDhead}>
+                              {searching ? (
+                                <div className={styles.mapDheadL}>
+                                  <span className={styles.mapDttl}>תוצאות חיפוש</span>
+                                  <span className={styles.mapDcnt}>{shownEntries.length} שדות</span>
+                                </div>
+                              ) : activeFolder ? (
+                                <div className={styles.mapDheadL}>
+                                  <span
+                                    className={styles.mapRicon}
+                                    style={{ background: `var(--t-${detailMeta.hue}-bg)`, color: `var(--t-${detailMeta.hue})` }}
+                                  >
+                                    <TypeIcon name={detailMeta.icon} />
+                                  </span>
+                                  <span>
+                                    <div className={styles.mapDttl}>{activeFolder.title}</div>
+                                    <div className={styles.mapDcnt}>שדות מסוג זה בלוח "{BOARD_ROLE_TITLES[boardKey] || boardKey}"</div>
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className={styles.mapDheadL}>
+                                  <span className={styles.mapDttl}>מיפוי עמודות</span>
+                                </div>
+                              )}
+                            </div>
+                            {rowsBody}
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* RIGHT — the boards list. Clicking a board opens its types. */}
+                    <div className={styles.mapBoards}>
+                      <div className={styles.mapBoardsLbl}>לוחות</div>
                       {boardKeys.map((bk) => {
                         const on = bk === boardKey;
                         return (
                           <button
                             key={bk}
                             type="button"
-                            role="tab"
                             aria-selected={on}
-                            className={`${styles.mapTab} ${on ? styles.mapTabOn : ''}`}
-                            onClick={() => { setSelectedBoardKey(bk); setSelectedFolderKey(null); setMapQuery(''); }}
+                            className={`${styles.mapBd} ${on ? styles.mapBdOn : ''}`}
+                            onClick={() => { setSelectedBoardKey(bk); setSelectedFolderKey('board'); setMapQuery(''); }}
                           >
                             {BOARD_ROLE_TITLES[bk] || bk}
-                            <span className={styles.mapTabCount}>{entriesFor(bk).length}</span>
                           </button>
                         );
                       })}
-                    </div>
-                    <div className={styles.mapSp} />
-                    <div className={styles.mapSearch}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-                        <path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                      </svg>
-                      <input
-                        value={mapQuery}
-                        onChange={(e) => setMapQuery(e.target.value)}
-                        placeholder="חיפוש שדה…"
-                        aria-label="חיפוש שדה"
-                      />
-                    </div>
-                    <div className={styles.mapGring}>
-                      <ProgressRing
-                        frac={gCounts.total ? gCounts.mapped / gCounts.total : 0}
-                        color="var(--primary-color, #0073ea)"
-                        label={`${Math.round(gCounts.total ? (gCounts.mapped / gCounts.total) * 100 : 0)}%`}
-                      />
-                      <div className={styles.mapGringLab}>
-                        ממופה<b>{gCounts.mapped}/{gCounts.total}</b>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className={styles.mapStrip}>
-                    <div className={styles.mapBoardPick}>
-                      <Text type={"text3"} color={"secondary"}>לוח</Text>
-                      <SearchablePicker
-                        options={boardOptions.map((option) => ({ id: option.value, name: option.label }))}
-                        value={String(boards?.[boardKey]?.id || '')}
-                        onChange={(id) => setBoardId(boardKey, id)}
-                        placeholder={loadingBoards ? 'טוען לוחות' : 'חפש ובחר לוח'}
-                        isLoading={loadingBoards}
-                        disabled={loadingBoards}
-                      />
-                    </div>
-                    {isConfigured && (
-                      <Button kind={"secondary"} size={"small"} onClick={() => setShowTopUp(true)}>
-                        הוספת / השלמת לוחות ועמודות
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className={styles.mapBody}>
-                    <div className={styles.mapRail} role="tablist" aria-label="סוגי עמודות">
-                      {folders.map((f) => {
-                        const meta = TYPE_META[f.key] || TYPE_META.other;
-                        const c = folderCounts(f.entries);
-                        const on = f.key === activeFolderKey && !searching;
-                        return (
-                          <button
-                            key={f.key}
-                            type="button"
-                            role="tab"
-                            aria-selected={on}
-                            className={`${styles.mapRentry} ${on ? styles.mapRentryOn : ''}`}
-                            onClick={() => { setSelectedFolderKey(f.key); setMapQuery(''); }}
-                          >
-                            <span
-                              className={styles.mapRicon}
-                              style={{ background: `var(--t-${meta.hue}-bg)`, color: `var(--t-${meta.hue})` }}
-                            >
-                              <TypeIcon name={meta.icon} />
-                            </span>
-                            <span className={styles.mapRtext}>
-                              <span className={styles.mapRname}>{f.title}</span>
-                            </span>
-                            <ProgressRing
-                              frac={c.total ? c.mapped / c.total : 0}
-                              color={c.full ? 'var(--positive-color, #00854d)' : `var(--t-${meta.hue})`}
-                              label={`${c.mapped}/${c.total}`}
-                            />
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <div className={styles.mapDetail}>
-                      <div className={styles.mapDhead}>
-                        {searching ? (
-                          <div className={styles.mapDheadL}>
-                            <span className={styles.mapDttl}>תוצאות חיפוש</span>
-                            <span className={styles.mapDcnt}>{shownEntries.length} שדות</span>
-                          </div>
-                        ) : activeFolder ? (
-                          <div className={styles.mapDheadL}>
-                            <span
-                              className={styles.mapRicon}
-                              style={{ background: `var(--t-${detailMeta.hue}-bg)`, color: `var(--t-${detailMeta.hue})` }}
-                            >
-                              <TypeIcon name={detailMeta.icon} />
-                            </span>
-                            <span>
-                              <div className={styles.mapDttl}>{activeFolder.title}</div>
-                              <div className={styles.mapDcnt}>{detailCounts.mapped} מתוך {detailCounts.total} ממופה</div>
-                            </span>
-                          </div>
-                        ) : (
-                          <div className={styles.mapDheadL}>
-                            <span className={styles.mapDttl}>מיפוי עמודות</span>
-                          </div>
-                        )}
-                      </div>
-                      {rowsBody}
+                      {isConfigured && (
+                        <Button kind={"secondary"} size={"small"} onClick={() => setShowTopUp(true)}>
+                          הוספת / השלמת לוחות ועמודות
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </>
