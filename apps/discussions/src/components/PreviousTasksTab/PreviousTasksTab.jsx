@@ -84,7 +84,7 @@ const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label ||
 const rangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
 
 
-export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUndo, onNotify, onNotifyLoading, onDismissToast, canTask = () => true, canCreateTask = true, canEditDiscussion = true, canReorderColumns, canManageSettings = false }) {
+export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUndo, onNotify, onNotifyLoading, onDismissToast, canTask = () => true, canCreateTask = true, canEditDiscussion = true, canDecision = () => true, canReorderColumns, canManageSettings = false }) {
   // Load-time grouping/filter = the shared saved view (empty default otherwise);
   // in-session changes are local until someone with permission hits Save.
   const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('previousTasks', { canManageSettings });
@@ -128,8 +128,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const [decSearch, setDecSearch] = useState('');
   const [decQuick, setDecQuick] = useState(null); // a decisionTrackingID label id, or null
   const tracking = useStatusOptions('decisions', 'decisionTrackingID');
-  const { decisions: allDecisions, loading: decisionsLoading } =
+  // round279 — keep the WHOLE hook result: it now also exposes the optimistic
+  // updaters wired into the interactive decisions table (edit/reorder/resize).
+  const decisionsData =
     usePreviousDecisions(discussion, { byType, scope, enabled: contentMode === 'decisions' });
+  const { decisions: allDecisions, loading: decisionsLoading } = decisionsData;
   const filteredDecisions = useMemo(() => {
     let rows = allDecisions || [];
     const q = decSearch.trim();
@@ -599,8 +602,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         </div>
         {/* round275 — content mode toggle (משימות/החלטות), right after the source
             chip per the owner's order: source → mode → scope → features. */}
+        {/* round279 — segment is dir="rtl", so the FIRST array item renders on the
+            RIGHT. Owner wants משימות on the LEFT of החלטות, so החלטות is listed
+            first (rightmost) and משימות second (leftmost). Default stays 'tasks'. */}
         <div className={styles.modeSeg} dir="rtl" role="tablist" aria-label="סוג התוכן">
-          {[{ key: 'tasks', label: 'משימות' }, { key: 'decisions', label: 'החלטות' }].map((m) => (
+          {[{ key: 'decisions', label: 'החלטות' }, { key: 'tasks', label: 'משימות' }].map((m) => (
             <button
               key={m.key}
               type="button"
@@ -815,7 +821,12 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
           </div>
         ) : (
           <div className={styles.board}>
-            <PreviousDecisionsTable decisions={filteredDecisions} />
+            <PreviousDecisionsTable
+              decisions={filteredDecisions}
+              data={decisionsData}
+              canDecision={canDecision}
+              canManageSettings={canManageSettings}
+            />
           </div>
         )
       )}
