@@ -8,7 +8,7 @@ import { useMemo } from 'react';
 import { useTheme } from '../../lib/theme';
 import { APP_ORDER, appColor } from '../../lib/palette';
 import type { ErrorsOverTimePoint } from '../../lib/types';
-import { EmptyPanel, Legend, TooltipShell, fmt } from './shared';
+import { EmptyPanel, Legend, TooltipShell, compact, fmt } from './shared';
 
 function pivot(rows: ErrorsOverTimePoint[]): { data: Array<Record<string, number | string>>; apps: string[] } {
   const times = new Map<string, Record<string, number | string>>();
@@ -69,7 +69,11 @@ export function ErrorsOverTime({ rows, window }: { rows: ErrorsOverTimePoint[]; 
   return (
     <>
       <ResponsiveContainer width="100%" height={288}>
-        <AreaChart data={data} margin={{ top: 8, right: 14, bottom: 4, left: 6 }}>
+        {/* Roomier gutters so neither axis' labels get clipped by the SVG edge:
+            the last X date-label centers on the right-most point (right margin
+            catches its overflow) and the Y column has room for its ticks + the
+            rotated caption. */}
+        <AreaChart data={data} margin={{ top: 8, right: 22, bottom: 8, left: 8 }}>
           <defs>
             {apps.map((a) => {
               const c = appColor(a, isDark);
@@ -91,21 +95,24 @@ export function ErrorsOverTime({ rows, window }: { rows: ErrorsOverTimePoint[]; 
             tick={{ fill: chrome.textSecondary, fontSize: 12 }}
             tickLine={{ stroke: chrome.baseline }}
             tickMargin={8}
+            height={28}
             axisLine={{ stroke: chrome.baseline }}
             interval="preserveStartEnd"
+            // Inset the plot from both ends so the first/last date labels have
+            // room to center under their points instead of being sliced off.
+            padding={{ left: 12, right: 12 }}
           />
           <YAxis
             tick={{ fill: chrome.textSecondary, fontSize: 12 }}
             tickLine={false}
             axisLine={false}
-            width={44}
+            width={46}
             allowDecimals={false}
-            label={{
-              value: 'errors',
-              angle: -90,
-              position: 'insideLeft',
-              style: { fill: chrome.muted, fontSize: 11, textAnchor: 'middle' },
-            }}
+            // Compact ticks (1.2K) keep the number column narrow so large counts
+            // don't spill past the gutter and get cut. The rotated "errors"
+            // caption was dropped: it sat ON TOP of the middle tick number
+            // ("swallowed" it), and the card title already says "Errors over time".
+            tickFormatter={(v) => compact(Number(v))}
           />
           <Tooltip
             content={({ active, payload, label }) =>
