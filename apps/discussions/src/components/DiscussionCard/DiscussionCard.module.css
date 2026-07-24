@@ -122,7 +122,8 @@
      would drift). round255 — owner still found it faint; DOUBLE it again
      (scaleY 2 → 4) so the active bar reads clearly, still resting centered on
      the rule. */
-  transform: translateY(3px) scaleY(4);
+  /* round283 (owner request) — active bar 40% THINNER: scaleY 4 → 2.4 (4 × 0.6). */
+  transform: translateY(3px) scaleY(2.4);
 }
 /* vibe TabList renders role="tablist"; keep it ONE row, never wrapping to a 2nd row. */
 .tabsRow :global([role="tablist"]) {

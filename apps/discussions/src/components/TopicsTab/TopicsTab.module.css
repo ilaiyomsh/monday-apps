@@ -1631,6 +1631,21 @@
   padding: 0;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.14);
   transition: transform 0.1s ease, box-shadow 0.1s ease;
+  /* round283 — center the type glyph (W/X/PDF/P) on the square. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* round283 — the type letter itself: white, bold, sized to fit even "PDF". */
+.docIconLabel {
+  color: #fff;
+  font-weight: 800;
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  font-family: var(--font-family);
+  direction: ltr;
+  pointer-events: none;
 }
 .docIcon:hover {
   transform: translateY(-1px);

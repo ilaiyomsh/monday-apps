@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { Check, Loader2, AlertCircle, Paperclip, Plus, X, Link2, Download } from 'lucide-react';
-import { fileKind, fileKindColor } from '@generated/utils/fileKind.js';
+import { fileKind, fileKindColor, fileKindLabel } from '@generated/utils/fileKind.js';
 import { useBackground } from '@generated/hooks/useBackground.js';
 import { useReferences } from '@generated/hooks/useReferences.js';
 import { useSummary } from '@generated/hooks/useSummary.js';
@@ -226,7 +226,10 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = fals
             title={f.name}
             aria-label={`מסמך: ${f.name}`}
             onClick={() => setPreview({ name: f.name, url: f.url })}
-          />
+          >
+            {/* round283 — the type glyph (W/X/PDF/P) on the colored square. */}
+            <span className={styles.docIconLabel}>{fileKindLabel(f.name)}</span>
+          </button>
           {canAttach && (
             <button
               type="button"

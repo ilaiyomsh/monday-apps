@@ -309,7 +309,10 @@ export function TopicPointRow({
             {(onCreateTask || onCreateDecision) && (
               <button
                 type="button"
-                className={styles.outAdd}
+                /* round283 (owner request) — the per-point "+" is now hover-revealed
+                   like the creator avatar (was always visible). opacity-based, so the
+                   reserved slot keeps its width and nothing shifts. */
+                className={`${styles.outAdd} ${styles.hoverOnly}`}
                 title="תוצר חדש (משימה או החלטה)"
                 aria-label="תוצר חדש מהנקודה"
                 disabled={inert}
