@@ -38,6 +38,7 @@ import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
 // Quick-filter status battery (round 81) — shared buckets + presentation chip.
 import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
+import battery from '@generated/components/TaskStatusBattery/TaskStatusBattery.module.css';
 import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
 import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
 import logger from '@generated/utils/logger.js';
@@ -139,8 +140,13 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // Tracking-label chips for the decisions quick-filter battery (owner-configured
   // labels + colors, e.g. התקבלה / מיושמת חלקית / מיושמת במלואה).
   const trackingChips = useMemo(
-    () => (tracking.options || []).map((o) => ({ id: o.id, label: o.label, color: o.color })),
-    [tracking.options]
+    () => (tracking.options || []).map((o) => ({
+      id: o.id,
+      label: o.label,
+      color: o.color,
+      count: (allDecisions || []).filter((d) => String(d.decisionTrackingID) === String(o.id)).length,
+    })),
+    [tracking.options, allDecisions]
   );
 
   // Data layer (round146 split): mode-resolved task list + previous-discussion
@@ -672,31 +678,43 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
           )}
         </div>
         )}
-        {/* round275 — decisions feature cluster: search + a tracking-label quick
-            filter (התקבלה / מיושמת חלקית / מיושמת במלואה — owner-configured labels). */}
+        {/* round275 — decisions feature cluster: just the search here; the quick
+            filter is a battery pinned to the far edge (batterySlot) below, so it
+            matches the tasks battery's look AND position exactly. */}
         {contentMode === 'decisions' && (
           <div className={styles.toolbarActions} dir="ltr">
             <SearchPill value={decSearch} onChange={setDecSearch} />
-            <div className={styles.decBattery} dir="rtl" role="group" aria-label="סינון מהיר לפי מעקב החלטה">
-              {trackingChips.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={`${styles.decChip}${String(decQuick) === String(c.id) ? ` ${styles.decChipOn}` : ''}`}
-                  onClick={() => setDecQuick((q) => (String(q) === String(c.id) ? null : c.id))}
-                  title={`הצג ${c.label}`}
-                >
-                  <span className={styles.decDot} style={{ background: c.color || 'hsl(var(--status-default))' }} />
-                  <span>{c.label}</span>
-                </button>
-              ))}
-            </div>
           </div>
         )}
-        {/* Quick-filter battery (round 81) — tasks only; pushed to the RIGHT edge. */}
+        {/* Quick-filter battery — pushed to the RIGHT edge (batterySlot). Tasks:
+            open/done/delayed. round277 — decisions: one chip per "מעקב החלטה"
+            label, rendered with the SAME battery styling + position as tasks. */}
         {contentMode === 'tasks' && (
         <div className={styles.batterySlot}>
           <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
+        </div>
+        )}
+        {contentMode === 'decisions' && trackingChips.length > 0 && (
+        <div className={styles.batterySlot}>
+          <div className={battery.battery} role="group" aria-label="סינון מהיר לפי מעקב החלטה" dir="rtl">
+            {trackingChips.map((c) => {
+              const isActive = String(decQuick) === String(c.id);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`${battery.chip} ${isActive ? battery.chipActive : ''}`}
+                  aria-pressed={isActive}
+                  title={`הצג ${c.label}`}
+                  onClick={() => setDecQuick((q) => (String(q) === String(c.id) ? null : c.id))}
+                >
+                  <span className={battery.dot} style={{ background: c.color || 'hsl(var(--status-default))' }} />
+                  <span className={battery.label}>{c.label}</span>
+                  <span className={battery.count}>{c.count}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
         )}
       </div>

@@ -149,25 +149,6 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
 }
 
-/* round275 — decisions quick-filter battery (one chip per tracking label). */
-.decBattery { display: inline-flex; align-items: center; gap: 6px; }
-.decChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 1px solid var(--ui-border-color, #d0d4e4);
-  background: var(--primary-background-color, #fff);
-  color: var(--text-color, #323338);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 13px;
-  font-family: var(--font-family);
-  cursor: pointer;
-}
-.decChip:hover { background: var(--primary-background-hover-color, #f5f6f8); }
-.decChipOn { background: #eaf2fe; border-color: var(--primary-color, #0073ea); }
-.decDot { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
-
 /* Centered "no previous discussion" state with a picker. */
 .noPrevious {
   display: flex;
