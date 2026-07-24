@@ -1034,32 +1034,55 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                 </div>
               );
 
-              // round286 (owner-approved mockup) — mapping is a boards-RIGHT /
-              // types-LEFT master-detail: pick a board on the right; its column
-              // TYPES appear as chips at the top-left ("לוח" is the first type =
-              // the board picker itself); picking a type opens its fields below.
-              // No percent ring, no per-folder count badges (owner request).
+              // round287 (owner request) — layout flipped: BOARDS as a horizontal
+              // row at the TOP (with the search); column TYPES as a vertical list in
+              // the LEFT column; the selected type's fields fill the pane to its
+              // right. "לוח" stays the first type (= the board picker).
               const boardSelected = selectedFolderKey === 'board' && !searching;
               return (
                 <>
-                  <div className={styles.mapBody2}>
-                    {/* LEFT — search + column-type chips + fields (or board picker) */}
-                    <div className={styles.mapLeft}>
-                      <div className={styles.mapSearch}>
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                          <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-                          <path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                        </svg>
-                        <input
-                          value={mapQuery}
-                          onChange={(e) => setMapQuery(e.target.value)}
-                          placeholder="חיפוש שדה…"
-                          aria-label="חיפוש שדה"
-                        />
-                      </div>
+                  {/* TOP — search + boards row (דיונים / משימות / …). */}
+                  <div className={styles.mapTop}>
+                    <div className={styles.mapSearch}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+                        <path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                      <input
+                        value={mapQuery}
+                        onChange={(e) => setMapQuery(e.target.value)}
+                        placeholder="חיפוש שדה…"
+                        aria-label="חיפוש שדה"
+                      />
+                    </div>
+                    <div className={styles.mapBoardsRow} role="tablist" aria-label="לוחות">
+                      {boardKeys.map((bk) => {
+                        const on = bk === boardKey;
+                        return (
+                          <button
+                            key={bk}
+                            type="button"
+                            role="tab"
+                            aria-selected={on}
+                            className={`${styles.mapBd} ${on ? styles.mapBdOn : ''}`}
+                            onClick={() => { setSelectedBoardKey(bk); setSelectedFolderKey('board'); setMapQuery(''); }}
+                          >
+                            {BOARD_ROLE_TITLES[bk] || bk}
+                          </button>
+                        );
+                      })}
+                      {isConfigured && (
+                        <Button kind={"secondary"} size={"small"} onClick={() => setShowTopUp(true)}>
+                          הוספת / השלמת לוחות ועמודות
+                        </Button>
+                      )}
+                    </div>
+                  </div>
 
-                      <div className={styles.mapTypes} role="tablist" aria-label="סוגי עמודות">
-                        {/* "לוח" — the board itself, first/topmost type. */}
+                  {/* BODY — column-type list (LEFT) + fields / board picker (right). */}
+                  <div className={styles.mapBody2}>
+                    <div className={styles.mapTypesCol} role="tablist" aria-label="סוגי עמודות">
+                      {/* "לוח" — the board itself, first type (= the board picker). */}
                         <button
                           type="button"
                           role="tab"
@@ -1142,31 +1165,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                           </>
                         )}
                       </div>
-                    </div>
-
-                    {/* RIGHT — the boards list. Clicking a board opens its types. */}
-                    <div className={styles.mapBoards}>
-                      <div className={styles.mapBoardsLbl}>לוחות</div>
-                      {boardKeys.map((bk) => {
-                        const on = bk === boardKey;
-                        return (
-                          <button
-                            key={bk}
-                            type="button"
-                            aria-selected={on}
-                            className={`${styles.mapBd} ${on ? styles.mapBdOn : ''}`}
-                            onClick={() => { setSelectedBoardKey(bk); setSelectedFolderKey('board'); setMapQuery(''); }}
-                          >
-                            {BOARD_ROLE_TITLES[bk] || bk}
-                          </button>
-                        );
-                      })}
-                      {isConfigured && (
-                        <Button kind={"secondary"} size={"small"} onClick={() => setShowTopUp(true)}>
-                          הוספת / השלמת לוחות ועמודות
-                        </Button>
-                      )}
-                    </div>
                   </div>
                 </>
               );
