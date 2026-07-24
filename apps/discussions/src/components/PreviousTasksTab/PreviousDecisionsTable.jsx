@@ -23,11 +23,16 @@ export function PreviousDecisionsTable({
   data,
   canDecision = () => true,
   canManageSettings = false,
+  // Group tint (round280) — when the previous-decisions view is grouped, each
+  // group's header color is threaded down to MyDecisionsTable as the row tint,
+  // exactly like the personal "ההחלטות שלי" grouped tables. Presentational only.
+  color,
 }) {
   const d = data || {};
   return (
     <MyDecisionsTable
       decisions={decisions}
+      color={color}
       canDecision={canDecision}
       canManageSettings={canManageSettings}
       onStatusChange={d.updateDecisionStatus}

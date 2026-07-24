@@ -41,3 +41,21 @@ export function fileKind(nameOrExt) {
 export function fileKindColor(nameOrExt) {
   return KIND_COLOR[fileKind(nameOrExt)];
 }
+
+// round283 (owner request) — short uppercase glyph shown ON the colored square so
+// a Word file reads as "W", Excel as "X", etc. (the round268 squares were
+// text-less and the owner couldn't tell the type apart). image/other stay blank —
+// the color + hover filename carry them.
+const KIND_LABEL = {
+  excel: 'X',
+  pdf: 'PDF',
+  word: 'W',
+  ppt: 'P',
+  image: '',
+  other: '',
+};
+
+/** Short uppercase label for a file's kind ('W'|'X'|'PDF'|'P'|''). Pure. */
+export function fileKindLabel(nameOrExt) {
+  return KIND_LABEL[fileKind(nameOrExt)] || '';
+}

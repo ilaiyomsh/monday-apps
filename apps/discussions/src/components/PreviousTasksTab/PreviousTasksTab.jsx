@@ -3,7 +3,7 @@ import { Button, Text, Dropdown } from '@vibe/core';
 import { DropdownChevronDown, Filter } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
-import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS } from '@generated/components/GroupByBuilder';
+import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
 import { EmptyState } from '@generated/components/EmptyState';
 // Varied stable group-title colors (owner request 2026-07-14) — shared engine.
 import { ensureGroupColors, groupTabTasks } from '@generated/components/MyTasksView/grouping.js';
@@ -33,6 +33,7 @@ import { משימות1Board } from '@api/BoardSDK.js';
 import { TaskTable } from '@generated/components/TaskTable';
 import { PreviousTasksSkeleton } from '@generated/components/PreviousTasksSkeleton';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
+import { isValidStatus } from '@generated/constants/statusConfig';
 import { usePreviousDecisions } from './usePreviousDecisions.js';
 import { PreviousDecisionsTable } from './PreviousDecisionsTable.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
@@ -84,6 +85,39 @@ const PREV_COL_NAME = { status: 'סטטוס', deadline: 'דד ליין', person:
 const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'בחרו טווח תאריכים';
 const rangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
 
+// ---- Previous-discussions DECISIONS view config (round280) ----------------
+// Mirrors DecisionsTab's decisions controls verbatim so the "דיונים קודמים →
+// החלטות" view gets the SAME Search / Filter / Sort / Group-by / Collapse
+// toolbar as the in-discussion decisions tab (and the personal "ההחלטות שלי").
+// Group by: none / סטאטוס (decisionStatusID) / מחליט (decider person).
+const DEC_GROUP_OPTIONS = [
+  { value: 'none', label: 'ללא קיבוץ' },
+  { value: 'status', label: 'סטאטוס', icon: 'status', orders: GROUP_STATUS_ORDERS },
+  { value: 'decider', label: 'מחליט', icon: 'person', orders: GROUP_AZ_ORDERS },
+];
+// Sort: החלטה (name) / סטאטוס / תאריך. `value` keys map to sortTasks(); a
+// decision is mapped to the { name, statusID, deadlineID } shape before sorting.
+const DEC_SORT_OPTIONS = [
+  { value: 'name', label: 'החלטה', icon: 'text', dirs: SORT_TEXT_DIRS },
+  { value: 'status', label: 'סטאטוס', icon: 'status', dirs: SORT_STATUS_DIRS },
+  { value: 'deadline', label: 'תאריך', icon: 'date', dirs: SORT_DATE_DIRS },
+];
+const firstDecSortDir = (col) => (DEC_SORT_OPTIONS.find((o) => o.value === col) || DEC_SORT_OPTIONS[0])?.dirs?.[0]?.key;
+const DEC_NO_STATUS = '__none__';
+const DEC_NO_DECIDER = '__nodecider__';
+// Filter columns: status + date + decider (person). Reuses the shared
+// controls.js engine (which reads statusID / responsibilityID / deadlineID) via
+// a filterView that maps each decision to that shape (see decFilterView below).
+const DEC_FILTER_COLUMNS = [
+  FILTER_COLUMNS.find((c) => c.key === 'status'),
+  FILTER_COLUMNS.find((c) => c.key === 'deadline'),
+  FILTER_COLUMN_PERSON,
+];
+const DEC_FILTER_TYPE_ICON = { status: 'status', date: 'date', person: 'person' };
+const DEC_FILTER_COL_NAME = { status: 'סטאטוס', deadline: 'תאריך', person: 'מחליט' };
+const decRangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'בחרו טווח תאריכים';
+const decRangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
+
 
 export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUndo, onNotify, onNotifyLoading, onDismissToast, canTask = () => true, canCreateTask = true, canEditDiscussion = true, canDecision = () => true, canReorderColumns, canManageSettings = false }) {
   // Load-time grouping/filter = the shared saved view (empty default otherwise);
@@ -129,18 +163,79 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const [decSearch, setDecSearch] = useState('');
   const [decQuick, setDecQuick] = useState(null); // a decisionTrackingID label id, or null
   const tracking = useStatusOptions('decisions', 'decisionTrackingID');
+  // Decision STATUS labels/order/colors — drive the decisions Filter/Sort/Group
+  // controls (mirrors DecisionsTab's useStatusOptions('decisions','decisionStatusID')).
+  const decStatus = useStatusOptions('decisions', 'decisionStatusID');
   // round279 — keep the WHOLE hook result: it now also exposes the optimistic
   // updaters wired into the interactive decisions table (edit/reorder/resize).
   const decisionsData =
     usePreviousDecisions(discussion, { byType, scope, enabled: contentMode === 'decisions' });
   const { decisions: allDecisions, loading: decisionsLoading } = decisionsData;
+
+  // ---- Decisions Filter / Sort / Group / Save-to-view (round280) ------------
+  // Same shared engine + builder chrome as DecisionsTab, but persisted under a
+  // SEPARATE saved-view key ('previousDecisions') so it never clobbers the
+  // in-discussion decisions tab ('decisionsTab').
+  const { view: decSavedView, canSave: decCanSaveView, saveView: decSaveView } =
+    useSavedViews('previousDecisions', { canManageSettings });
+  const decSavedGroup = DEC_GROUP_OPTIONS.some((o) => o.value === decSavedView?.group?.col) ? decSavedView.group : null;
+  const [decGroupBy, setDecGroupBy] = useState(decSavedGroup ? decSavedGroup.col : 'none');
+  const [decGroupOrder, setDecGroupOrder] = useState(decSavedGroup?.order || 'labelAsc');
+  const [decCollapsed, setDecCollapsed] = useState({});
+  const [decSort, setDecSort] = useState(() => {
+    const s = decSavedView?.sort;
+    if (!s || !s.active || !DEC_SORT_OPTIONS.some((o) => o.value === s.col)) return { col: null, dir: null, active: false };
+    return { col: s.col, dir: s.dir || firstDecSortDir(s.col), active: true };
+  });
+  const {
+    filter: decFilter, filterRows: decFilterRows, setFilterOp: setDecFilterOp,
+    toggleFilterVal: toggleDecFilterVal, setDeadlineRange: setDecDeadlineRange, setDeadlineDate: setDecDeadlineDate,
+    addFilterRow: addDecFilterRow, removeFilterRow: removeDecFilterRow, retargetFilterRow: retargetDecFilterRow, clearFilter: clearDecFilter,
+  } = useFilterBuilder({ columns: DEC_FILTER_COLUMNS, defaultRows: ['status'], savedView: decSavedView });
+  const decFc = filterCount(decFilter);
+  const onDecSortChange = ({ col, dir }) => setDecSort({ col, dir: dir || firstDecSortDir(col), active: true });
+  const clearDecSort = () => setDecSort({ col: null, dir: null, active: false });
+
+  // Map a decision to the shape controls.js' engine expects (verbatim from
+  // DecisionsTab): status + decider(person) + date.
+  const decFilterView = (d) => ({
+    id: d.id,
+    statusID: d.decisionStatusID,
+    responsibilityID: Array.isArray(d.deciderID) ? d.deciderID : [],
+    deadlineID: d.decisionDateID instanceof Date ? d.decisionDateID : null,
+  });
+  // Client pipeline: filter -> search -> quick-filter -> sort, over allDecisions.
   const filteredDecisions = useMemo(() => {
-    let rows = allDecisions || [];
+    let list = allDecisions || [];
+    if (filterCount(decFilter) > 0) {
+      const passing = new Set(filterTasks(list.map(decFilterView), decFilter).map((v) => String(v.id)));
+      list = list.filter((d) => passing.has(String(d.id)));
+    }
     const q = decSearch.trim();
-    if (q) rows = rows.filter((d) => (d.name || '').includes(q));
-    if (decQuick != null) rows = rows.filter((d) => String(d.decisionTrackingID) === String(decQuick));
-    return rows;
-  }, [allDecisions, decSearch, decQuick]);
+    if (q) list = list.filter((d) => matchesSearch(d.name, q));
+    if (decQuick != null) list = list.filter((d) => String(d.decisionTrackingID) === String(decQuick));
+    if (!decSort.active || !decSort.col) return list;
+    const views = list.map((d) => ({
+      id: d.id, name: d.name,
+      statusID: d.decisionStatusID,
+      deadlineID: d.decisionDateID instanceof Date ? d.decisionDateID : null,
+    }));
+    const orderIds = sortTasks(views, decSort, { orderById: decStatus.orderById, labelById: decStatus.labelById })
+      .map((v) => String(v.id));
+    const byId = new Map(list.map((d) => [String(d.id), d]));
+    return orderIds.map((id) => byId.get(id)).filter(Boolean);
+  }, [allDecisions, decFilter, decSearch, decQuick, decSort, decStatus.orderById, decStatus.labelById]);
+
+  // Decider person options = the distinct deciders across the loaded decisions.
+  const decPersonOptions = useMemo(() => {
+    const seen = new Map();
+    (allDecisions || []).forEach((d) => (Array.isArray(d.deciderID) ? d.deciderID : []).forEach((p) => {
+      if (p && p.id != null && !seen.has(String(p.id))) {
+        seen.set(String(p.id), { id: String(p.id), label: p.name || String(p.id), color: null });
+      }
+    }));
+    return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
+  }, [allDecisions]);
   // Tracking-label chips for the decisions quick-filter battery (owner-configured
   // labels + colors, e.g. התקבלה / מיושמת חלקית / מיושמת במלואה).
   const trackingChips = useMemo(
@@ -450,6 +545,49 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
 
   const groupOptions = byType ? [...GROUP_OPTIONS, GROUP_OPTION_DISCUSSION] : GROUP_OPTIONS;
 
+  // Decisions grouping (round280) — status groups key by the stable label id and
+  // resolve label/color via useStatusOptions; decider groups key by the sorted
+  // person-id set. Verbatim from DecisionsTab.groupedRaw. Shares the same
+  // useGroupColors instance (colorsByKey/openMenuFor) as the tasks groups above.
+  const decGroupedRaw = useMemo(() => {
+    if (decGroupBy === 'status') {
+      const groups = new Map();
+      filteredDecisions.forEach((d) => {
+        const id = isValidStatus(d.decisionStatusID) && decStatus.labelById[d.decisionStatusID] != null ? d.decisionStatusID : null;
+        const key = id == null ? DEC_NO_STATUS : String(id);
+        if (!groups.has(key)) groups.set(key, { key, statusId: id, items: [] });
+        groups.get(key).items.push(d);
+      });
+      const list = [...groups.values()].map((g) => ({
+        key: g.key,
+        label: g.statusId == null ? 'ללא סטאטוס' : (decStatus.labelById[g.statusId] ?? 'ללא סטאטוס'),
+        color: g.statusId == null ? null : (decStatus.colorById[g.statusId] || null),
+        items: g.items,
+      }));
+      return ensureGroupColors(sortGroupsByOrder(list, { order: decGroupOrder, orderById: decStatus.orderById, noKey: DEC_NO_STATUS }));
+    }
+    if (decGroupBy === 'decider') {
+      const groups = new Map();
+      filteredDecisions.forEach((d) => {
+        const people = Array.isArray(d.deciderID) ? d.deciderID : [];
+        const key = people.map((p) => String(p.id)).sort().join('|') || DEC_NO_DECIDER;
+        const label = people.map((p) => p.name).filter(Boolean).join(', ') || 'ללא מחליט';
+        if (!groups.has(key)) groups.set(key, { key, label: key, color: null, items: [] });
+        groups.get(key).label = label;
+        groups.get(key).items.push(d);
+      });
+      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: decGroupOrder, noKey: DEC_NO_DECIDER }));
+    }
+    return [{ key: '__all__', label: '', color: null, items: filteredDecisions }];
+  }, [filteredDecisions, decGroupBy, decGroupOrder, decStatus.labelById, decStatus.colorById, decStatus.orderById]);
+  const decGrouped = useMemo(() => ensureGroupColors(decGroupedRaw, colorsByKey), [decGroupedRaw, colorsByKey]);
+  const decIsGrouped = decGroupBy !== 'none';
+  const decAllCollapsed = decGrouped.length > 0 && decGrouped.every((g) => decCollapsed[g.key]);
+  const toggleDecAll = () => {
+    if (decAllCollapsed) setDecCollapsed({});
+    else { const c = {}; decGrouped.forEach((g) => { c[g.key] = true; }); setDecCollapsed(c); }
+  };
+
   // ---------- Filter panel body (mirrors My Tasks; status + deadline + person) ----------
   const field = (mobile, label, seg) => (mobile
     ? <div className={bs.bField} key={label}><div className={bs.bFieldLabel}>{label}</div>{seg}</div>
@@ -533,6 +671,90 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       {filterRows.length === 0 ? <div className={bs.bEmpty}>No filters — showing all tasks</div> : null}
       {filterRows.length < PREV_FILTER_COLUMNS.length
         ? <button type="button" className={bs.bAddLink} onClick={addFilterRow}>+ New filter</button>
+        : null}
+    </>
+  );
+
+  // ---------- Decisions Filter panel body (round280 — mirrors DecisionsTab) ----------
+  const decValueChips = (col) => {
+    const opts = col === 'person' ? decPersonOptions : decStatus.options;
+    return (opts || []).filter((o) => decFilter[col].values.has(String(o.id))).map((o) => ({ color: o.color, text: o.label }));
+  };
+  const renderDecFilterRow = (col, i, mobile, openId, setOpenId) => {
+    const fcfg = DEC_FILTER_COLUMNS.find((c) => c.key === col);
+    const colSeg = (
+      <Segment id={`dfcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
+        icon={DEC_FILTER_TYPE_ICON[fcfg.type]} text={DEC_FILTER_COL_NAME[col]}
+        options={DEC_FILTER_COLUMNS.map((c) => ({
+          key: c.key, label: DEC_FILTER_COL_NAME[c.key], icon: DEC_FILTER_TYPE_ICON[c.type],
+          selected: c.key === col, disabled: c.key !== col && decFilterRows.includes(c.key),
+        }))}
+        onPick={(to) => retargetDecFilterRow(col, to)} />
+    );
+    const opSeg = (
+      <Segment id={`dfop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="תנאי"
+        text={OP_LABEL[decFilter[col].op]}
+        options={fcfg.ops.map((op) => ({ key: op, label: OP_LABEL[op], selected: decFilter[col].op === op }))}
+        onPick={(op) => setDecFilterOp(col, op)} />
+    );
+    let valueCtl = null;
+    if (col === 'deadline') {
+      const f = decFilter.deadline;
+      if (f.op === 'within') {
+        valueCtl = (
+          <Segment id="dfval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="מתי"
+            icon={f.range ? decRangeIcon(f.range) : 'date'} text={f.range ? decRangeLabel(f.range) : 'בחרו טווח תאריכים'} placeholder={!f.range}
+            options={DEADLINE_RANGES.map((r) => ({ key: r.key, label: r.label, icon: r.icon, selected: f.range === r.key }))}
+            onPick={setDecDeadlineRange} />
+        );
+      } else {
+        valueCtl = (
+          <div className={mobile ? bs.bDateWrapFull : bs.bDateWrap}>
+            <DatePickerPopover value={f.date || null} onChange={setDecDeadlineDate} />
+          </div>
+        );
+      }
+    } else {
+      const opts = col === 'person' ? decPersonOptions : decStatus.options;
+      valueCtl = (
+        <Segment id={`dfval-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle={DEC_FILTER_COL_NAME[col]} multi
+          chips={decValueChips(col)}
+          options={(opts || []).map((o) => ({ key: String(o.id), label: o.label, dot: o.color, selected: decFilter[col].values.has(String(o.id)) }))}
+          onPick={(id) => toggleDecFilterVal(col, id)} />
+      );
+    }
+    const lead = i === 0 ? 'Where' : 'And';
+    const removeBtn = (
+      <button type="button" className={bs.bIconBtn} onClick={() => removeDecFilterRow(col)} aria-label="Remove filter">
+        <BuilderIcon name="x" size={16} />
+      </button>
+    );
+    if (mobile) {
+      return (
+        <div className={bs.bWhere} style={{ display: 'block' }} key={col}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span className={bs.bWhereLead}>{lead}</span>
+            {removeBtn}
+          </div>
+          {field(true, 'עמודה', colSeg)}
+          {field(true, 'תנאי', opSeg)}
+          {valueCtl ? field(true, 'Value', valueCtl) : null}
+        </div>
+      );
+    }
+    return (
+      <div className={bs.bWhere} key={col}>
+        <span className={bs.bWhereLead}>{lead}</span>
+        {colSeg}{opSeg}{valueCtl}{removeBtn}
+      </div>
+    );
+  };
+  const renderDecFilterBody = ({ mobile, openId, setOpenId }) => (
+    <>
+      {decFilterRows.map((col, i) => renderDecFilterRow(col, i, mobile, openId, setOpenId))}
+      {decFilterRows.length === 0 ? <div className={bs.bEmpty}>No filters — showing all decisions</div> : null}
+      {decFilterRows.length < DEC_FILTER_COLUMNS.length
+        ? <button type="button" className={bs.bAddLink} onClick={addDecFilterRow}>+ New filter</button>
         : null}
     </>
   );
@@ -689,6 +911,41 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         {contentMode === 'decisions' && (
           <div className={styles.toolbarActions} dir="ltr">
             <SearchPill value={decSearch} onChange={setDecSearch} />
+            <BuilderControl
+              icon={Filter} label="סינון" title="סינון לפי" mobile={isMobile} width={isMobile ? undefined : 620}
+              applied={decFc > 0} badge={decFc}
+              onClear={decFc > 0 ? clearDecFilter : null}
+              onSave={decCanSaveView ? () => {
+                decSaveView({ filter: serializeFilter(decFilter), filterRows: decFilterRows });
+                onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
+              } : null}
+              renderBody={renderDecFilterBody}
+            />
+            <SortByBuilder
+              options={DEC_SORT_OPTIONS}
+              value={decSort}
+              mobile={isMobile}
+              onChange={onDecSortChange}
+              onClear={clearDecSort}
+              onSave={decCanSaveView ? () => {
+                decSaveView({ sort: decSort });
+                onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
+              } : null}
+            />
+            <GroupByBuilder
+              options={DEC_GROUP_OPTIONS}
+              value={{ col: decGroupBy, order: decGroupOrder }}
+              noneValue="none"
+              mobile={isMobile}
+              onChange={(g) => { setDecGroupBy(g.col ?? 'none'); if (g.order) setDecGroupOrder(g.order); setDecCollapsed({}); }}
+              onSave={decCanSaveView ? () => {
+                decSaveView({ group: { col: decGroupBy, order: decGroupOrder } });
+                onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
+              } : null}
+            />
+            {decIsGrouped && filteredDecisions.length > 0 && (
+              <CollapseAllButton collapsed={decAllCollapsed} onClick={toggleDecAll} />
+            )}
           </div>
         )}
         {/* Quick-filter battery — pushed to the RIGHT edge (batterySlot). Tasks:
@@ -820,7 +1077,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
                   : 'לא נמצאו החלטות בדיונים קודמים')
               : 'לא נמצאו החלטות התואמות לסינון'}
           </EmptyState>
-        ) : (
+        ) : !decIsGrouped ? (
           <div className={styles.board}>
             <PreviousDecisionsTable
               decisions={filteredDecisions}
@@ -828,6 +1085,37 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
               canDecision={canDecision}
               canManageSettings={canManageSettings}
             />
+          </div>
+        ) : (
+          <div className={styles.board}>
+            <div className={styles.groupScrollInner}>
+              <div className={styles.groupStack}>
+                {decGrouped.map((grp) => (
+                  <div key={grp.key}>
+                    {grp.label && (
+                      <button type="button" onClick={() => setDecCollapsed((p) => ({ ...p, [grp.key]: !p[grp.key] }))}
+                        onContextMenu={(e) => openMenuFor(grp.key, e)}
+                        className={styles.groupHeader}>
+                        <DropdownChevronDown
+                          className={`${styles.groupChevron} ${decCollapsed[grp.key] ? styles.groupChevronCollapsed : ''}`}
+                          style={grp.color ? { color: grp.color } : undefined}
+                        />
+                        <span className={styles.groupTitle} style={grp.color ? { color: grp.color } : undefined}>{grp.label}</span>
+                      </button>
+                    )}
+                    {!decCollapsed[grp.key] && (
+                      <PreviousDecisionsTable
+                        decisions={grp.items}
+                        data={decisionsData}
+                        canDecision={canDecision}
+                        canManageSettings={canManageSettings}
+                        color={grp.color}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         )
       )}
