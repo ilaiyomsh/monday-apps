@@ -1,9 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { החלטות1Board, דיונים1Board } from '@api/BoardSDK.js';
 import { api, parseValue, cvSelection } from '../../utils/mondayApi/monday-client.js';
-import { getColumns } from '../../utils/mondayApi/board-config-store.js';
+import { getColumns, getBoardId } from '../../utils/mondayApi/board-config-store.js';
+import { ensureSubscribers } from '../../utils/mondayApi/subscribers.js';
 import { pickLatestPreviousId } from './previousScope.js';
 import logger from '@generated/utils/logger.js';
+
+// yyyy-mm-dd for a Date — the wire format monday's date column expects (matches
+// useDecisions.formatDate exactly).
+function formatDate(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 /*
  * round275 — decisions side of the "דיונים קודמים" tab. Resolves which previous
@@ -109,5 +116,73 @@ export function usePreviousDecisions(discussion, { byType, scope, enabled = true
     return () => { cancelled = true; };
   }, [enabled, byType, scope, discussion?.id, discussion?.discussionTypeID]);
 
-  return { decisions, loading };
+  // ---- Inline editing (round279) --------------------------------------------
+  // Previous decisions are REAL board items (never optimistic temp rows), so the
+  // updaters are the simple optimistic-with-revert shape: patch local state, write
+  // to the decisions board, roll back on failure. Each mirrors the corresponding
+  // useDecisions updater's write path (same board, same column aliases) — the only
+  // difference is there's no temp-row edit queue to feed here. A write to the
+  // shared decisions board is naturally reflected in the current-discussion tab on
+  // its next scan.
+  //
+  // The pre-edit snapshot for the revert is read from a ref (kept in sync with the
+  // committed `decisions`), NOT captured inside the setDecisions functional
+  // updater — React invokes that updater lazily, so it isn't reliably set by the
+  // time an async write rejects.
+  const decisionsRef = useRef([]);
+  useEffect(() => { decisionsRef.current = decisions; }, [decisions]);
+
+  const writeField = useCallback(async (id, changes, buildPayload) => {
+    const prev = decisionsRef.current;
+    setDecisions(prev.map((d) => (String(d.id) === String(id) ? { ...d, ...changes } : d)));
+    try {
+      await new החלטות1Board().item(id).update(await buildPayload()).execute();
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('usePreviousDecisions', 'עדכון החלטה מדיון קודם נכשל', err);
+      setDecisions(prev);
+    }
+  }, []);
+
+  const updateDecisionName = useCallback(async (id, name) => {
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    await writeField(id, { name: trimmed }, async () => ({ name: trimmed }));
+  }, [writeField]);
+
+  const updateDecisionStatus = useCallback((id, status) =>
+    writeField(id, { decisionStatusID: status }, async () => ({ decisionStatusID: status })), [writeField]);
+
+  const updateDecisionPriority = useCallback((id, priority) =>
+    writeField(id, { decisionPriorityID: priority }, async () => ({ decisionPriorityID: priority })), [writeField]);
+
+  const updateDecisionTracking = useCallback((id, tracking) =>
+    writeField(id, { decisionTrackingID: tracking }, async () => ({ decisionTrackingID: tracking })), [writeField]);
+
+  const updateDecisionDate = useCallback((id, date) =>
+    writeField(id, { decisionDateID: date }, async () => ({ decisionDateID: date ? formatDate(date) : null })), [writeField]);
+
+  // People columns: monday rejects assigning a non-subscriber, so pre-subscribe the
+  // account-wide people before the write (round104 pattern from useDecisions).
+  const writePeople = useCallback(async (id, alias, people) => {
+    await writeField(id, { [alias]: people }, async () => {
+      const ids = (people || []).map((p) => Number(p.id)).filter(Number.isFinite);
+      await ensureSubscribers(getBoardId('decisions'), ids);
+      return { [alias]: ids };
+    });
+  }, [writeField]);
+
+  const updateDecisionDecider = useCallback((id, people) => writePeople(id, 'deciderID', people), [writePeople]);
+  const updateDecisionAffected = useCallback((id, people) => writePeople(id, 'affectedID', people), [writePeople]);
+
+  return {
+    decisions,
+    loading,
+    updateDecisionName,
+    updateDecisionStatus,
+    updateDecisionPriority,
+    updateDecisionTracking,
+    updateDecisionDate,
+    updateDecisionDecider,
+    updateDecisionAffected,
+  };
 }

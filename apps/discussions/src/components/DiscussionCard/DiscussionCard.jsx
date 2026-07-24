@@ -964,7 +964,7 @@ export function DiscussionCard({
       <div className={styles.body} key={discussion.id}>
         {isComponentVisible(prefs, 'previous') && (
         <div className={activeTab === 'previous' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'previous' ? undefined : 'none' }}>
-          <PreviousTasksTab discussion={data} onCarryForward={tasksData.mergeTasks} onCarryForwardUndo={tasksData.removeTasks} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} canTask={canTask} canCreateTask={createTask} canEditDiscussion={editDiscussionFields} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
+          <PreviousTasksTab discussion={data} onCarryForward={tasksData.mergeTasks} onCarryForwardUndo={tasksData.removeTasks} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} canTask={canTask} canCreateTask={createTask} canEditDiscussion={editDiscussionFields} canDecision={canDecision} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
         </div>
         )}
         {(showTopicsTables || showBackground || showReferences || showSummaryPane) && (
