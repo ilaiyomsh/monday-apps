@@ -787,13 +787,17 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // while its type editor is on the "תבנית ייצוא" sub-tab. Without lifting the
   // contained overlay here, .modalExport is applied but the overlay still
   // clamps the modal small (owner: "עדיין מאוד קטן").
-  // round264 (owner request) — the ENTIRE settings modal (every tab) is always
-  // full-size and full-viewport, exactly like the export-template tab. `exportWide`
-  // remains the single flag for "full viewport + non-contained overlay + .modalExport";
-  // it is now always on, so mapping/preferences/templates/permissions all open at the
-  // same large size as the export tab.
-  const exportWide = true;
-  const overlayClass = `${styles.overlay} ${contained && !exportWide ? styles.overlayContained : ''}`;
+  // round264 (owner request) — the ENTIRE settings modal opened full-viewport.
+  // round284 (owner reversed this) — only the two "big-canvas" tabs stay full:
+  // תבנית ייצוא (3, the live Word preview) and מדדי שימוש (5, the usage dashboard).
+  // Every other settings tab (mapping/preferences/templates/permissions) opens as
+  // a compact EQUILATERAL SQUARE (~half the export width). `fullScreen` is the flag
+  // for "full viewport + non-contained overlay + .modalExport".
+  const fullScreen = activeTab === 3 || activeTab === 5;
+  const overlayClass = `${styles.overlay} ${contained && !fullScreen ? styles.overlayContained : ''}`;
+  // The template-manager / top-up wizard surfaces keep the old always-full overlay
+  // (they are their own large-canvas flows, unaffected by the per-tab sizing above).
+  const fullOverlayClass = styles.overlay;
 
   // round147 — templates-only mode: a super member ("חבר-על") opens the gear to
   // manage templates and NOTHING else — no mapping, no preferences, no
@@ -801,7 +805,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // settings save/footer machinery is deliberately absent here.
   if (templatesOnly) {
     return (
-      <div className={overlayClass} onClick={(e) => {
+      <div className={fullOverlayClass} onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}>
         <div
@@ -834,7 +838,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // so the re-seed effect refreshes the mapping view with the fresh config.
   if (showTopUp) {
     return (
-      <div className={overlayClass} onClick={(e) => {
+      <div className={fullOverlayClass} onClick={(e) => {
         if (e.target === e.currentTarget) setShowTopUp(false);
       }}>
         <div
@@ -868,7 +872,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       if (e.target === e.currentTarget) onClose();
     }}>
       <div
-        className={`${styles.modal} ${activeTab <= 2 && !exportWide ? styles.modalFixed : ''} ${exportWide ? styles.modalExport : ''} ${activeTab === 4 ? styles.modalWide : ''}`}
+        className={`${styles.modal} ${fullScreen ? styles.modalExport : styles.modalSquare}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"

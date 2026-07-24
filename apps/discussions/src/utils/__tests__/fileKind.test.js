@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extensionOf, fileKind, fileKindColor } from '../fileKind.js';
+import { extensionOf, fileKind, fileKindColor, fileKindLabel } from '../fileKind.js';
 
 describe('fileKind — extensionOf', () => {
   it('lower-cases and strips to the last extension', () => {
@@ -27,6 +27,28 @@ describe('fileKind — kind mapping', () => {
     expect(fileKind('h.zip')).toBe('other');
     expect(fileKind('noext')).toBe('other');
     expect(fileKind('')).toBe('other');
+  });
+});
+
+describe('fileKind — glyph label', () => {
+  // round284 — the triple-box glyph keys off monday's `extension` field, which is
+  // a BARE extension (no dot, no filename). Prove the label resolves from that
+  // bare form, not only from a dotted filename.
+  it('maps a BARE extension (monday `extension` field) to its glyph', () => {
+    expect(fileKindLabel('docx')).toBe('W');
+    expect(fileKindLabel('xlsx')).toBe('X');
+    expect(fileKindLabel('pdf')).toBe('PDF');
+    expect(fileKindLabel('pptx')).toBe('P');
+  });
+  it('maps a dotted filename to its glyph too', () => {
+    expect(fileKindLabel('report.docx')).toBe('W');
+    expect(fileKindLabel('budget.XLSX')).toBe('X');
+  });
+  it('is blank for image / other / unknown (color + hover carry them)', () => {
+    expect(fileKindLabel('png')).toBe('');
+    expect(fileKindLabel('zip')).toBe('');
+    expect(fileKindLabel('noext')).toBe('');
+    expect(fileKindLabel('')).toBe('');
   });
 });
 

@@ -7,6 +7,11 @@ import { useTheme } from '../../lib/theme';
 export const nf = new Intl.NumberFormat('en-US');
 export const fmt = (n: number) => nf.format(Math.round(n));
 
+// Compact form for AXIS ticks (1200 → "1.2K"), so numeric ticks stay short and
+// never get clipped by a narrow axis gutter. Tooltips keep the full `fmt` value.
+const cf = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
+export const compact = (n: number) => cf.format(Math.round(n));
+
 interface TooltipRow {
   label: string;
   value: string;

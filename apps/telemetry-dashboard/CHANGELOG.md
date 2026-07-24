@@ -1,5 +1,22 @@
 # Changelog - telemetry-dashboard
 
+## 2026-07-24 — Axis legibility follow-up (values were clipped/overlapped)
+
+### 💅 Design
+
+- **"Errors over time" axes no longer swallow their values.** Three fixes to the
+  time-series chart:
+  1. The rotated **"errors" Y-axis caption was removed** — it sat directly on top
+     of the middle Y tick number and garbled it; the card title already says
+     "Errors over time", so the caption was redundant.
+  2. **Y ticks are compact** (`1.2K` instead of `1,200`), keeping the number
+     column narrow so large counts don't spill past the gutter and get cut.
+  3. **Edge date labels stop getting sliced:** the X-axis now insets the plot
+     (`padding {left:12,right:12}`) and the chart carries roomier right/bottom/left
+     margins, so the first (`Jan 1`) and last (`Feb 10`) labels center under their
+     points instead of being clipped by the SVG edge.
+  Verified with a before/after render at large counts + edge dates.
+
 ## 2026-07-24 — Dashboard polish: LTR time, clearer axes, refined chrome
 
 ### 💅 Design

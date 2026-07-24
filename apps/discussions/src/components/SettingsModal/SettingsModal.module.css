@@ -30,6 +30,14 @@
   height: auto;
   max-height: 100%;
 }
+/* round284 — the compact square keeps its equilateral shape inside the contained
+   (card-pane) overlay too; it must beat the generic `.overlayContained .modal`
+   width above (higher specificity), so pin BOTH dimensions here. */
+.overlayContained .modalSquare {
+  width: min(620px, 96%);
+  height: min(620px, 96%);
+  max-height: 100%;
+}
 
 .modal {
   width: min(1000px, 95vw);
@@ -63,6 +71,14 @@
 .modalExport {
   width: calc(100vw - 32px);
   height: calc(100vh - 32px);
+}
+
+/* round284 (owner request) — every settings tab EXCEPT תבנית ייצוא (3) and
+   מדדי שימוש (5) opens as a compact equilateral square, ~half the export width.
+   Content scrolls internally (see `.content`), so a fixed square never clips. */
+.modalSquare {
+  width: min(620px, 92vw);
+  height: min(620px, 92vh);
 }
 
 .header {
