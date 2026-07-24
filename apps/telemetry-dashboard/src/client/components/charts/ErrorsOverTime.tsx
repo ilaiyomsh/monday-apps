@@ -54,7 +54,9 @@ function chooseTicks(data: Array<Record<string, number | string>>, window: strin
       firstPerGroup.push(iso);
     }
   }
-  const MAX = 8;
+  // Fewer labels → each date/month gets real breathing room and none is
+  // "swallowed" by its neighbour (owner: X-axis month names were unreadable).
+  const MAX = 6;
   if (firstPerGroup.length <= MAX) return firstPerGroup;
   const step = Math.ceil(firstPerGroup.length / MAX);
   return firstPerGroup.filter((_, i) => i % step === 0);
@@ -73,7 +75,7 @@ export function ErrorsOverTime({ rows, window }: { rows: ErrorsOverTimePoint[]; 
             the last X date-label centers on the right-most point (right margin
             catches its overflow) and the Y column has room for its ticks + the
             rotated caption. */}
-        <AreaChart data={data} margin={{ top: 8, right: 22, bottom: 8, left: 8 }}>
+        <AreaChart data={data} margin={{ top: 8, right: 24, bottom: 16, left: 8 }}>
           <defs>
             {apps.map((a) => {
               const c = appColor(a, isDark);
@@ -92,21 +94,22 @@ export function ErrorsOverTime({ rows, window }: { rows: ErrorsOverTimePoint[]; 
             reversed={false}
             ticks={ticks}
             tickFormatter={(t) => tickLabel(String(t), window)}
-            tick={{ fill: chrome.textSecondary, fontSize: 12 }}
+            tick={{ fill: chrome.textSecondary, fontSize: 13, fontWeight: 600 }}
             tickLine={{ stroke: chrome.baseline }}
-            tickMargin={8}
-            height={28}
+            tickMargin={10}
+            height={40}
             axisLine={{ stroke: chrome.baseline }}
             interval="preserveStartEnd"
             // Inset the plot from both ends so the first/last date labels have
             // room to center under their points instead of being sliced off.
-            padding={{ left: 12, right: 12 }}
+            padding={{ left: 16, right: 16 }}
           />
           <YAxis
-            tick={{ fill: chrome.textSecondary, fontSize: 12 }}
+            tick={{ fill: chrome.textSecondary, fontSize: 14, fontWeight: 600 }}
             tickLine={false}
             axisLine={false}
-            width={46}
+            width={54}
+            tickMargin={4}
             allowDecimals={false}
             // Compact ticks (1.2K) keep the number column narrow so large counts
             // don't spill past the gutter and get cut. The rotated "errors"

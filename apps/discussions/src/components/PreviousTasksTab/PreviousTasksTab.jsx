@@ -295,6 +295,38 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
   }, [saveView, hiddenColumns, onNotify]);
 
+  // round286 (owner request) — the DECISIONS view gets its own "הסתר" (columns)
+  // control, mirroring "ההחלטות שלי". Columns match MyDecisionsTable's set (name
+  // locked); persisted to the previousDecisions saved view. Applied at the render
+  // layer only (MyDecisionsTable's `hiddenColumns`), so order/width are untouched.
+  const decCols = getColumns('decisions') || {};
+  const decColumnList = [
+    { key: 'name', label: 'החלטה', icon: 'text', locked: true },
+    decCols.deciderID?.id && { key: 'decider', label: 'מחליט', icon: 'person' },
+    decCols.affectedID?.id && { key: 'affected', label: 'מושפעים', icon: 'person' },
+    decCols.decisionPriorityID?.id && { key: 'priority', label: 'עדיפות', icon: 'status' },
+    { key: 'status', label: 'סטאטוס', icon: 'status' },
+    decCols.decisionTrackingID?.id && { key: 'tracking', label: 'מעקב החלטה', icon: 'status' },
+    decCols.decisionDateID?.id && { key: 'date', label: 'תאריך', icon: 'date' },
+    decCols.discussionLinkID?.id && { key: 'discussion', label: 'דיון מקור', icon: 'relation' },
+  ].filter(Boolean);
+  const decHideableKeys = decColumnList.filter((c) => !c.locked).map((c) => c.key);
+  const [decHiddenColumns, setDecHiddenColumns] = useState(
+    () => new Set(Array.isArray(decSavedView?.hiddenColumns) ? decSavedView.hiddenColumns : [])
+  );
+  const toggleDecColumn = useCallback((key) => setDecHiddenColumns((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  }), []);
+  const showAllDecColumns = useCallback((show) => {
+    setDecHiddenColumns(show ? new Set() : new Set(decHideableKeys));
+  }, [decHideableKeys]);
+  const saveDecHiddenColumns = useCallback(() => {
+    decSaveView({ hiddenColumns: [...decHiddenColumns] });
+    onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
+  }, [decSaveView, decHiddenColumns, onNotify]);
+
 
 
 
@@ -943,6 +975,17 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
                 onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
               } : null}
             />
+            {/* round286 — "הסתר" (columns) for the decisions view, owners only,
+                exactly like "ההחלטות שלי". */}
+            {canManageSettings && (
+              <HideColumnsControl
+                columns={decColumnList}
+                hidden={decHiddenColumns}
+                onToggle={toggleDecColumn}
+                onToggleAll={showAllDecColumns}
+                onSave={decCanSaveView ? saveDecHiddenColumns : null}
+              />
+            )}
             {decIsGrouped && filteredDecisions.length > 0 && (
               <CollapseAllButton collapsed={decAllCollapsed} onClick={toggleDecAll} />
             )}
@@ -1084,6 +1127,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
               data={decisionsData}
               canDecision={canDecision}
               canManageSettings={canManageSettings}
+              hiddenColumns={decHiddenColumns}
             />
           </div>
         ) : (
@@ -1110,6 +1154,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
                         canDecision={canDecision}
                         canManageSettings={canManageSettings}
                         color={grp.color}
+                        hiddenColumns={decHiddenColumns}
                       />
                     )}
                   </div>

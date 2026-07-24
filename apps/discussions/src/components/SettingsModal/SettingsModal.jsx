@@ -303,6 +303,10 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // (onDone) or backs out (onManual). Offered only once the instance is already
   // configured — never during the first-run forced modal.
   const [showTopUp, setShowTopUp] = useState(false);
+  // round286 — when the templates tab (2) is on its "תבנית ייצוא" sub-tab, grow
+  // the modal to full screen like the dedicated export tab (3). TemplateManagerModal
+  // reports this via onExportWide.
+  const [templatesExportWide, setTemplatesExportWide] = useState(false);
   const fileInputRef = useRef(null);
 
   // re-seed local draft from the live settings whenever the modal opens
@@ -793,7 +797,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // Every other settings tab (mapping/preferences/templates/permissions) opens as
   // a compact EQUILATERAL SQUARE (~half the export width). `fullScreen` is the flag
   // for "full viewport + non-contained overlay + .modalExport".
-  const fullScreen = activeTab === 3 || activeTab === 5;
+  const fullScreen = activeTab === 3 || activeTab === 5 || (activeTab === 2 && templatesExportWide);
   const overlayClass = `${styles.overlay} ${contained && !fullScreen ? styles.overlayContained : ''}`;
   // The template-manager / top-up wizard surfaces keep the old always-full overlay
   // (they are their own large-canvas flows, unaffected by the per-tab sizing above).
@@ -1291,7 +1295,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                     (TemplateManagerModal), NOT a wrapper div: the round247
                     wrapper broke the flex-height chain so the editor list could
                     not scroll. TemplatesPanel is a direct flex child again. */}
-                <TemplatesPanel />
+                <TemplatesPanel onExportWide={setTemplatesExportWide} />
               </TabPanel>
 
               <TabPanel className={styles.tabPanelFill}>

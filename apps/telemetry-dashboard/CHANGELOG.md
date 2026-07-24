@@ -1,5 +1,16 @@
 # Changelog - telemetry-dashboard
 
+## 2026-07-24 — Axis legibility, round 2 (bigger, roomier)
+
+### 💅 Design
+
+- **"Errors over time" axis values are now large and un-crowded** (owner: the
+  X month names were still swallowed and the Y values too small):
+  - X-axis labels bumped to 13px / weight 600, with more room (height 40,
+    tickMargin 10, plot padding 16), and the label count thinned from ≤8 to ≤6
+    so each month name has real breathing space.
+  - Y-axis values bumped to 14px / weight 600, gutter widened to 54.
+
 ## 2026-07-24 — Axis legibility follow-up (values were clipped/overlapped)
 
 ### 💅 Design
