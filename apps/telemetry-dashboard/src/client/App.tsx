@@ -11,16 +11,17 @@ import { ChartCard } from './components/ChartCard';
 import { AppBar, AccountBar } from './components/charts/BarPanels';
 import { ErrorsOverTime } from './components/charts/ErrorsOverTime';
 import { TopErrorsTable } from './components/charts/TopErrorsTable';
+import { ErrorDetailDrawer } from './components/charts/ErrorDetailDrawer';
 import { TopUsageEvents } from './components/charts/TopUsageEvents';
 import { HealthBoot } from './components/charts/HealthBoot';
 import { ApiLatency } from './components/charts/ApiLatency';
 import { Heatmap } from './components/charts/Heatmap';
 import { SettingsView } from './components/SettingsView';
-import { fetchTelemetry } from './lib/api';
-import { aggregateAll, applyLivePresentationFilters } from './lib/aggregate';
+import { fetchTelemetry, fetchErrorDetail } from './lib/api';
+import { aggregateAll, applyLivePresentationFilters, errorOccurrences } from './lib/aggregate';
 import { SEED_RECORDS, SEED_NOW } from './data/seed';
 import { APP_ORDER } from './lib/palette';
-import type { Filters, TelemetryPanels, TelemetryPayload } from './lib/types';
+import type { ErrorOccurrence, Filters, TelemetryPanels, TelemetryPayload, TopError } from './lib/types';
 
 type Source =
   | { kind: 'seed' }
@@ -42,6 +43,12 @@ export function App() {
   const [source, setSource] = useState<Source>({ kind: 'seed' });
   const [refreshing, setRefreshing] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Error drill-down drawer: the selected error + its raw occurrences.
+  const [detailError, setDetailError] = useState<TopError | null>(null);
+  const [detailRows, setDetailRows] = useState<ErrorOccurrence[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailErrorMsg, setDetailErrorMsg] = useState<string | null>(null);
 
   const load = useCallback(async (window: Filters['window']) => {
     setRefreshing(true);
@@ -71,6 +78,32 @@ export function App() {
   const updateFilters = useCallback((patch: Partial<Filters>) => {
     setFilters((prev) => ({ ...prev, ...patch }));
   }, []);
+
+  // Open the drawer for one error. In seed mode the raw records are already in
+  // the browser, so we drill down synchronously; in live mode we fetch the
+  // occurrences from the access-controlled endpoint.
+  const openDetail = useCallback(
+    (err: TopError) => {
+      setDetailError(err);
+      setDetailErrorMsg(null);
+      if (source.kind === 'seed') {
+        setDetailRows(errorOccurrences(SEED_RECORDS, err.err_name, filters, SEED_NOW) as ErrorOccurrence[]);
+        setDetailLoading(false);
+        return;
+      }
+      setDetailRows([]);
+      setDetailLoading(true);
+      void (async () => {
+        const res = await fetchErrorDetail(filters.window, err.err_name);
+        setDetailRows(res.rows);
+        setDetailErrorMsg(res.error);
+        setDetailLoading(false);
+      })();
+    },
+    [source, filters]
+  );
+
+  const closeDetail = useCallback(() => setDetailError(null), []);
 
   // Derive the panel payload for the current source + filters. The JS
   // aggregation modules infer a looser shape; assert the shared panel type.
@@ -136,8 +169,18 @@ export function App() {
           refreshing={refreshing}
           notice={notice}
           onRefresh={() => load(filters.window)}
+          onOpenDetail={openDetail}
         />
       )}
+
+      <ErrorDetailDrawer
+        error={detailError}
+        rows={detailRows}
+        loading={detailLoading}
+        errorMsg={detailErrorMsg}
+        seed={seed}
+        onClose={closeDetail}
+      />
     </div>
   );
 }
@@ -153,6 +196,7 @@ interface DashboardBodyProps {
   refreshing: boolean;
   notice: string | null;
   onRefresh: () => void;
+  onOpenDetail: (err: TopError) => void;
 }
 
 function DashboardBody({
@@ -166,6 +210,7 @@ function DashboardBody({
   refreshing,
   notice,
   onRefresh,
+  onOpenDetail,
 }: DashboardBodyProps) {
   return (
     <>
@@ -197,11 +242,12 @@ function DashboardBody({
           <ErrorsOverTime rows={panels.errors_over_time} window={filters.window} />
         </ChartCard>
 
-        <ChartCard title="Top errors" subtitle="Click a row to cross-filter" wide>
+        <ChartCard title="Top errors" subtitle="Row = cross-filter · 🔍 = full occurrences" wide>
           <TopErrorsTable
             rows={panels.top_errors}
             focusError={filters.focusError}
             onFocus={(errName) => updateFilters({ focusError: errName })}
+            onOpenDetail={onOpenDetail}
           />
         </ChartCard>
 

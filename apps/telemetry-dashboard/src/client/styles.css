@@ -555,6 +555,136 @@ body {
   position: relative;
 }
 
+/* Detail (drill-down) affordance — a narrow trailing column with a magnifier
+   button. The button stops row-click propagation so cross-filter and
+   drill-down stay independent. */
+.tbl th.act,
+.tbl td.act {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+  padding-left: 4px;
+}
+.tbl__detail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+.tbl__detail-btn:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--border);
+}
+.tbl__detail-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---- Error drill-down drawer ---- */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(11, 11, 11, 0.4);
+  display: flex;
+  justify-content: flex-end;
+}
+.drawer {
+  width: min(600px, 94vw);
+  height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 30px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  animation: drawer-in 0.16s ease-out;
+}
+@keyframes drawer-in {
+  from {
+    transform: translateX(16px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+.drawer__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.drawer__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  word-break: break-word;
+}
+.drawer__meta {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.drawer__msg {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  word-break: break-word;
+}
+.drawer__close {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.drawer__close:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.drawer__body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 18px 18px;
+}
+.drawer__state {
+  padding: 40px 8px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.drawer__state--err {
+  color: #d83a52;
+}
+.tbl--dense th,
+.tbl--dense td {
+  padding: 5px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ---- Dumbbell (boot health) ---- */
 .dumbbell {
   display: flex;

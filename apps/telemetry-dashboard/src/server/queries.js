@@ -46,3 +46,34 @@ export const WINDOWS = {
   '30d': 30 * 24 * 60 * 60 * 1000,
   '90d': 90 * 24 * 60 * 60 * 1000,
 };
+
+/** How many raw occurrences the error-detail drill-down returns (newest first). */
+export const ERROR_DETAIL_LIMIT = 200;
+
+/**
+ * Escape a value for safe embedding inside a single-quoted APL string literal.
+ * err_name reaches the drill-down from a client query param, so it is
+ * UNTRUSTED — escape backslashes first (so we don't double-unescape) then
+ * single quotes, which keeps the whole payload trapped inside the literal and
+ * defeats any attempt to break out into the APL pipeline.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function escapeApl(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+/**
+ * Build the drill-down query: the most recent raw error occurrences for ONE
+ * err_name, newest first, capped at `limit`. Deliberately does NOT project —
+ * the detail view shows every field the record carries (identity, object,
+ * version, …), exactly what an operator would otherwise open Axiom to read.
+ * @param {string} dataset
+ * @param {string} errName  UNTRUSTED — escaped before embedding
+ * @param {number} [limit]
+ * @returns {string} APL pipeline (shares the `_startTime`/`_endTime` bindings)
+ */
+export function buildErrorDetailQuery(dataset, errName, limit = ERROR_DETAIL_LIMIT) {
+  const safe = escapeApl(errName);
+  return `['${dataset}'] | where _time between (_startTime .. _endTime) and kind=='error' and err_name=='${safe}' | sort by _time desc | take ${limit}`;
+}
