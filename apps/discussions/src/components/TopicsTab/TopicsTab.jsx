@@ -1248,7 +1248,11 @@ export function TopicsTab({
           // round251 — height is PER-BOX: the agenda column carries its own var,
           // so resizing it never touches the triple box.
           ...(layout.boxHeight ? { '--split-card-h': `${layout.boxHeight}px` } : null),
-          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${layout.ratio} 1 0` }),
+          // round292 — width via a PERCENT basis + equal grow, so the two boxes
+          // ALWAYS fill the row (sum to 100%): a percent basis keeps the ratio,
+          // and grow:1 means a single visible box still fills 100% (a bare
+          // `flex: ratio 1 0` with grow<1 left an uncovered gap when alone).
+          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `1 1 ${(layout.ratio * 100).toFixed(3)}%` }),
         }}
       >
       {/* round218 (approved mockup) — the topics live in an "אג'נדה" CARD
@@ -1503,7 +1507,7 @@ export function TopicsTab({
           // round251 — the triple box carries its OWN height var, independent of
           // the agenda box.
           ...(layout.boxHeight ? { '--split-card-h': `${layout.boxHeight}px` } : null),
-          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${1 - layout.ratio} 1 0` }),
+          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `1 1 ${((1 - layout.ratio) * 100).toFixed(3)}%` }),
         }}
       >
         <UpdatesTripleBox

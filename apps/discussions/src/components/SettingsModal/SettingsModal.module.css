@@ -856,19 +856,28 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: row;
-  align-items: flex-start;
+  align-items: stretch;
   flex-wrap: wrap;
-  gap: 10px;
-  padding-bottom: 12px;
+  gap: 12px;
+  /* round292 — elegant breathing room between the top tabs and this row. */
+  padding-top: 16px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
 }
 .mapBoardsRow {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
+  align-items: stretch;
+  gap: 8px;
+}
+/* round292 — board buttons stretch to fill the row equally, so their LEFT edge
+   lines up with the fields pane below (the search occupies the left column). */
+.mapBoardsRow .mapBd {
+  flex: 1 1 0;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
 }
 /* round291 — the field-search sits on the LEFT (DOM after the boards row → left
    edge in RTL), at the same width as the column-type column below it. */
