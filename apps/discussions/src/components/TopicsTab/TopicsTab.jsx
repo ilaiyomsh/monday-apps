@@ -1248,11 +1248,15 @@ export function TopicsTab({
           // round251 — height is PER-BOX: the agenda column carries its own var,
           // so resizing it never touches the triple box.
           ...(layout.boxHeight ? { '--split-card-h': `${layout.boxHeight}px` } : null),
-          // round292 — width via a PERCENT basis + equal grow, so the two boxes
-          // ALWAYS fill the row (sum to 100%): a percent basis keeps the ratio,
-          // and grow:1 means a single visible box still fills 100% (a bare
-          // `flex: ratio 1 0` with grow<1 left an uncovered gap when alone).
-          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `1 1 ${(layout.ratio * 100).toFixed(3)}%` }),
+          // round293 — width driven PURELY by the ratio (proportional grow,
+          // basis 0) so dragging the divider tracks the pointer across the WHOLE
+          // range. round292's percent-basis froze the drag over a sub-range: the
+          // triple box's `.refPanel` max-width:720/min-width:360 (which the `flex`
+          // shorthand does NOT override) clamped that percent basis, so the split
+          // stopped moving. Those caps are neutralized inline on the triple box
+          // below; here basis 0 + proportional grow keeps agenda = ratio × row.
+          // A sole visible box (grow as the only child) still fills 100%.
+          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${layout.ratio} 1 0`, minWidth: 0 }),
         }}
       >
       {/* round218 (approved mockup) — the topics live in an "אג'נדה" CARD
@@ -1507,7 +1511,12 @@ export function TopicsTab({
           // round251 — the triple box carries its OWN height var, independent of
           // the agenda box.
           ...(layout.boxHeight ? { '--split-card-h': `${layout.boxHeight}px` } : null),
-          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `1 1 ${((1 - layout.ratio) * 100).toFixed(3)}%` }),
+          // round293 — see the agenda box: proportional grow (basis 0) + NEUTRALIZE
+          // the `.refPanel` max-width:720/min-width:360 caps inline so the divider
+          // drag tracks the pointer across the whole range AND the box fills 100%
+          // (alone or paired). Without minWidth:0/maxWidth:none the stylesheet caps
+          // fight the ratio and the split freezes (round292 regression).
+          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${1 - layout.ratio} 1 0`, minWidth: 0, maxWidth: 'none' }),
         }}
       >
         <UpdatesTripleBox
