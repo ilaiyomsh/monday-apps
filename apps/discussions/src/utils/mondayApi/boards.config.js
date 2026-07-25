@@ -287,7 +287,9 @@ export const CAPABILITY_DEFAULTS = {
   writeReferences: 'creatorLeadOwner',
   editSummary: 'creatorLeadOwner',
   exportDocs: 'creatorLeadOwner',
-  createTask: 'creatorLeadOwner',
+  // round291 (owner spec) — ANYONE can create a task, both standalone (My Tasks,
+  // already ungated) and inside a discussion. Mirrors createDiscussion: 'all'.
+  createTask: 'all',
   addTopicOrPoint: 'creatorLeadOwner',
   editTopicOrPoint: 'creatorLeadOwner',
   deleteTopicOrPoint: 'creatorLeadOwner',

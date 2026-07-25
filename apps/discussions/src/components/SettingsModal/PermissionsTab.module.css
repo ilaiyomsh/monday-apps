@@ -402,6 +402,7 @@
 }
 .badgeView { background: var(--secondary-text-color, #676879); }
 .badgeEdit { background: var(--primary-color, #0073ea); }
+.badgeCreate { background: var(--positive-color, #00854d); }
 .mxSubRow {
   display: flex;
   align-items: center;

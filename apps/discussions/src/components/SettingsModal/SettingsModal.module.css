@@ -855,20 +855,30 @@
 .mapTop {
   flex-shrink: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 10px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
 }
-.mapTop .mapSearch input {
-  width: 100%;
-  max-width: none;
-}
 .mapBoardsRow {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+}
+/* round291 — the field-search sits on the LEFT (DOM after the boards row → left
+   edge in RTL), at the same width as the column-type column below it. */
+.mapTop .mapSearch {
+  width: 184px;
+  flex-shrink: 0;
+}
+.mapTop .mapSearch input {
+  width: 100%;
+  max-width: none;
 }
 
 .mapBody2 {
