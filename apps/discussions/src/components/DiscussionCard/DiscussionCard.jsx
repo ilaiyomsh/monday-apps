@@ -1,4 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, useSyncExternalStore, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
 import { MoveArrowLeft, Info } from '@vibe/icons';
 import { Pencil } from 'lucide-react';
@@ -34,6 +35,7 @@ import { QuickCreateFab } from '@generated/components/QuickCreateFab';
 import { QuickCreateModal } from '@generated/components/QuickCreateModal';
 import { fmtTimeLabel, composeLocalDate, localYmd, toDateInput, toTimeInput } from '@generated/utils/dateTime.js';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import logger from '@generated/utils/logger.js';
 import { useViewTracking } from '@generated/utils/viewTracking.js';
 import { loadPointItems, addPointItem, mergePointItemIn, prunePointItems } from '@generated/utils/pointItems.js';
@@ -143,6 +145,27 @@ export function DiscussionCard({
   const { isMobile } = useViewport();
   const [infoOpen, setInfoOpen] = useState(false);
   const [timeMenuOpen, setTimeMenuOpen] = useState(false);
+  // round294 — the half-hour time menu is PORTALED to <body> (fixed position)
+  // so it floats above the header's sibling rows (the status counters/tabs
+  // previously painted THROUGH it — a stacking-context trap a local z-index
+  // can't escape, owner-reported). The trigger ref anchors the float; the menu
+  // is measured/placed via computeFloatingPosition (flips up when short on room).
+  const timeTriggerRef = useRef(null);
+  const [timeMenuPos, setTimeMenuPos] = useState(null);
+  useLayoutEffect(() => {
+    if (!timeMenuOpen) { setTimeMenuPos(null); return undefined; }
+    const place = () => {
+      const rect = timeTriggerRef.current?.getBoundingClientRect();
+      if (rect) setTimeMenuPos(computeFloatingPosition({ anchorRect: rect, preferred: 'bottom-start', popupWidth: 120, popupHeight: 280 }));
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [timeMenuOpen]);
   // Round 51 — hide the header PEOPLE meta (מנהל / מרכז / משתתפים) when the header
   // row is too crowded to fit everything on ONE line, keeping the date + time.
   // This replaces round-50's fixed 600px width threshold, which never fired: when
@@ -840,6 +863,7 @@ export function DiscussionCard({
                       <div className={styles.timeMenuWrap}>
                         <button
                           type="button"
+                          ref={timeTriggerRef}
                           className={styles.dateTrigger}
                           onClick={() => setTimeMenuOpen((o) => !o)}
                           aria-haspopup="listbox"
@@ -847,10 +871,18 @@ export function DiscussionCard({
                         >
                           {data.discussionDateID.hasTime ? fmtTimeLabel(data.discussionDateID) : 'קבע שעה'}
                         </button>
-                        {timeMenuOpen && (
+                        {/* round294 — portal to <body> (fixed) so the menu floats
+                            above the header's sibling rows instead of being painted
+                            through by the status counters below it. */}
+                        {timeMenuOpen && timeMenuPos && createPortal(
                           <>
-                            <div className={styles.infoBackdrop} onClick={() => setTimeMenuOpen(false)} />
-                            <div className={styles.timeMenu} role="listbox" aria-label="בחירת שעה">
+                            <div className={styles.timeMenuBackdrop} onClick={() => setTimeMenuOpen(false)} />
+                            <div
+                              className={styles.timeMenu}
+                              role="listbox"
+                              aria-label="בחירת שעה"
+                              style={{ position: 'fixed', top: timeMenuPos.top, insetInlineStart: timeMenuPos.left, maxHeight: timeMenuPos.height }}
+                            >
                               {HEADER_TIME_OPTIONS.map((t) => {
                                 const selected = t === toTimeInput(data.discussionDateID);
                                 return (
@@ -868,7 +900,8 @@ export function DiscussionCard({
                                 );
                               })}
                             </div>
-                          </>
+                          </>,
+                          document.body
                         )}
                       </div>
                     ) : (

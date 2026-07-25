@@ -722,11 +722,17 @@
 .timeMenuWrap {
   position: relative;
 }
+/* round294 — the time menu is portaled to <body> and positioned by inline
+   fixed top/inset-inline-start (computeFloatingPosition). z-index sits above the
+   app chrome so no sibling row can paint through it (was 51, scoped to the
+   header stacking context — the status counters row painted over it). */
+.timeMenuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
 .timeMenu {
-  position: absolute;
-  top: calc(100% + 6px);
-  inset-inline-start: 0;
-  z-index: 51;
+  z-index: 10000;
   max-height: 280px;
   min-width: 96px;
   overflow-y: auto;
