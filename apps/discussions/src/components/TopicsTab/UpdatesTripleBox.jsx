@@ -1,10 +1,9 @@
 import React, { lazy, Suspense, useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { Check, Loader2, AlertCircle, Paperclip, Plus, X, Link2, Download } from 'lucide-react';
+import { Check, Loader2, AlertCircle, Paperclip, X, Download } from 'lucide-react';
 import { fileKindColor, fileKindLabel } from '@generated/utils/fileKind.js';
 import { useBackground } from '@generated/hooks/useBackground.js';
 import { useReferences } from '@generated/hooks/useReferences.js';
 import { useSummary } from '@generated/hooks/useSummary.js';
-import { loadBackgroundLinks, saveBackgroundLinks } from '@generated/utils/backgroundStore.js';
 import { getUpdateFiles } from '@api/updates.js';
 import { uploadFileToUpdateSeamless } from '@api/fileUpload.js';
 import lazyRetry from '@generated/utils/lazyRetry.js';
@@ -49,7 +48,7 @@ function editorInitials(name) {
  * `getUpdateFiles` reads `update.assets` back. monday exposes NO per-file delete
  * on an update, so the bar is add + preview + download only (no per-file remove).
  */
-function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = false, withLinks = false, active, mentionPeople = [] }) {
+function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = false, active, mentionPeople = [] }) {
   const { html, loading, author, updatedAt, save, saveErrorCode, updateId, ensureUpdate, clearDocuments } = hook;
 
   const draftRef = useRef(null);
@@ -162,29 +161,8 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = fals
     }
   };
 
-  // ---- preparation LINKS (רקע only; app-local storage, whole-list writes) ----
-  const [links, setLinks] = useState([]);
-  const [addingLink, setAddingLink] = useState(false);
-  const [linkUrl, setLinkUrl] = useState('');
-  const [linkLabel, setLinkLabel] = useState('');
-  useEffect(() => {
-    let cancelled = false;
-    setLinks([]);
-    if (!withLinks || !discussionId) return undefined;
-    loadBackgroundLinks(discussionId)
-      .then((l) => { if (!cancelled) setLinks(l); })
-      .catch((err) => { if (!err?.__loggedId) logger.warn('UpdatesTripleBox', 'טעינת קישורי הרקע נכשלה', err); });
-    return () => { cancelled = true; };
-  }, [withLinks, discussionId]);
-  const persistLinks = (next) => { setLinks(next); saveBackgroundLinks(discussionId, next); };
-  const addLink = () => {
-    const url = linkUrl.trim();
-    if (!url) return;
-    const withProto = /^(https?:)?\/\//i.test(url) ? url : `https://${url}`;
-    persistLinks([...links, { id: `${Date.now()}-${links.length}`, url: withProto, label: linkLabel.trim() || url }]);
-    setLinkUrl(''); setLinkLabel(''); setAddingLink(false);
-  };
-  const removeLink = (id) => persistLinks(links.filter((l) => l.id !== id));
+  // round290 (owner request) — the bottom "add link" feature was removed; links
+  // are added inline via the editor (select text → add link). No links state here.
 
   const when = formatWhen(updatedAt);
   const showLoader = loading || !editorReady;
@@ -307,49 +285,6 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = fals
         )}
       </div>
 
-      {/* round268 — documents live in the top bar; this area now holds only the
-          רקע preparation LINKS. */}
-      {(links.length > 0 || (withLinks && canEdit)) && (
-        <div className={styles.paneAttachments}>
-          <div className={styles.attachRow}>
-            {links.map((l) => (
-              <span key={l.id} className={styles.attachChip}>
-                <Link2 size={13} />
-                <a href={l.url} target="_blank" rel="noreferrer">{l.label}</a>
-                {canEdit && (
-                  <button type="button" className={styles.attachX} onClick={() => removeLink(l.id)} aria-label="הסר קישור">
-                    <X size={12} />
-                  </button>
-                )}
-              </span>
-            ))}
-          </div>
-          {withLinks && canEdit && (
-            addingLink ? (
-              <div className={styles.linkForm}>
-                <input
-                  className={styles.linkInput} autoFocus placeholder="כתובת (URL)" value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') addLink(); if (e.key === 'Escape') setAddingLink(false); }}
-                />
-                <input
-                  className={styles.linkInput} placeholder="שם (רשות)" value={linkLabel}
-                  onChange={(e) => setLinkLabel(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') addLink(); if (e.key === 'Escape') setAddingLink(false); }}
-                />
-                <button type="button" className={styles.attachAddBtn} onClick={addLink} disabled={!linkUrl.trim()}>הוסף</button>
-                <button type="button" className={styles.attachAddBtn} onClick={() => setAddingLink(false)}>ביטול</button>
-              </div>
-            ) : (
-              <div className={styles.attachBtns}>
-                <button type="button" className={styles.attachAddBtn} onClick={() => setAddingLink(true)}>
-                  <Plus size={13} /> הוסף קישור
-                </button>
-              </div>
-            )
-          )}
-        </div>
-      )}
 
       {/* round225 — for EDITORS the meta/save-state moved into the toolbar's
           white right end (toolbarMeta above); read-only viewers have no toolbar,
@@ -458,7 +393,7 @@ export function UpdatesTripleBox({
   const editSummaryPane = canEditSummary ?? canEdit;
 
   const panes = useMemo(() => [
-    showBackground && { key: 'background', title: 'רקע', hook: background, canEdit: editBackground, placeholder: 'כתבו כאן רקע והכנה לדיון…', withLinks: true },
+    showBackground && { key: 'background', title: 'רקע', hook: background, canEdit: editBackground, placeholder: 'כתבו כאן רקע והכנה לדיון…' },
     showReferences && { key: 'references', title: 'התייחסויות', hook: references, canEdit: editReferences, placeholder: 'כתבו כאן התייחסויות של משתתפי הדיון…' },
     showSummary && { key: 'summary', title: 'סיכום', hook: summary, canEdit: editSummaryPane, placeholder: 'כתבו כאן את סיכום הדיון…' },
   ].filter(Boolean), [showBackground, showReferences, showSummary, background, references, summary, editBackground, editReferences, editSummaryPane]);
@@ -505,7 +440,6 @@ export function UpdatesTripleBox({
           placeholder={p.placeholder}
           canEdit={p.canEdit}
           canAttach={canAttach}
-          withLinks={p.withLinks === true}
           active={activeKey === p.key}
           mentionPeople={mentionPeople}
         />
