@@ -161,7 +161,7 @@ export function UsageMetricsTab({ active }) {
                 formatter={(v) => [v, metric === 'actions' ? 'פעולות' : 'כניסות']}
               />
               <Area
-                type="monotone"
+                type="linear"
                 dataKey="value"
                 stroke={lineColor}
                 strokeWidth={2.5}

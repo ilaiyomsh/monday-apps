@@ -34,8 +34,8 @@
    (card-pane) overlay too; it must beat the generic `.overlayContained .modal`
    width above (higher specificity), so pin BOTH dimensions here. */
 .overlayContained .modalSquare {
-  width: min(620px, 96%);
-  height: min(620px, 96%);
+  width: min(744px, 98%);
+  height: min(744px, 98%);
   max-height: 100%;
 }
 
@@ -77,8 +77,10 @@
    מדדי שימוש (5) opens as a compact equilateral square, ~half the export width.
    Content scrolls internally (see `.content`), so a fixed square never clips. */
 .modalSquare {
-  width: min(620px, 92vw);
-  height: min(620px, 92vh);
+  /* round290 (owner request) — +20% on the non-full tabs (mapping / preferences /
+     templates / permissions): 620 → 744. */
+  width: min(744px, 94vw);
+  height: min(744px, 94vh);
 }
 
 .header {
