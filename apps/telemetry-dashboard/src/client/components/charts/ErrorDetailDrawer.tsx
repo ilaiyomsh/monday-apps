@@ -4,13 +4,16 @@
 // from the bundled records) so the full per-event context lives in the
 // dashboard, not in Axiom.
 //
-// Columns are DYNAMIC: whatever fields the records actually carry are shown
-// (known ones ordered + labelled first, any extra enrichment appended), so the
-// drawer surfaces everything Axiom stores without pinning the schema here.
-// Closes on the × button, a backdrop click, or Escape; body scroll is locked
-// while open.
+// Columns are DYNAMIC: whatever fields the records carry are shown. Known
+// app-errors fields (verified live 2026-07-25 via getschema — usr/obj/board,
+// env, ver, corr, sess, path, level, …) get friendly labels + a sensible
+// order; any unrecognised field is appended so the drawer never hides data.
+// The stack trace (`stack1`) is NOT a column — it would be unreadable squeezed
+// into a cell — so a row that has one gets an expander that reveals the full
+// stack in a monospace block. Closes on ×, a backdrop click, or Escape; body
+// scroll is locked while open.
 
-import { useEffect } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import type { ErrorOccurrence, TopError } from '../../lib/types';
 import { fmt } from './shared';
 
@@ -23,37 +26,45 @@ interface Props {
   onClose: () => void;
 }
 
-// Fields we know how to label + the order we prefer them in. Any key present in
-// the data but not listed here is appended after these (alphabetically).
+// Known columns → label, in display order (identity/context first, the longer
+// message/detail last). Any field present in the data but absent here is shown
+// after these with its raw key. Keys match the real app-errors schema.
 const KNOWN: Array<[string, string]> = [
   ['_time', 'Time'],
+  ['level', 'Level'],
   ['app', 'App'],
   ['acc', 'Account'],
   ['usr', 'User'],
   ['obj', 'Object'],
   ['board', 'Board'],
-  ['level', 'Level'],
-  ['err_code', 'Code'],
+  ['env', 'Env'],
+  ['ver', 'Version'],
   ['tag', 'Tag'],
+  ['path', 'Path'],
+  ['corr', 'Corr'],
+  ['sess', 'Session'],
+  ['step', 'Step'],
+  ['ms', 'ms'],
+  ['total_ms', 'total ms'],
+  ['err_code', 'Code'], // seed dataset carries this; live app-errors does not
   ['message', 'Message'],
   ['err_msg', 'Detail'],
-  ['total_ms', 'ms'],
-  ['appVersion', 'Version'],
-  ['environment', 'Env'],
 ];
 const LABELS = new Map(KNOWN);
 const PREFERRED = KNOWN.map(([k]) => k);
+const NUMERIC = new Set(['err_code', 'total_ms', 'ms', 'step']);
+// Rendered via a per-row expander, never as a table column.
+const STACK_KEY = 'stack1';
 // Redundant in this view: kind is always 'error', err_name is the drawer title.
-const HIDDEN = new Set(['kind', 'err_name']);
+const HIDDEN = new Set(['kind', 'err_name', STACK_KEY]);
 
-/** Order the columns actually present across the rows: known keys first, rest after. */
-function columnsFor(rows: ErrorOccurrence[]): string[] {
+/** Order the columns present across the rows: known keys first, the rest after. */
+export function columnsFor(rows: ErrorOccurrence[]): string[] {
   const present = new Set<string>();
   for (const r of rows) {
     for (const k of Object.keys(r)) {
       if (HIDDEN.has(k)) continue;
-      // Drop Axiom's internal system fields, but keep _time.
-      if (k.startsWith('_') && k !== '_time') continue;
+      if (k.startsWith('_') && k !== '_time') continue; // drop Axiom system fields
       present.add(k);
     }
   }
@@ -74,6 +85,7 @@ function cell(key: string, value: unknown): string {
 
 export function ErrorDetailDrawer({ error, rows, loading, errorMsg, seed, onClose }: Props) {
   const open = error !== null;
+  const [expanded, setExpanded] = useState<Set<number>>(new Set());
 
   // Escape-to-close + body scroll lock, only while open.
   useEffect(() => {
@@ -90,9 +102,22 @@ export function ErrorDetailDrawer({ error, rows, loading, errorMsg, seed, onClos
     };
   }, [open, onClose]);
 
+  // Collapse every expanded stack when the selected error changes.
+  useEffect(() => {
+    setExpanded(new Set());
+  }, [error?.err_name]);
+
   if (!error) return null;
 
   const cols = columnsFor(rows);
+  const totalCols = cols.length + 1; // + the leading stack-toggle column
+  const toggle = (i: number) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
 
   return (
     <div className="drawer-backdrop" onClick={onClose}>
@@ -130,27 +155,52 @@ export function ErrorDetailDrawer({ error, rows, loading, errorMsg, seed, onClos
               <table className="tbl tbl--dense">
                 <thead>
                   <tr>
+                    <th className="act" aria-label="Stack trace" />
                     {cols.map((c) => (
-                      <th key={c} className={c === 'err_code' || c === 'total_ms' ? 'num' : undefined}>
+                      <th key={c} className={NUMERIC.has(c) ? 'num' : undefined}>
                         {LABELS.get(c) ?? c}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, i) => (
-                    <tr key={i}>
-                      {cols.map((c) => (
-                        <td
-                          key={c}
-                          className={c === 'err_code' || c === 'total_ms' ? 'num' : undefined}
-                          title={cell(c, r[c])}
-                        >
-                          {cell(c, r[c])}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
+                  {rows.map((r, i) => {
+                    const stack = r[STACK_KEY];
+                    const hasStack = stack != null && stack !== '';
+                    const isOpen = expanded.has(i);
+                    return (
+                      <Fragment key={i}>
+                        <tr className={hasStack ? 'occ-row occ-row--stack' : 'occ-row'}>
+                          <td className="act">
+                            {hasStack && (
+                              <button
+                                type="button"
+                                className="drawer__stack-toggle"
+                                aria-expanded={isOpen}
+                                aria-label={isOpen ? 'Hide stack trace' : 'Show stack trace'}
+                                title={isOpen ? 'Hide stack trace' : 'Show stack trace'}
+                                onClick={() => toggle(i)}
+                              >
+                                {isOpen ? '▾' : '▸'}
+                              </button>
+                            )}
+                          </td>
+                          {cols.map((c) => (
+                            <td key={c} className={NUMERIC.has(c) ? 'num' : undefined} title={cell(c, r[c])}>
+                              {cell(c, r[c])}
+                            </td>
+                          ))}
+                        </tr>
+                        {hasStack && isOpen && (
+                          <tr className="drawer__stack-row">
+                            <td colSpan={totalCols} className="drawer__stack-cell">
+                              <pre className="drawer__stack">{String(stack)}</pre>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
