@@ -137,7 +137,6 @@ export function UsageMetricsTab({ active }) {
               <CartesianGrid strokeDasharray="3 3" stroke="#e6e9ef" vertical={false} />
               <XAxis
                 dataKey="bucket"
-                reversed
                 tickFormatter={fmtTick}
                 tick={{ fontSize: 13, fontWeight: 600, fill: '#676879' }}
                 tickMargin={10}

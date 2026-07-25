@@ -1042,19 +1042,10 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               return (
                 <>
                   {/* TOP — search + boards row (דיונים / משימות / …). */}
+                  {/* round291 — boards row on the RIGHT; the field-search sits on the
+                      LEFT at the same width as the column-type column below it. The
+                      top-up button moved to the modal footer. */}
                   <div className={styles.mapTop}>
-                    <div className={styles.mapSearch}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
-                        <path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                      </svg>
-                      <input
-                        value={mapQuery}
-                        onChange={(e) => setMapQuery(e.target.value)}
-                        placeholder="חיפוש שדה…"
-                        aria-label="חיפוש שדה"
-                      />
-                    </div>
                     <div className={styles.mapBoardsRow} role="tablist" aria-label="לוחות">
                       {boardKeys.map((bk) => {
                         const on = bk === boardKey;
@@ -1071,11 +1062,18 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                           </button>
                         );
                       })}
-                      {isConfigured && (
-                        <Button kind={"secondary"} size={"small"} onClick={() => setShowTopUp(true)}>
-                          הוספת / השלמת לוחות ועמודות
-                        </Button>
-                      )}
+                    </div>
+                    <div className={styles.mapSearch}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+                        <path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                      <input
+                        value={mapQuery}
+                        onChange={(e) => setMapQuery(e.target.value)}
+                        placeholder="חיפוש שדה…"
+                        aria-label="חיפוש שדה"
+                      />
                     </div>
                   </div>
 
@@ -1301,6 +1299,13 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               style={{ display: 'none' }}
               onChange={handleImportFile}
             />
+            {/* round291 — moved here from the mapping tab; sits to the LEFT of
+                "ייבוא JSON" (leftmost in the RTL footer). */}
+            {isConfigured && (
+              <Button kind={"secondary"} onClick={() => setShowTopUp(true)}>
+                הוספת / השלמת לוחות ועמודות
+              </Button>
+            )}
             <Button kind={"secondary"} onClick={handleImportClick}>
               ייבוא JSON
             </Button>
