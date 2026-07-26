@@ -37,6 +37,32 @@ import { unzipSync, strFromU8 } from 'fflate';
 const EMU_PER_PX = 9525;
 
 /**
+ * Keep docx-preview's body aligned like the generated Word document. The
+ * renderer leaves alignment unset on bidi paragraphs, allowing the app's LTR
+ * stylesheet to win in the preview even though the downloaded file is RTL.
+ */
+export function forceRtlRenderedBody(root) {
+  if (!root || typeof root.querySelectorAll !== 'function') return;
+  const blocks = [
+    '.docx article p',
+    '.docx article li',
+    '.docx article h1',
+    '.docx article h2',
+    '.docx article h3',
+    '.docx article h4',
+    '.docx article h5',
+    '.docx article h6',
+  ].join(', ');
+
+  root.querySelectorAll(blocks).forEach((element) => {
+    element.style.direction = 'rtl';
+    // Preserve alignments that came explicitly from the document, such as a
+    // centered title; only replace the inherited LTR application default.
+    if (!element.style.textAlign) element.style.textAlign = 'right';
+  });
+}
+
+/**
  * Height-based pagination (round197). Splits the single rendered section into
  * fixed-height pages: whole blocks (paragraphs / tables) move to the next page
  * when they cross the content budget — a heading glued above a moved block

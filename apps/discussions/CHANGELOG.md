@@ -10,6 +10,10 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.3.2 — 2026-07-26
+
+- Hotfix: תצוגת הייצוא מיישרת כעת לימין ומציגה מימין לשמאל את הטקסט בתיבות רקע, התייחסויות וסיכום, בדיוק כמו מסמך ה־DOCX המופק. יישור מפורש מתוך המסמך, כגון כותרת ממורכזת, נשמר ללא שינוי.
+
 ## 2.3.1 — 2026-07-23
 
 - round295: **תבניות (שמירה/יציאה/ENTER), מרכז דיון מתבנית, וצבעי נושאים מגוונים.**
