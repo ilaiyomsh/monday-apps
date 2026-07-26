@@ -29,6 +29,32 @@ cd .claude/skills/axiom-sre
   do not guess or fabricate results.
 - Every `axiom-query` call **must** carry a window (`--since 7d` or `--from/--to`).
 
+### Cloud / web sessions (Claude Code on the web, Cowork, CI)
+
+The per-user `~/.config/axiom-sre/config.toml` does **not** travel to a cloud session
+(only the repo's committed `.claude/` does), and GitHub Actions secrets are not
+available there either. Instead, `scripts/config` reads the token from the
+**environment** when present (env wins over the file), so a cloud session just needs
+these set as environment variables:
+
+```
+AXIOM_URL=https://api.axiom.co
+AXIOM_TOKEN=<axiom READ token, scoped to app-errors>
+AXIOM_ORG_ID=<org id>
+```
+
+- Set them in the **claude.ai/code environment UI** (cloud icon → edit environment →
+  "environment variables", `.env` syntax). Then `./scripts/discover-axiom prod` and
+  `./scripts/axiom-query prod …` work unchanged — always pass the deployment name
+  (`prod`) so no config file is needed.
+- **Security:** cloud env vars are **not** a protected secrets store — they're visible
+  to anyone who can edit that environment. Use a **read-only token scoped to
+  `app-errors`** (low blast radius: read telemetry only, no writes, no other datasets).
+  Do not put a write/ingest or broader token here. For stricter secrecy, a setup script
+  can fetch the token from an external vault at session start instead.
+- This is read-only triage access; it does **not** change the rule that cloud sessions
+  carry no `MONDAY_TOKEN` and perform no deploys/`mapps` auth.
+
 ## 1. The dataset
 
 - **One dataset `app-errors`** for all apps. Discriminators: `app` (which app) and
