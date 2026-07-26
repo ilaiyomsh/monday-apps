@@ -2,6 +2,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  defaultDigestDraft,
   draftFromConfig,
   draftIsComplete,
   draftToConfig,
@@ -44,9 +45,15 @@ function completeDraft(overrides: Partial<ConfigDraft> = {}): ConfigDraft {
     peopleColumnId: 'multiple_person_mm582h4p',
     buttons: [button],
     templates: [template],
+    // v4: digest rides the draft; disabled by default (contract pinned in
+    // draft-digest.test.ts).
+    digest: defaultDigestDraft(),
     ...overrides,
   };
 }
+
+// defaultDigestDraft() generates fresh section ids — match shape, not ids.
+const DISABLED_DIGEST = expect.objectContaining({ enabled: false });
 
 describe('draftFromConfig', () => {
   it('maps a null stored config to an empty draft', () => {
@@ -55,6 +62,7 @@ describe('draftFromConfig', () => {
       peopleColumnId: null,
       buttons: [],
       templates: [],
+      digest: DISABLED_DIGEST,
     });
   });
 
@@ -64,6 +72,7 @@ describe('draftFromConfig', () => {
       peopleColumnId: 'multiple_person_mm582h4p',
       buttons: [button],
       templates: [template],
+      digest: DISABLED_DIGEST,
     });
   });
 });
@@ -130,7 +139,7 @@ describe('draftIsComplete / draftToConfig', () => {
   });
 
   it('draftToConfig returns the exact payload for a complete draft and null otherwise', () => {
-    expect(draftToConfig(completeDraft())).toStrictEqual(storedConfig);
+    expect(draftToConfig(completeDraft())).toStrictEqual({ ...storedConfig, digest: null });
     expect(draftToConfig(completeDraft({ buttons: [] }))).toBeNull();
   });
 });

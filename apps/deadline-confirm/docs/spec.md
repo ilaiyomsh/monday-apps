@@ -396,3 +396,170 @@ segregated per APP only, so account isolation is the storage layer's job
   installing account is admitted (isolation is structural). The legacy
   variable, when still set, is merged into the list — existing deployments
   keep their lockdown until env is updated.
+
+# V4 Amendment, Phase 1 — Per-User Digest Email (owner decisions, 2026-07-19)
+
+Design log: `docs/v4-digest-decisions.md` (rev 3). Phase 1 deliberately keeps
+the v3 click mechanism (static shared secret, `/confirm` auto-POST landing)
+and adds a per-user summary email ON TOP of everything that exists. Nothing
+was removed: the per-task template editor + external workflow path keeps
+working unchanged. Interactive email (Adaptive Cards) is deferred — see the
+decision log §3.
+
+## Product behavior
+
+- The app composes and sends ONE email per user listing all their pending
+  tasks, replacing email-per-task fatigue (decision log §1 problem 4).
+- Recipients come from a dedicated USERS BOARD: a people column identifies
+  the user (person ids), an email column is the address. Task ↔ user matching
+  is person-id intersection with the tasks board's `peopleColumnId`.
+  Rows missing an email/person are reported as skipped, never guessed.
+  Duplicate emails merge (person ids united).
+- The digest is split into SECTIONS (1..4; default two, per the approved
+  mock). Each section = a date column on the tasks board + one action button +
+  a **status condition**. **Pending rule (owner spec 2026-07-20):** date set
+  AND date ≤ today (a past date **includes today**; Asia/Jerusalem) AND the
+  task's status (on the button's status column) is **one of the section's
+  `includeStatusLabelIds`** — "show by status", only the listed statuses enter
+  (label id 0 valid; unset status matches nothing). This replaces the earlier
+  "≠ button target" rule, which let already-done tasks appear in a
+  not-yet-done section. A recipient with zero pending tasks gets no email; an
+  empty section is omitted.
+- **Email date-column header** = the ORIGINAL board column title
+  (`section.dateColumnTitle`), captured when the column is picked in the admin
+  (re-save after a board-side rename to refresh).
+- Each task row carries the button as a REAL v3 `/confirm` link
+  (`itemId + a + k + btn`) — one click, auto-POST, done.
+- **Phase 1 sending is MANUAL ONLY** — the "שלח עכשיו" button in the admin's
+  new "מייל מסכם" tab. A scheduler is a later phase.
+
+## §7 change — success page auto-close
+
+The success page (and only it) now carries ONE inline script: `window.close()`
+2s after render, with a visible fallback line ("אפשר לסגור את החלון…").
+Invalid/bad-request pages stay JS-free — a human should read them. This
+amends §7's "no JS" wording for the success page alone.
+
+## Storage & config schema (extends §4)
+
+`config.digest` (nullable; absent on old configs — normalized to `null`):
+
+```
+digest: {
+  usersBoardId: "222",                 // digits
+  usersPeopleColumnId: "people_u",
+  usersEmailColumnId: "email_u",
+  subject: "המשימות שלך — נדרש עדכון סטטוס",   // 1..120
+  sections: [ { id: "s_xxxxxxxx", title: "…", dateColumnId: "date_x",
+                dateColumnTitle: "תאריך התחלה",   // board title → email <th>
+                buttonId: "b_xxxxxxxx",           // must exist
+                includeStatusLabelIds: [0, 2] } ] // 1..4 sections; >=1 label id (0 valid)
+}
+```
+
+A digest block requires `peopleColumnId` to be set (matching column).
+
+## Environment (extends §5)
+
+- `RESEND_API_KEY`, `DIGEST_FROM` — the Resend sender funnel
+  (`src/services/email-sender.js`). Both optional; when either is missing
+  `/api/digest/send` answers 409 `email_not_configured`.
+
+## Admin API (extends §9)
+
+- `GET /api/digest/preview[?recipient=<email>]` → 200
+  `{ recipients: [{email,name,taskCount}], skippedUsers, truncated, html }`;
+  409 `digest_not_configured` / `no_secret` / `not_connected`;
+  502 `monday_api_failed`.
+- `POST /api/digest/send` → same guards + 409 `email_not_configured`; sends
+  per recipient (per-recipient failures isolated), returns
+  `{ ok, results: [{email,name,taskCount,ok,error?}], skippedUsers, truncated }`.
+
+## GraphQL (extends §11)
+
+- `getBoardItems` — whole-board read, `items_page` → `next_items_page` cursor
+  pagination (page 100, cap 20 pages, `truncated` surfaced — never silent),
+  typed fragments Status/Date/People; people filtered to `kind: person`.
+  **Pre-release gate:** sandbox probe (WZ- board) + `/monday-api check` — the
+  cloud session that authored this had no token (see tests/fixtures/README.md).
+
+---
+
+# V5 Amendment — Gmail Dynamic Email (owner decisions, 2026-07-26)
+
+Design log: `docs/v5-gmail-dynamic-email.md`. The client's organization runs on
+**Google Workspace (Gmail)**, so Outlook **Actionable Messages / Adaptive Cards**
+— explored earlier — is off the table: it renders in Outlook only. Gmail's
+equivalent is **AMP for Email**, which Gmail calls **dynamic email**: a
+`text/x-amp-html` MIME part with real form controls that posts to our server
+from inside the message.
+
+V5 adds that part ALONGSIDE the V4 digest. Nothing is removed or replaced: the
+static `text/html` body with per-task links stays the universal fallback, and
+every client that does not render AMP (Outlook, Apple Mail, an old Gmail app, a
+user who never allow-listed the sender) gets exactly today's email. Graceful
+degradation is a locked property, not an accident.
+
+## Product behavior
+
+- The digest email becomes TWO representations of the same digest data:
+  - `text/x-amp-html` — one `<amp-form>` per section, a **checkbox per task**
+    and ONE submit button per section: tick several tasks, one click, done,
+    without leaving the message. This is what the owner asked for from the
+    start (in-email interactivity, no landing page).
+  - `text/html` — unchanged V4 body, one link-button per task.
+- The AMP part must be placed BEFORE the html part inside
+  `multipart/alternative` (some clients render only the last part).
+- Gmail strips the AMP part on reply/forward and may stop rendering it after
+  ~30 days; both fall back to the html part.
+
+## New endpoint (extends §7)
+
+`POST /amp/confirm` — the app's ONLY bulk mutation path. Ordered contract
+(security contract, `src/routes/amp.js` header is authoritative):
+
+1. **AMP CORS gate** (`src/helpers/amp-cors.js`) — FIRST, before any I/O.
+   Supports both documented variants: v2 `AMP-Email-Sender` →
+   `AMP-Email-Allow-Sender`, and v1 `Origin` + `?__amp_source_origin` →
+   `Access-Control-Allow-Origin` + `AMP-Access-Control-Allow-Source-Origin` +
+   `Access-Control-Expose-Headers`; v2 wins when both are offered.
+   **Default deny** (empty allowlist admits nobody) and the wildcard `*` is
+   deliberately unsupported. A rejected caller gets 403 with **NO CORS
+   headers** — the email client then discards the body — and never reaches
+   storage, so it cannot probe whether a secret is valid.
+2. parse+validate `a`, `k`, `btn`, `item[]` (each `/^\d{1,20}$/`,
+   1..`MAX_ITEMS`=50) → 400 `bad_request` / `no_items` / `too_many_items`.
+3. secret gate (constant-time, account-scoped) → 403 `invalid`.
+4. rate limit, bucket `${a}:${ip}` → 429.
+5. `performAction` per item — the SAME v2/v3 engine, so already-at-target
+   stays a silent success and nothing is written twice; duplicate ids collapse.
+
+Responses from step 2 on carry the CORS headers and are JSON (amp-form feeds
+them to `<template type="amp-mustache">`): `{ ok, updated, already, failed,
+message }` — counts and a Hebrew message ONLY, never item/board/account data.
+Authorized-but-nothing-updated answers **502** so the reader sees the error
+template instead of a green one. `OPTIONS /amp/confirm` answers the preflight
+under the same CORS gate.
+
+## Environment (extends §5)
+
+- `AMP_ALLOWED_SENDERS` — comma-separated sender addresses whose AMP forms may
+  call `/amp/confirm` (trimmed, lowercased, de-duplicated). **Empty or unset =
+  the endpoint admits nobody.** Holds the production sender address, plus
+  `amp@gmail.dev` while testing through the AMP playground.
+
+## Admin API (extends §9)
+
+- `GET /api/digest/preview` gains `amp` — the amp4email document for the same
+  recipient as `html` (both `null` when that recipient has nothing pending).
+  The admin panel copies it out for the AMP playground while the AMP sending
+  path is still manual.
+
+## Deferred (phase 2)
+
+- Sending the AMP MIME part: Resend's support for `text/x-amp-html` is
+  undocumented, so the production sender becomes a dedicated Google Workspace
+  mailbox via the Gmail API with the `gmail.send` scope only (send, never
+  read) — see the design log. Until then the AMP part is exercised manually.
+- Per-task status dropdown (`<select>` per row) instead of a checkbox — the
+  format supports it; the owner has seen a mock, no decision yet.

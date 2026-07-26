@@ -2,13 +2,32 @@
 // client-generated ids on creation (server re-validates and generates for
 // any that arrive without one).
 
-import type { ActionButton, AppConfig, EmailTemplate, TemplateBlock } from './types';
+import type { ActionButton, AppConfig, DigestConfig, EmailTemplate, TemplateBlock } from './types';
+
+export interface DigestSectionDraft {
+  id: string;
+  title: string;
+  dateColumnId: string | null;
+  dateColumnTitle: string; // captured when the date column is picked
+  buttonId: string | null;
+  includeStatusLabelIds: number[]; // task shown only if its status is one of these
+}
+
+export interface DigestDraft {
+  enabled: boolean;
+  usersBoardId: string | null;
+  usersPeopleColumnId: string | null;
+  usersEmailColumnId: string | null;
+  subject: string;
+  sections: DigestSectionDraft[];
+}
 
 export interface ConfigDraft {
   boardId: string | null;
   peopleColumnId: string | null;
   buttons: ActionButton[];
   templates: EmailTemplate[];
+  digest: DigestDraft;
 }
 
 function randomSlug(): string {
@@ -49,12 +68,98 @@ export function newButtonsBlock(): TemplateBlock {
   return { type: 'buttons', buttonIds: [] };
 }
 
+export function newDigestSection(title = ''): DigestSectionDraft {
+  return {
+    id: `s_${randomSlug()}`,
+    title,
+    dateColumnId: null,
+    dateColumnTitle: '',
+    buttonId: null,
+    includeStatusLabelIds: [],
+  };
+}
+
+export const DEFAULT_DIGEST_SUBJECT = 'המשימות שלך — נדרש עדכון סטטוס';
+
+/** Fresh digest draft — disabled, default subject, the two mock sections. */
+export function defaultDigestDraft(): DigestDraft {
+  return {
+    enabled: false,
+    usersBoardId: null,
+    usersPeopleColumnId: null,
+    usersEmailColumnId: null,
+    subject: DEFAULT_DIGEST_SUBJECT,
+    sections: [
+      newDigestSection('משימות שנדרש להתחיל וטרם התחילו:'),
+      newDigestSection('משימות שנדרש לסיים וטרם בוצעו:'),
+    ],
+  };
+}
+
+export function digestFromConfig(digest: DigestConfig | null | undefined): DigestDraft {
+  if (!digest) return defaultDigestDraft();
+  return {
+    enabled: true,
+    usersBoardId: digest.usersBoardId,
+    usersPeopleColumnId: digest.usersPeopleColumnId,
+    usersEmailColumnId: digest.usersEmailColumnId,
+    subject: digest.subject,
+    // Tolerate configs saved before 0.6.0 introduced these two section fields
+    // (production incident 2026-07-26: the spread below threw at SPA boot on a
+    // legacy config). A missing condition becomes [], which digestIsComplete
+    // then flags as incomplete — the operator picks labels, nothing is guessed.
+    sections: digest.sections.map((s) => ({
+      ...s,
+      dateColumnTitle: s.dateColumnTitle ?? '',
+      includeStatusLabelIds: Array.isArray(s.includeStatusLabelIds) ? [...s.includeStatusLabelIds] : [],
+    })),
+  };
+}
+
+export function digestIsComplete(digest: DigestDraft): boolean {
+  return (
+    digest.usersBoardId !== null &&
+    digest.usersPeopleColumnId !== null &&
+    digest.usersEmailColumnId !== null &&
+    digest.subject.trim().length > 0 &&
+    digest.sections.length > 0 &&
+    digest.sections.every(
+      (s) =>
+        s.title.trim().length > 0 &&
+        s.dateColumnId !== null &&
+        s.buttonId !== null &&
+        // a status condition is mandatory — at least one included label
+        s.includeStatusLabelIds.length > 0
+    )
+  );
+}
+
+/** Resolve the digest draft into the config payload piece (see draftToConfig). */
+function digestToConfig(digest: DigestDraft): DigestConfig | null {
+  if (!digest.enabled) return null;
+  return {
+    usersBoardId: digest.usersBoardId as string,
+    usersPeopleColumnId: digest.usersPeopleColumnId as string,
+    usersEmailColumnId: digest.usersEmailColumnId as string,
+    subject: digest.subject,
+    sections: digest.sections.map((s) => ({
+      id: s.id,
+      title: s.title,
+      dateColumnId: s.dateColumnId as string,
+      dateColumnTitle: s.dateColumnTitle,
+      buttonId: s.buttonId as string,
+      includeStatusLabelIds: [...s.includeStatusLabelIds],
+    })),
+  };
+}
+
 export function draftFromConfig(config: AppConfig | null): ConfigDraft {
   return {
     boardId: config?.boardId ?? null,
     peopleColumnId: config?.peopleColumnId ?? null,
     buttons: config?.buttons ?? [],
     templates: config?.templates ?? [],
+    digest: digestFromConfig(config?.digest),
   };
 }
 
@@ -80,7 +185,10 @@ export function draftIsComplete(draft: ConfigDraft): boolean {
     draft.boardId !== null &&
     draft.buttons.length > 0 &&
     draft.buttons.every(buttonIsComplete) &&
-    draft.templates.every(templateIsComplete)
+    draft.templates.every(templateIsComplete) &&
+    // A disabled digest never blocks saving; an enabled one must be complete
+    // (and needs the tasks-board people column for person-id matching).
+    (!draft.digest.enabled || (digestIsComplete(draft.digest) && draft.peopleColumnId !== null))
   );
 }
 
@@ -92,5 +200,6 @@ export function draftToConfig(draft: ConfigDraft): AppConfig | null {
     peopleColumnId: draft.peopleColumnId,
     buttons: draft.buttons,
     templates: draft.templates,
+    digest: digestToConfig(draft.digest),
   };
 }

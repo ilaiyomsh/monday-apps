@@ -151,3 +151,11 @@ body {
   padding: 16px;
   overflow-x: auto;
 }
+
+/* v4 — tab panels keep the page's vertical rhythm */
+.dc-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 16px;
+}

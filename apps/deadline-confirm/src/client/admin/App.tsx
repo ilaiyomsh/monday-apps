@@ -1,10 +1,11 @@
-// The single admin screen — v2: connection → board → action buttons →
-// email templates → secret → save. No routing, no state library.
+// The admin screen — v4: two tabs. "הגדרות" carries the v2 flow (connection →
+// board → action buttons → email templates → secret); "מייל מסכם" carries the
+// digest config + preview + manual send. One shared save footer, one draft.
 
 import { useCallback, useEffect, useState } from 'react';
-import { Button, Loader } from '@vibe/core';
+import { Button, Loader, Tab, TabList, TabPanel, TabPanels, TabsContext } from '@vibe/core';
 import type { ActionButton, AppState, Board, BoardColumn, EmailTemplate } from './types';
-import { type ConfigDraft, draftFromConfig, draftToConfig } from './draft';
+import { type ConfigDraft, type DigestDraft, draftFromConfig, draftToConfig } from './draft';
 import { apiFetch, ApiError } from './services/api';
 import { fetchBoards, fetchBoardColumns } from './services/monday';
 import { ConnectionSection } from './components/ConnectionSection';
@@ -12,10 +13,16 @@ import { BoardConfigSection } from './components/BoardConfigSection';
 import { ButtonsSection } from './components/ButtonsSection';
 import { TemplatesSection } from './components/TemplatesSection';
 import { SecretSection } from './components/SecretSection';
+import { DigestSection } from './components/DigestSection';
+import logger from './utils/logger';
+import { useViewTracking } from './utils/viewTracking';
 
 type SaveStatus = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved' } | { kind: 'error'; message: string };
 
 export function App() {
+  // Usage telemetry (D3): the admin settings screen is reported once per session.
+  useViewTracking(logger, 'admin_settings');
+
   const [state, setState] = useState<AppState | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,7 +55,7 @@ export function App() {
         await loadState({ initDraft: true });
         setBoards(await fetchBoards());
       } catch (err) {
-        console.error('admin boot failed', err);
+        logger.error('admin', 'boot_failed', err);
         setBootError('טעינת ההגדרות נכשלה. ודאו שאתם פותחים את המסך מתוך monday ונסו לרענן.');
       }
     })();
@@ -74,7 +81,7 @@ export function App() {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        console.error('columns load failed', err);
+        logger.error('admin', 'columns_load_failed', err);
         setPickersError('טעינת עמודות הלוח נכשלה. נסו לרענן.');
       })
       .finally(() => {
@@ -99,6 +106,17 @@ export function App() {
           targetIndex: -1,
           targetLabel: '',
         }));
+        // Digest section date columns + status conditions live on the tasks
+        // board too — a board switch invalidates them.
+        next.digest = {
+          ...next.digest,
+          sections: next.digest.sections.map((s) => ({
+            ...s,
+            dateColumnId: null,
+            dateColumnTitle: '',
+            includeStatusLabelIds: [],
+          })),
+        };
       }
       return next;
     });
@@ -106,6 +124,8 @@ export function App() {
 
   const onButtonsChange = (buttons: ActionButton[]) => onDraftChange({ buttons });
   const onTemplatesChange = (templates: EmailTemplate[]) => onDraftChange({ templates });
+  const onDigestChange = (patch: Partial<DigestDraft>) =>
+    onDraftChange({ digest: { ...draft.digest, ...patch } });
 
   const payload = draftToConfig(draft);
 
@@ -123,7 +143,7 @@ export function App() {
       setSaveStatus({ kind: 'saved' });
       await loadState({ initDraft: false });
     } catch (err) {
-      console.error('config save failed', err);
+      logger.error('admin', 'config_save_failed', err);
       const message =
         err instanceof ApiError && err.field
           ? `השמירה נכשלה — שדה לא תקין: ${err.field}`
@@ -139,7 +159,7 @@ export function App() {
       setRotatedSecret(res.secret);
       await loadState({ initDraft: false });
     } catch (err) {
-      console.error('secret rotate failed', err);
+      logger.error('admin', 'secret_rotate_failed', err);
       setSaveStatus({ kind: 'error', message: 'יצירת מפתח חדש נכשלה. נסו שוב.' });
     } finally {
       setRotating(false);
@@ -151,7 +171,7 @@ export function App() {
     try {
       await loadState({ initDraft: false });
     } catch (err) {
-      console.error('state refresh failed', err);
+      logger.error('admin', 'state_refresh_failed', err);
       setBootError('רענון הסטטוס נכשל. נסו שוב.');
     } finally {
       setRefreshing(false);
@@ -177,34 +197,59 @@ export function App() {
   return (
     <div className="dc-page">
       <h1 style={{ margin: 0, fontSize: 20 }}>Deadline Confirm — הגדרות</h1>
-      <ConnectionSection oauth={state.oauth} onRefresh={onRefresh} refreshing={refreshing} />
-      <BoardConfigSection
-        boards={boards}
-        columns={columns}
-        columnsLoading={columnsLoading}
-        draft={draft}
-        onChange={onDraftChange}
-      />
-      {pickersError && <div className="dc-error">{pickersError}</div>}
-      <ButtonsSection
-        columns={columns}
-        columnsLoading={columnsLoading}
-        buttons={draft.buttons}
-        dirty={dirty}
-        onChange={onButtonsChange}
-      />
-      <TemplatesSection
-        templates={draft.templates}
-        buttons={draft.buttons}
-        dirty={dirty}
-        onChange={onTemplatesChange}
-      />
-      <SecretSection
-        maskedSecret={state.secret}
-        rotatedSecret={rotatedSecret}
-        rotating={rotating}
-        onRotate={onRotate}
-      />
+      <TabsContext>
+        <TabList>
+          <Tab>הגדרות</Tab>
+          <Tab>מייל מסכם</Tab>
+        </TabList>
+        <TabPanels>
+          <TabPanel>
+            <div className="dc-tab-panel">
+              <ConnectionSection oauth={state.oauth} onRefresh={onRefresh} refreshing={refreshing} />
+              <BoardConfigSection
+                boards={boards}
+                columns={columns}
+                columnsLoading={columnsLoading}
+                draft={draft}
+                onChange={onDraftChange}
+              />
+              {pickersError && <div className="dc-error">{pickersError}</div>}
+              <ButtonsSection
+                columns={columns}
+                columnsLoading={columnsLoading}
+                buttons={draft.buttons}
+                dirty={dirty}
+                onChange={onButtonsChange}
+              />
+              <TemplatesSection
+                templates={draft.templates}
+                buttons={draft.buttons}
+                dirty={dirty}
+                onChange={onTemplatesChange}
+              />
+              <SecretSection
+                maskedSecret={state.secret}
+                rotatedSecret={rotatedSecret}
+                rotating={rotating}
+                onRotate={onRotate}
+              />
+            </div>
+          </TabPanel>
+          <TabPanel>
+            <div className="dc-tab-panel">
+              <DigestSection
+                boards={boards}
+                tasksColumns={columns}
+                tasksColumnsLoading={columnsLoading}
+                buttons={draft.buttons}
+                digest={draft.digest}
+                dirty={dirty}
+                onChange={onDigestChange}
+              />
+            </div>
+          </TabPanel>
+        </TabPanels>
+      </TabsContext>
       <section className="dc-section">
         <h2>שמירה</h2>
         <div className="dc-footer">
