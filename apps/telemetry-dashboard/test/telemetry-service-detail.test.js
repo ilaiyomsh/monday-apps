@@ -52,7 +52,7 @@ describe('getErrorDetail', () => {
 
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     const body = JSON.parse(fetchImpl.mock.calls[0][1].body);
-    expect(body.apl).toContain("err_name=='TimeoutError'");
+    expect(body.apl).toContain("__name=='TimeoutError'"); // matched via the shared name derivation
     expect(body.apl).toContain("kind=='error'");
     expect(res.rows).toHaveLength(1);
     expect(res.rows[0].usr).toBe('u1'); // enrichment field survives the round-trip

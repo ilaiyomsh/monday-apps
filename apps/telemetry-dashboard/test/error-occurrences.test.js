@@ -4,7 +4,7 @@
 // err_name, within the active window/app/account scope, newest first, capped.
 
 import { describe, it, expect } from 'vitest';
-import { errorOccurrences } from '../src/client/lib/aggregate.js';
+import { errorOccurrences, errorLabel } from '../src/client/lib/aggregate.js';
 
 const NOW = Date.parse('2026-07-24T12:00:00.000Z');
 const base = {
@@ -64,5 +64,28 @@ describe('errorOccurrences (seed drill-down)', () => {
     );
     const rows = errorOccurrences(many, 'TimeoutError', noFilter, NOW, 3);
     expect(rows).toHaveLength(3);
+  });
+
+  // err_name-less records (warn-level logs) are named by their message, so
+  // clicking their row must drill into them by that same derived name.
+  it('drills into un-named errors by their message-derived name', () => {
+    const records = [
+      rec({ err_name: '', err_msg: '', message: 'Retryable error, attempt 1/2' }),
+      rec({ err_name: '', err_msg: '', message: 'a different message' }),
+    ];
+    const rows = errorOccurrences(records, 'Retryable error, attempt 1/2', noFilter, NOW);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].message).toBe('Retryable error, attempt 1/2');
+  });
+});
+
+describe('errorLabel', () => {
+  it('prefers err_name when present', () => {
+    expect(errorLabel({ err_name: 'TimeoutError', err_msg: 'x', message: 'y' })).toBe('TimeoutError');
+  });
+  it('falls back err_msg → message → (unnamed)', () => {
+    expect(errorLabel({ err_msg: 'boom', message: 'ctx' })).toBe('boom');
+    expect(errorLabel({ message: 'ctx' })).toBe('ctx');
+    expect(errorLabel({})).toBe('(unnamed)');
   });
 });
