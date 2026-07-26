@@ -5,6 +5,8 @@
 
 import mondaySdk from 'monday-sdk-js';
 import type { Board, BoardColumn, StatusLabel } from '../types';
+import logger from '../utils/logger';
+import { latencyBucket } from '../utils/latency';
 
 const monday = mondaySdk();
 
@@ -32,20 +34,56 @@ interface GraphQLResponse<T> {
 }
 
 async function seamlessApi<T>(query: string, variables?: Record<string, unknown>): Promise<T> {
-  const res = (await monday.api(query, variables ? { variables } : undefined)) as GraphQLResponse<T>;
+  const t0 = Date.now();
+  // API-latency health (D5): bucketed so repeated signals dedup; ships as kind='health'
+  // (inert until the Axiom sink is active).
+  const reportLatency = (ok: boolean): void =>
+    logger.health('api_latency', { bucket: latencyBucket(Date.now() - t0), ok });
+  let res: GraphQLResponse<T>;
+  try {
+    res = (await monday.api(query, variables ? { variables } : undefined)) as GraphQLResponse<T>;
+  } catch (err) {
+    // network/SDK throw (not a GraphQL error response) — record latency + rethrow
+    reportLatency(false);
+    throw err;
+  }
   // GraphQL soft errors arrive inside a resolved promise — throw at the funnel.
   if (res.errors?.length) {
+    reportLatency(false);
     throw new Error(`monday.api error: ${res.errors.map((e) => e.message).join('; ')}`);
   }
-  if (!res.data) throw new Error('monday.api returned no data');
+  if (!res.data) {
+    reportLatency(false);
+    throw new Error('monday.api returned no data');
+  }
+  reportLatency(true);
   return res.data;
 }
 
+// The raw boards() query returns every board-like OBJECT — real work
+// boards, but also sub-item boards, portfolios, docs, custom objects, etc.
+// The board pickers must offer only real boards, so we filter by
+// object_type_unique_key (same mechanism the tracker uses in
+// PortfolioPickStep). Standard work-management board = 'board'.
+export const REAL_BOARD_OBJECT_TYPE_KEY = 'board';
+
+/** True only for a real work-management board (drops sub-items/portfolio/docs/…).
+ * Robust to the namespace form: matches both 'board' and 'work-management::board'. */
+export function isRealBoard(board: { object_type_unique_key?: string | null }): boolean {
+  const key = board.object_type_unique_key;
+  if (typeof key !== 'string') return false;
+  const bare = key.includes('::') ? (key.split('::').pop() ?? '') : key;
+  return bare === REAL_BOARD_OBJECT_TYPE_KEY;
+}
+
 export async function fetchBoards(): Promise<Board[]> {
-  const data = await seamlessApi<{ boards: Array<{ id: string; name: string } | null> }>(
-    `query AdminBoards { boards(limit: 200, order_by: used_at) { id name } }`
-  );
-  return (data.boards ?? []).filter((b): b is Board => Boolean(b));
+  const data = await seamlessApi<{
+    boards: Array<{ id: string; name: string; object_type_unique_key?: string | null } | null>;
+  }>(`query AdminBoards { boards(limit: 500, order_by: used_at) { id name object_type_unique_key } }`);
+  return (data.boards ?? [])
+    .filter((b): b is NonNullable<typeof b> => Boolean(b))
+    .filter(isRealBoard)
+    .map((b) => ({ id: b.id, name: b.name }));
 }
 
 interface RawSettingsLabel {
@@ -72,7 +110,7 @@ export async function fetchBoardColumns(boardId: string): Promise<BoardColumn[]>
   }>(
     `query AdminColumns($boardIds: [ID!]) {
       boards(ids: $boardIds) {
-        columns(types: [status, people, date]) { id title type settings }
+        columns(types: [status, people, date, email]) { id title type settings }
       }
     }`,
     { boardIds: [boardId] }
@@ -96,6 +134,6 @@ export async function openOauthTab(): Promise<void> {
     window.open(`/oauth/start?st=${encodeURIComponent(token)}`, '_blank', 'noopener');
   } catch (err) {
     // Without a sessionToken there is no account context to connect.
-    console.error('openOauthTab: sessionToken unavailable', err);
+    logger.error('monday', 'oauth_open_failed', err);
   }
 }

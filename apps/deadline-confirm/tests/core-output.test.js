@@ -34,7 +34,12 @@ describe('pages', () => {
     expect(render()).toContain('<html dir="rtl" lang="he">');
   });
 
-  it.each(allPages)('%s contains no <script tag', (_name, render) => {
+  // v4 phase 1 (owner decision 2026-07-19): the SUCCESS page is the ONE
+  // result page allowed an inline script — auto-close after 2s (pinned in
+  // tests/pages-autoclose.test.js). Every other page stays JS-free.
+  const jsFreePages = allPages.filter(([name]) => name !== 'successPage');
+
+  it.each(jsFreePages)('%s contains no <script tag', (_name, render) => {
     expect(render().toLowerCase()).not.toContain('<script');
   });
 

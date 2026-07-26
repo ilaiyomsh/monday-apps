@@ -44,11 +44,68 @@ export interface EmailTemplate {
   blocks: TemplateBlock[];
 }
 
+// v4 digest — a dedicated users board (people column ↔ email column) maps
+// person ids to recipient addresses; each section pairs a date column on the
+// TASKS board with one of the action buttons.
+export interface DigestSectionConfig {
+  id: string; // s_XXXXXXXX — client-generated on add, server validates
+  title: string;
+  dateColumnId: string;
+  dateColumnTitle: string; // the board column's title, captured at save → email <th>
+  buttonId: string;
+  // A task enters the section only if its status (on the button's status
+  // column) is one of these label ids. Empty = nothing matches. Label id 0
+  // is valid — never truthy-check.
+  includeStatusLabelIds: number[];
+}
+
+export interface DigestConfig {
+  usersBoardId: string;
+  usersPeopleColumnId: string;
+  usersEmailColumnId: string;
+  subject: string;
+  sections: DigestSectionConfig[];
+}
+
 export interface AppConfig {
   boardId: string;
   peopleColumnId: string | null;
   buttons: ActionButton[];
   templates: EmailTemplate[];
+  digest?: DigestConfig | null;
+}
+
+export interface DigestRecipientSummary {
+  email: string;
+  name: string;
+  taskCount: number;
+}
+
+export interface DigestSkippedUser {
+  itemId: string;
+  name: string;
+  reason: 'no_email' | 'no_person';
+}
+
+export interface DigestPreviewResponse {
+  recipients: DigestRecipientSummary[];
+  skippedUsers: DigestSkippedUser[];
+  truncated: boolean;
+  html: string | null;
+  /** V5: the amp4email (Gmail dynamic email) part of the same digest. */
+  amp: string | null;
+}
+
+export interface DigestSendResult extends DigestRecipientSummary {
+  ok: boolean;
+  error?: string;
+}
+
+export interface DigestSendResponse {
+  ok: boolean;
+  results: DigestSendResult[];
+  skippedUsers: DigestSkippedUser[];
+  truncated: boolean;
 }
 
 export type OauthStatus = 'connected' | 'disconnected' | 'broken';
@@ -75,7 +132,7 @@ export interface StatusLabel {
 export interface BoardColumn {
   id: string;
   title: string;
-  type: 'status' | 'people' | 'date';
+  type: 'status' | 'people' | 'date' | 'email'; // email: v4 digest users board
   labels: StatusLabel[]; // parsed from settings.labels, status columns only
 }
 

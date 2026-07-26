@@ -38,10 +38,15 @@ import express from 'express';
 import { generateSecret, maskSecret } from '../services/secret.js';
 import { renderSnippet } from '../helpers/snippet.js';
 import { renderEmailTemplate, ALLOWED_FONTS } from '../helpers/email-template.js';
-import { logError } from '../helpers/logger.js';
+import { renderDigestEmail } from '../helpers/digest-email.js';
+import { renderDigestAmp } from '../helpers/digest-amp.js';
+import { buildDigest, digestTaskColumnIds } from '../services/digest-service.js';
+import { MondayApiError } from '../services/monday-api.js';
+import { logError, logInfo } from '../helpers/logger.js';
 
 const BUTTON_ID_RE = /^b_[A-Za-z0-9_-]{4,16}$/;
 const TEMPLATE_ID_RE = /^t_[A-Za-z0-9_-]{4,16}$/;
+const SECTION_ID_RE = /^s_[A-Za-z0-9_-]{4,16}$/;
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 function generateId(prefix) {
@@ -141,14 +146,77 @@ function validateConfig(body) {
   }
   if (new Set(templates.map((t) => t.id)).size !== templates.length) return { field: 'templates' };
 
+  // --- v4 digest block (optional; absent/null → digest: null) ---------------
+  let digest = null;
+  if (body.digest !== undefined && body.digest !== null) {
+    const raw = body.digest;
+    if (typeof raw !== 'object') return { field: 'digest' };
+    // Person-id matching happens on the TASKS board people column — required.
+    if (body.peopleColumnId === null || body.peopleColumnId === undefined) {
+      return { field: 'peopleColumnId' };
+    }
+    if (typeof raw.usersBoardId !== 'string' || !/^\d+$/.test(raw.usersBoardId)) {
+      return { field: 'digest.usersBoardId' };
+    }
+    if (!isNonEmptyString(raw.usersPeopleColumnId)) return { field: 'digest.usersPeopleColumnId' };
+    if (!isNonEmptyString(raw.usersEmailColumnId)) return { field: 'digest.usersEmailColumnId' };
+    if (!isNonEmptyString(raw.subject, 120)) return { field: 'digest.subject' };
+    if (!Array.isArray(raw.sections) || raw.sections.length < 1 || raw.sections.length > 4) {
+      return { field: 'digest.sections' };
+    }
+    const sections = [];
+    for (const s of raw.sections) {
+      if (typeof s !== 'object' || s === null) return { field: 'digest.sections' };
+      if (s.id !== undefined && !(typeof s.id === 'string' && SECTION_ID_RE.test(s.id))) {
+        return { field: 'digest.sections' };
+      }
+      if (!isNonEmptyString(s.title, 60)) return { field: 'digest.sections' };
+      if (!isNonEmptyString(s.dateColumnId)) return { field: 'digest.sections' };
+      if (!isNonEmptyString(s.dateColumnTitle, 255)) return { field: 'digest.sections' };
+      if (!buttonIds.has(s.buttonId)) return { field: 'digest.sections' };
+      // "show by status": a non-empty set of label ids (0 is valid).
+      if (
+        !Array.isArray(s.includeStatusLabelIds) ||
+        s.includeStatusLabelIds.length === 0 ||
+        !s.includeStatusLabelIds.every((n) => Number.isInteger(n) && n >= 0)
+      ) {
+        return { field: 'digest.sections' };
+      }
+      sections.push({
+        id: s.id ?? generateId('s'),
+        title: s.title,
+        dateColumnId: s.dateColumnId,
+        dateColumnTitle: s.dateColumnTitle,
+        buttonId: s.buttonId,
+        includeStatusLabelIds: [...s.includeStatusLabelIds],
+      });
+    }
+    if (new Set(sections.map((s) => s.id)).size !== sections.length) {
+      return { field: 'digest.sections' };
+    }
+    digest = {
+      usersBoardId: raw.usersBoardId,
+      usersPeopleColumnId: raw.usersPeopleColumnId,
+      usersEmailColumnId: raw.usersEmailColumnId,
+      subject: raw.subject,
+      sections,
+    };
+  }
+
   return {
     config: {
       boardId: body.boardId,
       peopleColumnId: body.peopleColumnId ?? null,
       buttons,
       templates,
+      digest,
     },
   };
+}
+
+/** YYYY-MM-DD "today" in the app's business timezone (digest overdue rule). */
+function todayInJerusalem() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
 }
 
 /**
@@ -158,11 +226,155 @@ function validateConfig(body) {
  * @param {ReturnType<import('../services/monday-api.js').createMondayApi>} deps.api
  * @param {{ baseUrl: string }} deps.env
  * @param {import('express').RequestHandler} deps.requireSession
+ * @param {{ send(p: object): Promise<{ id: string }> }} [deps.emailSender] - absent → send answers 409
+ * @param {string} [deps.todayIso] - test injection; defaults to Asia/Jerusalem "today"
  * @returns {import('express').Router}
  */
-export function createAdminRouter({ storage, api, env, requireSession }) {
+export function createAdminRouter({ storage, api, env, requireSession, emailSender, todayIso }) {
   const router = express.Router();
   router.use('/api', requireSession);
+
+  /**
+   * Shared digest pipeline: guards (409s) → both board reads → buildDigest →
+   * per-recipient render. Returns { status, body } for guard failures or
+   * { digestData } on success.
+   */
+  async function prepareDigest(req) {
+    const scopedStorage = storage.forAccount(req.session.accountId);
+    const [config, secret, token] = await Promise.all([
+      scopedStorage.getConfig(),
+      scopedStorage.getLinkSecret(),
+      scopedStorage.getOauthToken(),
+    ]);
+    if (!config?.digest) return { status: 409, body: { error: 'digest_not_configured' } };
+    if (!secret) return { status: 409, body: { error: 'no_secret' } };
+    if (!token) return { status: 409, body: { error: 'not_connected' } };
+
+    const { digest } = config;
+    let tasksRead, usersRead;
+    try {
+      [tasksRead, usersRead] = await Promise.all([
+        api.getBoardItems({
+          token,
+          boardId: config.boardId,
+          columnIds: digestTaskColumnIds(config),
+        }),
+        api.getBoardItems({
+          token,
+          boardId: digest.usersBoardId,
+          columnIds: [digest.usersPeopleColumnId, digest.usersEmailColumnId],
+        }),
+      ]);
+    } catch (err) {
+      if (err instanceof MondayApiError) {
+        logError('digest', 'board read failed', {
+          error: err.message,
+          code: err.code,
+          unauthorized: err.unauthorized,
+        });
+        return { status: 502, body: { error: 'monday_api_failed' } };
+      }
+      throw err; // non-API failure → guarded() logs and answers 500
+    }
+
+    const today = todayIso ?? todayInJerusalem();
+    const { recipients, skippedUsers } = buildDigest({
+      config,
+      tasks: tasksRead.items,
+      users: usersRead.items,
+      today,
+    });
+
+    const buttonsById = new Map(config.buttons.map((b) => [b.id, b]));
+    /** Recipient + resolved buttons — the shape both renderers consume. */
+    const withButtons = (recipient) => ({
+      ...recipient,
+      sections: recipient.sections.map((s) => ({ ...s, button: buttonsById.get(s.buttonId) })),
+    });
+    const renderArgs = { baseUrl: env.baseUrl, secret, accountId: req.session.accountId };
+    const renderFor = (recipient) => renderDigestEmail({ ...renderArgs, recipient: withButtons(recipient) });
+    // V5: the dynamic-email (amp4email) part of the same digest — same data,
+    // checkboxes instead of per-task links.
+    const renderAmpFor = (recipient) => renderDigestAmp({ ...renderArgs, recipient: withButtons(recipient) });
+
+    return {
+      digestData: {
+        config,
+        recipients,
+        skippedUsers,
+        truncated: tasksRead.truncated || usersRead.truncated,
+        renderFor,
+        renderAmpFor,
+      },
+    };
+  }
+
+  router.get(
+    '/api/digest/preview',
+    guarded(async (req, res) => {
+      const prep = await prepareDigest(req);
+      if (!prep.digestData) {
+        res.status(prep.status).json(prep.body);
+        return;
+      }
+      const { recipients, skippedUsers, truncated, renderFor, renderAmpFor } = prep.digestData;
+      const wanted =
+        typeof req.query.recipient === 'string'
+          ? recipients.find((r) => r.email === req.query.recipient)
+          : recipients[0];
+      res.json({
+        recipients: recipients.map(({ email, name, taskCount }) => ({ email, name, taskCount })),
+        skippedUsers,
+        truncated,
+        html: wanted ? renderFor(wanted) : null,
+        amp: wanted ? renderAmpFor(wanted) : null,
+      });
+    })
+  );
+
+  router.post(
+    '/api/digest/send',
+    guarded(async (req, res) => {
+      if (!emailSender) {
+        res.status(409).json({ error: 'email_not_configured' });
+        return;
+      }
+      const prep = await prepareDigest(req);
+      if (!prep.digestData) {
+        res.status(prep.status).json(prep.body);
+        return;
+      }
+      const { config, recipients, skippedUsers, truncated, renderFor } = prep.digestData;
+
+      const results = [];
+      for (const recipient of recipients) {
+        const base = { email: recipient.email, name: recipient.name, taskCount: recipient.taskCount };
+        try {
+          await emailSender.send({
+            to: recipient.email,
+            subject: config.digest.subject,
+            html: renderFor(recipient),
+          });
+          results.push({ ...base, ok: true });
+        } catch (err) {
+          logError('digest', 'send failed for recipient', {
+            email: recipient.email,
+            error: String(err?.message ?? err),
+          });
+          results.push({ ...base, ok: false, error: String(err?.message ?? err) });
+        }
+      }
+
+      const failures = results.filter((r) => !r.ok).length;
+      logInfo('digest', 'manual digest send finished', {
+        recipients: results.length,
+        failures,
+        skipped: skippedUsers.length,
+      });
+      res.json({ ok: failures === 0, results, skippedUsers, truncated });
+    })
+  );
+
 
   function guarded(handler) {
     return async (req, res) => {

@@ -1,12 +1,17 @@
 // The three static /confirm response pages (spec §7) + the OAuth result
 // pages (§8). Hard requirements: <html dir="rtl" lang="he">, inline CSS only,
-// no JS, no external assets, mobile-friendly. The /confirm pages contain ZERO
+// no external assets, mobile-friendly. The /confirm pages contain ZERO
 // item/account-derived data — the only dynamic value is the config-derived
 // target label on the success page (locked decision §3.6).
+//
+// JS policy (v4 phase 1 amendment, owner decision 2026-07-19): the SUCCESS
+// page carries ONE inline script — window.close() after 2s, with a visible
+// fallback line — so the email click round-trip ends by itself. The invalid
+// and bad-request pages stay JS-free: a human should read them.
 
 import { escapeHtml } from './html.js';
 
-function renderPage({ title, heading, body }) {
+function renderPage({ title, heading, body, footer = '', script = '' }) {
   return `<!doctype html>
 <html dir="rtl" lang="he">
 <head>
@@ -18,7 +23,9 @@ function renderPage({ title, heading, body }) {
 <div style="max-width:420px;margin:48px auto;background:#ffffff;border-radius:12px;padding:32px 24px;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
 <h1 style="margin:0 0 16px;font-size:24px;color:#323338;">${heading}</h1>
 <p style="margin:0;font-size:18px;line-height:1.6;color:#4b4e59;">${body}</p>
+${footer}
 </div>
+${script}
 </body>
 </html>`;
 }
@@ -33,6 +40,20 @@ export function successPage(toLabel) {
     title: 'המשימה עודכנה',
     heading: 'המשימה עודכנה ✓',
     body: `הסטטוס שונה ל"${escapeHtml(toLabel)}".`,
+    footer:
+      '<p id="close-note" style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#9aa0a8;">החלון נסגר בעוד רגע…</p>',
+    // Auto-close (v4 phase 1): most browsers allow closing a tab that was
+    // opened from an external app (the email client). Where refused, the
+    // visible note flips to a manual-close hint.
+    script: `<script>
+setTimeout(function () {
+  window.close();
+  setTimeout(function () {
+    var n = document.getElementById('close-note');
+    if (n) n.textContent = 'אפשר לסגור את החלון ולחזור למייל';
+  }, 350);
+}, 2000);
+</script>`,
   });
 }
 
