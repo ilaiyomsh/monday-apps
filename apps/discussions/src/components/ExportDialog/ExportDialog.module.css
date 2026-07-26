@@ -27,6 +27,30 @@
   box-shadow: var(--box-shadow-medium, 0 10px 30px rgba(0, 0, 0, 0.2));
 }
 
+/* round297 — indeterminate loading bar shown at the very top of the dialog while
+   the .docx is being produced (from click on "הפק מסמך" until it's delivered). */
+.produceBar {
+  position: relative;
+  height: 3px;
+  width: 100%;
+  overflow: hidden;
+  background: var(--primary-background-hover-color, #e6e9ef);
+  flex-shrink: 0;
+}
+.produceBarFill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 40%;
+  border-radius: 3px;
+  background: var(--primary-color, #0073ea);
+  animation: produceBarSlide 1.1s ease-in-out infinite;
+}
+@keyframes produceBarSlide {
+  0% { inset-inline-start: -40%; }
+  100% { inset-inline-start: 100%; }
+}
+
 .exHeader {
   display: flex;
   align-items: center;
