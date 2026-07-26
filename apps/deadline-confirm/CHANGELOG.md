@@ -2,6 +2,32 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.7.2 — 2026-07-27 — deploy hardening: client sourcemaps no longer reach production
+
+- **Exposure, found by self-check.** The LIVE deployment was serving the admin
+  SPA's sourcemap (`/admin/assets/index-*.js.map`, 2.4 MB) — 333 files with full
+  `sourcesContent`, of which 19 are our own `src/client/**` sources. Verified
+  that it carried **no credentials or secrets**: the client holds none, they live
+  in the server's runtime env. Source exposure, not data or permission exposure.
+- **Root cause was the pipeline, not the app.** The `Strip client sourcemaps
+  before deploy` step was added to this app's workflows on `develop`
+  (`8f0de56`), but `main` never received it — `main`'s last change to
+  `deploy-live-deadline-confirm.yml` was `609a78a`, which predates it. Since
+  deploy-live runs **`main`'s** workflow, every live deploy shipped the maps.
+  Selective releases sync only `apps/<app>/**`, so pipeline improvements never
+  travel to `main` on their own; they must be synced deliberately.
+- **Fix:** `main` now carries this app's draft+live workflows as they exist on
+  `develop`. The live deploy archives the maps as a 90-day build artifact (keyed
+  by commit SHA, for stack symbolication) and then deletes them from
+  `public/admin` before `code:push`, with a hard guard that **fails the deploy**
+  if any `.map` survives — so this cannot silently regress.
+- The same sync also activates the client error sink in the live build
+  (`VITE_AXIOM_*`), which `develop` already did for draft. Behaviour change to
+  note: the live admin SPA now reports client errors to the shared `app-errors`
+  dataset, as every other app in the monorepo does.
+- No application code changed. The version bump reflects a changed deployed
+  artifact: production no longer serves `.map` files.
+
 ## 0.7.1 — 2026-07-26 — hotfix: admin SPA crashed at boot on a pre-0.6.0 digest config
 
 - **Production incident.** v0.6.0 added two required digest-section fields
