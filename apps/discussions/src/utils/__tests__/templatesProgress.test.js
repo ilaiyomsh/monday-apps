@@ -58,6 +58,29 @@ describe('createTopicsFromTemplate — onProgress', () => {
     await expect(createTopicsFromTemplate('D1', TEMPLATE)).resolves.toMatchObject({ topics: 2, points: 3 });
   });
 
+  it('round297 — topicIds stay in TEMPLATE order even when parallel creates resolve out of order', async () => {
+    const completion = [];
+    api.mockReset();
+    api.mockImplementation((query, vars) => {
+      if (query.includes('create_item')) {
+        const name = vars.name;
+        // Make the FIRST template topic ("נושא א") resolve LAST, so completion
+        // order (ב → א) is the reverse of template order. The sort-by-index must
+        // still return ids in template order.
+        const delay = name === 'נושא א' ? 20 : 1;
+        return new Promise((resolve) => {
+          setTimeout(() => { completion.push(name); resolve({ create_item: { id: `T-${name}` } }); }, delay);
+        });
+      }
+      return Promise.resolve({ create_subitem: { id: 'P-new' } });
+    });
+    const res = await createTopicsFromTemplate('D1', TEMPLATE);
+    // Completion order was scrambled (ב finished before א)…
+    expect(completion[0]).toBe('נושא ב');
+    // …yet the returned ids follow TEMPLATE order (owner ribbon-order invariant).
+    expect(res.topicIds).toEqual(['T-נושא א', 'T-נושא ב']);
+  });
+
   it('a throwing onProgress never breaks the creation flow', async () => {
     const res = await createTopicsFromTemplate('D1', TEMPLATE, {
       onProgress: () => { throw new Error('listener bug'); },

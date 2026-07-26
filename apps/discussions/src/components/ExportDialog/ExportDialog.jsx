@@ -94,9 +94,11 @@ export function ExportDialog({ discussion, settings, context, onClose, onNotify 
         modelState.model, modelState.filename,
         { template, assets, discussionId },
       );
-      if (uploadAttempted && uploaded) onNotify?.('הדיון יוצא ונשמר לעמודת הקובץ');
-      else if (uploadAttempted) onNotify?.('הקובץ ירד למחשב, אך השמירה לעמודת הקובץ נכשלה', 'warning');
-      else onNotify?.('הדיון יוצא ל-DOCS בהצלחה');
+      // round297 — lead every success with "המסמך הופק בהצלחה" (owner request:
+      // a green top notice after production), keeping the where-it-saved nuance.
+      if (uploadAttempted && uploaded) onNotify?.('המסמך הופק בהצלחה ונשמר לעמודת הקובץ');
+      else if (uploadAttempted) onNotify?.('המסמך הופק וירד למחשב, אך השמירה לעמודת הקובץ נכשלה', 'warning');
+      else onNotify?.('המסמך הופק בהצלחה');
       onClose?.();
     } catch (err) {
       if (!err?.__loggedId) logger.error('ExportDialog', 'הפקת המסמך נכשלה', err);
@@ -113,6 +115,14 @@ export function ExportDialog({ discussion, settings, context, onClose, onNotify 
       onClick={(e) => { if (e.target === e.currentTarget && !producing) onClose?.(); }}
     >
       <div className={styles.exModal} role="dialog" aria-modal="true" aria-label="ייצוא דיון">
+        {/* round297 — indeterminate loading BAR across the top of the dialog while
+            the document is being produced (owner request), from click until the
+            .docx is delivered. */}
+        {producing && (
+          <div className={styles.produceBar} role="progressbar" aria-label="מפיק מסמך…" aria-busy="true">
+            <span className={styles.produceBarFill} />
+          </div>
+        )}
         <div className={styles.exHeader}>
           <div className={styles.exHeaderTitles}>
             <Heading type="h4">ייצוא דיון</Heading>

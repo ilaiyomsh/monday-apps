@@ -178,7 +178,6 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
 
   let topicsCreated = 0;
   let pointsCreated = 0;
-  const createdTopicIds = []; // in TEMPLATE order — used to persist the ribbon order below
   const total = clean.topics.reduce((n, t) => n + 1 + t.points.length, 0);
   let done = 0;
   const report = () => {
@@ -191,27 +190,35 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
   };
   report();
 
-  for (const topic of clean.topics) {
-    const columnValues = {};
+  const topicColumnValues = () => {
+    const cv = {};
     if (relation?.id) {
-      columnValues[relation.id] = formatValue(
-        relation.type || 'board_relation',
-        { linkedItems: [{ id: discussionId }] }
-      );
+      cv[relation.id] = formatValue(relation.type || 'board_relation', { linkedItems: [{ id: discussionId }] });
     }
     // "האם להציג?" CHECKED = show; default created topics to shown.
-    if (topicDispCol?.id) {
-      columnValues[topicDispCol.id] = formatValue('checkbox', true);
-    }
-    if (topicCreatedCol?.id) {
-      columnValues[topicCreatedCol.id] = formatValue('date', new Date());
-    }
+    if (topicDispCol?.id) cv[topicDispCol.id] = formatValue('checkbox', true);
+    if (topicCreatedCol?.id) cv[topicCreatedCol.id] = formatValue('date', new Date());
+    return cv;
+  };
+  const pointColumnValues = () => {
+    const cv = pointDispCol?.id ? { [pointDispCol.id]: formatValue('checkbox', true) } : {};
+    if (pointCreatedCol?.id) cv[pointCreatedCol.id] = formatValue('date', new Date());
+    return cv;
+  };
 
+  // round297 — PERFORMANCE: creation used to be fully sequential (one round-trip
+  // per topic AND per point), so a type template with a few topics × points took
+  // many seconds. Now every TOPIC is created CONCURRENTLY, and each topic's POINTS
+  // run as their own sequential chain (point order matters — no point-order map is
+  // persisted) with the chains themselves in PARALLEL. Wall-time drops from
+  // sum(topics+points) round-trips to ~1 (topics) + max-points-in-a-topic. Order
+  // for the ribbon is preserved by the TEMPLATE index, not by creation timing.
+  const topicResults = await Promise.all(clean.topics.map(async (topic, i) => {
     const res = await api(
       `mutation ($boardId: ID!, $name: String!, $columnValues: JSON!) {
         create_item(board_id: $boardId, item_name: $name, column_values: $columnValues) { id }
       }`,
-      { boardId, name: topic.name, columnValues: JSON.stringify(columnValues) },
+      { boardId, name: topic.name, columnValues: JSON.stringify(topicColumnValues()) },
       'createTopicFromTemplate'
     );
     const topicId = res?.create_item?.id;
@@ -219,30 +226,36 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
       // create_item succeeded at the API level but returned no id — can't attach
       // points. Surface the anomaly (WARN, no toast) rather than silently count it.
       logger.warn('createTopicsFromTemplate', `הנושא "${topic.name}" נוצר אך לא הוחזר מזהה — דילוג על הנקודות`);
-      continue;
+      return { i, topicId: null, topic };
     }
     topicsCreated += 1;
-    createdTopicIds.push(String(topicId));
     done += 1;
     report();
+    return { i, topicId: String(topicId), topic };
+  }));
 
-    const pointCv = pointDispCol?.id ? { [pointDispCol.id]: formatValue('checkbox', true) } : {};
-    if (pointCreatedCol?.id) {
-      pointCv[pointCreatedCol.id] = formatValue('date', new Date());
-    }
+  // Ribbon order = TEMPLATE order (by index), valid ids only.
+  const createdTopicIds = topicResults
+    .filter((r) => r.topicId)
+    .sort((a, b) => a.i - b.i)
+    .map((r) => r.topicId);
+
+  await Promise.all(topicResults.map(async ({ topicId, topic }) => {
+    if (!topicId) return;
+    const pointCv = JSON.stringify(pointColumnValues());
     for (const point of topic.points) {
       await api(
         `mutation ($parentId: ID!, $name: String!, $cv: JSON!) {
           create_subitem(parent_item_id: $parentId, item_name: $name, column_values: $cv) { id }
         }`,
-        { parentId: topicId, name: point, cv: JSON.stringify(pointCv) },
+        { parentId: topicId, name: point, cv: pointCv },
         'createPointFromTemplate'
       );
       pointsCreated += 1;
       done += 1;
       report();
     }
-  }
+  }));
 
   // round250 — persist the ribbon order so the template lands correctly in the
   // RTL ribbon (items[0] = rightmost): EXISTING topics keep their place, then the

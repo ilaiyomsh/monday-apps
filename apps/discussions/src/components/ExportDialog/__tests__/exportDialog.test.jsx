@@ -111,7 +111,7 @@ describe('ExportDialog (round207)', () => {
     });
     // Assets untouched in the dialog → no per-discussion assets override written.
     expect(h.saveDiscussionExportAssets).not.toHaveBeenCalled();
-    expect(props.onNotify).toHaveBeenCalledWith('הדיון יוצא ל-DOCS בהצלחה');
+    expect(props.onNotify).toHaveBeenCalledWith('המסמך הופק בהצלחה');
   });
 
   it('a stored per-discussion template wins over the instance default', async () => {

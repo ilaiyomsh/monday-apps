@@ -128,19 +128,26 @@ function canRunLivePreview() {
  * discussion instead of the built-in sample. `modelKey` identifies it in the
  * rebuild signature (the model object is stable per dialog mount).
  */
-// round296 — deterministic RTL parity for the LIVE preview. The generated .docx
-// marks EVERY body paragraph bidirectional (w:bidi) + section-level bidi, so Word
-// / Google Docs render the boxes (רקע/התייחסויות/סיכום) right-to-left. docx-preview
-// maps w:bidi → direction:rtl too, but INTERMITTENTLY a paragraph came out LTR in
-// the on-screen preview (owner-reported; the downloaded file was always correct).
-// Force `direction: rtl` inline on the rendered body blocks AFTER render so the
-// preview matches the docx deterministically — the moment content swaps in it is
-// already in its right-to-left form. We only touch direction (not text-align), so
-// an explicit center/left a user chose is preserved, exactly like Word.
+// round297 — deterministic RTL parity for the LIVE preview. The generated .docx
+// marks EVERY body paragraph bidirectional (w:bidi), so Word/Google Docs render the
+// boxes (רקע/התייחסויות/סיכום) right-to-left and the downloaded file is always
+// correct. docx-preview DOES set `direction: rtl` on those paragraphs — but it
+// leaves `text-align` UNSET, so the used alignment is inherited. The app's global
+// stylesheet resolves that to a physical LEFT for these plain <p> nodes, and
+// `direction: rtl` alone cannot override a physical `text-align: left` — so the box
+// text hugged the LEFT in the preview even though the file was fine (round296's
+// direction-only pass was a no-op because direction was already rtl).
+// Fix: force `text-align: right` inline (inline beats the global rule) on body
+// blocks that have NO explicit inline alignment — leaving docx-preview's own
+// center/justify/explicit values (e.g. the centered title) untouched, exactly
+// like Word. Also (re)assert direction:rtl as a belt-and-suspenders baseline.
 function forceRtlRenderedBody(root) {
   if (!root || typeof root.querySelectorAll !== 'function') return;
   root.querySelectorAll('.docx p, .docx li, .docx h1, .docx h2, .docx h3, .docx h4, .docx h5, .docx h6').forEach((el) => {
     if (el.style.direction !== 'rtl') el.style.direction = 'rtl';
+    // Only supply alignment where docx-preview left it to inheritance; never
+    // override an explicit center/left/justify a run carried from the .docx.
+    if (!el.style.textAlign) el.style.textAlign = 'right';
   });
 }
 

@@ -569,8 +569,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // celebration window — the discussion is already saved at this point.
       setCreateProgress((p) => (p ? { ...p, done: p.total } : { done: 1, total: 1 }));
       if (!isEdit) {
+        // round297 — the discussion is ALREADY saved here; this window is pure
+        // celebration. Trimmed 1500 → 500ms so the card opens far sooner after
+        // "צור דיון" (owner: creation felt slow). The confetti still flashes.
         setCelebrate(true);
-        await new Promise((resolve) => { setTimeout(resolve, 1500); });
+        await new Promise((resolve) => { setTimeout(resolve, 500); });
         setCelebrate(false);
       }
 
