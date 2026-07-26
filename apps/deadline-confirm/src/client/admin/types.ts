@@ -92,6 +92,8 @@ export interface DigestPreviewResponse {
   skippedUsers: DigestSkippedUser[];
   truncated: boolean;
   html: string | null;
+  /** V5: the amp4email (Gmail dynamic email) part of the same digest. */
+  amp: string | null;
 }
 
 export interface DigestSendResult extends DigestRecipientSummary {

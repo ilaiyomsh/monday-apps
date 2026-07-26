@@ -39,6 +39,7 @@ import { generateSecret, maskSecret } from '../services/secret.js';
 import { renderSnippet } from '../helpers/snippet.js';
 import { renderEmailTemplate, ALLOWED_FONTS } from '../helpers/email-template.js';
 import { renderDigestEmail } from '../helpers/digest-email.js';
+import { renderDigestAmp } from '../helpers/digest-amp.js';
 import { buildDigest, digestTaskColumnIds } from '../services/digest-service.js';
 import { MondayApiError } from '../services/monday-api.js';
 import { logError, logInfo } from '../helpers/logger.js';
@@ -285,16 +286,16 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     });
 
     const buttonsById = new Map(config.buttons.map((b) => [b.id, b]));
-    const renderFor = (recipient) =>
-      renderDigestEmail({
-        baseUrl: env.baseUrl,
-        secret,
-        accountId: req.session.accountId,
-        recipient: {
-          ...recipient,
-          sections: recipient.sections.map((s) => ({ ...s, button: buttonsById.get(s.buttonId) })),
-        },
-      });
+    /** Recipient + resolved buttons — the shape both renderers consume. */
+    const withButtons = (recipient) => ({
+      ...recipient,
+      sections: recipient.sections.map((s) => ({ ...s, button: buttonsById.get(s.buttonId) })),
+    });
+    const renderArgs = { baseUrl: env.baseUrl, secret, accountId: req.session.accountId };
+    const renderFor = (recipient) => renderDigestEmail({ ...renderArgs, recipient: withButtons(recipient) });
+    // V5: the dynamic-email (amp4email) part of the same digest — same data,
+    // checkboxes instead of per-task links.
+    const renderAmpFor = (recipient) => renderDigestAmp({ ...renderArgs, recipient: withButtons(recipient) });
 
     return {
       digestData: {
@@ -303,6 +304,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         skippedUsers,
         truncated: tasksRead.truncated || usersRead.truncated,
         renderFor,
+        renderAmpFor,
       },
     };
   }
@@ -315,7 +317,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         res.status(prep.status).json(prep.body);
         return;
       }
-      const { recipients, skippedUsers, truncated, renderFor } = prep.digestData;
+      const { recipients, skippedUsers, truncated, renderFor, renderAmpFor } = prep.digestData;
       const wanted =
         typeof req.query.recipient === 'string'
           ? recipients.find((r) => r.email === req.query.recipient)
@@ -325,6 +327,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         skippedUsers,
         truncated,
         html: wanted ? renderFor(wanted) : null,
+        amp: wanted ? renderAmpFor(wanted) : null,
       });
     })
   );

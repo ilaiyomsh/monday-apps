@@ -35,6 +35,7 @@ src/
 ├── app.js                    # createApp factory — DI for tests (trust proxy, routers, /admin static)
 ├── routes/
 │   ├── confirm.js            # HEAD + GET (landing page) + POST (action) — header comment = the contract
+│   ├── amp.js                # V5 POST/OPTIONS /amp/confirm — Gmail dynamic email, BULK confirm
 │   ├── oauth.js              # /oauth/start + /oauth/callback (§8)
 │   └── admin-api.js          # /api/state|config|secret/rotate|snippet?btn|email-template?tpl
 │                             # + v4: /api/digest/preview|send (guards → board reads → render → send)
@@ -49,7 +50,7 @@ src/
 │   └── secret.js             # generate / constant-time compare / mask
 ├── helpers/                  # pages (3 static + landing + oauth), rate-limit, snippet (per-button),
 │                             # email-template (full email renderer), digest-email (v4 digest renderer),
-│                             # logger, environment
+│                             # digest-amp + amp-cors (V5 Gmail dynamic email), logger, environment
 ├── storage/                  # secure-storage-backend (prod) / memory-backend (dev+tests)
 └── client/admin/             # React 19 + Vite 7 + @vibe/core SPA → built to public/admin/
                               # v4: two tabs — "הגדרות" (v2 flow) + "מייל מסכם" (DigestSection)
@@ -90,6 +91,18 @@ src/
 - The three /confirm pages are the ENTIRE response space (plus plain 429) —
   no item/account data ever (only the config-derived target label). v4: the
   SUCCESS page (alone) auto-closes after 2s via one inline script.
+- **V5 Gmail dynamic email (`/amp/confirm`, spec V5):** the digest gained a
+  `text/x-amp-html` part (checkbox per task, one submit per section) that Gmail
+  renders as dynamic email; the v4 `text/html` body is UNCHANGED and is the
+  universal fallback. The endpoint is the app's only BULK path (cap 50 items)
+  and its gate order differs from `/confirm`: the **AMP CORS gate runs FIRST**
+  (pure header work → an unlisted sender never reaches storage and cannot probe
+  secrets; a rejection carries NO CORS headers so the client discards it).
+  Default deny — `AMP_ALLOWED_SENDERS` empty admits nobody; wildcard `*` is
+  deliberately unsupported. Unlike Outlook Actionable Messages, an AMP POST
+  carries **no clicker identity** — the link secret is still the only
+  credential. Sending the AMP part is NOT wired yet (Resend AMP support
+  undocumented): the admin panel copies it out of `/api/digest/preview`.
 - **v4 digest (phase 1, manual-only):** recipients come from a dedicated
   USERS BOARD (people column → person ids, email column → address); matching
   is person-id intersection with the tasks board's `peopleColumnId`. Pending
@@ -106,9 +119,11 @@ Env (platform: `mapps code:env -i 11704868`; local: `.env`): `MONDAY_CLIENT_ID`,
 `MONDAY_CLIENT_SECRET` (also verifies sessionTokens), `ALLOWED_ACCOUNT_IDS`
 (optional comma-separated allowlist; empty = any installing account; legacy
 single `ALLOWED_ACCOUNT_ID` is merged in), `BASE_URL` (stable liveUrl),
-`PORT` (8080), `USE_LOCAL_STORAGE` (dev/tests only), and v4:
+`PORT` (8080), `USE_LOCAL_STORAGE` (dev/tests only), v4:
 `RESEND_API_KEY` + `DIGEST_FROM` (both optional — without them
-`/api/digest/send` answers 409 `email_not_configured`).
+`/api/digest/send` answers 409 `email_not_configured`), and V5:
+`AMP_ALLOWED_SENDERS` (comma-separated sender addresses allowed to call
+`/amp/confirm`; **empty/unset = that endpoint admits nobody**).
 
 Deploys ONLY via the pipeline (root CLAUDE.md): merge to `develop` → draft,
 merge to `main` → live. Server-type app: the workflow pushes the app root
