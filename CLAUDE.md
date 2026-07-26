@@ -215,6 +215,11 @@ One unified standard, from catching an error to shipping it to Axiom:
 ship through the single hardened transport in `@axis/app-core` via `attachAxiomSink` —
 never a raw fetch. Shared dataset `app-errors`, discriminated by `app`.
 
+To **query/triage** `app-errors` (send an agent to check errors), use the `axiom-sre`
+skill — agent playbook with the live schema, conventions/gotchas (e.g. `err_name` is
+often empty; there is no `err_code` column), and ready-to-run APL queries:
+**`.claude/skills/axiom-sre/reference/app-errors.md`**.
+
 ## Maintaining this file
 
 This file changes via PR into `develop` like everything else. Keep it short:
