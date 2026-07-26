@@ -18,6 +18,7 @@ import {
   paginateRenderedDocx,
   patchPageNumbers,
   waitForImages,
+  forceRtlRenderedBody,
   extractTemplateAnchors,
   reanchorFloatingDrawings,
   extractTemplateTabParagraphs,
@@ -128,29 +129,6 @@ function canRunLivePreview() {
  * discussion instead of the built-in sample. `modelKey` identifies it in the
  * rebuild signature (the model object is stable per dialog mount).
  */
-// round297 — deterministic RTL parity for the LIVE preview. The generated .docx
-// marks EVERY body paragraph bidirectional (w:bidi), so Word/Google Docs render the
-// boxes (רקע/התייחסויות/סיכום) right-to-left and the downloaded file is always
-// correct. docx-preview DOES set `direction: rtl` on those paragraphs — but it
-// leaves `text-align` UNSET, so the used alignment is inherited. The app's global
-// stylesheet resolves that to a physical LEFT for these plain <p> nodes, and
-// `direction: rtl` alone cannot override a physical `text-align: left` — so the box
-// text hugged the LEFT in the preview even though the file was fine (round296's
-// direction-only pass was a no-op because direction was already rtl).
-// Fix: force `text-align: right` inline (inline beats the global rule) on body
-// blocks that have NO explicit inline alignment — leaving docx-preview's own
-// center/justify/explicit values (e.g. the centered title) untouched, exactly
-// like Word. Also (re)assert direction:rtl as a belt-and-suspenders baseline.
-function forceRtlRenderedBody(root) {
-  if (!root || typeof root.querySelectorAll !== 'function') return;
-  root.querySelectorAll('.docx p, .docx li, .docx h1, .docx h2, .docx h3, .docx h4, .docx h5, .docx h6').forEach((el) => {
-    if (el.style.direction !== 'rtl') el.style.direction = 'rtl';
-    // Only supply alignment where docx-preview left it to inheritance; never
-    // override an explicit center/left/justify a run carried from the .docx.
-    if (!el.style.textAlign) el.style.textAlign = 'right';
-  });
-}
-
 export default function ExportPreview({ template, assets, model = null, modelKey = null }) {
   const fontCss = (EXPORT_FONTS[template?.font] || EXPORT_FONTS[DEFAULT_EXPORT_FONT]).css;
   const isConfig = (template?.headerMode || EXPORT_HEADER_MODES.CONFIG) !== EXPORT_HEADER_MODES.UPLOAD;
@@ -304,8 +282,8 @@ export default function ExportPreview({ template, assets, model = null, modelKey
           // body content overlap the footer. Wait for real image geometry.
           await waitForImages(stage);
           if (cancelled || seq !== seqRef.current) return;
-          // round296 — force RTL on the rendered body BEFORE measuring/paginating,
-          // so the swapped-in preview is always right-to-left (matches the .docx).
+          // docx-preview leaves bidi body alignment to inheritance. Apply the
+          // Word document's RTL baseline before measuring and paginating.
           forceRtlRenderedBody(stage);
           // round202 — put the template's floating header/footer art where the
           // file actually anchors it (page-frame absolute, real extent) and lay
