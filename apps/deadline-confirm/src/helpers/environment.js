@@ -3,6 +3,17 @@
 // (comma-separated allowlist; legacy single ALLOWED_ACCOUNT_ID is merged in),
 // BASE_URL (set via `mapps code:env` on the platform, .env locally).
 
+/** Comma-separated sender list → trimmed, lowercased, de-duplicated addresses. */
+function parseSenderList(raw) {
+  const seen = new Set(
+    (raw || '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => s.length > 0)
+  );
+  return [...seen];
+}
+
 export function getEnv() {
   const allowedAccountIds = (process.env.ALLOWED_ACCOUNT_IDS || '')
     .split(',')
@@ -28,5 +39,8 @@ export function getEnv() {
     // answers 409 email_not_configured.
     resendApiKey: process.env.RESEND_API_KEY || '',
     digestFrom: process.env.DIGEST_FROM || '',
+    // V5 Gmail dynamic email: senders whose AMP forms may call /amp/confirm.
+    // Empty = endpoint admits NOBODY (default deny, see helpers/amp-cors.js).
+    ampAllowedSenders: parseSenderList(process.env.AMP_ALLOWED_SENDERS),
   };
 }

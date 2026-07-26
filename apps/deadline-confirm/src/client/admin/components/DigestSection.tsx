@@ -52,6 +52,7 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const [previewRecipient, setPreviewRecipient] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [ampCopied, setAmpCopied] = useState(false);
 
   const [sendPhase, setSendPhase] = useState<'idle' | 'confirm' | 'sending'>('idle');
   const [sendResult, setSendResult] = useState<DigestSendResponse | null>(null);
@@ -119,6 +120,18 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
       setPreviewError(guardMessage(err));
     } finally {
       setPreviewLoading(false);
+    }
+  };
+
+  // V5: hand the amp4email part to the operator's clipboard (playground paste).
+  const copyAmp = async (amp: string) => {
+    setAmpCopied(false);
+    try {
+      await navigator.clipboard.writeText(amp);
+      setAmpCopied(true);
+    } catch (err) {
+      logger.error('admin', 'digest_amp_copy_failed', err);
+      setPreviewError('העתקה נכשלה — אפשר לפתוח את הקונסול ולהעתיק ידנית.');
     }
   };
 
@@ -410,6 +423,19 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     sandbox=""
                     style={{ width: '100%', height: 480, border: '1px solid var(--ui-border-color, #d0d4e4)', borderRadius: 8, background: '#fff' }}
                   />
+                )}
+                {/* V5: the Gmail dynamic-email part. Copied out for the AMP
+                    playground while the AMP sending path is still manual. */}
+                {preview.amp && (
+                  <div style={{ marginTop: 10 }}>
+                    <Button kind="secondary" size="small" onClick={() => void copyAmp(preview.amp as string)}>
+                      {ampCopied ? 'הועתק ✓' : 'העתק גרסת AMP (מייל דינמי בג׳ימייל)'}
+                    </Button>
+                    <div className="dc-hint">
+                      הגרסה הזאת מציגה תיבות סימון בתוך ג׳ימייל. להדבקה ב-playground.amp.dev (פורמט Email) ומשם
+                      Send to Gmail — הנמען צריך להוסיף את כתובת השולח תחת Dynamic email → Developer settings.
+                    </div>
+                  </div>
                 )}
               </>
             )}

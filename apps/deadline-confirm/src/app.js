@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { createConfirmRouter } from './routes/confirm.js';
+import { createAmpRouter } from './routes/amp.js';
 import { createOauthRouter } from './routes/oauth.js';
 import { createAdminRouter } from './routes/admin-api.js';
 import { createSessionTokenMiddleware } from './middlewares/session-token.js';
@@ -35,6 +36,9 @@ export function createApp({ storage, api, rateLimiter, env, fetchImpl, todayIso,
 
   // Hot path first.
   app.use(createConfirmRouter({ storage, api, rateLimiter, todayIso }));
+
+  // V5 Gmail dynamic email — bulk confirm submitted from inside the message.
+  app.use(createAmpRouter({ storage, api, rateLimiter, allowedSenders: env.ampAllowedSenders ?? [] }));
 
   app.use(createOauthRouter({ storage, api, env, fetchImpl }));
 

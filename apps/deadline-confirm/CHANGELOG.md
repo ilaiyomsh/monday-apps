@@ -2,6 +2,39 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.7.0 — 2026-07-26 — V5: Gmail dynamic email (AMP for Email), phase 1
+
+- **The client's org runs Gmail, not Outlook** — so Adaptive Cards / Actionable
+  Messages is out (Outlook-only) and Gmail's **dynamic email** (AMP for Email)
+  is in. Design log: `docs/v5-gmail-dynamic-email.md`; spec V5 Amendment.
+- **`helpers/digest-amp.js` (new)**: renders the `text/x-amp-html` part of the
+  digest — one `<amp-form>` per section, a **checkbox per task** and ONE submit
+  per section, so several tasks are confirmed in one click without leaving the
+  message. Valid amp4email (boilerplate, CDN-only scripts, `action-xhr`,
+  `amp-mustache` success/error templates); the link secret rides in hidden
+  inputs, never in a URL.
+- **`routes/amp.js` (new)**: `POST /amp/confirm` — the app's only bulk mutation
+  path. Ordered gate: AMP CORS (first, no I/O) → validate (`a`,`k`,`btn`,
+  `item[]`, cap 50) → secret → rate limit → `performAction` per item (same
+  engine, so already-at-target stays a silent success). JSON replies carry
+  counts + a Hebrew message only; authorized-but-nothing-updated answers 502 so
+  the reader sees the error template. `OPTIONS` handled.
+- **`helpers/amp-cors.js` (new)**: both documented CORS variants (v2
+  `AMP-Email-Sender` preferred, v1 `Origin` + `__amp_source_origin`).
+  **Default deny**, no wildcard support, and a rejected caller gets NO CORS
+  headers and never touches storage.
+- **Env**: `AMP_ALLOWED_SENDERS` (comma-separated, lowercased, de-duplicated;
+  empty = endpoint admits nobody).
+- **Admin**: `GET /api/digest/preview` now also returns `amp`, and the digest
+  tab gained a copy-AMP button (for the AMP playground while the AMP sending
+  path is manual). The static `text/html` digest is unchanged and remains the
+  universal fallback — nobody gets a broken email.
+- Tests: 5 new gated files (red→green + 9 killed mutations, 0 survivors);
+  full suite 512 green. Type-check + lint clean.
+- **Deferred**: sending the AMP MIME part (Resend's `text/x-amp-html` support is
+  undocumented → phase 2 goes through a dedicated Workspace mailbox with the
+  `gmail.send` scope only), and the per-task status dropdown variant.
+
 ## 0.6.0 — 2026-07-20 — digest: show-by-status condition + today-inclusive + real date header
 
 - **Status condition per section ("show by status")**: each group now carries
