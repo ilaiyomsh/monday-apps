@@ -55,6 +55,12 @@ App-core's `MondayProvider` auto-enriches every envelope with iframe identity
 > gone. It had no batching/breaker/sanitizer and serialized the full record (a privacy
 > leak). Do not reintroduce a raw fetch to Axiom anywhere.
 
+The shipped `stack1` is a single **minified** frame. To read it as `File.jsx:line`,
+every client bundle builds `sourcemap: 'hidden'` and CI archives the maps as an
+artifact (never served) — resolve on demand with
+`.claude/skills/axiom-sre/scripts/symbolicate '<stack1>' --app <app> --ver <ver>`.
+See `LOGGING-ARCHITECTURE.md` §6.
+
 ## Dataset model (fixed decision)
 
 **ONE shared dataset `app-errors` for the whole portfolio**, discriminated by the `app`

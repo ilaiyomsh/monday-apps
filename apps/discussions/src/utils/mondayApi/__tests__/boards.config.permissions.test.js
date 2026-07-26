@@ -11,7 +11,13 @@ import {
 // Capability ids from the spec catalog (single source of truth for this test).
 const DISC_CAPS = [
   'viewDiscussion',
+  // round209 — per-role view gates for the triple-box panes (owner spec).
+  'viewReferencesBox',
+  'viewSummaryBox',
   'editDiscussionFields',
+  // round212 — the triple-box writes are matrix caps (labels: כתיבת רקע/התייחסויות/סיכום).
+  'writeBackground',
+  'writeReferences',
   'editSummary',
   'exportDocs',
   'createTask',
@@ -97,6 +103,12 @@ describe('CAPABILITY_DEFAULTS', () => {
     // item 20 (2026-07-14): view is now ROLE-GATED (participants view via the
     // seed; strangers are denied) — no longer 'all'.
     expect(CAPABILITY_DEFAULTS.viewDiscussion).toBe('creatorLeadOwner');
+    // round209 — the box-view caps default 'all' (existing stored role maps
+    // lack these keys and must keep today's everyone-sees behavior); the
+    // resolver deliberately routes them through the role scan so an explicit
+    // false still hides (see usePermission BOX_VIEW_CAPS).
+    expect(CAPABILITY_DEFAULTS.viewReferencesBox).toBe('all');
+    expect(CAPABILITY_DEFAULTS.viewSummaryBox).toBe('all');
     // createDiscussion + manageTemplates = all
     expect(CAPABILITY_DEFAULTS.createDiscussion).toBe('all');
     expect(CAPABILITY_DEFAULTS.manageTemplates).toBe('all');
@@ -104,8 +116,12 @@ describe('CAPABILITY_DEFAULTS', () => {
     expect(CAPABILITY_DEFAULTS.reorderColumns).toBe('owner');
     expect(CAPABILITY_DEFAULTS.addDiscussionTypes).toBe('owner');
     expect(CAPABILITY_DEFAULTS.saveViewDefaults).toBe('owner');
+    // round291 — createTask defaults to 'all' (anyone can create a task, in a
+    // discussion too), mirroring createDiscussion.
+    expect(CAPABILITY_DEFAULTS.createTask).toBe('all');
     // all discussion-content edits + task edits + decision edits = creatorLeadOwner
-    [...DISC_CAPS.filter((id) => id !== 'viewDiscussion'), ...TASK_CAPS, ...DECISION_CAPS].forEach((id) =>
+    const exempt = new Set(['viewDiscussion', 'viewReferencesBox', 'viewSummaryBox', 'createTask']);
+    [...DISC_CAPS.filter((id) => !exempt.has(id)), ...TASK_CAPS, ...DECISION_CAPS].forEach((id) =>
       expect(CAPABILITY_DEFAULTS[id]).toBe('creatorLeadOwner')
     );
   });

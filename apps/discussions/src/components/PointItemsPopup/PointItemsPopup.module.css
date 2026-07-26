@@ -124,3 +124,20 @@
   color: var(--placeholder-color, #9699a6);
   font-size: 14px;
 }
+
+/* round262 — the unified תוצרים popup is grouped by kind: a section per kind,
+   each with a heading ("משימות" / "החלטות") over its rows. */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.group + .group {
+  margin-top: 6px;
+}
+.groupHead {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--secondary-text-color, #676879);
+  padding: 2px 2px 0;
+}

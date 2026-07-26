@@ -83,10 +83,16 @@ function FontPicker({ value, onChange }) {
 
 const SECTION_NAMES = {
   meta: 'פרטי דיון',
+  // round219 — the רקע (background) box from the Topics tab's triple box.
+  background: 'רקע',
   topics: 'נושאים לדיון',
   summary: 'סיכום',
+  // round200 — the References box from the Topics tab.
+  references: 'התייחסויות',
   tasks: 'משימות',
-  freeText: 'מידע כללי',
+  // round192 — decisions section (owner request).
+  decisions: 'החלטות',
+  // round203 — the "פתיחה" (freeText) section was retired (owner request).
 };
 
 const POS_OPTIONS = [
@@ -113,15 +119,24 @@ function stripDataPrefix(dataUri) {
 function SortableSectionRow({ section, onToggle, onExpandToggle, expanded, children }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.key });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
-  const expandable = section.key === 'meta' || section.key === 'freeText';
+  const expandable = section.key === 'meta';
   return (
     <div ref={setNodeRef} style={style} className={styles.sectionWrap}>
       <div className={styles.sectionRow}>
         <button type="button" className={styles.grip} {...attributes} {...listeners} aria-label="גרור לשינוי סדר">
           <GripVertical size={16} />
         </button>
-        <Toggle isSelected={section.enabled !== false} onChange={onToggle} ariaLabel={`הצג ${SECTION_NAMES[section.key] || section.key}`} />
+        {/* round219 — name first (leading/right), toggle to its LEFT; the toggle
+            reads "כן/לא" instead of on/off, and the row is compact so every
+            component fits on one screen without scrolling. */}
         <span className={styles.sectionName}>{SECTION_NAMES[section.key] || section.key}</span>
+        <Toggle
+          isSelected={section.enabled !== false}
+          onChange={onToggle}
+          onOverrideText="כן"
+          offOverrideText="לא"
+          ariaLabel={`הצג ${SECTION_NAMES[section.key] || section.key}`}
+        />
         {expandable && (
           <button type="button" className={`${styles.expandBtn} ${expanded ? styles.expandOpen : ''}`} onClick={onExpandToggle} aria-label="עוד">
             <ChevronDown size={16} />
@@ -140,7 +155,7 @@ function SortableSectionRow({ section, onToggle, onExpandToggle, expanded, child
  *
  * Deliberately controls-only: no eyebrow section titles, no hint/explanation text.
  */
-export default function ExportTemplateTab({ template, setTemplate, assets, setAssets, assetError }) {
+export default function ExportTemplateTab({ template, setTemplate, assets, setAssets, assetError, previewModel = null, previewModelKey = null }) {
   const headerLogoRef = useRef(null);
   const footerLogoRef = useRef(null);
   const templateDocxRef = useRef(null);
@@ -219,7 +234,6 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
   };
 
   const metaSection = sections.find((s) => s.key === 'meta');
-  const freeTextSection = sections.find((s) => s.key === 'freeText');
 
   const renderBand = (band) => {
     const cfg = template?.[band] || {};
@@ -324,6 +338,7 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
         <SortableContext items={sections.map((s) => s.key)} strategy={verticalListSortingStrategy}>
+          <div className={styles.sectionList}>
           {sections.map((section) => (
             <SortableSectionRow
               key={section.key}
@@ -342,14 +357,9 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
                   ))}
                 </div>
               )}
-              {section.key === 'freeText' && freeTextSection && (
-                <div className={styles.freeText}>
-                  <TextField placeholder="כותרת" value={freeTextSection.title || ''} onChange={(val) => patchSection('freeText', { title: val })} size="small" />
-                  <TextArea placeholder="תוכן" value={freeTextSection.body || ''} onChange={(e) => patchSection('freeText', { body: e.target.value })} rows={3} />
-                </div>
-              )}
             </SortableSectionRow>
           ))}
+          </div>
         </SortableContext>
       </DndContext>
 
@@ -383,7 +393,7 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
       </div>
 
       <div className={styles.previewCol}>
-        <ExportPreview template={template} assets={assets} />
+        <ExportPreview template={template} assets={assets} model={previewModel} modelKey={previewModelKey} />
       </div>
     </div>
   );

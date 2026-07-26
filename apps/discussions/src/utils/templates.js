@@ -17,6 +17,7 @@
  */
 import { api, formatValue } from './mondayApi/monday-client.js';
 import { getBoardId, getColumns } from './mondayApi/board-config-store.js';
+import { saveTopicOrder } from './topicOrder.js';
 import logger from './logger.js';
 
 function pointName(point) {
@@ -103,15 +104,24 @@ export function sanitizeParticipantTemplate(template, id) {
  * one shot. Persisted in its own monday.storage key by TemplatesContext.
  *
  * Shape:
- *   TypeTemplate = { id, discussionType: string, topics: Topic[], lead, coordinator, participants: Person[] }
+ *   TypeTemplate = { id, discussionType: string, topics: Topic[], lead, coordinator,
+ *                    participants: Person[], deciderIsLead: boolean,
+ *                    exportTemplate: object|null }
  *
  * `discussionType` is REQUIRED (it is the key — the label TEXT) — sanitize
  * returns null when it is missing so callers can drop malformed entries.
+ *
+ * round254 — `exportTemplate` (object|null): a per-type export-template CONFIG
+ * that OVERRIDES the system default at export time (null ⇒ use the system
+ * default). Stored raw here (a plain config object); the export dialog runs it
+ * through seedExportTemplate for validation/back-fill, so this file needs no
+ * knowledge of the export-template schema.
  */
 export function sanitizeTypeTemplate(template, id) {
   const dt = typeKey(template?.discussionType);
   if (!dt) return null;
   const topics = Array.isArray(template?.topics) ? template.topics : [];
+  const exp = template?.exportTemplate;
   return {
     id: id || template?.id || null,
     discussionType: dt,
@@ -121,6 +131,8 @@ export function sanitizeTypeTemplate(template, id) {
     // item 18 — per-type default decider flag (מחליט = מנהל הדיון). Strict
     // boolean so a stored junk value can never truthy its way in.
     deciderIsLead: template?.deciderIsLead === true,
+    // round254 — a non-array object is kept as-is; anything else ⇒ null (default).
+    exportTemplate: (exp && typeof exp === 'object' && !Array.isArray(exp)) ? exp : null,
     topics: topics
       .map((topic) => ({
         name: (topic?.name || '').trim(),
@@ -147,24 +159,26 @@ export function sanitizeTypeTemplate(template, id) {
  *
  * @returns {Promise<{topics:number, points:number}>} how many were created.
  */
-export async function createTopicsFromTemplate(discussionId, template, { onProgress, creatorId = null } = {}) {
+export async function createTopicsFromTemplate(discussionId, template, { onProgress, existingTopicIds = [] } = {}) {
   const clean = sanitizeTemplate(template);
-  if (!discussionId || !clean.topics.length) return { topics: 0, points: 0 };
+  if (!discussionId || !clean.topics.length) return { topics: 0, points: 0, topicIds: [] };
 
   const boardId = getBoardId('topics');
   const relation = getColumns('topics')?.discussionLinkID; // board_relation: topic -> discussion
   const topicDispCol = getColumns('topics')?.topicNotForDiscussionID; // "האם להציג?" (item)
   const pointDispCol = getColumns('topics')?.pointNotForDiscussionID; // "האם להציג?" (subitem)
-  // round115 — creator + creation-date columns, stamped on every topic/point
-  // created from a template (mirrors useTopics.addTopic/addPoint). creatorId is
-  // passed by the caller (the user applying the template).
-  const topicCreatorCol = getColumns('topics')?.topicCreatorID;
-  const pointCreatorCol = getColumns('topics')?.pointCreatorID;
+  // round115 — creation-date columns, stamped on every topic/point created from a
+  // template (mirrors useTopics.addTopic/addPoint).
+  // round267 (owner request) — the CREATOR column is intentionally NOT stamped
+  // here: template/duplicate/type-default topics are generated, not authored by a
+  // person, so they carry NO creator (and thus show no creator avatar). Only a
+  // MANUALLY typed topic (useTopics.addTopic) gets a creator.
   const topicCreatedCol = getColumns('topics')?.topicCreationDateID;
   const pointCreatedCol = getColumns('topics')?.pointCreationDateID;
 
   let topicsCreated = 0;
   let pointsCreated = 0;
+  const createdTopicIds = []; // in TEMPLATE order — used to persist the ribbon order below
   const total = clean.topics.reduce((n, t) => n + 1 + t.points.length, 0);
   let done = 0;
   const report = () => {
@@ -189,9 +203,6 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
     if (topicDispCol?.id) {
       columnValues[topicDispCol.id] = formatValue('checkbox', true);
     }
-    if (topicCreatorCol?.id && creatorId) {
-      columnValues[topicCreatorCol.id] = formatValue('people', [creatorId]);
-    }
     if (topicCreatedCol?.id) {
       columnValues[topicCreatedCol.id] = formatValue('date', new Date());
     }
@@ -211,13 +222,11 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
       continue;
     }
     topicsCreated += 1;
+    createdTopicIds.push(String(topicId));
     done += 1;
     report();
 
     const pointCv = pointDispCol?.id ? { [pointDispCol.id]: formatValue('checkbox', true) } : {};
-    if (pointCreatorCol?.id && creatorId) {
-      pointCv[pointCreatorCol.id] = formatValue('people', [creatorId]);
-    }
     if (pointCreatedCol?.id) {
       pointCv[pointCreatedCol.id] = formatValue('date', new Date());
     }
@@ -235,7 +244,23 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
     }
   }
 
-  return { topics: topicsCreated, points: pointsCreated };
+  // round250 — persist the ribbon order so the template lands correctly in the
+  // RTL ribbon (items[0] = rightmost): EXISTING topics keep their place, then the
+  // template's topics are appended AFTER them in TEMPLATE order. Because the
+  // ribbon is RTL this puts the whole template block to the LEFT of existing
+  // topics (owner request E), with the template's FIRST topic to the right of its
+  // second, etc. (owner request D). On a fresh discussion (existingTopicIds=[])
+  // this simply orders the template topics first-to-last = right-to-left.
+  if (createdTopicIds.length) {
+    try {
+      await saveTopicOrder(discussionId, [...existingTopicIds.map(String), ...createdTopicIds]);
+    } catch (err) {
+      // best-effort: a failed order save just leaves the API/default order.
+      logger.warn('createTopicsFromTemplate', 'שמירת סדר הנושאים מהתבנית נכשלה', err);
+    }
+  }
+
+  return { topics: topicsCreated, points: pointsCreated, topicIds: createdTopicIds };
 }
 
 /*

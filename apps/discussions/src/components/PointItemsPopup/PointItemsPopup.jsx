@@ -22,7 +22,10 @@ export function PointItemsPopup({ open, kind, point, items = [], onClose }) {
   if (!open) return null;
 
   const isDecision = kind === 'decision';
-  const title = isDecision ? 'החלטות מהנקודה' : 'משימות מהנקודה';
+  // round226 — the unified תוצרים popup lists the point's tasks AND decisions,
+  // each row tagged by its kind (item._outKind).
+  const isOutputs = kind === 'outputs';
+  const title = isOutputs ? 'תוצרים מהנקודה' : isDecision ? 'החלטות מהנקודה' : 'משימות מהנקודה';
 
   return (
     <div className={styles.overlay} onClick={() => onClose?.()} dir="rtl">
@@ -45,12 +48,44 @@ export function PointItemsPopup({ open, kind, point, items = [], onClose }) {
         <div className={styles.body}>
           {/* NAMES ONLY — the leading bar is fixed decision/task chrome (a color
               marker), not item data. */}
-          {items.map((item) => (
-            <div key={item.id} className={styles.item}>
-              <span className={`${styles.bar} ${isDecision ? styles.barDecision : styles.barTask}`} aria-hidden="true" />
-              <span className={styles.text}>{item.name}</span>
-            </div>
-          ))}
+          {isOutputs ? (
+            // round262 (owner request) — the unified תוצרים popup is now GROUPED
+            // by kind: a "משימות" heading + all tasks, then a "החלטות" heading +
+            // all decisions. Each section renders only when it has items.
+            (() => {
+              const tasks = items.filter((it) => it._outKind !== 'decision');
+              const decisions = items.filter((it) => it._outKind === 'decision');
+              const renderItem = (item, rowIsDecision) => (
+                <div key={`${rowIsDecision ? 'decision' : 'task'}-${item.id}`} className={styles.item}>
+                  <span className={`${styles.bar} ${rowIsDecision ? styles.barDecision : styles.barTask}`} aria-hidden="true" />
+                  <span className={styles.text}>{item.name}</span>
+                </div>
+              );
+              return (
+                <>
+                  {tasks.length > 0 && (
+                    <div className={styles.group}>
+                      <div className={styles.groupHead}>משימות</div>
+                      {tasks.map((it) => renderItem(it, false))}
+                    </div>
+                  )}
+                  {decisions.length > 0 && (
+                    <div className={styles.group}>
+                      <div className={styles.groupHead}>החלטות</div>
+                      {decisions.map((it) => renderItem(it, true))}
+                    </div>
+                  )}
+                </>
+              );
+            })()
+          ) : (
+            items.map((item) => (
+              <div key={`${kind}-${item.id}`} className={styles.item}>
+                <span className={`${styles.bar} ${isDecision ? styles.barDecision : styles.barTask}`} aria-hidden="true" />
+                <span className={styles.text}>{item.name}</span>
+              </div>
+            ))
+          )}
           {items.length === 0 && (
             <div className={styles.empty}>אין פריטים עדיין — צור חדש עם כפתור ה־+</div>
           )}

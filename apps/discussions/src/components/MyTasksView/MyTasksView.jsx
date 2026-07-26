@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@vibe/core';
-import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall } from '@vibe/icons';
+import { Button, IconButton } from '@vibe/core';
+import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall, Add } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
+import { EmptyState } from '@generated/components/EmptyState';
 import { ArrowLeft } from 'lucide-react';
 import { useMyTasks } from '@generated/hooks/useMyTasks.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
@@ -15,13 +16,18 @@ import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
 import { BrandLoader } from '@generated/components/BrandLoader';
+import { DndContext, PointerSensor, TouchSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { MyTasksTable } from './MyTasksTable.jsx';
+import { MyTasksCardList } from './MyTasksCardList.jsx';
+import { computeCardDrop } from './cardDnd.js';
+import { loadMyTasksOrder, saveMyTasksOrder, applyManualOrder } from '@generated/utils/myTasksOrder.js';
 import { groupMyTasks, ensureGroupColors, NO_DISCUSSION } from './grouping.js';
 import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
 import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
 import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
 import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
 import { BuilderControl } from './controls/BuilderControl.jsx';
+import { GroupPickList } from './controls/GroupPickList.jsx';
 import { Segment } from './controls/Segment.jsx';
 import { BuilderIcon } from './controls/BuilderIcon.jsx';
 import { HideColumnsControl } from './controls/HideColumnsControl.jsx';
@@ -41,12 +47,24 @@ import { useViewTracking } from '@generated/utils/viewTracking.js';
 import styles from './MyTasksView.module.css';
 import bs from './controls/builder.module.css';
 
-const TYPE_ICON = { status: 'status', date: 'date', text: 'text', relation: 'relation' };
+const TYPE_ICON = { status: 'status', date: 'date', text: 'text', relation: 'relation', person: 'person' };
 
 const firstSortDir = (col) => (SORT_COLUMNS.find((c) => c.key === col) || SORT_COLUMNS[0]).dirs[0].key;
 const firstGroupOrder = (col) => (GROUP_COLUMNS.find((c) => c.key === col) || GROUP_COLUMNS[0]).orders[0].key;
-const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'Choose a date range';
+const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'בחרו טווח תאריכים';
 const rangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
+
+// round215 — mobile-only DndContext wrapper: ONE context over ALL the card
+// groups so a card can be dropped in another group; on desktop it's a no-op
+// passthrough (the tables have no card drag).
+function CardDndWrapper({ enabled, sensors, onDragEnd, children }) {
+  if (!enabled) return children;
+  return (
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      {children}
+    </DndContext>
+  );
+}
 
 // Hidden loader: mounted ONLY when "group by discussion → order by date" is
 // active, so discussion dates (which tasks don't carry) are fetched lazily.
@@ -61,7 +79,7 @@ function DiscussionDates({ onLoaded }) {
   return null;
 }
 
-export function MyTasksView({ canManageSettings = false, onBackToDiscussions, onNotify }) {
+export function MyTasksView({ canManageSettings = false, onBackToDiscussions, onNotify, embedded = false }) {
   const { t } = useTranslation();
   // v2 usage telemetry: one view_open per session for the my_tasks view (D3).
   useViewTracking(logger, 'my_tasks');
@@ -71,6 +89,11 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  // round224 (owner mockup, approved) — the scope toggle, mirroring the My
+  // Decisions received/affecting toggle: משימות באחריות (default — the classic
+  // assigned-to-me page) ⇄ משימות בדיונים שהובלתי (ALL tasks from discussions I
+  // lead/coordinate; creator counts when a discussion has neither).
+  const [scope, setScope] = useState('mine');
   // Seed a new task from the group it is created in: by-status group -> status,
   // by-priority group -> priority (grp.status holds the label id for both); other
   // groupings (discussion / none / board-group) seed nothing — a task created
@@ -140,6 +163,19 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
   }, [saveView, hiddenColumns, onNotify]);
 
+  // round213 — MOBILE (owner spec): Filter/Sort/Group are replaced by ONE quick
+  // "סידור לפי" toggle — status (default) ⇄ priority — that simply GROUPS the
+  // list top-down by that column. The effect pins the group state to the toggle
+  // (and clears any saved-view sort/filter, which have no mobile controls).
+  const [mobileGroupCol, setMobileGroupCol] = useState('status');
+  useEffect(() => {
+    if (!isMobile) return;
+    setGroup({ col: mobileGroupCol, order: firstGroupOrder(mobileGroupCol) });
+    setSort({ ...DEFAULT_SORT });
+    clearFilter();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobile, mobileGroupCol]);
+
   const [collapsed, setCollapsed] = useState({});
   const [discDateMap, setDiscDateMap] = useState({});
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -192,7 +228,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     items, loading, loadingMore, hasMore, error, loadMore,
     updateTaskStatus, updateTaskPriority, updateTaskNotes, updateTaskDeadline, updateTaskName,
     softDeleteTasks, createTask,
-  } = useMyTasks({ currentUser, context, search: debouncedSearch, notDoneStatusIds });
+  } = useMyTasks({ currentUser, context, search: debouncedSearch, notDoneStatusIds, scope });
 
   // Branded splash for the initial tasks load. useMinSplash arms when `loading`
   // rises (on mount, as the first page fetches) and holds a short min window so
@@ -237,11 +273,29 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     () => sortTasks(scopedItems, sort, { orderById, labelById, priorityOrderById, priorityLabelById }),
     [scopedItems, sort, orderById, labelById, priorityOrderById, priorityLabelById]
   );
+  // round208 — MOBILE manual ordering (drag-reorder on the card list): a saved
+  // per-user order (monday.storage) is applied over the sorted list, so within
+  // each group the user's own drag order wins. Desktop is untouched.
+  const [manualOrder, setManualOrder] = useState([]);
+  useEffect(() => {
+    if (!isMobile || !currentUser?.id) return undefined;
+    let cancelled = false;
+    loadMyTasksOrder(currentUser.id)
+      .then((order) => { if (!cancelled) setManualOrder(order); })
+      // loadMyTasksOrder resolves [] on storage failure; this catch is the
+      // last-resort guard (e.g. a synchronous throw inside the promise chain).
+      .catch((err) => logger.warn('MyTasksView', 'טעינת סדר המשימות הידני נכשלה', err));
+    return () => { cancelled = true; };
+  }, [isMobile, currentUser?.id]);
+  const orderedItems = useMemo(
+    () => (isMobile ? applyManualOrder(sortedItems, manualOrder) : sortedItems),
+    [isMobile, sortedItems, manualOrder]
+  );
   // Right-click a group header → color palette; the chosen color is shared
   // across all users (round 77). colorsByKey overrides the auto group color.
   const { colorsByKey, openMenuFor, menu: groupColorMenu } = useGroupColors();
   const grouped = useMemo(
-    () => ensureGroupColors(groupMyTasks(sortedItems, group.col, {
+    () => ensureGroupColors(groupMyTasks(orderedItems, group.col, {
       labelById, colorById, orderById,
       priorityLabelById, priorityColorById, priorityOrderById,
       isValidStatus,
@@ -252,8 +306,44 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       noDiscussionLabel: t('myTasks.noDiscussion'),
       allTasksLabel: t('myTasks.allTasks'),
     }), colorsByKey),
-    [sortedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t, colorsByKey]
+    [orderedItems, group, discDateMap, labelById, colorById, orderById, priorityLabelById, priorityColorById, priorityOrderById, t, colorsByKey]
   );
+
+  // round208 — a drag-drop inside ONE group (mobile cards) rebuilds the FLAT
+  // manual order from the current grouped view, with that group's new order
+  // spliced in, and persists it per user.
+  const reorderGroup = useCallback((groupKey, newIds) => {
+    const flat = grouped.flatMap((g) => (g.key === groupKey ? newIds : g.items.map((tk) => String(tk.id))));
+    setManualOrder(flat);
+    saveMyTasksOrder(currentUser?.id, flat);
+  }, [grouped, currentUser?.id]);
+
+  // round215 — ONE DndContext spans all the mobile card groups: a drop inside
+  // the same group reorders; a drop on a card of ANOTHER group MOVES the task
+  // there (writes the target group's status/priority label) and places it at
+  // the drop position. Drag activates only from each card's grip handle.
+  const cardSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 120, tolerance: 8 } }),
+  );
+  const handleCardDragEnd = useCallback(({ active, over }) => {
+    const drop = computeCardDrop({
+      grouped,
+      groupCol: group.col,
+      activeId: active?.id,
+      overId: over?.id,
+    });
+    if (!drop) return;
+    if (drop.type === 'reorder') {
+      reorderGroup(drop.groupKey, drop.ids);
+      return;
+    }
+    // move: write the target group's column value, then persist the new order.
+    if (group.col === 'status') applyStatus(drop.taskId, drop.value);
+    else applyPriority(drop.taskId, drop.value);
+    setManualOrder(drop.flat);
+    saveMyTasksOrder(currentUser?.id, drop.flat);
+  }, [grouped, group.col, reorderGroup, applyStatus, applyPriority, currentUser?.id]);
 
   // Surface the just-created task at the VERY TOP of the view. Under GROUP BY
   // DISCUSSION the new (unlinked) task lives in "ללא דיון", so that group is
@@ -403,67 +493,62 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     status: t('myTasks.colStatus'),
     name: t('myTasks.colName'),
     discussion: t('myTasks.colDiscussion'),
+    person: t('myTasks.colPerson'),
   };
   const field = (mobile, label, seg) => (mobile
     ? <div className={bs.bField} key={label}><div className={bs.bFieldLabel}>{label}</div>{seg}</div>
     : seg);
 
   // ---------- Sort panel body ----------
-  const renderSortBody = ({ mobile, openId, setOpenId }) => {
+  const renderSortBody = ({ mobile, openId, setOpenId, close }) => {
     const colOptions = SORT_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === sort.col }));
+    // round228 (owner request) — a NON-owner (no "שמור") can't persist a sort
+    // default, so picking a column CLOSES the panel (mirrors the group-by
+    // picker); the column's default direction applies. Owners keep it open for
+    // "שמור", and a non-owner can still tweak the direction on a re-open.
+    const pickColMaybeClose = (col) => { setSortCol(col); if (!canSaveView) close?.(); };
     // Empty state — no column chosen yet: a placeholder segment, like Group's.
     if (!sort.col) {
       const emptySeg = (
-        <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
-          text="Choose a column" placeholder options={colOptions} onPick={setSortCol} />
+        <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
+          text="בחרו עמודה" placeholder options={colOptions} onPick={pickColMaybeClose} />
       );
-      return mobile ? field(true, 'Column', emptySeg) : <div className={bs.bRow}>{emptySeg}</div>;
+      return mobile ? field(true, 'עמודה', emptySeg) : <div className={bs.bRow}>{emptySeg}</div>;
     }
     const sc = SORT_COLUMNS.find((c) => c.key === sort.col) || SORT_COLUMNS[0];
     const dir = sc.dirs.find((d) => d.key === sort.dir) || sc.dirs[0];
     const colSeg = (
-      <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+      <Segment id="col" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
         icon={TYPE_ICON[sc.type]} text={COL_NAME[sc.key]}
         options={colOptions}
-        onPick={setSortCol} />
+        onPick={pickColMaybeClose} />
     );
     const dirSeg = (
-      <Segment id="dir" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Direction" note={sc.note}
+      <Segment id="dir" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="כיוון" note={sc.note}
         icon={dir.icon} text={dir.label}
         options={sc.dirs.map((d) => ({ key: d.key, label: d.label, icon: d.icon, selected: d.key === sort.dir }))}
         onPick={setSortDir} />
     );
     return mobile
-      ? <>{field(true, 'Column', colSeg)}{field(true, 'Direction', dirSeg)}</>
+      ? <>{field(true, 'עמודה', colSeg)}{field(true, 'כיוון', dirSeg)}</>
       : <div className={bs.bRow}>{colSeg}{dirSeg}</div>;
   };
 
   // ---------- Group panel body ----------
-  const renderGroupBody = ({ mobile, openId, setOpenId }) => {
-    const colOptions = GROUP_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === group.col }));
-    if (group.col === 'none') {
-      const colSeg = (
-        <Segment id="gcol" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
-          text="Choose a column" placeholder options={colOptions} onPick={setGroupModePersist} />
-      );
-      return mobile ? field(true, 'Column', colSeg) : <div className={bs.bRow}>{colSeg}</div>;
-    }
-    const gc = GROUP_COLUMNS.find((c) => c.key === group.col) || GROUP_COLUMNS[0];
-    const ord = gc.orders.find((o) => o.key === group.order) || gc.orders[0];
-    const colSeg = (
-      <Segment id="gcol" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
-        icon={TYPE_ICON[gc.type]} text={COL_NAME[gc.key]} options={colOptions} onPick={setGroupModePersist} />
-    );
-    const ordSeg = (
-      <Segment id="gord" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Order"
-        icon={ord.icon} text={ord.label}
-        options={gc.orders.map((o) => ({ key: o.key, label: o.label, icon: o.icon, selected: o.key === group.order }))}
-        onPick={setGroupOrder} />
-    );
-    return mobile
-      ? <>{field(true, 'Column', colSeg)}{field(true, 'Order', ordSeg)}</>
-      : <div className={bs.bRow}>{colSeg}{ordSeg}</div>;
-  };
+  // round224 (owner mockup, approved) — ONE flat radio list: סטטוס (ברירת
+  // מחדל) / אחריות / עדיפות / דיון. No order picker — the order is ALWAYS the
+  // top-down label order (setGroupModePersist pins each column's first order).
+  // A NON-owner's panel closes the moment a column is picked; the owner's stays
+  // open so "שמור" (save-as-default for everyone) is reachable.
+  const renderGroupBody = ({ close }) => (
+    <GroupPickList
+      options={GROUP_COLUMNS.map((c) => ({ key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type], selected: c.key === group.col }))}
+      onPick={setGroupModePersist}
+      close={close}
+      closeOnPick={!canSaveView}
+      defaultKey="status"
+    />
+  );
 
   // ---------- Filter panel body ----------
   const valueChips = (col) => {
@@ -473,7 +558,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const renderFilterRow = (col, i, mobile, openId, setOpenId) => {
     const fcfg = FILTER_COLUMNS.find((c) => c.key === col);
     const colSeg = (
-      <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+      <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
         icon={TYPE_ICON[fcfg.type]} text={COL_NAME[col]}
         options={FILTER_COLUMNS.map((c) => ({
           key: c.key, label: COL_NAME[c.key], icon: TYPE_ICON[c.type],
@@ -482,7 +567,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
         onPick={(to) => retargetFilterRow(col, to)} />
     );
     const opSeg = (
-      <Segment id={`fop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Condition"
+      <Segment id={`fop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="תנאי"
         text={OP_LABEL[filter[col].op]}
         options={fcfg.ops.map((op) => ({ key: op, label: OP_LABEL[op], selected: filter[col].op === op }))}
         onPick={(op) => setFilterOp(col, op)} />
@@ -492,8 +577,8 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       const f = filter.deadline;
       if (f.op === 'within') {
         valueCtl = (
-          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="When"
-            icon={f.range ? rangeIcon(f.range) : 'date'} text={f.range ? rangeLabel(f.range) : 'Choose a date range'} placeholder={!f.range}
+          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="מתי"
+            icon={f.range ? rangeIcon(f.range) : 'date'} text={f.range ? rangeLabel(f.range) : 'בחרו טווח תאריכים'} placeholder={!f.range}
             options={DEADLINE_RANGES.map((r) => ({ key: r.key, label: r.label, icon: r.icon, selected: f.range === r.key }))}
             onPick={setDeadlineRange} />
         );
@@ -526,8 +611,8 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
             <span className={bs.bWhereLead}>{lead}</span>
             {removeBtn}
           </div>
-          {field(true, 'Column', colSeg)}
-          {field(true, 'Condition', opSeg)}
+          {field(true, 'עמודה', colSeg)}
+          {field(true, 'תנאי', opSeg)}
           {valueCtl ? field(true, 'Value', valueCtl) : null}
         </div>
       );
@@ -561,20 +646,50 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
           left-arrow "back to discussions" icon button to its LEFT (round 53a,
           replacing the old text button that lived in the toolbar). The header is
           direction:ltr so the arrow sits on the left, the title to its right. */}
-      <div className={styles.viewHeader}>
-        {onBackToDiscussions && (
-          <button
-            type="button"
-            className={styles.backArrowBtn}
-            onClick={onBackToDiscussions}
-            aria-label="בחזרה לתצוגת הדיונים"
-            title="בחזרה לתצוגת הדיונים"
-          >
-            <ArrowLeft size={20} aria-hidden="true" />
-          </button>
-        )}
-        <h1 className={styles.viewTitle}>המשימות שלי</h1>
-      </div>
+      {/* round170 — when embedded in the PersonalShell, the shell owns the back
+          arrow + the (tab) title, so this view drops its own header row. */}
+      {!embedded && (
+        <div className={styles.viewHeader}>
+          {onBackToDiscussions && (
+            <button
+              type="button"
+              className={styles.backArrowBtn}
+              onClick={onBackToDiscussions}
+              aria-label="בחזרה לתצוגת הדיונים"
+              title="בחזרה לתצוגת הדיונים"
+            >
+              <ArrowLeft size={20} aria-hidden="true" />
+            </button>
+          )}
+          {/* round272 (owner spec, MOBILE only) — beside the title, a scope toggle:
+              "המשימות שלי" (default, RIGHT) ⇄ "משימות של אחרים" (LEFT) — the tasks
+              in discussions I lead/coordinate/created that are NOT assigned to me.
+              In this dir="rtl" track the first button ('mine') lands on the right
+              and the second ('others') to its left, matching the owner's layout.
+              Desktop keeps its own toolbar scope toggle (led/mine) unchanged. */}
+          {isMobile ? (
+            <div className={styles.scopeToggleMobile} dir="rtl" role="tablist" aria-label="תחום המשימות">
+              {[
+                { key: 'mine', label: 'המשימות שלי' },
+                { key: 'others', label: 'משימות של אחרים' },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={scope === tab.key}
+                  className={`${styles.subTab}${scope === tab.key ? ` ${styles.subTabActive}` : ''}`}
+                  onClick={() => setScope(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <h1 className={styles.viewTitle}>המשימות שלי</h1>
+          )}
+        </div>
+      )}
 
       {/* Single toolbar row (round 35 baseline; round 41 flush-LEFT): dir="ltr"
           and flush-LEFT, reading (left→right)
@@ -582,9 +697,19 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
           the back control out of the toolbar to a left-arrow icon button beside
           the view title, so "משימה חדשה" is now the leftmost toolbar control. */}
       <div className={styles.toolbar} dir="ltr">
-        <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
-          משימה חדשה
-        </Button>
+        {/* round208 — mobile toolbar is ICONS-ONLY (owner spec): the new-task
+            button collapses to a "+" icon; the other pills are already icon-only
+            via the .mobile-app CSS. */}
+        {/* round224 — creation stays in the DEFAULT scope only: a task created
+            here is assigned to me and unlinked, so it can never satisfy the
+            "בדיונים שהובלתי" scope; hiding the button avoids a vanishing row. */}
+        {scope === 'mine' && (isMobile ? (
+          <IconButton icon={Add} kind="primary" size="small" onClick={startCreateNew} ariaLabel="משימה חדשה" />
+        ) : (
+          <Button kind={"primary"} size={"small"} onClick={startCreateNew}>
+            משימה חדשה
+          </Button>
+        ))}
 
         {showSearch ? (
           <div className={styles.searchPill}>
@@ -608,44 +733,60 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
               type="text"
               autoFocus
               value={search}
-              placeholder="Search"
+              placeholder="חיפוש"
               onChange={(e) => setSearch(e.target.value)}
               onBlur={() => { if (!search) setSearchOpen(false); }}
-              aria-label="Search"
+              aria-label="חיפוש"
             />
           </div>
         ) : (
           <button type="button" className={styles.pill} onClick={() => setSearchOpen(true)}>
             <Search className={styles.pillIcon} />
-            <span>Search</span>
+            <span>חיפוש</span>
           </button>
         )}
 
-        <BuilderControl
-          icon={Filter} label="Filter" title="Filter by" mobile={isMobile} width={isMobile ? undefined : 620}
-          applied={fc > 0} badge={fc}
-          onClear={fc > 0 ? clearFilter : null}
-          onSave={canSaveView ? saveFilterView : null}
-          renderBody={renderFilterBody}
-        />
-        <BuilderControl
-          icon={Sort} label="Sort" title="Sort by" mobile={isMobile} width={isMobile ? undefined : 360}
-          applied={sort.active} badge={1}
-          onClear={sort.active ? clearSort : null}
-          onSave={canSaveView ? saveSortView : null}
-          renderBody={renderSortBody}
-        />
-        <BuilderControl
-          icon={Group} label="Group by" title="Group items by" mobile={isMobile} width={isMobile ? undefined : 360}
-          applied={group.col !== 'none'} badge={1}
-          onClear={group.col !== 'none' ? clearGroup : null}
-          onSave={canSaveView ? saveGroupView : null}
-          renderBody={renderGroupBody}
-        />
+        {/* round213 — MOBILE: one quick "סידור לפי" toggle (status ⇄ priority)
+            replaces the Filter/Sort/Group builders (owner spec). */}
+        {isMobile ? (
+          <button
+            type="button"
+            className={styles.mobileSortPill}
+            dir="rtl"
+            onClick={() => setMobileGroupCol((c) => (c === 'status' ? 'priority' : 'status'))}
+            aria-label="החלפת הסידור בין סטטוס לעדיפות"
+          >
+            סידור לפי: <b>{mobileGroupCol === 'status' ? 'סטטוס' : 'עדיפות'}</b>
+          </button>
+        ) : (
+          <>
+            <BuilderControl
+              icon={Filter} label="סינון" title="סינון לפי" width={620}
+              applied={fc > 0} badge={fc}
+              onClear={fc > 0 ? clearFilter : null}
+              onSave={canSaveView ? saveFilterView : null}
+              renderBody={renderFilterBody}
+            />
+            <BuilderControl
+              icon={Sort} label="סדר" title="סדר לפי" width={360}
+              applied={sort.active} badge={1}
+              onClear={sort.active ? clearSort : null}
+              onSave={canSaveView ? saveSortView : null}
+              renderBody={renderSortBody}
+            />
+            <BuilderControl
+              icon={Group} label="קבץ לפי" title="קבץ לפי" width={360}
+              applied={group.col !== 'none'} badge={1}
+              onClear={group.col !== 'none' ? clearGroup : null}
+              onSave={canSaveView ? saveGroupView : null}
+              renderBody={renderGroupBody}
+            />
+          </>
+        )}
 
         {/* Hide columns (round 46) — owners only. Non-owners never see it and
             always get the saved config applied. */}
-        {canManageSettings && (
+        {canManageSettings && !isMobile && (
           <HideColumnsControl
             columns={columnList}
             hidden={hiddenColumns}
@@ -657,11 +798,40 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
 
         <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
 
+        {/* round224 (owner mockup) — the scope toggle, same placement as the My
+            Decisions toggle (right after Collapse): משימות באחריותי (default) ⇄
+            משימות בדיונים שהובלתי. round227 (owner request): "באחריותי" is the
+            LEFT button of the two and stays the default — so in this dir="rtl"
+            track "led" is listed FIRST (lands on the right) and "mine" second
+            (lands on the left). Desktop only (the mobile toolbar stays minimal). */}
+        {!isMobile && (
+          <div className={styles.subTabs} dir="rtl" role="tablist" aria-label="תחום המשימות">
+            {[
+              { key: 'led', label: 'משימות בדיונים שהובלתי' },
+              { key: 'mine', label: 'משימות באחריותי' },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={scope === tab.key}
+                className={`${styles.subTab}${scope === tab.key ? ` ${styles.subTabActive}` : ''}`}
+                onClick={() => setScope(tab.key)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Quick-filter battery (round 81) — pushed to the far (right) end of the
-            toolbar, monday-battery style: open / done / delayed counts + filter. */}
-        <div className={styles.batterySlot}>
-          <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
-        </div>
+            toolbar, monday-battery style: open / done / delayed counts + filter.
+            round208 — hidden on mobile: the icon toolbar stays minimal there. */}
+        {!isMobile && (
+          <div className={styles.batterySlot}>
+            <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
+          </div>
+        )}
       </div>
 
       <SelectionActionBar count={selectedIds.size} onClear={clearSelection} ariaLabel="פעולות על משימות נבחרות">
@@ -674,13 +844,14 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       ) : error ? (
         <div className={styles.empty}>{t('myTasks.error')}</div>
       ) : (items.length === 0 && !creatingNew) ? (
-        <div className={styles.empty}>
-          <div className={styles.emptyTitle}>{t('myTasks.empty')}</div>
+        <EmptyState>
+          {t('myTasks.empty')}
           <div className={styles.emptyHint}>{t('myTasks.emptyHint')}</div>
-        </div>
+        </EmptyState>
       ) : (
         <div className={styles.groupScrollInner}>
           <div className={styles.groupStack}>
+            <CardDndWrapper enabled={isMobile} sensors={cardSensors} onDragEnd={handleCardDragEnd}>
             {groupsForRender.map((grp, gi) => (
               <div key={grp.key}>
                 <button
@@ -701,7 +872,36 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                   </span>
                   <span className={styles.groupCount}>{grp.items.length}</span>
                 </button>
-                {!collapsed[grp.key] && (
+                {/* round208 — MOBILE renders stacked cards (status bottom-left,
+                    priority+deadline bottom-right, drag-to-reorder, bottom-sheet
+                    pickers); the discussion line drops when already grouped by
+                    discussion. Desktop keeps the table untouched. */}
+                {!collapsed[grp.key] && isMobile && (
+                  <MyTasksCardList
+                    tasks={grp.items}
+                    color={grp.color}
+                    showDiscussion={group.col !== 'discussion'}
+                    statusOptions={statusOptions}
+                    priorityOptions={priorityOptions}
+                    statusLabelById={labelById}
+                    statusColorById={colorById}
+                    priorityLabelById={priorityLabelById}
+                    priorityColorById={priorityColorById}
+                    canTask={canTask}
+                    onStatusChange={applyStatus}
+                    onPriorityChange={applyPriority}
+                    onDeadlineChange={applyDeadline}
+                    onRenameTask={applyRename}
+                    sortableId={grp.key}
+                    searchTerm={debouncedSearch}
+                    newTaskRow={creatingNew && gi === 0 ? {
+                      defaultName: 'משימה חדשה',
+                      onCommit: commitNewTask,
+                      onCancel: cancelNewTask,
+                    } : null}
+                  />
+                )}
+                {!collapsed[grp.key] && !isMobile && (
                   <MyTasksTable
                     tasks={grp.items}
                     color={grp.color}
@@ -734,6 +934,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                 )}
               </div>
             ))}
+            </CardDndWrapper>
           </div>
           {hasMore && (
             <div className={styles.loadMore}>

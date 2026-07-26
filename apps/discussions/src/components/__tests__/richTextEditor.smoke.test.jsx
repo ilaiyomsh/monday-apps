@@ -16,7 +16,9 @@ describe('RichTextEditor (real TipTap)', () => {
     expect(screen.getByRole('button', { name: 'רשימה ממוספרת' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'צ׳קליסט' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'צבע טקסט' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'קישור' })).toBeInTheDocument();
+    // round253 — link moved OFF the toolbar into the selection bubble (which is
+    // not mounted without a selection), so the static toolbar no longer has it.
+    expect(screen.queryByRole('button', { name: 'קישור' })).toBeNull();
   });
 
   it('reports its initial HTML through onReady', async () => {

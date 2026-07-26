@@ -70,7 +70,7 @@ describe('PreviousTasksTab — Filter pill (smoke)', () => {
 
   it('opens the Filter builder with a default STATUS row (empty values ⇒ shows all)', async () => {
     render(<PreviousTasksTab discussion={DISCUSSION} />);
-    const pill = await screen.findByLabelText('Filter');
+    const pill = await screen.findByLabelText('סינון');
     fireEvent.click(pill);
     // Round 17: the panel opens PRE-SEEDED with one "Where status is …" row
     // (empty values, so nothing is actually filtered) instead of the old
@@ -83,7 +83,7 @@ describe('PreviousTasksTab — Filter pill (smoke)', () => {
 
   it('offers status + deadline + person columns (no priority)', async () => {
     render(<PreviousTasksTab discussion={DISCUSSION} />);
-    fireEvent.click(await screen.findByLabelText('Filter'));
+    fireEvent.click(await screen.findByLabelText('סינון'));
     // The default status row is already present — open its column picker.
     fireEvent.click(screen.getByText('סטטוס'));
     expect(screen.getByText('אחראי')).toBeTruthy();   // person column available
@@ -93,10 +93,13 @@ describe('PreviousTasksTab — Filter pill (smoke)', () => {
 
   it('filtering by a person narrows the rendered tasks', async () => {
     render(<PreviousTasksTab discussion={DISCUSSION} />);
+    // round274 — by-type defaults to "הפעם האחרונה"; switch to "כל הדיונים הקודמים"
+    // so the full mocked type set renders (the set this test filters over).
+    fireEvent.click(await screen.findByTitle(/החלפת טווח/));
     expect(await screen.findByText('הנחיה של דנה')).toBeTruthy();
     expect(screen.getByText('הנחיה של יוסי')).toBeTruthy();
 
-    fireEvent.click(await screen.findByLabelText('Filter'));
+    fireEvent.click(await screen.findByLabelText('סינון'));
     // Retarget the default status row to the person column, then pick דנה.
     fireEvent.click(screen.getByText('סטטוס'));
     fireEvent.click(screen.getByText('אחראי'));

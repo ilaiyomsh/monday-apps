@@ -68,7 +68,17 @@ describe('sanitizeTypeTemplate', () => {
       coordinator: [{ id: 12, kind: 'person', name: 'מרכז' }],
       participants: [{ id: 11, kind: 'person', name: 'א' }],
       deciderIsLead: false, // item 18 — defaults off unless explicitly true
+      exportTemplate: null, // round254 — no per-type export template ⇒ null (system default)
     });
+  });
+
+  it('round254 — keeps a per-type export template object, rejects non-objects', () => {
+    const exp = { defaultFormat: 'docx', sections: [{ key: 'meta', enabled: true }] };
+    expect(sanitizeTypeTemplate({ discussionType: 'סוג', exportTemplate: exp }, 'id').exportTemplate).toEqual(exp);
+    // arrays / primitives / missing ⇒ null (fall back to the system default)
+    expect(sanitizeTypeTemplate({ discussionType: 'סוג', exportTemplate: [1, 2] }, 'id').exportTemplate).toBeNull();
+    expect(sanitizeTypeTemplate({ discussionType: 'סוג', exportTemplate: 'x' }, 'id').exportTemplate).toBeNull();
+    expect(sanitizeTypeTemplate({ discussionType: 'סוג' }, 'id').exportTemplate).toBeNull();
   });
 
   it('requires a non-empty type text; empty/missing returns null (dropped)', () => {
@@ -93,8 +103,8 @@ describe('createTopicsFromTemplate', () => {
   });
 
   it('no-ops when there is no discussion id or no topics', async () => {
-    expect(await createTopicsFromTemplate(null, { topics: [{ name: 't' }] })).toEqual({ topics: 0, points: 0 });
-    expect(await createTopicsFromTemplate('D1', { topics: [] })).toEqual({ topics: 0, points: 0 });
+    expect(await createTopicsFromTemplate(null, { topics: [{ name: 't' }] })).toMatchObject({ topics: 0, points: 0 });
+    expect(await createTopicsFromTemplate('D1', { topics: [] })).toMatchObject({ topics: 0, points: 0 });
     expect(api).not.toHaveBeenCalled();
   });
 
@@ -107,7 +117,7 @@ describe('createTopicsFromTemplate', () => {
       ],
     });
 
-    expect(result).toEqual({ topics: 2, points: 2 });
+    expect(result).toMatchObject({ topics: 2, points: 2 });
 
     // 2 create_item + 2 create_subitem
     const itemCalls = api.mock.calls.filter((c) => c[0].includes('create_item'));
@@ -132,7 +142,7 @@ describe('createTopicsFromTemplate', () => {
     const result = await createTopicsFromTemplate('DISC_1', {
       topics: [{ name: 'bad', points: ['p1'] }],
     });
-    expect(result).toEqual({ topics: 0, points: 0 });
+    expect(result).toMatchObject({ topics: 0, points: 0 });
     // only the create_item was attempted; no create_subitem fired
     expect(api.mock.calls.some((c) => c[0].includes('create_subitem'))).toBe(false);
   });

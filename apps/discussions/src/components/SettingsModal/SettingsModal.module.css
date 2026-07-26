@@ -9,6 +9,61 @@
   backdrop-filter: blur(2px);
   padding: 16px;
 }
+/* round295 — unsaved-changes confirm dialog, portaled to <body> so it floats
+   above the Settings modal (z-index 4000) regardless of which surface is open. */
+.confirmOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 16px;
+}
+.confirmDialog {
+  width: min(420px, 92vw);
+  background: var(--primary-background-color, #fff);
+  border-radius: var(--border-radius-medium, 8px);
+  box-shadow: var(--box-shadow-large, 0 12px 40px rgba(0, 0, 0, 0.28));
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: right;
+}
+.confirmActions {
+  margin-top: 8px;
+}
+/* round178 — `contained` scopes the overlay to the right discussion-card pane
+   (App renders this instance inside `.main`, which is position:relative): the box
+   opens CENTERED within that pane and dims only its tabs, not the whole screen. */
+.overlayContained {
+  position: absolute;
+  z-index: 30;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.32);
+}
+.overlayContained .modal {
+  width: min(760px, 96%);
+  max-height: 100%;
+}
+/* (round197: .modalExport is absent here on purpose — the export tab always
+   escapes containment and uses the viewport-fixed overlay.) */
+.overlayContained .modalFixed,
+.overlayContained .modalWide {
+  width: min(760px, 96%);
+  height: auto;
+  max-height: 100%;
+}
+/* round284 — the compact square keeps its equilateral shape inside the contained
+   (card-pane) overlay too; it must beat the generic `.overlayContained .modal`
+   width above (higher specificity), so pin BOTH dimensions here. */
+.overlayContained .modalSquare {
+  width: min(744px, 98%);
+  height: min(744px, 98%);
+  max-height: 100%;
+}
 
 .modal {
   width: min(1000px, 95vw);
@@ -28,11 +83,30 @@
   height: min(760px, 88vh);
 }
 
-/* Permissions AND Export-template tabs share ONE fixed, larger box (wider than
-   the mapping/prefs/templates tabs) so switching between them doesn't resize. */
+/* Permissions tab: a fixed, larger box (wider than the mapping/prefs/templates
+   tabs). */
 .modalWide {
   width: min(1200px, 96vw);
   height: min(690px, 92vh);
+}
+
+/* round193/round197 — the Export-template tab box fills the WHOLE app iframe
+   (owner request): the overlay is always viewport-fixed on this tab (containment
+   is dropped in SettingsModal.jsx), and the box takes everything minus the
+   overlay's 16px padding, so the live Word preview gets maximum room. */
+.modalExport {
+  width: calc(100vw - 32px);
+  height: calc(100vh - 32px);
+}
+
+/* round284 (owner request) — every settings tab EXCEPT תבנית ייצוא (3) and
+   מדדי שימוש (5) opens as a compact equilateral square, ~half the export width.
+   Content scrolls internally (see `.content`), so a fixed square never clips. */
+.modalSquare {
+  /* round290 (owner request) — +20% on the non-full tabs (mapping / preferences /
+     templates / permissions): 620 → 744. */
+  width: min(744px, 94vw);
+  height: min(744px, 94vh);
 }
 
 .header {
@@ -183,19 +257,31 @@
 
 .cols {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  /* round264 (owner request) — EXACTLY 4 columns per row. `minmax(0, 1fr)` fixes
+     every track at ¼ of the row, so a field keeps that same width even when its
+     row has fewer than 4 fields (the missing tracks stay empty rather than
+     stretching the present fields). */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
   margin-top: 6px;
+  align-items: start;
 }
 
 .colRow {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   border: 1px solid var(--ui-border-color, #c3c6d4);
   border-radius: 8px;
-  padding: 10px;
+  padding: 8px 10px;
   background: var(--primary-background-color, #fff);
+}
+
+/* round252 — the multi-column people rows (יכולת צפייה/עריכה) carry column chips
+   AND the role-source toggles, so they need the full row width; they span every
+   grid track instead of squeezing into one narrow cell. */
+.colRowWide {
+  grid-column: 1 / -1;
 }
 
 .colLabel {
@@ -204,7 +290,8 @@
   align-items: flex-start;
   min-width: 0;
   overflow-wrap: anywhere;
-  text-align: left;
+  /* round247 — logical alignment so the mapping labels follow the panel's RTL. */
+  text-align: start;
 }
 
 /* Pinned footer bar (outside the scrolling content) so it stays at the modal
@@ -416,4 +503,504 @@
   background: var(--primary-selected-color, #e5f0ff);
   color: var(--primary-color, #0073ea);
   font-weight: 600;
+}
+
+/* round205 — per-component visibility grid in the preferences tab. */
+/* round244 (owner request) — the "רכיבים באפליקציה" row stacks (label on top,
+   controls full-width below) so the checkbox grid spans the whole panel and
+   lays out in several columns instead of a tall, scrolling single column. */
+.prefRowStack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+.prefControlFull {
+  flex: 1 1 auto;
+  width: 100%;
+}
+.componentGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px 16px;
+}
+.prefControlFull .componentGrid {
+  width: 100%;
+}
+.componentItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.componentItem input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary-color, #0073ea);
+  flex-shrink: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* round280 — master–detail mapping tab (approved mockup). Board tabs + */
+/* global ring on top, a type-folder rail on the RIGHT (RTL), and the   */
+/* selected folder's dense field rows on the LEFT. All classes are      */
+/* prefixed `map*` to avoid colliding with other non-scoped modules.    */
+/* ------------------------------------------------------------------ */
+
+/* Per-type accent hues + pale backgrounds, copied from the mockup's
+   `--t-*` tokens. Scoped to the mapping shell so they never leak. */
+.mapShell {
+  --t-people: #7a52d1; --t-people-bg: #f0eafb;
+  --t-date: #2a7de1; --t-date-bg: #e7f1fc;
+  --t-status: #0f9d63; --t-status-bg: #e6f5ee;
+  --t-dropdown: #d9820a; --t-dropdown-bg: #fbf1e0;
+  --t-relation: #0aa3a3; --t-relation-bg: #e2f5f5;
+  --t-text: #5a6478; --t-text-bg: #eef0f4;
+  --t-checkbox: #d24f86; --t-checkbox-bg: #fbe9f1;
+  --t-file: #5568df; --t-file-bg: #eceffc;
+  --t-computed: #8a8fa3; --t-computed-bg: #f0f1f5;
+
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+@media (prefers-color-scheme: dark) {
+  .mapShell {
+    --t-people-bg: #241d33; --t-date-bg: #152538; --t-status-bg: #12281d;
+    --t-dropdown-bg: #2c2110; --t-relation-bg: #0f2727; --t-text-bg: #20222b;
+    --t-checkbox-bg: #2b1420; --t-file-bg: #191d33; --t-computed-bg: #212230;
+  }
+}
+
+/* Header row: board tabs · spacer · search · global ring. */
+.mapHead {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 4px 12px;
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+  flex-wrap: wrap;
+}
+.mapSp {
+  flex: 1;
+}
+
+.mapTabs {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.mapTab {
+  border: 0;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 7px 13px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.mapTab:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+.mapTabOn {
+  background: var(--primary-selected-color, #e6f1fe);
+  color: var(--primary-color, #0073ea);
+}
+.mapTabCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--secondary-text-color, #9497a8);
+  background: var(--primary-background-hover-color, #f5f6f8);
+  border-radius: 20px;
+  padding: 0 7px;
+}
+.mapTabOn .mapTabCount {
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+}
+
+.mapSearch {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.mapSearch svg {
+  position: absolute;
+  inset-inline-start: 10px;
+  color: var(--secondary-text-color, #9497a8);
+  pointer-events: none;
+}
+.mapSearch input {
+  width: 210px;
+  max-width: 44vw;
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #1c1f3b);
+  border-radius: 9px;
+  height: 36px;
+  padding: 0 12px;
+  padding-inline-start: 34px;
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.mapSearch input:focus {
+  border-color: var(--primary-color, #0073ea);
+  box-shadow: 0 0 0 3px var(--primary-selected-color, #e6f1fe);
+}
+
+.mapGring {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mapGringLab {
+  font-size: 11.5px;
+  color: var(--secondary-text-color, #676879);
+  text-align: start;
+  line-height: 1.2;
+}
+.mapGringLab b {
+  display: block;
+  font-size: 13px;
+  color: var(--primary-text-color, #1c1f3b);
+  direction: ltr;
+}
+
+/* Board-context strip: the "לוח" picker for the selected board + the
+   post-install top-up entry. */
+.mapStrip {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+  flex-wrap: wrap;
+}
+.mapBoardPick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.mapBoardPick > :last-child {
+  width: 280px;
+  max-width: 60vw;
+}
+
+/* Body: rail (right, RTL first child) + detail (left). */
+.mapBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+.mapRail {
+  width: 236px;
+  flex-shrink: 0;
+  overflow: auto;
+  padding: 8px 4px;
+}
+.mapDetail {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  border-inline-start: 1px solid var(--ui-border-color, #e6e9ef);
+  padding: 6px 8px 10px;
+}
+
+.mapRentry {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--primary-text-color, #1c1f3b);
+  font-family: inherit;
+  text-align: start;
+  padding: 9px 10px;
+  border-radius: 11px;
+  cursor: pointer;
+  position: relative;
+  margin-bottom: 2px;
+}
+.mapRentry:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+.mapRentryOn {
+  background: var(--primary-selected-color, #e6f1fe);
+}
+.mapRentryOn::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--primary-color, #0073ea);
+}
+.mapRicon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.mapRtext {
+  flex: 1;
+  min-width: 0;
+}
+.mapRname {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Progress ring (mapped/total) — the arc SVG is rotated so it starts at 12 o'clock. */
+.mapRing {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
+.mapRing svg {
+  transform: rotate(-90deg);
+}
+.mapRingNum {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 9.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  direction: ltr;
+}
+
+/* Detail header (folder icon + name + count), sticky at the top of the pane. */
+.mapDhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 10px 9px;
+  position: sticky;
+  top: 0;
+  background: var(--primary-background-color, #fff);
+  z-index: 2;
+}
+.mapDheadL {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.mapDttl {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--primary-text-color, #1c1f3b);
+}
+.mapDcnt {
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+}
+
+/* Dense single-line field rows. renderRow emits `.colRow` (+ `.colRowWide` for
+   multi-people); here they become horizontal rows: name on the trailing edge,
+   control on the leading edge. The multi-people rows keep the stacked layout. */
+.mapRows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 4px 6px;
+}
+.mapRows .colRow {
+  margin: 0;
+  border-radius: 11px;
+  padding: 8px 12px;
+}
+.mapRows .colRow:not(.colRowWide) {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+}
+.mapRows .colRow:not(.colRowWide) > .colLabel {
+  flex: 0 1 230px;
+  min-width: 0;
+}
+.mapRows .colRow:not(.colRowWide) > .colLabel ~ * {
+  flex: 0 0 260px;
+  max-width: 46%;
+}
+.mapRows .colRowWide {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.mapEmpty {
+  padding: 26px;
+  text-align: center;
+  color: var(--secondary-text-color, #9497a8);
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .mapRail {
+    width: 64px;
+  }
+  .mapRtext,
+  .mapRentry .mapRing {
+    display: none;
+  }
+  .mapRows .colRow:not(.colRowWide) > .colLabel ~ * {
+    flex-basis: auto;
+    max-width: 52%;
+  }
+}
+
+/* round287 (owner request) — mapping layout: BOARDS as a horizontal row at the
+   TOP (with the search); column TYPES as a vertical list in the LEFT column; the
+   selected type's fields fill the pane to its right. No percent ring, no per-type
+   count badges. */
+.mapTop {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 12px;
+  /* round292 — elegant breathing room between the top tabs and this row. */
+  padding-top: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+}
+.mapBoardsRow {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+/* round292 — board buttons stretch to fill the row equally, so their LEFT edge
+   lines up with the fields pane below (the search occupies the left column). */
+.mapBoardsRow .mapBd {
+  flex: 1 1 0;
+  justify-content: center;
+  text-align: center;
+  white-space: nowrap;
+}
+/* round291 — the field-search sits on the LEFT (DOM after the boards row → left
+   edge in RTL), at the same width as the column-type column below it. */
+.mapTop .mapSearch {
+  width: 184px;
+  flex-shrink: 0;
+}
+.mapTop .mapSearch input {
+  width: 100%;
+  max-width: none;
+}
+
+.mapBody2 {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  gap: 14px;
+  padding-top: 12px;
+}
+/* LEFT — the vertical column-type list. In this RTL flex row the HIGHER order
+   renders on the LEFT (verified via the approved mockup), so types = order:2. */
+.mapTypesCol {
+  width: 184px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  order: 2;
+  overflow: auto;
+}
+/* RIGHT — the fields pane, a bordered card that fills + scrolls. */
+.mapBody2 .mapDetail {
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  border-radius: 12px;
+  padding: 4px 6px 10px;
+}
+
+/* Board button (top row). */
+.mapBd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #1c1f3b);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-align: start;
+  padding: 9px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.mapBd:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.mapBdOn {
+  background: var(--primary-selected-color, #e6f1fe);
+  border-color: var(--primary-color, #0073ea);
+  color: var(--primary-color, #0073ea);
+}
+
+/* Column-type button — a full-width row inside the left column. */
+.mapTy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid var(--ui-border-color, #e6e9ef);
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #1c1f3b);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-align: start;
+  padding: 9px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.mapTy:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.mapTyOn {
+  background: var(--primary-color, #0073ea);
+  border-color: var(--primary-color, #0073ea);
+  color: #fff;
+}
+.mapTyDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.mapTyOn .mapTyDot { background: #fff !important; }
+
+@media (max-width: 640px) {
+  .mapBody2 { flex-direction: column; }
+  .mapTypesCol { width: 100%; order: 0; flex-direction: row; flex-wrap: wrap; }
+  .mapTypesCol .mapTy { width: auto; }
 }

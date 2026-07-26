@@ -162,7 +162,7 @@ packages/shared                     EMPTY STUB — see below
   **monday-api** (any code touching the monday API — validate against the live
   schema, probe in the sandbox), **test-guard** + **error-guard** (every change).
 - Situational: monday-ops, monday-scaffold, integration-scaffold,
-  add-to-status-hub, axiom-sre.
+  add-to-status-hub, axiom-sre, monday-oauth (any monday auth/OAuth work).
 - A platform quirk discovered while working is appended to the owning skill's
   `references/` in the same session.
 
@@ -187,6 +187,12 @@ packages/shared                     EMPTY STUB — see below
 - Cloud sessions base on `develop` (the default branch) and PR into `develop`.
   They have no `MONDAY_TOKEN` and must not attempt deploys or `mapps` auth —
   merging their PR is what triggers the draft deploy.
+- **Error triage from a cloud session:** a cloud session MAY carry a **read-only**
+  Axiom token (scoped to `app-errors`) to query telemetry — set `AXIOM_URL`/
+  `AXIOM_TOKEN`/`AXIOM_ORG_ID` in the cloud environment; the `axiom-sre` skill reads
+  them from env (no local config file needed). Read-only, single-dataset only — this
+  is the sole token exception for cloud, and does not extend to `MONDAY_TOKEN` or any
+  write/ingest token. See `.claude/skills/axiom-sre/reference/app-errors.md`.
 
 ## One-time developer setup
 
@@ -214,6 +220,11 @@ One unified standard, from catching an error to shipping it to Axiom:
 **`docs/ERROR-AXIOM-STANDARD.md`** (authority: the `error-guard` skill). Client apps
 ship through the single hardened transport in `@axis/app-core` via `attachAxiomSink` —
 never a raw fetch. Shared dataset `app-errors`, discriminated by `app`.
+
+To **query/triage** `app-errors` (send an agent to check errors), use the `axiom-sre`
+skill — agent playbook with the live schema, conventions/gotchas (e.g. `err_name` is
+often empty; there is no `err_code` column), and ready-to-run APL queries:
+**`.claude/skills/axiom-sre/reference/app-errors.md`**.
 
 ## Maintaining this file
 

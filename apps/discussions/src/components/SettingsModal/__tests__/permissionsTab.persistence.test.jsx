@@ -39,6 +39,7 @@ const COLUMNS = {
   discussions: {
     discussionCreatorID: { title: 'יוצר דיון', type: 'people' },
     discussionLeadID: { title: 'מוביל דיון', type: 'people' },
+    discussionCoordinatorID: { title: 'מרכז דיון', type: 'people' },
     participantsID: { title: 'משתתפים', type: 'people' },
   },
   tasks: {
@@ -90,6 +91,12 @@ function lastWritten() {
   return JSON.parse(calls[calls.length - 1][1]);
 }
 
+// round246 — every permission table is COLLAPSED by default; open its section
+// (by clicking the header button whose name matches) before touching its cells.
+async function openSection(nameRe) {
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: nameRe })); });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   storageState.value = JSON.stringify({
@@ -124,12 +131,13 @@ describe('PermissionsTab persistence round-trip', () => {
     renderHarness();
     await waitFor(() => expect(screen.getByText('save')).toBeTruthy());
     await act(async () => {}); // flush the always-on seed effect
+    await openSection(/דיון ונושאים/); // round246 — the tier table is collapsed by default
 
-    // The first tier is "כללי" (system), so select the discussion-creator role
-    // explicitly (seeded with editSummary:true). Then flip "עריכת סיכום" off.
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'יוצר דיון' })); });
-    const editSummary = screen.getByLabelText('עריכת סיכום');
-    await act(async () => { fireEvent.click(editSummary); });
+    // round212 — the matrix: the discussion-creator × כתיבת סיכום cell is a ✓
+    // cell (seeded editSummary:true). Clicking it flips the grant to false.
+    const cell = screen.getByTestId('mx-discussions:discussionCreatorID-editSummary');
+    expect(cell.textContent).toContain('✓');
+    await act(async () => { fireEvent.click(cell); });
 
     await act(async () => { fireEvent.click(screen.getByText('save')); });
 
@@ -147,16 +155,12 @@ describe('PermissionsTab persistence round-trip', () => {
     renderHarness();
     await waitFor(() => expect(screen.getByText('save')).toBeTruthy());
     await act(async () => {}); // flush the always-on seed effect
+    await openSection(/מערכת/); // round246 — the system table is collapsed by default
 
-    // "כללי" (system) is the FIRST tier and selected by default, so there are two
-    // "כללי" buttons — the sidebar role button (first in the DOM) and the card
-    // head. Click the sidebar one to be explicit.
-    const systemRoleBtn = screen.getAllByRole('button', { name: 'כללי' })[0];
-    await act(async () => { fireEvent.click(systemRoleBtn); });
-
-    // System capabilities are reachable as checkbox rows.
-    const createDiscussion = screen.getByLabelText('יצירת דיון');
-    await act(async () => { fireEvent.click(createDiscussion); });
+    // round212 — the system matrix: the Members × יצירת דיון cell writes the
+    // system:system pseudo-role.
+    const cell = screen.getByTestId('mx-system:system-createDiscussion');
+    await act(async () => { fireEvent.click(cell); });
 
     await act(async () => { fireEvent.click(screen.getByText('save')); });
 
@@ -164,6 +168,41 @@ describe('PermissionsTab persistence round-trip', () => {
     expect(
       written.permissions.roles['system:system'].capabilities.createDiscussion
     ).toBe(true);
+  });
+
+  it('round219: the coordinator column is driven by MAPPING — present when mapped, no switch/sentence', async () => {
+    // COLUMNS maps discussionCoordinatorID (people) → the column is present, and
+    // the old "לא עובדים עם מרכז דיון" sentence + checkbox are gone (round219).
+    renderHarness();
+    await waitFor(() => expect(screen.getByText('save')).toBeTruthy());
+    await act(async () => {}); // flush the always-on seed effect
+    await openSection(/דיון ונושאים/); // round246 — the tier table is collapsed by default
+
+    expect(screen.getByTestId('mx-discussions:discussionCoordinatorID-editSummary')).toBeTruthy();
+    expect(screen.queryByText(/לא עובדים עם מרכז דיון/)).toBeNull();
+
+    // Saving never writes a noCoordinator flag anymore.
+    await act(async () => { fireEvent.click(screen.getByText('save')); });
+    expect(lastWritten().permissions.noCoordinator).toBeUndefined();
+  });
+
+  it('round219: an UNMAPPED coordinator column simply does not appear', async () => {
+    const cols = { ...COLUMNS, discussions: { ...COLUMNS.discussions } };
+    delete cols.discussions.discussionCoordinatorID;
+    render(
+      <MondayContext.Provider value={{ context: { instanceId: 'inst1' }, currentUser: null, isMobile: false }}>
+        <PermissionsTab
+          permissions={{ ...DEFAULT_PERMISSIONS, enabled: true, roles: JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED)) }}
+          setPermissions={() => {}}
+          columns={cols}
+        />
+      </MondayContext.Provider>
+    );
+    await act(async () => {});
+    await openSection(/דיון ונושאים/); // round246 — the tier table is collapsed by default
+    expect(screen.queryByTestId('mx-discussions:discussionCoordinatorID-editSummary')).toBeNull();
+    // The other role columns are unaffected.
+    expect(screen.getByTestId('mx-discussions:discussionLeadID-editSummary')).toBeTruthy();
   });
 
   it('seeds the new מרכז דיון (coordinator) role on mount', async () => {

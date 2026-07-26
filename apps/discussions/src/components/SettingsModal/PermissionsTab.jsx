@@ -1,6 +1,11 @@
 import React, { useMemo, useState, useEffect, useSyncExternalStore } from 'react';
-import { Checkbox, Text } from '@vibe/core';
-import { Comment, Note, Status, Completed, Settings, DropdownChevronDown } from '@vibe/icons';
+import { Button, Text } from '@vibe/core';
+import { Download, DropdownChevronDown } from '@vibe/icons';
+import { groupCapabilities } from './permissionsGrouping.js';
+import { buildPermissionsSummaryModel, downloadPermissionsSummary } from '../../utils/permissionsSummaryDoc.js';
+import { getBoardId } from '../../utils/mondayApi/board-config-store.js';
+import { getBoardPeople } from '../../utils/mondayApi/subscribers.js';
+import logger from '../../utils/logger.js';
 import {
   CAPABILITIES,
   DEFAULT_PERMISSION_SEED,
@@ -17,11 +22,11 @@ import BoardPeoplePicker from './BoardPeoplePicker.jsx';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import styles from './PermissionsTab.module.css';
 
-// Inline eye / eye-off glyphs for the per-role "hide" toggle (no eye icon in
-// @vibe/icons). Eye-off = "ignore this column"; eye = "restore".
+// Inline eye / eye-off glyphs for the per-role-COLUMN "hide" toggle (no eye icon
+// in @vibe/icons). Eye-off = "ignore this column"; eye = "restore".
 function EyeIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
@@ -29,7 +34,7 @@ function EyeIcon() {
 }
 function EyeOffIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M10.6 6.1C11.05 6.03 11.52 6 12 6c6.4 0 10 6 10 6a17 17 0 0 1-3 3.6M6.2 6.2A17 17 0 0 0 2 12s3.6 7 10 7c1.9 0 3.6-.5 5-1.3" />
       <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
       <path d="M3 3l18 18" />
@@ -38,37 +43,19 @@ function EyeOffIcon() {
 }
 
 /*
- * "הרשאות" tab — owner-only role/capability matrix (Phase 3).
+ * "הרשאות" tab — round212 REDESIGN (owner spec): one ✓-MATRIX TABLE per tier —
+ * the actions are the rows, the roles are the columns, and every intersection
+ * is a clickable cell (✓ = allowed). Below the matrices, the APP ROLES section
+ * assigns account users to Owners / Super Members / Members.
  *
- * Client-side ADVISORY gating only (the app has no server). While
- * `permissions.enabled` is false the whole matrix is bypassed and behavior is
- * byte-for-byte identical to today (fail-open) — the grid is disabled with an
- * explainer. The owner picks a role on the LEFT (people columns by title,
- * grouped by tier); the MAIN pane shows that role's capabilities as category
- * cards with checkbox rows. State lives in the parent SettingsModal and is
- * persisted as a whole `permissions` object via updateSettings on save.
- *
- * The people-picker (owners/members under "אנשים בלוח") is Phase 5 — NOT here.
+ * Still client-side ADVISORY gating (the app has no server). The state lives in
+ * the parent SettingsModal draft and persists as one `permissions` object.
  */
 
-// Tier metadata: title, 1-line role description, and the per-tier category cards
-// (group id -> { title, icon-illustration glyph }). The catalog
-// (CAPABILITIES) is filtered by tier+group to fill each card's checkbox rows.
-// `boardLabel` names the SOURCE board each role group's people-columns come from
-// (rendered as the group header in the sidebar). disc → the discussions board's
-// people columns (creator/lead/participants); task → the tasks board's people
-// columns (creator/responsible); decision → the decisions board's role columns
-// (creator/decider/מושפעים — PERMISSION_ROLE_SOURCES.decisions, where the
-// "מושפעים"/affected people column is now a first-class role); system → global
-// pseudo-roles (no board).
-// "כללי" (system) is FIRST — it's the global pseudo-role, shown at the top with
-// no board-source header. Then the per-board tiers, whose roles are ALL the
-// board's mapped people columns (derived dynamically, see buildRoleGroups).
 const TIERS = [
-  { id: 'system', label: 'כללי', boardLabel: null },
-  { id: 'disc', label: 'דיון', boardLabel: 'לוח דיונים' },
-  { id: 'task', label: 'משימה', boardLabel: 'לוח משימות' },
-  { id: 'decision', label: 'החלטה', boardLabel: 'לוח החלטות' },
+  { id: 'disc', title: 'דיון ונושאים', sub: 'התפקידים נקבעים לפי עמודות האנשים של כל דיון' },
+  { id: 'task', title: 'שדות משימה', sub: 'התפקידים נקבעים לפי עמודות האנשים של כל משימה' },
+  { id: 'decision', title: 'שדות החלטה', sub: 'התפקידים נקבעים לפי עמודות האנשים של כל החלטה' },
 ];
 
 // Which board's columns back each people-column tier (system is synthetic).
@@ -77,29 +64,10 @@ const TIER_BOARD_KEY = { disc: 'discussions', task: 'tasks', decision: 'decision
 // The system tier is NOT a people-column role; it is a single global pseudo-role
 // stored under this fixed key so its grants persist alongside the people roles.
 const SYSTEM_ROLE_KEY = 'system:system';
-const SYSTEM_ROLE_TITLE = 'כללי';
 
-// Category cards per tier. Each card groups a subset of CAPABILITIES by `group`.
-// `Icon` is a @vibe/icons component (advisory illustration for the card head).
-const TIER_CARDS = {
-  disc: [
-    { group: 'discussion', title: 'דיון', Icon: Comment },
-    { group: 'topics', title: 'נושאים ונקודות', Icon: Note },
-    { group: 'tasks', title: 'משימות', Icon: Status },
-    { group: 'decisions', title: 'החלטות', Icon: Completed },
-  ],
-  task: [
-    // ONE "שדות משימה" card; delete is just another row inside it.
-    { group: 'taskFields', title: 'שדות משימה', Icon: Status },
-  ],
-  decision: [
-    // ONE "שדות החלטה" card, mirroring the task tier; delete is a row inside it.
-    { group: 'decisionFields', title: 'שדות החלטה', Icon: Completed },
-  ],
-  system: [
-    { group: 'system', title: 'כללי', Icon: Settings },
-  ],
-};
+// round147 — the two DEFINING super-member capabilities (always granted to super
+// members by the resolver, above the matrix). Locked ✓ in the system table.
+const SUPER_MEMBER_CAPS = new Set(['addDiscussionTypes', 'manageTemplates']);
 
 // A column alias is a "role source" iff its mapped type is a people column.
 function isPeopleType(type) {
@@ -108,101 +76,76 @@ function isPeopleType(type) {
 }
 
 /**
- * Build the LEFT role list. "כללי" (system) is one synthetic role; each board
- * tier's roles are ALL the LIVE people columns of that board (fetched from the
- * real board — a column added there, e.g. "רשם דיון", appears automatically).
- * Roles that correspond to a MAPPED alias keep their alias key so existing
- * stored config is preserved; unmapped columns are keyed by raw column id.
+ * The role COLUMNS of one board tier: ALL the live people columns of that board
+ * (a column added there appears automatically). Mapped role-source aliases keep
+ * their alias key (preserves stored config); extra columns key by raw column id.
  * Falls back to the mapped people columns until the live list has loaded.
  */
-function buildRoleGroups(columns) {
-  return TIERS.map((tier) => {
-    // The system tier has a single synthetic role (no people column backs it).
-    if (tier.id === 'system') {
-      return {
-        tier,
-        roles: [{ key: SYSTEM_ROLE_KEY, boardKey: 'system', alias: 'system', title: SYSTEM_ROLE_TITLE }],
-      };
-    }
-    const boardKey = TIER_BOARD_KEY[tier.id];
-    const cfg = columns?.[boardKey] || {};
-    // Only PERMISSION_ROLE_SOURCES aliases keep their alias key — that's what
-    // the resolver reads for mapped roles. Any OTHER live people column the owner
-    // added that isn't a designated role source is NOT an alias-role: the
-    // resolver treats it as an EXTRA live column keyed by raw column id, so the
-    // UI must too. (decisions' affectedID "מושפעים" is now a role source, so it
-    // keeps its alias key like creator/decider.)
-    const roleSources = PERMISSION_ROLE_SOURCES[boardKey] || [];
-    // alias-by-columnId, to preserve alias keys for already-mapped role columns.
-    // A multi-column alias (`ids`, e.g. tasks.taskViewersID) claims EVERY one of
-    // its mapped columns — they are all the same role in the matrix.
-    const aliasByColId = {};
-    for (const alias of roleSources) {
-      const entry = cfg[alias];
-      const ids = [entry?.id, ...(Array.isArray(entry?.ids) ? entry.ids : [])].filter(Boolean);
-      for (const cid of ids) aliasByColId[cid] = alias;
-    }
-
-    const live = getPeopleColumns(boardKey);
-    let roles;
-    if (live.length) {
-      const seenKeys = new Set();
-      roles = live
-        .map((col) => {
-          const alias = aliasByColId[col.id];
-          return alias
-            ? { key: `${boardKey}:${alias}`, boardKey, alias, columnId: col.id, title: col.title || cfg[alias]?.title || alias }
-            : { key: `${boardKey}:${col.id}`, boardKey, alias: col.id, columnId: col.id, title: col.title || col.id };
-        })
-        // several live columns can map to ONE multi-column alias — one matrix row
-        .filter((r) => (seenKeys.has(r.key) ? false : (seenKeys.add(r.key), true)));
-    } else {
-      // Pre-load fallback: mapped people ROLE columns from the settings schema.
-      roles = roleSources
-        .filter((alias) => isPeopleType(cfg[alias]?.type))
-        .map((alias) => ({ key: `${boardKey}:${alias}`, boardKey, alias, columnId: cfg[alias]?.id, title: cfg[alias]?.title || alias }));
-    }
-    return { tier, roles };
-  });
+function buildTierRoles(boardKey, columns) {
+  const cfg = columns?.[boardKey] || {};
+  const roleSources = PERMISSION_ROLE_SOURCES[boardKey] || [];
+  const aliasByColId = {};
+  for (const alias of roleSources) {
+    const entry = cfg[alias];
+    const ids = [entry?.id, ...(Array.isArray(entry?.ids) ? entry.ids : [])].filter(Boolean);
+    for (const cid of ids) aliasByColId[cid] = alias;
+  }
+  const live = getPeopleColumns(boardKey);
+  if (live.length) {
+    const seenKeys = new Set();
+    return live
+      .map((col) => {
+        const alias = aliasByColId[col.id];
+        return alias
+          ? { key: `${boardKey}:${alias}`, boardKey, alias, title: col.title || cfg[alias]?.title || alias }
+          : { key: `${boardKey}:${col.id}`, boardKey, alias: col.id, title: col.title || col.id };
+      })
+      .filter((r) => (seenKeys.has(r.key) ? false : (seenKeys.add(r.key), true)));
+  }
+  return roleSources
+    .filter((alias) => isPeopleType(cfg[alias]?.type))
+    .map((alias) => ({ key: `${boardKey}:${alias}`, boardKey, alias, title: cfg[alias]?.title || alias }));
 }
 
-/**
- * Is a capability box CHECKED for a role in the current draft? Checked iff the
- * stored value is exactly `true` (an explicit grant). Both `false` (explicit
- * revoke, deny-wins in the resolver) and `undefined` (never touched → inherits
- * CAPABILITY_DEFAULTS) render UNCHECKED — `toggleCap` writes `true` on check and
- * `false` on uncheck, so unchecking a box always expresses a revoke.
- */
+/** Checked iff the stored value is exactly `true` (an explicit grant). */
 function isCapChecked(permissions, roleKey, capId) {
-  const cap = permissions?.roles?.[roleKey]?.capabilities?.[capId];
-  return cap === true;
+  return permissions?.roles?.[roleKey]?.capabilities?.[capId] === true;
 }
 
-export default function PermissionsTab({ permissions, setPermissions, columns, selectedRoleKey, onSelectRole }) {
-  // Board permissions are ALWAYS ON — there is no enable toggle. The matrix is
-  // enforced at runtime for everyone (owners are never restricted). On mount we
-  // force `enabled: true` in the draft and pre-fill the roles from the LOCKED
-  // seed when none are stored yet, so the matrix is never empty and saving
-  // persists the always-on state.
-  const enabled = true;
+export default function PermissionsTab({ permissions, setPermissions, columns }) {
+  // Board permissions are ALWAYS ON. On mount: force enabled + seed/backfill.
   useEffect(() => {
     setPermissions((prev) => {
       const needsSeed = !prev?.roles || Object.keys(prev.roles).length === 0;
-      // Backfill: seed role keys that didn't exist when this instance first
-      // stored its roles (e.g. the decision tier's decisions:* roles, added
-      // after launch). Only WHOLLY-ABSENT keys are added — a role the owner
-      // ever touched (even to revoke everything) is never overwritten.
       const missingSeedKeys = needsSeed
         ? []
         : Object.keys(DEFAULT_PERMISSION_SEED).filter((k) => !prev.roles[k]);
-      if (prev?.enabled === true && !needsSeed && !missingSeedKeys.length) return prev;
+      // Per-CAPABILITY backfill (round209/round212): capability ids added to the
+      // catalog AFTER an instance stored its roles are seeded into the EXISTING
+      // role rows so the cells reflect the live default. Only wholly-ABSENT keys
+      // are added — an owner's explicit true/false is never touched.
+      const NEW_CAPS = ['viewReferencesBox', 'viewSummaryBox', 'writeBackground', 'writeReferences'];
+      const capBackfill = needsSeed
+        ? []
+        : Object.keys(DEFAULT_PERMISSION_SEED).filter((k) => {
+          if (!prev.roles[k]) return false;
+          const seedCaps = DEFAULT_PERMISSION_SEED[k]?.capabilities || {};
+          return NEW_CAPS.some((c) => c in seedCaps && prev.roles[k]?.capabilities?.[c] === undefined);
+        });
+      if (prev?.enabled === true && !needsSeed && !missingSeedKeys.length && !capBackfill.length) return prev;
       const next = { ...DEFAULT_PERMISSIONS, ...prev, enabled: true };
       if (needsSeed) {
         next.roles = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED));
-      } else if (missingSeedKeys.length) {
+      } else if (missingSeedKeys.length || capBackfill.length) {
         next.roles = { ...prev.roles };
         for (const k of missingSeedKeys) {
           next.roles[k] = JSON.parse(JSON.stringify(DEFAULT_PERMISSION_SEED[k]));
+        }
+        for (const k of capBackfill) {
+          const seedCaps = DEFAULT_PERMISSION_SEED[k]?.capabilities || {};
+          const caps = { ...(next.roles[k]?.capabilities || {}) };
+          NEW_CAPS.forEach((c) => { if (c in seedCaps && caps[c] === undefined) caps[c] = seedCaps[c]; });
+          next.roles[k] = { ...next.roles[k], capabilities: caps };
         }
       }
       return next;
@@ -210,45 +153,35 @@ export default function PermissionsTab({ permissions, setPermissions, columns, s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load the live people columns once and re-render when they arrive, so the role
-  // list reflects the REAL board (incl. people columns that aren't a mapped alias).
+  // Live people columns (extra roles beyond the mapped aliases).
   useEffect(() => { ensurePeopleColumns(); }, []);
   const peopleColumnsVersion = useSyncExternalStore(
     subscribePeopleColumns, getPeopleColumnsVersion, getPeopleColumnsVersion
   );
 
-  const roleGroups = useMemo(() => buildRoleGroups(columns), [columns, peopleColumnsVersion]);
-  const allRoleKeys = useMemo(
-    () => roleGroups.flatMap((g) => g.roles.map((r) => r.key)),
-    [roleGroups]
-  );
-
-  // Selected role lives in parent local state (NOT in the persisted permissions
-  // blob) so it survives a tab switch but never reaches storage.
-  const selectedKey = allRoleKeys.includes(selectedRoleKey)
-    ? selectedRoleKey
-    : allRoleKeys[0];
-
-  const selectedRole = useMemo(() => {
-    for (const g of roleGroups) {
-      const found = g.roles.find((r) => r.key === selectedKey);
-      if (found) return { ...found, tier: g.tier };
+  // round219 — the coordinator ("מרכז דיון") column is now driven PURELY by the
+  // board mapping (buildTierRoles): it appears as a role column iff that people
+  // column is mapped, labeled with its mapped title, and simply doesn't exist
+  // otherwise. The old instance-level `permissions.noCoordinator` switch (and its
+  // checkbox + sentence) was removed — mapping is the single source of truth.
+  const tierRoles = useMemo(() => {
+    const map = {};
+    for (const tier of TIERS) {
+      const boardKey = TIER_BOARD_KEY[tier.id];
+      map[tier.id] = buildTierRoles(boardKey, columns);
     }
-    return null;
-  }, [roleGroups, selectedKey]);
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [columns, peopleColumnsVersion]);
 
-  const selectRole = (key) => onSelectRole?.(key);
+  const roleGroups = useMemo(() => ([
+    { tier: { id: 'system', label: 'כללי' }, roles: [{ key: SYSTEM_ROLE_KEY, boardKey: 'system', alias: 'system', title: 'כללי' }] },
+    ...TIERS.map((tier) => ({ tier: { id: tier.id, label: tier.title }, roles: tierRoles[tier.id] || [] })),
+  ]), [tierRoles]);
 
-  // Accordion state — which capability cards are collapsed (keyed by group id).
-  // Empty = all expanded by default; toggling flips one card open/closed.
-  const [collapsedCards, setCollapsedCards] = useState({});
-  const toggleCard = (group) =>
-    setCollapsedCards((prev) => ({ ...prev, [group]: !prev[group] }));
-
-  // Writes the checkbox's literal boolean: `true` on check (grant), `false` on
-  // uncheck (explicit revoke — deny-wins in the resolver). It never DELETES the
-  // key, so an unchecked box is a stored `false`, distinct from an untouched cap
-  // (undefined → inherits CAPABILITY_DEFAULTS).
+  // Writes the cell's literal boolean: `true` on check (grant), `false` on
+  // uncheck (explicit revoke). Never DELETES the key — an unchecked cell is a
+  // stored `false`, distinct from an untouched cap (undefined → defaults).
   const toggleCap = (roleKey, capId, value) =>
     setPermissions((prev) => {
       const roles = { ...(prev?.roles || {}) };
@@ -259,9 +192,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns, s
       return { ...prev, roles };
     });
 
-  // A hidden role's column is IGNORED entirely by the runtime resolver (as if the
-  // people column weren't a role source). Stored as a per-role `hidden` flag; the
-  // sidebar row renders dimmed and the toggle is reversible.
+  // A hidden role's column is IGNORED by the runtime resolver.
   const isRoleHidden = (roleKey) => permissions?.roles?.[roleKey]?.hidden === true;
   const toggleHidden = (roleKey) =>
     setPermissions((prev) => {
@@ -271,158 +202,258 @@ export default function PermissionsTab({ permissions, setPermissions, columns, s
       return { ...prev, roles };
     });
 
-  const cards = selectedRole ? TIER_CARDS[selectedRole.tier.id] || [] : [];
+  // round246 (owner request) — every permission table is COLLAPSED by default
+  // and opens on click. `expanded` holds the ids of the open sections.
+  const [expanded, setExpanded] = useState(() => new Set());
+  const toggleSection = (id) =>
+    setExpanded((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+
+  // round203 — "הורדת סיכום הרשאות" (Word).
+  const [downloading, setDownloading] = useState(false);
+  const handleDownloadSummary = async () => {
+    setDownloading(true);
+    try {
+      let boardPeople = null;
+      try {
+        const boardId = getBoardId('discussions');
+        if (boardId) boardPeople = await getBoardPeople(boardId);
+      } catch (err) {
+        if (!err?.__loggedId) logger.warn('PermissionsTab', 'טעינת חברי הלוח לסיכום ההרשאות נכשלה — הסיכום יופק בלעדיהם', err);
+      }
+      const model = buildPermissionsSummaryModel({ permissions, roleGroups });
+      await downloadPermissionsSummary(model, boardPeople);
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('PermissionsTab', 'הפקת סיכום ההרשאות נכשלה', err);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  // One matrix cell: click toggles grant/revoke. Hidden role columns disable.
+  const renderCell = (roleKey, capId, disabled) => {
+    const on = isCapChecked(permissions, roleKey, capId);
+    return (
+      <td key={roleKey} className={styles.mxTd}>
+        <button
+          type="button"
+          className={`${styles.mxCell} ${on ? styles.mxOn : ''}`}
+          onClick={() => toggleCap(roleKey, capId, !on)}
+          disabled={disabled}
+          aria-pressed={on}
+          aria-label={on ? 'מורשה — לחץ לביטול' : 'לא מורשה — לחץ להרשאה'}
+          data-testid={`mx-${roleKey}-${capId}`}
+        >
+          {on ? '✓' : ''}
+        </button>
+      </td>
+    );
+  };
+
+  // round246 — a tier's cap rows, grouped by component with a SUB-HEADING row
+  // per group (shown only when the tier has more than one group).
+  const renderGroupedTbody = (roles, caps) => {
+    const groups = groupCapabilities(caps);
+    const showSub = groups.length > 1;
+    return (
+      <tbody>
+        {groups.map((grp) => (
+          <React.Fragment key={grp.group}>
+            {showSub && (
+              <tr className={styles.mxGroupRow}>
+                <td className={styles.mxGroupCell} colSpan={roles.length + 1}>{grp.label}</td>
+              </tr>
+            )}
+            {grp.caps.map((cap) => (
+              <tr key={cap.id}>
+                <td className={styles.mxAction}>{cap.label}</td>
+                {roles.map((role) => renderCell(role.key, cap.id, isRoleHidden(role.key)))}
+              </tr>
+            ))}
+          </React.Fragment>
+        ))}
+      </tbody>
+    );
+  };
+
+  // round246 — a collapsible section header (chevron + title + optional caption).
+  const sectionHead = (id, title, sub) => {
+    const open = expanded.has(id);
+    return (
+      <button
+        type="button"
+        className={styles.secHead}
+        onClick={() => toggleSection(id)}
+        aria-expanded={open}
+      >
+        <DropdownChevronDown className={`${styles.secChevron} ${open ? '' : styles.secChevronClosed}`} />
+        <span className={styles.mxTitle}>{title}</span>
+        {sub && <span className={styles.secSub}>{sub}</span>}
+      </button>
+    );
+  };
+
+  const systemCaps = CAPABILITIES.filter((c) => c.tier === 'system');
 
   return (
-    <div className={styles.root} dir="ltr">
-      <div className={styles.layout}>
-        {/* LEFT — role list grouped by tier, thin dividers, no sub-header text.
-            The role groups scroll; "People on this board" stays pinned at the
-            bottom at a fixed height. */}
-        <aside className={styles.sidebar}>
-          <div className={styles.roleScroll}>
-          {roleGroups.map((group, gi) => (
-            <div key={group.tier.id} className={styles.roleGroup}>
-              {gi > 0 && <div className={styles.divider} role="separator" />}
-              {group.tier.boardLabel && (
-                <div className={styles.groupHeader}>{group.tier.boardLabel}</div>
-              )}
-              <ul className={styles.roleList}>
-                {group.roles.map((role) => {
-                  const hidden = isRoleHidden(role.key);
-                  const canHide = role.boardKey !== 'system';
-                  return (
-                    <li
-                      key={role.key}
-                      className={`${styles.roleRow} ${hidden ? styles.roleRowHidden : ''}`}
-                    >
-                      <button
-                        type="button"
-                        className={`${styles.roleItem} ${role.key === selectedKey ? styles.roleItemActive : ''}`}
-                        onClick={() => selectRole(role.key)}
-                        disabled={!enabled}
-                      >
-                        {role.title}
-                      </button>
-                      {canHide && (
-                        <button
-                          type="button"
-                          className={styles.hideBtn}
-                          onClick={(e) => { e.stopPropagation(); toggleHidden(role.key); }}
-                          disabled={!enabled}
-                          aria-label={hidden ? 'הצג הרשאות עמודה' : 'התעלם מהרשאות עמודה'}
-                          title={hidden ? 'העמודה מוסתרת — לחץ להצגה' : 'התעלם מהרשאות העמודה'}
-                        >
-                          {hidden ? <EyeOffIcon /> : <EyeIcon />}
-                        </button>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-          </div>
+    <div className={styles.root} dir="rtl">
+      <div className={styles.matrixScroll}>
+        <div className={styles.summaryRow}>
+          <Button
+            kind="secondary"
+            size="small"
+            leftIcon={Download}
+            onClick={handleDownloadSummary}
+            loading={downloading}
+            disabled={downloading}
+          >
+            הורדת סיכום הרשאות (Word)
+          </Button>
+        </div>
 
-          {/* "אנשים בלוח" — real board owners/members + people-picker (Phase 5).
-              Shown regardless of the matrix enable state (it's membership, not a
-              capability), but disabled until a discussions board is mapped.
-              Pinned at the bottom of the sidebar at a fixed height. */}
-          <div className={styles.peopleFooter}>
-            <BoardPeoplePicker />
-          </div>
-        </aside>
-
-        {/* MAIN — selected role title + description + category cards */}
-        <section className={styles.main}>
-          {selectedRole && (
-            <>
-              <div className={styles.roleHeader}>
-                <Text type="text1" weight="bold">{selectedRole.title}</Text>
+        {/* ===== per-tier ✓ matrices (round246 — each COLLAPSED by default,
+             cap rows grouped by component with sub-headings) ===== */}
+        {TIERS.map((tier) => {
+          const roles = tierRoles[tier.id] || [];
+          const caps = CAPABILITIES.filter((c) => c.tier === tier.id);
+          const open = expanded.has(tier.id);
+          // round246 (owner request) — the "שדות משימה" tier no longer shows a
+          // view/edit column matrix; instead a plain-language card states the
+          // effective rule. (Enforcement is unchanged — see the note.)
+          if (tier.id === 'task') {
+            return (
+              <div key={tier.id} className={styles.mxSec}>
+                {sectionHead(tier.id, tier.title, tier.sub)}
+                {open && (
+                  <div className={styles.taskRuleCard}>
+                    <div className={styles.taskRuleLine}>
+                      <span className={`${styles.taskRuleBadge} ${styles.badgeCreate}`}>יצירה</span>
+                      <span>כל משתמש יכול ליצור משימה — גם ב"המשימות שלי" וגם בתוך דיון.</span>
+                    </div>
+                    <div className={styles.taskRuleLine}>
+                      <span className={`${styles.taskRuleBadge} ${styles.badgeView}`}>צפייה</span>
+                      <span>כל מי שנמצא בדיון רואה את משימותיו; ב"המשימות שלי" כל אחד רואה את המשימות שלו/באחריותו.</span>
+                    </div>
+                    <div className={styles.taskRuleLine}>
+                      <span className={`${styles.taskRuleBadge} ${styles.badgeEdit}`}>עריכה</span>
+                      <span>יוצר הדיון, מנהל הדיון ומרכז הדיון עורכים כל משימה שנוצרה בדיון; שאר המשתתפים עורכים רק משימות שיצרו או שהם האחראי עליהן.</span>
+                    </div>
+                  </div>
+                )}
               </div>
-
-              {isRoleHidden(selectedKey) && (
-                <div className={styles.hiddenNote} dir="rtl">
-                  העמודה הזו מוסתרת — ההרשאות שלה לא נאכפות. לחץ על אייקון העין בסרגל כדי להפעיל מחדש.
+            );
+          }
+          if (!roles.length || !caps.length) return null;
+          return (
+            <div key={tier.id} className={styles.mxSec}>
+              {sectionHead(tier.id, tier.title, tier.sub)}
+              {open && (
+              <>
+              <table className={styles.mxTable}>
+                <thead>
+                  <tr>
+                    <th className={styles.mxActionTh} />
+                    {roles.map((role) => {
+                      const hidden = isRoleHidden(role.key);
+                      return (
+                        <th key={role.key} className={`${styles.mxRoleTh} ${hidden ? styles.mxRoleHidden : ''}`}>
+                          <span className={styles.mxRoleName}>{role.title}</span>
+                          <button
+                            type="button"
+                            className={styles.mxEyeBtn}
+                            onClick={() => toggleHidden(role.key)}
+                            aria-label={hidden ? 'העמודה מוסתרת — לחץ להצגה' : 'התעלם מהרשאות העמודה'}
+                            title={hidden ? 'העמודה מוסתרת — ההרשאות שלה לא נאכפות' : 'התעלם מהרשאות העמודה'}
+                          >
+                            {hidden ? <EyeOffIcon /> : <EyeIcon />}
+                          </button>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                {renderGroupedTbody(roles, caps)}
+              </table>
+              {tier.id === 'disc' && (
+                <div className={styles.mxNote}>
+                  דיון שעמודת "מרכז דיון" שלו ריקה — אף אחד לא מקבל בו את הרשאות המרכז; שאר התפקידים עובדים כרגיל.
+                  בעלי הלוח (Owners) תמיד מורשים הכל ואינם מוגבלים ע"י הטבלאות.
                 </div>
               )}
-
-              {/* round147 — "חברי-על": a shared people list on the permissions
-                  blob. A super member is a REGULAR user plus exactly two extra
-                  abilities — adding discussion types and managing templates
-                  (they also get the gear in templates-only mode). Deliberately
-                  ACTIVE even while the matrix switch is off — like board
-                  membership, it isn't a matrix capability. */}
-              {selectedRole.tier.id === 'system' && (
-                <div className={styles.card} dir="rtl">
-                  <div className={styles.cardHead}>
-                    <span className={styles.cardIcon} aria-hidden="true"><Settings size={20} /></span>
-                    <Text type="text1" weight="medium">חברי-על</Text>
-                  </div>
-                  <div className={styles.capRows}>
-                    <Text type="text3" color="secondary">
-                      משתמשים רגילים עם שתי יכולות נוספות בלבד: הוספת סוגי דיון וניהול תבניות.
-                      פעיל גם כשמתג ההרשאות כבוי.
-                    </Text>
-                    <PersonPicker
-                      selected={permissions?.superMembers || []}
-                      onChange={(people) =>
-                        setPermissions((prev) => ({
-                          ...prev,
-                          superMembers: (people || []).map((p) => ({ id: String(p.id), name: p.name })),
-                        }))
-                      }
-                      accountWide
-                      bordered
-                    />
-                  </div>
-                </div>
+              </>
               )}
+            </div>
+          );
+        })}
 
-              {cards.map((card) => {
-                const caps = CAPABILITIES.filter(
-                  (c) => c.tier === selectedRole.tier.id && c.group === card.group
-                );
-                if (!caps.length) return null;
-                const CardIcon = card.Icon;
-                const isOpen = !collapsedCards[card.group];
-                return (
-                  <div key={card.group} className={styles.card}>
-                    <button
-                      type="button"
-                      className={styles.cardHead}
-                      onClick={() => toggleCard(card.group)}
-                      aria-expanded={isOpen}
-                    >
-                      <span className={styles.cardIcon} aria-hidden="true">
-                        {CardIcon ? <CardIcon size={20} /> : null}
-                      </span>
-                      <Text type="text1" weight="medium">{card.title}</Text>
-                      <DropdownChevronDown
-                        className={`${styles.cardChevron} ${isOpen ? styles.cardChevronOpen : ''}`}
-                        aria-hidden="true"
-                      />
-                    </button>
-                    {isOpen && (
-                      <div className={styles.capRows}>
-                        {caps.map((cap) => (
-                          <div key={cap.id} className={styles.capRow}>
-                            <Checkbox
-                              label={cap.label}
-                              checked={isCapChecked(permissions, selectedKey, cap.id)}
-                              onChange={(e) => toggleCap(selectedKey, cap.id, e.target.checked)}
-                              disabled={!enabled}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </>
+        {/* ===== system tier: Members / Super Members / Owners ===== */}
+        <div className={styles.mxSec}>
+          {sectionHead('system', 'מערכת (כלל-האפליקציה)', 'פעולות גלובליות — לפי תפקיד האפליקציה')}
+          {expanded.has('system') && (
+          <table className={styles.mxTable}>
+            <thead>
+              <tr>
+                <th className={styles.mxActionTh} />
+                <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Members</span><small className={styles.mxRoleSmall}>כל משתמשי הלוח</small></th>
+                <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Super Members</span><small className={styles.mxRoleSmall}>חברי-על</small></th>
+                <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Owners</span><small className={styles.mxRoleSmall}>בעלי הלוח</small></th>
+              </tr>
+            </thead>
+            <tbody>
+              {systemCaps.map((cap) => (
+                <tr key={cap.id}>
+                  <td className={styles.mxAction}>{cap.label}</td>
+                  {renderCell(SYSTEM_ROLE_KEY, cap.id, false)}
+                  {/* Super members = regular members PLUS the two defining caps
+                      (locked ✓); every other system cap follows the Members cell. */}
+                  <td className={styles.mxTd}>
+                    {SUPER_MEMBER_CAPS.has(cap.id)
+                      ? <span className={`${styles.mxCell} ${styles.mxOn} ${styles.mxLocked}`} title="יכולת מגדירה של חבר-על — תמיד מורשה">✓<span className={styles.mxAlways}>תמיד</span></span>
+                      : <span className={`${styles.mxCell} ${styles.mxInherit}`} title="כמו Members">כמו חברים</span>}
+                  </td>
+                  <td className={styles.mxTd}>
+                    <span className={`${styles.mxCell} ${styles.mxOn} ${styles.mxLocked}`} title="בעלי הלוח תמיד מורשים">✓<span className={styles.mxAlways}>תמיד</span></span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           )}
-        </section>
+        </div>
+
+        {/* ===== app roles — user assignment (round219: compact) ===== */}
+        <div className={styles.appRolesSec}>
+          <div className={styles.mxTitle}>תפקידי האפליקציה — שיוך משתמשים</div>
+          <div className={styles.appRolesGrid}>
+            <div className={styles.appRoleCard}>
+              <div className={styles.appRoleHead}><span className={`${styles.appRoleBadge} ${styles.badgeOwner}`}>OWNERS · MEMBERS</span> אנשים בלוח</div>
+              <Text type="text3" color="secondary" className={styles.appRoleDesc}>
+                בעלי הלוח (כתר) עוקפים את הטבלאות; חברים מקבלים את הרשאות התפקידים.
+              </Text>
+              <BoardPeoplePicker />
+            </div>
+            <div className={styles.appRoleCard}>
+              <div className={styles.appRoleHead}><span className={`${styles.appRoleBadge} ${styles.badgeSuper}`}>SUPER MEMBERS</span> חברי-על</div>
+              <Text type="text3" color="secondary" className={styles.appRoleDesc}>
+                חברים + יצירת תבניות והוספת סוגי דיון.
+              </Text>
+              <PersonPicker
+                selected={permissions?.superMembers || []}
+                onChange={(people) =>
+                  setPermissions((prev) => ({
+                    ...prev,
+                    superMembers: (people || []).map((p) => ({ id: String(p.id), name: p.name })),
+                  }))
+                }
+                accountWide
+                bordered
+              />
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

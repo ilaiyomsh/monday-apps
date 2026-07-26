@@ -35,6 +35,14 @@
   undocumented → phase 2 goes through a dedicated Workspace mailbox with the
   `gmail.send` scope only), and the per-task status dropdown variant.
 
+## 2026-07-22 — Client sourcemaps for stack symbolication
+
+### 🔧 Infrastructure
+
+- **2026-07-22** — The browser-served client bundle now builds `sourcemap: 'hidden'` instead of `true`; CI archives `public/admin/**/*.map` as artifact `sourcemaps-deadline-confirm-<sha>` then strips them before `mapps code:push`. This also closed a prior leak (the client maps were served publicly). Server code runs from source (`node ./src/index.js`, unbundled) — already-readable stacks, not symbolicated. (#361)
+  - _Why:_ minified client `stack1` frames were uninvestigable, and `sourcemap: true` served source maps publicly.
+  - _Done:_ Part of the portfolio-wide rollout; see `docs/LOGGING-ARCHITECTURE.md` §6.
+
 ## 0.6.0 — 2026-07-20 — digest: show-by-status condition + today-inclusive + real date header
 
 - **Status condition per section ("show by status")**: each group now carries

@@ -576,3 +576,52 @@
     border-radius: 12px 12px 0 0;
   }
 }
+
+/* round211 — משתתפים חיצוניים: a bordered chips box (name chips + inline input),
+   matching the modal's bordered pickers. */
+.extPeopleBox {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-height: 40px;
+  background: var(--primary-background-color, #fff);
+}
+.extPeopleBox:focus-within {
+  border-color: var(--primary-color, #0073ea);
+}
+.extPersonChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--primary-background-hover-color, #f0f1f5);
+  border-radius: 14px;
+  padding: 4px 10px;
+  font-size: 13px;
+  color: var(--primary-text-color, #323338);
+}
+.extPersonRemove {
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #9699a6);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 2px;
+  border-radius: 4px;
+}
+.extPersonRemove:hover {
+  color: var(--negative-color, #d83a52);
+}
+.extPersonInput {
+  flex: 1;
+  min-width: 140px;
+  border: none;
+  outline: none;
+  font-size: 13.5px;
+  font-family: inherit;
+  background: transparent;
+  padding: 4px 2px;
+}

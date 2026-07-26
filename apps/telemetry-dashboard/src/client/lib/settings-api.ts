@@ -1,0 +1,83 @@
+// Settings API client — reads and provisions the lifecycle events board config
+// through the authenticated /api/settings endpoints. Like lib/api.ts, every
+// call carries the monday sessionToken; the server verifies it (and the
+// optional account allowlist) before doing anything.
+
+import { getSessionToken } from './monday';
+
+export interface BoardConfig {
+  boardId: string;
+  groupId: string | null;
+  columns: Record<string, string>;
+}
+
+/**
+ * OAuth 2.1 connection state (Change #144): reauth_required surfaces the
+ * 6-month refresh-token death (or an invalid_grant) — the owner must run
+ * /oauth/start again.
+ */
+export type OauthStatus = 'connected' | 'disconnected' | 'reauth_required';
+
+export interface SettingsState {
+  oauthStatus: OauthStatus;
+  oauthConnected: boolean;
+  board: BoardConfig | null;
+}
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const token = await getSessionToken();
+  return { Authorization: token };
+}
+
+/** GET current settings (OAuth status + board config). Throws on failure. */
+export async function fetchSettings(): Promise<SettingsState> {
+  const res = await fetch('/api/settings', { headers: await authHeaders() });
+  if (!res.ok) throw new Error(`http ${res.status}`);
+  return (await res.json()) as SettingsState;
+}
+
+export type ProvisionResult =
+  | { ok: true; board: BoardConfig }
+  | { ok: false; error: 'not_authorized' | 'provision_failed' | string };
+
+/**
+ * POST to provision the board+columns+group. Returns a discriminated result
+ * (never throws for the two expected server errors) so the UI can branch:
+ * `not_authorized` → prompt the owner to authorize at /oauth/start.
+ */
+export async function provisionBoard(name?: string): Promise<ProvisionResult> {
+  try {
+    const res = await fetch('/api/settings/board', {
+      method: 'POST',
+      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+      body: JSON.stringify(name ? { name } : {}),
+    });
+    const body = (await res.json().catch(() => ({}))) as { board?: BoardConfig; error?: string };
+    if (res.ok && body.board) return { ok: true, board: body.board };
+    return { ok: false, error: body.error ?? `http ${res.status}` };
+  } catch (err) {
+    return { ok: false, error: `network: ${String(err)}` };
+  }
+}
+
+export type DisconnectResult = { ok: true; revoked: boolean } | { ok: false; error: string };
+
+/**
+ * POST to disconnect the app's OAuth identity: the server revokes both
+ * tokens (best-effort) and always clears the stored record. Discriminated
+ * result like provisionBoard — never throws for expected failures.
+ */
+export async function disconnectApp(): Promise<DisconnectResult> {
+  try {
+    const res = await fetch('/api/settings/disconnect', {
+      method: 'POST',
+      headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const body = (await res.json().catch(() => ({}))) as { status?: string; revoked?: boolean };
+    if (res.ok && body.status === 'disconnected') return { ok: true, revoked: Boolean(body.revoked) };
+    return { ok: false, error: `http ${res.status}` };
+  } catch (err) {
+    return { ok: false, error: `network: ${String(err)}` };
+  }
+}

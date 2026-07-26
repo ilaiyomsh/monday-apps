@@ -35,6 +35,25 @@ export interface TopError {
   apps_affected: number;
   err_code: string | number | null;
 }
+/**
+ * One raw error occurrence, as returned by the drill-down (live endpoint or the
+ * seed extractor). The named fields are the documented app-errors columns; the
+ * index signature carries whatever enrichment the record also holds (usr, obj,
+ * board, app version, environment, …) so the detail drawer can render every
+ * field Axiom stores without the shape being pinned here.
+ */
+export interface ErrorOccurrence {
+  _time?: string;
+  app?: string;
+  acc?: string;
+  err_name?: string;
+  err_msg?: string;
+  err_code?: string | number | null;
+  message?: string;
+  tag?: string;
+  [key: string]: unknown;
+}
+
 export interface UsageEvent {
   message: string;
   event_kind: 'view_open' | 'track';

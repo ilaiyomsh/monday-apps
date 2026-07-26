@@ -1,14 +1,14 @@
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Pencil, Check, RotateCcw, EyeOff, GripVertical } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Pencil, Check, RotateCcw, EyeOff, GripVertical } from 'lucide-react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, Tooltip, LabelList,
   PieChart, Pie,
 } from 'recharts';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BrandLoader } from '@generated/components/BrandLoader';
+import { EmptyState } from '@generated/components/EmptyState';
 import { useDashboardData } from '@generated/hooks/useDashboardData.js';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { aggregateDashboard } from './dashboardAgg.js';
 import {
   WIDGET_IDS, WIDGETS, GRID_COLS, GRID_GAP, LAYOUT_VERSION,
@@ -67,7 +67,7 @@ function peopleOptions(discussions, key) {
     .sort((a, b) => a.label.localeCompare(b.label, 'he'));
 }
 
-export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = false }) {
+export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = false, embedded = false }) {
   // v2 usage telemetry: one view_open per session for the dashboard view (D3).
   useViewTracking(logger, 'dashboard');
   const { data, loading, error } = useDashboardData();
@@ -153,9 +153,18 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
   useEffect(() => {
     const el = canvasRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return undefined;
-    const ro = new ResizeObserver(() => setCanvasW(el.clientWidth || 0));
+    // round245 — coalesce resize notifications through one rAF and only commit a
+    // CHANGED, integer width. With .scroll's reserved scrollbar gutter this stops
+    // the narrow-screen "shaking" (a ResizeObserver ⇄ scrollbar feedback loop)
+    // and silences the "ResizeObserver loop" console warning.
+    let raf = 0;
+    const ro = new ResizeObserver((entries) => {
+      const w = Math.round(entries[0]?.contentRect?.width || el.clientWidth || 0);
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setCanvasW((prev) => (prev !== w ? w : prev)));
+    });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => { if (raf) cancelAnimationFrame(raf); ro.disconnect(); };
   }, [loading, error, editing]);
 
   const toStored = useCallback((l) => {
@@ -235,11 +244,18 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
                 ))}
               </div>
               {preset === 'custom' && (
-                <span className={styles.customRange}>
-                  <DatePickerPopover variant="field" value={custom.from} onChange={(d) => setCustom((c) => ({ ...c, from: d }))} />
-                  <span className={styles.dash}>–</span>
-                  <DatePickerPopover variant="field" value={custom.to} onChange={(d) => setCustom((c) => ({ ...c, to: d }))} />
-                </span>
+                // round163 — start date on the LEFT, end date on the RIGHT, an
+                // arrow pointing toward the end, and explicit placeholders so it's
+                // clear which is which. Wraps (never clips) in a narrow filter.
+                <div className={styles.customRange}>
+                  <span className={styles.crField}>
+                    <DatePickerPopover variant="field" placeholder="תאריך התחלה" value={custom.from} onChange={(d) => setCustom((c) => ({ ...c, from: d }))} />
+                  </span>
+                  <ArrowRight size={16} className={styles.crArrow} aria-hidden="true" />
+                  <span className={styles.crField}>
+                    <DatePickerPopover variant="field" placeholder="תאריך סיום" value={custom.to} onChange={(d) => setCustom((c) => ({ ...c, to: d }))} />
+                  </span>
+                </div>
               )}
             </div>
             <div className={styles.fSection}>
@@ -267,7 +283,6 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
                 ))}
               </div>
             </div>
-            <div className={styles.fFoot}>מציג <b>{model.totalDiscussions} דיונים</b> בטווח הנבחר</div>
           </div>
         );
       case 'effectiveness':
@@ -305,7 +320,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
         return (
           <div className={`${styles.card} ${styles.barCard}`}>
             <div className={styles.cardTitle}>דיונים {model.axisLabel}</div>
-            {barData.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+            {barData.length === 0 ? <EmptyState>אין נתונים בטווח</EmptyState> : (
               <div className={styles.chartFill}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={barData} margin={{ top: 18, right: 8, left: 8, bottom: 4 }}>
@@ -333,7 +348,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
         return (
           <div className={`${styles.card} ${styles.donutCard}`}>
             <div className={styles.cardTitle}>התפלגות לפי סוג דיון</div>
-            {model.byType.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+            {model.byType.length === 0 ? <EmptyState>אין נתונים בטווח</EmptyState> : (
               <div className={styles.donutWrap}>
                 <div className={styles.donutChart}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -384,8 +399,12 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
     <div className={styles.root}>
       {/* Header — same pattern as "המשימות שלי"/"ההחלטות שלי": LTR row so the
           back arrow sits physically LEFT of the RTL title, on the shared gutter. */}
+      {/* round170 — embedded in PersonalShell: drop the back arrow + title (the
+          shell owns them), but KEEP the owner-only layout-editor toolbar. The
+          header row is skipped entirely when embedded and there are no tools. */}
+      {(!embedded || (canEditLayout && ready)) && (
       <div className={styles.viewHeader}>
-        {onBackToDiscussions && (
+        {!embedded && onBackToDiscussions && (
           <button
             type="button"
             className={styles.backArrowBtn}
@@ -396,7 +415,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
             <ArrowLeft size={20} aria-hidden="true" />
           </button>
         )}
-        <h1 className={styles.viewTitle}>דשבורד דיונים</h1>
+        {!embedded && <h1 className={styles.viewTitle}>דשבורד דיונים</h1>}
         {/* round160 — owner-only layout editor controls. */}
         {canEditLayout && ready && (
           <div className={styles.dashTools}>
@@ -417,6 +436,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
           </div>
         )}
       </div>
+      )}
 
       <div className={styles.scroll}>
         {loading ? (
@@ -482,11 +502,14 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
               <button type="button" className={styles.drillClose} onClick={() => setDrill(null)}>סגור ✕</button>
             </div>
             <div className={styles.drillList}>
+              {/* round244 (owner request) — the drill-down rows are READ-ONLY:
+                  clicking a discussion here must NOT open its monday Updates
+                  card. They list name + date only. */}
               {drillView.items.map((it) => (
-                <button key={it.id} type="button" className={styles.drillItem} onClick={() => openOrToggleItemCard(it.id)}>
+                <div key={it.id} className={styles.drillItem}>
                   <span className={styles.drillName}>{it.name}</span>
                   <span className={styles.drillDate}>{fmtDate(it.date)}</span>
-                </button>
+                </div>
               ))}
             </div>
           </div>

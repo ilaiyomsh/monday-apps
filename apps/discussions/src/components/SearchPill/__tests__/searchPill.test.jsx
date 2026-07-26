@@ -29,7 +29,7 @@ function Harness() {
 describe('SearchPill', () => {
   it('renders a collapsed pill, expands to an input on click', () => {
     render(<Harness />);
-    const pill = screen.getByRole('button', { name: 'Search' });
+    const pill = screen.getByRole('button', { name: 'חיפוש' });
     expect(screen.queryByRole('textbox')).toBeNull();
     fireEvent.click(pill);
     expect(screen.getByRole('textbox')).toBeTruthy();
@@ -37,7 +37,7 @@ describe('SearchPill', () => {
 
   it('typing updates the value; the clear-X empties it and keeps the input open', () => {
     render(<Harness />);
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    fireEvent.click(screen.getByRole('button', { name: 'חיפוש' }));
     const input = screen.getByRole('textbox');
     fireEvent.change(input, { target: { value: 'תקציב' } });
     expect(input.value).toBe('תקציב');
@@ -47,7 +47,7 @@ describe('SearchPill', () => {
 
   it('blur with an empty value collapses back to the pill; with a value it stays open', () => {
     render(<Harness />);
-    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    fireEvent.click(screen.getByRole('button', { name: 'חיפוש' }));
     const input = screen.getByRole('textbox');
     fireEvent.change(input, { target: { value: 'א' } });
     fireEvent.blur(input);
@@ -55,6 +55,6 @@ describe('SearchPill', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: '' } });
     fireEvent.blur(screen.getByRole('textbox'));
     expect(screen.queryByRole('textbox')).toBeNull(); // empty -> collapses
-    expect(screen.getByRole('button', { name: 'Search' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'חיפוש' })).toBeTruthy();
   });
 });

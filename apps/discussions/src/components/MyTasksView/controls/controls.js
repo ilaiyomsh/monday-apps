@@ -19,10 +19,10 @@
 // reused by BOTH sort directions and group orders. The two "Label order" entries
 // are distinguished by their up/down icon (monday's asc/desc idiom).
 export const STATUS_DIRS = [
-  { key: 'labelAsc', label: 'Label order', icon: 'up' },
-  { key: 'labelDesc', label: 'Label order', icon: 'down' },
-  { key: 'azAsc', label: 'A → Z', icon: 'alphaAsc' },
-  { key: 'azDesc', label: 'Z → A', icon: 'alphaDesc' },
+  { key: 'labelAsc', label: 'סדר לייבלים', icon: 'up' },
+  { key: 'labelDesc', label: 'סדר לייבלים', icon: 'down' },
+  { key: 'azAsc', label: 'א → ת', icon: 'alphaAsc' },
+  { key: 'azDesc', label: 'ת → א', icon: 'alphaDesc' },
 ];
 
 // SORT — column -> ordered direction options. `type` picks the column icon.
@@ -31,33 +31,34 @@ export const SORT_COLUMNS = [
   {
     key: 'deadline', type: 'date', alias: 'deadlineID',
     dirs: [
-      { key: 'deadlineAsc', label: 'Earliest first', icon: 'calUp' },
-      { key: 'deadlineDesc', label: 'Latest first', icon: 'calDown' },
+      { key: 'deadlineAsc', label: 'מהמוקדם למאוחר', icon: 'calUp' },
+      { key: 'deadlineDesc', label: 'מהמאוחר למוקדם', icon: 'calDown' },
     ],
-    note: 'Tasks with no deadline always sort last',
+    note: 'משימות ללא דד ליין תמיד ממוינות אחרונות',
   },
   { key: 'status', type: 'status', alias: 'statusID', dirs: STATUS_DIRS },
   {
     key: 'name', type: 'text',
     dirs: [
-      { key: 'nameAsc', label: 'A → Z', icon: 'alphaAsc' },
-      { key: 'nameDesc', label: 'Z → A', icon: 'alphaDesc' },
+      { key: 'nameAsc', label: 'א → ת', icon: 'alphaAsc' },
+      { key: 'nameDesc', label: 'ת → א', icon: 'alphaDesc' },
     ],
   },
 ];
 
-// GROUP — column -> ordered "order" options. status/priority reuse STATUS_DIRS.
+// GROUP — round224 (owner mockup, approved): ONE flat pick — status (the
+// default) / person (אחריות) / priority / discussion — and the order is ALWAYS
+// top-down by label order (labelAsc for the status-shaped columns, Hebrew A→Z
+// for people, date-desc for discussions), so the panel offers no order picker.
+// `orders` keeps a single pinned entry per column (the group state still stores
+// { col, order }, saved views stay shape-compatible).
 export const GROUP_COLUMNS = [
-  { key: 'status', type: 'status', orders: STATUS_DIRS },
-  { key: 'priority', type: 'status', orders: STATUS_DIRS },
+  { key: 'status', type: 'status', orders: [{ key: 'labelAsc', label: 'סדר לייבלים', icon: 'up' }] },
+  { key: 'person', type: 'person', orders: [{ key: 'azAsc', label: 'א → ת', icon: 'alphaAsc' }] },
+  { key: 'priority', type: 'status', orders: [{ key: 'labelAsc', label: 'סדר לייבלים', icon: 'up' }] },
   {
     key: 'discussion', type: 'relation',
-    orders: [
-      { key: 'azAsc', label: 'A → Z', icon: 'alphaAsc' },
-      { key: 'azDesc', label: 'Z → A', icon: 'alphaDesc' },
-      { key: 'dateAsc', label: 'Date ↑', icon: 'calUp' },
-      { key: 'dateDesc', label: 'Date ↓', icon: 'calDown' },
-    ],
+    orders: [{ key: 'azAsc', label: 'א → ת', icon: 'alphaAsc' }],
   },
 ];
 
@@ -75,15 +76,15 @@ export const FILTER_COLUMNS = [
 export const FILTER_COLUMN_PERSON = { key: 'person', type: 'person', alias: 'responsibilityID', ops: ['is', 'isnot'] };
 
 export const OP_LABEL = {
-  is: 'is', isnot: 'is not',
-  within: 'within', before: 'before', after: 'after',
+  is: 'הוא', isnot: 'אינו',
+  within: 'בטווח', before: 'לפני', after: 'אחרי',
 };
 
 export const DEADLINE_RANGES = [
-  { key: 'today', label: 'Today', icon: 'calToday' },
-  { key: 'thisWeek', label: 'This week', icon: 'calWeek' },
-  { key: 'thisMonth', label: 'This month', icon: 'calMonth' },
-  { key: 'overdue', label: 'Overdue', icon: 'clock' },
+  { key: 'today', label: 'היום', icon: 'calToday' },
+  { key: 'thisWeek', label: 'השבוע', icon: 'calWeek' },
+  { key: 'thisMonth', label: 'החודש', icon: 'calMonth' },
+  { key: 'overdue', label: 'באיחור', icon: 'clock' },
 ];
 
 // Defaults are EMPTY (no sort, no grouping): every table starts with nothing
@@ -91,7 +92,9 @@ export const DEADLINE_RANGES = [
 // An empty sort has NO column either — the panel shows a "Choose a column"
 // placeholder, exactly like the group panel's none state.
 export const DEFAULT_SORT = { col: null, dir: null, active: false };
-export const DEFAULT_GROUP = { col: 'none' };
+// round224 — the DEFAULT grouping is STATUS, top-down (owner spec); a shared
+// saved view still overrides it.
+export const DEFAULT_GROUP = { col: 'status', order: 'labelAsc' };
 
 // ---------------------------------------------------------------- sort -----
 

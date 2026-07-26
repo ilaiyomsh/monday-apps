@@ -1,7 +1,9 @@
 .root {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-medium, 16px);
+  /* round188 — zero the normal-flow gap; the toolbar→content gap is pinned on the
+     sticky toolbar's padding-bottom (see .toolbar) so it stays CONSTANT on scroll. */
+  gap: 0;
   /* Full width (the tab pane broke out of the 90% frame) so the board's row
      separators run to the RIGHT edge of the view. Left inset keeps the toolbar off
      the edge; the right stays flush (the board bleeds right). */
@@ -29,7 +31,10 @@
   top: 0;
   z-index: 20;
   background: var(--primary-background-color, #ffffff);
-  padding-block: 4px;
+  /* round188 — the toolbar→content gap lives HERE (pinned), not in the parent
+     flex `gap` which scrolls away. 20px bottom keeps it constant on scroll. */
+  padding-top: 4px;
+  padding-bottom: 20px;
   font-size: 14px; /* round138 — pinned; identical toolbar row in all four tabs */
 }
 /* Cover the scroll container's (.body) top padding band above the pinned toolbar
@@ -50,6 +55,12 @@
 .batterySlot {
   margin-inline-start: auto;
   margin-inline-end: 0.5cm;
+}
+/* round180 — while the discussions selector panel is open the card is narrow, so
+   hide the colored quick-filter battery; it returns only once the tabs area is
+   expanded (the list collapsed). Mirrors the body[data-list-open] flag set in App. */
+:global(body[data-list-open="1"]) .batterySlot {
+  display: none !important;
 }
 
 .discussionSelect {
@@ -88,6 +99,54 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* round274 — the by-type scope toggle, folded into the toolbar as a compact
+   pill (Filter/Sort language). Click cycles הפעם האחרונה ⇄ כל הדיונים הקודמים. */
+.scopePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-small, 4px);
+  background: var(--primary-background-color, #fff);
+  color: var(--text-color, #323338);
+  font-size: 13.5px;
+  font-family: var(--font-family);
+  cursor: pointer;
+}
+.scopePill:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.scopePill b { font-weight: 600; color: var(--primary-color, #0073ea); }
+.scopePillChev { opacity: 0.55; font-size: 11px; }
+
+/* round275 — content mode toggle (משימות/החלטות), segmented, in the toolbar. */
+.modeSeg {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+  height: 36px;
+  box-sizing: border-box;
+}
+.modeSegBtn {
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  font-family: var(--font-family);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 0 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.modeSegBtn:hover { color: var(--text-color, #323338); }
+.modeSegOn {
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-color, #0073ea);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
 }
 
 /* Centered "no previous discussion" state with a picker. */
@@ -134,12 +193,6 @@
   flex-direction: column;
   /* monday gap between groups (open→open) = 28px. */
   gap: 28px;
-}
-
-.emptyState {
-  text-align: center;
-  padding-top: var(--spacing-xl, 48px);
-  padding-bottom: var(--spacing-xl, 48px);
 }
 
 .groupHeader {

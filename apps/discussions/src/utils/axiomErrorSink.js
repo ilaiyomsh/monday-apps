@@ -196,6 +196,15 @@ export function mapRecordToEvent(record) {
         if (typeof ctx.totalMs === 'number' && Number.isFinite(ctx.totalMs)) ev.total_ms = ctx.totalMs;
         if (typeof ctx.step === 'number' && Number.isFinite(ctx.step)) ev.step = ctx.step;
     }
+    // Guarantee an err_name on every ERROR record: real Errors keep err.name;
+    // otherwise fall back to the stable message event-id, then the tag, so
+    // nothing ships nameless (the telemetry dashboard groups + drills down by
+    // err_name). Interim safety net — the goal is genuine err_names supplied at
+    // the call sites (a real Error per throw), which this does NOT replace.
+    if (ev.kind === 'error' && (ev.err_name == null || ev.err_name === '')) {
+        const msg = typeof ev.message === 'string' ? ev.message.trim() : '';
+        ev.err_name = msg || ev.tag || 'unknown';
+    }
     return ev;
 }
 

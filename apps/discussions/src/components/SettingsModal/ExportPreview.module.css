@@ -5,10 +5,126 @@
   min-width: 0;
 }
 
+.pageLabelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .pageLabel {
   font-size: 12px;
   font-weight: 600;
   color: var(--secondary-text-color, #676879);
+}
+
+/* round195 — status chips next to the label: green = the pane shows the ACTUAL
+   rendered .docx; grey = a live rebuild is in progress. */
+.liveBadge,
+.buildingBadge {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+.liveBadge {
+  color: var(--positive-color, #258750);
+  background: rgba(37, 135, 80, 0.1);
+}
+.buildingBadge {
+  color: var(--secondary-text-color, #676879);
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+
+/* round195 — LIVE preview frame: a grey "desk" the real Word pages sit on,
+   scrolling vertically; the pages themselves come from docx-preview and are
+   zoom-scaled to the frame width (see fitZoom in ExportPreview.jsx). */
+.liveBox {
+  /* round197 — the export tab's box is now FULLSCREEN (100vh-32), so the frame
+     gets everything minus the modal chrome (~230px: header+tabs+footer+label). */
+  max-height: calc(100vh - 262px);
+  overflow-y: auto;
+  overflow-x: auto;
+  /* round201 — the frame sits in an RTL layout, which parks the vertical bar on
+     the LEFT; force LTR on the scroll frame itself so the bar hugs the RIGHT
+     edge of the element it scrolls (.liveHost re-establishes dir="rtl"). */
+  direction: ltr;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 4px;
+  background: #eceef4;
+  padding: 12px;
+}
+
+/* round201 — owner request: the preview frame's vertical bar is ALWAYS visible,
+   overriding the app-wide hover-gated default (index.css) so the scrollable
+   preview is discoverable at a glance. Hover/active keep the darker shade. */
+.liveBox::-webkit-scrollbar-thumb:vertical {
+  background: var(--ui-border-color, #c3c6d4);
+}
+.liveBox::-webkit-scrollbar-thumb:hover,
+.liveBox::-webkit-scrollbar-thumb:active {
+  background: #a8adbd;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .liveBox {
+    scrollbar-color: var(--ui-border-color, #c3c6d4) transparent;
+  }
+}
+
+/* round197 — preview controls: page up/down + "עמוד x / y" + horizontal nudges,
+   pushed to the far LEFT of the RTL label row so they hug the frame's corner. */
+.previewControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+.ctrlBtn {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 4px;
+  background: var(--primary-background-color, #fff);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.ctrlBtn:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--primary-text-color, #323338);
+}
+.ctrlBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.ctrlDivider {
+  width: 1px;
+  height: 14px;
+  background: var(--ui-border-color, #d0d4e4);
+  margin: 0 2px;
+}
+.pageIndicator {
+  font-size: 11px;
+  color: var(--secondary-text-color, #676879);
+  min-width: 58px;
+  text-align: center;
+}
+/* docx-preview injects its own global classes (.docx-wrapper / section.docx) —
+   strip its dark backdrop and let our desk styling own the chrome. */
+.liveHost :global(.docx-wrapper) {
+  background: transparent !important;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.liveHost :global(.docx-wrapper > section.docx) {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16) !important;
+  margin-bottom: 0 !important;
 }
 
 /* The "sheet" — a white page with a soft shadow. FIXED height so it doesn't grow
@@ -86,6 +202,15 @@
 .metaLine { font-size: 11px; }
 .metaLabel { font-weight: 700; }
 
+/* round193 — centered document title, like the docx HEADING_1 "סיכום דיון: …". */
+.docTitle {
+  text-align: center;
+  font-size: 17px;
+  font-weight: 700;
+  color: #1f3864;
+  margin-bottom: 4px;
+}
+
 .docSection { display: flex; flex-direction: column; gap: 4px; }
 .h2 { font-size: 15px; font-weight: 700; color: #2e5496; }
 .h3 { font-size: 13px; font-weight: 700; color: #44546a; }
@@ -93,3 +218,34 @@
 .paraMuted { margin: 0; font-size: 12px; color: #b0b4c3; font-style: italic; }
 .list { margin: 0; padding-inline-start: 18px; font-size: 12px; }
 .list li { margin-bottom: 2px; }
+
+/* round193 — tables that mirror the docx tasks/decisions tables: dark header band
+   (#4F6B8F, white bold), hairline #D9D9D9 borders, centered cells except the name
+   column. Fixed layout + RTL so it reads like the Word output. */
+.table {
+  /* round286 — mirror the .docx: the table is ~80% wide and CENTERED on the
+     page (not full width), with balanced cell padding on all sides. */
+  width: 80%;
+  margin-inline: auto;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 11px;
+  direction: rtl;
+}
+.table th,
+.table td {
+  border: 1px solid #d9d9d9;
+  padding: 6px 9px;
+  text-align: center;
+  vertical-align: middle;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.table th {
+  background: #4f6b8f;
+  color: #fff;
+  font-weight: 700;
+}
+.thName,
+.tdName { text-align: right; }
+.table td { color: #323338; }

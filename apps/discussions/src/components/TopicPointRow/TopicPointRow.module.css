@@ -1,44 +1,52 @@
-/* A POINT = one table row, a grid aligned to the group's column header via the
-   shared inline grid-template (rowStyle):
-   [checkbox lead 36px] | name (flex) | נידונה 66px | החלטות 168px | משימות 168px */
+/* round226 stage B (approved mockup) — a POINT is a CLEAN LIST ROW inside its
+   topic card: flex, rounded hover highlight, NO table grid / cell borders.
+   RTL order (dir=rtl cascades from the card):
+   [select ☐] [נידונה ✓] [name (fill)] [hover actions] [תוצרים] */
 .row {
-  display: grid;
-  align-items: stretch;
-  min-height: 36px;
-  border-bottom: 1px solid var(--ui-border-color, #d0d4e4);
-  background: var(--primary-background-color, #fff);
-  /* Smooth hover, same as TaskTableRow's .bodyRow. */
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  position: relative;
+  background: transparent;
   transition: background-color var(--motion-productive-short, 0.1s) ease;
+}
+.row + .row {
+  margin-top: 1px;
 }
 .row:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
 }
-/* Whole-row drag affordance (the six-dot grip was removed — the row itself is
-   the drag handle). grab cursor on the draggable areas; interactive cells keep
-   their own pointer cursor. */
-.rowDraggable { cursor: grab; }
-.rowDraggable:active { cursor: grabbing; }
-/* The frozen leading cells (accent bar + name) are opaque, so their hover
-   background must be set explicitly — otherwise they stay white while the rest
-   of the row highlights. Composite the (possibly semi-transparent) hover token
-   OVER solid white so the frozen cell stays opaque (scrolled cells can't bleed
-   through). Same technique as TaskTableRow's `.bodyRow:hover .name`. */
-.row:hover .lead,
-.row:hover .nameCell {
-  background-color: #ffffff;
-  background-image: linear-gradient(
-    var(--primary-background-hover-color, #f5f6f8),
-    var(--primary-background-hover-color, #f5f6f8)
-  );
+/* round233 — six-dot drag grip at the row's leading (right, in RTL) edge. Hover-
+   revealed, grab cursor; touch-action:none lets the PointerSensor claim vertical
+   drags on touch. It is the ONLY drag handle now (the whole-row drag was removed). */
+.dragGrip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  color: var(--placeholder-color, #9699a6);
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+  transition: opacity 0.1s ease;
 }
-/* Hidden ("לא לדיון") point — dimmed. */
+.row:hover .dragGrip,
+.dragGrip:focus-visible {
+  opacity: 1;
+}
+.dragGrip:active { cursor: grabbing; }
+
+/* Hidden ("לא לדיון") point — dimmed + italic (mockup .pt.hidden2). */
 .excluded .nameCell {
-  opacity: 0.45;
+  opacity: 0.5;
+  font-style: italic;
 }
 /* Item 11 — a hidden point is fully INERT: every disabled control loses its
    pointer affordance (the eye + selection checkbox stay live to re-show it). */
-.excluded .createBtn:disabled,
-.excluded .counter:disabled,
 .excluded .updatesBtn:disabled,
 .excluded .checkCell {
   cursor: default;
@@ -47,13 +55,10 @@
 }
 
 /* Failed optimistic create: the point stays EDITABLE (no lock) but is marked
-   with a red row tint + a red leading accent strip; the red "שמירה נכשלה" label
-   and the retry button live in the name cell (delete = the existing trash). */
+   with a red row tint; the red "שמירה נכשלה" label and the retry button live
+   next to the name. */
 .rowFailed {
   background: var(--negative-color-selected, #fce9ec);
-}
-.rowFailed .lead {
-  box-shadow: inset 6px 0 0 var(--negative-color, #d83a52);
 }
 .createFailedActions {
   display: inline-flex;
@@ -83,39 +88,28 @@
   color: #ffffff;
 }
 
-/* Lead column — the FROZEN selection-checkbox cell that carries the topic accent
-   strip (36px track, 6px inset strip), mirroring TaskTable's `.selectCell`.
-   --topic-accent cascades from .section in TopicsTab. Not rounded: the column
-   header rounds the top-left, the add-row rounds the bottom-left.
-   FROZEN (sticky at left:0, opaque) so it pins with the name during the rare
-   horizontal scroll — mirrors TaskTable's frozen leading cell. Off selection
-   mode it's just the bare accent strip. */
-.lead {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: inset 6px 0 0 var(--topic-accent, hsl(var(--status-default)));
-  /* Close the lead (checkbox/accent) column with a right rule, matching the
-     Tasks table's frozen `.selectCell` separator (TaskTable `.taskCell`). */
-  border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, aligned with the header cells */
-  position: sticky;
-  left: 0;
-  z-index: 2;
-  background: var(--primary-background-color, #fff);
-}
-
-/* Selection checkbox centered in the lead cell (mirrors TaskTable's
-   `.selectCell > label`): reset the vibe Checkbox wrapper margins and nudge the
-   16px box to sit visually centered just after the 6px color strip. */
-.leadSelect {
+/* Selection checkbox — quiet at rest (hover-revealed); stays visible while the
+   row is selected or while ANY selection is active (.rowSelecting from the
+   parent), so mid-selection the targets don't vanish between hovers. The box
+   keeps its width either way so nothing shifts on hover. */
+.selCell {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
+  width: 18px;
+  opacity: 0;
+  transition: opacity 0.1s ease;
 }
-.leadSelect > label {
+.row:hover .selCell,
+.selCell:focus-within,
+.selCellOn,
+.rowSelecting .selCell {
+  opacity: 1;
+}
+.selCell > label {
   margin: 0;
-  transform: translateX(2px);
 }
-.leadSelect > label > :last-child {
+.selCell > label > :last-child {
   margin-inline-start: 0;
 }
 
@@ -126,7 +120,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
+  width: 26px;
   height: 26px;
   padding: 0;
   border: none;
@@ -134,11 +128,6 @@
   color: var(--secondary-text-color, #676879);
   cursor: pointer;
   border-radius: var(--border-radius-small, 4px);
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.row:hover .kebabBtn {
-  opacity: 1;
 }
 .kebabBtn:hover {
   background: var(--primary-background-hover-color, #eceef2);
@@ -151,6 +140,9 @@
   flex-direction: column;
   gap: 2px;
   min-width: 140px;
+  /* round191 — the whole kebab popup is RTL (owner request): menu items right-aligned
+     (icon leads on the right), and the delete-confirm row's ✓/✕ land on the LEFT. */
+  direction: rtl;
 }
 .menuItem {
   display: flex;
@@ -180,6 +172,13 @@
   padding: 6px 10px;
   font-size: 13px;
   color: var(--text-color, #323338);
+  /* round191 — RTL confirm row: the "?למחוק נושא" text sits on the RIGHT and stretches,
+     pushing the ✓ (confirm) and ✕ (cancel) buttons to the far LEFT (owner request). */
+  direction: rtl;
+  text-align: right;
+}
+.menuConfirm > span {
+  flex: 1;
 }
 .menuIcon {
   display: inline-flex;
@@ -196,32 +195,56 @@
 }
 .menuIcon:hover { background: var(--primary-background-hover-color, #f0f1f3); }
 
-/* נקודה לדיון — leading data cell. Left-aligned like the Tasks name cell
-   (.taskFirst): 14px inline-start clears the 6px accent strip, 8px trailing;
-   14px text; the row-level 36px min-height + 0.625px column rule come from .row
-   / the cell borders below (matches TaskTable's .taskCell chrome). */
-.nameCell {
-  min-width: 0;
-  display: flex;
+/* נידונה — leading rounded-square check (mockup .chk): 16px, 2px border; green
+   fill + white ✓ when checked; a faint ✓ hint on hovering an empty box. */
+.checkCell {
+  display: inline-flex;
   align-items: center;
-  /* Space the trailing controls (hide / delete / updates) like the Tasks name
-     cell's .nameInner gap:6px. */
+  flex-shrink: 0;
+}
+.chk {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 2px solid var(--ui-border-color, #d0d4e4);
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.1s ease, border-color 0.1s ease;
+}
+.chk:disabled { cursor: default; }
+.chkGlyph {
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.chk:hover:not(.chkOn) .chkGlyph {
+  opacity: 0.55;
+  color: var(--secondary-text-color, #676879);
+}
+.chkOn {
+  background: #00854d;
+  border-color: #00854d;
+}
+.chkOn .chkGlyph {
+  opacity: 1;
+  color: #fff;
+}
+
+/* Point name — fills the row; RTL text; line-through + dimmed when discussed
+   (mockup .pt.done .pName). */
+.nameCell {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  padding-inline-start: 38px; /* round139 — 1cm from the name cell's start (approved mock) */
-  padding-inline-end: 8px;
-  border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, aligned with the header cells */
-  /* FROZEN name column — pinned right after the 36px checkbox lead, opaque so
-     scrolled cells don't bleed through (mirrors TaskTable's frozen `.taskFirst`).
-     Its resize handle in the header cell drives the width; the row cell just
-     tracks the shared grid template. */
-  position: sticky;
-  left: 36px;
-  z-index: 2;
-  background: var(--primary-background-color, #fff);
 }
 .name {
-  /* flex:1 so the name fills the cell and the trailing updates icon pins to the
-     end — mirrors TaskTableRow's .nameText/.nameBtn. */
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -229,261 +252,115 @@
   white-space: nowrap;
   color: var(--primary-text-color, #323338);
   font-size: 14px;
-  line-height: 36px; /* match the native monday row height (TaskTableRow .nameText) */
+  line-height: 26px;
   font-family: var(--font-family);
-  direction: rtl;
-  text-align: left;
 }
-
-/* monday "updates" speech-bubble icon at the trailing edge of the name cell —
-   copied verbatim from TaskTableRow.module.css so the Topics point name matches
-   the Tasks item name (same size, color, hover). Revealed at rest (not hover-
-   only) exactly like the Tasks affordance. */
-.updatesBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
+.rowDone .name {
   color: var(--secondary-text-color, #676879);
-  cursor: pointer;
-  transition: background-color 0.1s ease, color 0.1s ease;
-}
-.updatesBtn:hover {
-  background: var(--primary-background-hover-color, #e6e9ef);
-  color: var(--primary-color, #0073ea);
+  text-decoration: line-through;
 }
 .nameEditInput {
   width: 100%;
-  border: 1px solid var(--primary-color, #0073ea);
-  border-radius: 4px;
-  padding: 4px 6px;
+  border: none;
+  border-bottom: 1.5px solid var(--primary-color, #0073ea);
+  border-radius: 0;
+  padding: 2px 0;
   font-size: 14px;
   font-family: var(--font-family);
   color: var(--text-color, #323338);
-  background: var(--primary-background-color, #fff);
-  direction: rtl;
-  text-align: left;
+  background: transparent;
 }
 .nameEditInput:focus-visible { outline: none; }
 
-/* Hover-revealed secondary controls at the trailing edge of the name cell —
-   same affordance as the Tasks name cell's hover trash (.deleteBtn): hidden at
-   rest, revealed on row hover / keyboard focus. hide(eye) toggles the point's
-   not-for-discussion flag; delete opens an inline confirm. */
-.hideBtn,
-.deleteBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--secondary-text-color, #676879);
-  cursor: pointer;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.1s ease, background-color 0.1s ease, color 0.1s ease;
-}
-.row:hover .hideBtn,
-.row:hover .deleteBtn,
-.hideBtn:focus-visible,
-.deleteBtn:focus-visible {
-  opacity: 1;
-}
-.hideBtn:hover {
-  background: var(--primary-background-hover-color, #e6e9ef);
-  color: var(--primary-color, #0073ea);
-}
-.deleteBtn:hover {
-  background: var(--primary-background-hover-color, #e6e9ef);
-  color: var(--negative-color, #d83a52);
-}
-
-/* Rename pencil — hover-revealed near the name (mirrors the tasks pencil / the
-   hide+delete reveal above). Triggers the same inline rename as double-clicking
-   the name. */
-.renameBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--secondary-text-color, #676879);
-  cursor: pointer;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.1s ease, background-color 0.1s ease, color 0.1s ease;
-}
-.row:hover .renameBtn,
-.renameBtn:focus-visible {
-  opacity: 1;
-}
-.renameBtn:hover {
-  background: var(--primary-background-hover-color, #e6e9ef);
-  color: var(--primary-color, #0073ea);
-}
-
-/* Inline delete confirmation (mirrors TaskTableRow's .confirmDel) — stays visible
-   regardless of hover so the user can complete/cancel it. */
-.confirmDel {
+/* round260 (owner request) — the single action cluster, CENTERED in the row.
+   RTL order (right → left): [+ create] [count] [creator] [delete]. The cluster
+   itself is always present (position:relative anchors the create progress bar);
+   per-element visibility is controlled below. A trailing .clusterSpacer (flex:1)
+   balances .nameCell (flex:1) so the cluster sits mid-row, close to the text. */
+.pointCluster {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+  position: relative;
 }
-.confirmText {
-  font-size: 13px;
-  color: var(--secondary-text-color, #676879);
-  font-family: var(--font-family);
-  white-space: nowrap;
+.clusterSpacer {
+  flex: 1;
+  min-width: 0;
 }
-.confirmBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--secondary-text-color, #676879);
-  cursor: pointer;
-  transition: background-color 0.1s ease, color 0.1s ease;
-}
-.confirmBtn:hover {
-  background: var(--primary-background-hover-color, #e6e9ef);
-}
-.confirmYes:hover {
-  color: var(--negative-color, #d83a52);
-}
-
-/* האם נידונה — square checkbox (mockup: blue fill when checked). Cell chrome
-   (padding / centering / 0.625px rule) mirrors TaskTable's .taskCell. */
-/* נידונה — monday checkbox COLUMN cell (round 99): the whole cell is clickable;
-   empty when unchecked, borderless green ✓ when checked. */
-.checkCell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, aligned with the header cells */
-}
-.checkBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  min-height: 34px;
-  border: none;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-}
-.checkBtn:disabled {
-  cursor: default;
-}
-/* The checkmark: hidden on an empty cell, a faint gray hint on hover, solid
-   monday-green when checked (green wins over the hover hint via :not). */
-.checkGlyph {
-  color: #c3c6d4;
+/* Elements that stay quiet at rest and reveal on row hover / keyboard focus
+   (round260 — the creator avatar and the delete trash; the + and count are
+   always visible). No layout shift: opacity only, width is reserved. */
+.hoverOnly {
   opacity: 0;
-  stroke-width: 2.5;
   transition: opacity 0.1s ease;
 }
-.checkBtn:hover .checkGlyph:not(.checkGlyphOn) {
-  opacity: 0.45;
-}
-.checkGlyphOn {
-  color: #00c875;
+.row:hover .hoverOnly,
+.hoverOnly:focus-within,
+.hoverOnly:focus-visible {
   opacity: 1;
 }
 
-/* החלטות / משימות cells — dashed create button + round counter pill. Cell
-   chrome (padding / centering / 0.625px rule) mirrors TaskTable's .taskCell. */
-.linkCell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 0 8px;
-  border-right: 1px solid var(--ui-border-color, #d0d4e4); /* round128 — physical, aligned with the header cells */
-  /* Positioning context for the in-flight CreateProgressBar overlay (round 52),
-     which fills the cell while a create-from-point is pending / just done. */
-  position: relative;
-}
-.createBtn {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
+/* round261 (owner request) — FIXED-WIDTH reserved slots so the "+" sits at the
+   very same spot in every row, whether or not a count/creator/delete is present
+   (symmetric layout). Each slot centers its (optional) content. */
+.countSlot {
+  width: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+}
+.creatorSlot {
+  width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.deleteSlot {
+  width: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* round261 — elegant rounded-square icon button (bigger, softer than the old
+   circle/plain-icon). Shared by the delete trash. */
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  flex-shrink: 0;
   padding: 0;
-  font-family: var(--font-family);
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
-/* Purple = decisions accent (chrome color per the approved mockup). */
-.createDecision {
-  border: 1px dashed #b7a8f0;
-  background: #f4f1fe;
-  color: #6b4ee6;
+.iconBtn:hover {
+  background: var(--primary-background-hover-color, #e6e9ef);
+  color: var(--primary-color, #0073ea);
 }
-.createDecision:hover {
-  background: #ece6fc;
-}
-/* Blue = tasks accent. */
-.createTask {
-  border: 1px dashed #9cc4fb;
-  background: #eef5ff;
-  color: #0073ea;
-}
-.createTask:hover {
-  background: #e0edff;
+/* round232 — the per-point delete trash turns red on hover (destructive). */
+.deleteBtn:hover {
+  background: var(--negative-color-selected, #fce9ec);
+  color: var(--negative-color, #d83a52);
 }
 
-/* Round counter pill — outline gray at 0, filled (purple/blue) when >0. */
-.counter {
-  min-width: 26px;
-  height: 26px;
-  padding: 0 8px;
-  border-radius: 13px;
-  border: 1px solid var(--ui-border-color, #d0d4e4);
-  background: var(--primary-background-color, #fff);
-  color: var(--placeholder-color, #9699a6);
-  font-size: 12px;
-  font-weight: 700;
-  font-family: var(--font-family);
-  cursor: pointer;
+/* Per-point creator avatar (round 58) — rides inside the hover actions cluster. */
+.creatorAvatar {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-variant-numeric: tabular-nums;
-}
-.counterDecisionOn {
-  border-color: #6b4ee6;
-  background: #6b4ee6;
-  color: #fff;
-}
-.counterTaskOn {
-  border-color: #0073ea;
-  background: #0073ea;
-  color: #fff;
+  flex-shrink: 0;
 }
 
-/* Neutral placeholder for CreatorAvatar (still used in the topic group header). */
+/* Neutral placeholder for CreatorAvatar (also used in the topic card header). */
 .avatarEmpty {
   display: inline-block;
   width: 24px;
@@ -492,17 +369,45 @@
   background: var(--disabled-background-color, #eceef2);
 }
 
-/* Per-point creator avatar (round 58) — hidden at rest, revealed on row hover,
-   pinned just left of the updates bubble. Mirrors the hover reveal of .hideBtn /
-   .renameBtn (opacity fade; keeps its box so nothing else shifts on hover). */
-.creatorAvatar {
+/* round226/260/261 — תוצרים controls inside .pointCluster. round261 — the count
+   is a rounded-SQUARE chip (matches the + button) instead of a pill; a touch
+   bigger and more legible. */
+.outCount {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6b4ee6;
+  background: rgba(107, 78, 230, 0.10);
+  border: 1px solid rgba(107, 78, 230, 0.22);
+  border-radius: 9px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-variant-numeric: tabular-nums;
+}
+.outCount:hover { background: rgba(107, 78, 230, 0.18); }
+.outCount:disabled { cursor: default; opacity: 0.5; }
+
+/* round260/261 — the "+" (new output) is ALWAYS visible (owner request). round261
+   — a rounded-SQUARE, slightly larger, with a crisp Plus icon and a soft resting
+   tint so it reads as a real button. */
+.outAdd {
+  border: none;
+  background: var(--primary-background-hover-color, #f0f2f7);
+  color: var(--secondary-text-color, #676879);
+  border-radius: 9px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.1s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
 }
-.row:hover .creatorAvatar,
-.creatorAvatar:focus-within {
-  opacity: 1;
-}
+.outAdd:hover { background: var(--primary-selected-color, #e6f1fd); color: var(--primary-color, #0073ea); }
+.outAdd:disabled { opacity: 0.4; cursor: default; }

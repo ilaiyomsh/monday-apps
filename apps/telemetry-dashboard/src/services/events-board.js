@@ -1,8 +1,18 @@
 // Events-board service — writes normalized lifecycle/app events as items on
-// the owner's private monday "App Lifecycle Events" board (one group per app
-// slug). Fail-soft BY CONTRACT: recordEvent never throws and returns null on
-// any failure — a dead board, a bad token, or a monday outage must never
-// bubble into the webhook path.
+// the owner's private "App Lifecycle Events" board. Fail-soft BY CONTRACT:
+// recordEvent never throws and returns null on any failure — a dead board, a
+// bad token, an unconfigured board, or a monday outage must never bubble into
+// the webhook path.
+//
+// CONFIG SOURCE (Change: board config moved from boot-time env to runtime
+// storage): boardId, the single groupId, and the logical→column-id map are
+// read per event via the injected `getConfig()` (backed by SecureStorage with
+// its own 60s cache in the storage service). So changing the mapping in the
+// Settings UI takes effect WITHOUT a redeploy. Until a board is provisioned,
+// getConfig() yields null → recordEvent warns once and skips (inert).
+//
+// GROUPS (decision: ONE group per board, not one-per-app): every event lands
+// in the board's single group (config.groupId); the `app` column discriminates.
 //
 // PRIVACY: evt.details (which may carry account names — allowed BY DESIGN on
 // this private board) goes ONLY to the board via column_values. Logger calls
@@ -15,21 +25,15 @@ const DETAILS_MAX_CHARS = 2000;
 
 /**
  * @param {object} deps
- * @param {{ createItem: Function, getBoardGroups: Function, createGroup: Function }} deps.mondayApi
- * @param {string} deps.boardId - target board id
- * @param {Record<string, string>} deps.columns - logical key → monday column id
- *   (keys: event_time, category, event_type, app, feature, account_id,
- *   user_id, details, event_id). Any missing key → that column is skipped.
+ * @param {{ createItem: Function }} deps.mondayApi
+ * @param {() => Promise<{ boardId: string, groupId: string|null, columns: Record<string,string> }|null>} deps.getConfig
+ *   Resolves the current board config, or null when no board is provisioned.
  * @param {object} deps.logger - app logger (`(message, tag, context)` shape)
- * @returns {{ ensureGroupForApp: (appSlug: string) => Promise<string|null>,
- *             recordEvent: (evt: object) => Promise<string|null> }}
+ * @returns {{ recordEvent: (evt: object) => Promise<string|null> }}
  */
-export function createEventsBoardService({ mondayApi, boardId, columns, logger }) {
-  const cols = columns && typeof columns === 'object' ? columns : {};
-
-  // appSlug → groupId, cached for the life of the process. Failures are NOT
-  // cached, so the next event retries group resolution.
-  const groupCache = new Map();
+export function createEventsBoardService({ mondayApi, getConfig, logger }) {
+  // 'lifecycle_not_configured' is throttled to once per boot.
+  let warnedNotConfigured = false;
 
   /** UTC { date, time } for a monday date column, from an ISO string / epoch. */
   function toDateTime(occurredAt) {
@@ -54,7 +58,8 @@ export function createEventsBoardService({ mondayApi, boardId, columns, logger }
   }
 
   /** Build column_values, skipping any column whose id is absent from the map. */
-  function buildColumnValues(evt) {
+  function buildColumnValues(evt, columns) {
+    const cols = columns && typeof columns === 'object' ? columns : {};
     const values = {};
     const put = (key, value) => {
       const columnId = cols[key];
@@ -67,37 +72,34 @@ export function createEventsBoardService({ mondayApi, boardId, columns, logger }
     put('feature', String(evt.feature ?? ''));
     put('account_id', String(evt.accountId ?? ''));
     put('user_id', String(evt.userId ?? ''));
+    // #145 enrichment columns (skipped automatically on pre-#145 boards
+    // whose stored column map has no ids for them).
+    put('user_name', String(evt.userName ?? ''));
+    put('user_email', String(evt.userEmail ?? ''));
+    put('workspace', String(evt.workspace ?? ''));
+    put('object_name', String(evt.objectName ?? ''));
+    if (typeof evt.objectUrl === 'string' && evt.objectUrl.length > 0) {
+      // monday link column value: { url, text } — text falls back to the url.
+      put('object_url', { url: evt.objectUrl, text: String(evt.objectName || evt.objectUrl) });
+    }
+    put('app_version', String(evt.appVersion ?? ''));
     put('details', { text: stringifyDetails(evt.details) });
     put('event_id', String(evt.eventId ?? ''));
     return values;
   }
 
   /**
-   * Resolve (find-by-title or create) the board group for an app slug.
-   * Never throws; null on failure — the caller then creates the item ungrouped.
-   * @param {string} appSlug
-   * @returns {Promise<string|null>}
+   * Resolve the current board config. Never throws — a read failure or an
+   * unconfigured/invalid config degrades to null (caller treats it as inert).
+   * @returns {Promise<{ boardId: string, groupId: string|null, columns: object }|null>}
    */
-  async function ensureGroupForApp(appSlug) {
-    const slug = String(appSlug ?? '');
-    if (groupCache.has(slug)) return groupCache.get(slug);
+  async function resolveConfig() {
     try {
-      const groups = await mondayApi.getBoardGroups(boardId);
-      const existing = (Array.isArray(groups) ? groups : []).find((g) => g?.title === slug);
-      if (existing?.id) {
-        groupCache.set(slug, existing.id);
-        return existing.id;
-      }
-      const createdId = await mondayApi.createGroup({ boardId, groupName: slug });
-      if (createdId) {
-        groupCache.set(slug, createdId);
-        return createdId;
-      }
-      logger.warn('group_create_empty', TAG, { app: slug });
+      const cfg = await getConfig();
+      if (cfg && typeof cfg === 'object' && cfg.boardId) return cfg;
       return null;
     } catch (err) {
-      // Group is cosmetic — the event still lands on the board, ungrouped.
-      logger.warn('group_ensure_failed', TAG, { app: slug, error: String(err?.message ?? err) });
+      logger.error('board_config_resolve_failed', TAG, { error: String(err?.message ?? err) });
       return null;
     }
   }
@@ -115,12 +117,21 @@ export function createEventsBoardService({ mondayApi, boardId, columns, logger }
         logger.warn('record_event_invalid', TAG, {});
         return null;
       }
-      const groupId = await ensureGroupForApp(evt.appSlug);
+      const cfg = await resolveConfig();
+      if (!cfg) {
+        // No board provisioned yet — warn once, then stay quiet. Webhooks
+        // still 202 upstream; nothing is recorded.
+        if (!warnedNotConfigured) {
+          warnedNotConfigured = true;
+          logger.warn('lifecycle_not_configured', TAG, {});
+        }
+        return null;
+      }
       const itemId = await mondayApi.createItem({
-        boardId,
-        groupId,
+        boardId: cfg.boardId,
+        groupId: cfg.groupId ?? null, // the single events group; null → default
         itemName: `${evt.eventType} · ${evt.appSlug}`,
-        columnValues: buildColumnValues(evt),
+        columnValues: buildColumnValues(evt, cfg.columns),
       });
       return itemId ?? null;
     } catch (err) {
@@ -135,5 +146,5 @@ export function createEventsBoardService({ mondayApi, boardId, columns, logger }
     }
   }
 
-  return { ensureGroupForApp, recordEvent };
+  return { recordEvent };
 }

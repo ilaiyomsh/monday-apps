@@ -68,6 +68,8 @@ export const TOPICS_COLUMN_WIDTHS = {
   check: { default: 66, min: 52, max: 160 },
   decisions: { default: 168, min: 110, max: 360 },
   tasks: { default: 168, min: 110, max: 360 },
+  // round226 — the unified תוצרים column (replaces decisions+tasks in render).
+  outputs: { default: 140, min: 96, max: 320 },
 };
 
 // Decisions tab table (its OWN 'decisions' tableId — separate widths from the

@@ -128,10 +128,24 @@ if [[ -z "$TOOL" || -z "$DEPLOYMENT" ]]; then
     show_usage
 fi
 
+# Environment fallback (cloud / CI sessions): the per-user ~/.config file does
+# NOT travel to Claude Code cloud/web sessions — only the repo's committed
+# .claude/ does. So if the connection vars are already in the environment, use
+# them and skip the file entirely. Env takes precedence when present; local
+# machines with a config.toml and no such env vars are unaffected. Set these in
+# the cloud environment UI. See references/app-errors.md → "Access".
+if [[ "$TOOL" == "axiom" && -n "${AXIOM_URL:-}" && -n "${AXIOM_TOKEN:-}" ]]; then
+    echo "AXIOM_URL=\"$AXIOM_URL\""
+    echo "AXIOM_TOKEN=\"$AXIOM_TOKEN\""
+    echo "AXIOM_ORG_ID=\"${AXIOM_ORG_ID:-}\""
+    exit 0
+fi
+
 if [[ ! -f "$CONFIG_FILE" ]]; then
     echo "Error: Config file not found: $CONFIG_FILE" >&2
     echo "" >&2
     echo "Run 'scripts/init' to create configuration." >&2
+    echo "(Cloud/CI: set AXIOM_URL + AXIOM_TOKEN [+ AXIOM_ORG_ID] in the environment instead.)" >&2
     exit 1
 fi
 

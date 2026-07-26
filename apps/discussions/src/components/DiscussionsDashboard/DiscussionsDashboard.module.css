@@ -27,8 +27,14 @@
   align-items: center;
   gap: var(--spacing-small, 8px);
   direction: ltr;
-  padding: var(--spacing-medium, 16px);
+  /* round172 — tight vertical padding so the (embedded) "ערוך פריסה" toolbar and
+     the dashboard content below it sit high, near the mode switcher. */
+  padding: 4px var(--spacing-medium, 16px);
   padding-inline-start: var(--content-gutter-start, 52px);
+  /* round244 (owner request) — the (embedded) "ערוך פריסה" button is pinned to
+     the header's end edge (margin-inline-start:auto on .dashTools); pull it
+     closer to the card corner, keeping just a small gap from the edge. */
+  padding-inline-end: var(--spacing-small, 8px);
 }
 .viewTitle {
   flex: none;
@@ -56,11 +62,28 @@
 .backArrowBtn:hover { background: var(--primary-background-hover-color, #f0f1f3); }
 
 /* Scrollable content region — the header stays put; charts scroll under it. */
+/* round165 — `direction: ltr` puts the vertical scrollbar on the RIGHT (the app
+   is RTL, which would otherwise drop it on the left). The canvas positions its
+   widgets with physical left/top (direction-agnostic) and each widget restores
+   RTL internally; the text children below re-assert RTL so only the bar side
+   changes. */
 .scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* round245 (owner bug) — the dashboard "shook" while narrowing: a toggling
+     vertical scrollbar changed the canvas width → recomputed widget heights →
+     toggled the scrollbar again (a ResizeObserver feedback loop). Reserving the
+     scrollbar gutter keeps the content width constant whether or not the bar is
+     shown, breaking the loop. */
+  scrollbar-gutter: stable;
   padding: 0 16px 24px;
+  direction: ltr;
+}
+.scroll > .centerMsg,
+.scroll > .drill,
+.scroll > .hiddenTray {
+  direction: rtl;
 }
 
 /* Three zones: filter rail (LEFT) + the 2×2 grid. `align-items:stretch` makes
@@ -118,11 +141,6 @@
 .fSection { padding: 12px 0; }
 .fSection + .fSection { border-top: 1px solid #eef0f5; }
 .fLabel { font-size: 12px; font-weight: 600; color: var(--secondary-text-color, #676879); margin-bottom: 9px; }
-.fFoot {
-  margin-top: auto; padding-top: 14px; border-top: 1px solid #eef0f5;
-  font-size: 12px; color: var(--secondary-text-color, #676879); line-height: 1.5;
-}
-.fFoot b { color: var(--primary-text-color, #323338); }
 
 .pillGroup { display: flex; flex-wrap: wrap; background: #eef1f8; border-radius: 9px; padding: 4px; gap: 3px; }
 .pill {
@@ -146,8 +164,11 @@
 .dimSelect + .dimSelect { margin-top: 9px; }
 .dimSelect:hover { background: #e6eaf5; }
 .dimSelect:focus { outline: none; border-color: var(--dash-s1); }
-.customRange { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
-.customRange .dash { color: var(--secondary-text-color, #676879); }
+/* round163 — start (left) → end (right) with an arrow toward the end; wraps
+   instead of clipping when the filter column is narrow. */
+.customRange { display: flex; direction: ltr; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 9px; }
+.crField { flex: 1 1 110px; min-width: 100px; }
+.crArrow { flex: none; color: var(--secondary-text-color, #676879); }
 
 /* ROW 1, left cell — effectiveness (grows to fill) + 4 KPI cubes. */
 .cellEff { display: flex; flex-direction: column; gap: 12px; }
@@ -258,16 +279,27 @@
   padding: 8px 12px; background: var(--bg-secondary, #f6f7fb);
   border: 1px solid var(--layout-border-color, #e6e9ef); border-radius: 8px;
   font: inherit; font-size: 13.5px; color: var(--primary-text-color, #323338);
-  cursor: pointer; text-align: right; width: 100%;
+  /* round244 — read-only rows (no Updates-card open), so no click affordance. */
+  cursor: default; text-align: right; width: 100%;
 }
-.drillItem:hover { background: #eef1f8; }
 .drillName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drillDate { color: var(--secondary-text-color, #676879); font-size: 12px; flex-shrink: 0; }
 
 /* =========================================================================
    round160 — owner-editable free-form canvas (drag / resize / hide widgets).
    ========================================================================= */
-.centerMsg { display: flex; align-items: center; justify-content: center; min-height: 320px; }
+/* round166 — the loading splash / error message fills the scroll area with a
+   solid white backdrop (like My Tasks), instead of letting the dashboard's grey
+   `.root` show around the animation. Negative margins bleed over `.scroll`'s
+   side/bottom padding so the white reaches the frame edges. */
+.centerMsg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  background: var(--primary-background-color, #fff);
+  margin: 0 -16px -24px;
+}
 
 /* Editor toolbar in the header (LTR row → margin-inline-start:auto pushes it to
    the far side). */

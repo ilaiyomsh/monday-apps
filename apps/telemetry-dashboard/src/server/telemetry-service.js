@@ -3,7 +3,7 @@
 // Axiom. When no Axiom token is configured the service reports seed mode and
 // the client falls back to the bundled synthetic dataset.
 
-import { buildQueries, WINDOWS } from './queries.js';
+import { buildQueries, buildErrorDetailQuery, WINDOWS } from './queries.js';
 import { createAxiomClient } from './axiom.js';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -96,5 +96,35 @@ export function createTelemetryService({ axiomToken, axiomDataset, axiomOrgId, f
     return payload;
   }
 
-  return { getTelemetry, enabled };
+  /**
+   * Drill-down: the recent raw error occurrences for ONE err_name over a
+   * window. Unlike getTelemetry this runs a single query and does NOT swallow
+   * failures — it lets the query error propagate so the route maps it to 502
+   * (the caller has one thing to show, not eleven independent panels). Returns
+   * { seed:true, rows:[] } when Axiom is unconfigured, and an empty result
+   * (no query) when no err_name is given.
+   * @param {string} rawWindow
+   * @param {string} errName
+   * @returns {Promise<{ rows: Array<Record<string, unknown>>, window: string, seed?: boolean, generatedAt?: string }>}
+   */
+  async function getErrorDetail(rawWindow, errName) {
+    const win = normalizeWindow(rawWindow);
+    if (!enabled) {
+      return { seed: true, window: win, rows: [] };
+    }
+    const name = typeof errName === 'string' ? errName.trim() : '';
+    if (!name) {
+      return { window: win, rows: [] };
+    }
+
+    const end = new Date(clock());
+    const start = new Date(clock() - WINDOWS[win]);
+    const startIso = start.toISOString();
+    const endIso = end.toISOString();
+
+    const rows = await client.query(buildErrorDetailQuery(axiomDataset, name), startIso, endIso);
+    return { window: win, rows, generatedAt: endIso };
+  }
+
+  return { getTelemetry, getErrorDetail, enabled };
 }

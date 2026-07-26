@@ -20,13 +20,69 @@
   box-shadow: var(--box-shadow-small, 0 4px 12px rgba(0, 0, 0, 0.16));
 }
 
+/* round237 — templates PREVIEW panel: a list (right) + the selected template's
+   topics/points (left) + an add button. */
+.panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  /* round244 (owner request) — the templates button sits at the header's
+     physical-LEFT (RTL headTools), so opening from inline-start made the 360px
+     panel spill LEFT, OUTSIDE the agenda card. Anchor its inline-END edge to the
+     button instead so the whole card (list + preview + add) opens toward the
+     physical RIGHT, staying inside the agenda box. */
+  inset-inline-end: 0;
+  z-index: 4100;
+  width: 340px;
+  max-width: min(340px, calc(100vw - 24px));
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: var(--border-radius-medium, 8px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+.panelBody {
+  display: flex;
+  max-height: 320px;
+}
+.list {
+  width: 140px;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  overflow-y: auto;
+  border-inline-end: 1px solid var(--layout-border-color, #e6e9ef);
+}
+.preview {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  overflow-y: auto;
+}
+.previewHead {
+  font-size: 12px;
+  color: var(--secondary-text-color, #676879);
+  margin-bottom: 8px;
+  font-weight: var(--font-weight-bold, 700);
+}
+.previewTopic { display: flex; flex-direction: column; margin-top: 8px; }
+.previewTopicName { font-size: 13px; font-weight: 600; color: var(--text-color, #323338); }
+.previewPoint { font-size: 12.5px; color: var(--secondary-text-color, #676879); padding-inline-start: 12px; }
+.panelFoot {
+  display: flex;
+  justify-content: flex-start;
+  padding: 8px 12px;
+  border-top: 1px solid var(--layout-border-color, #e6e9ef);
+}
+
 .item {
   display: flex;
   flex-direction: column;
   gap: 2px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 8px 10px;
   border: none;
+  border-radius: 6px;
   background: transparent;
   cursor: pointer;
   text-align: start;
@@ -35,6 +91,10 @@
 
 .item:hover {
   background: var(--primary-background-hover-color, #f0f3ff);
+}
+.itemOn {
+  background: var(--primary-selected-color, #e6f1fd);
+  color: var(--primary-color, #0073ea);
 }
 
 .itemName {
@@ -51,7 +111,7 @@
 .progressPop {
   position: absolute;
   top: calc(100% + 6px);
-  inset-inline-start: 0;
+  inset-inline-end: 0;
   z-index: 900;
   width: 240px;
   padding: 10px 12px;

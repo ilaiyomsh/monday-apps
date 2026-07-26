@@ -1,6 +1,6 @@
 {
   "name": "telemetry-dashboard",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Access-controlled monday-code dashboard for Axiom app-errors usage + error telemetry, by account and by app — plus lifecycle/app-event webhooks recorded to a monday board",
   "private": true,
   "type": "module",

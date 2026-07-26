@@ -98,13 +98,14 @@ real monday tokens (local dev outside monday simply falls back to the seed).
 | `AXIOM_DATASET` | dataset name (default `app-errors`) |
 | `AXIOM_ORG_ID` | optional Axiom org id header |
 
-OAuth app-identity token (Change #143 continuation — replaces the need for a
-personal `MONDAY_API_TOKEN`; see "Lifecycle events → monday board" below):
+OAuth app-identity token (Change #143, OAuth 2.1 in #144 — replaces the need
+for a personal `MONDAY_API_TOKEN`; see "Lifecycle events → monday board"):
 
 | var | purpose |
 |-----|---------|
 | `MONDAY_CLIENT_ID` | monday app Client ID — used for the `GET /oauth/start` authorize redirect |
 | `BASE_URL` | this app's own stable base URL; builds the OAuth `redirect_uri` (`<BASE_URL>/oauth/callback`) — must match the redirect URI registered in the Developer Center OAuth config exactly |
+| `MONDAY_APP_VERSION_ID` | optional — targets a DRAFT version's OAuth config during testing (`app_version_id` on the authorize URL). The Developer Center's **New OAuth Flow** toggle is per-version; unset targets the live version |
 
 Lifecycle-events additions (all optional — unset keeps the feature inert):
 
@@ -112,10 +113,15 @@ Lifecycle-events additions (all optional — unset keeps the feature inert):
 |-----|---------|
 | `MONDAY_API_TOKEN` | **optional fallback** — a personal monday API token used to **write** items on the events board only when the owner has not yet authorized via `/oauth/start` (or for local dev). The OAuth-issued token (SecureStorage) always takes priority when present. |
 | `MONDAY_API_URL` | GraphQL endpoint override (tests only; default `https://api.monday.com/v2`) |
-| `LIFECYCLE_BOARD_ID` | target board id (from `create-events-board.mjs`) |
-| `LIFECYCLE_BOARD_COLUMNS` | JSON map logical key → column id (from `create-events-board.mjs`) |
 | `LIFECYCLE_SIGNING_SECRETS` | JSON map `appSlug → Signing Secret` — verifies `/api/webhooks/lifecycle` |
 | `APP_EVENTS_CLIENT_SECRETS` | JSON map `appSlug → Client Secret` — verifies `/api/webhooks/app-events` |
+
+> **Board config is no longer env-based.** The events board id, its single
+> group id, and the logical→column-id map used to live in `LIFECYCLE_BOARD_ID`
+> / `LIFECYCLE_BOARD_COLUMNS`. They are now **provisioned from the in-app
+> Settings tab** (`POST /api/settings/board`) and stored in SecureStorage
+> (key `lifecycle:board_config`); `events-board.js` reads them per event
+> (60s cache), so changing the mapping needs no redeploy.
 
 Server-side error/usage shipping (the logger's Axiom sink) is gated separately
 on `AXIOM_TOKEN` + `AXIOM_DATASET` + `AXIOM_APP_NAME` — unset = console-only.
@@ -130,35 +136,76 @@ Secret) and **app-level install/subscription webhooks** (`POST
 /api/webhooks/app-events`, JWT signed with that app's Client Secret) land on
 this server, which identifies the sender by which configured secret verifies,
 acks `202` immediately (challenge handshakes echo `200` before auth), then
-fail-soft records each event as an item on a private monday board — one group
-per app, deduped by `X-Apps-Event-Id`.
+fail-soft records each event as an item on a private monday board — a **single
+group** (the `App` column distinguishes apps), deduped by `X-Apps-Event-Id`.
+
+The board is **provisioned from the Settings tab** (see below), not env: the
+config (`{ boardId, groupId, columns }`) is created in the owner's account and
+stored in SecureStorage. Until it exists, webhooks still `202` and simply
+record nothing (`events-board.js` warns once and stays inert).
 
 Privacy: webhook payload details go **only** to the board (owner's private
 monday account); logger/Axiom ever see ids and enums only. Auth is
 fail-closed: no secrets configured → 401 (only the challenge echo is open).
 A dead board/token/monday outage can never 5xx a webhook.
 
-**Write token — app-identity OAuth (Change #143 continuation):** board writes
-(`create_item` / `create_group`) need a write-scoped monday credential.
-Instead of a personal `MONDAY_API_TOKEN`, the owner authorizes this app's own
-identity **once**: `GET /oauth/start` redirects to monday's consent screen;
-`GET /oauth/callback` exchanges the returned code for an access token (scopes
-`boards:read boards:write me:read`) and stores it in SecureStorage
-(`owner:oauth_token`, `src/services/storage.js`). `src/services/monday-api.js`
-resolves the write token **per call**: the stored OAuth token first, the
-optional `MONDAY_API_TOKEN` env var as a fallback — so the events board can be
-configured (`LIFECYCLE_BOARD_ID`) before the owner has authorized; writes
-simply fail soft until then. If `ALLOWED_ACCOUNT_IDS` is set, `/oauth/callback`
-checks the authorizing account via `me { account { id } }` and **rejects (403,
-does not store)** an account outside the allowlist. Both routes are mounted at
-`/oauth` with no session-token gate — the code exchange is the auth.
+**Write token — app-identity OAuth 2.1 (Change #143 model, #144 migration):**
+board writes (`create_item` / `create_group`) need a write-scoped monday
+credential. Instead of a personal `MONDAY_API_TOKEN`, the owner authorizes
+this app's own identity **once**: `GET /oauth/start` redirects to monday's
+consent screen with a single-use CSRF `state` nonce and a **PKCE S256
+code_challenge** (monday's new OAuth flow requires PKCE; the verifier rides
+in the `oauth_state:` record, 10-min TTL, replay → 400). `GET /oauth/callback`
+consumes the state and exchanges the code at the **new
+`oauth_ms/oauth/token` endpoint** (`grant_type=authorization_code` +
+`code_verifier`; scopes `boards:read boards:write me:read`), storing a token
+RECORD in SecureStorage (`owner:oauth_token`): access token + **rotating
+single-use refresh token** + decoded JWT `exp` + `obtainedAt` (monday's
+6-month lifetime anchor) + status.
+
+`src/services/oauth-token-provider.js` resolves the write token **per call**
+via `src/services/monday-api.js`: proactive refresh when <5 min remain
+(single-flight mutex — a concurrent double-refresh would burn the single-use
+rotation), rotated refresh tokens persisted, `invalid_grant` (incl. the
+6-month death) flags the record `reauth_required` — the Settings tab shows a
+**reauthorize** CTA. The optional `MONDAY_API_TOKEN` env var remains the
+fallback, so writes fail soft until the owner authorizes. A legacy
+bare-string token stored by the pre-2.1 flow is normalized to a non-expiring
+record and keeps working — re-authorize once to gain refresh + revocation.
+If `ALLOWED_ACCOUNT_IDS` is set, `/oauth/callback` checks the authorizing
+account via `me { account { id } }` and **rejects (403, does not store)** an
+account outside the allowlist. Both routes are mounted at `/oauth` with no
+session-token gate — the state nonce + code exchange are the auth.
+**Disconnect:** `POST /api/settings/disconnect` (Settings-tab button) revokes
+both tokens best-effort (`oauth_ms/oauth/revoke`) and always clears the
+stored record.
+
+> **Developer Center prerequisite:** the app version must have the **New
+> OAuth Flow** toggle enabled (OAuth & Permissions tab — per version) and the
+> redirect URI registered exactly as `<BASE_URL>/oauth/callback`. A version
+> on the new flow with legacy code fails with `code_challenge is required`;
+> this code speaks the new flow.
+
+### Settings tab (board provisioning)
+
+The **Settings** tab in the dashboard (owner-only, behind the same session +
+allowlist gate) is where the events board is created and inspected:
+
+1. Authorize the app once (`/oauth/start`) — the tab links to it and shows the
+   connection status.
+2. Click **Create events board** — the server creates a private board, its 9
+   columns, and uses the board's single default group as the events group, then
+   stores `{ boardId, groupId, columns }` in SecureStorage. The tab then shows
+   the board id and the column mapping (read-only). No `mapps code:env` step,
+   no version IDs.
 
 ### Scripts (`scripts/`)
 
 ```bash
-# 1. Create the private events board (columns + one group per app); prints the
-#    two env lines ready for `mapps code:env`:
-node scripts/create-events-board.mjs [--name "App Lifecycle Events"] [--workspace <id>]
+# 1. (SUPERSEDED by the Settings tab above — kept for reference only.) The old
+#    CLI that created the board + columns and printed LIFECYCLE_BOARD_* env
+#    lines. Board config now lives in SecureStorage, provisioned in-app.
+# node scripts/create-events-board.mjs [--name "App Lifecycle Events"] [--workspace <id>]
 
 # 2. Register feature-level lifecycle subscriptions for every app in
 #    scripts/lifecycle-apps.config.json (fill in appSlug/featureSlug first):
@@ -178,24 +225,24 @@ Token resolution for the first two: `MONDAY_API_TOKEN` env var, else
 1. **Create the monday app** (if not done yet — see "Activation steps" above)
    and add the GitHub secret `APP_TELEMETRY_DASHBOARD_ID`.
 2. **Merge to `develop`** → draft deploy; note the server's stable base URL.
-3. **Create the board**: `node scripts/create-events-board.mjs` → copy the
-   printed `LIFECYCLE_BOARD_ID` / `LIFECYCLE_BOARD_COLUMNS` lines.
-4. **Set the platform env** (never committed):
+3. **Set the platform env** (never committed):
    ```bash
    mapps code:env -i <APP_ID> -k MONDAY_CLIENT_ID            -v <client_id>
    mapps code:env -i <APP_ID> -k MONDAY_CLIENT_SECRET        -v <client_secret>
    mapps code:env -i <APP_ID> -k BASE_URL                    -v <stable_base_url>
-   mapps code:env -i <APP_ID> -k LIFECYCLE_BOARD_ID          -v <board_id>
-   mapps code:env -i <APP_ID> -k LIFECYCLE_BOARD_COLUMNS     -v '<minified json>'
    mapps code:env -i <APP_ID> -k LIFECYCLE_SIGNING_SECRETS   -v '{"axis-planner":"<signing secret>", ...}'
    mapps code:env -i <APP_ID> -k APP_EVENTS_CLIENT_SECRETS   -v '{"axis-planner":"<client secret>", ...}'
    ```
-5. **Authorize the app's write identity — once**: as the owner, visit
-   `<BASE_URL>/oauth/start` in a browser and approve the consent screen. This
-   stores an app-identity OAuth token (SecureStorage) that
-   `services/monday-api.js` uses for all board writes — no personal
-   `MONDAY_API_TOKEN` required. `MONDAY_API_TOKEN` remains available as an
-   **optional fallback** (local dev, or before this step has been done).
+4. **Authorize the app's write identity — once**: as the owner, visit
+   `<BASE_URL>/oauth/start` (or use the link in the **Settings** tab) and
+   approve the consent screen. This stores an app-identity OAuth token
+   (SecureStorage) that `services/monday-api.js` uses for all board writes — no
+   personal `MONDAY_API_TOKEN` required. `MONDAY_API_TOKEN` remains available as
+   an **optional fallback** (local dev, or before this step has been done).
+5. **Create the events board — Settings tab**: open the dashboard, go to
+   **Settings**, and click **Create events board**. This provisions the private
+   board + 9 columns + single group in your account and stores the config in
+   SecureStorage. (Nothing to set in env.)
 6. **Register feature-level subscriptions**: fill `webhookBaseUrl` +
    `appSlug`/`featureSlug` in `scripts/lifecycle-apps.config.json` (Developer
    Center → the feature's URL slug), then

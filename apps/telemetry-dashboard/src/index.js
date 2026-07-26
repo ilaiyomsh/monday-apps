@@ -24,8 +24,11 @@ const { createApp } = await import('./app.js');
 const { createTelemetryService } = await import('./server/telemetry-service.js');
 const { createMondayApi } = await import('./services/monday-api.js');
 const { createEventsBoardService } = await import('./services/events-board.js');
+const { createBoardProvisioner } = await import('./services/board-provisioner.js');
 const { createLifecycleService } = await import('./services/lifecycle-service.js');
 const { createStorageService } = await import('./services/storage.js');
+const { createMondayOauthClient } = await import('./services/monday-oauth-client.js');
+const { createOauthTokenProvider } = await import('./services/oauth-token-provider.js');
 const { createSecureStorageBackend } = await import('./storage/secure-storage-backend.js');
 const { getEnv } = await import('./helpers/environment.js');
 
@@ -35,7 +38,6 @@ const env = getEnv();
 // the boot-time validation lives HERE: a var that is set but yielded nothing
 // is a misconfiguration worth one warn (key name only — never the value).
 for (const [key, parsed] of [
-  ['LIFECYCLE_BOARD_COLUMNS', env.lifecycleBoardColumns],
   ['LIFECYCLE_SIGNING_SECRETS', env.lifecycleSigningSecrets],
   ['APP_EVENTS_CLIENT_SECRETS', env.appEventsClientSecrets],
 ]) {
@@ -51,40 +53,55 @@ const telemetry = createTelemetryService({
   axiomOrgId: env.axiomOrgId,
 });
 
-// --- OAuth app-identity token (Change #143 continuation) ------------------
-// The owner authorizes ONCE at /oauth/start (mounted in app.js); the token is
-// stored in SecureStorage (services/storage.js, key owner:oauth_token) with
-// a 60s read cache. getWriteToken resolves it per monday-api call, falling
-// back to the personal MONDAY_API_TOKEN only when no OAuth token exists yet.
+// --- OAuth app-identity token (Change #143, OAuth 2.1 in #144) -------------
+// The owner authorizes ONCE at /oauth/start (mounted in app.js); the token
+// RECORD (access + rotating refresh + expiry) is stored in SecureStorage
+// (services/storage.js, key owner:oauth_token) with a 60s read cache. The
+// token provider refreshes proactively (5-min cushion, single-flight) and
+// getWriteToken resolves it per monday-api call, falling back to the
+// personal MONDAY_API_TOKEN only when no usable OAuth token exists.
 const storageBackend = createSecureStorageBackend();
 const storage = createStorageService({ backend: storageBackend, logger });
-const getWriteToken = async () => (await storage.getOwnerToken()) ?? (env.mondayApiToken || null);
+const oauthClient = createMondayOauthClient({
+  clientId: env.mondayClientId,
+  clientSecret: env.clientSecret,
+});
+const tokenProvider = createOauthTokenProvider({ storage, oauthClient, logger });
+const getWriteToken = async () =>
+  (await tokenProvider.getFreshAccessToken()) ?? (env.mondayApiToken || null);
 
-// --- Lifecycle events → monday board (inert unless a board id is set) ----
-// The monday API client resolves its write token PER CALL (getWriteToken
-// above), so the events board is built whenever a board id is configured —
-// even before the owner has authorized, since the token can arrive later via
-// OAuth. Until then, each write attempt fails soft: monday-api throws
-// MondayApiError('no_write_token'), which events-board's recordEvent catches
-// like any other failure (logs, returns null) — it never reaches the webhook
-// path. The lifecycle service is ALWAYS built: with eventsBoard null (no
-// board id at all) it warns 'lifecycle_not_configured' once per route and
-// skips recording, so webhooks still 202 and never error back at monday.
+// --- Lifecycle events → monday board (config now lives in SecureStorage) --
+// The monday API client resolves its write token PER CALL (getWriteToken).
+// The events board is ALWAYS built: it reads its config (board id, single
+// group, column map) per event via storage.getBoardConfig() — provisioned
+// from the Settings UI, not env. Until a board is provisioned, getBoardConfig
+// yields null → recordEvent warns once and skips, so webhooks still 202 and
+// never error back at monday. Once provisioned, a write with no OAuth token
+// yet fails soft (MondayApiError 'no_write_token' → logged, null) — the token
+// can arrive later via /oauth/start.
 const mondayApi = createMondayApi({ getToken: getWriteToken, url: env.mondayApiUrl, logger });
-const eventsBoard = env.lifecycleBoardId
-  ? createEventsBoardService({
-      mondayApi,
-      boardId: env.lifecycleBoardId,
-      columns: env.lifecycleBoardColumns,
-      logger,
-    })
-  : null;
-const lifecycleService = createLifecycleService({ eventsBoard, logger });
+const eventsBoard = createEventsBoardService({
+  mondayApi,
+  getConfig: () => storage.getBoardConfig(),
+  logger,
+});
+const provisioner = createBoardProvisioner({ mondayApi, storage, logger });
+const { createAccountSlugResolver } = await import('./services/account-slug.js');
+const slugResolver = createAccountSlugResolver({ mondayApi, logger });
+const lifecycleService = createLifecycleService({
+  eventsBoard,
+  logger,
+  debugRawPayload: env.debugLifecyclePayload,
+  slugResolver,
+});
 
 const app = createApp({
   telemetry,
   env,
   storage,
+  provisioner,
+  tokenProvider,
+  oauthClient,
   lifecycle: {
     service: lifecycleService,
     signingSecrets: env.lifecycleSigningSecrets,
@@ -97,7 +114,6 @@ const server = app.listen(env.port, () => {
     port: env.port,
     axiom: telemetry.enabled ? 'live' : 'seed-mode',
     allowlist: env.allowedAccountIds.length,
-    lifecycleBoard: Boolean(eventsBoard),
     lifecycleApps: Object.keys(env.lifecycleSigningSecrets).length,
     appEventApps: Object.keys(env.appEventsClientSecrets).length,
   });

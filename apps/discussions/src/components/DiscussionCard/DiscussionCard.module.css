@@ -61,6 +61,8 @@
      keeps the original 24px inset. */
   inset-inline-start: var(--content-gutter-start, 52px);
   inset-inline-end: var(--section-rule-inset-wide, 24px);
+  /* round249 — back to the original 1px rule (owner request); the thicker blue
+     active-underline straddles it symmetrically (see the active ::after). */
   height: 1px;
   background: var(--ui-border-color, #d0d4e4);
   pointer-events: none;
@@ -75,6 +77,14 @@
   position: relative;
   z-index: 1;
   margin-inline-start: 0;
+  /* round231 — tabs (start) + the roster (end) share ONE line: a flex row,
+     vertically centered so the tab baseline and the avatars align and both meet
+     the same bottom rule. A min-height keeps the row a constant height whether
+     the roster is open or closed, so toggling never nudges the view. */
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
   /* Round 70 — keep the tab strip a FIXED-HEIGHT SINGLE ROW that scrolls
      horizontally, so it never grows taller when monday docks its native Updates
      panel and narrows the app iframe. Before this the vibe tab labels (e.g.
@@ -100,10 +110,31 @@
 }
 .tabsRow :global([class*="tabWrapper"][class*="active_"]::after) {
   z-index: 2;
+  /* round250 — round249's bottom/height override moved the bar into the row's
+     overflow-y:hidden clip zone, so it vanished. Keep vibe's own ::after box and
+     only TRANSFORM it (transforms are not clipped at this position) so the blue
+     underline sits ON the 1px black rule.
+     round252 (owner request) — DOUBLE the bar's thickness. scaleY(2) grows it
+     about its OWN vertical centre, so the centre that translateY(3px) already
+     seated on the black rule does NOT move — the thicker bar stays symmetric on
+     the rule. Both transforms scale with the browser/monday zoom, so the bar
+     keeps sitting on the rule at any zoom level (a fixed px `bottom`/`height`
+     would drift). round255 — owner still found it faint; DOUBLE it again
+     (scaleY 2 → 4) so the active bar reads clearly, still resting centered on
+     the rule. */
+  /* round283 (owner request) — active bar 40% THINNER: scaleY 4 → 2.4 (4 × 0.6). */
+  transform: translateY(3px) scaleY(2.4);
 }
 /* vibe TabList renders role="tablist"; keep it ONE row, never wrapping to a 2nd row. */
 .tabsRow :global([role="tablist"]) {
   flex-wrap: nowrap;
+  /* round245 (owner request) — the active-tab underline must sit on the grey
+     header rule, DIRECTLY UNDER the tab text. The rule is pinned at the row's
+     bottom (.header::after, bottom:0); the vibe underline sits at the tablist's
+     own bottom. Bottom-align the tablist so those two coincide. (round244's
+     stretch+center was wrong — it pushed the underline through the MIDDLE of
+     the label.) */
+  align-self: flex-end;
 }
 /* vibe Tab renders role="tab"; never let a tab shrink or its label wrap to a
    second line (that wrapping is what grew the bar height when the iframe
@@ -115,6 +146,18 @@
 }
 .tabsRow :global([role="tab"]) * {
   white-space: nowrap;
+}
+/* round217 — kill the stray black focus outline the vibe Tab paints around a
+   just-clicked/keyboard-focused tab (owner screenshot: a black frame appears
+   around some tabs). The active tab already has its own underline indicator,
+   so no focus ring is needed; keyboard users still see the underline move. */
+.tabsRow :global([role="tab"]),
+.tabsRow :global([role="tab"]) *,
+.tabsRow :global([role="tab"]:focus),
+.tabsRow :global([role="tab"]:focus-visible),
+.tabsRow :global([role="tab"]:focus-within) {
+  outline: none !important;
+  box-shadow: none !important;
 }
 /* round114 — zero the FIRST tab's internal leading padding so its label (and
    active underline) start exactly on the gutter line, aligned with the table
@@ -179,6 +222,32 @@
   align-items: center;
   gap: var(--spacing-xs, 4px);
   min-width: 0;
+}
+
+/* round203 — hover pencil next to the title (lead/coordinator/owner only):
+   hidden at rest, revealed while hovering the title row; dbl-click still works. */
+.titleEditBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+.titleMainRow:hover .titleEditBtn,
+.titleEditBtn:focus-visible {
+  opacity: 1;
+}
+.titleEditBtn:hover {
+  background: var(--primary-background-hover-color, #f0f1f3);
+  color: var(--primary-text-color, #323338);
 }
 
 /* "View only" chip shown when the current user may not edit this discussion. */
@@ -360,24 +429,22 @@
      that isn't the title is flush right). Physical — not inline — so the block's
      own dir="rtl" (which orders תאריך→שעה→people right-to-left) doesn't flip it. */
   margin-left: auto;
-  /* Round 51: the meta does NOT shrink (flex-shrink:0), so it keeps its natural
-     width flush-right on ONE line and it is the TITLE that yields first — the title
-     ellipsizes to give the meta room (see .title / .titleBlock min-width). When the
-     pane narrows past the point where [title min-width + the full meta] fit, the
-     meta would be pushed past the row's right edge and clipped; DiscussionCard.jsx
-     measures exactly that overflow and toggles .participantsNarrow to hide the
-     PEOPLE groups (keeping date + time), so the crowded state is transient and the
-     header stays one row (flex-wrap:nowrap here; the inner date/time/label/avatar
-     items are each already nowrap) and the table below never jumps. overflow-x:clip
-     does the horizontal clip in the brief crowded frame; overflow-y stays visible
-     so the inline half-hour time menu can still drop BELOW the row (a plain
-     overflow:hidden/auto would clip it — the date popover is portaled by Vibe, so
-     it is unaffected either way). At wide widths it sits on one line, flush right,
-     with every group shown. Round 48 established this one-row/no-wrap contract;
-     round 50 hid the people by a fixed 600px width (which never fired because the
-     docked Updates panel keeps the header wider than that); round 51 hides them by
-     REAL overflow instead, so it triggers whenever the panel docks, at any size. */
-  flex-shrink: 0;
+  /* round180 — the meta may now SHRINK (flex-shrink:1 + min-width:0). Because this
+     block is dir="rtl", its main-axis START is the RIGHT: the date packs at the
+     right edge, then time · chevron · (people) to the left. When the pane narrows,
+     the block shrinks to the available width and the LEFT-most items (the opened
+     people groups) overflow past the left edge and are clipped by overflow-x:clip —
+     the date and time, being at the right/start, are NEVER clipped. This fixes the
+     bug where expanding the roles on a narrow card (selector panel open) pushed the
+     block past the row's right edge and clipped the DATE/TIME. (Before round180 the
+     block was flex-shrink:0 and it was the whole meta that overflowed rightward.)
+     The header still stays ONE row (flex-wrap:nowrap; inner items nowrap) so the
+     table below never jumps; overflow-y stays visible so the inline half-hour time
+     menu can still drop BELOW the row. The DiscussionCard.jsx overflow watcher
+     (.participantsNarrow) still hides the people at extreme narrowness as a belt-
+     and-suspenders, but shrink-then-clip is now the primary mechanism. */
+  flex-shrink: 1;
+  min-width: 0;
   /* round112 — back to the ONE-line row layout (round111's two-row variant was
      reverted by the owner): date · time · chevron · (roles, when opened). */
   display: flex;
@@ -415,6 +482,46 @@
 .metaToggle:hover {
   background: var(--primary-background-hover-color, #f5f6f8);
 }
+/* round227 — the disclosure chevron points DOWN at rest and rotates 180° (points
+   up) when the roster band is open. */
+.metaToggle svg {
+  transition: transform 0.15s ease;
+}
+.metaToggleOpen svg {
+  transform: rotate(180deg);
+}
+
+/* round227 (owner request) — the role-holders + participants roster now opens as
+   a horizontal band BELOW the title/date row (was inline to the chevron's left).
+   dir=rtl (set in JSX) packs the groups under the date on the RIGHT and wraps
+   them LEFT along the white area toward the tabs. The header's own inline
+   padding provides the gutter, so this only adds the vertical rhythm. */
+/* round231 (approved mockup) — the roster on the tab-names line, pinned to the
+   END (physical right; margin-inline-start:auto in the ltr .tabsRow). Its own
+   dir=rtl orders the groups right-to-left; nowrap keeps it a single line flush
+   with the tab baseline. flex-shrink:0 keeps the avatars from squishing (a
+   narrow pane scrolls the row, and chrome-narrow hides the roster entirely). */
+.tabsRoster {
+  /* round238 — PHYSICAL margin-left:auto (like .participants), NOT the logical
+     margin-inline-start:auto. This block is dir="rtl", so the logical form
+     resolved to margin-RIGHT:auto and pushed the whole roster LEFT (its right
+     edge sat ~280px off the card edge — the misalignment the owner kept seeing;
+     round236's reserve-mirror never touched this root cause). Physical
+     margin-left:auto hugs the RIGHT edge deterministically, screenshot-verified. */
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 2px;
+  flex-shrink: 0;
+  /* round238 — the date text sits 16px inside its .dateGroup; the roster's last
+     group only has 4px, so pad the roster's inline-start (physical RIGHT in this
+     dir=rtl block) by ~16px so the rightmost group's right edge lands directly
+     under the date/time's right edge (screenshot-measured: 41px date ≈ 41px
+     roster). No settings-gear reserve is needed — the roster sits on the tab
+     line, BELOW the gear, so nothing overlaps it. */
+  padding-inline-start: 16px;
+}
 
 /* One labeled group: BOLD label to the RIGHT (dir=rtl → label is the first child)
    of its content (date value / time value / avatars), on one row. Groups stretch
@@ -449,9 +556,18 @@
   background: var(--ui-border-color, #d0d4e4);
 }
 
-/* People-column groups get a wider label→avatars gap than the date/time groups. */
+/* round183 — the expanded role groups (מנהל / מרכז דיון / משתתפים) are tightened
+   (owner request): less white space BETWEEN groups (padding-inline 12px → 4px) and
+   between each label and its avatars (gap 12px → 6px). */
 .peopleGroupAvatars {
-  gap: 12px;
+  gap: 6px;
+  padding-inline: 4px;
+}
+/* round183 — and NO divider around/between the role groups: drop the ::before
+   separator whenever a role group follows any group (time→first role and
+   role→role). The date·time separator (date followed by a .dateGroup) is kept. */
+.peopleGroup + .peopleGroupAvatars::before {
+  display: none;
 }
 
 /* Header people fields ONLY: neutralize the shared PersonPicker trigger's own
@@ -606,11 +722,17 @@
 .timeMenuWrap {
   position: relative;
 }
+/* round294 — the time menu is portaled to <body> and positioned by inline
+   fixed top/inset-inline-start (computeFloatingPosition). z-index sits above the
+   app chrome so no sibling row can paint through it (was 51, scoped to the
+   header stacking context — the status counters row painted over it). */
+.timeMenuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
 .timeMenu {
-  position: absolute;
-  top: calc(100% + 6px);
-  inset-inline-start: 0;
-  z-index: 51;
+  z-index: 10000;
   max-height: 280px;
   min-width: 96px;
   overflow-y: auto;
@@ -685,6 +807,21 @@
   width: 100%;
   max-width: 100%;
   margin-inline: 0;
+  /* round184 — the board's row separators STOP at the same right inset as the
+     header rule (.header::after inset-inline-end: 24px), instead of bleeding to
+     the very edge — so the top line under the tabs and every table row line end at
+     the exact same point (owner request). Left inset stays each tab's own 52px
+     gutter; box-sizing:border-box keeps this inside the 100% width. */
+  padding-inline-end: var(--section-rule-inset-wide, 24px);
+}
+
+/* round169 — the tab content's vertical scrollbar is visible from the first
+   moment (owner request), overriding the global transparent-until-hover default.
+   (The other views' vertical bars stay hover-revealed; these table views want it
+   always shown.) */
+.body::-webkit-scrollbar-thumb:vertical {
+  background: var(--ui-border-color, #c3c6d4);
+  background-clip: padding-box;
 }
 
 /* Smooth fade-in when a tab becomes active (either freshly mounted or revealed
@@ -751,7 +888,16 @@
 /* round103 — hide this chrome while monday's item-card panel is open (iframe narrows).
    round117: visibility (not display) so the row keeps its space and the layout
    below does not jump up when the panel opens. */
-:global(body[data-chrome-narrow="1"]) .participants { display: none !important; }
+:global(body[data-chrome-narrow="1"]) .participants,
+:global(body[data-chrome-narrow="1"]) .tabsRoster { display: none !important; }
+
+/* round181 — while the discussions SELECTOR panel is open the card is narrow, so
+   the participants roles must not be shown at all here (owner request): hide the
+   expander chevron and any already-open role/people groups. The date and time stay
+   visible. (body[data-list-open] is set by App while the desktop split shows the
+   selector alongside the card.) */
+:global(body[data-list-open="1"]) .metaToggle,
+:global(body[data-list-open="1"]) .peopleGroupAvatars { display: none !important; }
 
 /* round116 — the tabs strip's own horizontal scrollbar disappears entirely
    while the updates panel narrows the pane (scrolling still works by drag/

@@ -4,7 +4,7 @@
 // failure signals the caller to fall back to the bundled synthetic seed.
 
 import { getSessionToken } from './monday';
-import type { TelemetryPayload, TimeWindow } from './types';
+import type { ErrorOccurrence, TelemetryPayload, TimeWindow } from './types';
 
 export interface FetchResult {
   /** Present only when real data came back. */
@@ -37,5 +37,44 @@ export async function fetchTelemetry(window: TimeWindow): Promise<FetchResult> {
     return { payload: body, seed: false, error: null };
   } catch (err) {
     return { payload: null, seed: false, error: `network: ${String(err)}` };
+  }
+}
+
+export interface ErrorDetailResult {
+  rows: ErrorOccurrence[];
+  /** True when the server is in seed mode (client should drill down locally). */
+  seed: boolean;
+  /** Populated when the fetch/auth failed. */
+  error: string | null;
+}
+
+/**
+ * Fetch the raw occurrences behind one Top-errors row. Same session gate as
+ * fetchTelemetry. Used only in LIVE mode — in seed mode the client drills into
+ * the bundled records directly (see aggregate.errorOccurrences).
+ */
+export async function fetchErrorDetail(window: TimeWindow, errName: string): Promise<ErrorDetailResult> {
+  let token: string;
+  try {
+    token = await getSessionToken();
+  } catch (err) {
+    return { rows: [], seed: false, error: `no-session: ${String(err)}` };
+  }
+
+  try {
+    const res = await fetch(
+      `/api/telemetry/error-detail?window=${encodeURIComponent(window)}&err_name=${encodeURIComponent(errName)}`,
+      { headers: { Authorization: token } }
+    );
+    if (!res.ok) {
+      return { rows: [], seed: false, error: `http ${res.status}` };
+    }
+    const body = (await res.json()) as { rows?: ErrorOccurrence[]; seed?: boolean };
+    if (body?.seed) {
+      return { rows: [], seed: true, error: null };
+    }
+    return { rows: Array.isArray(body?.rows) ? body.rows : [], seed: false, error: null };
+  } catch (err) {
+    return { rows: [], seed: false, error: `network: ${String(err)}` };
   }
 }

@@ -37,6 +37,10 @@
 .bBadgeDot { position: absolute; top: 2px; inset-inline-end: 2px; width: 7px; height: 7px; border-radius: 50%; background: var(--primary-color, #0073ea); }
 /* Mobile-app only (gated on `.mobile-app`, not viewport width). */
 :global(.mobile-app) .bPill { width: 32px; height: var(--toolbar-pill-h, 32px); padding: 0; gap: 0; justify-content: center; flex-shrink: 0; }
+/* round208 — active state on mobile = a stronger background ALONE (the badge
+   dot was removed; owner spec: no extra marks/numbers on the icons). */
+:global(.mobile-app) .bPillApplied { background: var(--primary-selected-hover-color, #cce0ff); }
+:global(.mobile-app) .bPillApplied .bPillIcon { color: var(--primary-color, #0073ea); }
 
 /* ---- desktop panel (inside @vibe DialogContentContainer) ---- */
 .bPanel {
@@ -179,4 +183,48 @@
 
 @media (prefers-reduced-motion: reduce) {
   .bBackdrop, .bSheet { animation: none; }
+}
+
+/* round224 — the flat "קבץ לפי" pick list (GroupPickList): radio-style rows. */
+.gpList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  direction: rtl;
+}
+.gpRow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 8px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-size: 13.5px;
+  color: var(--primary-text-color, #323338);
+  text-align: start;
+}
+.gpRow:hover { background: var(--primary-background-hover-color, #f5f6f8); }
+.gpRadio {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--ui-border-color, #c3c6d4);
+  flex-shrink: 0;
+}
+.gpRowSel { color: var(--primary-color, #0073ea); font-weight: 600; }
+.gpRowSel .gpRadio {
+  border-color: var(--primary-color, #0073ea);
+  background: radial-gradient(var(--primary-color, #0073ea) 0 4px, transparent 5px);
+}
+.gpIcon { flex-shrink: 0; }
+.gpLabel { flex: 1; min-width: 0; }
+.gpDefault {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--secondary-text-color, #9699a6);
+  white-space: nowrap;
 }

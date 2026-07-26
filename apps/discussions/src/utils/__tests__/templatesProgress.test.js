@@ -42,7 +42,7 @@ describe('createTopicsFromTemplate — onProgress', () => {
     const res = await createTopicsFromTemplate('D1', TEMPLATE, {
       onProgress: (p) => seen.push({ ...p }),
     });
-    expect(res).toEqual({ topics: 2, points: 3 });
+    expect(res).toMatchObject({ topics: 2, points: 3 });
     // total = 2 topics + 3 points = 5; an initial 0/5 plus one tick per create
     expect(seen[0]).toEqual({ done: 0, total: 5 });
     expect(seen[seen.length - 1]).toEqual({ done: 5, total: 5 });
@@ -55,14 +55,14 @@ describe('createTopicsFromTemplate — onProgress', () => {
   });
 
   it('still resolves counts when onProgress is omitted (no throw)', async () => {
-    await expect(createTopicsFromTemplate('D1', TEMPLATE)).resolves.toEqual({ topics: 2, points: 3 });
+    await expect(createTopicsFromTemplate('D1', TEMPLATE)).resolves.toMatchObject({ topics: 2, points: 3 });
   });
 
   it('a throwing onProgress never breaks the creation flow', async () => {
     const res = await createTopicsFromTemplate('D1', TEMPLATE, {
       onProgress: () => { throw new Error('listener bug'); },
     });
-    expect(res).toEqual({ topics: 2, points: 3 });
+    expect(res).toMatchObject({ topics: 2, points: 3 });
   });
 });
 
