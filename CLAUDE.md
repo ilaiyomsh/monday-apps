@@ -7,8 +7,13 @@ it points to — link-following is expected, duplication is not.
 **This repo:** pnpm-workspace monorepo of monday.com apps — client-side (CDN)
 **and** server-side (monday-code) — wired to one CI/CD pipeline.
 
+**Other agents:** Codex (and anything else following the `AGENTS.md` convention)
+enters through **`AGENTS.md`** at the repo root, which mirrors this file's rules
+and adds the Codex-specific wiring. See "Codex sessions" below.
+
 **Authority chain (higher wins on conflict):**
-1. This file — repo-wide rules.
+1. This file — repo-wide rules. `AGENTS.md` mirrors it; on drift, this file wins
+   and `AGENTS.md` is the bug.
 2. `.claude/skills/monday-cicd/references/pipeline-model.md` — the pipeline spec.
 3. `.claude/skills/` — the in-repo skill copies (authoritative for this repo).
 4. Per-app `CLAUDE.md`/`README.md` — app-internal facts only.
@@ -142,6 +147,8 @@ packages/shared                     EMPTY STUB — see below
   `.claude/hooks/` + the skill-internal hooks): deploy-guard, test-guard's
   lock/nudge/stop-gate, error-guard's per-edit check, GraphQL write reminder.
   They also load in cloud sessions. Approve them on first run; never bypass.
+  The same scripts serve Codex via `.codex/hooks.json` + `.codex/hooks/codex-adapter.py`
+  — fix hook behaviour in `.claude/hooks/` only, never in a forked Codex copy.
 
 ## Secrets & env
 
@@ -194,6 +201,28 @@ packages/shared                     EMPTY STUB — see below
   is the sole token exception for cloud, and does not extend to `MONDAY_TOKEN` or any
   write/ingest token. See `.claude/skills/axiom-sre/reference/app-errors.md`.
 
+## Codex sessions (OpenAI Codex CLI / IDE extension)
+
+- Codex reads **`AGENTS.md`** at the repo root, not this file. Both state the same
+  rules; **a PR that changes a rule in one must change it in the other.**
+- **Skills are not auto-selected in Codex.** They are exposed at Codex's project
+  skill paths (`.codex/skills`, `.agents/skills` — both symlinks to
+  `.claude/skills`), but the agent must open the relevant `SKILL.md` itself.
+  `AGENTS.md` carries the task→skill routing table that makes this happen.
+- **The guards are wired, with one gap.** `.codex/hooks.json` runs the same
+  `.claude/hooks/` scripts through `.codex/hooks/codex-adapter.py`, which
+  translates Codex's payload shape (`tool_name: "shell"`, `command` as an argv
+  array, `apply_patch` covering N files). Shell guards fire; **`apply_patch`
+  coverage is version-dependent upstream**, so error-guard and test-guard must be
+  treated as self-enforced under Codex until verified. Details, caveats, and setup:
+  `.codex/README.md`.
+- **Two prerequisites, or nothing runs:** `[features] codex_hooks = true` in
+  `~/.codex/config.toml`, and the project `.codex/` layer trusted. Verify with
+  `bash .codex/verify.sh` plus `/hooks` inside Codex — an unloaded hook fails
+  silently and is indistinguishable from one that passed.
+- A standing briefing (`.codex/briefing.md`) is injected at SessionStart, so the
+  house rules do not depend on a human pasting them each session.
+
 ## One-time developer setup
 
 1. Install Node 20 and pnpm 10 (`corepack enable` or your version manager).
@@ -230,4 +259,5 @@ often empty; there is no `err_code` column), and ready-to-run APL queries:
 
 This file changes via PR into `develop` like everything else. Keep it short:
 state the rule, link the detail. Any PR that changes a rule stated here must
-update this file in the same PR.
+update this file in the same PR — **and `AGENTS.md` in the same PR too**, since
+Codex sessions read only that one. Two agents, one rule set.

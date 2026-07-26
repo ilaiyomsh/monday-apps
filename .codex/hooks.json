@@ -1,0 +1,111 @@
+{
+  "_comment": [
+    "Codex hook wiring for monday-apps. Mirrors .claude/settings.json one-for-one:",
+    "the same scripts under .claude/hooks/ do the enforcing, reached through",
+    ".codex/hooks/codex-adapter.py which translates Codex's payload shape into the",
+    "one those scripts expect. Do not fork the hook logic here — change it in",
+    ".claude/hooks/ and both agents pick it up.",
+    "",
+    "Requires `[features] codex_hooks = true` in ~/.codex/config.toml, and the",
+    "project .codex/ layer must be trusted. See .codex/README.md.",
+    "",
+    "Matchers are deliberately broad: Codex has renamed its shell tool across",
+    "versions, and the adapter is the real filter (it drops any tool it does not",
+    "map). An over-broad matcher costs one no-op process; a too-narrow one costs",
+    "the guarantee."
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); exec bash \"$R/.codex/hooks/session-brief.sh\"'",
+            "statusMessage": "Loading monday-apps house rules",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "shell|Bash|bash|local_shell|exec_command|run_command|shell_command|container.exec",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); exec python3 \"$R/.codex/hooks/codex-adapter.py\" .claude/hooks/deploy-guard.sh'",
+            "statusMessage": "deploy-guard: checking for a local deploy",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "sh -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); exec python3 \"$R/.codex/hooks/codex-adapter.py\" .claude/skills/test-guard/hooks/testfile-lock.sh'",
+            "statusMessage": "test-guard: checking the test-file lock",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": "apply_patch|Edit|Write|MultiEdit|edit_file|str_replace_editor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); exec python3 \"$R/.codex/hooks/codex-adapter.py\" .claude/skills/test-guard/hooks/testfile-lock.sh'",
+            "statusMessage": "test-guard: checking the test-file lock",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "shell|Bash|bash|local_shell|exec_command|run_command|shell_command|container.exec",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); exec python3 \"$R/.codex/hooks/codex-adapter.py\" .claude/hooks/release-debt-nudge.sh'",
+            "statusMessage": "checking release debt",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "apply_patch|Edit|Write|MultiEdit|edit_file|str_replace_editor",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); exec python3 \"$R/.codex/hooks/codex-adapter.py\" .claude/hooks/graphql-write-reminder.sh'",
+            "statusMessage": "monday-api: checking GraphQL writes",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "sh -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); exec python3 \"$R/.codex/hooks/codex-adapter.py\" .claude/hooks/error-guard-check.sh'",
+            "statusMessage": "error-guard: checking error handling",
+            "timeout": 25
+          },
+          {
+            "type": "command",
+            "command": "sh -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); exec python3 \"$R/.codex/hooks/codex-adapter.py\" .claude/skills/test-guard/hooks/route-nudge.sh'",
+            "statusMessage": "test-guard: routing check",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'R=$(git rev-parse --show-toplevel 2>/dev/null || pwd); exec python3 \"$R/.codex/hooks/codex-adapter.py\" .claude/skills/test-guard/hooks/stop-gate.sh'",
+            "statusMessage": "test-guard: session stop gate",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
