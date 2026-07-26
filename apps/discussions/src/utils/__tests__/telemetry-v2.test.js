@@ -68,6 +68,29 @@ describe('mapRecordToEvent (wire schema)', () => {
     expect(ev.err_msg).toBe('mail [email] failed');
     expect(ev.err_name).toBe('Error');
   });
+
+  it('a real Error keeps its name — no fallback', () => {
+    const ev = mapRecordToEvent({ level: 'ERROR', module: 'x', message: 'boom', kind: 'error', error: { name: 'TypeError' } });
+    expect(ev.err_name).toBe('TypeError');
+  });
+
+  it('falls back err_name to the message event-id when no Error name is present', () => {
+    // e.g. the global handler: logger.error("Uncaught error") with no Error object
+    const ev = mapRecordToEvent({ level: 'ERROR', module: 'globalerrorhandler', message: 'Uncaught error', kind: 'error' });
+    expect(ev.err_name).toBe('Uncaught error');
+  });
+
+  it('falls back err_name to the tag when message is empty too', () => {
+    const ev = mapRecordToEvent({ level: 'ERROR', module: 'boot', message: '', kind: 'error' });
+    expect(ev.err_name).toBe('boot');
+  });
+
+  it('never adds err_name to non-error kinds (usage/health)', () => {
+    const usage = mapRecordToEvent({ level: 'INFO', module: 'usage', message: 'view_open', domainKind: 'usage' });
+    const health = mapRecordToEvent({ level: 'INFO', module: 'health', message: 'boot', domainKind: 'health' });
+    expect(usage.err_name).toBeUndefined();
+    expect(health.err_name).toBeUndefined();
+  });
 });
 
 describe('shouldShip (level policy + alwaysShip bypass)', () => {
