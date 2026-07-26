@@ -10,7 +10,7 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
-## 2.3.1 — 2026-07-23
+## 2.3.2 — 2026-07-26
 
 - round296: **ENTER במשתתפים חיצוניים, יחס ברירת מחדל אג'נדה/תיבה, ותצוגת ייצוא RTL יציבה.**
   1. **משתתפים חיצוניים ביצירת דיון:** ENTER בשדה מוסיף צ'יפ בלבד ולא "בורח" ליצירת
@@ -23,6 +23,8 @@
      LTR (הקובץ עצמו תמיד היה תקין). לאחר הרינדור נכפה עכשיו `direction: rtl` על
      פסקאות הגוף — כך התצוגה המקדימה תמיד מימין-לשמאל ותואמת לקובץ, כבר ברגע שהתוכן
      נטען. (רק התצוגה המקדימה טופלה; הקובץ לא נגע.)
+
+## 2.3.1 — 2026-07-23
 
 - round295: **תבניות (שמירה/יציאה/ENTER), מרכז דיון מתבנית, וצבעי נושאים מגוונים.**
   1. **שמירת טיוטת תבנית מהשמירה הכללית:** לחיצה על "שמור" בכרטיס ההגדרות שוטפת גם
