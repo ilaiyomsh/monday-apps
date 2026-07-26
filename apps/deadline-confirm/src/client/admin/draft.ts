@@ -104,7 +104,15 @@ export function digestFromConfig(digest: DigestConfig | null | undefined): Diges
     usersPeopleColumnId: digest.usersPeopleColumnId,
     usersEmailColumnId: digest.usersEmailColumnId,
     subject: digest.subject,
-    sections: digest.sections.map((s) => ({ ...s, includeStatusLabelIds: [...s.includeStatusLabelIds] })),
+    // Tolerate configs saved before 0.6.0 introduced these two section fields
+    // (production incident 2026-07-26: the spread below threw at SPA boot on a
+    // legacy config). A missing condition becomes [], which digestIsComplete
+    // then flags as incomplete — the operator picks labels, nothing is guessed.
+    sections: digest.sections.map((s) => ({
+      ...s,
+      dateColumnTitle: s.dateColumnTitle ?? '',
+      includeStatusLabelIds: Array.isArray(s.includeStatusLabelIds) ? [...s.includeStatusLabelIds] : [],
+    })),
   };
 }
 
