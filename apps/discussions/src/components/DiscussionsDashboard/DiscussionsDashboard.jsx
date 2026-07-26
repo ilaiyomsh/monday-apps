@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BrandLoader } from '@generated/components/BrandLoader';
+import { EmptyState } from '@generated/components/EmptyState';
 import { useDashboardData } from '@generated/hooks/useDashboardData.js';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { aggregateDashboard } from './dashboardAgg.js';
@@ -319,7 +320,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
         return (
           <div className={`${styles.card} ${styles.barCard}`}>
             <div className={styles.cardTitle}>דיונים {model.axisLabel}</div>
-            {barData.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+            {barData.length === 0 ? <EmptyState>אין נתונים בטווח</EmptyState> : (
               <div className={styles.chartFill}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={barData} margin={{ top: 18, right: 8, left: 8, bottom: 4 }}>
@@ -347,7 +348,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
         return (
           <div className={`${styles.card} ${styles.donutCard}`}>
             <div className={styles.cardTitle}>התפלגות לפי סוג דיון</div>
-            {model.byType.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+            {model.byType.length === 0 ? <EmptyState>אין נתונים בטווח</EmptyState> : (
               <div className={styles.donutWrap}>
                 <div className={styles.donutChart}>
                   <ResponsiveContainer width="100%" height="100%">

@@ -15,7 +15,8 @@ import { Placeholder } from '@tiptap/extension-placeholder';
 import { matchMentionQuery, filterMentionRoster } from '@generated/utils/mention.js';
 import {
   Bold, Italic, Underline, Strikethrough, List, ListOrdered, ListChecks,
-  Link2, AlignRight, AlignCenter, AlignLeft, AlignJustify, ALargeSmall, ChevronDown, Check, Baseline, Search,
+  Link2, AlignRight, AlignCenter, AlignLeft, AlignJustify, ALargeSmall, ChevronDown, Check,
+  Baseline, Search, Plus, Minus,
 } from 'lucide-react';
 import styles from './RichTextEditor.module.css';
 
@@ -29,6 +30,12 @@ import styles from './RichTextEditor.module.css';
  * Toolbar: icon-only, horizontal. Format icons flow from the left; the font-size
  * picker (16-48px, like monday's "Size") is pinned to the right. Checklist is
  * serialised to monday's `ul.checklist` shape at the save boundary (summaryHtml.js).
+ *
+ * round253 — the toolbar dropdowns (color / align / size) are PORTALLED to
+ * <body> with fixed positioning (like the @-mention popup) so they can never be
+ * clipped/overlapped by the editor pane(s) below them (owner report: menus were
+ * "swallowed behind the text box"). The link control MOVED off the toolbar into
+ * the selection bubble, which also gained font-size ±, text color and alignment.
  */
 
 const SIZE_OPTIONS = [
@@ -40,6 +47,9 @@ const SIZE_OPTIONS = [
   { label: '48px', value: '48px' },
   { label: 'הסר גודל גופן', value: null },
 ];
+
+// round253 — the ordered size ladder the bubble's A+/A- steppers walk.
+const SIZE_PX = [16, 18, 24, 32, 36, 48];
 
 const COLORS = [
   { label: 'ברירת מחדל', value: null },
@@ -75,7 +85,7 @@ const ALIGNS = [
  * HTML, which the docx converter already renders bold. Purely additive: with an
  * empty `mentionPeople` (summary / other editors) nothing changes.
  */
-export default function RichTextEditor({ initialValue = '', onChange, onReady, placeholder = '', editable = true, variant = 'default', extraToolbarActions = null, mentionPeople = [] }) {
+export default function RichTextEditor({ initialValue = '', onChange, onReady, placeholder = '', editable = true, variant = 'default', extraToolbarActions = null, belowToolbar = null, mentionPeople = [] }) {
   // Latest closures/data reachable from the editor's create-time callbacks.
   const mentionPeopleRef = useRef(mentionPeople);
   mentionPeopleRef.current = Array.isArray(mentionPeople) ? mentionPeople : [];
@@ -148,10 +158,16 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
     } : {}),
   }) || {};
 
-  const [menu, setMenu] = useState(null); // 'size' | 'color' | 'align' | 'link' | null
-  const [linkUrl, setLinkUrl] = useState('');
+  const [menu, setMenu] = useState(null); // 'size' | 'color' | 'align' | null (toolbar dropdowns)
+  const [menuAnchor, setMenuAnchor] = useState(null); // { top, left } for the portalled menu
   const barRef = useRef(null);
+  const menuPortalRef = useRef(null);
   const mentionPopupRef = useRef(null);
+
+  // round253 — selection-bubble sub-panels (color swatches / link input) render
+  // INSIDE the floating bubble so they are never clipped.
+  const [bubbleSub, setBubbleSub] = useState(null); // 'color' | 'link' | null
+  const [bubbleLinkUrl, setBubbleLinkUrl] = useState('');
 
   // round220 — recompute the @-mention popup from the caret context. Returns
   // early (clearing any open popup) when there are no mention people, the editor
@@ -217,9 +233,15 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
     return () => document.removeEventListener('mousedown', onDown);
   }, [mention]);
 
+  // Close a toolbar dropdown on outside click / Escape. round253 — the menu is
+  // portalled to <body>, so "outside" must also exempt the portalled menu node.
   useEffect(() => {
     if (!menu) return undefined;
-    const onDocClick = (e) => { if (barRef.current && !barRef.current.contains(e.target)) setMenu(null); };
+    const onDocClick = (e) => {
+      const inBar = barRef.current && barRef.current.contains(e.target);
+      const inMenu = menuPortalRef.current && menuPortalRef.current.contains(e.target);
+      if (!inBar && !inMenu) setMenu(null);
+    };
     const onKey = (e) => { if (e.key === 'Escape') setMenu(null); };
     document.addEventListener('mousedown', onDocClick);
     document.addEventListener('keydown', onKey);
@@ -231,23 +253,52 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
 
   if (!editor) return null;
 
+  // Open/close a toolbar dropdown, anchoring the portalled panel just under the
+  // trigger button (fixed coords, so no ancestor overflow can clip it).
+  const toggleMenu = (name, e) => {
+    if (menu === name) { setMenu(null); return; }
+    const r = e.currentTarget.getBoundingClientRect();
+    setMenuAnchor({ top: r.bottom + 4, left: r.left });
+    setMenu(name);
+  };
+
   const applySize = (value) => {
     if (value) editor.chain().focus().setFontSize(value).run();
     else editor.chain().focus().unsetFontSize().run();
     setMenu(null);
   };
+  // round253 — bubble A+/A- stepper: walk the SIZE_PX ladder from the current
+  // size (default 16 when unset). Stepping below the base clears the override.
+  const stepSize = (dir) => {
+    const cur = st.fontSize ? parseInt(st.fontSize, 10) : 16;
+    if (dir > 0) {
+      const next = SIZE_PX.find((s) => s > cur);
+      if (next) editor.chain().focus().setFontSize(`${next}px`).run();
+    } else {
+      const prev = [...SIZE_PX].reverse().find((s) => s < cur);
+      if (!prev || prev <= 16) editor.chain().focus().unsetFontSize().run();
+      else editor.chain().focus().setFontSize(`${prev}px`).run();
+    }
+  };
   const applyColor = (value) => {
     if (value) editor.chain().focus().setColor(value).run();
     else editor.chain().focus().unsetColor().run();
     setMenu(null);
+    setBubbleSub(null);
   };
   const applyAlign = (key) => { editor.chain().focus().setTextAlign(key).run(); setMenu(null); };
-  const openLink = () => { setLinkUrl(editor.getAttributes('link').href || ''); setMenu(menu === 'link' ? null : 'link'); };
-  const applyLink = () => {
-    const url = linkUrl.trim();
+  // round253 — link lives ONLY in the selection bubble now. Applying uses the
+  // current selection's link range; an empty URL unsets it.
+  const applyBubbleLink = () => {
+    const url = bubbleLinkUrl.trim();
     if (url) editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
     else editor.chain().focus().extendMarkRange('link').unsetLink().run();
-    setMenu(null);
+    setBubbleSub(null);
+  };
+  const openBubbleLink = () => {
+    if (bubbleSub === 'link') { setBubbleSub(null); return; }
+    setBubbleLinkUrl(editor.getAttributes('link').href || '');
+    setBubbleSub('link');
   };
 
   const Btn = ({ onClick, active, label, children }) => (
@@ -266,6 +317,22 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
 
   const ActiveAlignIcon = (ALIGNS.find((a) => a.key === st.align) || ALIGNS[0]).Icon;
 
+  // Swatch grid shared by the toolbar color dropdown and the bubble color panel.
+  const renderSwatches = () => (
+    <div className={styles.swatches}>
+      {COLORS.map((c) => (
+        <button
+          key={c.label} type="button" title={c.label} aria-label={c.label}
+          className={`${styles.swatch} ${(st.color === c.value) || (!st.color && c.value === null) ? styles.swatchActive : ''}`}
+          style={{ background: c.value || 'transparent' }}
+          onMouseDown={(e) => e.preventDefault()} onClick={() => applyColor(c.value)}
+        >
+          {c.value === null && <span className={styles.noColor}>A</span>}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className={`${styles.root} ${variant === 'flush' ? styles.rootFlush : ''}`} dir="rtl">
       {editable && (
@@ -275,31 +342,15 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
         <Btn label="קו תחתון" active={st.underline} onClick={() => editor.chain().focus().toggleUnderline().run()}><Underline size={16} /></Btn>
         <Btn label="קו חוצה" active={st.strike} onClick={() => editor.chain().focus().toggleStrike().run()}><Strikethrough size={16} /></Btn>
 
-        {/* color */}
+        {/* color — portalled dropdown (round253) */}
         <div className={styles.menuWrap}>
           <button
             type="button" className={styles.btn} onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setMenu(menu === 'color' ? null : 'color')}
+            onClick={(e) => toggleMenu('color', e)}
             aria-haspopup="true" aria-expanded={menu === 'color'} aria-label="צבע טקסט" title="צבע טקסט"
           >
             <Baseline size={16} style={st.color ? { color: st.color } : undefined} />
           </button>
-          {menu === 'color' && (
-            <div className={styles.menu}>
-              <div className={styles.swatches}>
-                {COLORS.map((c) => (
-                  <button
-                    key={c.label} type="button" title={c.label} aria-label={c.label}
-                    className={`${styles.swatch} ${(st.color === c.value) || (!st.color && c.value === null) ? styles.swatchActive : ''}`}
-                    style={{ background: c.value || 'transparent' }}
-                    onMouseDown={(e) => e.preventDefault()} onClick={() => applyColor(c.value)}
-                  >
-                    {c.value === null && <span className={styles.noColor}>A</span>}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         <span className={styles.divider} aria-hidden="true" />
@@ -308,17 +359,51 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
         <Btn label="רשימה ממוספרת" active={st.ordered} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered size={16} /></Btn>
         <Btn label="צ׳קליסט" active={st.task} onClick={() => editor.chain().focus().toggleTaskList().run()}><ListChecks size={16} /></Btn>
 
-        {/* alignment */}
+        {/* alignment — portalled dropdown (round253) */}
         <div className={styles.menuWrap}>
           <button
             type="button" className={styles.btn} onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setMenu(menu === 'align' ? null : 'align')}
+            onClick={(e) => toggleMenu('align', e)}
             aria-haspopup="true" aria-expanded={menu === 'align'} aria-label="יישור" title="יישור"
           >
             <ActiveAlignIcon size={16} />
           </button>
+        </div>
+
+        {/* font size — portalled dropdown (round253) */}
+        <div className={styles.menuWrap}>
+          <button
+            type="button" className={styles.btn} onMouseDown={(e) => e.preventDefault()}
+            onClick={(e) => toggleMenu('size', e)}
+            aria-haspopup="listbox" aria-expanded={menu === 'size'} aria-label="גודל טקסט" title="גודל טקסט"
+          >
+            <ALargeSmall size={18} /><ChevronDown size={13} />
+          </button>
+        </div>
+
+        {/* round206 — host-provided actions (e.g. 📎 attach) pinned to the
+            toolbar's far end. */}
+        {extraToolbarActions && <span className={styles.toolbarExtra}>{extraToolbarActions}</span>}
+      </div>
+      )}
+
+      {/* round270 — host-provided strip rendered directly UNDER the toolbar and
+          ABOVE the text (the triple-box "מסמכים" bar). Rendered for read-only
+          viewers too (they have no toolbar), so documents are always visible. */}
+      {belowToolbar}
+
+      {/* round253 — the active toolbar dropdown, portalled to <body> at fixed
+          coords so the editor pane(s) below can never overlap/clip it. */}
+      {editable && menu && menuAnchor && createPortal(
+        <div
+          ref={menuPortalRef}
+          className={`${styles.menu} ${styles.menuPortal}`}
+          style={{ position: 'fixed', top: menuAnchor.top, left: menuAnchor.left, zIndex: 10002 }}
+          role={menu === 'color' ? undefined : 'listbox'}
+        >
+          {menu === 'color' && renderSwatches()}
           {menu === 'align' && (
-            <ul className={styles.menu} role="listbox">
+            <ul className={styles.menuList} role="listbox">
               {ALIGNS.map((a) => (
                 <li key={a.key}>
                   <button
@@ -332,37 +417,8 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
               ))}
             </ul>
           )}
-        </div>
-
-        {/* link */}
-        <div className={styles.menuWrap}>
-          <Btn label="קישור" active={st.link} onClick={openLink}><Link2 size={16} /></Btn>
-          {menu === 'link' && (
-            <div className={`${styles.menu} ${styles.linkMenu}`}>
-              <input
-                type="url" className={styles.linkInput} placeholder="https://…" value={linkUrl}
-                autoFocus dir="ltr"
-                onChange={(e) => setLinkUrl(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyLink(); } }}
-              />
-              <button type="button" className={styles.linkApply} onMouseDown={(e) => e.preventDefault()} onClick={applyLink}>
-                {linkUrl.trim() ? 'החל' : 'הסר'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* font size — grouped with the other buttons */}
-        <div className={styles.menuWrap}>
-          <button
-            type="button" className={styles.btn} onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setMenu(menu === 'size' ? null : 'size')}
-            aria-haspopup="listbox" aria-expanded={menu === 'size'} aria-label="גודל טקסט" title="גודל טקסט"
-          >
-            <ALargeSmall size={18} /><ChevronDown size={13} />
-          </button>
           {menu === 'size' && (
-            <ul className={styles.menu} role="listbox">
+            <ul className={styles.menuList} role="listbox">
               {SIZE_OPTIONS.map((opt) => (
                 <li key={opt.label}>
                   <button
@@ -376,25 +432,69 @@ export default function RichTextEditor({ initialValue = '', onChange, onReady, p
               ))}
             </ul>
           )}
-        </div>
-
-        {/* round206 — host-provided actions (e.g. 📎 attach) pinned to the
-            toolbar's far end. */}
-        {extraToolbarActions && <span className={styles.toolbarExtra}>{extraToolbarActions}</span>}
-      </div>
+        </div>,
+        document.body
       )}
 
-      {/* round206 — selection bubble: core formatting over any selection. */}
+      {/* round206/253 — selection bubble: core formatting over any selection,
+          now also font-size ±, text color, alignment and the link control
+          (owner request: link is added HERE, on selection, not on the toolbar). */}
       {editable && (
         <BubbleMenu editor={editor} className={styles.bubble} options={{ placement: 'top' }}>
-          <Btn label="מודגש" active={st.bold} onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={15} /></Btn>
-          <Btn label="נטוי" active={st.italic} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={15} /></Btn>
-          <Btn label="קו תחתון" active={st.underline} onClick={() => editor.chain().focus().toggleUnderline().run()}><Underline size={15} /></Btn>
-          <Btn label="קו חוצה" active={st.strike} onClick={() => editor.chain().focus().toggleStrike().run()}><Strikethrough size={15} /></Btn>
-          <span className={styles.bubbleSep} aria-hidden="true" />
-          <Btn label="רשימת תבליטים" active={st.bullet} onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={15} /></Btn>
-          <Btn label="רשימה ממוספרת" active={st.ordered} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered size={15} /></Btn>
-          <Btn label="צ׳קליסט" active={st.task} onClick={() => editor.chain().focus().toggleTaskList().run()}><ListChecks size={15} /></Btn>
+          <div className={styles.bubbleRow}>
+            <Btn label="מודגש" active={st.bold} onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={14} /></Btn>
+            <Btn label="נטוי" active={st.italic} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={14} /></Btn>
+            <Btn label="קו תחתון" active={st.underline} onClick={() => editor.chain().focus().toggleUnderline().run()}><Underline size={14} /></Btn>
+            <Btn label="קו חוצה" active={st.strike} onClick={() => editor.chain().focus().toggleStrike().run()}><Strikethrough size={14} /></Btn>
+            <span className={styles.bubbleSep} aria-hidden="true" />
+            {/* font size ± (round253) */}
+            <Btn label="הקטן גופן" onClick={() => stepSize(-1)}><Minus size={14} /></Btn>
+            <span className={styles.bubbleSizeVal} aria-hidden="true">{st.fontSize ? parseInt(st.fontSize, 10) : 16}</span>
+            <Btn label="הגדל גופן" onClick={() => stepSize(1)}><Plus size={14} /></Btn>
+            <span className={styles.bubbleSep} aria-hidden="true" />
+            {/* text color (round253) — toggles a swatch row inside the bubble */}
+            <Btn label="צבע טקסט" active={bubbleSub === 'color'} onClick={() => setBubbleSub(bubbleSub === 'color' ? null : 'color')}>
+              <Baseline size={14} style={st.color ? { color: st.color } : undefined} />
+            </Btn>
+            <span className={styles.bubbleSep} aria-hidden="true" />
+            {/* alignment (round257) — a SINGLE toggle; the 4 options open in a
+                sub-row below, so the main bar stays narrow. */}
+            <Btn label="יישור" active={bubbleSub === 'align' || !!st.align} onClick={() => setBubbleSub(bubbleSub === 'align' ? null : 'align')}>
+              <ActiveAlignIcon size={14} />
+            </Btn>
+            <span className={styles.bubbleSep} aria-hidden="true" />
+            {/* link (round253) — moved here from the toolbar */}
+            <Btn label="קישור" active={st.link || bubbleSub === 'link'} onClick={openBubbleLink}><Link2 size={14} /></Btn>
+            <span className={styles.bubbleSep} aria-hidden="true" />
+            <Btn label="רשימת תבליטים" active={st.bullet} onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={14} /></Btn>
+            <Btn label="רשימה ממוספרת" active={st.ordered} onClick={() => editor.chain().focus().toggleOrderedList().run()}><ListOrdered size={14} /></Btn>
+            <Btn label="צ׳קליסט" active={st.task} onClick={() => editor.chain().focus().toggleTaskList().run()}><ListChecks size={14} /></Btn>
+          </div>
+          {bubbleSub === 'align' && (
+            <div className={styles.bubbleSubRow} dir="rtl">
+              {ALIGNS.map((a) => (
+                <Btn key={a.key} label={a.label} active={st.align === a.key} onClick={() => { editor.chain().focus().setTextAlign(a.key).run(); setBubbleSub(null); }}>
+                  <a.Icon size={15} />
+                </Btn>
+              ))}
+            </div>
+          )}
+          {bubbleSub === 'color' && (
+            <div className={styles.bubbleSubRow} dir="rtl">{renderSwatches()}</div>
+          )}
+          {bubbleSub === 'link' && (
+            <div className={styles.bubbleSubRow}>
+              <input
+                type="url" className={styles.linkInput} placeholder="https://…" value={bubbleLinkUrl}
+                autoFocus dir="ltr"
+                onChange={(e) => setBubbleLinkUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyBubbleLink(); } }}
+              />
+              <button type="button" className={styles.linkApply} onMouseDown={(e) => e.preventDefault()} onClick={applyBubbleLink}>
+                {bubbleLinkUrl.trim() ? 'החל' : 'הסר'}
+              </button>
+            </div>
+          )}
         </BubbleMenu>
       )}
 

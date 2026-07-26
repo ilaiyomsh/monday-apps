@@ -441,6 +441,7 @@
 }
 .emptyHint {
   font-size: 14px;
+  margin-top: 8px;
 }
 
 .loadMore {
@@ -464,8 +465,10 @@
 /* round213 — elegant mobile top: a tight title row and the toolbar as a
    floating rounded card (instead of the full-width white strip). */
 :global(.mobile-app) .viewHeader {
-  padding: 10px 18px 8px;
-  padding-inline-start: 18px;
+  /* round276 — 12px side insets so the scope toggle's edges line up EXACTLY with
+     the toolbar bar below it (which uses margin: 0 12px). */
+  padding: 10px 12px 8px;
+  padding-inline-start: 12px;
 }
 :global(.mobile-app) .viewTitle {
   font-size: 20px;
@@ -622,3 +625,29 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
 }
 .subTabActive:hover { color: var(--primary-color, #0073ea); }
+
+/* round272 — MOBILE scope toggle in the view header: "המשימות שלי" (right,
+   default) ⇄ "משימות של אחרים" (left). Reuses the .subTab/.subTabActive button
+   look; the container is tuned for the narrow header row. */
+.scopeToggleMobile {
+  flex: 1 1 auto;
+  min-width: 0;
+  direction: rtl;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  /* round276 — match the toolbar bar below EXACTLY in size: its pills are 32px
+     (--toolbar-pill-h) + 6px top/bottom padding = 44px tall, radius 14px. The
+     12px viewHeader side insets already align this bar's width to the toolbar. */
+  height: 44px;
+  box-sizing: border-box;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--primary-background-hover-color, #f0f1f3);
+}
+.scopeToggleMobile .subTab {
+  flex: 1 1 0;
+  justify-content: center;
+  padding: 0 10px;
+  font-size: 13px;
+}

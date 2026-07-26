@@ -49,7 +49,7 @@ export const PREVIOUS_TASKS_MODES = {
  * components appear automatically on existing instances.
  */
 export const APP_COMPONENTS = [
-  { key: 'previous', label: 'הנחיות קודמות' },
+  { key: 'previous', label: 'דיונים קודמים' },
   { key: 'background', label: 'רקע' },
   { key: 'references', label: 'התייחסויות' },
   { key: 'summary', label: 'סיכום' },
@@ -287,7 +287,9 @@ export const CAPABILITY_DEFAULTS = {
   writeReferences: 'creatorLeadOwner',
   editSummary: 'creatorLeadOwner',
   exportDocs: 'creatorLeadOwner',
-  createTask: 'creatorLeadOwner',
+  // round291 (owner spec) — ANYONE can create a task, both standalone (My Tasks,
+  // already ungated) and inside a discussion. Mirrors createDiscussion: 'all'.
+  createTask: 'all',
   addTopicOrPoint: 'creatorLeadOwner',
   editTopicOrPoint: 'creatorLeadOwner',
   deleteTopicOrPoint: 'creatorLeadOwner',

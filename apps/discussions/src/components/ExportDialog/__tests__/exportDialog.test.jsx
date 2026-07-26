@@ -19,6 +19,9 @@ const h = vi.hoisted(() => ({
   saveDiscussionExportTemplate: vi.fn(),
   loadDiscussionExportAssets: vi.fn(),
   saveDiscussionExportAssets: vi.fn(),
+  // round254 — per-type export template tier (via useTemplates).
+  typeTemplates: [],
+  loadTypeExportAssets: vi.fn(),
   tabProps: { current: null },
 }));
 
@@ -43,6 +46,10 @@ vi.mock('../../SettingsModal/ExportTemplateTab.jsx', () => ({
   },
 }));
 vi.mock('../../BrandLoader', () => ({ BrandLoader: () => <div data-testid="brand-loader" /> }));
+// round254 — the dialog reads the discussion TYPE's export template via useTemplates.
+vi.mock('../../../contexts/TemplatesContext.jsx', () => ({
+  useTemplates: () => ({ typeTemplates: h.typeTemplates, loadTypeExportAssets: h.loadTypeExportAssets }),
+}));
 
 import { ExportDialog } from '../ExportDialog.jsx';
 
@@ -58,6 +65,8 @@ beforeEach(() => {
   h.loadDiscussionExportAssets.mockResolvedValue(null);
   h.saveDiscussionExportTemplate.mockResolvedValue(undefined);
   h.saveDiscussionExportAssets.mockResolvedValue(undefined);
+  h.typeTemplates = [];
+  h.loadTypeExportAssets.mockResolvedValue({ headerLogo: 'typeLogo' });
 });
 
 const renderDialog = (over = {}) => {
@@ -109,6 +118,34 @@ describe('ExportDialog (round207)', () => {
     const own = { font: 'perDiscussion', sections: [] };
     h.loadDiscussionExportTemplate.mockResolvedValue(own);
     renderDialog({ settings: { exportTemplate: { font: 'instance' } } });
+    await screen.findByTestId('export-template-tab');
+    expect(h.tabProps.current.template).toEqual(own);
+  });
+
+  it('round254 — the discussion TYPE\'s export template wins over the instance default (no per-discussion override)', async () => {
+    const typeTpl = { font: 'typeTpl', sections: [] };
+    h.typeTemplates = [{ discussionType: 'סבב', exportTemplate: typeTpl }];
+    h.loadTypeExportAssets.mockResolvedValue({ headerLogo: 'typeLogo' });
+    renderDialog({
+      discussion: { id: 7, name: 'x', discussionTypeID: 'סבב' },
+      settings: { exportTemplate: { font: 'instance' } },
+    });
+    await screen.findByTestId('export-template-tab');
+    // type template beats the instance default…
+    expect(h.tabProps.current.template).toEqual(typeTpl);
+    // …and its own assets are used when the type carries a template.
+    expect(h.tabProps.current.assets).toEqual({ headerLogo: 'typeLogo' });
+  });
+
+  it('round254 — a per-discussion override still wins over the TYPE template', async () => {
+    const own = { font: 'own', sections: [] };
+    const typeTpl = { font: 'typeTpl', sections: [] };
+    h.loadDiscussionExportTemplate.mockResolvedValue(own);
+    h.typeTemplates = [{ discussionType: 'סבב', exportTemplate: typeTpl }];
+    renderDialog({
+      discussion: { id: 7, name: 'x', discussionTypeID: 'סבב' },
+      settings: { exportTemplate: { font: 'instance' } },
+    });
     await screen.findByTestId('export-template-tab');
     expect(h.tabProps.current.template).toEqual(own);
   });

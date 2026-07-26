@@ -151,8 +151,8 @@ export function QuickCreateModal({
     ? { position: 'absolute', top: bounded.top, left: bounded.left, width: bounded.width, maxHeight: bounded.maxHeight, overflowY: 'auto', margin: 0 }
     : (anchor && isDesktop)
       ? (() => {
-          // round235 — the shell shrank to a compact 320px popover-like card.
-          const width = Math.min(320, window.innerWidth - 32);
+          // round235/266 — the shell is a compact ~280px popover-like card.
+          const width = Math.min(280, window.innerWidth - 32);
           const centerX = anchor.left + anchor.width / 2;
           const left = Math.max(16, Math.min(centerX - width / 2, window.innerWidth - width - 16));
           const top = Math.max(16, Math.min(anchor.bottom + 8, window.innerHeight - 280));
@@ -258,11 +258,12 @@ export function QuickCreateModal({
             </div>
           )}
 
-          <Flex gap={8} justify="end" className={styles.footer}>
-            <Button kind="tertiary" onClick={onClose}>
+          {/* round266 — compact (small) footer buttons scaled to the smaller card. */}
+          <Flex gap={6} justify="end" className={styles.footer}>
+            <Button kind="tertiary" size="small" onClick={onClose}>
               ביטול
             </Button>
-            <Button onClick={submit} disabled={!canSubmit}>
+            <Button size="small" onClick={submit} disabled={!canSubmit}>
               {isDecision ? 'צור החלטה' : 'צור משימה'}
             </Button>
           </Flex>

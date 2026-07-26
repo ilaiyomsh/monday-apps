@@ -50,13 +50,16 @@ const TASK_COLS = ['responsibilityID', 'deadlineID', 'statusID']; // assignee, d
 const DECISION_COLS = ['deciderID', 'decisionStatusID', 'decisionDateID'];
 // round193 — decisions table trimmed to 3 columns (owner request; date + status
 // dropped): מס׳, החלטה, מחליט. Sum 9000 DXA to match the tasks table width.
-const DECISION_COL_WIDTHS = [700, 5300, 3000];
+// round286 (owner request) — tables no longer span the full text width; scaled
+// to ~80% (sum 7200 DXA) so `alignment: CENTER` leaves visible side margins and
+// the table sits centered on the page. (Was sum 9000 = full width.)
+const DECISION_COL_WIDTHS = [560, 4240, 2400];
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const HEADER_FILL = '4F6B8F';
 // round191 — the "מדיון קודם" column was removed (owner request); its 900 DXA were
 // folded into the task-name column so the table still fills the same width.
 // 5 task columns, DXA (twips): #, task, assignee, deadline, status. Sum 9000.
-const TASK_COL_WIDTHS = [600, 3800, 1900, 1400, 1300];
+const TASK_COL_WIDTHS = [480, 3040, 1520, 1120, 1040];
 
 // Decode a base64 string to a Uint8Array (browser + node/jsdom both have atob).
 function base64ToU8(b64) {
@@ -701,13 +704,14 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
       out.push(para('אין משימות.'));
       return out;
     }
-    // Every column is centered EXCEPT the task name, which stays right-aligned
-    // (RTL natural leading edge — omit alignment so weak viewers don't flip it).
+    // round259 (owner spec) — header cells ALWAYS centered; body cells centered
+    // EXCEPT text columns (the task name + the assignee), which are right-aligned
+    // (RTL natural leading edge, like the document body). `center` toggles it.
     const cell = (text, widthDxa, isHeader, center) => new TableCell({
       width: { size: widthDxa, type: WidthType.DXA },
       verticalAlign: VerticalAlignTable.CENTER,
       shading: isHeader ? { type: 'clear', color: 'auto', fill: HEADER_FILL } : undefined,
-      margins: { marginUnitType: WidthType.DXA, top: 40, bottom: 40, left: 90, right: 90 },
+      margins: { marginUnitType: WidthType.DXA, top: 90, bottom: 90, left: 130, right: 130 },
       children: [new Paragraph({
         ...RTL,
         ...(center ? { alignment: AlignmentType.CENTER } : {}),
@@ -715,19 +719,19 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
         children: [run(text, isHeader ? { bold: true, color: 'FFFFFF' } : undefined)],
       })],
     });
-    const NAME_COL = 1; // the "משימה" column — right-aligned, all others centered.
     // round191 — the "מדיון קודם" column was removed (owner request); 5 columns now.
     const headers = ['מס׳', 'משימה', 'אחראי', 'דד ליין', 'סטטוס'];
-    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, TASK_COL_WIDTHS[i], true, i !== NAME_COL)) })];
+    // round259 — every header cell centered.
+    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, TASK_COL_WIDTHS[i], true, true)) })];
     model.tasks.forEach((t, i) => {
       rows.push(new TableRow({
         cantSplit: true,
         children: [
-          cell(String(i + 1), TASK_COL_WIDTHS[0], false, true),
-          cell(t.name, TASK_COL_WIDTHS[1], false, false),
-          cell(t.assigneesText, TASK_COL_WIDTHS[2], false, true),
-          cell(t.deadlineText, TASK_COL_WIDTHS[3], false, true),
-          cell(t.status || '—', TASK_COL_WIDTHS[4], false, true),
+          cell(String(i + 1), TASK_COL_WIDTHS[0], false, true),   // מס׳ — center
+          cell(t.name, TASK_COL_WIDTHS[1], false, false),          // משימה — right (text)
+          cell(t.assigneesText, TASK_COL_WIDTHS[2], false, false), // אחראי — right (text)
+          cell(t.deadlineText, TASK_COL_WIDTHS[3], false, true),   // דד ליין — center (date)
+          cell(t.status || '—', TASK_COL_WIDTHS[4], false, true),  // סטטוס — center
         ],
       }));
     });
@@ -735,6 +739,8 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     out.push(new Table({
       columnWidths: TASK_COL_WIDTHS,
       layout: TableLayoutType.FIXED,
+      // round259 — center the whole table between the page margins.
+      alignment: AlignmentType.CENTER,
       width: { size: TASK_COL_WIDTHS.reduce((a, b) => a + b, 0), type: WidthType.DXA },
       visuallyRightToLeft: true,
       borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border },
@@ -745,8 +751,9 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
 
   // round192 — decisions table (owner request): same monday-board look as the tasks
   // table (heading kept with the table via keepNext/cantSplit). Columns:
-  // מס׳ · החלטה · מחליט · תאריך · סטאטוס. The "החלטה" (name) column is right-aligned;
-  // the rest centered.
+  // מס׳ · החלטה · מחליט. round259 (owner spec) — headers ALWAYS centered; body text
+  // columns (החלטה + מחליט, person text) right-aligned; the numeric מס׳ centered; the
+  // whole table centered between the page margins.
   const buildDecisions = (section) => {
     const out = [new Paragraph({ ...RTL, keepNext: true, heading: HeadingLevel.HEADING_2, children: [run(section?.label || 'החלטות')] })];
     if (!model.decisions.length) {
@@ -757,7 +764,7 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
       width: { size: widthDxa, type: WidthType.DXA },
       verticalAlign: VerticalAlignTable.CENTER,
       shading: isHeader ? { type: 'clear', color: 'auto', fill: HEADER_FILL } : undefined,
-      margins: { marginUnitType: WidthType.DXA, top: 40, bottom: 40, left: 90, right: 90 },
+      margins: { marginUnitType: WidthType.DXA, top: 90, bottom: 90, left: 130, right: 130 },
       children: [new Paragraph({
         ...RTL,
         ...(center ? { alignment: AlignmentType.CENTER } : {}),
@@ -765,17 +772,17 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
         children: [run(text, isHeader ? { bold: true, color: 'FFFFFF' } : undefined)],
       })],
     });
-    const NAME_COL = 1; // "החלטה" — right-aligned, all others centered.
     // round193 — only מס׳ · החלטה · מחליט (date + status columns removed).
     const headers = ['מס׳', 'החלטה', 'מחליט'];
-    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, DECISION_COL_WIDTHS[i], true, i !== NAME_COL)) })];
+    // round259 — every header cell centered.
+    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, DECISION_COL_WIDTHS[i], true, true)) })];
     model.decisions.forEach((d, i) => {
       rows.push(new TableRow({
         cantSplit: true,
         children: [
-          cell(String(i + 1), DECISION_COL_WIDTHS[0], false, true),
-          cell(d.name, DECISION_COL_WIDTHS[1], false, false),
-          cell(d.deciderText, DECISION_COL_WIDTHS[2], false, true),
+          cell(String(i + 1), DECISION_COL_WIDTHS[0], false, true),    // מס׳ — center
+          cell(d.name, DECISION_COL_WIDTHS[1], false, false),          // החלטה — right (text)
+          cell(d.deciderText, DECISION_COL_WIDTHS[2], false, false),   // מחליט — right (person text)
         ],
       }));
     });
@@ -783,6 +790,8 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     out.push(new Table({
       columnWidths: DECISION_COL_WIDTHS,
       layout: TableLayoutType.FIXED,
+      // round259 — center the whole table between the page margins.
+      alignment: AlignmentType.CENTER,
       width: { size: DECISION_COL_WIDTHS.reduce((a, b) => a + b, 0), type: WidthType.DXA },
       visuallyRightToLeft: true,
       borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border },

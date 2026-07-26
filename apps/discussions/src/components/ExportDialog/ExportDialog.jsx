@@ -11,6 +11,8 @@ import {
   loadDiscussionExportAssets,
   saveDiscussionExportAssets,
 } from '../../utils/discussionExportStore.js';
+import { resolveExportTemplate, typeExportTemplateFor } from '../../utils/exportTemplateResolve.js';
+import { useTemplates } from '../../contexts/TemplatesContext.jsx';
 import logger from '../../utils/logger.js';
 import styles from './ExportDialog.module.css';
 
@@ -25,6 +27,9 @@ import styles from './ExportDialog.module.css';
  */
 export function ExportDialog({ discussion, settings, context, onClose, onNotify }) {
   const discussionId = discussion?.id ? String(discussion.id) : null;
+  // round254 — the discussion's TYPE may carry its own export template (and
+  // assets) that override the system default. Read at seed time below.
+  const { typeTemplates, loadTypeExportAssets } = useTemplates();
   const [template, setTemplate] = useState(null);
   const [assets, setAssets] = useState(null);
   const [modelState, setModelState] = useState(null); // { model, filename }
@@ -49,10 +54,16 @@ export function ExportDialog({ discussion, settings, context, onClose, onNotify 
           loadDiscussionExportTemplate(discussionId),
           loadDiscussionExportAssets(discussionId),
         ]);
+        // round254 — resolve the discussion TYPE's own export template (config)
+        // and, when it has one, its own assets. The type sits BETWEEN the
+        // per-discussion override and the instance default.
+        const typeName = discussion?.discussionTypeID || '';
+        const typeTemplate = typeExportTemplateFor(typeTemplates, typeName);
+        const typeAssets = typeTemplate ? await loadTypeExportAssets(typeName) : null;
         if (cancelled) return;
-        const seededAssets = ownAssets || globalAssets || null;
+        const seededAssets = ownAssets || (typeTemplate ? typeAssets : null) || globalAssets || null;
         initialAssetsRef.current = seededAssets;
-        setTemplate(seedExportTemplate(ownTemplate || settings?.exportTemplate));
+        setTemplate(seedExportTemplate(resolveExportTemplate(ownTemplate, typeTemplate, settings?.exportTemplate)));
         setAssets(seededAssets);
         setModelState(assembled);
       } catch (err) {

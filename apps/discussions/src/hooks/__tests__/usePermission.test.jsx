@@ -305,13 +305,15 @@ describe('resolveCan — degrades gracefully on missing/stale data', () => {
   });
 
   it('does not throw when a role alias is mapped but absent in the seed (inherits default)', () => {
-    // permissions enabled, but roles map is EMPTY → participant inherits
-    // CAPABILITY_DEFAULTS. createTask default = creatorLeadOwner → participant
-    // (not creator/lead) is denied; viewDiscussion default = all → allowed.
+    // permissions enabled, but roles map is EMPTY → caps inherit CAPABILITY_DEFAULTS.
+    // A creatorLeadOwner-default cap (editDiscussionFields) denies a non-creator/lead
+    // participant; createTask default = 'all' (round291) → allowed for everyone;
+    // viewDiscussion → allowed via the unseeded-roles safety valve.
     const opts = { permissions: { enabled: true, version: 1, roles: {} }, canManageSettings: false, isAdmin: false };
     const ctx = { discussion: disc({ participants: [person(ME)] }), currentUserId: ME };
-    expect(() => resolveCan('createTask', ctx, opts)).not.toThrow();
-    expect(resolveCan('createTask', ctx, opts)).toBe(false);
+    expect(() => resolveCan('editDiscussionFields', ctx, opts)).not.toThrow();
+    expect(resolveCan('editDiscussionFields', ctx, opts)).toBe(false);
+    expect(resolveCan('createTask', ctx, opts)).toBe(true);
     expect(resolveCan('viewDiscussion', ctx, opts)).toBe(true);
   });
 

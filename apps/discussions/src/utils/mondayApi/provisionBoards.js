@@ -106,6 +106,12 @@ export const PROVISION_SPEC = {
     columns: [
       { alias: 'discussionCreatorID', type: 'people', title: 'יוצר' },
       { alias: 'discussionLeadID', type: 'people', title: 'מוביל דיון' },
+      // round294 — the COORDINATOR role ("מרכז דיון") is a first-class access
+      // source (accessRoleSources.taskEditorsID = lead + coordinator + creator),
+      // so it must exist on a fresh board for מרכז הדיון to flow into the tasks
+      // "יכולת עריכה" column on task creation. Previously unprovisioned, so a
+      // coordinator could never be assigned out of the box.
+      { alias: 'discussionCoordinatorID', type: 'people', title: 'מרכז דיון' },
       { alias: 'participantsID', type: 'people', title: 'משתתפים' },
       { alias: 'creationDateID', type: 'date', title: 'תאריך יצירה' },
       { alias: 'discussionDateID', type: 'date', title: 'תאריך הדיון' },
@@ -163,6 +169,16 @@ export const PROVISION_SPEC = {
       { alias: 'deadlineID', type: 'date', title: 'דד ליין' },
       { alias: 'statusID', type: 'status', title: 'סטאטוס', defaults: STATUS_DEFAULTS },
       { alias: 'detailsID', type: 'long_text', title: 'מקור המשימה' },
+      // round294 — the tasks board ALWAYS carries a people column "יכולת עריכה"
+      // (taskEditorsID). It is the INFRASTRUCTURE column into which task creation
+      // from a discussion writes the discussion's creator + coordinator + manager
+      // (accessRoleSources.taskEditorsID). Provisioning it here means: a freshly
+      // CREATED tasks board gets it; a CONNECTED existing board has it ensured by
+      // (title,type) — created if absent, reused if present; and a post-install
+      // top-up run completes+maps it on boards that predate this. Without it the
+      // column was never mapped, so the editors write in useTasks was a silent
+      // no-op (owner-reported: the roles never landed in the board).
+      { alias: 'taskEditorsID', type: 'people', title: 'יכולת עריכה' },
     ],
     // discussionLinkID (back-link to discussions) is the reflection of
     // discussions.tasksBoardLinkID — see above.

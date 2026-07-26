@@ -5,7 +5,7 @@ import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
-import { Plus, Eye, EyeOff, Trash2, GripHorizontal } from 'lucide-react';
+import { Plus, EyeOff, Trash2, GripHorizontal } from 'lucide-react';
 import {
   DndContext,
   closestCenter,
@@ -24,8 +24,10 @@ import { useTopics } from '@generated/hooks/useTopics';
 import { useSavedViews } from '@generated/hooks/useSavedViews.js';
 import { useEscToClearSelection } from '@generated/hooks/useEscToClearSelection.js';
 import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/components/TopicPointRow';
+import { EmptyState } from '@generated/components/EmptyState';
 import { UpdatesTripleBox } from './UpdatesTripleBox.jsx';
 import { computeRibbonDropTarget } from './ribbonDrop.js';
+import { assignTopicAccents, topicColorStartIndex } from './topicAccents.js';
 import { buildMentionRoster } from '@generated/utils/mention.js';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
@@ -139,14 +141,6 @@ function TopicSelectAll({ points, selectedPointIds, onToggleTopicPoints }) {
 
 const TOPIC_SKELETON_H = 44;
 
-/* 20-color monday LABEL palette (see theme-tokens.css --topic-color-1..20). */
-const TOPIC_COLOR_COUNT = 20;
-function topicColorStartIndex(id, seed = 0) {
-  const s = String(id);
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
-  return (h + seed) % TOPIC_COLOR_COUNT;
-}
 
 /* One topic = a CARD (round226 stage B — approved mockup): a colored accent bar
    on the inline-start edge (the topic's PRIORITY color when set, its stable
@@ -162,7 +156,7 @@ function SortableTopicSection({
   // POINT via multi-select bulk delete — the per-point trash was removed.)
   onRetryCreate,
   deleteTopic, addPoint, togglePoint,
-  togglePointNotForDiscussion, toggleTopicNotForDiscussion,
+  toggleTopicNotForDiscussion,
   renamePoint, reorderPoints,
   // Visible column keys (round 47 Hide) — 'name' is always present; a hidden
   // check/outputs key drops that element from every point row.
@@ -425,17 +419,7 @@ function SortableTopicSection({
               <Edit size={16} />
             </button>
           )}
-          {canHideTopic && (
-            <button
-              type="button"
-              className={`${styles.headActBtn} ${excluded ? styles.headActOn : ''}`}
-              onClick={(e) => { e.stopPropagation(); toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(topic.id, !excluded); }}
-              aria-label={excluded ? 'הצג נושא' : 'הסתר נושא'}
-              title={excluded ? 'הצג נושא' : 'הסתר נושא'}
-            >
-              {excluded ? <Eye size={16} /> : <EyeOff size={16} />}
-            </button>
-          )}
+          {/* round260 (owner request) — topic hide button removed. */}
           {canDelete && (
             <RowKebabMenu
               excluded={excluded}
@@ -475,12 +459,10 @@ function SortableTopicSection({
                   usersById={usersById}
                   columns={columns}
                   onToggle={togglePoint}
-                  onToggleNotForDiscussion={togglePointNotForDiscussion}
                   onRename={renamePoint}
                   onDelete={canDelete ? onDeletePoint : undefined}
                   onRetryCreate={onRetryCreate}
                   canEditPoint={canEditTopic}
-                  canHidePoint={canHideTopic}
                   canCheck={canCheck}
                   decisionCount={getPointItemIds(pointItemsByPoint, point._realId || point.id, 'decision')
                     .filter((id) => decisionIdSet.has(String(id))).length}
@@ -564,6 +546,8 @@ export function TopicsTab({
   canEditBackground = false,
   canEditReferences = false,
   canEditSummary = false,
+  // round270 — who may add documents in the triple box (creator/coord/lead/owner).
+  canAttachDocuments = false,
   // round205 — owner-configurable component visibility (Settings → העדפות):
   // the topic tables and each triple-box pane can be hidden per instance.
   // round206 added showSummary (the summary moved into the triple box).
@@ -816,9 +800,9 @@ export function TopicsTab({
   //   layout.ratio        → the אג'נדה box's share of the row width (the triple
   //                         box gets the rest, so growing one shrinks the other).
   //   layout.stacked      → the two boxes stack vertically instead of side-by-side.
-  //   layout.agendaHeight → the אג'נדה box's own height in px (round251).
-  //   layout.tripleHeight → the triple box's own height in px — each resizes
-  //                         INDEPENDENTLY, so shrinking one leaves the other put.
+  //   layout.boxHeight    → round269: ONE SHARED height (px) for BOTH boxes, so
+  //                         they are always the same height (dragging either box's
+  //                         handle/corner resizes both). WIDTH stays per-box (ratio).
   // editLayout reveals the 6-dot grips + the resize divider on BOTH boxes at
   // once (owner request: one pencil arms both). Everyone READS the saved layout;
   // only an owner (canManageSettings) persists changes.
@@ -867,25 +851,24 @@ export function TopicsTab({
     document.addEventListener('pointerup', onUp);
   };
 
-  // round242 — bottom resize handle: drag it to shrink/GROW a box's card height.
-  // round251 (owner request) — each box owns its OWN height (`which` =
-  // 'agenda'|'triple' → agendaHeight|tripleHeight), so shrinking one no longer
-  // drags the other. The start height is measured from the handle's own box so
-  // the drag tracks the real pixels. One persist on release.
-  const heightKey = (which) => (which === 'triple' ? 'tripleHeight' : 'agendaHeight');
-  const onHeightPointerDown = (e, which) => {
+  // round242 — bottom resize handle: drag it to shrink/GROW the box card height.
+  // round269 (owner request) — height is UNIFORM: both boxes share ONE height
+  // (`boxHeight`), so dragging either box's handle resizes BOTH identically —
+  // never a state where one is taller than the other. The start height is
+  // measured from the dragged box so the drag tracks real pixels. `which` is
+  // kept only to tag which handle fired. One persist on release.
+  const onHeightPointerDown = (e /* , which */) => {
     if (!editLayout || !canManageSettings) return;
     e.preventDefault();
     e.stopPropagation();
     const startY = e.clientY;
     const box = e.currentTarget.parentElement;
-    const k = heightKey(which);
-    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current[k] || 520);
-    const onMove = (ev) => applyLayout({ [k]: heightFromDrag(startH, ev.clientY - startY) });
+    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current.boxHeight || 520);
+    const onMove = (ev) => applyLayout({ boxHeight: heightFromDrag(startH, ev.clientY - startY) });
     const onUp = (ev) => {
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
-      applyLayout({ [k]: heightFromDrag(startH, ev.clientY - startY) }, true);
+      applyLayout({ boxHeight: heightFromDrag(startH, ev.clientY - startY) }, true);
     };
     document.addEventListener('pointermove', onMove);
     document.addEventListener('pointerup', onUp);
@@ -909,7 +892,7 @@ export function TopicsTab({
   // corner and drag out/in to resize BOTH dimensions at once — horizontal moves
   // the split ratio (grow one, shrink the other), vertical moves the shared
   // height. Reuses the same pure ratioFromDrag / heightFromDrag math.
-  const onCornerPointerDown = (e, which) => {
+  const onCornerPointerDown = (e /* , which */) => {
     if (!editLayout || !canManageSettings) return;
     e.preventDefault();
     e.stopPropagation();
@@ -918,16 +901,15 @@ export function TopicsTab({
     const startRatio = layoutRef.current.ratio;
     const width = splitRowRef.current?.getBoundingClientRect().width || 0;
     const box = e.currentTarget.parentElement;
-    const k = heightKey(which);
-    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current[k] || 520);
+    const startH = box ? box.getBoundingClientRect().height : (layoutRef.current.boxHeight || 520);
     const commit = (ev, persist) => {
       const dx = ev.clientX - startX;
       const dy = ev.clientY - startY;
       const patch = {
-        // pointer moving physically RIGHT always grows the agenda's share.
+        // pointer moving physically RIGHT always grows the agenda's share (WIDTH,
+        // per-box). round269 — vertical drag resizes the SHARED boxHeight (both).
         ratio: ratioFromDrag(startRatio, dx, width),
-        // round251 — vertical drag resizes ONLY this box's own height.
-        [k]: heightFromDrag(startH, dy),
+        boxHeight: heightFromDrag(startH, dy),
       };
       // round250 (owner request "can't drag left/right") — a horizontal corner
       // drag while STACKED brings the boxes back side-by-side so the width
@@ -1016,28 +998,15 @@ export function TopicsTab({
   };
   const stableDiscussionSeedRef = useRef(topicColorStartIndex(`discussion:${discussion?.id || 'default'}`));
   const topicAccentMapRef = useRef({});
+  // round295 — MORE variance between adjacent topics (owner request): the pure
+  // assignTopicAccents walks the hue wheel by a coprime STRIDE so consecutive
+  // topics land on opposite sides (was a +1-collision hash that clustered
+  // look-alike hues). The per-id map is persisted in a ref so a topic keeps its
+  // colour across re-renders.
   const getAccentByTopicId = (topics) => {
-    const seed = stableDiscussionSeedRef.current;
-    const map = topicAccentMapRef.current;
-    const liveIds = new Set(topics.map((topic) => String(topic.id)));
-    Object.keys(map).forEach((topicId) => { if (!liveIds.has(topicId)) delete map[topicId]; });
-    const used = new Set(
-      Object.values(map).map((colorVar) => Number(String(colorVar).replace('--topic-color-', '')) - 1),
-    );
-    topics.forEach((topic, idx) => {
-      const topicId = String(topic.id);
-      if (map[topicId]) return;
-      let colorIndex = topicColorStartIndex(topic.id, seed);
-      let steps = 0;
-      while (used.has(colorIndex) && steps < TOPIC_COLOR_COUNT) {
-        colorIndex = (colorIndex + 1) % TOPIC_COLOR_COUNT;
-        steps += 1;
-      }
-      if (used.has(colorIndex)) colorIndex = idx % TOPIC_COLOR_COUNT;
-      used.add(colorIndex);
-      map[topicId] = `--topic-color-${colorIndex + 1}`;
-    });
-    return map;
+    const next = assignTopicAccents(topics, stableDiscussionSeedRef.current, topicAccentMapRef.current);
+    topicAccentMapRef.current = next;
+    return next;
   };
   const accentByTopicId = getAccentByTopicId(items);
 
@@ -1094,7 +1063,7 @@ export function TopicsTab({
   }, [visibleTopics, activeTopicId]);
 
   // ---- ribbon drag (long-press on the ⋮) ------------------------------------
-  // Long-press (450ms) on a label's ⋮ arms a horizontal drag; a short click
+  // Long-press (280ms, round255) on a label's ⋮ arms a horizontal drag; a short click
   // opens the topic menu. During the drag a local preview order renders; the
   // ONE reorderTopics persist happens on drop. Disabled while a search filter
   // is active (the ribbon then shows a partial list — reordering it would be
@@ -1118,7 +1087,7 @@ export function TopicsTab({
     });
   };
 
-  // round237 — LEFT long-press (>~0.55s) starts a GHOST drag: a faded clone
+  // round237 — LEFT long-press (280ms, round255) starts a GHOST drag: a faded clone
   // follows the cursor and the ribbon opens a spacing GAP at the drop point;
   // the ONE reorderTopics persist happens on drop. Disabled while searching
   // (partial list ⇒ ambiguous order) or when editing is off.
@@ -1141,7 +1110,9 @@ export function TopicsTab({
       g.style.top = startY + 'px';
       document.body.appendChild(g);
       ghostRef.current = g;
-    }, 560);
+      // round255 (owner request) — HALVE the long-press arm delay (560 → 280ms)
+      // so a topic becomes draggable in half the time.
+    }, 280);
 
     const onMove = (ev) => {
       if (!armed) return;
@@ -1256,8 +1227,16 @@ export function TopicsTab({
         style={{
           // round251 — height is PER-BOX: the agenda column carries its own var,
           // so resizing it never touches the triple box.
-          ...(layout.agendaHeight ? { '--split-card-h': `${layout.agendaHeight}px` } : null),
-          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${layout.ratio} 1 0` }),
+          ...(layout.boxHeight ? { '--split-card-h': `${layout.boxHeight}px` } : null),
+          // round293 — width driven PURELY by the ratio (proportional grow,
+          // basis 0) so dragging the divider tracks the pointer across the WHOLE
+          // range. round292's percent-basis froze the drag over a sub-range: the
+          // triple box's `.refPanel` max-width:720/min-width:360 (which the `flex`
+          // shorthand does NOT override) clamped that percent basis, so the split
+          // stopped moving. Those caps are neutralized inline on the triple box
+          // below; here basis 0 + proportional grow keeps agenda = ratio × row.
+          // A sole visible box (grow as the only child) still fills 100%.
+          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${layout.ratio} 1 0`, minWidth: 0 }),
         }}
       >
       {/* round218 (approved mockup) — the topics live in an "אג'נדה" CARD
@@ -1345,6 +1324,15 @@ export function TopicsTab({
               tabIndex={0}
               onClick={() => { setActiveTopicId(topicId); setTopicMenu(null); }}
               onKeyDown={(e) => { if (e.key === 'Enter') setActiveTopicId(topicId); }}
+              // round267 (owner request) — LEFT double-click on a topic tile opens
+              // its inline rename (same editor the ⋮/right-click "עריכת שם" opens).
+              onDoubleClick={(e) => {
+                if (!editTopicOrPoint) return;
+                e.preventDefault();
+                e.stopPropagation();
+                setTopicMenu(null);
+                setRenamingTopicId(topicId);
+              }}
               onContextMenu={(e) => handleTileContextMenu(e, topic)}
               onPointerDown={(e) => handleTilePointerDown(e, topic)}
               title={topic.name}
@@ -1432,7 +1420,6 @@ export function TopicsTab({
               deleteTopic={deleteTopic}
               addPoint={addPoint}
               togglePoint={applyTogglePoint}
-              togglePointNotForDiscussion={togglePointNotForDiscussion}
               toggleTopicNotForDiscussion={toggleTopicNotForDiscussion}
               renamePoint={renamePoint}
               reorderPoints={reorderPoints}
@@ -1467,7 +1454,7 @@ export function TopicsTab({
       )}
 
       {items.length === 0 && !addWhere && (
-        <div className={styles.empty}>אין נושאים לדיון זה</div>
+        <EmptyState>אין נושאים לדיון זה</EmptyState>
       )}
       </div>{/* .agendaBody */}
       </div>{/* .agendaBox */}
@@ -1503,12 +1490,18 @@ export function TopicsTab({
         style={{
           // round251 — the triple box carries its OWN height var, independent of
           // the agenda box.
-          ...(layout.tripleHeight ? { '--split-card-h': `${layout.tripleHeight}px` } : null),
-          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${1 - layout.ratio} 1 0` }),
+          ...(layout.boxHeight ? { '--split-card-h': `${layout.boxHeight}px` } : null),
+          // round293 — see the agenda box: proportional grow (basis 0) + NEUTRALIZE
+          // the `.refPanel` max-width:720/min-width:360 caps inline so the divider
+          // drag tracks the pointer across the whole range AND the box fills 100%
+          // (alone or paired). Without minWidth:0/maxWidth:none the stylesheet caps
+          // fight the ratio and the split freezes (round292 regression).
+          ...(layout.stacked ? { flex: '1 1 auto', width: '100%' } : { flex: `${1 - layout.ratio} 1 0`, minWidth: 0, maxWidth: 'none' }),
         }}
       >
         <UpdatesTripleBox
           discussionId={discussion?.id}
+          canAttach={canAttachDocuments}
           canEditBackground={canEditBackground}
           canEditReferences={canEditReferences}
           canEditSummary={canEditSummary}
@@ -1530,11 +1523,23 @@ export function TopicsTab({
       {topicMenu && (() => {
         const t = items.find((x) => String(x.id) === String(topicMenu.topicId));
         if (!t) return null;
-        const excluded = t.notForDiscussion === true;
         return (
           <>
             <div className={styles.topicMenuBackdrop} onClick={() => setTopicMenu(null)} />
             <div className={styles.topicMenu} style={{ left: topicMenu.x, top: topicMenu.y }} dir="rtl" role="menu">
+              {/* round267 (owner request) — the topic CREATOR's avatar + name at
+                  the top of the menu, above "עריכת שם". Shown only for a topic that
+                  has a creator; topics generated from a template/duplicate/type
+                  default carry no creator (see createTopicsFromTemplate), so no
+                  avatar appears for them. */}
+              {t.creatorId && (
+                <div className={styles.topicMenuCreator}>
+                  <CreatorAvatar userId={t.creatorId} usersById={usersById} size="small" />
+                  <span className={styles.topicMenuCreatorName}>
+                    {usersById[String(t.creatorId)]?.name || 'יוצר הנושא'}
+                  </span>
+                </div>
+              )}
               {editTopicOrPoint && (
                 <button
                   type="button"
@@ -1544,18 +1549,8 @@ export function TopicsTab({
                   <Edit size={15} /> עריכת שם
                 </button>
               )}
-              {canHide && (
-                <button
-                  type="button"
-                  className={styles.topicMenuItem}
-                  onClick={() => {
-                    setTopicMenu(null);
-                    toggleTopicNotForDiscussion && toggleTopicNotForDiscussion(t.id, !excluded);
-                  }}
-                >
-                  {excluded ? <Eye size={15} /> : <EyeOff size={15} />} {excluded ? 'הצג נושא' : 'הסתר נושא'}
-                </button>
-              )}
+              {/* round260 (owner request) — the "הסתר/הצג נושא" menu item was
+                  removed; topic hiding is no longer offered in the UI. */}
               {priorityMapped && editTopicOrPoint && (priorityOpts.options || []).length > 0 && (
                 <div className={styles.topicMenuPrio}>
                   <span className={styles.topicMenuPrioLabel}>עדיפות</span>

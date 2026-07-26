@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, TabPanels, TabPanel } from '@vibe/core';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
@@ -27,6 +28,7 @@ import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js'
 import SearchablePicker from './SearchablePicker';
 import PermissionsTab from './PermissionsTab.jsx';
 import ExportTemplateTab from './ExportTemplateTab.jsx';
+import { UsageMetricsTab } from '@generated/components/UsageMetricsTab';
 import { TemplateManagerModal as TemplatesPanel } from '@generated/components/TemplateManagerModal';
 import { SetupWizard } from '../SetupWizard';
 import logger from '../../utils/logger.js';
@@ -98,16 +100,92 @@ function mergeColumnsWithSchema(stored) {
 // Column-type sections for the mapping screen (discussions + tasks). Fields are
 // bucketed by their monday column TYPE into ordered sections, each with a Hebrew
 // header. A field whose type matches no section falls into the trailing "אחר".
+// round280 — ordered + titled to match the APPROVED master–detail mockup: this
+// is now the rail's TYPE-FOLDER order and the folder Hebrew names. A checkbox
+// ("סימונים") group was added (topics carries checkbox fields that previously
+// fell into "אחר"). Consumed only by the mapping tab.
 const COLUMN_TYPE_GROUPS = [
   { key: 'people', title: 'אנשים', types: ['people', 'person', 'multiple_person'] },
+  { key: 'status', title: 'סטטוסים', types: ['status', 'color'] },
+  { key: 'dropdown', title: 'רשימות נפתחות', types: ['dropdown'] },
   { key: 'date', title: 'תאריכים', types: ['date'] },
-  { key: 'status', title: 'סטטוס', types: ['status', 'color'] },
-  { key: 'dropdown', title: 'רשימה נפתחת', types: ['dropdown'] },
-  { key: 'relation', title: 'חיבורי לוחות', types: ['board_relation', 'connect_boards'] },
-  { key: 'file', title: 'קבצים', types: ['file'] },
+  { key: 'relation', title: 'קישורי לוחות', types: ['board_relation', 'connect_boards'] },
   { key: 'text', title: 'טקסט', types: ['text', 'long_text'] },
-  { key: 'formula', title: 'נוסחאות ושיקופים', types: ['formula', 'mirror', 'lookup'] },
+  { key: 'checkbox', title: 'סימונים', types: ['checkbox', 'boolean'] },
+  { key: 'file', title: 'קבצים', types: ['file'] },
+  { key: 'formula', title: 'שדות מחושבים', types: ['formula', 'mirror', 'lookup'] },
 ];
+
+// Per-folder presentation metadata (accent hue + glyph) for the mapping rail /
+// detail header — copied from the approved mockup's `I{…}` icon map and `--t-*`
+// hues. `other` is the trailing fallback bucket's presentation.
+const TYPE_META = {
+  people: { hue: 'people', icon: 'people' },
+  status: { hue: 'status', icon: 'status' },
+  dropdown: { hue: 'dropdown', icon: 'dropdown' },
+  date: { hue: 'date', icon: 'date' },
+  relation: { hue: 'relation', icon: 'relation' },
+  text: { hue: 'text', icon: 'text' },
+  checkbox: { hue: 'checkbox', icon: 'checkbox' },
+  file: { hue: 'file', icon: 'file' },
+  formula: { hue: 'computed', icon: 'computed' },
+  other: { hue: 'computed', icon: 'text' },
+};
+
+// Inline type-glyph paths (24×24, currentColor stroke) — verbatim from the
+// approved mockup so the rail/detail icons match it exactly.
+const TYPE_ICON_PATHS = {
+  people: (
+    <>
+      <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 6.2a3 3 0 0 1 0 5.6M17.5 19a5.5 5.5 0 0 0-3-4.9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </>
+  ),
+  date: (
+    <>
+      <rect x="4" y="5.5" width="16" height="14" rx="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M4 9.5h16M8 3.5v4M16 3.5v4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+    </>
+  ),
+  status: (
+    <>
+      <circle cx="12" cy="12" r="7.2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8.5 12.2l2.4 2.3 4.6-4.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  dropdown: (
+    <>
+      <rect x="4" y="6" width="16" height="12" rx="2.2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8.5 11l3.5 3 3.5-3" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  relation: (
+    <path d="M10 14a3.5 3.5 0 0 0 5 0l2.5-2.5a3.5 3.5 0 0 0-5-5L11 8M14 10a3.5 3.5 0 0 0-5 0l-2.5 2.5a3.5 3.5 0 0 0 5 5L13 16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  ),
+  text: (
+    <path d="M5 7h14M5 12h14M5 17h9" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+  ),
+  checkbox: (
+    <>
+      <rect x="4.5" y="4.5" width="15" height="15" rx="3.2" stroke="currentColor" strokeWidth="1.7" />
+      <path d="M8.5 12l2.4 2.3 4.6-4.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  ),
+  file: (
+    <path d="M13 4H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9l-6-5ZM13 4v5h6" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+  ),
+  computed: (
+    <path d="M7 5h10L11 12l6 7H7" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+  ),
+};
+
+function TypeIcon({ name, size = 19 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      {TYPE_ICON_PATHS[name] || TYPE_ICON_PATHS.text}
+    </svg>
+  );
+}
 
 // Which section a column type belongs to (falls back to a trailing "אחר").
 function typeGroupKey(type) {
@@ -178,8 +256,15 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   const [permissions, setPermissions] = useState(seedPermissions(draft.permissions));
   const [selectedRoleKey, setSelectedRoleKey] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState(0); // 0 = מיפוי, 1 = העדפות, 2 = הרשאות
-  const [openBoardKey, setOpenBoardKey] = useState(null);
+  const [activeTab, setActiveTab] = useState(0); // 0 = מיפוי, 1 = העדפות, 2 = תבניות, 3 = תבנית ייצוא, 4 = הרשאות, 5 = מדדי שימוש
+  // round256 — the Templates tab (2) widens to the export size while its type
+  // editor is on the "תבנית ייצוא" sub-tab (TemplateManagerModal reports this).
+  // round280 — master–detail mapping UI: the selected board tab and the selected
+  // type-folder in the rail, plus a field-title search. `null` folder ⇒ default
+  // to the first non-empty folder (resolved at render, never via setState-in-render).
+  const [selectedBoardKey, setSelectedBoardKey] = useState('discussions');
+  const [selectedFolderKey, setSelectedFolderKey] = useState(null);
+  const [mapQuery, setMapQuery] = useState('');
   const [boardOptions, setBoardOptions] = useState([]);
   const [loadingBoards, setLoadingBoards] = useState(false);
   const [columnsByBoardId, setColumnsByBoardId] = useState({});
@@ -191,22 +276,46 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // (onDone) or backs out (onManual). Offered only once the instance is already
   // configured — never during the first-run forced modal.
   const [showTopUp, setShowTopUp] = useState(false);
+  // round286 — when the templates tab (2) is on its "תבנית ייצוא" sub-tab, grow
+  // the modal to full screen like the dedicated export tab (3). TemplateManagerModal
+  // reports this via onExportWide.
+  const [templatesExportWide, setTemplatesExportWide] = useState(false);
   const fileInputRef = useRef(null);
+  // round295 — unsaved-changes guard on close (X / ביטול / overlay). The
+  // templates panel exposes its draft dirtiness via this ref; settings dirtiness
+  // is a snapshot compare (seeded on open). No change ⇒ close with no prompt.
+  const templatesRef = useRef(null);
+  const initialSnapshotRef = useRef(null);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // re-seed local draft from the live settings whenever the modal opens
   useEffect(() => {
     if (isOpen) {
       const seed = settings || buildEmptyConfig();
-      setBoards(mergeBoardsWithSchema(seed.boards));
-      setColumns(mergeColumnsWithSchema(seed.columns));
-      setPreferences({ ...DEFAULT_PREFERENCES, ...(seed.preferences || {}) });
-      setPermissions(seedPermissions(seed.permissions));
-      setExportTemplate(seedExportTemplate(seed.exportTemplate));
+      const seededBoards = mergeBoardsWithSchema(seed.boards);
+      const seededColumns = mergeColumnsWithSchema(seed.columns);
+      const seededPrefs = { ...DEFAULT_PREFERENCES, ...(seed.preferences || {}) };
+      const seededPerms = seedPermissions(seed.permissions);
+      const seededExport = seedExportTemplate(seed.exportTemplate);
+      setBoards(seededBoards);
+      setColumns(seededColumns);
+      setPreferences(seededPrefs);
+      setPermissions(seededPerms);
+      setExportTemplate(seededExport);
+      // round295 — snapshot the seeded settings so a later close can tell whether
+      // the mapping/preferences/permissions/export config was actually changed.
+      initialSnapshotRef.current = JSON.stringify({
+        boards: seededBoards, columns: seededColumns, preferences: seededPrefs,
+        permissions: seededPerms, exportTemplate: seededExport,
+      });
+      setShowCloseConfirm(false);
       setAssetError(null);
       loadExportAssets(context)
         .then(setExportAssets)
         .catch((err) => logger.warn('SettingsModal', 'טעינת נכסי הייצוא נכשלה', err));
-      setOpenBoardKey(null);
+      setSelectedBoardKey('discussions');
+      setSelectedFolderKey(null);
+      setMapQuery('');
     }
   }, [isOpen, settings, context]);
 
@@ -520,6 +629,14 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     setSaving(true);
     setAssetError(null);
     try {
+      // round295 — flush an in-progress template draft the user may have created
+      // but forgotten to "שמור תבנית" before hitting the general Settings save.
+      // Best-effort: a template save failure must not block the settings save.
+      try {
+        if (templatesRef.current?.isDirty?.()) await templatesRef.current.saveDraft();
+      } catch (err) {
+        logger.warn('SettingsModal', 'שמירת טיוטת התבנית נכשלה', err);
+      }
       // Persist the heavy export assets first — if they exceed the 6MB quota this
       // throws, and we abort WITHOUT saving settings so config and assets can't
       // drift out of sync. The friendly quota message is shown in the tab.
@@ -564,6 +681,62 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       setSaving(false);
     }
   };
+
+  // round295 — did the mapping/preferences/permissions/export CONFIG change since
+  // the modal opened? (Heavy export ASSETS are excluded — they're a separate blob.)
+  const computeSettingsDirty = () => {
+    if (!initialSnapshotRef.current) return false;
+    const now = JSON.stringify({ boards, columns, preferences, permissions, exportTemplate });
+    return now !== initialSnapshotRef.current;
+  };
+
+  // round295 — close intent (X / ביטול / overlay). If there are unsaved changes
+  // (settings config OR an in-progress template draft), ask before leaving;
+  // otherwise close immediately (no change ⇒ no prompt, per owner spec).
+  const attemptClose = () => {
+    // First-run forced config (SettingsGate) mounts this with NO onClose — the
+    // modal is not dismissable then, so there is nothing to confirm.
+    if (!onClose) return;
+    const tplDirty = !!templatesRef.current?.isDirty?.();
+    if (computeSettingsDirty() || tplDirty) setShowCloseConfirm(true);
+    else onClose();
+  };
+
+  // Confirm-dialog "שמירה ויציאה": persist everything, then close. In templatesOnly
+  // mode there is no settings save — just flush the template draft.
+  const saveAndClose = async () => {
+    setShowCloseConfirm(false);
+    if (templatesOnly) {
+      try {
+        if (templatesRef.current?.isDirty?.()) await templatesRef.current.saveDraft();
+      } catch (err) {
+        logger.warn('SettingsModal', 'שמירת טיוטת התבנית נכשלה', err);
+      }
+      onClose?.();
+    } else {
+      await handleSave(); // flushes the template draft + persists settings + closes on success
+    }
+  };
+
+  // Portal for the unsaved-changes confirm dialog — rendered above whichever
+  // Settings surface is showing (main or templatesOnly).
+  const closeConfirmPortal = showCloseConfirm ? createPortal(
+    <div
+      className={styles.confirmOverlay}
+      onClick={(e) => { if (e.target === e.currentTarget) setShowCloseConfirm(false); }}
+    >
+      <div className={styles.confirmDialog} role="dialog" aria-modal="true" aria-label="שינויים שלא נשמרו" dir="rtl">
+        <Heading type="h4">יש שינויים שלא נשמרו</Heading>
+        <Text>לשמור את השינויים לפני היציאה?</Text>
+        <Flex justify="end" gap={8} className={styles.confirmActions}>
+          <Button kind="tertiary" onClick={() => setShowCloseConfirm(false)}>המשך עריכה</Button>
+          <Button kind="secondary" onClick={() => { setShowCloseConfirm(false); onClose?.(); }}>יציאה ללא שמירה</Button>
+          <Button kind="primary" loading={saving} onClick={saveAndClose}>שמירה ויציאה</Button>
+        </Flex>
+      </div>
+    </div>,
+    document.body
+  ) : null;
 
   const handleExportJson = () => {
     const exportPayload = {
@@ -613,6 +786,37 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     }
   };
 
+  // round280 — mapping master–detail view model. These read the same `columns`
+  // draft + alias lists the accordion used, so persistence is untouched.
+  const settingsFieldsFor = (boardKey) =>
+    boardKey === 'discussions'
+      ? DISCUSSIONS_SETTINGS_FIELDS
+      : boardKey === 'tasks'
+        ? TASKS_SETTINGS_FIELDS
+        : boardKey === 'topics'
+          ? TOPICS_SETTINGS_FIELDS
+          : boardKey === 'decisions'
+            ? DECISIONS_SETTINGS_FIELDS
+            : Object.keys(columns?.[boardKey] || {});
+
+  const entriesFor = (boardKey) =>
+    settingsFieldsFor(boardKey)
+      .map((alias) => [alias, columns?.[boardKey]?.[alias]])
+      .filter(([, col]) => Boolean(col));
+
+  // Group a board's entries into ordered, non-empty type folders (trailing "אחר").
+  const foldersFor = (boardKey) => {
+    const entries = entriesFor(boardKey);
+    const groups = [...COLUMN_TYPE_GROUPS, { key: 'other', title: 'אחר', types: [] }];
+    return groups
+      .map((g) => ({
+        key: g.key,
+        title: g.title,
+        entries: entries.filter(([, col]) => typeGroupKey(col.type) === g.key),
+      }))
+      .filter((f) => f.entries.length > 0);
+  };
+
   if (!isOpen) return null;
 
   // round178 — `contained` scopes the overlay to the right discussion-card pane
@@ -622,7 +826,22 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // its box fills the whole app iframe, so the contained (card-pane-scoped)
   // overlay is dropped while that tab is active and the viewport-fixed overlay
   // takes over; every other tab keeps the contained behavior.
-  const overlayClass = `${styles.overlay} ${contained && activeTab !== 3 ? styles.overlayContained : ''}`;
+  // round258 — the export template needs the FULL-SCREEN overlay (not the
+  // contained one). That's the system export tab (3) AND the Templates tab (2)
+  // while its type editor is on the "תבנית ייצוא" sub-tab. Without lifting the
+  // contained overlay here, .modalExport is applied but the overlay still
+  // clamps the modal small (owner: "עדיין מאוד קטן").
+  // round264 (owner request) — the ENTIRE settings modal opened full-viewport.
+  // round284 (owner reversed this) — only the two "big-canvas" tabs stay full:
+  // תבנית ייצוא (3, the live Word preview) and מדדי שימוש (5, the usage dashboard).
+  // Every other settings tab (mapping/preferences/templates/permissions) opens as
+  // a compact EQUILATERAL SQUARE (~half the export width). `fullScreen` is the flag
+  // for "full viewport + non-contained overlay + .modalExport".
+  const fullScreen = activeTab === 3 || activeTab === 5 || (activeTab === 2 && templatesExportWide);
+  const overlayClass = `${styles.overlay} ${contained && !fullScreen ? styles.overlayContained : ''}`;
+  // The template-manager / top-up wizard surfaces keep the old always-full overlay
+  // (they are their own large-canvas flows, unaffected by the per-tab sizing above).
+  const fullOverlayClass = styles.overlay;
 
   // round147 — templates-only mode: a super member ("חבר-על") opens the gear to
   // manage templates and NOTHING else — no mapping, no preferences, no
@@ -630,8 +849,8 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // settings save/footer machinery is deliberately absent here.
   if (templatesOnly) {
     return (
-      <div className={overlayClass} onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+      <div className={fullOverlayClass} onClick={(e) => {
+        if (e.target === e.currentTarget) attemptClose();
       }}>
         <div
           className={`${styles.modal} ${styles.modalFixed}`}
@@ -641,17 +860,18 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
           aria-label="ניהול תבניות"
         >
           <div className={styles.header}>
-            <button type="button" className={styles.closeButton} onClick={onClose} aria-label="סגירה">
+            <button type="button" className={styles.closeButton} onClick={attemptClose} aria-label="סגירה">
               ×
             </button>
             <Heading type="h4">ניהול תבניות</Heading>
           </div>
           <div className={styles.content}>
             <div className={styles.body}>
-              <TemplatesPanel />
+              <TemplatesPanel ref={templatesRef} />
             </div>
           </div>
         </div>
+        {closeConfirmPortal}
       </div>
     );
   }
@@ -663,7 +883,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // so the re-seed effect refreshes the mapping view with the fresh config.
   if (showTopUp) {
     return (
-      <div className={overlayClass} onClick={(e) => {
+      <div className={fullOverlayClass} onClick={(e) => {
         if (e.target === e.currentTarget) setShowTopUp(false);
       }}>
         <div
@@ -694,17 +914,17 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
 
   return (
     <div className={overlayClass} onClick={(e) => {
-      if (e.target === e.currentTarget) onClose();
+      if (e.target === e.currentTarget) attemptClose();
     }}>
       <div
-        className={`${styles.modal} ${activeTab <= 2 ? styles.modalFixed : ''} ${activeTab === 3 ? styles.modalExport : ''} ${activeTab === 4 ? styles.modalWide : ''}`}
+        className={`${styles.modal} ${fullScreen ? styles.modalExport : styles.modalSquare}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label="הגדרות"
       >
         <div className={styles.header}>
-          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="סגירה">
+          <button type="button" className={styles.closeButton} onClick={attemptClose} aria-label="סגירה">
             ×
           </button>
           <Heading type="h4">הגדרות</Heading>
@@ -717,72 +937,30 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               <Tab onClick={() => setActiveTab(2)}>תבניות</Tab>
               <Tab onClick={() => setActiveTab(3)}>תבנית ייצוא</Tab>
               <Tab onClick={() => setActiveTab(4)}>הרשאות</Tab>
+              <Tab onClick={() => setActiveTab(5)}>מדדי שימוש</Tab>
             </TabList>
             <TabPanels className={styles.tabPanels}>
               <TabPanel className={styles.tabPanelFill}>
-          {/* round247 — the מיפוי panel is full RTL (owner request). */}
-          <div className={styles.body} dir="rtl">
-            {/* Post-install entry to the config-aware SetupWizard. Shown only when
-                the instance is already configured (never in the first-run forced
-                modal, which has the wizard as its landing screen). */}
-            {isConfigured && (
-              <div className={styles.topupEntry}>
-                <div className={styles.topupText}>
-                  <Text type={"text2"} weight={"medium"}>הוספת / השלמת לוחות ועמודות</Text>
-                  <Text type={"text3"} color={"secondary"}>
-                    יצירת לוחות שחסרים והשלמת עמודות חסרות — בלי לפגוע במיפוי הקיים.
-                  </Text>
-                </div>
-                <Button kind={"secondary"} size={"small"} onClick={() => setShowTopUp(true)}>
-                  פתיחת האשף
-                </Button>
-              </div>
-            )}
-            {Object.keys(boards || {}).map((boardKey) => (
-              <div key={boardKey} className={styles.board}>
-                <button
-                  type="button"
-                  className={styles.accordionHeader}
-                  onClick={() => setOpenBoardKey((prev) => (prev === boardKey ? null : boardKey))}
-                >
-                  <span className={styles.accordionTitle}>{BOARD_ROLE_TITLES[boardKey] || boardKey}</span>
-                  <span
-                    className={`${styles.accordionChevron} ${openBoardKey === boardKey ? styles.accordionChevronOpen : ''}`}
-                    aria-hidden="true"
-                  >
-                    ▾
-                  </span>
-                </button>
+          {/* round280 — master–detail mapping (approved mockup). Board tabs +
+              global ring on top; a type-folder rail on the right; the selected
+              folder's dense field rows on the left. `renderRow` and the whole
+              persistence model (columns/setColId/addMultiColId/handleSave) are
+              reused verbatim — only the layout around them changed. */}
+          <div className={styles.mapShell} dir="rtl">
+            {(() => {
+              const boardKeys = Object.keys(boards || {});
+              const boardKey = boardKeys.includes(selectedBoardKey)
+                ? selectedBoardKey
+                : (boardKeys[0] || 'discussions');
+              const entries = entriesFor(boardKey);
+              const ownBoardId = String(boards?.[boardKey]?.id || '');
+              const folders = foldersFor(boardKey);
+              const activeFolderKey = folders.some((f) => f.key === selectedFolderKey)
+                ? selectedFolderKey
+                : (folders[0]?.key || null);
+              const query = mapQuery.trim().toLowerCase();
 
-                {openBoardKey === boardKey && (
-                  <div className={styles.accordionContent}>
-                    <div className={styles.boardId}>
-                      <Text type={"text3"} color={"secondary"}>לוח</Text>
-                      <SearchablePicker
-                        options={boardOptions.map((option) => ({ id: option.value, name: option.label }))}
-                        value={String(boards[boardKey].id || '')}
-                        onChange={(id) => setBoardId(boardKey, id)}
-                        placeholder={loadingBoards ? 'טוען לוחות' : 'חפש ובחר לוח'}
-                        isLoading={loadingBoards}
-                        disabled={loadingBoards}
-                      />
-                    </div>
-                    <div className={styles.cols}>
-                      {(() => {
-                        const aliases = boardKey === 'discussions'
-                          ? DISCUSSIONS_SETTINGS_FIELDS
-                          : boardKey === 'tasks'
-                            ? TASKS_SETTINGS_FIELDS
-                            : boardKey === 'topics'
-                              ? TOPICS_SETTINGS_FIELDS
-                              : boardKey === 'decisions'
-                                ? DECISIONS_SETTINGS_FIELDS
-                                : Object.keys(columns?.[boardKey] || {});
-                        const entries = aliases
-                          .map((alias) => [alias, columns?.[boardKey]?.[alias]])
-                          .filter(([, col]) => Boolean(col));
-                        const ownBoardId = String(boards?.[boardKey]?.id || '');
-                        const renderRow = ([alias, col]) => {
+              const renderRow = ([alias, col]) => {
                           // subitem-level fields map against the SUBITEMS board's columns
                           const boardId = SUBITEM_FIELDS.has(alias)
                             ? String(subitemsBoardByBoard[ownBoardId] || '')
@@ -911,62 +1089,168 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                           </div>
                         );
 
-                        // Topics board: split into item-level ("נושא") and
-                        // subitem-level ("נקודה") column groups so it's clear which
-                        // board each mapping targets.
-                        if (boardKey === 'topics') {
-                          const itemEntries = entries.filter(([alias]) => !SUBITEM_FIELDS.has(alias));
-                          const subEntries = entries.filter(([alias]) => SUBITEM_FIELDS.has(alias));
-                          return (
-                            <>
-                              <div className={styles.colGroupTitle}>
-                                <Text type={"text2"} weight={"medium"}>עמודות נושא (אייטם)</Text>
-                              </div>
-                              {itemEntries.map(renderRow)}
-                              <div className={styles.colGroupTitle}>
-                                <Text type={"text2"} weight={"medium"}>עמודות נקודה (סאב־אייטם)</Text>
-                                <Text type={"text3"} color={"secondary"}>נקודה = סאב־אייטם תחת הנושא. עמודות אלו ממופות מלוח הסאב־אייטמים.</Text>
-                              </div>
-                              {subEntries.map(renderRow)}
-                            </>
-                          );
-                        }
+              // Rows to show: search hits across the whole board, else the
+              // selected folder's fields (order preserved from the alias list).
+              const activeFolder = folders.find((f) => f.key === activeFolderKey);
+              const searching = query.length > 0;
+              const shownEntries = searching
+                ? entries.filter(([alias, col]) => String(col?.title || alias).toLowerCase().includes(query))
+                : (activeFolder ? activeFolder.entries : []);
+              // The tasks "status" folder keeps the "סטאטוס בוצע" multi-select
+              // appended right after the status column (existing behavior).
+              const showDoneStatus = !searching && boardKey === 'tasks' && activeFolderKey === 'status';
+              const detailMeta = activeFolder ? (TYPE_META[activeFolder.key] || TYPE_META.other) : TYPE_META.other;
 
-                        // discussions + tasks: bucket the fields into typed
-                        // sections (אנשים / תאריכים / סטטוס / חיבורי לוחות / …),
-                        // preserving each section's field order. Empty sections
-                        // are skipped; unmatched types fall into a trailing "אחר".
-                        const sections = [...COLUMN_TYPE_GROUPS, { key: 'other', title: 'אחר', types: [] }];
-                        return sections.map((group) => {
-                          const groupEntries = entries.filter(
-                            ([, col]) => typeGroupKey(col.type) === group.key
-                          );
-                          if (!groupEntries.length) return null;
-                          // On the tasks board, render the "סטאטוס בוצע" multi-select
-                          // right after the status column so they sit side by side.
-                          const isTasksStatus = boardKey === 'tasks' && group.key === 'status';
-                          return (
-                            <React.Fragment key={group.key}>
-                              <div className={styles.colGroupTitle}>
-                                <Text type={"text2"} weight={"medium"}>{group.title}</Text>
-                              </div>
-                              {groupEntries.map((entry) => (
-                                isTasksStatus && entry[0] === 'statusID' ? (
-                                  <React.Fragment key="statusID">
-                                    {renderRow(entry)}
-                                    {renderDoneStatusRow()}
-                                  </React.Fragment>
-                                ) : renderRow(entry)
-                              ))}
-                            </React.Fragment>
-                          );
-                        });
-                      })()}
+              const rowsBody = (
+                <div className={styles.mapRows}>
+                  {shownEntries.length === 0 ? (
+                    <div className={styles.mapEmpty}>{searching ? 'לא נמצאו שדות' : 'אין שדות בקטגוריה זו'}</div>
+                  ) : (
+                    shownEntries.map((entry) => (
+                      showDoneStatus && entry[0] === 'statusID' ? (
+                        <React.Fragment key="statusID">
+                          {renderRow(entry)}
+                          {renderDoneStatusRow()}
+                        </React.Fragment>
+                      ) : renderRow(entry)
+                    ))
+                  )}
+                </div>
+              );
+
+              // round287 (owner request) — layout flipped: BOARDS as a horizontal
+              // row at the TOP (with the search); column TYPES as a vertical list in
+              // the LEFT column; the selected type's fields fill the pane to its
+              // right. "לוח" stays the first type (= the board picker).
+              const boardSelected = selectedFolderKey === 'board' && !searching;
+              return (
+                <>
+                  {/* TOP — search + boards row (דיונים / משימות / …). */}
+                  {/* round291 — boards row on the RIGHT; the field-search sits on the
+                      LEFT at the same width as the column-type column below it. The
+                      top-up button moved to the modal footer. */}
+                  <div className={styles.mapTop}>
+                    <div className={styles.mapBoardsRow} role="tablist" aria-label="לוחות">
+                      {boardKeys.map((bk) => {
+                        const on = bk === boardKey;
+                        return (
+                          <button
+                            key={bk}
+                            type="button"
+                            role="tab"
+                            aria-selected={on}
+                            className={`${styles.mapBd} ${on ? styles.mapBdOn : ''}`}
+                            onClick={() => { setSelectedBoardKey(bk); setSelectedFolderKey('board'); setMapQuery(''); }}
+                          >
+                            {BOARD_ROLE_TITLES[bk] || bk}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className={styles.mapSearch}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+                        <path d="M20 20l-3.2-3.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                      <input
+                        value={mapQuery}
+                        onChange={(e) => setMapQuery(e.target.value)}
+                        placeholder="חיפוש שדה…"
+                        aria-label="חיפוש שדה"
+                      />
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
+
+                  {/* BODY — column-type list (LEFT) + fields / board picker (right). */}
+                  <div className={styles.mapBody2}>
+                    <div className={styles.mapTypesCol} role="tablist" aria-label="סוגי עמודות">
+                      {/* "לוח" — the board itself, first type (= the board picker). */}
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={boardSelected}
+                          className={`${styles.mapTy} ${boardSelected ? styles.mapTyOn : ''}`}
+                          onClick={() => { setSelectedFolderKey('board'); setMapQuery(''); }}
+                        >
+                          <span className={styles.mapTyDot} style={{ background: 'var(--t-blue, #3b5bdb)' }} />
+                          לוח
+                        </button>
+                        {folders.map((f) => {
+                          const meta = TYPE_META[f.key] || TYPE_META.other;
+                          const on = !boardSelected && !searching && f.key === activeFolderKey;
+                          return (
+                            <button
+                              key={f.key}
+                              type="button"
+                              role="tab"
+                              aria-selected={on}
+                              className={`${styles.mapTy} ${on ? styles.mapTyOn : ''}`}
+                              onClick={() => { setSelectedFolderKey(f.key); setMapQuery(''); }}
+                            >
+                              <span className={styles.mapTyDot} style={{ background: `var(--t-${meta.hue})` }} />
+                              {f.title}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div className={styles.mapDetail}>
+                        {boardSelected ? (
+                          <>
+                            <div className={styles.mapDhead}>
+                              <div className={styles.mapDheadL}>
+                                <span>
+                                  <div className={styles.mapDttl}>לוח</div>
+                                  <div className={styles.mapDcnt}>בחירת לוח ה-monday שממופה ל{BOARD_ROLE_TITLES[boardKey] || boardKey}</div>
+                                </span>
+                              </div>
+                            </div>
+                            <div className={styles.mapBoardPick}>
+                              <SearchablePicker
+                                options={boardOptions.map((option) => ({ id: option.value, name: option.label }))}
+                                value={String(boards?.[boardKey]?.id || '')}
+                                onChange={(id) => setBoardId(boardKey, id)}
+                                placeholder={loadingBoards ? 'טוען לוחות' : 'חפש ובחר לוח'}
+                                isLoading={loadingBoards}
+                                disabled={loadingBoards}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className={styles.mapDhead}>
+                              {searching ? (
+                                <div className={styles.mapDheadL}>
+                                  <span className={styles.mapDttl}>תוצאות חיפוש</span>
+                                  <span className={styles.mapDcnt}>{shownEntries.length} שדות</span>
+                                </div>
+                              ) : activeFolder ? (
+                                <div className={styles.mapDheadL}>
+                                  <span
+                                    className={styles.mapRicon}
+                                    style={{ background: `var(--t-${detailMeta.hue}-bg)`, color: `var(--t-${detailMeta.hue})` }}
+                                  >
+                                    <TypeIcon name={detailMeta.icon} />
+                                  </span>
+                                  <span>
+                                    <div className={styles.mapDttl}>{activeFolder.title}</div>
+                                    <div className={styles.mapDcnt}>שדות מסוג זה בלוח "{BOARD_ROLE_TITLES[boardKey] || boardKey}"</div>
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className={styles.mapDheadL}>
+                                  <span className={styles.mapDttl}>מיפוי עמודות</span>
+                                </div>
+                              )}
+                            </div>
+                            {rowsBody}
+                          </>
+                        )}
+                      </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
               </TabPanel>
 
@@ -977,7 +1261,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       previous discussion, or by the discussion TYPE (taskTypeID). */}
                   <div className={styles.prefRow}>
                     <div className={styles.prefLabel}>
-                      <Text type={"text2"}>מקור המשימות בהנחיות קודמות</Text>
+                      <Text type={"text2"}>מקור המשימות בדיונים קודמים</Text>
                     </div>
                     <div className={styles.prefControl}>
                       <ButtonGroup
@@ -1052,7 +1336,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                     (TemplateManagerModal), NOT a wrapper div: the round247
                     wrapper broke the flex-height chain so the editor list could
                     not scroll. TemplatesPanel is a direct flex child again. */}
-                <TemplatesPanel />
+                <TemplatesPanel ref={templatesRef} onExportWide={setTemplatesExportWide} />
               </TabPanel>
 
               <TabPanel className={styles.tabPanelFill}>
@@ -1074,6 +1358,13 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                   onSelectRole={setSelectedRoleKey}
                 />
               </TabPanel>
+
+              {/* round265 — owner-only usage metrics dashboard. It's inside the
+                  owner-only settings modal; `active` gates the data read to when
+                  the tab is actually open. */}
+              <TabPanel className={styles.tabPanelFill}>
+                <UsageMetricsTab active={activeTab === 5} />
+              </TabPanel>
             </TabPanels>
           </TabsContext>
         </div>
@@ -1092,13 +1383,20 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               style={{ display: 'none' }}
               onChange={handleImportFile}
             />
+            {/* round291 — moved here from the mapping tab; sits to the LEFT of
+                "ייבוא JSON" (leftmost in the RTL footer). */}
+            {isConfigured && (
+              <Button kind={"secondary"} onClick={() => setShowTopUp(true)}>
+                הוספת / השלמת לוחות ועמודות
+              </Button>
+            )}
             <Button kind={"secondary"} onClick={handleImportClick}>
               ייבוא JSON
             </Button>
             <Button kind={"secondary"} onClick={handleExportJson}>
               ייצוא JSON
             </Button>
-            <Button kind={"tertiary"} onClick={onClose}>ביטול</Button>
+            <Button kind={"tertiary"} onClick={attemptClose}>ביטול</Button>
             <Button kind={"primary"} loading={saving} onClick={handleSave}>שמור</Button>
           </Flex>
           {/* round191 — version badge is OWNERS ONLY (owner request). This footer only
@@ -1112,6 +1410,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
           )}
         </div>
       </div>
+      {closeConfirmPortal}
     </div>
   );
 }

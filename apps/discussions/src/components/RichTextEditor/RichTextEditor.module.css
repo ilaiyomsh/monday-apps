@@ -63,14 +63,9 @@
 }
 
 .menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  inset-inline-start: 0;
-  z-index: 30;
   min-width: 150px;
   margin: 0;
   padding: 4px;
-  list-style: none;
   direction: rtl;
   background: var(--primary-background-color, #fff);
   border: 1px solid var(--ui-border-color, #d0d4e4);
@@ -78,7 +73,20 @@
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
 }
 
-.menu li { margin: 0; }
+/* round253 — the dropdown is portalled to <body> with fixed coords set inline,
+   so it escapes every ancestor's overflow/stacking (owner: menus were hidden
+   behind the editor pane below). */
+.menuPortal {
+  position: fixed;
+}
+
+.menuList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.menuList li { margin: 0; }
 
 .menuItem {
   width: 100%;
@@ -218,32 +226,63 @@
   gap: 4px;
 }
 
-/* round206 — selection bubble: dark pill with core formatting actions. */
+/* round206/253/257 — selection bubble: a compact WHITE floating panel (round257
+   — was dark and too wide; a single alignment toggle now opens the 4 options in
+   a sub-row so the main bar stays narrow and fits at any zoom). It is a COLUMN
+   whose top row is the inline action strip; a second row holds sub-panels. */
 .bubble {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  background: #2b2c33;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: min(92vw, 420px);
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
   border-radius: 8px;
-  padding: 4px 6px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  padding: 3px 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
   z-index: 3000;
 }
+.bubbleRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1px;
+}
+/* round257 — compact buttons so the whole bar is smaller. */
 .bubble .btn {
-  color: #ffffff;
+  color: var(--primary-text-color, #323338);
+  height: 26px;
+  min-width: 26px;
+  padding: 0 3px;
 }
 .bubble .btn:hover {
-  background: #45464e;
+  background: var(--primary-background-hover-color, #eef0f5);
 }
 .bubble .btnActive {
-  background: #0073ea;
-  color: #ffffff;
+  background: var(--primary-selected-color, #cce5ff);
+  color: var(--primary-color, #0073ea);
 }
 .bubbleSep {
   width: 1px;
-  height: 16px;
-  background: #55565e;
-  margin: 0 3px;
+  height: 15px;
+  background: var(--ui-border-color, #d0d4e4);
+  margin: 0 2px;
+}
+/* current font-size read-out between the A-/A+ steppers */
+.bubbleSizeVal {
+  min-width: 16px;
+  text-align: center;
+  color: var(--primary-text-color, #323338);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+/* second row inside the bubble (alignment / color swatches / link input) */
+.bubbleSubRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px 2px;
+  border-top: 1px solid var(--ui-border-color, #e6e9ef);
 }
 
 /* round220/223 — @-mention popup: a pinned search box (round223) over a

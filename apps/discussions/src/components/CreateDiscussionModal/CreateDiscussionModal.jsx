@@ -345,6 +345,12 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     });
     // The template may also carry a "מוביל דיון" — set it when present.
     if (Array.isArray(tpl.lead) && tpl.lead.length) setLead(tpl.lead);
+    // round295 — and a "מרכז דיון" (coordinator): it is stored on the template
+    // (sanitizeTypeTemplate/sanitizeParticipantTemplate) but was never applied
+    // here, so the coordinator defined in a type/participant template never
+    // reached the create-discussion form (owner-reported; lead + participants
+    // worked). Mirror the lead branch.
+    if (Array.isArray(tpl.coordinator) && tpl.coordinator.length) setCoordinator(tpl.coordinator);
     setIsParticipantTemplateMenuOpen(false);
   };
 
@@ -367,7 +373,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // manual topic-template pick so we don't double-create topics.
       setTemplateId('none');
       if (typeTpl.topics?.length) setTypeTopics(typeTpl.topics);
-      applyParticipantTemplate({ participants: typeTpl.participants, lead: typeTpl.lead });
+      applyParticipantTemplate({ participants: typeTpl.participants, lead: typeTpl.lead, coordinator: typeTpl.coordinator });
       return;
     }
 
@@ -994,7 +1000,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
               <div className={`${styles.row} ${styles.rowSingle}`}>
                 <div className={styles.field}>
                   <Text type="text2" className={styles.label}>
-                    {getColumnTitle('discussions', 'externalParticipantsID') || 'משתתפים חיצוניים'}
+                    {/* round278 — always "משתתפים חיצוניים", matching DiscussionCard's
+                        hardcoded label (round238). The mapped monday column is titled
+                        "משתתפים", so deriving from its title showed the wrong (generic)
+                        name in the create/duplicate card. */}
+                    משתתפים חיצוניים
                   </Text>
                   <div className={styles.extPeopleBox}>
                     {externalParticipants.map((n, i) => (

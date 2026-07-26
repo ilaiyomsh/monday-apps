@@ -18,7 +18,7 @@ vi.mock('../../utils/logger.js', () => ({
 }));
 
 import { useSummary } from '../useSummary.js';
-import { createUpdate, editUpdate, getItemUpdate } from '@api/updates.js';
+import { createUpdate, editUpdate, getItemUpdate, deleteUpdate } from '@api/updates.js';
 import { loadSummaryUpdateId, saveSummaryUpdateId } from '../../utils/summaryStore.js';
 
 const update = (over = {}) => ({
@@ -98,5 +98,40 @@ describe('useSummary save', () => {
     let ok;
     await act(async () => { ok = await result.current.save('<p>x</p>'); });
     expect(ok).toBe(false);
+  });
+
+  it('round270 — ensureUpdate creates the box update ONCE, exposes its id, and reuses it', async () => {
+    createUpdate.mockResolvedValue(update({ id: 'NEW' }));
+    const { result } = await mounted();
+
+    let id;
+    await act(async () => { id = await result.current.ensureUpdate(); });
+    expect(id).toBe('NEW');
+    expect(createUpdate).toHaveBeenCalledTimes(1);
+    expect(saveSummaryUpdateId).toHaveBeenCalledWith('D1', 'NEW');
+    expect(result.current.updateId).toBe('NEW');
+
+    // a second call must REUSE the id, never create a duplicate update.
+    await act(async () => { id = await result.current.ensureUpdate(); });
+    expect(id).toBe('NEW');
+    expect(createUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('round271 — clearDocuments deletes the update and recreates it with the SAME body (text kept)', async () => {
+    loadSummaryUpdateId.mockResolvedValue('U1');
+    getItemUpdate.mockResolvedValue(update({ id: 'U1', body: '<p>טקסט</p>' }));
+    deleteUpdate.mockResolvedValue({ id: 'U1' });
+    createUpdate.mockResolvedValue(update({ id: 'U2', body: '<p>טקסט</p>' }));
+    const { result } = await mounted();
+
+    let ok;
+    await act(async () => { ok = await result.current.clearDocuments(); });
+    expect(ok).toBe(true);
+    expect(deleteUpdate).toHaveBeenCalledWith('U1');
+    // recreated with the SAME body, so the box text survives the file-clear.
+    expect(createUpdate).toHaveBeenCalledWith('D1', '<p>טקסט</p>');
+    // the fresh update id is persisted + exposed.
+    expect(saveSummaryUpdateId).toHaveBeenCalledWith('D1', 'U2');
+    expect(result.current.updateId).toBe('U2');
   });
 });
