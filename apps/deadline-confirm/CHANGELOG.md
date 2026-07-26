@@ -2,6 +2,45 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.7.3 — 2026-07-27 — fix: board pickers were empty (wrong discriminator field)
+
+- **Reported from the admin panel:** the users-board dropdown rendered
+  `No options`, so no recipient could be matched — the digest preview showed
+  0 recipients and no pending tasks. **Both** board pickers were affected, not
+  only the digest one; the app could not be configured from scratch at all.
+- **Cause.** `fetchBoards` filtered on `object_type_unique_key`, asserting a
+  standard work board returns `'board'`. Probed against the live API
+  (2026-07, account with 1000+ objects) — the assertion is false:
+
+  | field | what the API actually returns |
+  |---|---|
+  | `type` | `board` 330 · `sub_items_board` 80 · `custom_object` 56 · `document` 34 |
+  | `object_type_unique_key` | `null` ×474 · `work-management::standalone` ×12 · `::portfolio-project` ×8 · `::project` ×4 · `::portfolio` ×2 |
+
+  No board returns `'board'` for `object_type_unique_key`, and the field is
+  `null` for 304 of the 330 real boards — and equally `null` for every document,
+  sub-item board and custom object, so it cannot discriminate at all. The filter
+  dropped **100%** of boards: 0/500 passed.
+- **Fix.** `type` is the discriminator and is now primary.
+  `object_type_unique_key` is kept only as a NEGATIVE signal (portfolios) and
+  only when actually present, so it can never again exclude a board whose key
+  is `null`.
+- **Second defect, found while probing.** Page 1 returned exactly 500 objects
+  and page 2 returned another 500 (262 of them real boards) — the single-page
+  query **silently** hid boards, so any board not used recently was unreachable.
+  `fetchBoards` now pages until a page comes back short, capped at 6 pages, and
+  logs `board_list_truncated` if the cap is hit instead of swallowing it.
+- **Why the old tests passed.** They invented the fixture
+  (`object_type_unique_key: 'board'`) instead of capturing it from a probe, so
+  they encoded the same wrong assumption as the code. `CLAUDE.md` requires
+  monday-facing doubles to be built ONLY from probe-captured fixtures — that
+  rule was violated, and 519 green tests could not catch a bug that made the
+  feature unusable. Every fixture in the rewritten test now carries the probe's
+  real shapes, with the distribution recorded in the file header.
+- Tests: red observed (7 failing) → green, **3/3 mutations killed** — including
+  one that reintroduces this exact bug and one that restores the silent
+  truncation. Suite 526 green.
+
 ## 0.7.2 — 2026-07-27 — deploy hardening: client sourcemaps no longer reach production
 
 - **Exposure, found by self-check.** The LIVE deployment was serving the admin
