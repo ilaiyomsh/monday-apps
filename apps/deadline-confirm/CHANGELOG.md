@@ -2,6 +2,26 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.7.1 — 2026-07-26 — hotfix: admin SPA crashed at boot on a pre-0.6.0 digest config
+
+- **Production incident.** v0.6.0 added two required digest-section fields
+  (`includeStatusLabelIds`, `dateColumnTitle`) but `digestFromConfig` spread the
+  array unconditionally. Accounts whose digest had been saved by an earlier
+  version stored sections without those keys, so the moment v5 became the LIVE
+  version the admin panel died at boot with
+  `TypeError: a.includeStatusLabelIds is not iterable` — the whole SPA, not just
+  the digest tab.
+- **Fix:** reading a stored config never throws. A missing status condition
+  becomes `[]` and a missing date-column title becomes `''`;
+  `digestIsComplete` then reports the digest as incomplete, so the operator is
+  asked to pick labels instead of the panel crashing or a condition being
+  invented.
+- The SERVER was never affected (`digest-service` reads `?? []`, validation runs
+  only on write) — this was purely the client read path.
+- Tests: `src/client/admin/draft-digest-legacy.test.ts` (red→green + 2 killed
+  mutations) pins the legacy shape AND that a current config is untouched
+  (including array copy, not aliasing). Full suite 519 green.
+
 ## 0.7.0 — 2026-07-26 — V5: Gmail dynamic email (AMP for Email), phase 1
 
 - **The client's org runs Gmail, not Outlook** — so Adaptive Cards / Actionable
