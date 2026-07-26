@@ -70,6 +70,12 @@ export function isComponentVisible(preferences, key) {
 
 export const DEFAULT_PREFERENCES = {
   previousTasksMode: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION,
+  // round296 — default width split of the ניהול-דיון row: the AGENDA box's share
+  // (0..1, clamped [0.25,0.75] by discussionLayout). 0.6 ⇒ agenda 60% / triple
+  // box 40% (owner request). Owner-configurable in Settings → העדפות. A per-
+  // discussion drag override is saved on that discussion only; a NEW discussion
+  // (no saved layout) opens at THIS default.
+  defaultLayoutRatio: 0.6,
   // round205 — per-component visibility map ({ [componentKey]: false } hides);
   // see APP_COMPONENTS + isComponentVisible above. Empty = everything shown.
   visibleComponents: {},

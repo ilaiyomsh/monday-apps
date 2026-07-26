@@ -37,7 +37,11 @@ export const MIN_RATIO = 0.25;
 export const MAX_RATIO = 0.75;
 export const MIN_HEIGHT = 360;
 export const MAX_HEIGHT = 1400;
-export const DEFAULT_LAYOUT = { ratio: 0.5, stacked: false, boxHeight: null };
+// round296 — default AGENDA share is 60% (triple box 40%), owner request. The
+// per-instance preference (settings.preferences.defaultLayoutRatio) overrides
+// this at the call site (loadLayout's second arg); this constant is the ultimate
+// fallback when no preference and no per-discussion layout exist.
+export const DEFAULT_LAYOUT = { ratio: 0.6, stacked: false, boxHeight: null };
 
 function key(discussionId) {
   return `${STORAGE_KEY_BASE}_${discussionId}`;
@@ -75,14 +79,18 @@ export function clampHeight(h) {
  *  tripleHeight, round251) and the older single `height` migrate into it on read:
  *  the first present value wins (agenda's, then triple's, then the old single),
  *  so an owner's saved height survives the upgrade. */
-export function normalizeLayout(raw) {
-  if (!raw || typeof raw !== 'object') return { ...DEFAULT_LAYOUT };
+export function normalizeLayout(raw, defaultRatio) {
+  // round296 — a MISSING ratio falls back to the per-instance default (owner's
+  // Settings → העדפות value), not the hard-coded 0.6. A stored per-discussion
+  // ratio always wins (that's the per-discussion override).
+  const fallbackRatio = defaultRatio != null ? defaultRatio : DEFAULT_LAYOUT.ratio;
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_LAYOUT, ratio: clampRatio(fallbackRatio) };
   const migrated = raw.boxHeight != null ? raw.boxHeight
     : raw.agendaHeight != null ? raw.agendaHeight
       : raw.tripleHeight != null ? raw.tripleHeight
         : raw.height;
   return {
-    ratio: clampRatio(raw.ratio != null ? raw.ratio : DEFAULT_LAYOUT.ratio),
+    ratio: clampRatio(raw.ratio != null ? raw.ratio : fallbackRatio),
     stacked: raw.stacked === true,
     boxHeight: clampHeight(migrated),
   };
@@ -109,17 +117,21 @@ export function heightFromDrag(startHeightPx, deltaPx) {
   return clampHeight(Number(startHeightPx) + deltaPx);
 }
 
-/** Load the saved layout; returns DEFAULT_LAYOUT on any failure. */
-export async function loadLayout(discussionId) {
-  if (!discussionId) return { ...DEFAULT_LAYOUT };
+/** Load the saved layout for a discussion. `defaultRatio` (the per-instance
+ *  preference) seeds the AGENDA share when this discussion has no saved layout;
+ *  a discussion WITH a saved layout keeps its own ratio (per-discussion override).
+ *  Returns the default split on any failure. */
+export async function loadLayout(discussionId, defaultRatio) {
+  const fallback = { ...DEFAULT_LAYOUT, ratio: clampRatio(defaultRatio != null ? defaultRatio : DEFAULT_LAYOUT.ratio) };
+  if (!discussionId) return fallback;
   try {
     const res = await withTimeout(monday.storage.getItem(key(discussionId)));
-    if (res?.data?.value) return normalizeLayout(JSON.parse(res.data.value));
+    if (res?.data?.value) return normalizeLayout(JSON.parse(res.data.value), defaultRatio);
   } catch (err) {
     // storage unavailable / parse error — fall back to the default split.
     logger.warn('discussionLayout', 'טעינת פריסת הדיון נכשלה — ברירת מחדל', err);
   }
-  return { ...DEFAULT_LAYOUT };
+  return fallback;
 }
 
 /** Persist a layout (owner-only at the call site). */
