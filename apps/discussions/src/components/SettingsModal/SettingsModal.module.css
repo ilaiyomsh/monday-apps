@@ -9,6 +9,32 @@
   backdrop-filter: blur(2px);
   padding: 16px;
 }
+/* round295 — unsaved-changes confirm dialog, portaled to <body> so it floats
+   above the Settings modal (z-index 4000) regardless of which surface is open. */
+.confirmOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 16px;
+}
+.confirmDialog {
+  width: min(420px, 92vw);
+  background: var(--primary-background-color, #fff);
+  border-radius: var(--border-radius-medium, 8px);
+  box-shadow: var(--box-shadow-large, 0 12px 40px rgba(0, 0, 0, 0.28));
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: right;
+}
+.confirmActions {
+  margin-top: 8px;
+}
 /* round178 — `contained` scopes the overlay to the right discussion-card pane
    (App renders this instance inside `.main`, which is position:relative): the box
    opens CENTERED within that pane and dims only its tabs, not the whole screen. */

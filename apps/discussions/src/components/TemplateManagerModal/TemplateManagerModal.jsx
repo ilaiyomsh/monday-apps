@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, TextField, Text, Loader, ColorPicker } from '@vibe/core';
 import { Search } from '@vibe/icons';
@@ -116,15 +116,25 @@ function TypeDropdown({ value, onChange, options, colorFn, takenNames }) {
 }
 
 /* One draggable point row inside a topic (keyed by stable _uid). */
-function SortablePointRow({ topicUid, point, onChange, onRemove, onEnterAddPoint }) {
+function SortablePointRow({ topicUid, point, onChange, onRemove, onEnterAddPoint, autoFocus = false, onFocused }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: point._uid });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
+  // round295 — when ENTER on the previous point created THIS (freshly added) row,
+  // move the caret straight into it so the user keeps typing the next point with
+  // no mouse. The parent flags the new row via autoFocus and clears it once used.
+  const fieldRef = useRef(null);
+  useEffect(() => {
+    if (!autoFocus) return;
+    const input = fieldRef.current?.querySelector('input, textarea');
+    if (input) input.focus();
+    onFocused?.();
+  }, [autoFocus]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div ref={setNodeRef} style={style} className={styles.pointRow}>
       <button type="button" className={styles.dragGrip} {...attributes} {...listeners} aria-label="גרור נקודה">
         <GripVertical size={14} />
       </button>
-      <div className={styles.pointField}>
+      <div className={styles.pointField} ref={fieldRef}>
         <TextField
           value={point.text}
           onChange={(v) => onChange(topicUid, point._uid, v)}
@@ -141,7 +151,7 @@ function SortablePointRow({ topicUid, point, onChange, onRemove, onEnterAddPoint
 }
 
 /* One draggable topic card with its own sortable points list. */
-function SortableTopicCard({ topic, sensors, canRemove, onSetName, onRemove, onAddPoint, onRemovePoint, onSetPoint, onPointsDragEnd }) {
+function SortableTopicCard({ topic, sensors, canRemove, onSetName, onRemove, onAddPoint, onRemovePoint, onSetPoint, onPointsDragEnd, autoFocusPointUid, onPointFocused }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: topic._uid });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
   return (
@@ -161,7 +171,7 @@ function SortableTopicCard({ topic, sensors, canRemove, onSetName, onRemove, onA
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onPointsDragEnd(topic._uid, e)}>
           <SortableContext items={topic.points.map((p) => p._uid)} strategy={verticalListSortingStrategy}>
             {topic.points.map((point) => (
-              <SortablePointRow key={point._uid} topicUid={topic._uid} point={point} onChange={onSetPoint} onRemove={onRemovePoint} onEnterAddPoint={onAddPoint} />
+              <SortablePointRow key={point._uid} topicUid={topic._uid} point={point} onChange={onSetPoint} onRemove={onRemovePoint} onEnterAddPoint={onAddPoint} autoFocus={point._uid === autoFocusPointUid} onFocused={onPointFocused} />
             ))}
           </SortableContext>
         </DndContext>
@@ -217,7 +227,7 @@ function draftToTemplate(draft) {
  * People pickers for a role column appear ONLY when that column is mapped in
  * Settings (the "יוצר" creator column is intentionally never shown/edited here).
  */
-export function TemplateManagerModal({ onExportWide } = {}) {
+export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ onExportWide } = {}, ref) {
   const { settings } = useSettings();
   const {
     templates,
@@ -283,6 +293,9 @@ export function TemplateManagerModal({ onExportWide } = {}) {
   const [typeExportDirty, setTypeExportDirty] = useState(false);
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
+  // round295 — uid of a freshly-added point row that should grab keyboard focus
+  // (set by addPoint, cleared once the row focuses).
+  const [autoFocusPointUid, setAutoFocusPointUid] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [typeSearch, setTypeSearch] = useState(''); // filters the "סוג דיון" list (also the typed source for the inline "create" affordance)
   const [addingType, setAddingType] = useState(false); // add-type mutation in-flight
@@ -429,11 +442,16 @@ export function TemplateManagerModal({ onExportWide } = {}) {
   const removeTopic = (tuid) => update((d) => ({ ...d, topics: d.topics.filter((t) => t._uid !== tuid) }));
   const setTopicName = (tuid, v) =>
     update((d) => ({ ...d, topics: d.topics.map((t) => (t._uid === tuid ? { ...t, name: v } : t)) }));
-  const addPoint = (tuid) =>
+  const addPoint = (tuid) => {
+    // round295 — create the point with a known uid so the new row can grab focus
+    // (ENTER on the previous point flows straight into the next one).
+    const np = makePoint();
     update((d) => ({
       ...d,
-      topics: d.topics.map((t) => (t._uid === tuid ? { ...t, points: [...t.points, makePoint()] } : t)),
+      topics: d.topics.map((t) => (t._uid === tuid ? { ...t, points: [...t.points, np] } : t)),
     }));
+    setAutoFocusPointUid(np._uid);
+  };
   const removePoint = (tuid, puid) =>
     update((d) => ({
       ...d,
@@ -524,6 +542,35 @@ export function TemplateManagerModal({ onExportWide } = {}) {
       setSaving(false);
     }
   };
+
+  // round295 — expose dirty-state + a save to the host (SettingsModal) so:
+  //  (1) the general Settings "שמור" also flushes an in-progress template draft
+  //      the user forgot to "שמור תבנית", and
+  //  (2) closing Settings (X) mid-edit can offer to save first.
+  // "Dirty" = we're inside the editor and its content DIFFERS from what it held
+  // when the editor opened (snapshot captured on view→edit). No change ⇒ not
+  // dirty ⇒ the host closes with no prompt (owner spec).
+  const editorSnapshotRef = useRef(null);
+  const serializeEditorState = () => {
+    if (kind === 'topics') return JSON.stringify(draft ? draftToTemplate(draft) : null);
+    if (kind === 'participants') return JSON.stringify(pDraft);
+    return JSON.stringify({
+      topics: draft ? draft.topics.map((t) => ({ name: t.name, points: t.points.map((p) => p.text) })) : null,
+      lead: typeLead, coordinator: typeCoordinator, participants: typeParticipants,
+      color: typeColorDraft, deciderIsLead: typeDeciderIsLead, exportDirty: typeExportDirty,
+    });
+  };
+  useEffect(() => {
+    editorSnapshotRef.current = view === 'edit' ? serializeEditorState() : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, kind]);
+  const isDirty = () =>
+    view === 'edit' && editorSnapshotRef.current != null && serializeEditorState() !== editorSnapshotRef.current;
+  useImperativeHandle(ref, () => ({
+    isDirty,
+    // Persist the current draft exactly as "שמור תבנית" would (guards on canSave).
+    saveDraft: async () => { if (canSave && !saving) await handleSave(); },
+  }));
 
   const handleDelete = async (id) => {
     if (kind === 'topics') await deleteTemplate(id);
@@ -868,6 +915,8 @@ export function TemplateManagerModal({ onExportWide } = {}) {
                       onRemovePoint={removePoint}
                       onSetPoint={setPoint}
                       onPointsDragEnd={onPointsDragEnd}
+                      autoFocusPointUid={autoFocusPointUid}
+                      onPointFocused={() => setAutoFocusPointUid(null)}
                     />
                   ))}
                 </SortableContext>
@@ -992,6 +1041,8 @@ export function TemplateManagerModal({ onExportWide } = {}) {
                           onRemovePoint={removePoint}
                           onSetPoint={setPoint}
                           onPointsDragEnd={onPointsDragEnd}
+                          autoFocusPointUid={autoFocusPointUid}
+                          onPointFocused={() => setAutoFocusPointUid(null)}
                         />
                       ))}
                     </SortableContext>
@@ -1089,6 +1140,6 @@ export function TemplateManagerModal({ onExportWide } = {}) {
       )}
     </div>
   );
-}
+});
 
 export default TemplateManagerModal;
