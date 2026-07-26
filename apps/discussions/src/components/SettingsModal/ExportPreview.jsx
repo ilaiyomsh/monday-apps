@@ -18,6 +18,7 @@ import {
   paginateRenderedDocx,
   patchPageNumbers,
   waitForImages,
+  forceRtlRenderedBody,
   extractTemplateAnchors,
   reanchorFloatingDrawings,
   extractTemplateTabParagraphs,
@@ -281,6 +282,9 @@ export default function ExportPreview({ template, assets, model = null, modelKey
           // body content overlap the footer. Wait for real image geometry.
           await waitForImages(stage);
           if (cancelled || seq !== seqRef.current) return;
+          // docx-preview leaves bidi body alignment to inheritance. Apply the
+          // Word document's RTL baseline before measuring and paginating.
+          forceRtlRenderedBody(stage);
           // round202 — put the template's floating header/footer art where the
           // file actually anchors it (page-frame absolute, real extent) and lay
           // out its tab-stop paragraphs RTL-correctly — the "not centered"
