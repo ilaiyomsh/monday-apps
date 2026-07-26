@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, IconButton } from '@vibe/core';
 import { DropdownChevronDown, Search, Filter, Sort, Group, CloseSmall, Add } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
+import { EmptyState } from '@generated/components/EmptyState';
 import { ArrowLeft } from 'lucide-react';
 import { useMyTasks } from '@generated/hooks/useMyTasks.js';
 import { usePermission } from '@generated/hooks/usePermission.js';
@@ -660,7 +661,33 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
               <ArrowLeft size={20} aria-hidden="true" />
             </button>
           )}
-          <h1 className={styles.viewTitle}>המשימות שלי</h1>
+          {/* round272 (owner spec, MOBILE only) — beside the title, a scope toggle:
+              "המשימות שלי" (default, RIGHT) ⇄ "משימות של אחרים" (LEFT) — the tasks
+              in discussions I lead/coordinate/created that are NOT assigned to me.
+              In this dir="rtl" track the first button ('mine') lands on the right
+              and the second ('others') to its left, matching the owner's layout.
+              Desktop keeps its own toolbar scope toggle (led/mine) unchanged. */}
+          {isMobile ? (
+            <div className={styles.scopeToggleMobile} dir="rtl" role="tablist" aria-label="תחום המשימות">
+              {[
+                { key: 'mine', label: 'המשימות שלי' },
+                { key: 'others', label: 'משימות של אחרים' },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={scope === tab.key}
+                  className={`${styles.subTab}${scope === tab.key ? ` ${styles.subTabActive}` : ''}`}
+                  onClick={() => setScope(tab.key)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <h1 className={styles.viewTitle}>המשימות שלי</h1>
+          )}
         </div>
       )}
 
@@ -817,10 +844,10 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
       ) : error ? (
         <div className={styles.empty}>{t('myTasks.error')}</div>
       ) : (items.length === 0 && !creatingNew) ? (
-        <div className={styles.empty}>
-          <div className={styles.emptyTitle}>{t('myTasks.empty')}</div>
+        <EmptyState>
+          {t('myTasks.empty')}
           <div className={styles.emptyHint}>{t('myTasks.emptyHint')}</div>
-        </div>
+        </EmptyState>
       ) : (
         <div className={styles.groupScrollInner}>
           <div className={styles.groupStack}>

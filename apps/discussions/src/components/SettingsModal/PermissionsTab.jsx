@@ -330,12 +330,16 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
                 {open && (
                   <div className={styles.taskRuleCard}>
                     <div className={styles.taskRuleLine}>
+                      <span className={`${styles.taskRuleBadge} ${styles.badgeCreate}`}>יצירה</span>
+                      <span>כל משתמש יכול ליצור משימה — גם ב"המשימות שלי" וגם בתוך דיון.</span>
+                    </div>
+                    <div className={styles.taskRuleLine}>
                       <span className={`${styles.taskRuleBadge} ${styles.badgeView}`}>צפייה</span>
-                      <span>כל מי שהשתתף בדיון רואה את המשימות שהיו בו.</span>
+                      <span>כל מי שנמצא בדיון רואה את משימותיו; ב"המשימות שלי" כל אחד רואה את המשימות שלו/באחריותו.</span>
                     </div>
                     <div className={styles.taskRuleLine}>
                       <span className={`${styles.taskRuleBadge} ${styles.badgeEdit}`}>עריכה</span>
-                      <span>יוצר הדיון, מנהל הדיון, מרכז הדיון והאחראי על המשימה יכולים לערוך אותה.</span>
+                      <span>יוצר הדיון, מנהל הדיון ומרכז הדיון עורכים כל משימה שנוצרה בדיון; שאר המשתתפים עורכים רק משימות שיצרו או שהם האחראי עליהן.</span>
                     </div>
                   </div>
                 )}

@@ -272,37 +272,78 @@
 }
 .nameEditInput:focus-visible { outline: none; }
 
-/* Hover-revealed row actions cluster (mockup .pActs): rename pencil, hide(eye),
-   creator avatar, updates bubble — hidden at rest, revealed on row hover /
-   keyboard focus. */
-.rowActs {
+/* round260 (owner request) — the single action cluster, CENTERED in the row.
+   RTL order (right → left): [+ create] [count] [creator] [delete]. The cluster
+   itself is always present (position:relative anchors the create progress bar);
+   per-element visibility is controlled below. A trailing .clusterSpacer (flex:1)
+   balances .nameCell (flex:1) so the cluster sits mid-row, close to the text. */
+.pointCluster {
   display: inline-flex;
   align-items: center;
-  gap: 1px;
+  gap: 4px;
   flex-shrink: 0;
+  position: relative;
+}
+.clusterSpacer {
+  flex: 1;
+  min-width: 0;
+}
+/* Elements that stay quiet at rest and reveal on row hover / keyboard focus
+   (round260 — the creator avatar and the delete trash; the + and count are
+   always visible). No layout shift: opacity only, width is reserved. */
+.hoverOnly {
   opacity: 0;
   transition: opacity 0.1s ease;
 }
-.row:hover .rowActs,
-.rowActs:focus-within {
+.row:hover .hoverOnly,
+.hoverOnly:focus-within,
+.hoverOnly:focus-visible {
   opacity: 1;
 }
-.rowActBtn {
+
+/* round261 (owner request) — FIXED-WIDTH reserved slots so the "+" sits at the
+   very same spot in every row, whether or not a count/creator/delete is present
+   (symmetric layout). Each slot centers its (optional) content. */
+.countSlot {
+  width: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  flex-shrink: 0;
+}
+.creatorSlot {
+  width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.deleteSlot {
+  width: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* round261 — elegant rounded-square icon button (bigger, softer than the old
+   circle/plain-icon). Shared by the delete trash. */
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
   border: none;
-  border-radius: 6px;
+  border-radius: 9px;
   background: transparent;
   color: var(--secondary-text-color, #676879);
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
-  transition: background-color 0.1s ease, color 0.1s ease;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
-.rowActBtn:hover {
+.iconBtn:hover {
   background: var(--primary-background-hover-color, #e6e9ef);
   color: var(--primary-color, #0073ea);
 }
@@ -311,7 +352,6 @@
   background: var(--negative-color-selected, #fce9ec);
   color: var(--negative-color, #d83a52);
 }
-.updatesBtn:disabled { cursor: default; }
 
 /* Per-point creator avatar (round 58) — rides inside the hover actions cluster. */
 .creatorAvatar {
@@ -329,47 +369,45 @@
   background: var(--disabled-background-color, #eceef2);
 }
 
-/* round226 — unified תוצרים cluster: quiet count pill + ghost round + (hover).
-   Pinned at the row's inline END (visual left in RTL), like the mockup .out. */
-.outputsCell {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  position: relative;
-  min-width: 52px;
-  flex-shrink: 0;
-}
+/* round226/260/261 — תוצרים controls inside .pointCluster. round261 — the count
+   is a rounded-SQUARE chip (matches the + button) instead of a pill; a touch
+   bigger and more legible. */
 .outCount {
-  font-size: 11.5px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  font-size: 13px;
   font-weight: 700;
   color: #6b4ee6;
-  background: rgba(107, 78, 230, 0.09);
+  background: rgba(107, 78, 230, 0.10);
   border: 1px solid rgba(107, 78, 230, 0.22);
-  border-radius: 999px;
-  padding: 1px 9px;
-  line-height: 1.5;
-  cursor: pointer;
-  font-family: var(--font-family);
-}
-.outCount:hover { background: rgba(107, 78, 230, 0.16); }
-.outCount:disabled { cursor: default; opacity: 0.5; }
-.outAdd {
-  border: none;
-  background: transparent;
-  color: var(--secondary-text-color, #676879);
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
+  border-radius: 9px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.12s, background 0.12s;
+  cursor: pointer;
+  font-family: var(--font-family);
+  font-variant-numeric: tabular-nums;
 }
-.row:hover .outAdd { opacity: 1; }
-.outAdd:hover { background: var(--primary-background-hover-color, #e6f1fd); color: var(--primary-color, #0073ea); }
-.outAdd:disabled { opacity: 0; cursor: default; }
+.outCount:hover { background: rgba(107, 78, 230, 0.18); }
+.outCount:disabled { cursor: default; opacity: 0.5; }
+
+/* round260/261 — the "+" (new output) is ALWAYS visible (owner request). round261
+   — a rounded-SQUARE, slightly larger, with a crisp Plus icon and a soft resting
+   tint so it reads as a real button. */
+.outAdd {
+  border: none;
+  background: var(--primary-background-hover-color, #f0f2f7);
+  color: var(--secondary-text-color, #676879);
+  border-radius: 9px;
+  width: 30px;
+  height: 30px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.outAdd:hover { background: var(--primary-selected-color, #e6f1fd); color: var(--primary-color, #0073ea); }
+.outAdd:disabled { opacity: 0.4; cursor: default; }

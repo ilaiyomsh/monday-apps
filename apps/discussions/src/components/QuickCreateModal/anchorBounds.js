@@ -22,7 +22,7 @@ function clamp(v, lo, hi) {
  * Returns { left, top, width, maxHeight } (px) or null when either rect is
  * missing (caller then falls back to the viewport placement).
  */
-export function computeBoundedAnchorStyle({ anchor, bounds, cardWidth = 320, gap = 8, pad = 8, estHeight = 300 }) {
+export function computeBoundedAnchorStyle({ anchor, bounds, cardWidth = 280, gap = 8, pad = 8, estHeight = 260 }) {
   if (!anchor || !bounds) return null;
   // Width never exceeds the box's inner width.
   const width = Math.max(0, Math.min(cardWidth, bounds.width - 2 * pad));

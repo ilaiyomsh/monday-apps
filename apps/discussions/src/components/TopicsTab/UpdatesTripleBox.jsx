@@ -1,12 +1,11 @@
 import React, { lazy, Suspense, useRef, useState, useCallback, useEffect, useMemo } from 'react';
-import { Check, Loader2, AlertCircle, Paperclip, Plus, X, FileText, Link2 } from 'lucide-react';
+import { Check, Loader2, AlertCircle, Paperclip, X, Download } from 'lucide-react';
+import { fileKindColor, fileKindLabel } from '@generated/utils/fileKind.js';
 import { useBackground } from '@generated/hooks/useBackground.js';
 import { useReferences } from '@generated/hooks/useReferences.js';
 import { useSummary } from '@generated/hooks/useSummary.js';
-import { loadBackgroundLinks, saveBackgroundLinks } from '@generated/utils/backgroundStore.js';
-import { getItemFiles } from '@api/itemFiles.js';
-import { getBoardId, getColumns } from '@api/board-config-store.js';
-import { monday } from '@api/monday-client.js';
+import { getUpdateFiles } from '@api/updates.js';
+import { uploadFileToUpdateSeamless } from '@api/fileUpload.js';
 import lazyRetry from '@generated/utils/lazyRetry.js';
 import logger from '@generated/utils/logger.js';
 import { BrandLoader } from '@components/BrandLoader';
@@ -39,13 +38,18 @@ function editorInitials(name) {
  * One pane of the triple box: a rich-text editor over ONE monday-update hook
  * (useBackground / useReferences / useSummary — all share the same API), with
  * the serialised autosave discipline the boxes have used since round200, a 📎
- * attach-file toolbar action into the pane's mapped files column (monday's
- * native dialog), the pane's file chips, and — for the רקע pane — the
- * preparation links. Mounted HIDDEN when inactive so a mid-typing draft
+ * attach-file toolbar action, the pane's DOCUMENTS bar, and — for the רקע pane —
+ * the preparation links. Mounted HIDDEN when inactive so a mid-typing draft
  * survives switching headers.
+ *
+ * round270 — documents live ON the pane's own monday UPDATE (owner model B):
+ * `uploadFileToUpdateSeamless` attaches the File through the seamless monday.api
+ * (no token — the parent window performs the multipart upload), and
+ * `getUpdateFiles` reads `update.assets` back. monday exposes NO per-file delete
+ * on an update, so the bar is add + preview + download only (no per-file remove).
  */
-function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, withLinks = false, active, mentionPeople = [] }) {
-  const { html, loading, author, updatedAt, save, saveErrorCode } = hook;
+function UpdatePane({ discussionId, hook, placeholder, canEdit, canAttach = false, active, mentionPeople = [] }) {
+  const { html, loading, author, updatedAt, save, saveErrorCode, updateId, ensureUpdate, clearDocuments } = hook;
 
   const draftRef = useRef(null);
   const savedRef = useRef(null);
@@ -92,66 +96,140 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
     if (target != null && target !== savedRef.current && !savingRef.current) save(target);
   }, [save]);
 
-  // ---- pane FILES (mapped files column, native monday upload dialog) ----
-  const filesColumnId = getColumns('discussions')?.[filesAlias]?.id || null;
+  // ---- pane DOCUMENTS (attached to THIS pane's update; seamless, no token) ----
   const [files, setFiles] = useState([]);
-  const refreshFiles = useCallback(async () => {
-    if (!discussionId || !filesColumnId) { setFiles([]); return; }
+  const [preview, setPreview] = useState(null); // { name, url } | null — open document preview
+  const [uploading, setUploading] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false); // round271 — >1-file delete warning
+  const [clearing, setClearing] = useState(false);
+  const fileInputRef = useRef(null);
+  const refreshFiles = useCallback(async (idOverride) => {
+    const uid = idOverride || updateId;
+    if (!discussionId || !uid) { setFiles([]); return; }
     try {
-      setFiles(await getItemFiles(discussionId, filesColumnId));
+      setFiles(await getUpdateFiles(discussionId, uid));
     } catch (err) {
-      if (!err?.__loggedId) logger.warn('UpdatesTripleBox', 'טעינת קבצי התיבה נכשלה', err);
+      if (!err?.__loggedId) logger.warn('UpdatesTripleBox', 'טעינת מסמכי התיבה נכשלה', err);
       setFiles([]);
     }
-  }, [discussionId, filesColumnId]);
+  }, [discussionId, updateId]);
   useEffect(() => { refreshFiles(); }, [refreshFiles]);
-  const uploadFile = async () => {
+
+  const onPickFiles = () => fileInputRef.current?.click();
+  const onFilesChosen = async (e) => {
+    const chosen = Array.from(e.target.files || []);
+    e.target.value = ''; // let the same file be picked again later
+    if (!chosen.length) return;
+    setUploading(true);
     try {
-      const boardId = getBoardId('discussions');
-      await monday.execute('triggerFilesUpload', {
-        boardId: Number(boardId),
-        itemId: Number(discussionId),
-        columnId: filesColumnId,
-      });
-      await refreshFiles();
+      // The box's update must exist before a file can attach to it; create it
+      // on demand (empty boxes have no update yet) via the hook.
+      const uid = updateId || (ensureUpdate ? await ensureUpdate() : null);
+      if (!uid) {
+        logger.error('UpdatesTripleBox', 'לא נוצר עדכון לצירוף המסמך');
+        return;
+      }
+      for (const f of chosen) {
+        await uploadFileToUpdateSeamless({ updateId: uid, file: f });
+      }
+      await refreshFiles(uid);
     } catch (err) {
-      if (!err?.__loggedId) logger.error('UpdatesTripleBox', 'העלאת קובץ לתיבה נכשלה', err);
+      if (!err?.__loggedId) logger.error('UpdatesTripleBox', 'העלאת המסמך לעדכון נכשלה', err);
+    } finally {
+      setUploading(false);
     }
   };
 
-  // ---- preparation LINKS (רקע only; app-local storage, whole-list writes) ----
-  const [links, setLinks] = useState([]);
-  const [addingLink, setAddingLink] = useState(false);
-  const [linkUrl, setLinkUrl] = useState('');
-  const [linkLabel, setLinkLabel] = useState('');
-  useEffect(() => {
-    let cancelled = false;
-    setLinks([]);
-    if (!withLinks || !discussionId) return undefined;
-    loadBackgroundLinks(discussionId)
-      .then((l) => { if (!cancelled) setLinks(l); })
-      .catch((err) => { if (!err?.__loggedId) logger.warn('UpdatesTripleBox', 'טעינת קישורי הרקע נכשלה', err); });
-    return () => { cancelled = true; };
-  }, [withLinks, discussionId]);
-  const persistLinks = (next) => { setLinks(next); saveBackgroundLinks(discussionId, next); };
-  const addLink = () => {
-    const url = linkUrl.trim();
-    if (!url) return;
-    const withProto = /^(https?:)?\/\//i.test(url) ? url : `https://${url}`;
-    persistLinks([...links, { id: `${Date.now()}-${links.length}`, url: withProto, label: linkLabel.trim() || url }]);
-    setLinkUrl(''); setLinkLabel(''); setAddingLink(false);
+  // round271 — delete. monday has no per-file delete on an update, so removing a
+  // document clears ALL of the box's documents at once (the text is kept). When
+  // there is MORE THAN ONE file we warn first; a single file deletes immediately.
+  const requestDeleteFiles = () => {
+    if (files.length > 1) { setConfirmClear(true); return; }
+    doClearDocuments();
   };
-  const removeLink = (id) => persistLinks(links.filter((l) => l.id !== id));
+  const doClearDocuments = async () => {
+    setConfirmClear(false);
+    if (!clearDocuments) return;
+    setClearing(true);
+    try {
+      const ok = await clearDocuments();
+      if (ok) setFiles([]);
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('UpdatesTripleBox', 'מחיקת מסמכי התיבה נכשלה', err);
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  // round290 (owner request) — the bottom "add link" feature was removed; links
+  // are added inline via the editor (select text → add link). No links state here.
 
   const when = formatWhen(updatedAt);
   const showLoader = loading || !editorReady;
 
-  // 📎 — inside the FORMATTING TOOLBAR (owner request), per pane's own column.
-  const attachAction = canEdit && filesColumnId ? (
-    <button type="button" className={styles.attachToolbarBtn} onClick={uploadFile} title="צרף קובץ" aria-label="צרף קובץ">
-      <Paperclip size={15} />
-      <span>צרף קובץ</span>
-    </button>
+  // round270 — 📎 is a MINIMALIST icon-only button at the toolbar's far end that
+  // opens a native file picker; the chosen file(s) attach to THIS pane's update
+  // (seamless, no token). Shown only to creator/coordinator/lead/owner
+  // (canAttach); everyone else still sees the bar and can preview + download.
+  // monday has no per-file delete on an update, so there is no remove control.
+  const attachAction = canAttach ? (
+    <>
+      <button
+        type="button"
+        className={styles.attachToolbarBtn}
+        onClick={onPickFiles}
+        disabled={uploading}
+        title="צירוף מסמך"
+        aria-label="צירוף מסמך"
+      >
+        {uploading ? <Loader2 size={16} className={styles.refSpin} /> : <Paperclip size={16} />}
+      </button>
+      <input ref={fileInputRef} type="file" multiple hidden onChange={onFilesChosen} />
+    </>
+  ) : null;
+
+  // round268 — the DOCUMENTS bar: a text-less, LEFT-pinned row of type-colored
+  // square icons, rendered directly under the toolbar and above the text (via
+  // RichTextEditor's belowToolbar slot). Hover shows the filename; a single click
+  // opens the preview (from which the file downloads). Renders only when the box
+  // has documents, so an empty box keeps the text flush under the toolbar.
+  const documentsBar = files.length > 0 ? (
+    <div className={styles.docBar} dir="rtl">
+      {files.map((f) => {
+        // round284 fix — monday returns the asset `name` WITHOUT the extension
+        // (it lives in the separate `extension` field), so keying the type off
+        // `name` alone yielded a blank glyph for Word/Excel/PPT. Prefer the
+        // explicit extension; fall back to the name (which may carry a dotted ext).
+        const kindKey = f.extension || f.name;
+        return (
+        <span key={f.assetId || f.name} className={styles.docItem}>
+          <button
+            type="button"
+            className={styles.docIcon}
+            style={{ background: fileKindColor(kindKey) }}
+            title={f.name}
+            aria-label={`מסמך: ${f.name}`}
+            onClick={() => setPreview({ name: f.name, url: f.url, extension: f.extension })}
+          >
+            {/* round283 — the type glyph (W/X/PDF/P) on the colored square. */}
+            <span className={styles.docIconLabel}>{fileKindLabel(kindKey)}</span>
+          </button>
+          {canAttach && (
+            <button
+              type="button"
+              className={styles.docDel}
+              disabled={clearing}
+              onClick={requestDeleteFiles}
+              title="מחיקת מסמך"
+              aria-label={`מחיקת מסמך: ${f.name}`}
+            >
+              <X size={10} />
+            </button>
+          )}
+        </span>
+        );
+      })}
+    </div>
   ) : null;
 
   // round225 (owner spec) — the last-edit meta lives in the WHITE area at the
@@ -195,6 +273,7 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
               editable={canEdit}
               variant="flush"
               extraToolbarActions={<>{attachAction}{toolbarMeta}</>}
+              belowToolbar={documentsBar}
               mentionPeople={mentionPeople}
             />
           </Suspense>
@@ -206,53 +285,6 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
         )}
       </div>
 
-      {(files.length > 0 || links.length > 0 || (withLinks && canEdit)) && (
-        <div className={styles.paneAttachments}>
-          <div className={styles.attachRow}>
-            {files.map((f) => (
-              <span key={f.assetId || f.name} className={styles.attachChip}>
-                <FileText size={13} />
-                {f.url ? <a href={f.url} target="_blank" rel="noreferrer">{f.name}</a> : <span>{f.name}</span>}
-              </span>
-            ))}
-            {links.map((l) => (
-              <span key={l.id} className={styles.attachChip}>
-                <Link2 size={13} />
-                <a href={l.url} target="_blank" rel="noreferrer">{l.label}</a>
-                {canEdit && (
-                  <button type="button" className={styles.attachX} onClick={() => removeLink(l.id)} aria-label="הסר קישור">
-                    <X size={12} />
-                  </button>
-                )}
-              </span>
-            ))}
-          </div>
-          {withLinks && canEdit && (
-            addingLink ? (
-              <div className={styles.linkForm}>
-                <input
-                  className={styles.linkInput} autoFocus placeholder="כתובת (URL)" value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') addLink(); if (e.key === 'Escape') setAddingLink(false); }}
-                />
-                <input
-                  className={styles.linkInput} placeholder="שם (רשות)" value={linkLabel}
-                  onChange={(e) => setLinkLabel(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') addLink(); if (e.key === 'Escape') setAddingLink(false); }}
-                />
-                <button type="button" className={styles.attachAddBtn} onClick={addLink} disabled={!linkUrl.trim()}>הוסף</button>
-                <button type="button" className={styles.attachAddBtn} onClick={() => setAddingLink(false)}>ביטול</button>
-              </div>
-            ) : (
-              <div className={styles.attachBtns}>
-                <button type="button" className={styles.attachAddBtn} onClick={() => setAddingLink(true)}>
-                  <Plus size={13} /> הוסף קישור
-                </button>
-              </div>
-            )
-          )}
-        </div>
-      )}
 
       {/* round225 — for EDITORS the meta/save-state moved into the toolbar's
           white right end (toolbarMeta above); read-only viewers have no toolbar,
@@ -262,6 +294,59 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
           <span className={styles.refMeta}>
             {author ? `נערך לאחרונה ע״י ${author} · ${when}` : `נערך לאחרונה · ${when}`}
           </span>
+        </div>
+      )}
+
+      {/* round285 (owner request) — clicking a document no longer renders an
+          inline preview (the empty preview area for xlsx/word looked bad). It
+          opens a COMPACT popup: the file-type glyph + name + a single download
+          button. */}
+      {preview && (
+        <div
+          className={styles.docPreviewOverlay}
+          dir="rtl"
+          onClick={(e) => { if (e.target === e.currentTarget) setPreview(null); }}
+        >
+          <div className={styles.docDownloadCard} role="dialog" aria-modal="true" aria-label={`הורדת מסמך: ${preview.name}`}>
+            <button type="button" className={styles.docPreviewClose} onClick={() => setPreview(null)} aria-label="סגירה">×</button>
+            <span
+              className={styles.docDownloadIcon}
+              style={{ background: fileKindColor(preview.extension || preview.name) }}
+              aria-hidden="true"
+            >
+              {fileKindLabel(preview.extension || preview.name)}
+            </span>
+            <span className={styles.docDownloadName} title={preview.name}>{preview.name}</span>
+            {preview.url ? (
+              <a className={styles.docDownloadBtn} href={preview.url} target="_blank" rel="noreferrer" download>
+                <Download size={16} /> הורדת הקובץ
+              </a>
+            ) : (
+              <span className={styles.docPreviewNote}>הקובץ אינו זמין להורדה.</span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* round271 — delete confirmation, shown ONLY when the box holds more than
+          one document (monday clears them all at once; a single file skips this). */}
+      {confirmClear && (
+        <div
+          className={styles.docPreviewOverlay}
+          dir="rtl"
+          onClick={(e) => { if (e.target === e.currentTarget) setConfirmClear(false); }}
+        >
+          <div className={styles.docConfirm} role="alertdialog" aria-modal="true" aria-label="מחיקת מסמכים">
+            <div className={styles.docConfirmTitle}>מחיקת מסמכים</div>
+            <div className={styles.docConfirmBody}>
+              בתיבה זו יש <b>{files.length}</b> מסמכים. ל-monday אין אפשרות למחוק מסמך בודד מעדכון,
+              ולכן המחיקה תסיר את <b>כל</b> המסמכים בתיבה (הטקסט יישמר). להמשיך?
+            </div>
+            <div className={styles.docConfirmActions}>
+              <button type="button" className={styles.docConfirmCancel} onClick={() => setConfirmClear(false)}>ביטול</button>
+              <button type="button" className={styles.docConfirmDanger} onClick={doClearDocuments} disabled={clearing}>מחק הכל</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -279,6 +364,11 @@ function UpdatePane({ discussionId, hook, placeholder, canEdit, filesAlias, with
  */
 export function UpdatesTripleBox({
   discussionId, canEdit = false,
+  // round270 — who may ADD documents (the 📎). A fixed rule: discussion creator /
+  // coordinator / lead / owner (computed in DiscussionCard). Everyone else still
+  // sees the documents bar and can preview + download. (No per-file remove — the
+  // monday API has no per-asset delete on an update.)
+  canAttach = false,
   // round212 — PER-PANE write gates (matrix capabilities); null falls back to
   // the legacy single canEdit so old call sites/tests keep working.
   canEditBackground = null, canEditReferences = null, canEditSummary = null,
@@ -303,9 +393,9 @@ export function UpdatesTripleBox({
   const editSummaryPane = canEditSummary ?? canEdit;
 
   const panes = useMemo(() => [
-    showBackground && { key: 'background', title: 'רקע', hook: background, canEdit: editBackground, placeholder: 'כתבו כאן רקע והכנה לדיון…', filesAlias: 'backgroundFilesID', withLinks: true },
-    showReferences && { key: 'references', title: 'התייחסויות', hook: references, canEdit: editReferences, placeholder: 'כתבו כאן התייחסויות של משתתפי הדיון…', filesAlias: 'referencesFilesID' },
-    showSummary && { key: 'summary', title: 'סיכום', hook: summary, canEdit: editSummaryPane, placeholder: 'כתבו כאן את סיכום הדיון…', filesAlias: 'summaryFilesID' },
+    showBackground && { key: 'background', title: 'רקע', hook: background, canEdit: editBackground, placeholder: 'כתבו כאן רקע והכנה לדיון…' },
+    showReferences && { key: 'references', title: 'התייחסויות', hook: references, canEdit: editReferences, placeholder: 'כתבו כאן התייחסויות של משתתפי הדיון…' },
+    showSummary && { key: 'summary', title: 'סיכום', hook: summary, canEdit: editSummaryPane, placeholder: 'כתבו כאן את סיכום הדיון…' },
   ].filter(Boolean), [showBackground, showReferences, showSummary, background, references, summary, editBackground, editReferences, editSummaryPane]);
 
   const [activeKey, setActiveKey] = useState(panes[0]?.key || 'background');
@@ -349,8 +439,7 @@ export function UpdatesTripleBox({
           hook={p.hook}
           placeholder={p.placeholder}
           canEdit={p.canEdit}
-          filesAlias={p.filesAlias}
-          withLinks={p.withLinks === true}
+          canAttach={canAttach}
           active={activeKey === p.key}
           mentionPeople={mentionPeople}
         />

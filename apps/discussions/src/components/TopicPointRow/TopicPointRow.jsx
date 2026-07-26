@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Avatar, Dialog, DialogContentContainer, Checkbox } from '@vibe/core';
-import { Edit } from '@vibe/icons';
-import { Trash2, EyeOff, Eye, MoreHorizontal, Check, GripVertical } from 'lucide-react';
+import { Trash2, EyeOff, Eye, MoreHorizontal, Check, GripVertical, Plus } from 'lucide-react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { CreateProgressBar } from '@generated/components/CreateProgressBar';
@@ -107,16 +106,20 @@ export function RowKebabMenu({ excluded, onToggleHide, onDelete, kind = 'נקו�
  * A discussion POINT = a subitem, rendered as a CLEAN LIST ROW inside its topic
  * card (round226 stage B — approved mockup): no table grid, no column header,
  * no cell borders. RTL row order (dir=rtl cascades from the topic card):
- *   [select ☐ (hover/selection)] [נידונה ✓] [name (fill)] [hover actions] [תוצרים]
+ *   [select ☐] [נידונה ✓] [name (flex)] [action cluster] [flex spacer]
+ * round260 (owner request) — the action cluster sits in the MIDDLE of the row
+ * (the trailing flex spacer balances the name's flex:1). Cluster order, right →
+ * left: [+ create] [count] [creator] [delete]. The pencil (edit) and eye (hide)
+ * buttons were removed — a single click on the name enters inline edit.
  *
  * "נידונה" (discussed) is a leading rounded-square check — green fill + white ✓
  * when checked, and the name gets a line-through (mockup .pt.done). It persists
  * to the subitems board when pointCheckedID is mapped (app-local storage
  * fallback otherwise — handled in useTopics).
  *
- * The תוצרים cluster (unified, round226 stage A): a quiet count pill
- * (tasks+decisions, shown only when >0) that opens the combined popup, and a
- * ghost round "+" revealed on row hover that opens the ONE create box.
+ * The תוצרים controls (unified, round226/260): a "+" that is ALWAYS visible and
+ * opens the ONE create box, and a count pill (tasks+decisions, shown only when
+ * >0) that opens the combined popup. Creator avatar + delete stay hover-revealed.
  *
  * DRAG-TO-REORDER: the WHOLE ROW is the drag handle (native monday board feel).
  * dnd-kit's PointerSensor activation distance (set in TopicsTab, ~8px) means a
@@ -128,7 +131,7 @@ export function TopicPointRow({
   // Per-point creator avatar (round 58): revealed on row hover inside the
   // actions cluster. Resolved from usersById via point.creatorId.
   usersById,
-  onToggle, onToggleNotForDiscussion, onRename,
+  onToggle, onRename,
   // round232 (owner request) — per-point DELETE: a hover trash button to the
   // LEFT of the creator avatar (replaces the multi-select-checkbox delete path).
   // Soft-delete with an undo toast lives in the parent; omitted ⇒ no trash.
@@ -136,10 +139,10 @@ export function TopicPointRow({
   // Optimistic-create error affordance: retry re-runs a failed point create.
   onRetryCreate,
   // Granular discussion-tier caps. Each equals the legacy canEdit while the
-  // permissions feature is off, so behavior is unchanged. point edit (rename +
-  // whole-row drag), check ("נידונה" toggle). Hiding is a SEPARATE fixed rule
-  // (item 10): only the discussion lead/coordinator/owner get canHidePoint.
-  canEditPoint = true, canHidePoint = true, canCheck = true,
+  // permissions feature is off, so behavior is unchanged. point edit (rename via
+  // click-the-text + drag-grip reorder), check ("נידונה" toggle). round260 —
+  // per-point hide was removed, so canHidePoint no longer exists.
+  canEditPoint = true, canCheck = true,
   // Unified תוצרים counters (stored ids ∩ loaded items; 0 when unmapped).
   decisionCount = 0, taskCount = 0,
   // Create-from-point + open-counter-popup callbacks (threaded by TopicsTab).
@@ -267,7 +270,11 @@ export function TopicPointRow({
           <span
             className={styles.name}
             title={point.name}
-            onDoubleClick={canEditPoint && !inert ? () => { setNameDraft(point.name || ''); setEditingName(true); } : undefined}
+            // round260 (owner request) — the pencil button was removed; a single
+            // CLICK on the point text now enters edit mode ("no need for a pencil").
+            role={canEditPoint && !inert ? 'button' : undefined}
+            style={canEditPoint && !inert ? { cursor: 'text' } : undefined}
+            onClick={canEditPoint && !inert ? (e) => { e.stopPropagation(); setNameDraft(point.name || ''); setEditingName(true); } : undefined}
           >
             {point.name}
           </span>
@@ -288,89 +295,78 @@ export function TopicPointRow({
         )}
       </span>
 
-      {/* Hover-revealed row actions (mockup .pActs): rename pencil, hide(eye),
-          creator avatar, updates bubble. The eye DELIBERATELY stays live on a
-          hidden row so it can be re-shown (item 11). */}
-      <span className={styles.rowActs} onClick={stop} onPointerDown={stop}>
-        {canEditPoint && !inert && !editingName && (
-          <button
-            type="button"
-            className={styles.rowActBtn}
-            title="עריכת שם"
-            aria-label={`ערוך שם נקודה: ${point.name}`}
-            onClick={(e) => { e.stopPropagation(); setNameDraft(point.name || ''); setEditingName(true); }}
-          >
-            <Edit size={16} />
-          </button>
+      {/* round260/261 — a single centered cluster. RTL order (right → left):
+          [+ create] [count] [creator] [delete]. round261 (owner request) — every
+          slot has a FIXED reserved width so the "+" sits at the SAME position in
+          every row whether or not a count/creator exists (symmetric). The "+" is
+          always visible; the count shows only when >0 (inside its reserved slot);
+          creator + delete stay hover-revealed. Icons are rounded-squares. A
+          trailing flex spacer balances the name (flex:1) so the cluster sits in
+          the MIDDLE of the row, close to the point text. */}
+      <span className={styles.pointCluster} onClick={stop} onPointerDown={stop}>
+        {(showCol('outputs') || showCol('decisions') || showCol('tasks')) && (
+          <>
+            {(onCreateTask || onCreateDecision) && (
+              <button
+                type="button"
+                /* round283 (owner request) — the per-point "+" is now hover-revealed
+                   like the creator avatar (was always visible). opacity-based, so the
+                   reserved slot keeps its width and nothing shifts. */
+                className={`${styles.outAdd} ${styles.hoverOnly}`}
+                title="תוצר חדש (משימה או החלטה)"
+                aria-label="תוצר חדש מהנקודה"
+                disabled={inert}
+                onClick={(e) => (onCreateTask || onCreateDecision)(point, e.currentTarget.getBoundingClientRect())}
+              >
+                <Plus size={17} strokeWidth={2.5} />
+              </button>
+            )}
+            {/* count slot — ALWAYS reserved (empty when 0) so the + never shifts. */}
+            <span className={styles.countSlot}>
+              {(taskCount + decisionCount) > 0 && (
+                <button
+                  type="button"
+                  className={styles.outCount}
+                  title={`${taskCount} משימות · ${decisionCount} החלטות`}
+                  aria-label="הצג תוצרים מהנקודה"
+                  disabled={inert}
+                  onClick={() => (onOpenTasks || onOpenDecisions)?.(point)}
+                >
+                  {taskCount + decisionCount}
+                </button>
+              )}
+            </span>
+          </>
         )}
-        {canHidePoint && (
-          <button
-            type="button"
-            className={styles.rowActBtn}
-            onClick={(e) => { e.stopPropagation(); onToggleNotForDiscussion?.(point, !excluded); }}
-            aria-label={excluded ? 'הצג נקודה' : 'הסתר נקודה'}
-            title={excluded ? 'הצג נקודה' : 'הסתר נקודה'}
-          >
-            {excluded ? <Eye size={16} /> : <EyeOff size={16} />}
-          </button>
-        )}
-        {/* round229 (owner request) — the "עדכונים" (updates) affordance was
-            removed from points/topics: no update can be created on them. */}
-        {point.creatorId && (
-          <span className={styles.creatorAvatar}>
-            <CreatorAvatar userId={point.creatorId} usersById={usersById} size="small" />
-          </span>
-        )}
-        {/* round232 (owner request) — per-point DELETE trash, to the LEFT of the
-            creator avatar (last in this rtl cluster ⇒ leftmost). Soft-delete +
-            undo lives in the parent. Inert on a hidden row (item 11). */}
-        {onDelete && !inert && (
-          <button
-            type="button"
-            className={`${styles.rowActBtn} ${styles.deleteBtn}`}
-            title="מחיקת נקודה"
-            aria-label={`מחק נקודה: ${point.name}`}
-            onClick={(e) => { e.stopPropagation(); onDelete(point); }}
-          >
-            <Trash2 size={16} />
-          </button>
-        )}
+        {/* creator slot — reserved width, hover-revealed (order: after the count). */}
+        <span className={`${styles.creatorSlot} ${styles.hoverOnly}`}>
+          {point.creatorId && (
+            <span className={styles.creatorAvatar}>
+              <CreatorAvatar userId={point.creatorId} usersById={usersById} size="small" />
+            </span>
+          )}
+        </span>
+        {/* delete slot — reserved width, leftmost. Soft-delete + undo lives in the
+            parent. Inert on a hidden row. */}
+        <span className={styles.deleteSlot}>
+          {onDelete && !inert && (
+            <button
+              type="button"
+              className={`${styles.iconBtn} ${styles.deleteBtn} ${styles.hoverOnly}`}
+              title="מחיקת נקודה"
+              aria-label={`מחק נקודה: ${point.name}`}
+              onClick={(e) => { e.stopPropagation(); onDelete(point); }}
+            >
+              <Trash2 size={17} />
+            </button>
+          )}
+        </span>
+        <CreateProgressBar status={taskCreateStatus || decisionCreateStatus} variant={taskCreateStatus ? 'task' : 'decision'} />
       </span>
 
-      {/* round226 (approved mockup) — the UNIFIED "תוצרים" cluster: a quiet count
-          pill (tasks+decisions, shown only when >0; breakdown in the tooltip)
-          that opens the combined popup, and a ghost round "+" revealed on row
-          hover that opens the ONE create box (משימה default, החלטה via its
-          toggle). Hidden-row inertness kept. */}
-      {(showCol('outputs') || showCol('decisions') || showCol('tasks')) && (
-        <span className={styles.outputsCell} onClick={stop}>
-          {(taskCount + decisionCount) > 0 && (
-            <button
-              type="button"
-              className={styles.outCount}
-              title={`${taskCount} משימות · ${decisionCount} החלטות`}
-              aria-label="הצג תוצרים מהנקודה"
-              disabled={inert}
-              onClick={() => (onOpenTasks || onOpenDecisions)?.(point)}
-            >
-              {taskCount + decisionCount}
-            </button>
-          )}
-          {(onCreateTask || onCreateDecision) && (
-            <button
-              type="button"
-              className={styles.outAdd}
-              title="תוצר חדש (משימה או החלטה)"
-              aria-label="תוצר חדש מהנקודה"
-              disabled={inert}
-              onClick={(e) => (onCreateTask || onCreateDecision)(point, e.currentTarget.getBoundingClientRect())}
-            >
-              +
-            </button>
-          )}
-          <CreateProgressBar status={taskCreateStatus || decisionCreateStatus} variant={taskCreateStatus ? 'task' : 'decision'} />
-        </span>
-      )}
+      {/* round260 — flex spacer: balances .nameCell (flex:1) so the action
+          cluster is centered between the row's two edges (approved mockup). */}
+      <span className={styles.clusterSpacer} aria-hidden="true" />
     </div>
   );
 }

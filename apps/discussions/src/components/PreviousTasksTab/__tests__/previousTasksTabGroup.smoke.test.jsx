@@ -97,6 +97,9 @@ describe('PreviousTasksTab — group-by builder (smoke)', () => {
   it('byType=true (mobile): picking לפי אחראי regroups by person (unassigned header appears)', async () => {
     cfg.byType = true;
     render(<PreviousTasksTab discussion={DISCUSSION} />);
+    // round274 — by-type defaults to "הפעם האחרונה" (a different fetch path); switch
+    // to "כל הדיונים הקודמים" so the mocked type task set renders for the regroup.
+    fireEvent.click(await screen.findByTitle(/החלפת טווח/));
     await openGroupOptions();
     fireEvent.click(screen.getByText('אחראי'));
     expect(await screen.findByText('לא הוקצה')).toBeTruthy();

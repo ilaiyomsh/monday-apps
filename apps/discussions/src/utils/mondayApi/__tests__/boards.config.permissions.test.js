@@ -116,9 +116,12 @@ describe('CAPABILITY_DEFAULTS', () => {
     expect(CAPABILITY_DEFAULTS.reorderColumns).toBe('owner');
     expect(CAPABILITY_DEFAULTS.addDiscussionTypes).toBe('owner');
     expect(CAPABILITY_DEFAULTS.saveViewDefaults).toBe('owner');
+    // round291 — createTask defaults to 'all' (anyone can create a task, in a
+    // discussion too), mirroring createDiscussion.
+    expect(CAPABILITY_DEFAULTS.createTask).toBe('all');
     // all discussion-content edits + task edits + decision edits = creatorLeadOwner
-    const viewLike = new Set(['viewDiscussion', 'viewReferencesBox', 'viewSummaryBox']);
-    [...DISC_CAPS.filter((id) => !viewLike.has(id)), ...TASK_CAPS, ...DECISION_CAPS].forEach((id) =>
+    const exempt = new Set(['viewDiscussion', 'viewReferencesBox', 'viewSummaryBox', 'createTask']);
+    [...DISC_CAPS.filter((id) => !exempt.has(id)), ...TASK_CAPS, ...DECISION_CAPS].forEach((id) =>
       expect(CAPABILITY_DEFAULTS[id]).toBe('creatorLeadOwner')
     );
   });

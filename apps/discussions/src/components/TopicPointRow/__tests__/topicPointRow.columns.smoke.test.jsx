@@ -20,18 +20,20 @@ function renderRow(props) {
 }
 
 describe('TopicPointRow — clean list row structure (round226 stage B smoke)', () => {
-  it('round226b — renders the list order: נידונה check, name, actions, תוצרים (no table cells)', () => {
+  it('round260 — renders the list order: check, name, centered action cluster, spacer (no table cells)', () => {
     renderRow({});
     const row = document.querySelector('.row');
     const classes = [...row.children].map((el) => el.className);
     const idx = (c) => classes.findIndex((cls) => cls.includes(c));
     expect(idx('checkCell')).toBeLessThan(idx('nameCell'));
-    expect(idx('nameCell')).toBeLessThan(idx('rowActs'));
-    expect(idx('rowActs')).toBeLessThan(idx('outputsCell'));
-    // the legacy table cells are gone
+    // round260 — the actions live in one .pointCluster, followed by a flex
+    // .clusterSpacer that balances the name (flex:1) so the cluster is centered.
+    expect(idx('nameCell')).toBeLessThan(idx('pointCluster'));
+    expect(idx('pointCluster')).toBeLessThan(idx('clusterSpacer'));
+    // the legacy table cells / split action+outputs cells are gone
     expect(idx('lead')).toBe(-1);
-    expect(idx('decisionsCell')).toBe(-1);
-    expect(idx('tasksCell')).toBe(-1);
+    expect(idx('rowActs')).toBe(-1);
+    expect(idx('outputsCell')).toBe(-1);
   });
 
   it('round226b — the discussed state draws the green check and strikes the name', () => {
@@ -133,6 +135,58 @@ describe('TopicPointRow — clean list row structure (round226 stage B smoke)', 
     // Hidden (notForDiscussion) row is inert → no trash even with a handler.
     renderRow({ onDelete, point: { ...POINT, notForDiscussion: true } });
     expect(document.querySelector('[aria-label^="מחק נקודה"]')).toBeNull();
+  });
+
+  it('round260/261 — DOM order (rtl right→left) is +, count, creator, delete', () => {
+    renderRow({
+      onCreateTask: vi.fn(),
+      onDelete: vi.fn(),
+      decisionCount: 1,
+      taskCount: 1,
+      point: { ...POINT, creatorId: '99' },
+      usersById: { 99: { name: 'דנה' } },
+    });
+    const cluster = document.querySelector('.pointCluster');
+    // round261 — count/creator/delete now live inside fixed-width reserved slots,
+    // so compare true document order (not just direct children).
+    const add = cluster.querySelector('[aria-label="תוצר חדש מהנקודה"]');
+    const count = cluster.querySelector('[aria-label="הצג תוצרים מהנקודה"]');
+    const creator = cluster.querySelector('.creatorAvatar');
+    const del = cluster.querySelector('[aria-label^="מחק נקודה"]');
+    expect(add && count && creator && del).toBeTruthy();
+    const before = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(before(add, count)).toBe(true);
+    expect(before(count, creator)).toBe(true);
+    expect(before(creator, del)).toBe(true);
+  });
+
+  it('round261 — the + slot layout is symmetric: reserved count slot exists even with 0 outputs', () => {
+    // With zero outputs the count pill is absent, but its reserved slot stays,
+    // so the + keeps its position (no shift between rows with/without a count).
+    const { unmount } = renderRow({ onCreateTask: vi.fn(), decisionCount: 0, taskCount: 0 });
+    expect(document.querySelector('.countSlot')).toBeTruthy();
+    expect(document.querySelector('[aria-label="הצג תוצרים מהנקודה"]')).toBeNull();
+    unmount();
+    // With outputs the same slot now holds the pill.
+    renderRow({ onCreateTask: vi.fn(), decisionCount: 1, taskCount: 1 });
+    const slot = document.querySelector('.countSlot');
+    expect(slot.querySelector('[aria-label="הצג תוצרים מהנקודה"]')).toBeTruthy();
+  });
+
+  it('round260 — clicking the point text enters inline edit (the pencil button is gone)', () => {
+    renderRow({});
+    // the hover pencil button was removed…
+    expect(document.querySelector('[aria-label="ערוך שם נקודה: נקודה לבדיקה"]')).toBeNull();
+    // …and a single click on the name opens the inline editor input.
+    expect(document.querySelector('[aria-label="ערוך שם נקודה"]')).toBeNull();
+    fireEvent.click(document.querySelector('.name'));
+    expect(document.querySelector('[aria-label="ערוך שם נקודה"]')).toBeTruthy();
+  });
+
+  it('round260 — a read-only point does NOT enter edit on click', () => {
+    renderRow({ canEditPoint: false });
+    fireEvent.click(document.querySelector('.name'));
+    expect(document.querySelector('[aria-label="ערוך שם נקודה"]')).toBeNull();
   });
 
   it('round233 — a six-dot drag grip renders at the row START (editable, not hidden)', () => {

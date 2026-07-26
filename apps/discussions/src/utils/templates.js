@@ -104,15 +104,24 @@ export function sanitizeParticipantTemplate(template, id) {
  * one shot. Persisted in its own monday.storage key by TemplatesContext.
  *
  * Shape:
- *   TypeTemplate = { id, discussionType: string, topics: Topic[], lead, coordinator, participants: Person[] }
+ *   TypeTemplate = { id, discussionType: string, topics: Topic[], lead, coordinator,
+ *                    participants: Person[], deciderIsLead: boolean,
+ *                    exportTemplate: object|null }
  *
  * `discussionType` is REQUIRED (it is the key — the label TEXT) — sanitize
  * returns null when it is missing so callers can drop malformed entries.
+ *
+ * round254 — `exportTemplate` (object|null): a per-type export-template CONFIG
+ * that OVERRIDES the system default at export time (null ⇒ use the system
+ * default). Stored raw here (a plain config object); the export dialog runs it
+ * through seedExportTemplate for validation/back-fill, so this file needs no
+ * knowledge of the export-template schema.
  */
 export function sanitizeTypeTemplate(template, id) {
   const dt = typeKey(template?.discussionType);
   if (!dt) return null;
   const topics = Array.isArray(template?.topics) ? template.topics : [];
+  const exp = template?.exportTemplate;
   return {
     id: id || template?.id || null,
     discussionType: dt,
@@ -122,6 +131,8 @@ export function sanitizeTypeTemplate(template, id) {
     // item 18 — per-type default decider flag (מחליט = מנהל הדיון). Strict
     // boolean so a stored junk value can never truthy its way in.
     deciderIsLead: template?.deciderIsLead === true,
+    // round254 — a non-array object is kept as-is; anything else ⇒ null (default).
+    exportTemplate: (exp && typeof exp === 'object' && !Array.isArray(exp)) ? exp : null,
     topics: topics
       .map((topic) => ({
         name: (topic?.name || '').trim(),
@@ -148,7 +159,7 @@ export function sanitizeTypeTemplate(template, id) {
  *
  * @returns {Promise<{topics:number, points:number}>} how many were created.
  */
-export async function createTopicsFromTemplate(discussionId, template, { onProgress, creatorId = null, existingTopicIds = [] } = {}) {
+export async function createTopicsFromTemplate(discussionId, template, { onProgress, existingTopicIds = [] } = {}) {
   const clean = sanitizeTemplate(template);
   if (!discussionId || !clean.topics.length) return { topics: 0, points: 0, topicIds: [] };
 
@@ -156,11 +167,12 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
   const relation = getColumns('topics')?.discussionLinkID; // board_relation: topic -> discussion
   const topicDispCol = getColumns('topics')?.topicNotForDiscussionID; // "האם להציג?" (item)
   const pointDispCol = getColumns('topics')?.pointNotForDiscussionID; // "האם להציג?" (subitem)
-  // round115 — creator + creation-date columns, stamped on every topic/point
-  // created from a template (mirrors useTopics.addTopic/addPoint). creatorId is
-  // passed by the caller (the user applying the template).
-  const topicCreatorCol = getColumns('topics')?.topicCreatorID;
-  const pointCreatorCol = getColumns('topics')?.pointCreatorID;
+  // round115 — creation-date columns, stamped on every topic/point created from a
+  // template (mirrors useTopics.addTopic/addPoint).
+  // round267 (owner request) — the CREATOR column is intentionally NOT stamped
+  // here: template/duplicate/type-default topics are generated, not authored by a
+  // person, so they carry NO creator (and thus show no creator avatar). Only a
+  // MANUALLY typed topic (useTopics.addTopic) gets a creator.
   const topicCreatedCol = getColumns('topics')?.topicCreationDateID;
   const pointCreatedCol = getColumns('topics')?.pointCreationDateID;
 
@@ -191,9 +203,6 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
     if (topicDispCol?.id) {
       columnValues[topicDispCol.id] = formatValue('checkbox', true);
     }
-    if (topicCreatorCol?.id && creatorId) {
-      columnValues[topicCreatorCol.id] = formatValue('people', [creatorId]);
-    }
     if (topicCreatedCol?.id) {
       columnValues[topicCreatedCol.id] = formatValue('date', new Date());
     }
@@ -218,9 +227,6 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
     report();
 
     const pointCv = pointDispCol?.id ? { [pointDispCol.id]: formatValue('checkbox', true) } : {};
-    if (pointCreatorCol?.id && creatorId) {
-      pointCv[pointCreatorCol.id] = formatValue('people', [creatorId]);
-    }
     if (pointCreatedCol?.id) {
       pointCv[pointCreatedCol.id] = formatValue('date', new Date());
     }

@@ -93,6 +93,9 @@ describe('PreviousTasksTab — Filter pill (smoke)', () => {
 
   it('filtering by a person narrows the rendered tasks', async () => {
     render(<PreviousTasksTab discussion={DISCUSSION} />);
+    // round274 — by-type defaults to "הפעם האחרונה"; switch to "כל הדיונים הקודמים"
+    // so the full mocked type set renders (the set this test filters over).
+    fireEvent.click(await screen.findByTitle(/החלפת טווח/));
     expect(await screen.findByText('הנחיה של דנה')).toBeTruthy();
     expect(screen.getByText('הנחיה של יוסי')).toBeTruthy();
 

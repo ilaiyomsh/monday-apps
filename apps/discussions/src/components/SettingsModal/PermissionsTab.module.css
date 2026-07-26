@@ -402,6 +402,7 @@
 }
 .badgeView { background: var(--secondary-text-color, #676879); }
 .badgeEdit { background: var(--primary-color, #0073ea); }
+.badgeCreate { background: var(--positive-color, #00854d); }
 .mxSubRow {
   display: flex;
   align-items: center;
@@ -499,8 +500,11 @@
   margin-top: 4px;
 }
 .appRolesGrid {
+  /* round289 (owner request) — stack the cards in ONE column so the SUPER MEMBERS
+     card sits BELOW OWNERS·MEMBERS instead of beside it (side-by-side clipped it
+     inside the compact square settings modal). */
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
   align-items: start;
 }

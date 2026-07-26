@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { createUpdate, editUpdate, getItemUpdate } from '@api/updates.js';
+import { createUpdate, editUpdate, getItemUpdate, deleteUpdate } from '@api/updates.js';
 import {
   loadBackgroundUpdateId,
   saveBackgroundUpdateId,
@@ -25,6 +25,9 @@ export function useBackground(discussionId) {
   const [saveErrorCode, setSaveErrorCode] = useState(null);
   const [meta, setMeta] = useState({ author: null, updatedAt: null });
   const updateIdRef = useRef(null);
+  // round270 — the box's update id, mirrored into state so the documents bar
+  // (which attaches files to THIS update) re-renders when it resolves/creates.
+  const [updateId, setUpdateId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -38,6 +41,7 @@ export function useBackground(discussionId) {
       }
       setLoading(true);
       updateIdRef.current = null;
+      setUpdateId(null);
       try {
         const storedId = await loadBackgroundUpdateId(discussionId);
         if (cancelled) return;
@@ -53,6 +57,7 @@ export function useBackground(discussionId) {
 
         if (update) {
           updateIdRef.current = String(update.id);
+          setUpdateId(String(update.id));
           setHtml(toEditorHtml(update.body || ''));
           setMeta({
             author: update.creator?.name || null,
@@ -103,6 +108,7 @@ export function useBackground(discussionId) {
       }
 
       updateIdRef.current = String(update.id);
+      setUpdateId(String(update.id));
       await saveBackgroundUpdateId(discussionId, update.id);
       setHtml(toEditorHtml(update.body ?? body));
       setMeta({
@@ -124,6 +130,58 @@ export function useBackground(discussionId) {
     }
   }, [discussionId]);
 
+  // round270 — create the box's update on demand so a document can attach even
+  // before any text was saved. A single space keeps the body non-empty (monday
+  // requires one); the next text save overwrites it in place. Returns the update
+  // id (existing or freshly created), or null on failure.
+  const ensureUpdate = useCallback(async () => {
+    if (updateIdRef.current) return updateIdRef.current;
+    if (!discussionId) return null;
+    try {
+      const update = await createUpdate(discussionId, ' ');
+      if (!update) return null;
+      updateIdRef.current = String(update.id);
+      setUpdateId(String(update.id));
+      await saveBackgroundUpdateId(discussionId, update.id);
+      return updateIdRef.current;
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('useBackground', 'יצירת עדכון הרקע לצירוף מסמך נכשלה', err);
+      return null;
+    }
+  }, [discussionId]);
+
+  // round271 — clear ALL of the box's documents while KEEPING its text. monday
+  // has no per-file delete on an update, so the only way to drop files is to
+  // delete the whole update; we first read its persisted body, delete it, then
+  // recreate it with the same body — text survives, every file is removed.
+  // Returns true on success. (The recreate resets the update's author/timestamp.)
+  const clearDocuments = useCallback(async () => {
+    const uid = updateIdRef.current;
+    if (!uid || !discussionId) return false;
+    try {
+      const current = await getItemUpdate(discussionId, uid);
+      const body = current?.body ?? toMondayHtml(html || '');
+      await deleteUpdate(uid);
+      const recreated = await createUpdate(discussionId, body || ' ');
+      if (!recreated) {
+        logger.error('useBackground', 'מחיקת מסמכי הרקע נכשלה — לא נוצר עדכון חדש');
+        return false;
+      }
+      updateIdRef.current = String(recreated.id);
+      setUpdateId(String(recreated.id));
+      await saveBackgroundUpdateId(discussionId, recreated.id);
+      setHtml(toEditorHtml(recreated.body ?? body));
+      setMeta({
+        author: recreated.creator?.name || null,
+        updatedAt: recreated.updated_at || recreated.created_at || null,
+      });
+      return true;
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('useBackground', 'מחיקת מסמכי הרקע נכשלה', err);
+      return false;
+    }
+  }, [discussionId, html]);
+
   return {
     html,
     loading,
@@ -132,6 +190,9 @@ export function useBackground(discussionId) {
     author: meta.author,
     updatedAt: meta.updatedAt,
     save,
+    updateId,
+    ensureUpdate,
+    clearDocuments,
   };
 }
 
