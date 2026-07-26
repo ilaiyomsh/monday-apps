@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, TabPanels, TabPanel } from '@vibe/core';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
@@ -280,16 +281,34 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // reports this via onExportWide.
   const [templatesExportWide, setTemplatesExportWide] = useState(false);
   const fileInputRef = useRef(null);
+  // round295 — unsaved-changes guard on close (X / ביטול / overlay). The
+  // templates panel exposes its draft dirtiness via this ref; settings dirtiness
+  // is a snapshot compare (seeded on open). No change ⇒ close with no prompt.
+  const templatesRef = useRef(null);
+  const initialSnapshotRef = useRef(null);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // re-seed local draft from the live settings whenever the modal opens
   useEffect(() => {
     if (isOpen) {
       const seed = settings || buildEmptyConfig();
-      setBoards(mergeBoardsWithSchema(seed.boards));
-      setColumns(mergeColumnsWithSchema(seed.columns));
-      setPreferences({ ...DEFAULT_PREFERENCES, ...(seed.preferences || {}) });
-      setPermissions(seedPermissions(seed.permissions));
-      setExportTemplate(seedExportTemplate(seed.exportTemplate));
+      const seededBoards = mergeBoardsWithSchema(seed.boards);
+      const seededColumns = mergeColumnsWithSchema(seed.columns);
+      const seededPrefs = { ...DEFAULT_PREFERENCES, ...(seed.preferences || {}) };
+      const seededPerms = seedPermissions(seed.permissions);
+      const seededExport = seedExportTemplate(seed.exportTemplate);
+      setBoards(seededBoards);
+      setColumns(seededColumns);
+      setPreferences(seededPrefs);
+      setPermissions(seededPerms);
+      setExportTemplate(seededExport);
+      // round295 — snapshot the seeded settings so a later close can tell whether
+      // the mapping/preferences/permissions/export config was actually changed.
+      initialSnapshotRef.current = JSON.stringify({
+        boards: seededBoards, columns: seededColumns, preferences: seededPrefs,
+        permissions: seededPerms, exportTemplate: seededExport,
+      });
+      setShowCloseConfirm(false);
       setAssetError(null);
       loadExportAssets(context)
         .then(setExportAssets)
@@ -610,6 +629,14 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     setSaving(true);
     setAssetError(null);
     try {
+      // round295 — flush an in-progress template draft the user may have created
+      // but forgotten to "שמור תבנית" before hitting the general Settings save.
+      // Best-effort: a template save failure must not block the settings save.
+      try {
+        if (templatesRef.current?.isDirty?.()) await templatesRef.current.saveDraft();
+      } catch (err) {
+        logger.warn('SettingsModal', 'שמירת טיוטת התבנית נכשלה', err);
+      }
       // Persist the heavy export assets first — if they exceed the 6MB quota this
       // throws, and we abort WITHOUT saving settings so config and assets can't
       // drift out of sync. The friendly quota message is shown in the tab.
@@ -654,6 +681,62 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       setSaving(false);
     }
   };
+
+  // round295 — did the mapping/preferences/permissions/export CONFIG change since
+  // the modal opened? (Heavy export ASSETS are excluded — they're a separate blob.)
+  const computeSettingsDirty = () => {
+    if (!initialSnapshotRef.current) return false;
+    const now = JSON.stringify({ boards, columns, preferences, permissions, exportTemplate });
+    return now !== initialSnapshotRef.current;
+  };
+
+  // round295 — close intent (X / ביטול / overlay). If there are unsaved changes
+  // (settings config OR an in-progress template draft), ask before leaving;
+  // otherwise close immediately (no change ⇒ no prompt, per owner spec).
+  const attemptClose = () => {
+    // First-run forced config (SettingsGate) mounts this with NO onClose — the
+    // modal is not dismissable then, so there is nothing to confirm.
+    if (!onClose) return;
+    const tplDirty = !!templatesRef.current?.isDirty?.();
+    if (computeSettingsDirty() || tplDirty) setShowCloseConfirm(true);
+    else onClose();
+  };
+
+  // Confirm-dialog "שמירה ויציאה": persist everything, then close. In templatesOnly
+  // mode there is no settings save — just flush the template draft.
+  const saveAndClose = async () => {
+    setShowCloseConfirm(false);
+    if (templatesOnly) {
+      try {
+        if (templatesRef.current?.isDirty?.()) await templatesRef.current.saveDraft();
+      } catch (err) {
+        logger.warn('SettingsModal', 'שמירת טיוטת התבנית נכשלה', err);
+      }
+      onClose?.();
+    } else {
+      await handleSave(); // flushes the template draft + persists settings + closes on success
+    }
+  };
+
+  // Portal for the unsaved-changes confirm dialog — rendered above whichever
+  // Settings surface is showing (main or templatesOnly).
+  const closeConfirmPortal = showCloseConfirm ? createPortal(
+    <div
+      className={styles.confirmOverlay}
+      onClick={(e) => { if (e.target === e.currentTarget) setShowCloseConfirm(false); }}
+    >
+      <div className={styles.confirmDialog} role="dialog" aria-modal="true" aria-label="שינויים שלא נשמרו" dir="rtl">
+        <Heading type="h4">יש שינויים שלא נשמרו</Heading>
+        <Text>לשמור את השינויים לפני היציאה?</Text>
+        <Flex justify="end" gap={8} className={styles.confirmActions}>
+          <Button kind="tertiary" onClick={() => setShowCloseConfirm(false)}>המשך עריכה</Button>
+          <Button kind="secondary" onClick={() => { setShowCloseConfirm(false); onClose?.(); }}>יציאה ללא שמירה</Button>
+          <Button kind="primary" loading={saving} onClick={saveAndClose}>שמירה ויציאה</Button>
+        </Flex>
+      </div>
+    </div>,
+    document.body
+  ) : null;
 
   const handleExportJson = () => {
     const exportPayload = {
@@ -767,7 +850,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   if (templatesOnly) {
     return (
       <div className={fullOverlayClass} onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) attemptClose();
       }}>
         <div
           className={`${styles.modal} ${styles.modalFixed}`}
@@ -777,17 +860,18 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
           aria-label="ניהול תבניות"
         >
           <div className={styles.header}>
-            <button type="button" className={styles.closeButton} onClick={onClose} aria-label="סגירה">
+            <button type="button" className={styles.closeButton} onClick={attemptClose} aria-label="סגירה">
               ×
             </button>
             <Heading type="h4">ניהול תבניות</Heading>
           </div>
           <div className={styles.content}>
             <div className={styles.body}>
-              <TemplatesPanel />
+              <TemplatesPanel ref={templatesRef} />
             </div>
           </div>
         </div>
+        {closeConfirmPortal}
       </div>
     );
   }
@@ -830,7 +914,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
 
   return (
     <div className={overlayClass} onClick={(e) => {
-      if (e.target === e.currentTarget) onClose();
+      if (e.target === e.currentTarget) attemptClose();
     }}>
       <div
         className={`${styles.modal} ${fullScreen ? styles.modalExport : styles.modalSquare}`}
@@ -840,7 +924,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
         aria-label="הגדרות"
       >
         <div className={styles.header}>
-          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="סגירה">
+          <button type="button" className={styles.closeButton} onClick={attemptClose} aria-label="סגירה">
             ×
           </button>
           <Heading type="h4">הגדרות</Heading>
@@ -1252,7 +1336,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                     (TemplateManagerModal), NOT a wrapper div: the round247
                     wrapper broke the flex-height chain so the editor list could
                     not scroll. TemplatesPanel is a direct flex child again. */}
-                <TemplatesPanel onExportWide={setTemplatesExportWide} />
+                <TemplatesPanel ref={templatesRef} onExportWide={setTemplatesExportWide} />
               </TabPanel>
 
               <TabPanel className={styles.tabPanelFill}>
@@ -1312,7 +1396,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
             <Button kind={"secondary"} onClick={handleExportJson}>
               ייצוא JSON
             </Button>
-            <Button kind={"tertiary"} onClick={onClose}>ביטול</Button>
+            <Button kind={"tertiary"} onClick={attemptClose}>ביטול</Button>
             <Button kind={"primary"} loading={saving} onClick={handleSave}>שמור</Button>
           </Flex>
           {/* round191 — version badge is OWNERS ONLY (owner request). This footer only
@@ -1326,6 +1410,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
           )}
         </div>
       </div>
+      {closeConfirmPortal}
     </div>
   );
 }

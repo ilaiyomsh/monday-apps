@@ -27,6 +27,7 @@ import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/component
 import { EmptyState } from '@generated/components/EmptyState';
 import { UpdatesTripleBox } from './UpdatesTripleBox.jsx';
 import { computeRibbonDropTarget } from './ribbonDrop.js';
+import { assignTopicAccents, topicColorStartIndex } from './topicAccents.js';
 import { buildMentionRoster } from '@generated/utils/mention.js';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
@@ -140,14 +141,6 @@ function TopicSelectAll({ points, selectedPointIds, onToggleTopicPoints }) {
 
 const TOPIC_SKELETON_H = 44;
 
-/* 20-color monday LABEL palette (see theme-tokens.css --topic-color-1..20). */
-const TOPIC_COLOR_COUNT = 20;
-function topicColorStartIndex(id, seed = 0) {
-  const s = String(id);
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) >>> 0;
-  return (h + seed) % TOPIC_COLOR_COUNT;
-}
 
 /* One topic = a CARD (round226 stage B — approved mockup): a colored accent bar
    on the inline-start edge (the topic's PRIORITY color when set, its stable
@@ -1005,28 +998,15 @@ export function TopicsTab({
   };
   const stableDiscussionSeedRef = useRef(topicColorStartIndex(`discussion:${discussion?.id || 'default'}`));
   const topicAccentMapRef = useRef({});
+  // round295 — MORE variance between adjacent topics (owner request): the pure
+  // assignTopicAccents walks the hue wheel by a coprime STRIDE so consecutive
+  // topics land on opposite sides (was a +1-collision hash that clustered
+  // look-alike hues). The per-id map is persisted in a ref so a topic keeps its
+  // colour across re-renders.
   const getAccentByTopicId = (topics) => {
-    const seed = stableDiscussionSeedRef.current;
-    const map = topicAccentMapRef.current;
-    const liveIds = new Set(topics.map((topic) => String(topic.id)));
-    Object.keys(map).forEach((topicId) => { if (!liveIds.has(topicId)) delete map[topicId]; });
-    const used = new Set(
-      Object.values(map).map((colorVar) => Number(String(colorVar).replace('--topic-color-', '')) - 1),
-    );
-    topics.forEach((topic, idx) => {
-      const topicId = String(topic.id);
-      if (map[topicId]) return;
-      let colorIndex = topicColorStartIndex(topic.id, seed);
-      let steps = 0;
-      while (used.has(colorIndex) && steps < TOPIC_COLOR_COUNT) {
-        colorIndex = (colorIndex + 1) % TOPIC_COLOR_COUNT;
-        steps += 1;
-      }
-      if (used.has(colorIndex)) colorIndex = idx % TOPIC_COLOR_COUNT;
-      used.add(colorIndex);
-      map[topicId] = `--topic-color-${colorIndex + 1}`;
-    });
-    return map;
+    const next = assignTopicAccents(topics, stableDiscussionSeedRef.current, topicAccentMapRef.current);
+    topicAccentMapRef.current = next;
+    return next;
   };
   const accentByTopicId = getAccentByTopicId(items);
 
