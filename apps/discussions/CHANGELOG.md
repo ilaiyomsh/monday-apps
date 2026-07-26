@@ -10,6 +10,10 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.3.3 — 2026-07-26
+
+- Development version after synchronizing the production RTL preview hotfix from PR #435 back into `develop`. The correction now lives in the tested preview-pagination DOM helper; no additional production behavior is introduced by this version bump.
+
 ## 2.3.2 — 2026-07-26
 
 - round297: **תיקון RTL בתצוגת הייצוא, בר טעינה + הודעת הצלחה בהפקה, וזירוז יצירת דיון.**
@@ -36,6 +40,8 @@
      LTR (הקובץ עצמו תמיד היה תקין). לאחר הרינדור נכפה עכשיו `direction: rtl` על
      פסקאות הגוף — כך התצוגה המקדימה תמיד מימין-לשמאל ותואמת לקובץ, כבר ברגע שהתוכן
      נטען. (רק התצוגה המקדימה טופלה; הקובץ לא נגע.)
+
+- Production hotfix sync (#435): יישור ה־RTL של רקע, התייחסויות וסיכום הועבר לעזר DOM בדיקתי; יישור מפורש כמו כותרת ממורכזת נשמר.
 
 ## 2.3.1 — 2026-07-23
 

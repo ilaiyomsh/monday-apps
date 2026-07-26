@@ -3,6 +3,7 @@ import { zipSync, strToU8 } from 'fflate';
 import {
   extractTemplateAnchors,
   extractTemplateTabParagraphs,
+  forceRtlRenderedBody,
   patchPageNumbers,
 } from '../previewPagination.js';
 
@@ -49,6 +50,44 @@ function makeTemplateZip() {
     'word/footer1.xml': strToU8(FOOTER_XML),
   });
 }
+
+describe('forceRtlRenderedBody', () => {
+  it('right-aligns the Hebrew background, references, and summary preview text', () => {
+    const stage = document.createElement('div');
+    stage.innerHTML = `
+      <section class="docx">
+        <article>
+          <p data-box="background">רקע לדיון</p>
+          <p data-box="references">התייחסויות המשתתפים</p>
+          <p data-box="summary">סיכום הדיון</p>
+        </article>
+      </section>
+    `;
+
+    forceRtlRenderedBody(stage);
+
+    for (const box of ['background', 'references', 'summary']) {
+      const paragraph = stage.querySelector(`[data-box="${box}"]`);
+      expect(paragraph.style.direction).toBe('rtl');
+      expect(paragraph.style.textAlign).toBe('right');
+    }
+  });
+
+  it('preserves explicit alignment from the rendered document', () => {
+    const stage = document.createElement('div');
+    stage.innerHTML = `
+      <section class="docx">
+        <article><h1 style="text-align: center">כותרת הדיון</h1></article>
+      </section>
+    `;
+
+    forceRtlRenderedBody(stage);
+
+    const title = stage.querySelector('h1');
+    expect(title.style.direction).toBe('rtl');
+    expect(title.style.textAlign).toBe('center');
+  });
+});
 
 describe('extractTemplateAnchors', () => {
   it('reads a floating anchor: EMU extent → px, page-relative center/offset, behindDoc', () => {
