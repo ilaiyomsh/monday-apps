@@ -2,7 +2,7 @@
 # verify-pipeline.sh — read-only health check of the monorepo pipeline wiring.
 # Never prints secret values (names only). Exits nonzero if any FAIL.
 #
-# Usage: verify-pipeline.sh [--repo owner/name] [--dir path] [--app <name> --id <monday app id>]
+# Usage: verify-pipeline.sh [--repo owner/name] [--dir path] [--app <name> --id <monday app id>] [--local-only]
 set -uo pipefail
 
 REPO="ilaiyomsh/monday-apps"
@@ -11,7 +11,7 @@ SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # Monorepo working copy: the repo this skill is checked into (the skill lives at
 # <repo-root>/.claude/skills/monday-cicd). Override with --dir.
 DIR="$(git -C "$SKILL_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "$SKILL_DIR/../../.." && pwd))"
-APP=""; APP_MONDAY_ID=""
+APP=""; APP_MONDAY_ID=""; LOCAL_ONLY=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -19,6 +19,7 @@ while [[ $# -gt 0 ]]; do
     --dir) DIR="$2"; shift 2 ;;
     --app) APP="$2"; shift 2 ;;
     --id) APP_MONDAY_ID="$2"; shift 2 ;;
+    --local-only) LOCAL_ONLY=1; shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -29,7 +30,7 @@ warn() { echo "WARN  $1"; [[ -n "${2:-}" ]] && echo "      fix: $2"; }
 fail() { echo "FAIL  $1"; [[ -n "${2:-}" ]] && echo "      fix: $2"; FAILS=$((FAILS+1)); }
 
 # ---- 1. Local monorepo ----------------------------------------------------------
-if [[ -d "$DIR/.git" && -f "$DIR/pnpm-workspace.yaml" && -f "$DIR/.github/workflows/ci.yml" ]]; then
+if git -C "$DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1 && [[ -f "$DIR/pnpm-workspace.yaml" && -f "$DIR/.github/workflows/ci.yml" ]]; then
   pass "local monorepo at $DIR (git + workspace + ci.yml)"
 else
   fail "no monorepo found at $DIR" "run bootstrap-monorepo.sh (Mode 1)"
@@ -37,7 +38,9 @@ else
 fi
 
 # ---- 2. Remote + branches --------------------------------------------------------
-if gh repo view "$REPO" >/dev/null 2>&1; then
+if [[ $LOCAL_ONLY -eq 1 ]]; then
+  warn "--local-only: remote repository and branch checks skipped"
+elif gh repo view "$REPO" >/dev/null 2>&1; then
   pass "remote $REPO exists"
   for b in main develop; do
     if gh api "repos/$REPO/branches/$b" --jq .name >/dev/null 2>&1; then
@@ -59,6 +62,9 @@ else
 fi
 
 # ---- 3. Branch protection ----------------------------------------------------------
+if [[ $LOCAL_ONLY -eq 1 ]]; then
+  warn "--local-only: branch protection check skipped"
+else
 PROT=$(gh api "repos/$REPO/branches/main/protection" 2>&1)
 if grep -q '"required_pull_request_reviews"' <<<"$PROT"; then
   pass "main branch protection present (PR reviews required)"
@@ -69,8 +75,12 @@ else
   warn "main branch protection missing/unreadable (403/404 = free plan + private repo?)" \
        "set in GitHub Settings -> Branches, or bootstrap-monorepo.sh --set-protection"
 fi
+fi
 
 # ---- 4. Secrets (names only) ---------------------------------------------------------
+if [[ $LOCAL_ONLY -eq 1 ]]; then
+  warn "--local-only: GitHub secret-name checks skipped"
+else
 SECRETS=$(gh secret list --repo "$REPO" 2>/dev/null | awk '{print $1}')
 grep -qx "MONDAY_TOKEN" <<<"$SECRETS" \
   && pass "secret MONDAY_TOKEN present" \
@@ -83,6 +93,7 @@ for appdir in "$DIR"/apps/*/; do
     && pass "secret $s present (app: $a)" \
     || fail "secret $s missing (app: $a)" "gh secret set $s --repo $REPO --body <APP_ID>"
 done
+fi
 
 # ---- 5. Per-app workflows --------------------------------------------------------------
 check_app_workflows() {
@@ -125,12 +136,16 @@ else
 fi
 
 # ---- 6. Release freeze -------------------------------------------------------------------
+if [[ $LOCAL_ONLY -eq 1 ]]; then
+  warn "--local-only: release-freeze check skipped"
+else
 RELEASE_PR=$(gh pr list --repo "$REPO" --base main --state open --json number,headRefName --jq '.[0].number' 2>/dev/null)
 if [[ -n "$RELEASE_PR" ]]; then
   warn "RELEASE FREEZE ACTIVE: PR #$RELEASE_PR into main is open" \
        "do NOT merge anything into develop until PR #$RELEASE_PR is merged/closed"
 else
   pass "no open release PR — merges into develop are allowed"
+fi
 fi
 
 # ---- 7. monday versions (optional) ----------------------------------------------------------
@@ -154,7 +169,7 @@ if [[ -n "$APP_MONDAY_ID" ]] && command -v mapps >/dev/null 2>&1; then
 fi
 
 # ---- 8. Last workflow runs --------------------------------------------------------------------
-if [[ -n "$APP" ]]; then
+if [[ -n "$APP" && $LOCAL_ONLY -eq 0 ]]; then
   for wf in "deploy-draft-$APP.yml" "deploy-live-$APP.yml"; do
     LAST=$(gh run list --repo "$REPO" --workflow "$wf" -L 1 --json conclusion,updatedAt --jq '.[0] | "\(.conclusion) (\(.updatedAt))"' 2>/dev/null)
     [[ -n "$LAST" && "$LAST" != "null"* ]] && echo "INFO  last $wf run: $LAST" || echo "INFO  $wf has no runs yet"

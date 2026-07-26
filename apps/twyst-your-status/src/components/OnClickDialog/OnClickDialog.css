@@ -1,0 +1,160 @@
+.status-guard-dialog {
+  display: grid;
+  gap: 20px;
+  inline-size: min(100%, 460px);
+  margin-inline: auto;
+  color: var(--primary-text-color, #323338);
+}
+
+.status-guard-header,
+.current-status-row,
+.status-option,
+.status-option-name {
+  display: flex;
+  align-items: center;
+}
+
+.status-guard-header {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.status-guard-header h1,
+.status-guard-dialog h2 {
+  margin: 0;
+}
+
+.status-guard-header h1 {
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.status-guard-dialog h2 {
+  margin-block-end: 10px;
+  font-size: 15px;
+}
+
+.status-guard-eyebrow,
+.section-label {
+  margin: 0 0 4px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.settings-button,
+.guard-settings-actions button {
+  min-block-size: 36px;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 8px;
+  padding-inline: 14px;
+  background: var(--primary-background-color, #fff);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-button:hover,
+.guard-settings-actions button:hover,
+.status-option:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f6f7fb);
+}
+
+.current-status {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 12px;
+  padding: 14px;
+  background: var(--secondary-background-color, #f6f7fb);
+}
+
+.current-status-row {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 30px;
+  border-radius: 999px;
+  padding-inline: 12px;
+  background: var(--status-color);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.automation-only-badge {
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: #e5f4ff;
+  color: #0b66a8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.restricted-explanation,
+.view-only-note,
+.empty-options,
+.empty-current-status {
+  color: var(--secondary-text-color, #676879);
+  font-size: 13px;
+}
+
+.restricted-explanation {
+  margin: 10px 0 0;
+  line-height: 1.5;
+}
+
+.status-options {
+  display: grid;
+  gap: 6px;
+}
+
+.status-option {
+  justify-content: space-between;
+  gap: 12px;
+  inline-size: 100%;
+  min-block-size: 44px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.status-option.is-selected {
+  border-color: var(--primary-color, #0073ea);
+  background: var(--primary-selected-color, #eaf4ff);
+}
+
+.status-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.status-option-name {
+  gap: 10px;
+}
+
+.status-dot {
+  inline-size: 14px;
+  block-size: 14px;
+  flex: 0 0 14px;
+  border-radius: 4px;
+  background: var(--status-color);
+}
+
+.status-option-state {
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+}
+
+.view-only-note {
+  margin: 0;
+  border-inline-start: 3px solid #fdab3d;
+  padding-inline-start: 10px;
+}

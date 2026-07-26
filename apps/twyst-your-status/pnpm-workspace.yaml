@@ -1,0 +1,4 @@
+allowBuilds:
+  '@mondaycom/apps-cli': true
+  esbuild: true
+  postinstall-postinstall: true

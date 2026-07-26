@@ -3,3 +3,9 @@ packages:
   - "packages/*"
   - "apps/axis/*"
   - "apps/axis/services/*"
+
+allowBuilds:
+  '@mondaycom/apps-cli': true
+  '@parcel/watcher': true
+  esbuild: true
+  postinstall-postinstall: true

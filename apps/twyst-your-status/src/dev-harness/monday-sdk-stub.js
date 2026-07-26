@@ -7,25 +7,25 @@
 //
 // Drop-in replacement for `monday-sdk-js` when the app runs OUTSIDE the monday
 // iframe (local dev, vitest, worktrees). Aliased in vite.config.js when
-// VITE_MONDAY_MOCK is set — see README.md in this folder.
+// VITE_MONDAY_MOCK is set ג€” see README.md in this folder.
 //
 // Covered surface: get / listen / execute / api / storage (instance + global) /
 // set / setToken / setApiVersion. Response ENVELOPES match the real SDK:
-//   get(...)                → { data: ... }
-//   api(...)                → { data: ..., account_id }  (or { errors: [...] })
-//   storage.*.getItem(...)  → { data: { success, value, version } }
+//   get(...)                ג†’ { data: ... }
+//   api(...)                ג†’ { data: ..., account_id }  (or { errors: [...] })
+//   storage.*.getItem(...)  ג†’ { data: { success, value, version } }
 //
 // Failure toggles (harness.failures):
-//   storageFalseEmptyFirstRead — the FIRST getItem per key returns
+//   storageFalseEmptyFirstRead ג€” the FIRST getItem per key returns
 //       success:true + value:null even when the key is seeded, reproducing the
 //       monday.storage false-empty race that shipped a blank onboarding screen
 //       to configured instances (Axis-Planner). Any settings-loading code MUST
 //       survive this read.
-//   apiErrorNext   — next api() resolves with { errors: [...] } (GraphQL
-//       soft-error: the promise RESOLVES, it does not reject — same as live).
-//   apiRejectNext  — next api() rejects (network/hard error).
-//   storageErrorNext — next storage op resolves { data: { success:false } }.
-//   latencyMs      — async latency added to every call (default 30).
+//   apiErrorNext   ג€” next api() resolves with { errors: [...] } (GraphQL
+//       soft-error: the promise RESOLVES, it does not reject ג€” same as live).
+//   apiRejectNext  ג€” next api() rejects (network/hard error).
+//   storageErrorNext ג€” next storage op resolves { data: { success:false } }.
+//   latencyMs      ג€” async latency added to every call (default 30).
 
 import { CONTEXTS, THEMES, ROLES, API_FIXTURES, DEFAULT_SETTINGS, USERS } from './fixtures.js';
 
@@ -42,6 +42,12 @@ function createHarness() {
   const storageMap = new Map(); // key -> string value
   const storageVersions = new Map(); // key -> version counter
   const firstReadDone = new Set(); // keys already read once (for the race toggle)
+
+  const seedAppDefaults = () => {
+    const key = 'global:status-guard:v1:1234567890:status';
+    storageMap.set(key, JSON.stringify({ version: 1, restrictedLabelIds: ['1'] }));
+    storageVersions.set(key, 1);
+  };
 
   const state = {
     context: clone(CONTEXTS[FEATURE_TYPE] || CONTEXTS.board_view),
@@ -115,6 +121,7 @@ function createHarness() {
       });
       state.context = clone(CONTEXTS[FEATURE_TYPE] || CONTEXTS.board_view);
       state.settings = clone(DEFAULT_SETTINGS);
+      seedAppDefaults();
     },
 
     _listeners: listeners,
@@ -122,6 +129,7 @@ function createHarness() {
     _storageVersions: storageVersions,
     _firstReadDone: firstReadDone,
   };
+  seedAppDefaults();
   return harness;
 }
 
@@ -243,7 +251,7 @@ function createClient() {
       }
       const handler = resolveApi(String(query));
       if (!handler) {
-        return { errors: [{ message: `dev-harness: no fixture matches this query — add one via harness.apiHandlers.push({ match, data }). Query was: ${String(query).slice(0, 120)}` }] };
+        return { errors: [{ message: `dev-harness: no fixture matches this query ג€” add one via harness.apiHandlers.push({ match, data }). Query was: ${String(query).slice(0, 120)}` }] };
       }
       if (handler.errors) return { errors: clone(handler.errors) };
       const data = typeof handler.fn === 'function' ? handler.fn(query, options.variables) : handler.data;
@@ -273,3 +281,4 @@ export default function mondaySdk() {
 }
 
 export { USERS };
+

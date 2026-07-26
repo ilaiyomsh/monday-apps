@@ -54,3 +54,27 @@ differs (lockfile drift + pnpm hoisting) and can break what passes locally.
 Related: lockfile drift silently resolved `@vibe/core` ^4.2.5 → 4.5.2 and
 `@tiptap/*` ^3.26.0 → 3.27.3, breaking render smoke tests — pinned exact
 tested versions in the app's package.json as the remedy.
+
+## 2026-07-27 — onboarding depended on the blocked Windows python3 alias
+
+`onboard-app.sh` used three inline Python programs for package normalization,
+dist detection, and workflow generation. On Windows Git Bash, `python3` resolved
+to the non-executable WindowsApps alias. These steps now use Node.js, which is
+already a hard dependency of every pnpm app in this monorepo. The same update
+also added worktree detection and a `--no-push` mode for gated local onboarding.
+The same Windows preflight found that Git for Windows ships without `rsync`, so
+source copying now uses Node's recursive copy API with the original exclusions
+and an explicit guard that the replacement target remains under `apps/`.
+When GitHub CLI authentication is unavailable, `--no-secret` now lets the local
+copy/build/commit finish while printing the exact secret that must be set before
+merge; it does not silently pretend pipeline wiring is complete.
+`verify-pipeline.sh --local-only` now performs the corresponding local wiring
+and monday-version checks while explicitly warning which GitHub checks were
+skipped; worktree detection uses `git rev-parse` instead of requiring `.git` to
+be a directory.
+
+The current pnpm also requires a root `allowBuilds` policy. The monorepo now
+allows only the installed toolchain packages whose scripts are required:
+`@mondaycom/apps-cli`, `@parcel/watcher`, `esbuild`, and
+`postinstall-postinstall`. Without this root policy, onboarding aborted after an
+otherwise successful install with `ERR_PNPM_IGNORED_BUILDS`.
