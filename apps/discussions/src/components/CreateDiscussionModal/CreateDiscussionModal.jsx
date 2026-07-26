@@ -1026,7 +1026,16 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                       placeholder={externalParticipants.length ? 'שם נוסף…' : 'שם מלא… (Enter להוספה)'}
                       onChange={(e) => setExternalDraft(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && externalDraft.trim()) {
+                        // round296 — Enter here ADDS a chip; it must NOT bubble to the
+                        // modal-level onFormKeyDown (which would submit/create the
+                        // discussion). preventDefault alone doesn't stop bubbling, so a
+                        // single Enter both added a name AND created the discussion —
+                        // aborting further additions and dropping the just-typed name.
+                        // stopPropagation on EVERY Enter keeps this field submit-inert;
+                        // only clicking "צור דיון" creates. (owner-reported)
+                        if (e.key !== 'Enter' || e.shiftKey) return;
+                        e.stopPropagation();
+                        if (externalDraft.trim()) {
                           e.preventDefault();
                           setExternalParticipants((list) => [...list, externalDraft.trim()]);
                           setExternalDraft('');

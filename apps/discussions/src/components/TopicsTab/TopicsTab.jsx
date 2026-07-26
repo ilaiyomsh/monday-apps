@@ -32,7 +32,8 @@ import { buildMentionRoster } from '@generated/utils/mention.js';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
 import { getPointItemIds } from '@generated/utils/pointItems.js';
-import { loadLayout, saveLayout, DEFAULT_LAYOUT, ratioFromDrag, heightFromDrag } from '@generated/utils/discussionLayout.js';
+import { loadLayout, saveLayout, DEFAULT_LAYOUT, ratioFromDrag, heightFromDrag, clampRatio } from '@generated/utils/discussionLayout.js';
+import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import logger from '@generated/utils/logger.js';
 import styles from './TopicsTab.module.css';
 
@@ -806,7 +807,14 @@ export function TopicsTab({
   // editLayout reveals the 6-dot grips + the resize divider on BOTH boxes at
   // once (owner request: one pencil arms both). Everyone READS the saved layout;
   // only an owner (canManageSettings) persists changes.
-  const [layout, setLayout] = useState(DEFAULT_LAYOUT);
+  // round296 — the per-instance DEFAULT split (agenda's share) an unsaved
+  // discussion opens at; a per-discussion drag override still wins (loadLayout).
+  const { settings } = useSettings();
+  const defaultLayoutRatio = settings?.preferences?.defaultLayoutRatio;
+  const [layout, setLayout] = useState(() => ({
+    ...DEFAULT_LAYOUT,
+    ratio: clampRatio(defaultLayoutRatio != null ? defaultLayoutRatio : DEFAULT_LAYOUT.ratio),
+  }));
   const [editLayout, setEditLayout] = useState(false);
   const layoutRef = useRef(layout);
   const splitRowRef = useRef(null);
@@ -816,11 +824,11 @@ export function TopicsTab({
   useEffect(() => { layoutRef.current = layout; }, [layout]);
   useEffect(() => {
     let alive = true;
-    loadLayout(discussion?.id)
+    loadLayout(discussion?.id, defaultLayoutRatio)
       .then((l) => { if (alive) setLayout(l); })
       .catch((err) => logger.warn('TopicsTab', 'טעינת פריסת הדיון נכשלה', err));
     return () => { alive = false; };
-  }, [discussion?.id]);
+  }, [discussion?.id, defaultLayoutRatio]);
   // A non-owner never edits; if the gate flips off mid-session, drop edit mode.
   useEffect(() => { if (!canManageSettings) setEditLayout(false); }, [canManageSettings]);
 

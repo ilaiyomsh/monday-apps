@@ -128,6 +128,22 @@ function canRunLivePreview() {
  * discussion instead of the built-in sample. `modelKey` identifies it in the
  * rebuild signature (the model object is stable per dialog mount).
  */
+// round296 — deterministic RTL parity for the LIVE preview. The generated .docx
+// marks EVERY body paragraph bidirectional (w:bidi) + section-level bidi, so Word
+// / Google Docs render the boxes (רקע/התייחסויות/סיכום) right-to-left. docx-preview
+// maps w:bidi → direction:rtl too, but INTERMITTENTLY a paragraph came out LTR in
+// the on-screen preview (owner-reported; the downloaded file was always correct).
+// Force `direction: rtl` inline on the rendered body blocks AFTER render so the
+// preview matches the docx deterministically — the moment content swaps in it is
+// already in its right-to-left form. We only touch direction (not text-align), so
+// an explicit center/left a user chose is preserved, exactly like Word.
+function forceRtlRenderedBody(root) {
+  if (!root || typeof root.querySelectorAll !== 'function') return;
+  root.querySelectorAll('.docx p, .docx li, .docx h1, .docx h2, .docx h3, .docx h4, .docx h5, .docx h6').forEach((el) => {
+    if (el.style.direction !== 'rtl') el.style.direction = 'rtl';
+  });
+}
+
 export default function ExportPreview({ template, assets, model = null, modelKey = null }) {
   const fontCss = (EXPORT_FONTS[template?.font] || EXPORT_FONTS[DEFAULT_EXPORT_FONT]).css;
   const isConfig = (template?.headerMode || EXPORT_HEADER_MODES.CONFIG) !== EXPORT_HEADER_MODES.UPLOAD;
@@ -281,6 +297,9 @@ export default function ExportPreview({ template, assets, model = null, modelKey
           // body content overlap the footer. Wait for real image geometry.
           await waitForImages(stage);
           if (cancelled || seq !== seqRef.current) return;
+          // round296 — force RTL on the rendered body BEFORE measuring/paginating,
+          // so the swapped-in preview is always right-to-left (matches the .docx).
+          forceRtlRenderedBody(stage);
           // round202 — put the template's floating header/footer art where the
           // file actually anchors it (page-frame absolute, real extent) and lay
           // out its tab-stop paragraphs RTL-correctly — the "not centered"
