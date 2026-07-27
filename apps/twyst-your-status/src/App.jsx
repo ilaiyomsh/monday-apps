@@ -4,16 +4,19 @@ import OnClickDialog from './components/OnClickDialog/OnClickDialog';
 import LoadingState from './components/shared/LoadingState';
 import ErrorState from './components/shared/ErrorState';
 
-// Settings opens rarely; keep it off the picker's critical path.
+// Settings surfaces open rarely; keep them off the picker's critical path.
+const SettingsLauncher = lazy(() => import('./components/ColumnSettings/SettingsLauncher'));
 const ColumnSettings = lazy(() => import('./components/ColumnSettings/ColumnSettings'));
 
 /**
  * Resolve the active surface from the URL pathname.
- * Feature URLs in monday are configured as …/picker and …/settings.
+ * Feature URLs in monday: …/picker (on-click), …/settings (tiny shell).
+ * Full editor lives at …/settings-full and is opened via openAppFeatureModal.
  */
 export function resolveAppRoute(pathname = window.location.pathname) {
   const normalized = String(pathname || '').replace(/\/+$/, '') || '/';
   if (normalized.endsWith('/picker') || normalized === '/picker') return 'picker';
+  if (normalized.endsWith('/settings-full') || normalized === '/settings-full') return 'settings-full';
   if (normalized.endsWith('/settings') || normalized === '/settings') return 'settings';
   return null;
 }
@@ -38,8 +41,13 @@ function App() {
     <div className={`app-shell ${themeClass}`} dir={dir}>
       {route === 'picker' && <OnClickDialog context={context} />}
       {route === 'settings' && (
+        <Suspense fallback={<LoadingState message="טוען…" />}>
+          <SettingsLauncher />
+        </Suspense>
+      )}
+      {route === 'settings-full' && (
         <Suspense fallback={<LoadingState message="טוען הגדרות…" />}>
-          <ColumnSettings context={context} />
+          <ColumnSettings context={context} variant="overlay" />
         </Suspense>
       )}
       {route === null && (

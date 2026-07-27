@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.1.1
+
+- Column settings shell is now a single button that opens a full-size nested
+  overlay (`openAppFeatureModal` → `/settings-full`) for label editing and
+  permissions — the native settings iframe stays minimal.
+
 ## 3.1.0
 
 - Default when no settings are saved: **all active statuses are allowed** (removed the

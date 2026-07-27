@@ -143,7 +143,8 @@ function LabelRuleCard({
   );
 }
 
-function ColumnSettings({ context }) {
+function ColumnSettings({ context, variant = 'overlay' }) {
+  const isOverlay = variant === 'overlay';
   const boardId = context?.boardId;
   const columnId = context?.columnId;
   const {
@@ -278,6 +279,19 @@ function ColumnSettings({ context }) {
     setLabelsDraft((current) => [...current, createBlankLabelDraft(current)]);
   };
 
+  const dismiss = async ({ saved = false } = {}) => {
+    try {
+      if (isOverlay) {
+        await mondayService.closeAppFeatureModal();
+      }
+      if (saved || !isOverlay) {
+        await mondayService.closeDialog();
+      }
+    } catch (err) {
+      logger.error('ColumnSettings', 'Failed to close settings surface', err);
+    }
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
@@ -344,7 +358,7 @@ function ColumnSettings({ context }) {
       }
       await mondayService.setColumnConfig(boardId, columnId, next);
       mondayService.showNotice('ההגדרות נשמרו');
-      mondayService.closeDialog();
+      await dismiss({ saved: true });
     } catch (err) {
       logger.error('ColumnSettings', 'Failed to save column settings', err);
       const message = err?.message || '';
@@ -376,7 +390,7 @@ function ColumnSettings({ context }) {
   const ruleLabels = labelsDraft.filter((label) => !label.isNew);
 
   return (
-    <main className="twyst-settings" dir="rtl">
+    <main className={`twyst-settings${isOverlay ? ' is-overlay' : ''}`} dir="rtl">
       <header>
         <p className="twyst-eyebrow">Twyst Your Status</p>
         <h1>הגדרות לייבלים</h1>
@@ -433,7 +447,7 @@ function ColumnSettings({ context }) {
         <button type="button" className="primary-action" disabled={saving} onClick={handleSave}>
           {saving ? 'שומר…' : 'שמירה'}
         </button>
-        <button type="button" disabled={saving} onClick={() => mondayService.closeDialog()}>
+        <button type="button" disabled={saving} onClick={() => dismiss()}>
           ביטול
         </button>
       </div>

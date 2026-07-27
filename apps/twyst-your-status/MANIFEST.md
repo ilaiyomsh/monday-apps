@@ -8,7 +8,9 @@
 - Client-only CDN app (no monday-code server)
 - Feature URLs (configure on the draft/live version):
   - On-click dialog: `<CDN_ORIGIN>/picker`
-  - Column settings: `<CDN_ORIGIN>/settings`
+  - Column settings (tiny shell): `<CDN_ORIGIN>/settings`
+  - Full settings overlay (opened from the shell via `openAppFeatureModal`):
+    `<CDN_ORIGIN>/settings-full`
 
 ## Product rules
 
