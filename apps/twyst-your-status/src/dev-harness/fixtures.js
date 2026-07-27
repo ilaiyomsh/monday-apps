@@ -132,11 +132,22 @@ export const API_FIXTURES = [
           { id: 'date4', title: 'תאריך', type: 'date', settings: {} },
         ],
       }],
-      users: USERS.map((user) => ({ ...user, teams: [{ id: '7' }] })),
+      users: USERS,
+    },
+  },
+  {
+    match: 'GetAccountTeams',
+    data: {
       teams: [
         { id: '7', name: 'צוות דמו' },
         { id: '8', name: 'צוות שני' },
       ],
+    },
+  },
+  {
+    match: 'GetUserTeamIds',
+    data: {
+      users: [{ id: '11111111', teams: [{ id: '7' }] }],
     },
   },
   {
@@ -185,7 +196,6 @@ export const API_FIXTURES = [
           ],
         },
       ],
-      users: [{ id: '11111111', name: 'ידידיה כהן', teams: [{ id: '7' }] }],
     },
   },
   {

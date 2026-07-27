@@ -5,12 +5,16 @@ import { isSupportedFormColumnType } from '../../domain/columnValueFormats';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';
 import { GET_BOARD_SETTINGS_METADATA } from '../../services/graphqlQueries';
 import mondayService from '../../services/mondayService';
+import { loadAccountTeams } from '../../services/teamsAccess';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
 import { VERSION_LABEL } from '../../utils/versionLabel';
 import ErrorState from '../shared/ErrorState';
 import LoadingState from '../shared/LoadingState';
 import './ColumnSettings.css';
+
+const TEAMS_SCOPE_HINT =
+  'חסר הסקופ teams:read בגרסת האפליקציה — בחירת צוותים לא זמינה. הוסיפו teams:read בהרשאות הגרסה והתקינו מחדש / אשרו הרשאות.';
 
 function multiValues(event) {
   return [...event.target.selectedOptions].map((option) => option.value);
@@ -22,6 +26,7 @@ function LabelRuleCard({
   rule,
   users,
   teams,
+  teamsAvailable,
   columns,
   onToggleHidden,
   onChangeRule,
@@ -56,6 +61,7 @@ function LabelRuleCard({
           <select
             multiple
             value={rule.allowedTeamIds}
+            disabled={!teamsAvailable}
             onChange={(event) => onChangeRule(label.id, { allowedTeamIds: multiValues(event) })}
           >
             {teams.map((team) => (
@@ -106,15 +112,19 @@ function ColumnSettings({ context }) {
     try {
       setMetaLoading(true);
       setMetaError(null);
-      const data = await mondayService.query(GET_BOARD_SETTINGS_METADATA, {
-        boardIds: [String(boardId)],
-      });
+      const [data, teamsResult] = await Promise.all([
+        mondayService.query(GET_BOARD_SETTINGS_METADATA, {
+          boardIds: [String(boardId)],
+        }),
+        loadAccountTeams(),
+      ]);
       const board = data?.boards?.[0];
       if (!board) throw new Error('הלוח לא נמצא');
       setMetadata({
         columns: board.columns ?? [],
         users: data.users ?? [],
-        teams: data.teams ?? [],
+        teams: teamsResult.teams,
+        teamsAvailable: teamsResult.teamsAvailable,
       });
     } catch (err) {
       logger.error('ColumnSettings', 'Failed to load board metadata', err);
@@ -237,6 +247,10 @@ function ColumnSettings({ context }) {
         <p>לכל לייבל יעד: מי מורשה לבחור אותו, ואילו שדות חובה למלא לפני המעבר.</p>
       </header>
 
+      {!metadata.teamsAvailable && (
+        <AttentionBox type="warning" text={TEAMS_SCOPE_HINT} />
+      )}
+
       {labels.map((label) => (
         <LabelRuleCard
           key={label.id}
@@ -245,6 +259,7 @@ function ColumnSettings({ context }) {
           rule={getRule(label.id)}
           users={metadata.users}
           teams={metadata.teams}
+          teamsAvailable={metadata.teamsAvailable}
           columns={formColumns}
           onToggleHidden={toggleHidden}
           onChangeRule={changeRule}
