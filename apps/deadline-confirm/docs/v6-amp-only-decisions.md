@@ -100,7 +100,7 @@ slot. Selective resend is out of scope for this round.
 
 ### D9 — Email redesign: multi-button table, one global submit. **IMPLEMENTED
 (T15 → LabelPicker 0.8.3–0.8.4 → cluster tables + multi-button 0.9.0 →
-`<select>` 0.9.1 → styled LabelPicker radios 0.9.2).**
+`<select>` 0.9.1 → amp-bind colored dropdown 0.9.2).**
 
 Owner briefs:
 - (2026-07-27) one table + **one** approve button — not one form per section.
@@ -115,15 +115,17 @@ Owner briefs:
   clusters shares `name="item_<id>"`.
 - (2026-07-27) **tried native `<select>` (0.9.1):** closed control can be styled;
   OS popup cannot — rejected for monday-parity UX.
-- (2026-07-27) **styled LabelPicker (0.9.2):** inlined colored radio options
-  (`.picker` / `.opt-fill`) inside the cluster **סטטוס חדש** cell — monday
-  status-picker look. Unchecked = no change. Wire unchanged.
+- (2026-07-27) **tried always-open LabelPicker radios:** colored but not a
+  dropdown (options always visible) — rejected.
+- (2026-07-27) **amp-bind dropdown (0.9.2):** closed colored trigger; tap opens
+  popup of colored options; overlay closes; wire via hidden `[value]` binding.
+  Same item across clusters shares one state key + one hidden field.
 
 Behaviour:
-- One AMP form. Populated sections → separate tables (title + date + LabelPicker).
+- One AMP form. Populated sections → separate tables (title + date + dropdown).
 - Options = section `buttonIds` (fallback `[buttonId]`). Wire `item_<id>=btnId`.
 - **One global submit** (`אשר את המסומנות`) applies every chosen status.
-- Tasks with no radio selected are unchanged.
+- Tasks left on "ללא שינוי" / empty value are unchanged.
 
 Admin: multi-select "כפתורי פעולה"; primary (first) drives status filter column.
 

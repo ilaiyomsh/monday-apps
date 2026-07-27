@@ -1,16 +1,14 @@
 // V6 amp4email digest renderer (docs/v6-amp-only-decisions.md §3, §5, D9).
 //
 // Layout (owner 2026-07-27): ONE table per populated cluster (מקבץ).
-// Columns: name | that cluster's date | styled LabelPicker (colored radio
-// options) — AMP for Email cannot style the native <select> popup, so the
-// monday-like picker is inlined in the cell (status-picker-wrapper-v2 parity).
-// Multiple buttons per cluster via section.buttonIds / section.buttons
-// (fallback: singular buttonId / button). ONE global submit.
+// Columns: name | that cluster's date | amp-bind dropdown (monday-colored
+// trigger + popup options). Native <select> popup cannot be styled; always-open
+// radio stacks are not a dropdown. Wire via hidden input [value] binding.
 //
 // Wire format unchanged:
 //   hidden: a, p, m, s, sig
-//   selection: radio name="item_<itemId>" value="<btnId>" (unchecked = no change)
-// Same item across clusters shares the same radio name.
+//   selection: <input type="hidden" name="item_<itemId>" [value]=btnId> ("" = no change)
+// Same item across clusters shares one state key + one hidden field.
 
 import { escapeHtml } from './html.js';
 import { buildManifest, signManifest, currentSlot } from '../services/manifest-signature.js';
@@ -20,6 +18,7 @@ const DEFAULT_SEND_HOUR = 8;
 const SUBMIT_LABEL = 'אשר את המסומנות';
 const SUBMIT_COLOR = '#0073ea';
 const NEUTRAL_STATUS = '#c4c4c4';
+const TRIGGER_PLACEHOLDER = 'בחרו סטטוס';
 
 /** YYYY-MM-DD → DD/MM/YYYY (unset → ''). */
 function formatDate(date) {
@@ -27,6 +26,17 @@ function formatDate(date) {
   const [y, m, d] = date.split('-');
   if (!y || !m || !d) return escapeHtml(date);
   return `${d}/${m}/${y}`;
+}
+
+/**
+ * Escape a string for use inside a single-quoted amp-bind / setState literal.
+ * @param {string} raw
+ */
+function escapeBindStr(raw) {
+  return String(raw)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, ' ');
 }
 
 /**
@@ -79,6 +89,41 @@ export function resolveSectionButtons(section) {
   return out;
 }
 
+/**
+ * Collect unique item ids (string) across populated sections — for amp-state.
+ * @param {object} recipient
+ * @returns {string[]}
+ */
+function collectItemIds(recipient) {
+  const ids = [];
+  const seen = new Set();
+  for (const section of recipient.sections ?? []) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    for (const task of section.tasks) {
+      const id = String(task.itemId);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Initial amp-state for all dropdowns in the message.
+ * @param {string[]} itemIds
+ */
+function buildDropdownState(itemIds) {
+  /** @type {Record<string, string>} */
+  const state = { o: '' };
+  for (const id of itemIds) {
+    state[`v${id}`] = '';
+    state[`l${id}`] = TRIGGER_PLACEHOLDER;
+    state[`c${id}`] = NEUTRAL_STATUS;
+  }
+  return state;
+}
+
 const STYLES = `
       body { margin:0; padding:14px 10px; background:#F5F6F8; font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif; color:#323338; }
       .wrap { max-width:720px; margin:0 auto; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; padding:18px; }
@@ -95,25 +140,32 @@ const STYLES = `
       td:last-child { border-inline-end:none; }
       td.name { text-align:right; padding-inline-start:12px; white-space:nowrap; }
       td.date { color:#676879; font-size:13px; white-space:nowrap; }
-      /* monday status-picker-wrapper-v2 parity (~200px, 34px×14px labels). AMP-safe (no position). */
-      td.picker-cell { padding:8px; width:220px; vertical-align:top; text-align:right; }
-      .picker {
-        width:200px; max-width:200px; padding:10px; box-sizing:border-box;
-        background:#ffffff; border:1px solid #0073ea;
-        box-shadow:0 4px 16px rgba(0,0,0,0.12);
+      td.dd-cell { padding:8px; width:220px; vertical-align:middle; text-align:right; }
+      .dd-wrap { position:relative; display:inline-block; width:200px; max-width:100%; text-align:right; }
+      .dd-trig {
+        width:200px; max-width:100%; height:34px; box-sizing:border-box;
+        padding:0 12px; border:0; border-radius:4px; cursor:pointer;
+        font-size:14px; font-weight:bold; color:#ffffff; text-align:center;
+        font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
+        background:${NEUTRAL_STATUS};
+      }
+      .dd-menu {
+        position:absolute; top:100%; inset-inline-end:0; z-index:20;
+        width:200px; margin-top:4px; padding:8px; box-sizing:border-box;
+        background:#ffffff; border:1px solid #E6E9EF; border-radius:8px;
+        box-shadow:0 10px 25px rgba(0,0,0,0.15);
+      }
+      .dd-opt {
+        display:block; width:100%; box-sizing:border-box;
+        margin:0 0 4px; padding:0 12px; border:0; border-radius:4px; cursor:pointer;
+        height:34px; line-height:34px; font-size:14px; font-weight:bold; color:#ffffff; text-align:center;
         font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
       }
-      .opt { display:block; margin:0 0 6px; }
-      .opt:last-child { margin-bottom:0; }
-      .opt input { opacity:0; width:0; height:0; margin:0; padding:0; border:0; overflow:hidden; }
-      .opt-fill {
-        display:block; text-align:center; color:#ffffff;
-        font-size:14px; font-weight:normal; line-height:34px;
-        height:34px; min-height:34px; border-radius:4px; padding:0 12px;
-        border:2px solid transparent; box-sizing:border-box;
-        overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
+      .dd-opt:last-child { margin-bottom:0; }
+      .dd-overlay {
+        position:fixed; top:0; right:0; bottom:0; left:0; z-index:10;
+        background:transparent;
       }
-      .opt input:checked + .opt-fill { border-color:#0073ea; }
       .go { margin:8px 0 4px; }
       .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; }
       .ok { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#E6F7EF; color:#00754A; font-size:13px; }
@@ -122,26 +174,54 @@ const STYLES = `
 `;
 
 /**
- * Inlined monday-like LabelPicker: colored option radios (discussions statusOption).
- * Unchecked → field omitted → no change for that task.
+ * amp-bind dropdown: closed colored trigger; tap opens menu of colored options.
+ * @param {string} fieldName escaped name="item_<id>"
+ * @param {Array<{ id: string, label: string, color: string }>} buttons
+ * @param {string} itemId raw item id
+ * @param {boolean} includeHidden emit the wire hidden input once per item
  */
-function renderLabelPicker(fieldName, buttons, itemId) {
-  const options = buttons
-    .map((button) => {
-      const boxId = escapeHtml(`sel_${button.id}_${itemId}`);
-      const color = escapeHtml(button.color || NEUTRAL_STATUS);
-      return `              <label class="opt" for="${boxId}">
-                <input type="radio" name="${fieldName}" value="${escapeHtml(button.id)}" id="${boxId}">
-                <span class="opt-fill" style="background:${color}">&#8207;${escapeHtml(button.label)}</span>
-              </label>`;
-    })
-    .join('\n');
-  return `              <td class="picker-cell"><div class="picker">
+function renderLabelDropdown(fieldName, buttons, itemId, includeHidden) {
+  const id = String(itemId);
+  const idEsc = escapeHtml(id);
+  const idBind = escapeBindStr(id);
+  const vKey = `v${id}`;
+  const lKey = `l${id}`;
+  const cKey = `c${id}`;
+
+  const options = [
+    ...buttons.map((button) => {
+      const color = button.color || NEUTRAL_STATUS;
+      const label = button.label;
+      return `                <button type="button" class="dd-opt" style="background:${escapeHtml(color)}"
+                        on="tap:AMP.setState({dd:{o:'', ${vKey}:'${escapeBindStr(button.id)}', ${lKey}:'${escapeBindStr(label)}', ${cKey}:'${escapeBindStr(color)}'}})">&#8207;${escapeHtml(label)}</button>`;
+    }),
+    `                <button type="button" class="dd-opt" style="background:${NEUTRAL_STATUS}"
+                        on="tap:AMP.setState({dd:{o:'', ${vKey}:'', ${lKey}:'${escapeBindStr(TRIGGER_PLACEHOLDER)}', ${cKey}:'${NEUTRAL_STATUS}'}})">&#8207;ללא שינוי</button>`,
+  ].join('\n');
+
+  const hidden = includeHidden
+    ? `\n              <input type="hidden" name="${fieldName}" value="" [value]="dd.${vKey}">`
+    : '';
+
+  return `              <td class="dd-cell">
+              <div class="dd-wrap">
+                <button type="button" class="dd-trig" style="background:${NEUTRAL_STATUS}"
+                        [style]="'background:' + dd.${cKey}"
+                        on="tap:AMP.setState({dd:{o: dd.o == '${idBind}' ? '' : '${idBind}'}})">
+                  <span [text]="dd.${lKey}">&#8207;${escapeHtml(TRIGGER_PLACEHOLDER)}</span>
+                </button>
+                <div class="dd-menu" hidden [hidden]="dd.o != '${idBind}'">
 ${options}
-            </div></td>`;
+                </div>
+              </div>${hidden}
+            </td>`;
 }
 
-function renderClusterTable(section) {
+/**
+ * @param {object} section
+ * @param {Set<string>} emittedHidden
+ */
+function renderClusterTable(section, emittedHidden) {
   const buttons = resolveSectionButtons(section);
   if (buttons.length === 0) return '';
 
@@ -152,11 +232,14 @@ function renderClusterTable(section) {
 
   const rows = section.tasks
     .map((task) => {
-      const fieldName = escapeHtml(`item_${task.itemId}`);
+      const itemId = String(task.itemId);
+      const fieldName = escapeHtml(`item_${itemId}`);
+      const includeHidden = !emittedHidden.has(itemId);
+      if (includeHidden) emittedHidden.add(itemId);
       return `            <tr>
               <td class="name">&#8207;${escapeHtml(task.name)}</td>
               <td class="date">${formatDate(task.date) || '—'}</td>
-${renderLabelPicker(fieldName, buttons, task.itemId)}
+${renderLabelDropdown(fieldName, buttons, itemId, includeHidden)}
             </tr>`;
     })
     .join('\n');
@@ -229,9 +312,12 @@ export function renderDigestAmp({
   }
 
   const signed = buildSignedManifest({ secret, accountId, personId, recipient, sendHour, now });
+  const itemIds = collectItemIds(recipient);
+  const ddState = buildDropdownState(itemIds);
+  const emittedHidden = new Set();
   const clusters = (recipient.sections ?? [])
     .filter((section) => section.tasks && section.tasks.length > 0)
-    .map((section) => renderClusterTable(section))
+    .map((section) => renderClusterTable(section, emittedHidden))
     .filter((html) => html.length > 0)
     .join('\n');
 
@@ -241,14 +327,18 @@ export function renderDigestAmp({
     <meta charset="utf-8">
     <script async src="https://cdn.ampproject.org/v0.js"></script>
     <script async custom-element="amp-form" src="https://cdn.ampproject.org/v0/amp-form-0.1.js"></script>
+    <script async custom-element="amp-bind" src="https://cdn.ampproject.org/v0/amp-bind-0.1.js"></script>
     <script async custom-template="amp-mustache" src="https://cdn.ampproject.org/v0/amp-mustache-0.2.js"></script>
     <style amp4email-boilerplate>body{visibility:hidden}</style>
     <style amp-custom>${STYLES}    </style>
   </head>
   <body dir="rtl">
+    <amp-state id="dd"><script type="application/json">${JSON.stringify(ddState)}</script></amp-state>
+    <div class="dd-overlay" hidden [hidden]="dd.o == ''" role="button" tabindex="0"
+         on="tap:AMP.setState({dd:{o:''}})"></div>
     <div class="wrap">
       <p class="hi">&#8207;שלום ${escapeHtml(recipient.name)},</p>
-      <p class="lead">&#8207;בחרו סטטוס חדש לכל משימה (מודול הצבעים) ולחצו על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
+      <p class="lead">&#8207;לחצו על תגית הסטטוס לבחירה מהתפריט הנפתח, ואז על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
       <form method="post"
             action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
             enctype="application/x-www-form-urlencoded">
@@ -262,7 +352,7 @@ ${clusters}
         <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
         <div submit-error><template type="amp-mustache"><div class="err">{{message}}</div></template></div>
       </form>
-      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
+      <p class="foot">&#8207;מייל אוטומטי · משימות על "ללא שינוי" לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
     </div>
   </body>
 </html>`;

@@ -2,13 +2,12 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
-## 0.9.2 — 2026-07-27 — feat: AMP digest — monday-style LabelPicker (colored radios)
+## 0.9.2 — 2026-07-27 — feat: AMP digest — amp-bind status dropdown (monday colors)
 
-- Per-row status choice is an inlined **LabelPicker** (colored radio options,
-  monday `status-picker-wrapper-v2` look: ~200×34) — native `<select>` popup
-  cannot be styled in AMP/Gmail.
-- Cluster tables kept: name | cluster date | **סטטוס חדש** picker.
-- Wire: `item_<id>=btnId` radios (unchecked = no change).
+- Per-row status choice is a real **dropdown**: closed colored trigger → tap opens
+  a popup of monday-colored options (`amp-bind` + `AMP.setState`).
+- Not native `<select>` (OS popup unstyleable) and not an always-open radio stack.
+- Wire: hidden `item_<id>` with `[value]` bound to state (`""` = no change).
 - Playground: `docs/amp-playground-cluster-tables.html`.
 
 ## 0.9.1 — 2026-07-27 — feat: AMP digest — styled label dropdown (`<select>`)

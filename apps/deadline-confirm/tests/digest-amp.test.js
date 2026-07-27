@@ -1,7 +1,6 @@
 // AMP digest: one table per cluster (מקבץ), cluster date column,
-// styled LabelPicker (colored radio options — AMP cannot style native <select>
-// popup), one global submit.
-// Wire unchanged: a/p/m/s/sig + item_<id>=btnId (unchecked = no change).
+// amp-bind dropdown (closed colored trigger → popup options), one global submit.
+// Wire: a/p/m/s/sig + hidden name=item_<id> [value]=btnId ("" = no change).
 
 import { describe, it, expect } from 'vitest';
 import { renderDigestAmp } from '../src/helpers/digest-amp.js';
@@ -139,13 +138,17 @@ describe('renderDigestAmp — amp4email document validity', () => {
     expect(render()).toMatch(/<head>\s*<meta charset="utf-8">/);
   });
 
-  it('carries the amp4email boilerplate style and CDN scripts only', () => {
+  it('carries amp4email boilerplate, amp-form, amp-bind, and CDN scripts', () => {
     const doc = render();
     expect(doc).toContain('<style amp4email-boilerplate>body{visibility:hidden}</style>');
     expect(doc).toContain('custom-element="amp-form"');
+    expect(doc).toContain('custom-element="amp-bind"');
     expect(doc).toContain('custom-template="amp-mustache"');
+    expect(doc).toContain('<amp-state id="dd">');
     for (const tag of doc.match(/<script[^>]*>/g) ?? []) {
-      expect(tag).toContain('src="https://cdn.ampproject.org/');
+      const isCdn = tag.includes('src="https://cdn.ampproject.org/');
+      const isStateJson = tag.includes('type="application/json"');
+      expect(isCdn || isStateJson).toBe(true);
     }
   });
 
@@ -154,7 +157,7 @@ describe('renderDigestAmp — amp4email document validity', () => {
   });
 });
 
-describe('renderDigestAmp — cluster tables with styled LabelPicker', () => {
+describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
   it('renders exactly one form, one submit, and one board table per populated section', () => {
     const doc = render();
     expect((doc.match(/<form /g) ?? []).length).toBe(1);
@@ -166,16 +169,26 @@ describe('renderDigestAmp — cluster tables with styled LabelPicker', () => {
     expect(doc).not.toContain('קבוצה ריקה');
   });
 
-  it('uses styled LabelPicker (opt-fill radios) — not native <select>', () => {
+  it('uses closed amp-bind dropdown (dd-trig + dd-menu) — not native <select> or always-open radios', () => {
     const doc = render();
-    expect(doc).toContain('class="picker"');
-    expect(doc).toContain('class="opt-fill"');
+    expect(doc).toContain('class="dd-trig"');
+    expect(doc).toContain('class="dd-menu"');
+    expect(doc).toContain('class="dd-opt"');
+    expect(doc).toContain('AMP.setState');
     expect(doc).toMatch(/<th class="status-h">[^<]*סטטוס חדש/);
-    expect(doc).toContain('type="radio"');
+    expect(doc).toContain('בחרו סטטוס');
     expect(doc).not.toContain('<select');
     expect(doc).not.toContain('label-dd');
+    expect(doc).not.toContain('type="radio"');
+    expect(doc).not.toContain('class="picker"');
     expect(doc).not.toContain('amp-accordion');
-    expect(doc).not.toContain('amp-bind');
+  });
+
+  it('hides menus by default and toggles via dd.o state', () => {
+    const doc = render();
+    expect(doc).toContain('hidden [hidden]="dd.o != \'9001\'"');
+    expect(doc).toContain("dd.o == '9001' ? '' : '9001'");
+    expect(doc).toContain('class="dd-overlay"');
   });
 
   it('shows only that cluster date column (not every digest date on every table)', () => {
@@ -188,7 +201,7 @@ describe('renderDigestAmp — cluster tables with styled LabelPicker', () => {
     expect(doc).not.toContain('20/03/2026');
   });
 
-  it('colors each option fill with the button style color and labels', () => {
+  it('colors each dropdown option with the button style color and labels', () => {
     const doc = render();
     expect(doc).toContain(`background:${BTN_START.style.color}`);
     expect(doc).toContain(`background:${BTN_STUCK.style.color}`);
@@ -196,18 +209,22 @@ describe('renderDigestAmp — cluster tables with styled LabelPicker', () => {
     expect(doc).toContain('בעבודה');
     expect(doc).toContain('תקוע');
     expect(doc).toContain('בוצע');
+    expect(doc).toContain('ללא שינוי');
   });
 
-  it('offers radios name=item_<id> for every button in the section (multi-button)', () => {
+  it('wires one hidden item_<id> per task bound to dd.v<id> (multi-button options in setState)', () => {
     const doc = render();
-    // section1: 2 tasks × 2 buttons = 4; section2: 1 × 1 = 1 → 5 radios
-    expect((doc.match(/type="radio"/g) ?? []).length).toBe(5);
-    expect(doc).toContain(`name="item_9001" value="${BTN_START.id}"`);
-    expect(doc).toContain(`name="item_9001" value="${BTN_STUCK.id}"`);
-    expect(doc).toContain(`name="item_9002" value="${BTN_START.id}"`);
-    expect(doc).toContain(`name="item_9004" value="${BTN_DONE.id}"`);
-    expect(doc).not.toContain(`name="item_9004" value="${BTN_START.id}"`);
-    expect(doc).not.toMatch(/\schecked(=|\s|>)/);
+    expect((doc.match(/name="item_9001"/g) ?? []).length).toBe(1);
+    expect((doc.match(/name="item_9002"/g) ?? []).length).toBe(1);
+    expect((doc.match(/name="item_9004"/g) ?? []).length).toBe(1);
+    expect(doc).toContain('name="item_9001" value="" [value]="dd.v9001"');
+    expect(doc).toContain('name="item_9002" value="" [value]="dd.v9002"');
+    expect(doc).toContain('name="item_9004" value="" [value]="dd.v9004"');
+    expect(doc).toContain(`v9001:'${BTN_START.id}'`);
+    expect(doc).toContain(`v9001:'${BTN_STUCK.id}'`);
+    expect(doc).toContain(`v9004:'${BTN_DONE.id}'`);
+    expect(doc).not.toContain(`v9004:'${BTN_START.id}'`);
+    expect((doc.match(/class="dd-trig"/g) ?? []).length).toBe(3);
   });
 
   it('falls back to singular buttonId/button when buttonIds/buttons are absent', () => {
@@ -234,12 +251,12 @@ describe('renderDigestAmp — cluster tables with styled LabelPicker', () => {
     const doc = render(legacy);
     expect((doc.match(/class="board"/g) ?? []).length).toBe(1);
     expect(doc).toContain('מקבץ ישן');
-    expect(doc).toContain(`name="item_9010" value="${BTN_DONE.id}"`);
-    expect((doc.match(/type="radio"/g) ?? []).length).toBe(1);
-    expect((doc.match(/class="picker"/g) ?? []).length).toBe(1);
+    expect(doc).toContain('name="item_9010" value="" [value]="dd.v9010"');
+    expect(doc).toContain(`v9010:'${BTN_DONE.id}'`);
+    expect((doc.match(/class="dd-trig"/g) ?? []).length).toBe(1);
   });
 
-  it('shares the same radio name across clusters when the same item appears twice', () => {
+  it('shares one hidden wire field when the same item appears in two clusters', () => {
     const dual = {
       ...RECIPIENT,
       sections: [
@@ -262,9 +279,10 @@ describe('renderDigestAmp — cluster tables with styled LabelPicker', () => {
       ],
     };
     const doc = render(dual);
-    expect((doc.match(/name="item_9001"/g) ?? []).length).toBe(2);
-    expect(doc).toContain(`name="item_9001" value="${BTN_START.id}"`);
-    expect(doc).toContain(`name="item_9001" value="${BTN_DONE.id}"`);
+    expect((doc.match(/name="item_9001"/g) ?? []).length).toBe(1);
+    expect((doc.match(/class="dd-trig"/g) ?? []).length).toBe(2);
+    expect(doc).toContain(`v9001:'${BTN_START.id}'`);
+    expect(doc).toContain(`v9001:'${BTN_DONE.id}'`);
   });
 
   it('escapes HTML in task names', () => {
