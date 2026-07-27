@@ -137,24 +137,112 @@ describe('buildDigest — show-by-status classification', () => {
         name: 'דנה כהן',
         personId: '501',
         taskCount: 2,
+        dateColumns: [
+          { id: 'date_start', title: 'תאריך התחלה' },
+          { id: 'date_due', title: 'תאריך סיום' },
+        ],
         sections: [
           {
             sectionId: 's_start001',
             title: 'משימות שנדרש להתחיל וטרם התחילו:',
             dateColumnTitle: 'תאריך התחלה',
             buttonId: 'b_start001',
-            tasks: [{ itemId: '9001', name: 'גיבוש תכנית עבודה', date: '2026-07-10', statusText: 'בעבודה' }],
+            tasks: [
+              {
+                itemId: '9001',
+                name: 'גיבוש תכנית עבודה',
+                date: '2026-07-10',
+                dates: { date_start: '2026-07-10', date_due: null },
+                statusText: 'בעבודה',
+              },
+            ],
           },
           {
             sectionId: 's_done0001',
             title: 'משימות שנדרש לסיים וטרם בוצעו:',
             dateColumnTitle: 'תאריך סיום',
             buttonId: 'b_done0001',
-            tasks: [{ itemId: '9002', name: 'הגשת דוח רבעוני', date: '2026-07-01', statusText: 'בעבודה' }],
+            tasks: [
+              {
+                itemId: '9002',
+                name: 'הגשת דוח רבעוני',
+                date: '2026-07-01',
+                dates: { date_start: null, date_due: '2026-07-01' },
+                statusText: 'בעבודה',
+              },
+            ],
           },
         ],
       },
     ]);
+  });
+
+  it('attaches every digest date-column value on each task (not only the section filter date)', () => {
+    const result = buildDigest({
+      config: baseConfig(),
+      users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+      tasks: [
+        taskRow('9001', 'שתי תאריכים', {
+          persons: ['501'],
+          startDate: '2026-07-10',
+          dueDate: '2026-07-18',
+          statusA: 0,
+          statusAText: 'טרם',
+        }),
+      ],
+      today: TODAY,
+    });
+    expect(result.recipients[0].dateColumns).toEqual([
+      { id: 'date_start', title: 'תאריך התחלה' },
+      { id: 'date_due', title: 'תאריך סיום' },
+    ]);
+    expect(result.recipients[0].sections[0].tasks[0].dates).toEqual({
+      date_start: '2026-07-10',
+      date_due: '2026-07-18',
+    });
+  });
+
+  it('dedupes dateColumns by dateColumnId when two sections share the same date column', () => {
+    const config = baseConfig({
+      digest: {
+        usersBoardId: '222',
+        usersPeopleColumnId: 'people_u',
+        usersEmailColumnId: 'email_u',
+        subject: 'המשימות שלך',
+        sections: [
+          {
+            id: 's_a',
+            title: 'א',
+            dateColumnId: 'date_start',
+            dateColumnTitle: 'תאריך התחלה',
+            buttonId: 'b_start001',
+            includeStatusLabelIds: [0],
+          },
+          {
+            id: 's_b',
+            title: 'ב',
+            dateColumnId: 'date_start',
+            dateColumnTitle: 'תאריך התחלה (שנית)',
+            buttonId: 'b_done0001',
+            includeStatusLabelIds: [0],
+          },
+        ],
+      },
+    });
+    const result = buildDigest({
+      config,
+      users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+      tasks: [
+        taskRow('9001', 'משימה', {
+          persons: ['501'],
+          startDate: '2026-07-10',
+          statusA: 0,
+          statusB: 0,
+        }),
+      ],
+      today: TODAY,
+    });
+    expect(result.recipients[0].dateColumns).toEqual([{ id: 'date_start', title: 'תאריך התחלה' }]);
   });
 
   it('THE BUG FIX: an overdue task already "בוצע" (status NOT in the include set) is excluded', () => {

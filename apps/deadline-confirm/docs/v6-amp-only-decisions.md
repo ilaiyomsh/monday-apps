@@ -99,25 +99,23 @@ A "resend today" action re-runs the send for **all** recipients using the curren
 slot. Selective resend is out of scope for this round.
 
 ### D9 — Email redesign: multi-button table, one global submit. **IMPLEMENTED
-(T15).**
+(T15 + LabelPicker visual, 0.8.3).**
 
-Owner brief (2026-07-27): one table with selection + **one** approve button —
-not one form/submit per section.
+Owner briefs:
+- (2026-07-27) one table + **one** approve button — not one form per section.
+- (2026-07-27) status column with labels + LabelPicker-like choice; show **all**
+  date columns from digest settings.
 
 Behaviour:
-- A section may offer **more than one button** (today: one button per section;
-  tasks that appear under several sections get a union of those buttons on one
-  row).
-- The recipient sees a **single table with one column per button** and marks,
-  per task, which status that task moves to.
-- **One global submit** (`אשר את המסומנות`) for the whole message.
+- Single monday-like table: name, every digest `dateColumnId`, current status
+  fill, inlined LabelPicker options (colored radios — AMP cannot run the
+  discussions React `LabelPickerCell` Dialog).
+- Options are the ActionButtons offered for that task (`targetLabel` + style
+  color). Wire format stays `item_<id>=btnId`.
+- **One global submit** (`אשר את המסומנות`) applies every chosen status.
+- Tasks with no selection are unchanged.
 
-Admin UI for multi-button-per-section config remains out of scope; the renderer
-already flattens section buttons into columns.
-
-The signed-manifest design in §3 (decision D10) deliberately **decouples the
-signature from the layout**: the manifest enumerates whichever (task, button)
-pairs the renderer chooses to offer.
+Admin UI for multi-button-per-section config remains out of scope.
 
 ### D10 — One signature per message, over a signed manifest.
 

@@ -91,7 +91,7 @@ function extractSelections(body) {
     const itemId = match[1];
     const values = Array.isArray(rawValue) ? rawValue : [rawValue];
     for (const value of values) {
-      if (typeof value !== 'string' || value.length === 0) return { error: 'bad_request' };
+      if (typeof value !== 'string' || value.trim().length === 0) continue; // empty select = no change
       const existing = byItem.get(itemId);
       if (existing === undefined) byItem.set(itemId, value);
       // One item, two DIFFERENT buttons in one submission is not producible

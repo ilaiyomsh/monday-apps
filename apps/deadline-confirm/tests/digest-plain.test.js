@@ -58,6 +58,32 @@ describe('renderDigestPlain — content', () => {
     expect(text).toContain('תאריך סיום: 01/07/2026');
   });
 
+  it('renders every digest dateColumns entry from task.dates when present', () => {
+    const text = render({
+      ...RECIPIENT,
+      dateColumns: [
+        { id: 'date_start', title: 'תאריך התחלה' },
+        { id: 'date_due', title: 'תאריך סיום' },
+      ],
+      sections: [
+        {
+          ...RECIPIENT.sections[0],
+          tasks: [
+            {
+              itemId: '9001',
+              name: 'גיבוש תכנית עבודה',
+              date: '2026-07-10',
+              dates: { date_start: '2026-07-10', date_due: '2026-07-18' },
+              statusText: 'בעבודה',
+            },
+          ],
+        },
+      ],
+    });
+    expect(text).toContain('תאריך התחלה: 10/07/2026');
+    expect(text).toContain('תאריך סיום: 18/07/2026');
+  });
+
   it('renders the status text when present and omits the status part when empty', () => {
     const text = render();
     expect(text).toContain('סטטוס: בעבודה');

@@ -16,22 +16,42 @@ function formatDate(date) {
 }
 
 /**
+ * @param {object} task
+ * @param {Array<{ id: string, title: string }>} dateColumns
+ * @param {string} sectionDateHeader
+ * @returns {string[]}
+ */
+function datePartsForTask(task, dateColumns, sectionDateHeader) {
+  if (Array.isArray(dateColumns) && dateColumns.length > 0 && task.dates && typeof task.dates === 'object') {
+    const parts = [];
+    for (const col of dateColumns) {
+      const formatted = formatDate(task.dates[col.id]);
+      if (formatted) parts.push(`${col.title || 'תאריך'}: ${formatted}`);
+    }
+    return parts;
+  }
+  const date = formatDate(task.date);
+  return date ? [`${sectionDateHeader}: ${date}`] : [];
+}
+
+/**
  * Render one recipient's digest as plain text.
- * @param {{ name: string, sections: Array<{ title: string, dateColumnTitle?: string,
- *          tasks: Array<{ itemId: string, name: string, date: string|null, statusText?: string }> }> }} p.recipient
+ * @param {{ name: string, dateColumns?: Array<{id:string,title:string}>,
+ *          sections: Array<{ title: string, dateColumnTitle?: string,
+ *          tasks: Array<{ itemId: string, name: string, date: string|null,
+ *            dates?: Record<string, string|null>, statusText?: string }> }> }} p.recipient
  * @returns {string}
  */
 export function renderDigestPlain({ recipient }) {
   const lines = [`שלום ${recipient.name},`, 'אלו המשימות שממתינות לעדכון סטטוס:', ''];
+  const dateColumns = recipient.dateColumns ?? [];
 
   for (const section of recipient.sections) {
     if (section.tasks.length === 0) continue;
     lines.push(section.title);
     const dateHeader = section.dateColumnTitle && section.dateColumnTitle.length > 0 ? section.dateColumnTitle : 'תאריך';
     for (const task of section.tasks) {
-      const parts = [`- ${task.name}`];
-      const date = formatDate(task.date);
-      if (date) parts.push(`${dateHeader}: ${date}`);
+      const parts = [`- ${task.name}`, ...datePartsForTask(task, dateColumns, dateHeader)];
       if (task.statusText) parts.push(`סטטוס: ${task.statusText}`);
       lines.push(parts.join(' · '));
     }
