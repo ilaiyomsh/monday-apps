@@ -563,3 +563,45 @@ under the same CORS gate.
   read) — see the design log. Until then the AMP part is exercised manually.
 - Per-task status dropdown (`<select>` per row) instead of a checkbox — the
   format supports it; the owner has seen a mock, no decision yet.
+
+---
+
+# V6 Amendment — AMP-only + per-message signed manifest (owner decisions, 2026-07-27)
+
+Design brief: `docs/v6-amp-only-decisions.md`. **Supersedes** the V5 additive
+model: the actionable `text/html` body and the entire `/confirm` route family
+are **removed**. Resend is retired; Gmail API send is the planned channel (T9).
+
+## Product behavior
+
+- Digest email = `multipart/alternative`: `text/plain` (non-actionable task list,
+  no links/credentials) + `text/x-amp-html` (Gmail dynamic email, the only
+  actionable part).
+- One **signature per message** over a manifest of authorized (task × button)
+  pairs. Wire fields: `a`, `p`, `m`, `s`, `sig` + per-task radio `item_<itemId>`.
+  No `k` anywhere in the message (D3/D10).
+- Slot = calendar date (YYYYMMDD) of the scheduled send in Asia/Jerusalem;
+  configured via `digest.sendHour` (integer 0–23, default 8). No grace window
+  for the previous slot (D5/D6).
+- D11: at execution, signed `recipientPersonId` must match item assignees
+  (`not_assignee` per item — not whole-request rejection).
+
+## Deleted (D2/D4)
+
+- `HEAD/GET/POST /confirm`, landing/success pages, JS auto-submit.
+- `GET /api/snippet`, `GET /api/email-template` (secret-unmasking paths).
+
+## Endpoint changes (extends §9)
+
+| Route | V6 change |
+|---|---|
+| `POST /amp/confirm` | **only** public write path; V6 verification order in `src/routes/amp.js` |
+| `POST /api/secret/rotate` | returns `{ ok: true }` only — secret never exposed |
+| `GET /api/digest/preview` | returns `{ plain, amp }` — drops `html` |
+| `PUT /api/config` | `digest.sendHour` validated 0–23, default 8 |
+
+## Deferred (post-V6)
+
+- T9–T12: Gmail multipart send, scheduler, operator summary, resend-today.
+- T15: D9 email redesign (multi-button table, one global submit) — awaiting owner briefing.
+

@@ -1,27 +1,22 @@
-// TDD red phase (V5) — the amp4email digest renderer.
+// TDD (V6) — the amp4email digest renderer with signed-manifest wire format.
 //
-// This is the `text/x-amp-html` MIME part of the digest: Gmail renders it as
-// dynamic email and the reader ticks checkboxes and submits ONE form per
-// section, straight from the message. The static `text/html` part
-// (helpers/digest-email.js) stays the universal fallback and is unchanged.
-//
-// Format rules pinned here come from the AMP for Email spec (amp-email-format /
-// amp-email-components / amp-form):
-//   - doctype + <html amp4email> + <meta charset> first in head + boilerplate
-//   - only cdn.ampproject.org scripts (custom JS is invalid AMP → email is
-//     dropped to the HTML fallback, silently)
-//   - POST forms use action-xhr; `target`/`action` are website-only
-//   - responses render through <template type="amp-mustache">
-// Security: the link secret rides in hidden inputs only — the AMP part never
-// contains a clickable URL carrying it (a forwarded screenshot/link cannot leak
-// it, and Gmail strips this part on forward anyway).
+// V6 replaces the V5 static-secret fields (`k` + `btn` + `item[]`) with ONE
+// signed manifest per message: hidden `a`, `p`, `m`, `s`, `sig`; selections as
+// `item_<itemId>=<btnId>` radio fields. The base link secret never appears in
+// the rendered document. Manifests and signatures use the real
+// manifest-signature module — same crypto the /amp/confirm route verifies.
 
 import { describe, it, expect } from 'vitest';
 import { renderDigestAmp } from '../src/helpers/digest-amp.js';
+import { buildManifest, signManifest, currentSlot } from '../src/services/manifest-signature.js';
 
 const BASE = 'https://app.example';
 const SECRET = 'wJalrXUtnFEMIK7MDENGbPxRfiCY_EXAMPLEKEY-43x';
 const ACCOUNT = '777';
+const PERSON_ID = '48274917';
+const SEND_HOUR = 8;
+const NOW = new Date('2026-07-28T09:00:00Z'); // 12:00 Asia/Jerusalem (IDT)
+const SLOT = currentSlot({ sendHour: SEND_HOUR, now: NOW });
 
 const BTN_START = {
   id: 'b_start001',
@@ -43,6 +38,7 @@ const BTN_DONE = {
 const RECIPIENT = {
   email: 'dana@example.com',
   name: 'דנה',
+  personId: PERSON_ID,
   taskCount: 3,
   sections: [
     {
@@ -72,8 +68,28 @@ const RECIPIENT = {
   ],
 };
 
+const MANIFEST = buildManifest([
+  { itemId: '9001', btnId: BTN_START.id },
+  { itemId: '9002', btnId: BTN_START.id },
+  { itemId: '9004', btnId: BTN_DONE.id },
+]);
+const SIG = signManifest({
+  secret: SECRET,
+  accountId: ACCOUNT,
+  personId: PERSON_ID,
+  slot: SLOT,
+  manifest: MANIFEST,
+});
+
 const render = (recipient = RECIPIENT) =>
-  renderDigestAmp({ baseUrl: BASE, secret: SECRET, accountId: ACCOUNT, recipient });
+  renderDigestAmp({
+    baseUrl: BASE,
+    secret: SECRET,
+    accountId: ACCOUNT,
+    recipient,
+    sendHour: SEND_HOUR,
+    now: NOW,
+  });
 
 describe('renderDigestAmp — amp4email document validity', () => {
   it('opens with the doctype and the amp4email html tag', () => {
@@ -140,28 +156,36 @@ describe('renderDigestAmp — one form per populated section', () => {
     expect(doc).not.toMatch(/\saction="/);
   });
 
-  it('carries account, secret and button id as hidden inputs in every form', () => {
+  it('carries the V6 signed-manifest hidden fields in every form (a, p, m, s, sig)', () => {
     const doc = render();
-    expect((doc.match(/name="a" value="777"/g) ?? []).length).toBe(2);
-    expect((doc.match(new RegExp(`name="k" value="${SECRET}"`, 'g')) ?? []).length).toBe(2);
-    expect(doc).toContain(`name="btn" value="${BTN_START.id}"`);
-    expect(doc).toContain(`name="btn" value="${BTN_DONE.id}"`);
+    expect((doc.match(new RegExp(`name="a" value="${ACCOUNT}"`, 'g')) ?? []).length).toBe(2);
+    expect((doc.match(new RegExp(`name="p" value="${PERSON_ID}"`, 'g')) ?? []).length).toBe(2);
+    expect((doc.match(new RegExp(`name="m" value="${MANIFEST}"`, 'g')) ?? []).length).toBe(2);
+    expect((doc.match(new RegExp(`name="s" value="${SLOT}"`, 'g')) ?? []).length).toBe(2);
+    expect((doc.match(new RegExp(`name="sig" value="${SIG}"`, 'g')) ?? []).length).toBe(2);
   });
 
-  it('never exposes the secret inside a URL', () => {
+  it('never carries the V5 k or btn fields and never exposes the base secret', () => {
     const doc = render();
-    expect(doc).not.toContain(`?itemId=`);
+    expect(doc).not.toContain('name="k"');
+    expect(doc).not.toContain('name="btn"');
+    expect(doc).not.toContain(`value="${SECRET}"`);
+  });
+
+  it('never exposes credentials inside a URL', () => {
+    const doc = render();
+    expect(doc).not.toContain('?itemId=');
     expect(doc).not.toMatch(new RegExp(`href="[^"]*${SECRET}`));
   });
 });
 
 describe('renderDigestAmp — task rows', () => {
-  it('renders one unchecked checkbox per task, valued by item id', () => {
+  it('renders one unchecked radio per task with item_<itemId> name and btnId value', () => {
     const doc = render();
-    expect((doc.match(/type="checkbox"/g) ?? []).length).toBe(3);
-    expect(doc).toContain('name="item" value="9001"');
-    expect(doc).toContain('name="item" value="9002"');
-    expect(doc).toContain('name="item" value="9004"');
+    expect((doc.match(/type="radio"/g) ?? []).length).toBe(3);
+    expect(doc).toContain(`name="item_9001" value="${BTN_START.id}"`);
+    expect(doc).toContain(`name="item_9002" value="${BTN_START.id}"`);
+    expect(doc).toContain(`name="item_9004" value="${BTN_DONE.id}"`);
     expect(doc).not.toContain('checked');
   });
 
@@ -205,5 +229,20 @@ describe('renderDigestAmp — response rendering', () => {
 
   it('greets the recipient by name', () => {
     expect(render()).toContain('דנה');
+  });
+});
+
+describe('renderDigestAmp — input validation', () => {
+  it('throws when recipient.personId is missing', () => {
+    expect(() =>
+      renderDigestAmp({
+        baseUrl: BASE,
+        secret: SECRET,
+        accountId: ACCOUNT,
+        recipient: { ...RECIPIENT, personId: undefined },
+        sendHour: SEND_HOUR,
+        now: NOW,
+      })
+    ).toThrow(/personId/);
   });
 });

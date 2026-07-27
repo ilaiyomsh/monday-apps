@@ -67,6 +67,19 @@ function getItemParams(overrides = {}) {
   };
 }
 
+/**
+ * V6/D11: the GetItem probe capture predates the persons_and_teams read —
+ * derive a double by adding the DOCUMENTED PeopleValue shape (same one the
+ * board-items doubles use: { id, kind }) onto the captured people column.
+ * Pre-release probe gate recorded in tests/fixtures/README.md.
+ */
+function withPersons(fx, persons) {
+  const clone = structuredClone(fx);
+  const people = clone.data.items[0].column_values.find((cv) => cv.id === PEOPLE_COL);
+  people.persons_and_teams = persons;
+  return clone;
+}
+
 describe('createMondayApi — getItemState parsing', () => {
   it('parses a populated item into the exact ItemState (status 0, assignee name, deadline date)', async () => {
     const { fetchImpl } = fetchReturning(getItemFx);
@@ -79,11 +92,35 @@ describe('createMondayApi — getItemState parsing', () => {
       boardId: '18422009734',
       statusLabelId: 0,
       peopleText: 'עילי שלם',
+      peoplePersonIds: [],
       deadlineDate: '2026-07-20',
     });
   });
 
-  it('normalizes never-set columns: status index null, people text "", empty-string date → null', async () => {
+  it('parses persons_and_teams into peoplePersonIds as STRINGS, filtering kind "team" entries out (D11)', async () => {
+    const fx = withPersons(getItemFx, [
+      { id: '48274917', kind: 'person' },
+      { id: '77', kind: 'team' },
+    ]);
+    const { fetchImpl } = fetchReturning(fx);
+    const api = createMondayApi({ fetchImpl });
+
+    const state = await api.getItemState(getItemParams());
+
+    expect(state.peoplePersonIds).toEqual(['48274917']);
+  });
+
+  it('normalizes NUMERIC persons_and_teams ids to strings in peoplePersonIds', async () => {
+    const fx = withPersons(getItemFx, [{ id: 48274917, kind: 'person' }]);
+    const { fetchImpl } = fetchReturning(fx);
+    const api = createMondayApi({ fetchImpl });
+
+    const state = await api.getItemState(getItemParams());
+
+    expect(state.peoplePersonIds).toEqual(['48274917']);
+  });
+
+  it('normalizes never-set columns: status index null, people text "", ids [], empty-string date → null', async () => {
     const { fetchImpl } = fetchReturning(getItemEmptyFx);
     const api = createMondayApi({ fetchImpl });
 
@@ -96,8 +133,18 @@ describe('createMondayApi — getItemState parsing', () => {
       boardId: '18422009734',
       statusLabelId: null,
       peopleText: '',
+      peoplePersonIds: [],
       deadlineDate: null,
     });
+  });
+
+  it('returns peoplePersonIds [] when no people column is configured (peopleColumnId null)', async () => {
+    const { fetchImpl } = fetchReturning(getItemFx);
+    const api = createMondayApi({ fetchImpl });
+
+    const state = await api.getItemState(getItemParams({ peopleColumnId: null }));
+
+    expect(state.peoplePersonIds).toEqual([]);
   });
 
   it('returns { found: false } when the items array is empty (nonexistent item)', async () => {
@@ -137,6 +184,8 @@ describe('createMondayApi — request shape (spec §11.1)', () => {
     expect(req.body.query).toContain('items(ids: $itemIds');
     expect(req.body.query).toContain('... on StatusValue');
     expect(req.body.query).toContain('... on DateValue');
+    // V6/D11: the runtime assignee check needs the person IDS, not just text.
+    expect(req.body.query).toContain('... on PeopleValue { persons_and_teams { id kind } }');
     expect(req.body.variables).toEqual({
       itemIds: [ITEM_ID],
       columnIds: [STATUS_COL, PEOPLE_COL, DATE_COL],

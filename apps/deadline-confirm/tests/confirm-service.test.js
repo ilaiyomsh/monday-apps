@@ -54,16 +54,24 @@ const baseConfig = {
   templates: [],
 };
 
+// V6/D11: the person id of the captured assignee ('עילי שלם') — the probe's
+// me identity (board-columns capture). The GetItem probe predates the
+// persons_and_teams read; ids follow the documented PeopleValue shape, and
+// the pre-release probe gate is recorded in tests/fixtures/README.md.
+const ASSIGNEE_ID = String(boardColumnsFx.data.me.id); // '48274917'
+
 /** Derive an ItemState (the monday-api contract shape) from a probe fixture. */
 function itemStateFrom(fixture) {
   const item = fixture.data.items[0];
   if (!item) return { found: false };
   const col = (id) => item.column_values.find((c) => c.id === id);
+  const peopleText = col(PEOPLE_COL).text ?? '';
   return {
     found: true,
     boardId: item.board.id,
     statusLabelId: col(STATUS_COL).index ?? null,
-    peopleText: col(PEOPLE_COL).text ?? '',
+    peopleText,
+    peoplePersonIds: peopleText ? [ASSIGNEE_ID] : [],
     deadlineDate: null,
   };
 }
@@ -474,6 +482,84 @@ describe("performAction — 'unknown_button' and 'no_config' (ZERO api calls)", 
 
     expect(result.outcome).toBe('no_config');
     expectNoApiCalls(api);
+  });
+});
+
+describe('performAction — D11 runtime assignee check (expectedPersonId)', () => {
+  it("proceeds to 'ok' when expectedPersonId is among the item's peoplePersonIds", async () => {
+    const api = fakeApi({ itemState: workingItem() }); // assignee 48274917
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_DONE.id,
+      expectedPersonId: ASSIGNEE_ID,
+    });
+
+    expect(result.outcome).toBe('ok');
+    expect(api.changeStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 'not_assignee' with NO mutation and NO update when expectedPersonId is not among the item's assignees", async () => {
+    const api = fakeApi({ itemState: workingItem() });
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_DONE.id,
+      expectedPersonId: '999999',
+    });
+
+    expect(result.outcome).toBe('not_assignee');
+    expect(api.changeStatus).not.toHaveBeenCalled();
+    expect(api.createUpdate).not.toHaveBeenCalled();
+  });
+
+  it("returns 'not_assignee' when the item's people column is EMPTY (a reassigned-to-nobody task refuses the click)", async () => {
+    const api = fakeApi({ itemState: { ...workingItem(), peoplePersonIds: [] } });
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_DONE.id,
+      expectedPersonId: ASSIGNEE_ID,
+    });
+
+    expect(result.outcome).toBe('not_assignee');
+    expect(api.changeStatus).not.toHaveBeenCalled();
+  });
+
+  it("checks the assignee BEFORE already_done: item at target + wrong person → 'not_assignee', not 'already_done'", async () => {
+    const api = fakeApi({ itemState: doneItem() }); // status 1 === BTN_DONE target
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_DONE.id,
+      expectedPersonId: '999999',
+    });
+
+    expect(result.outcome).toBe('not_assignee');
+    expect(api.changeStatus).not.toHaveBeenCalled();
+    expect(api.createUpdate).not.toHaveBeenCalled();
+  });
+
+  it("skips the assignee check entirely when expectedPersonId is omitted (digest preview path): 'ok' even for an item with no assignees", async () => {
+    const api = fakeApi({ itemState: { ...workingItem(), peoplePersonIds: [] } });
+
+    const result = await performAction({
+      storage: seededStorage(),
+      api,
+      itemId: ITEM_ID,
+      btnId: BTN_DONE.id,
+    });
+
+    expect(result.outcome).toBe('ok');
+    expect(api.changeStatus).toHaveBeenCalledTimes(1);
   });
 });
 

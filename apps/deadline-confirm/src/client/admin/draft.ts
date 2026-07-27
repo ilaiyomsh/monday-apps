@@ -19,6 +19,8 @@ export interface DigestDraft {
   usersPeopleColumnId: string | null;
   usersEmailColumnId: string | null;
   subject: string;
+  /** Hour (0–23, Asia/Jerusalem) for scheduled send + slot math. Default 8. */
+  sendHour: number;
   sections: DigestSectionDraft[];
 }
 
@@ -89,6 +91,7 @@ export function defaultDigestDraft(): DigestDraft {
     usersPeopleColumnId: null,
     usersEmailColumnId: null,
     subject: DEFAULT_DIGEST_SUBJECT,
+    sendHour: 8,
     sections: [
       newDigestSection('משימות שנדרש להתחיל וטרם התחילו:'),
       newDigestSection('משימות שנדרש לסיים וטרם בוצעו:'),
@@ -104,6 +107,7 @@ export function digestFromConfig(digest: DigestConfig | null | undefined): Diges
     usersPeopleColumnId: digest.usersPeopleColumnId,
     usersEmailColumnId: digest.usersEmailColumnId,
     subject: digest.subject,
+    sendHour: digest.sendHour ?? 8,
     // Tolerate configs saved before 0.6.0 introduced these two section fields
     // (production incident 2026-07-26: the spread below threw at SPA boot on a
     // legacy config). A missing condition becomes [], which digestIsComplete
@@ -142,6 +146,7 @@ function digestToConfig(digest: DigestDraft): DigestConfig | null {
     usersPeopleColumnId: digest.usersPeopleColumnId as string,
     usersEmailColumnId: digest.usersEmailColumnId as string,
     subject: digest.subject,
+    sendHour: digest.sendHour,
     sections: digest.sections.map((s) => ({
       id: s.id,
       title: s.title,
