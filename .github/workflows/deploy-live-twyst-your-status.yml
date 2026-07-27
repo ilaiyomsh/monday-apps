@@ -59,7 +59,7 @@ jobs:
       - name: Authenticate mapps CLI (non-interactive)
         run: mapps init -t "$MONDAY_TOKEN"
         env:
-          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
 
       # `code:push --force -a <app>` is NOT reliable for live: it resolves the
       # app's NEWEST version (usually the newer draft sitting above live), not
@@ -79,7 +79,7 @@ jobs:
           echo "Resolved LIVE version id: $LIVE_ID"
           echo "live_id=$LIVE_ID" >> "$GITHUB_OUTPUT"
         env:
-          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
           APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}
 
       # -c is "-c" for client-side (CDN) apps, empty for
@@ -102,4 +102,4 @@ jobs:
           echo "::error::code:push to live version ${{ steps.live.outputs.live_id }} failed after retry"
           exit 1
         env:
-          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
