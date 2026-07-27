@@ -106,9 +106,11 @@ if (DEV_TOKEN) monday.setToken(DEV_TOKEN);
 // NOT throw on GraphQL soft-errors (it logs them), so we enforce them here
 // with assertNoGraphQLErrors — preserving the previous "return data, throw on
 // errors" contract the BoardSDK relies on.
-export async function api(query, variables = {}, fnName) {
+export async function api(query, variables = {}, fnName, requestOptions = {}) {
   const caller = fnName || extractOperationName(query) || 'api';
-  const res = await safeApi(monday, caller, query, { variables, apiVersion: API_VERSION });
+  const safeOptions = { variables, apiVersion: API_VERSION };
+  if (requestOptions.retry === false) safeOptions.retry = false;
+  const res = await safeApi(monday, caller, query, safeOptions);
   if (!res) {
     // Happens outside the monday iframe with no token configured. safeApi
     // didn't see this as an error (it returned a falsy response), so log it
