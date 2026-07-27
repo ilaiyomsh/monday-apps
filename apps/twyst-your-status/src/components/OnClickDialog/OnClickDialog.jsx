@@ -297,26 +297,15 @@ function OnClickDialog({ context }) {
 
   return (
     <main className="status-picker-dialog" aria-label="בחירת סטטוס" dir="rtl">
-      {pickerModel.currentLabel && (
-        <div className="status-picker-current" aria-label="הסטטוס הנוכחי">
-          <span
-            className="status-fill"
-            style={{ background: pickerModel.currentLabel.color || NEUTRAL }}
-          >
-            {pickerModel.currentLabel.label || 'ללא שם'}
-          </span>
-          {pickerModel.currentIsHidden && (
-            <p className="status-picker-note">
-              הסטטוס נקבע מחוץ לבורר (למשל אוטומציה) ולכן מוצג לקריאה בלבד.
-            </p>
-          )}
-        </div>
+      {pickerModel.currentIsHidden && (
+        <p className="status-picker-note">
+          הסטטוס הנוכחי נקבע מחוץ לבורר (למשל אוטומציה) ואינו מוצג לבחירה.
+        </p>
       )}
 
       {pickerModel.options.length > 0 ? (
         <div className="status-menu" role="listbox" aria-label="סטטוסים זמינים">
           {pickerModel.options.map((label) => {
-            const isSelected = label.id === pickerModel.currentLabelId;
             const isSaving = label.id === savingLabelId;
             return (
               <button
@@ -324,7 +313,7 @@ function OnClickDialog({ context }) {
                 className="status-option"
                 type="button"
                 role="option"
-                aria-selected={isSelected}
+                aria-selected={false}
                 disabled={savingLabelId !== null || user?.isViewOnly}
                 style={{ background: label.color || NEUTRAL }}
                 onClick={() => handleSelectLabel(label.id)}

@@ -3,7 +3,8 @@
  *
  * Rules (product contract):
  * - Skip deactivated labels.
- * - Skip hiddenLabelIds (picker-only; current hidden value stays visible read-only).
+ * - Skip hiddenLabelIds (picker-only; current metadata still returned for UI notes).
+ * - Skip the currently selected label — no reason to re-pick the same status.
  * - Missing rule OR empty allowlists → everyone may pick.
  * - Else allow if actor.userId ∈ allowedUserIds OR any actor.teamIds ∈ allowedTeamIds.
  * - Unauthorized labels are omitted (not disabled).
@@ -71,6 +72,7 @@ export function buildAvailableLabels({ labels, settings, actor, currentValue }) 
   const options = normalizedLabels.filter((label) => {
     if (label?.isDeactivated) return false;
     const labelId = String(label.id);
+    if (currentLabelId !== null && labelId === currentLabelId) return false;
     if (hiddenIds.has(labelId)) return false;
     const rule = getLabelRule(migrated, labelId);
     return isActorAllowedForLabel(rule, actor);

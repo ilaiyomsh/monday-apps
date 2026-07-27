@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.5
+
+- Picker no longer lists the currently selected status (or shows it as a header
+  chip) — only other allowed labels appear for switching.
+
 ## 3.1.4
 
 - Fix settings save failing with monday `Colors should be unique` on

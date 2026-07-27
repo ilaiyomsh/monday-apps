@@ -60,9 +60,22 @@ describe('buildAvailableLabels', () => {
       currentLabelId: '1',
       currentLabel: LABELS[1],
       currentIsHidden: true,
-      // label 0 is open (no rule); 1 hidden; 2 unauthorized; 3 deactivated
+      // label 0 is open (no rule); 1 current+hidden; 2 unauthorized; 3 deactivated
       options: [LABELS[0]],
     });
+  });
+
+  it('omits the currently selected label from pickable options', () => {
+    const model = buildAvailableLabels({
+      labels: LABELS,
+      settings: null,
+      actor: { userId: '1', teamIds: [] },
+      currentValue: { index: 0 },
+    });
+
+    expect(model.currentLabelId).toBe('0');
+    expect(model.currentLabel).toEqual(LABELS[0]);
+    expect(model.options.map((label) => label.id)).toEqual(['1', '2']);
   });
 
   it('shows an allowlisted label when the actor is on an allowed team', () => {
@@ -73,7 +86,8 @@ describe('buildAvailableLabels', () => {
       currentValue: { index: 0 },
     });
 
-    expect(model.options.map((label) => label.id)).toEqual(['0', '2']);
+    // current (0) omitted; 2 allowlisted via team
+    expect(model.options.map((label) => label.id)).toEqual(['2']);
     expect(model.currentIsHidden).toBe(false);
   });
 

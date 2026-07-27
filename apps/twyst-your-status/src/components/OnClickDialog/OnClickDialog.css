@@ -76,27 +76,6 @@
   font-family: var(--font-family, inherit);
 }
 
-.status-picker-current {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-
-.status-fill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  min-height: 36px;
-  border-radius: 0;
-  padding: 0 8px;
-  color: var(--text-color-on-primary, #fff);
-  font-weight: var(--font-weight-normal, 400);
-  font-size: 14px;
-  font-family: var(--font-family, inherit);
-}
-
 .status-menu {
   display: flex;
   flex-direction: column;
