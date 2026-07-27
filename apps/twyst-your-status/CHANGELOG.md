@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.6
+
+- Picker shows a monday-style shimmer skeleton (6 label-sized bars) from the
+  first paint while context/labels load.
+- Document Dialog Design size: width `200`, height `250` (fits 6 pills, no scroll).
+
 ## 3.2.5
 
 - Settings overlay ignores the tiny column-settings iframe size (root cause of

@@ -15,6 +15,19 @@
 Do **not** bind an On-Hover Dialog to `/picker` — hover dialogs close when the
 pointer leaves the cell, which feels like the picker vanishing while choosing.
 
+## Dialog Design size (On-Click → `/picker`)
+
+Configure in Developer Center → feature → Dialog Design → Custom size:
+
+| | |
+|---|---|
+| Width | `200` |
+| Height | `250` |
+
+`250` fits **exactly 6** status pills with no scrollbar
+(`8+8` padding + `6×34` pills + `5×6` gaps). More than 6 labels scroll inside
+the menu. See `src/utils/pickerDialogSize.js`.
+
 ## Product rules
 
 - Configuration is stored in global `monday.storage` under

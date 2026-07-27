@@ -120,6 +120,41 @@
   opacity: 0.7;
 }
 
+/* Monday-style shimmer skeleton — same box as .status-option. */
+.status-option-skeleton {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  flex: 0 0 auto;
+  height: 34px;
+  border-radius: var(--border-radius-small, 4px);
+  background-color: var(--ui-border-color, #e6e9ef);
+}
+
+.status-option-skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.55) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: twystPickerSkeletonShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes twystPickerSkeletonShimmer {
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-option-skeleton::after {
+    animation: none;
+  }
+}
+
 .status-picker-note,
 .status-picker-empty {
   margin: 0;

@@ -18,7 +18,7 @@ import { loadUserTeamIds } from '../../services/teamsAccess';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
 import ErrorState from '../shared/ErrorState';
-import LoadingState from '../shared/LoadingState';
+import StatusPickerSkeleton from './StatusPickerSkeleton';
 import './OnClickDialog.css';
 
 function inputTypeFor(columnType) {
@@ -274,7 +274,7 @@ function OnClickDialog({ context }) {
   }
 
   if (settingsLoading || loading) {
-    return <LoadingState message="טוען את הסטטוסים…" />;
+    return <StatusPickerSkeleton />;
   }
 
   if (error && !formTarget) {
