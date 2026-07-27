@@ -1,4 +1,4 @@
-# V6 — AMP-only + per-task expiring signatures
+# V6 — AMP-only + per-message signed manifest
 
 **Status:** decided, not implemented. This document is the implementation brief.
 **App:** `deadline-confirm` (App ID `11704868`, server app on monday-code, pushed dir = app root)
@@ -52,8 +52,9 @@ second one.
 
 ### D3 — The link secret never leaves the server.
 
-The message no longer carries `k`. It carries per-task signatures derived from
-the secret (§3). The base secret becomes **write-only from the outside**:
+The message no longer carries `k`. It carries one signature derived from the
+secret, over a manifest of what that message authorizes (§3). The base secret
+becomes **write-only from the outside**:
 generated server-side, stored in SecureStorage, never returned by any endpoint.
 
 ### D4 — The monday-workflow snippet path is retired.
@@ -109,8 +110,25 @@ Target behaviour:
 - **One global submit for the whole message**, not one per section.
 
 **Do not build the renderer or the admin UI for this until the owner briefs it.**
-Do implement §3 as specified, because the signature shape depends on this design
-and changing it later means re-issuing every code.
+
+The signed-manifest design in §3 (decision D10) deliberately **decouples the
+signature from the layout**: the manifest enumerates whichever (task, button)
+pairs the renderer chooses to offer, so the crypto layer can be built now and the
+renderer later with no risk of having to re-issue codes.
+
+### D10 — One signature per message, over a signed manifest.
+
+Superseded design: one signature per (task × button) pair. Rejected in favour of
+a single signature covering an explicit manifest of what the message authorizes.
+
+A bare per-recipient token was also considered and **rejected**: it proves which
+mailbox the message went to but not *which tasks it listed*, so any itemId on the
+board could be submitted — restoring the whole-board blast radius. Re-deriving
+the recipient's task set at confirm time was rejected too: it costs two board
+reads on the hot path, it is unstable (a task in the 08:00 digest may no longer
+qualify at 15:00, so a legitimate click gets rejected), and it moves
+authorization out of cryptography and into business logic, where a filter bug
+becomes an authorization bypass.
 
 ---
 
@@ -118,7 +136,7 @@ and changing it later means re-issuing every code.
 
 | Endpoint | Auth | Writes | Change |
 |---|---|---|---|
-| `POST /amp/confirm` | sender gate + per-task signature | yes | **the only public write path** |
+| `POST /amp/confirm` | sender gate + signed manifest | yes | **the only public write path** |
 | `OPTIONS /amp/confirm` | sender gate | no | unchanged |
 | `GET /oauth/start?st=` | monday sessionToken (query) | no | unchanged (see §7) |
 | `GET /oauth/callback` | single-use expiring nonce | stores token | unchanged |
@@ -139,15 +157,26 @@ and changing it later means re-issuing every code.
 
 ### Construction
 
+**One signature per message.** It covers a manifest that enumerates exactly what
+the message authorizes: which tasks, and for each task which buttons are offered.
+
 ```
-slot    = date (YYYYMMDD) of the scheduled send, Asia/Jerusalem
-payload = accountId | itemId | btnId | slot        (single-byte "|" separator)
-sig     = base64url( HMAC-SHA256(link_secret, payload) )
+slot     = date (YYYYMMDD) of the scheduled send, Asia/Jerusalem
+manifest = "<itemId>:<btnId>[,<btnId>…][;<itemId>:…]"   canonical: items ascending,
+                                                        buttons ascending, no spaces
+payload  = accountId | recipientEmail | slot | manifest  (single-byte "|" separator)
+sig      = base64url( HMAC-SHA256(link_secret, payload) )
 ```
 
-`btnId` is inside the payload. Because D9 lets the recipient pick among several
-buttons per task, **one signature is emitted per (task × button) pair** — the
-selected radio carries its own signature, so the button cannot be swapped.
+The manifest is **not secret** — it lists item and button ids that the message
+already displays. Signing it is what binds authorization to a specific task set,
+so nothing outside the manifest can ever be acted on.
+
+`recipientEmail` is inside the payload. It is not needed to constrain scope (the
+manifest already does that), but it means the server knows **cryptographically**
+which mailbox a code was issued to. That upgrades R2 from an assumption to a
+provable fact and is available for free if the attribution wording is ever
+changed — see §6.
 
 ### Current slot
 
@@ -170,42 +199,60 @@ scheduler failure, not widening the window.
 ### Wire format
 
 ```html
-<input type="radio" name="item_9871234567"
-       value="9871234567.confirm-done.20260728.a7f3c91e4b2d…">
-<input type="hidden" name="a" value="1234567">
+<input type="hidden" name="a"   value="1234567">
+<input type="hidden" name="m"   value="9871234567:done,in-progress;9871234599:done">
+<input type="hidden" name="s"   value="20260728">
+<input type="hidden" name="sig" value="a7f3c91e4b2d…">
+
+<input type="radio" name="item_9871234567" value="done">   <!-- selection, no crypto -->
 ```
 
-- No `k` field anywhere.
-- No `btn` field — the button id rides inside each value.
-- Radio group name is per task (`item_<itemId>`); the server must accept only
-  field names matching `^item_\d{1,20}$` and ignore everything else.
+- No `k` field anywhere. The base secret never appears in the message.
+- Selection fields carry **no signature** — authorization lives entirely in the
+  signed manifest.
+- Radio group name is per task (`item_<itemId>`); accept only field names matching
+  `^item_\d{1,20}$` and ignore everything else.
 - Unselected tasks submit nothing.
+- `recipientEmail` is **not** a wire field — the server takes it from the manifest
+  verification step only if it is needed for logging. If it must be transmitted,
+  transmit it and include it in the recompute; do not let a submitted value
+  bypass the signature.
 
 ### Verification order (security contract — do not reorder)
 
 1. **AMP CORS sender gate** — first, pure header work, no I/O. Unchanged.
 2. **Rate limit, bucket A** — per-IP, generous. See §4. New position: *before*
    any secret work.
-3. Parse. Collect `item_*` fields. Reject on: no selections, more than
-   `MAX_ITEMS` (50), any malformed value, duplicate itemId across two radios.
+3. Parse `a`, `m`, `s`, `sig`. Reject a malformed or non-canonical manifest, a
+   manifest listing more than `MAX_ITEMS` (50) tasks, or duplicate item ids.
 4. Load the account's base secret via `storage.forAccount(a)`.
-5. **Verify every selection before executing any of them.** For each: `slot`
-   must equal `currentSlot`, and `timingSafeEqual(sig, recomputed)` must hold.
-6. **All-or-nothing.** If any selection fails validation, reject the whole
-   request with the generic invalid message and perform no mutation. This is not
-   cosmetic: the response returns counts, so per-item skipping would turn those
-   counts into a verification oracle.
-7. **Rate limit, bucket B** — the existing `accountId:ip` bucket.
-8. `performAction` per selection, passing that selection's own `btnId`.
+5. `s` must equal `currentSlot`.
+6. Recompute the HMAC over `accountId|recipientEmail|s|m` and compare with
+   `timingSafeEqual`. **Reject before parsing selections** — an invalid signature
+   must never lead to reading the selection fields.
+7. Parse selections. Every `(itemId, btnId)` pair **must appear in the verified
+   manifest**; reject on no selections, an unknown item, or a button not offered
+   for that item.
+8. **All-or-nothing.** Any failure in 3–7 rejects the whole request with the
+   generic invalid message and performs no mutation. This is not cosmetic: the
+   response returns counts, so partial execution would turn those counts into a
+   verification oracle.
+9. **Rate limit, bucket B** — the existing `accountId:ip` bucket.
+10. `performAction` per selection, passing that selection's own `btnId`.
 
-Steps 3–6 must complete before any monday API call.
+Steps 3–8 must complete before any monday API call.
+
+Note the inversion from the old `/confirm` contract, where the secret gate ran
+before the rate limit. Here bucket A runs first (§4) and the signature is checked
+before any selection data is trusted.
 
 ### What each property buys — state it this way in the security doc
 
-- **Non-composable.** Holding N valid signatures gives zero ability to forge the
-  N+1st. Recomputation requires the base secret, which never leaves the server.
-- **Scope.** A leaked message exposes only the tasks it listed, for the buttons
-  offered — not the board.
+- **Non-composable.** Holding any number of valid message signatures gives zero
+  ability to forge one for a different manifest. Recomputation requires the base
+  secret, which never leaves the server.
+- **Scope.** A leaked message authorizes exactly the (task, button) pairs in its
+  own manifest — not the board, and not other buttons.
 - **Lifetime.** One send interval.
 - **Non-escalating.** A compromise cannot be widened; there is no path from a
   signature back to the secret.
@@ -314,10 +361,12 @@ the only authorization.
 - [ ] T4 — the actionable `text/html` digest renderer.
 
 **Build**
-- [ ] T5 — signature module: derive, verify, `currentSlot` (§3). Pure and
-      unit-testable; no storage, no network.
-- [ ] T6 — rewrite `POST /amp/confirm` to the §3 verification order, including
-      all-or-nothing and per-selection `btnId`.
+- [ ] T5 — signature module: build manifest, sign, verify, `currentSlot`, and a
+      strict canonical-manifest parser (§3). Pure and unit-testable; no storage,
+      no network.
+- [ ] T6 — rewrite `POST /amp/confirm` to the §3 verification order: manifest
+      verified before selections are read, every selection checked against the
+      manifest, all-or-nothing, per-selection `btnId`.
 - [ ] T7 — two-bucket rate limiter (§4).
 - [ ] T8 — `text/plain` renderer (§5).
 - [ ] T9 — multipart/alternative assembly for the Gmail API send path.
@@ -339,10 +388,13 @@ the only authorization.
 
 - **test-guard:** every new test must be **observed failing before it passes**.
   For each changed module, prove ≥2 killed mutations. Specifically pin:
-  - a signature valid for item A rejected when presented for item B;
-  - a signature from the previous slot rejected;
-  - a tampered `btnId` rejected;
-  - one bad selection rejecting the entire batch (the oracle guard);
+  - a selection for an item absent from the verified manifest is rejected;
+  - a selection naming a button not offered for that item in the manifest is
+    rejected;
+  - a manifest signature from the previous slot is rejected;
+  - a tampered manifest (item added, button added, reordered) is rejected;
+  - an invalid signature is rejected **without** the selection fields being read;
+  - one bad selection rejects the entire batch (the oracle guard);
   - the R2 invariant: a digest section contains only the recipient's tasks.
 - **error-guard:** every catch logs, rethrows, or displays. GraphQL soft errors
   inside 200 responses are thrown at the API funnel.
@@ -358,6 +410,13 @@ the only authorization.
 
 ## 10. Documents to update in the same PR
 
+- `CLAUDE.md` (this app's) — **required, and easy to miss.** Its "Locked
+  decisions" block currently reads "static shared secret in every email", "no
+  clicker identity in the URL", and "scanner protection = the JS-auto-POST
+  landing page". V6 overturns all three: the secret leaves the message, the
+  landing page is deleted, and `/confirm` no longer exists. Its module-layout
+  tree and the `/confirm` request-order contract also become wrong. Leaving this
+  stale will make the next agent revert V6 as a rule violation.
 - `docs/spec.md` — V6 amendment.
 - `docs/v5-gmail-dynamic-email.md` — mark the HTML fallback section superseded.
 - Security doc (external, 5-page): threat-model rate-limit row (§4), disclosure
