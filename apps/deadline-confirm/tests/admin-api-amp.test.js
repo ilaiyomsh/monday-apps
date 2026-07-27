@@ -114,6 +114,8 @@ function harness() {
     env: ENV,
     fetchImpl: vi.fn(),
     todayIso: TODAY,
+    // Pin the preview signing clock — AMP slot must match currentSlot(sendHour).
+    now: () => PREVIEW_NOW,
   });
 }
 
@@ -136,8 +138,8 @@ describe('GET /api/digest/preview — amp4email part', () => {
 
   it('passes config.digest.sendHour into the AMP renderer (slot differs from the default 8)', async () => {
     const res = await preview(harness());
-    // At 12:00 Jerusalem with sendHour 15 the slot is YESTERDAY — would NOT match a
-    // signature computed with the default sendHour 8 (today).
+    // Preview is signed with the live/injected clock. At 09:00 Jerusalem with
+    // sendHour 15 the slot is YESTERDAY — would NOT match sendHour 8 (today).
     expect(SLOT).toBe('20260718');
     expect(res.body.amp).toContain(`name="s" value="${SLOT}"`);
   });

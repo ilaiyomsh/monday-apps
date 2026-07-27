@@ -253,8 +253,9 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     /** Recipient + resolved buttons — the shape both renderers consume. */
     const withButtons = (recipient) => decorateRecipientSections(recipient, buttonsById);
     const sendHour = config.digest?.sendHour ?? 8;
-    // Midday Jerusalem on the preview day — deterministic slot/sig in admin preview.
-    const previewNow = new Date(`${today}T09:00:00+03:00`);
+    // Sign with the LIVE clock so a copied AMP is immediately submittable in the
+    // AMP playground / Gmail (same slot the server will demand). Task filtering
+    // still uses `today` above — only the HMAC slot follows `now`.
     const renderArgs = { baseUrl: env.baseUrl, secret, accountId: req.session.accountId };
     const renderPlainFor = (recipient) => renderDigestPlain({ recipient: withButtons(recipient) });
     const renderAmpFor = (recipient) =>
@@ -262,7 +263,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         ...renderArgs,
         recipient: withButtons(recipient),
         sendHour,
-        now: previewNow,
+        now: now(),
       });
 
     return {

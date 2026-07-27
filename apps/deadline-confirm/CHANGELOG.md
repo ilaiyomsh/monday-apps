@@ -2,10 +2,13 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
-## 0.9.3 — 2026-07-27 — fix: drop «ללא שינוי» from AMP status dropdown
+## 0.9.3 — 2026-07-27 — fix: drop «ללא שינוי»; preview AMP uses live slot
 
 - Status menu shows only the cluster's action buttons (no gray «ללא שינוי»).
 - Unchanged tasks = leave the current-status trigger as-is (`item_<id>` stays empty).
+- Admin preview AMP is signed with the **live clock** (not a fixed 09:00), so a
+  copied document matches `/amp/confirm`'s current slot when tested immediately.
+- Admin hint: playground submit needs `amp@gmail.dev` on `AMP_ALLOWED_SENDERS`.
 
 ## 0.9.2 — 2026-07-27 — feat: AMP digest — amp-bind status dropdown (monday colors)
 
