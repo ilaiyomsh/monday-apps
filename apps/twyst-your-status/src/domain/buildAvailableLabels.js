@@ -5,14 +5,17 @@
  * - Skip deactivated labels.
  * - Skip hiddenLabelIds (picker-only; current metadata still returned for UI notes).
  * - Skip the currently selected label — no reason to re-pick the same status.
- * - Missing rule OR empty allowlists → everyone may pick.
+ * - Missing rule OR empty allowlists → everyone may pick (subject to people gate).
  * - Else allow if actor.userId ∈ allowedUserIds OR any actor.teamIds ∈ allowedTeamIds.
+ * - If requiredPeopleColumnIds is set: actor must appear in EACH listed people
+ *   column (as a person / agent id, or as a member of a team listed there).
  * - Unauthorized labels are omitted (not disabled).
  *
  * Label keys in settings are monday status label **ids** (stable). The status
  * column value's `index` field also carries that id (monday naming quirk).
  */
 
+import { actorMatchesPeopleAssignments } from './peopleColumnGate.js';
 import { getLabelRule, isOpenAllowlist, migrateSettings } from './settingsSchema.js';
 
 function normalizeNonNegativeInteger(value) {
@@ -37,7 +40,7 @@ export function currentLabelIdFromValue(currentValue) {
   return fallbackIndex === null ? null : String(fallbackIndex);
 }
 
-export function isActorAllowedForLabel(rule, actor) {
+function passesAllowlist(rule, actor) {
   if (isOpenAllowlist(rule)) return true;
 
   const userId = actor?.userId == null ? null : String(actor.userId).trim();
@@ -52,15 +55,47 @@ export function isActorAllowedForLabel(rule, actor) {
   return teamIds.some((teamId) => allowedTeams.has(teamId));
 }
 
+function passesPeopleColumnGate(rule, actor, itemContext) {
+  const gateIds = Array.isArray(rule?.requiredPeopleColumnIds)
+    ? rule.requiredPeopleColumnIds
+    : [];
+  if (gateIds.length === 0) return true;
+
+  const peopleByColumnId = itemContext?.peopleByColumnId ?? {};
+  return gateIds.every((columnId) => {
+    const assignments = peopleByColumnId[columnId]
+      ?? peopleByColumnId[String(columnId)]
+      ?? null;
+    return actorMatchesPeopleAssignments(actor, assignments);
+  });
+}
+
+/**
+ * @param {object} rule
+ * @param {{ userId: string, teamIds?: string[] }} actor
+ * @param {{ peopleByColumnId?: Record<string, { personIds: string[], teamIds: string[] }> }} [itemContext]
+ */
+export function isActorAllowedForLabel(rule, actor, itemContext = {}) {
+  if (!passesAllowlist(rule, actor)) return false;
+  return passesPeopleColumnGate(rule, actor, itemContext);
+}
+
 /**
  * @param {{
  *   labels: Array<{ id: string, isDeactivated?: boolean, label?: string, color?: string }>,
  *   settings: object|null,
  *   actor: { userId: string, teamIds?: string[] },
  *   currentValue?: object|null,
+ *   peopleByColumnId?: Record<string, { personIds: string[], teamIds: string[] }>,
  * }} input
  */
-export function buildAvailableLabels({ labels, settings, actor, currentValue }) {
+export function buildAvailableLabels({
+  labels,
+  settings,
+  actor,
+  currentValue,
+  peopleByColumnId,
+}) {
   const normalizedLabels = Array.isArray(labels) ? labels : [];
   const migrated = migrateSettings(settings);
   const hiddenIds = new Set(migrated?.hiddenLabelIds ?? []);
@@ -68,6 +103,7 @@ export function buildAvailableLabels({ labels, settings, actor, currentValue }) 
   const currentLabel = currentLabelId === null
     ? null
     : normalizedLabels.find((label) => String(label.id) === currentLabelId) ?? null;
+  const itemContext = { peopleByColumnId: peopleByColumnId ?? {} };
 
   const options = normalizedLabels.filter((label) => {
     if (label?.isDeactivated) return false;
@@ -75,7 +111,7 @@ export function buildAvailableLabels({ labels, settings, actor, currentValue }) 
     if (currentLabelId !== null && labelId === currentLabelId) return false;
     if (hiddenIds.has(labelId)) return false;
     const rule = getLabelRule(migrated, labelId);
-    return isActorAllowedForLabel(rule, actor);
+    return isActorAllowedForLabel(rule, actor, itemContext);
   });
 
   return {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.6
+
+- Per-label people-column gate: pick a People column; only actors who appear on
+  that column (as a person or via a team listed there) may select the label.
+  Combines with user/team allowlists as AND.
+
 ## 3.2.5
 
 - Settings overlay ignores the tiny column-settings iframe size (root cause of

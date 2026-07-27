@@ -22,6 +22,9 @@ pointer leaves the cell, which feels like the picker vanishing while choosing.
 - Per **target label id**: optional `allowedUserIds` / `allowedTeamIds` and
   `requiredColumnIds`. Missing rule or empty allowlists ⇒ everyone may pick.
 - Actor is allowed when their user id matches **or** they belong to an allowed team.
+- Optional per-label **people-column gate** (`requiredPeopleColumnIds`): the actor must
+  appear on that people column of the same item as a person, **or** belong to a team
+  listed on that column. Empty ⇒ no extra gate. Combines with allowlists as AND.
 - `hiddenLabelIds` are omitted from the picker only; automation/API may still set them.
   A hidden current value remains visible as read-only.
 - Selecting a label with required fields always opens a fill form (even when filled);

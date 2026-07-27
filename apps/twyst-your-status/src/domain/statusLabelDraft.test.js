@@ -234,7 +234,12 @@ describe('pruneSettingsForActiveLabels', () => {
       version: 1,
       hiddenLabelIds: ['0'],
       labels: {
-        0: { allowedUserIds: ['1'], allowedTeamIds: [], requiredColumnIds: [] },
+        0: {
+          allowedUserIds: ['1'],
+          allowedTeamIds: [],
+          requiredColumnIds: [],
+          requiredPeopleColumnIds: [],
+        },
       },
     });
   });

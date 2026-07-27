@@ -32,6 +32,12 @@ export const GET_STATUS_COLUMN_CONTEXT = `
             border
           }
         }
+        ... on PeopleValue {
+          persons_and_teams {
+            id
+            kind
+          }
+        }
       }
     }
   }

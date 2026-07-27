@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CURRENT_VERSION,
+  collectRequiredPeopleColumnIds,
   emptyLabelRule,
   getLabelRule,
   isOpenAllowlist,
@@ -17,7 +18,7 @@ describe('migrateSettings', () => {
     expect(migrateSettings([])).toBeNull();
   });
 
-  it('normalizes a v1 settings object and drops unknown fields', () => {
+  it('normalizes a v1 settings object including requiredPeopleColumnIds', () => {
     expect(
       migrateSettings({
         version: 1,
@@ -27,6 +28,7 @@ describe('migrateSettings', () => {
             allowedUserIds: [' 10 ', 10, ''],
             allowedTeamIds: [20],
             requiredColumnIds: [' text ', 'date4', 'text'],
+            requiredPeopleColumnIds: [' person ', 'person', 'owner'],
             ignored: true,
           },
           bad: { allowedUserIds: ['1'] },
@@ -41,6 +43,7 @@ describe('migrateSettings', () => {
           allowedUserIds: ['10'],
           allowedTeamIds: ['20'],
           requiredColumnIds: ['text', 'date4'],
+          requiredPeopleColumnIds: ['person', 'owner'],
         },
       },
     });
@@ -58,9 +61,14 @@ describe('migrateSettings', () => {
 });
 
 describe('normalizeLabelRule / isOpenAllowlist / getLabelRule', () => {
-  it('treats empty allowlists as open to everyone', () => {
+  it('treats empty allowlists as open to everyone (people gate is separate)', () => {
     expect(isOpenAllowlist(emptyLabelRule())).toBe(true);
     expect(isOpenAllowlist(normalizeLabelRule({ allowedUserIds: [], allowedTeamIds: [] }))).toBe(true);
+    expect(isOpenAllowlist(normalizeLabelRule({
+      allowedUserIds: [],
+      allowedTeamIds: [],
+      requiredPeopleColumnIds: ['owner'],
+    }))).toBe(true);
     expect(isOpenAllowlist(normalizeLabelRule({ allowedUserIds: ['1'], allowedTeamIds: [] }))).toBe(false);
     expect(isOpenAllowlist(normalizeLabelRule({ allowedUserIds: [], allowedTeamIds: ['9'] }))).toBe(false);
   });
@@ -69,6 +77,20 @@ describe('normalizeLabelRule / isOpenAllowlist / getLabelRule', () => {
     const settings = migrateSettings({ version: 1, hiddenLabelIds: [], labels: {} });
     expect(getLabelRule(settings, '3')).toEqual(emptyLabelRule());
     expect(getLabelRule(null, '3')).toEqual(emptyLabelRule());
+  });
+});
+
+describe('collectRequiredPeopleColumnIds', () => {
+  it('returns unique people-column ids across all label rules', () => {
+    expect(collectRequiredPeopleColumnIds({
+      version: 1,
+      hiddenLabelIds: [],
+      labels: {
+        '0': { allowedUserIds: [], allowedTeamIds: [], requiredColumnIds: [], requiredPeopleColumnIds: ['owner'] },
+        '1': { allowedUserIds: [], allowedTeamIds: [], requiredColumnIds: [], requiredPeopleColumnIds: ['owner', 'qa'] },
+      },
+    })).toEqual(['owner', 'qa']);
+    expect(collectRequiredPeopleColumnIds(null)).toEqual([]);
   });
 });
 
@@ -82,6 +104,7 @@ describe('validateSettings', () => {
           allowedUserIds: [],
           allowedTeamIds: [],
           requiredColumnIds: ['text', 'gone'],
+          requiredPeopleColumnIds: [],
         },
       },
     };
@@ -92,6 +115,34 @@ describe('validateSettings', () => {
     expect(validateSettings(settings, [
       { id: 'text', type: 'text' },
       { id: 'gone', type: 'date' },
+    ]).ok).toBe(true);
+  });
+
+  it('flags missing or non-people gate columns', () => {
+    const settings = {
+      version: 1,
+      hiddenLabelIds: [],
+      labels: {
+        '0': {
+          allowedUserIds: [],
+          allowedTeamIds: [],
+          requiredColumnIds: [],
+          requiredPeopleColumnIds: ['owner', 'status'],
+        },
+      },
+    };
+    expect(validateSettings(settings, [
+      { id: 'status', type: 'status' },
+    ])).toEqual({
+      ok: false,
+      problems: [
+        'REQUIRED_PEOPLE_COLUMN_MISSING:owner',
+        'REQUIRED_PEOPLE_COLUMN_NOT_PEOPLE:status',
+      ],
+    });
+    expect(validateSettings(settings, [
+      { id: 'owner', type: 'people' },
+      { id: 'status', type: 'people' },
     ]).ok).toBe(true);
   });
 });

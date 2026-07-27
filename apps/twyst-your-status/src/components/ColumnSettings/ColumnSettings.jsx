@@ -42,6 +42,7 @@ function LabelCard({
   teams,
   teamsAvailable,
   columns,
+  peopleColumns,
   usedColors,
   saving,
   showPermissions,
@@ -57,6 +58,7 @@ function LabelCard({
       ? { id: String(match.id), name: match.name }
       : { id: String(id), name: String(id) };
   });
+  const gatePeopleColumnId = rule.requiredPeopleColumnIds?.[0] ?? '';
 
   return (
     <article className="twyst-label-card">
@@ -120,6 +122,24 @@ function LabelCard({
             >
               {teams.map((team) => (
                 <option key={team.id} value={String(team.id)}>{team.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="twyst-field">
+            <Text type="text2">עמודת אנשים</Text>
+            <select
+              className="twyst-select"
+              value={gatePeopleColumnId}
+              disabled={saving || peopleColumns.length === 0}
+              aria-label="עמודת אנשים לתנאי הרשאה"
+              onChange={(event) => onChangeRule(label.id, {
+                requiredPeopleColumnIds: event.target.value ? [event.target.value] : [],
+              })}
+            >
+              <option value="">ללא</option>
+              {peopleColumns.map((column) => (
+                <option key={column.id} value={column.id}>{column.title}</option>
               ))}
             </select>
           </div>
@@ -228,10 +248,16 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     [metadata, columnId],
   );
 
+  const peopleColumns = useMemo(
+    () => formColumns.filter((column) => column.type === 'people'),
+    [formColumns],
+  );
+
   const getRule = (labelId) => draft?.labels?.[labelId] ?? {
     allowedUserIds: [],
     allowedTeamIds: [],
     requiredColumnIds: [],
+    requiredPeopleColumnIds: [],
   };
 
   const toggleHidden = (labelId) => {
@@ -249,6 +275,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         allowedUserIds: [],
         allowedTeamIds: [],
         requiredColumnIds: [],
+        requiredPeopleColumnIds: [],
       };
       return {
         ...current,
@@ -436,6 +463,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
               teams={metadata.teams}
               teamsAvailable={metadata.teamsAvailable}
               columns={formColumns}
+              peopleColumns={peopleColumns}
               usedColors={usedColors}
               saving={saving}
               showPermissions={!label.isNew}
