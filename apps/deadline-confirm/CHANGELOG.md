@@ -9,6 +9,8 @@
 - Admin preview AMP is signed with the **live clock** (not a fixed 09:00), so a
   copied document matches `/amp/confirm`'s current slot when tested immediately.
 - Admin hint: playground submit needs `amp@gmail.dev` on `AMP_ALLOWED_SENDERS`.
+- Admin `500 internal_error` now returns `message` + `detail` (name/message/stack);
+  the SPA shows them on boot/save and logs the stack to the browser console.
 
 ## 0.9.2 — 2026-07-27 — feat: AMP digest — amp-bind status dropdown (monday colors)
 

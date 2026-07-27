@@ -346,11 +346,23 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
       try {
         await handler(req, res);
       } catch (err) {
+        const name = err?.name ? String(err.name) : 'Error';
+        const message = err?.message != null ? String(err.message) : String(err);
+        const stack = typeof err?.stack === 'string' ? err.stack : undefined;
         logError('admin_api', 'handler failed', {
           path: req.path,
-          error: String(err?.message ?? err),
+          method: req.method,
+          error: message,
+          errName: name,
+          stack,
         });
-        res.status(500).json({ error: 'internal_error' });
+        // Authenticated admin only — surface the real failure so draft debugging
+        // does not stop at opaque `internal_error` (owner ask 2026-07-27).
+        res.status(500).json({
+          error: 'internal_error',
+          message,
+          detail: { name, message, stack: stack ?? null },
+        });
       }
     };
   }
