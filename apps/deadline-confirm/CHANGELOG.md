@@ -2,6 +2,12 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.8.5 — 2026-07-27 — chore: redeploy draft after transient mapps failure
+
+- Re-push of 0.8.4 AMP status-picker styling after monday `code:push` polling
+  failed mid-deploy (`Unexpected error occurred while communicating with the
+  remote server`). No product code change.
+
 ## 0.8.4 — 2026-07-27 — style: AMP status picker matches monday status-picker-wrapper-v2
 
 - Picker column styled like monday's native status picker: **200px** wide,
