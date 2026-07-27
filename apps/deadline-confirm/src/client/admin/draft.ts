@@ -9,7 +9,10 @@ export interface DigestSectionDraft {
   title: string;
   dateColumnId: string | null;
   dateColumnTitle: string; // captured when the date column is picked
+  /** @deprecated prefer buttonIds — kept in sync as buttonIds[0] */
   buttonId: string | null;
+  /** Action buttons for this cluster (radio columns). First drives status filter. */
+  buttonIds: string[];
   includeStatusLabelIds: number[]; // task shown only if its status is one of these
 }
 
@@ -77,6 +80,7 @@ export function newDigestSection(title = ''): DigestSectionDraft {
     dateColumnId: null,
     dateColumnTitle: '',
     buttonId: null,
+    buttonIds: [],
     includeStatusLabelIds: [],
   };
 }
@@ -112,11 +116,21 @@ export function digestFromConfig(digest: DigestConfig | null | undefined): Diges
     // (production incident 2026-07-26: the spread below threw at SPA boot on a
     // legacy config). A missing condition becomes [], which digestIsComplete
     // then flags as incomplete — the operator picks labels, nothing is guessed.
-    sections: digest.sections.map((s) => ({
-      ...s,
-      dateColumnTitle: s.dateColumnTitle ?? '',
-      includeStatusLabelIds: Array.isArray(s.includeStatusLabelIds) ? [...s.includeStatusLabelIds] : [],
-    })),
+    sections: digest.sections.map((s) => {
+      const buttonIds =
+        Array.isArray(s.buttonIds) && s.buttonIds.length > 0
+          ? [...s.buttonIds]
+          : s.buttonId
+            ? [s.buttonId]
+            : [];
+      return {
+        ...s,
+        dateColumnTitle: s.dateColumnTitle ?? '',
+        buttonIds,
+        buttonId: buttonIds[0] ?? s.buttonId ?? null,
+        includeStatusLabelIds: Array.isArray(s.includeStatusLabelIds) ? [...s.includeStatusLabelIds] : [],
+      };
+    }),
   };
 }
 
@@ -131,7 +145,7 @@ export function digestIsComplete(digest: DigestDraft): boolean {
       (s) =>
         s.title.trim().length > 0 &&
         s.dateColumnId !== null &&
-        s.buttonId !== null &&
+        s.buttonIds.length > 0 &&
         // a status condition is mandatory — at least one included label
         s.includeStatusLabelIds.length > 0
     )
@@ -147,14 +161,18 @@ function digestToConfig(digest: DigestDraft): DigestConfig | null {
     usersEmailColumnId: digest.usersEmailColumnId as string,
     subject: digest.subject,
     sendHour: digest.sendHour,
-    sections: digest.sections.map((s) => ({
-      id: s.id,
-      title: s.title,
-      dateColumnId: s.dateColumnId as string,
-      dateColumnTitle: s.dateColumnTitle,
-      buttonId: s.buttonId as string,
-      includeStatusLabelIds: [...s.includeStatusLabelIds],
-    })),
+    sections: digest.sections.map((s) => {
+      const buttonIds = s.buttonIds.length > 0 ? [...s.buttonIds] : s.buttonId ? [s.buttonId] : [];
+      return {
+        id: s.id,
+        title: s.title,
+        dateColumnId: s.dateColumnId as string,
+        dateColumnTitle: s.dateColumnTitle,
+        buttonId: buttonIds[0] as string,
+        buttonIds,
+        includeStatusLabelIds: [...s.includeStatusLabelIds],
+      };
+    }),
   };
 }
 

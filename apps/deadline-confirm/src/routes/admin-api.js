@@ -32,7 +32,7 @@ import express from 'express';
 import { generateSecret, maskSecret } from '../services/secret.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
 import { renderDigestPlain } from '../helpers/digest-plain.js';
-import { buildDigest, digestTaskColumnIds } from '../services/digest-service.js';
+import { buildDigest, digestTaskColumnIds, decorateRecipientSections } from '../services/digest-service.js';
 import { runDigestForAccount, todayInJerusalem as todayInJerusalemFromRun } from '../services/digest-run.js';
 import { MondayApiError } from '../services/monday-api.js';
 import { logError } from '../helpers/logger.js';
@@ -120,7 +120,18 @@ function validateConfig(body) {
       if (!isNonEmptyString(s.title, 60)) return { field: 'digest.sections' };
       if (!isNonEmptyString(s.dateColumnId)) return { field: 'digest.sections' };
       if (!isNonEmptyString(s.dateColumnTitle, 255)) return { field: 'digest.sections' };
-      if (!buttonIds.has(s.buttonId)) return { field: 'digest.sections' };
+      // buttonIds (multi) with legacy fallback to singular buttonId
+      let sectionButtonIds;
+      if (Array.isArray(s.buttonIds) && s.buttonIds.length > 0) {
+        if (!s.buttonIds.every((id) => typeof id === 'string' && buttonIds.has(id))) {
+          return { field: 'digest.sections' };
+        }
+        sectionButtonIds = [...new Set(s.buttonIds)];
+      } else if (typeof s.buttonId === 'string' && buttonIds.has(s.buttonId)) {
+        sectionButtonIds = [s.buttonId];
+      } else {
+        return { field: 'digest.sections' };
+      }
       // "show by status": a non-empty set of label ids (0 is valid).
       if (
         !Array.isArray(s.includeStatusLabelIds) ||
@@ -134,7 +145,8 @@ function validateConfig(body) {
         title: s.title,
         dateColumnId: s.dateColumnId,
         dateColumnTitle: s.dateColumnTitle,
-        buttonId: s.buttonId,
+        buttonId: sectionButtonIds[0],
+        buttonIds: sectionButtonIds,
         includeStatusLabelIds: [...s.includeStatusLabelIds],
       });
     }
@@ -239,10 +251,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
 
     const buttonsById = new Map(config.buttons.map((b) => [b.id, b]));
     /** Recipient + resolved buttons — the shape both renderers consume. */
-    const withButtons = (recipient) => ({
-      ...recipient,
-      sections: recipient.sections.map((s) => ({ ...s, button: buttonsById.get(s.buttonId) })),
-    });
+    const withButtons = (recipient) => decorateRecipientSections(recipient, buttonsById);
     const sendHour = config.digest?.sendHour ?? 8;
     // Midday Jerusalem on the preview day — deterministic slot/sig in admin preview.
     const previewNow = new Date(`${today}T09:00:00+03:00`);

@@ -26,12 +26,53 @@ export function digestTaskColumnIds(config) {
   const ids = new Set([config.peopleColumnId]);
   for (const section of config.digest?.sections ?? []) {
     ids.add(section.dateColumnId);
-    const button = buttonsById.get(section.buttonId);
-    if (button) ids.add(button.statusColumnId);
+    const btnIds =
+      Array.isArray(section.buttonIds) && section.buttonIds.length > 0
+        ? section.buttonIds
+        : section.buttonId
+          ? [section.buttonId]
+          : [];
+    for (const bid of btnIds) {
+      const button = buttonsById.get(bid);
+      if (button) ids.add(button.statusColumnId);
+    }
   }
   ids.delete(null);
   ids.delete(undefined);
   return [...ids];
+}
+
+/**
+ * Button ids offered for a section (multi with singular fallback).
+ * @param {object} section
+ * @returns {string[]}
+ */
+export function sectionActionButtonIds(section) {
+  if (Array.isArray(section.buttonIds) && section.buttonIds.length > 0) {
+    return section.buttonIds.filter((id) => typeof id === 'string' && id.length > 0);
+  }
+  return section.buttonId ? [section.buttonId] : [];
+}
+
+/**
+ * Attach full ActionButton objects for AMP/plain renderers.
+ * @param {object} recipient
+ * @param {Map<string, object>} buttonsById
+ */
+export function decorateRecipientSections(recipient, buttonsById) {
+  return {
+    ...recipient,
+    sections: (recipient.sections ?? []).map((s) => {
+      const buttonIds = sectionActionButtonIds(s);
+      const buttons = buttonIds.map((id) => buttonsById.get(id)).filter(Boolean);
+      return {
+        ...s,
+        buttonIds,
+        button: buttons[0] ?? buttonsById.get(s.buttonId),
+        buttons,
+      };
+    }),
+  };
 }
 
 function col(item, columnId) {
@@ -151,6 +192,7 @@ export function buildDigest({ config, tasks, users, today }) {
         title: section.title,
         dateColumnTitle: section.dateColumnTitle ?? '',
         buttonId: section.buttonId,
+        buttonIds: sectionActionButtonIds(section),
         tasks: mine.map(({ itemId, name, date, dates, statusText }) => ({
           itemId,
           name,

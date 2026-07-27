@@ -260,13 +260,15 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
           <h2>מקבצי משימות</h2>
           <div className="dc-hint">
             כל מקבץ הוא טבלה במייל: עמודת תאריך שקובעת "באיחור" (תאריך שעבר — כולל היום),
-            תנאי סטטוס שקובע אילו משימות נכנסות, והכפתור שמופיע ליד כל משימה.
+            תנאי סטטוס שקובע אילו משימות נכנסות, וכפתורי הפעולה שמופיעים כעמודות סימון בטבלה.
           </div>
           {digest.sections.map((section) => {
-            const statusOptions = statusLabelOptionsFor(section.buttonId);
+            const primaryButtonId = section.buttonIds[0] ?? section.buttonId;
+            const statusOptions = statusLabelOptionsFor(primaryButtonId);
             const selectedStatus = statusOptions.filter((o) =>
               section.includeStatusLabelIds.includes(Number(o.value))
             );
+            const selectedButtons = buttonOptions.filter((o) => section.buttonIds.includes(o.value));
             return (
               <div key={section.id} className="dc-card">
                 <div className="dc-row">
@@ -294,16 +296,25 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                       clearable={false}
                     />
                   </div>
-                  <div className="dc-field">
-                    <label>כפתור פעולה</label>
+                  <div className="dc-field" style={{ minWidth: 220 }}>
+                    <label>כפתורי פעולה (עמודות במייל)</label>
                     <Dropdown
-                      placeholder="בחרו כפתור"
+                      multi
+                      multiline
+                      placeholder="בחרו כפתור אחד או יותר"
                       options={buttonOptions}
-                      value={findOption(buttonOptions, section.buttonId)}
-                      onChange={(opt: Option | null) =>
-                        // switching the button changes the status column → reset the condition
-                        patchSection(section.id, { buttonId: opt?.value ?? null, includeStatusLabelIds: [] })
-                      }
+                      value={selectedButtons}
+                      onChange={(opts: Option[] | null) => {
+                        const buttonIds = (opts ?? []).map((o) => o.value);
+                        const nextPrimary = buttonIds[0] ?? null;
+                        const primaryChanged = nextPrimary !== primaryButtonId;
+                        patchSection(section.id, {
+                          buttonIds,
+                          buttonId: nextPrimary,
+                          // switching the primary button changes the status column → reset filter
+                          ...(primaryChanged ? { includeStatusLabelIds: [] } : {}),
+                        });
+                      }}
                       clearable={false}
                     />
                   </div>
@@ -318,14 +329,14 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                 </div>
                 <div className="dc-row">
                   <div className="dc-field" style={{ minWidth: 320, flex: 1 }}>
-                    <label>הצג רק משימות שהסטטוס שלהן (בעמודת הכפתור):</label>
+                    <label>הצג רק משימות שהסטטוס שלהן (בעמודת הכפתור הראשון):</label>
                     <Dropdown
                       multi
                       multiline
                       placeholder={
-                        !section.buttonId ? 'בחרו קודם כפתור פעולה' : 'בחרו סטטוסים שנכנסים למקבץ'
+                        !primaryButtonId ? 'בחרו קודם כפתור פעולה' : 'בחרו סטטוסים שנכנסים למקבץ'
                       }
-                      disabled={!section.buttonId}
+                      disabled={!primaryButtonId}
                       options={statusOptions}
                       value={selectedStatus}
                       onChange={(opts: Option[] | null) =>
@@ -337,6 +348,7 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     />
                     <div className="dc-hint">
                       רק משימות בסטטוסים שנבחרו יופיעו במקבץ — כך משימות שכבר טופלו (למשל "בוצע") לא ייכנסו.
+                      הכפתור הראשון קובע את עמודת הסטטוס לסינון; כל הכפתורים שנבחרו מופיעים כעמודות במייל.
                     </div>
                   </div>
                 </div>

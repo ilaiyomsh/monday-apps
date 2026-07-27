@@ -52,7 +52,13 @@ export interface DigestSectionConfig {
   title: string;
   dateColumnId: string;
   dateColumnTitle: string; // the board column's title, captured at save → email <th>
+  /** Primary button — used for the status-column filter (includeStatusLabelIds). */
   buttonId: string;
+  /**
+   * Action buttons shown as radio columns in this cluster's AMP table.
+   * Must include buttonId. Absent/legacy configs are read as [buttonId].
+   */
+  buttonIds?: string[];
   // A task enters the section only if its status (on the button's status
   // column) is one of these label ids. Empty = nothing matches. Label id 0
   // is valid — never truthy-check.
