@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AttentionBox, Button, Heading } from '@vibe/core';
 import { validateSettings } from '../../domain/settingsSchema';
 import { isSupportedFormColumnType } from '../../domain/columnValueFormats';
@@ -31,16 +32,6 @@ import './ColumnSettings.css';
 const TEAMS_SCOPE_HINT =
   'חסר הסקופ teams:read — בחירת צוותים לא זמינה.';
 
-function ruleHasConfig(rule, hidden) {
-  return Boolean(
-    hidden
-    || (rule.allowedUserIds?.length ?? 0)
-    || (rule.allowedTeamIds?.length ?? 0)
-    || (rule.requiredColumnIds?.length ?? 0)
-    || (rule.requiredPeopleColumnIds?.length ?? 0),
-  );
-}
-
 function OptionChecklist({ options, values, disabled, onChange, emptyText }) {
   const selected = new Set((values ?? []).map(String));
   if (!options.length) {
@@ -71,6 +62,116 @@ function OptionChecklist({ options, values, disabled, onChange, emptyText }) {
   );
 }
 
+/** Custom dropdown — matches settings field chrome (not native <select>). */
+function SelectDropdown({
+  id,
+  value,
+  options,
+  disabled,
+  onChange,
+  placeholder = 'בחירה',
+  emptyText = 'אין אפשרויות',
+}) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const triggerRef = useRef(null);
+  const menuRef = useRef(null);
+  const selected = options.find((option) => String(option.value) === String(value));
+  const label = selected?.label || placeholder;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDown = (event) => {
+      if (menuRef.current?.contains(event.target) || triggerRef.current?.contains(event.target)) {
+        return;
+      }
+      setOpen(false);
+    };
+    const onEsc = (event) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc, true);
+    };
+  }, [open]);
+
+  const openMenu = () => {
+    if (disabled) return;
+    try {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.max(rect.width, 200);
+      const left = Math.min(
+        Math.max(8, rect.left),
+        Math.max(8, window.innerWidth - width - 8),
+      );
+      setPos({ top: rect.bottom + 4, left, width });
+      setOpen(true);
+    } catch (err) {
+      logger.error('SelectDropdown', 'Failed to open dropdown', err);
+    }
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        id={id}
+        type="button"
+        className={`twyst-select-trigger${open ? ' is-open' : ''}`}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => (open ? setOpen(false) : openMenu())}
+      >
+        <span className={`twyst-select-value${!selected ? ' is-placeholder' : ''}`}>{label}</span>
+        <span className="twyst-select-chevron" aria-hidden="true">▾</span>
+      </button>
+      {open && pos && createPortal(
+        <div
+          ref={menuRef}
+          className="twyst-select-menu"
+          role="listbox"
+          style={{
+            position: 'fixed',
+            top: pos.top,
+            left: pos.left,
+            width: pos.width,
+            zIndex: 10000,
+          }}
+        >
+          {options.length === 0 ? (
+            <div className="twyst-select-empty">{emptyText}</div>
+          ) : (
+            options.map((option) => {
+              const isActive = String(option.value) === String(value);
+              return (
+                <button
+                  key={String(option.value) || '__none__'}
+                  type="button"
+                  role="option"
+                  aria-selected={isActive}
+                  className={`twyst-select-option${isActive ? ' is-active' : ''}`}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                >
+                  {option.label}
+                </button>
+              );
+            })
+          )}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 function LabelCard({
   label,
   hidden,
@@ -92,21 +193,43 @@ function LabelCard({
   onToggleHidden,
   onChangeRule,
 }) {
-  const [open, setOpen] = useState(() => ruleHasConfig(rule, hidden));
-  const selectedPeople = (rule.allowedUserIds ?? []).map((id) => {
-    const match = users.find((user) => String(user.id) === String(id));
-    return match
-      ? { id: String(match.id), name: match.name }
-      : { id: String(id), name: String(id) };
-  });
+  // Accordion closed by default for every label — never auto-open on config.
+  const [open, setOpen] = useState(false);
+  const [requiredOpen, setRequiredOpen] = useState(false);
+
+  const selectedActors = useMemo(() => {
+    const people = (rule.allowedUserIds ?? []).map((id) => {
+      const match = users.find((user) => String(user.id) === String(id));
+      return match
+        ? { id: String(match.id), name: match.name, kind: 'person' }
+        : { id: String(id), name: String(id), kind: 'person' };
+    });
+    const teamEntries = (rule.allowedTeamIds ?? []).map((id) => {
+      const match = teams.find((team) => String(team.id) === String(id));
+      return match
+        ? { id: String(match.id), name: match.name, kind: 'team' }
+        : { id: String(id), name: String(id), kind: 'team' };
+    });
+    return [...people, ...teamEntries];
+  }, [rule.allowedUserIds, rule.allowedTeamIds, users, teams]);
+
   const gatePeopleColumnId = rule.requiredPeopleColumnIds?.[0] ?? '';
   const gatePeopleTitle = peopleColumns.find((column) => column.id === gatePeopleColumnId)?.title;
+  const peopleGateOptions = useMemo(() => ([
+    { value: '', label: 'ללא הגבלה' },
+    ...peopleColumns.map((column) => ({ value: column.id, label: column.title })),
+  ]), [peopleColumns]);
+
   const summaryBits = [];
   if (hidden) summaryBits.push('מוסתר');
-  if (rule.allowedUserIds?.length) summaryBits.push(`${rule.allowedUserIds.length} משתמשים`);
-  if (rule.allowedTeamIds?.length) summaryBits.push(`${rule.allowedTeamIds.length} צוותים`);
+  if (rule.allowedUserIds?.length || rule.allowedTeamIds?.length) {
+    const n = (rule.allowedUserIds?.length ?? 0) + (rule.allowedTeamIds?.length ?? 0);
+    summaryBits.push(`${n} מורשים`);
+  }
   if (gatePeopleTitle) summaryBits.push(gatePeopleTitle);
   if (rule.requiredColumnIds?.length) summaryBits.push(`${rule.requiredColumnIds.length} שדות חובה`);
+
+  const requiredCount = rule.requiredColumnIds?.length ?? 0;
 
   return (
     <article className={`twyst-label-card${open ? ' is-open' : ''}`}>
@@ -171,11 +294,12 @@ function LabelCard({
             </label>
             <button
               type="button"
-              className="twyst-text-btn"
+              className="twyst-text-btn twyst-accordion-toggle"
               aria-expanded={open}
               disabled={saving}
               onClick={() => setOpen((current) => !current)}
             >
+              <span className={`twyst-accordion-chevron${open ? ' is-open' : ''}`} aria-hidden="true">▾</span>
               {open ? 'הסתר הרשאות' : 'הרשאות'}
               {!open && summaryBits.length > 0 ? ` · ${summaryBits.join(' · ')}` : ''}
             </button>
@@ -183,26 +307,24 @@ function LabelCard({
 
           {open && (
             <div className="twyst-permissions">
-              <div className="twyst-field twyst-field-users">
-                <span className="twyst-field-label">משתמשים מורשים</span>
+              <div className="twyst-field twyst-field-actors">
+                <span className="twyst-field-label">אנשים וצוותים מורשים</span>
                 <PersonPicker
-                  selected={selectedPeople}
+                  selected={selectedActors}
                   users={users}
+                  teams={teamsAvailable ? teams : []}
                   bordered
-                  onChange={(people) => onChangeRule(label.id, {
-                    allowedUserIds: (people || []).map((person) => String(person.id)),
-                  })}
-                />
-              </div>
-
-              <div className="twyst-field twyst-field-teams">
-                <span className="twyst-field-label">צוותים מורשים</span>
-                <OptionChecklist
-                  options={teams.map((team) => ({ id: team.id, label: team.name }))}
-                  values={rule.allowedTeamIds}
-                  disabled={!teamsAvailable || saving}
-                  emptyText={teamsAvailable ? 'אין צוותים בחשבון' : 'חסר סקופ teams:read'}
-                  onChange={(next) => onChangeRule(label.id, { allowedTeamIds: next })}
+                  onChange={(actors) => {
+                    const nextActors = actors || [];
+                    onChangeRule(label.id, {
+                      allowedUserIds: nextActors
+                        .filter((actor) => actor.kind !== 'team')
+                        .map((actor) => String(actor.id)),
+                      allowedTeamIds: nextActors
+                        .filter((actor) => actor.kind === 'team')
+                        .map((actor) => String(actor.id)),
+                    });
+                  }}
                 />
               </div>
 
@@ -210,35 +332,46 @@ function LabelCard({
                 <label className="twyst-field-label" htmlFor={`people-gate-${label.clientKey}`}>
                   חייב להופיע בעמודת אנשים
                 </label>
-                <select
+                <SelectDropdown
                   id={`people-gate-${label.clientKey}`}
-                  className="twyst-select"
                   value={gatePeopleColumnId}
+                  options={peopleGateOptions}
                   disabled={saving || peopleColumns.length === 0}
-                  onChange={(event) => onChangeRule(label.id, {
-                    requiredPeopleColumnIds: event.target.value ? [event.target.value] : [],
+                  placeholder="ללא הגבלה"
+                  emptyText="אין עמודות אנשים בלוח"
+                  onChange={(nextValue) => onChangeRule(label.id, {
+                    requiredPeopleColumnIds: nextValue ? [nextValue] : [],
                   })}
-                >
-                  <option value="">ללא הגבלה</option>
-                  {peopleColumns.map((column) => (
-                    <option key={column.id} value={column.id}>{column.title}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div className="twyst-field twyst-field-required">
-                <span className="twyst-field-label">שדות חובה במעבר</span>
-                <OptionChecklist
-                  options={columns.map((column) => ({
-                    id: column.id,
-                    label: column.title,
-                    disabled: !isSupportedFormColumnType(column.type),
-                  }))}
-                  values={rule.requiredColumnIds}
+                <button
+                  type="button"
+                  className="twyst-collapse-toggle"
+                  aria-expanded={requiredOpen}
                   disabled={saving}
-                  emptyText="אין עמודות זמינות"
-                  onChange={(next) => onChangeRule(label.id, { requiredColumnIds: next })}
-                />
+                  onClick={() => setRequiredOpen((current) => !current)}
+                >
+                  <span className={`twyst-accordion-chevron${requiredOpen ? ' is-open' : ''}`} aria-hidden="true">▾</span>
+                  <span className="twyst-field-label">שדות חובה במעבר</span>
+                  {requiredCount > 0 && (
+                    <span className="twyst-collapse-count">{requiredCount}</span>
+                  )}
+                </button>
+                {requiredOpen && (
+                  <OptionChecklist
+                    options={columns.map((column) => ({
+                      id: column.id,
+                      label: column.title,
+                      disabled: !isSupportedFormColumnType(column.type),
+                    }))}
+                    values={rule.requiredColumnIds}
+                    disabled={saving}
+                    emptyText="אין עמודות זמינות"
+                    onChange={(next) => onChangeRule(label.id, { requiredColumnIds: next })}
+                  />
+                )}
               </div>
             </div>
           )}
