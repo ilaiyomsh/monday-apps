@@ -3,7 +3,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock the monday API layer + config store so the apply service runs without a
 // real SDK. api() returns the create_item id; formatValue is a passthrough.
 vi.mock('../mondayApi/monday-client.js', () => ({
-  api: vi.fn(async () => ({ create_item: { id: 'NEW_TOPIC' } })),
+  monday: {
+    storage: {
+      getItem: vi.fn(async () => ({ data: { value: null } })),
+      setItem: vi.fn(async () => ({ data: { success: true } })),
+    },
+  },
+  api: vi.fn(async (query) => {
+    const fields = [
+      ['create_item', 'TOPIC'],
+      ['change_multiple_column_values', 'LINK'],
+      ['create_subitem', 'POINT'],
+    ];
+    for (const [field, prefix] of fields) {
+      const aliases = [...query.matchAll(new RegExp(`\\b([_A-Za-z][_0-9A-Za-z]*)\\s*:\\s*${field}\\s*\\(`, 'g'))]
+        .map((match) => match[1]);
+      if (aliases.length) return Object.fromEntries(aliases.map((alias) => [alias, { id: `${prefix}-${alias}` }]));
+    }
+    return {};
+  }),
   formatValue: vi.fn((type, value) => ({ __type: type, value })),
 }));
 vi.mock('../mondayApi/board-config-store.js', () => ({
@@ -99,7 +117,19 @@ describe('countPoints', () => {
 describe('createTopicsFromTemplate', () => {
   beforeEach(() => {
     api.mockClear();
-    api.mockResolvedValue({ create_item: { id: 'NEW_TOPIC' } });
+    api.mockImplementation(async (query) => {
+      const fields = [
+        ['create_item', 'TOPIC'],
+        ['change_multiple_column_values', 'LINK'],
+        ['create_subitem', 'POINT'],
+      ];
+      for (const [field, prefix] of fields) {
+        const aliases = [...query.matchAll(new RegExp(`\\b([_A-Za-z][_0-9A-Za-z]*)\\s*:\\s*${field}\\s*\\(`, 'g'))]
+          .map((match) => match[1]);
+        if (aliases.length) return Object.fromEntries(aliases.map((alias) => [alias, { id: `${prefix}-${alias}` }]));
+      }
+      return {};
+    });
   });
 
   it('no-ops when there is no discussion id or no topics', async () => {
@@ -119,31 +149,34 @@ describe('createTopicsFromTemplate', () => {
 
     expect(result).toMatchObject({ topics: 2, points: 2 });
 
-    // 2 create_item + 2 create_subitem
+    // One aliased batch for topics, one for relation writes, one for points.
     const itemCalls = api.mock.calls.filter((c) => c[0].includes('create_item'));
+    const relationCalls = api.mock.calls.filter((c) => c[0].includes('change_multiple_column_values'));
     const subitemCalls = api.mock.calls.filter((c) => c[0].includes('create_subitem'));
-    expect(itemCalls).toHaveLength(2);
-    expect(subitemCalls).toHaveLength(2);
+    expect(itemCalls).toHaveLength(1);
+    expect(relationCalls).toHaveLength(1);
+    expect(subitemCalls).toHaveLength(1);
+    expect(itemCalls[0][0].match(/create_item\s*\(/g)).toHaveLength(2);
+    expect(subitemCalls[0][0].match(/create_subitem\s*\(/g)).toHaveLength(2);
 
-    // create_item carries the topics board id, the topic name, and the relation column
+    // User values are variables. Relation writes happen after create_item because
+    // monday silently drops board_relation values during create_item.
     const [, firstItemVars] = itemCalls[0];
     expect(firstItemVars.boardId).toBe('TOPICS_BOARD');
-    expect(firstItemVars.name).toBe('נושא א');
-    expect(JSON.parse(firstItemVars.columnValues)).toHaveProperty('rel_col');
+    expect(firstItemVars.name0).toBe('נושא א');
+    expect(JSON.stringify(relationCalls[0][1])).toContain('rel_col');
 
     // subitems are attached to the returned topic id with the point name
     const [, firstSubVars] = subitemCalls[0];
-    expect(firstSubVars.parentId).toBe('NEW_TOPIC');
-    expect(firstSubVars.name).toBe('נקודה 1');
+    expect(firstSubVars.parentId0).toBe('TOPIC-topic0');
+    expect(firstSubVars.name0).toBe('נקודה 1');
   });
 
-  it('skips a topic whose create_item returns no id (no points attached)', async () => {
-    api.mockResolvedValueOnce({ create_item: {} }); // first topic: malformed (no id)
-    const result = await createTopicsFromTemplate('DISC_1', {
+  it('surfaces a create_item alias that returns no id and does not create its points', async () => {
+    api.mockResolvedValueOnce({ topic0: null });
+    await expect(createTopicsFromTemplate('DISC_1', {
       topics: [{ name: 'bad', points: ['p1'] }],
-    });
-    expect(result).toMatchObject({ topics: 0, points: 0 });
-    // only the create_item was attempted; no create_subitem fired
+    })).rejects.toThrow('missing alias result');
     expect(api.mock.calls.some((c) => c[0].includes('create_subitem'))).toBe(false);
   });
 });

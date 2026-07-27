@@ -17,8 +17,22 @@
  */
 import { api, formatValue } from './mondayApi/monday-client.js';
 import { getBoardId, getColumns } from './mondayApi/board-config-store.js';
-import { saveTopicOrder } from './topicOrder.js';
+import { saveFreshTopicOrder, saveTopicOrder } from './topicOrder.js';
 import logger from './logger.js';
+import {
+  buildTopicCreateBatches,
+  buildTopicRelationBatches,
+  buildPointCreateBatches,
+  parseAliasedMutationResult,
+  buildFreshTopicOrderPayload,
+} from './templateBatching.js';
+export {
+  buildTopicCreateBatches,
+  buildTopicRelationBatches,
+  buildPointCreateBatches,
+  parseAliasedMutationResult,
+  buildFreshTopicOrderPayload,
+};
 
 function pointName(point) {
   return (typeof point === 'string' ? point : point?.name || '').trim();
@@ -146,8 +160,9 @@ export function sanitizeTypeTemplate(template, id) {
 
 /*
  * Create every topic of a template (and each topic's points as subitems) under
- * the given discussion. Topics and points are created sequentially to preserve
- * order and stay well under monday's complexity/rate limits.
+ * the given discussion. Writes use aliased GraphQL batches of at most ten
+ * operations so the serialized iframe bridge makes a few round-trips while the
+ * explicit order map preserves template order.
  *
  * Errors propagate (api() throws a MondayApiError that the logger funnel already
  * surfaced as a toast); callers catch only to reset their loading state.
@@ -159,27 +174,70 @@ export function sanitizeTypeTemplate(template, id) {
  *
  * @returns {Promise<{topics:number, points:number}>} how many were created.
  */
-export async function createTopicsFromTemplate(discussionId, template, { onProgress, existingTopicIds = [] } = {}) {
+export async function createTopicsFromTemplate(discussionId, template, {
+  onProgress,
+  existingTopicIds = [],
+  freshDiscussion = false,
+  resumeState = null,
+  onCheckpoint,
+} = {}) {
   const clean = sanitizeTemplate(template);
   if (!discussionId || !clean.topics.length) return { topics: 0, points: 0, topicIds: [] };
 
   const boardId = getBoardId('topics');
-  const relation = getColumns('topics')?.discussionLinkID; // board_relation: topic -> discussion
-  const topicDispCol = getColumns('topics')?.topicNotForDiscussionID; // "האם להציג?" (item)
-  const pointDispCol = getColumns('topics')?.pointNotForDiscussionID; // "האם להציג?" (subitem)
-  // round115 — creation-date columns, stamped on every topic/point created from a
-  // template (mirrors useTopics.addTopic/addPoint).
-  // round267 (owner request) — the CREATOR column is intentionally NOT stamped
-  // here: template/duplicate/type-default topics are generated, not authored by a
-  // person, so they carry NO creator (and thus show no creator avatar). Only a
-  // MANUALLY typed topic (useTopics.addTopic) gets a creator.
-  const topicCreatedCol = getColumns('topics')?.topicCreationDateID;
-  const pointCreatedCol = getColumns('topics')?.pointCreationDateID;
+  const columns = getColumns('topics') || {};
+  const relation = columns.discussionLinkID;
+  const topicDispCol = columns.topicNotForDiscussionID;
+  const pointDispCol = columns.pointNotForDiscussionID;
+  const topicCreatedCol = columns.topicCreationDateID;
+  const pointCreatedCol = columns.pointCreationDateID;
+  const templateKey = JSON.stringify(clean.topics);
+  const compatibleResume = resumeState?.templateKey === templateKey ? resumeState : null;
+  const state = {
+    templateKey,
+    topicResults: Array.isArray(compatibleResume?.topicResults)
+      ? compatibleResume.topicResults.map((result) => ({
+        sourceIndex: Number(result.sourceIndex),
+        id: String(result.id),
+      }))
+      : [],
+    pointResults: Array.isArray(compatibleResume?.pointResults)
+      ? compatibleResume.pointResults.map((result) => ({
+        topicSourceIndex: Number(result.topicSourceIndex),
+        pointIndex: Number(result.pointIndex),
+        id: String(result.id),
+      }))
+      : [],
+    linkedTopicSourceIndexes: Array.isArray(compatibleResume?.linkedTopicSourceIndexes)
+      ? compatibleResume.linkedTopicSourceIndexes.map(Number)
+      : [],
+    ambiguousMutation: compatibleResume?.ambiguousMutation
+      ? { ...compatibleResume.ambiguousMutation }
+      : null,
+  };
 
-  let topicsCreated = 0;
-  let pointsCreated = 0;
-  const total = clean.topics.reduce((n, t) => n + 1 + t.points.length, 0);
-  let done = 0;
+  const checkpoint = () => {
+    const snapshot = {
+      templateKey: state.templateKey,
+      topicResults: [...state.topicResults].sort((a, b) => a.sourceIndex - b.sourceIndex),
+      pointResults: [...state.pointResults].sort((a, b) => (
+        a.topicSourceIndex - b.topicSourceIndex || a.pointIndex - b.pointIndex
+      )),
+      linkedTopicSourceIndexes: [...new Set(state.linkedTopicSourceIndexes)].sort((a, b) => a - b),
+      ambiguousMutation: state.ambiguousMutation ? { ...state.ambiguousMutation } : null,
+    };
+    if (typeof onCheckpoint === 'function') {
+      try {
+        onCheckpoint(snapshot);
+      } catch (err) {
+        logger.warn('createTopicsFromTemplate', 'Template checkpoint listener failed; creation continues', err);
+      }
+    }
+    return snapshot;
+  };
+
+  const total = clean.topics.reduce((count, topic) => count + 1 + topic.points.length, 0);
+  let done = state.topicResults.length + state.pointResults.length;
   const report = () => {
     if (typeof onProgress !== 'function') return;
     try {
@@ -190,90 +248,211 @@ export async function createTopicsFromTemplate(discussionId, template, { onProgr
   };
   report();
 
-  const topicColumnValues = () => {
-    const cv = {};
-    if (relation?.id) {
-      cv[relation.id] = formatValue(relation.type || 'board_relation', { linkedItems: [{ id: discussionId }] });
+  const attachResumeState = (err) => {
+    const snapshot = checkpoint();
+    try {
+      Object.defineProperty(err, 'templateResumeState', {
+        value: snapshot,
+        enumerable: false,
+        configurable: true,
+      });
+    } catch (tagErr) {
+      logger.warn('createTopicsFromTemplate', 'Could not attach template resume state to error', tagErr);
     }
-    // "האם להציג?" CHECKED = show; default created topics to shown.
-    if (topicDispCol?.id) cv[topicDispCol.id] = formatValue('checkbox', true);
-    if (topicCreatedCol?.id) cv[topicCreatedCol.id] = formatValue('date', new Date());
-    return cv;
-  };
-  const pointColumnValues = () => {
-    const cv = pointDispCol?.id ? { [pointDispCol.id]: formatValue('checkbox', true) } : {};
-    if (pointCreatedCol?.id) cv[pointCreatedCol.id] = formatValue('date', new Date());
-    return cv;
+    return err;
   };
 
-  // round297 — PERFORMANCE: creation used to be fully sequential (one round-trip
-  // per topic AND per point), so a type template with a few topics × points took
-  // many seconds. Now every TOPIC is created CONCURRENTLY, and each topic's POINTS
-  // run as their own sequential chain (point order matters — no point-order map is
-  // persisted) with the chains themselves in PARALLEL. Wall-time drops from
-  // sum(topics+points) round-trips to ~1 (topics) + max-points-in-a-topic. Order
-  // for the ribbon is preserved by the TEMPLATE index, not by creation timing.
-  const topicResults = await Promise.all(clean.topics.map(async (topic, i) => {
-    const res = await api(
-      `mutation ($boardId: ID!, $name: String!, $columnValues: JSON!) {
-        create_item(board_id: $boardId, item_name: $name, column_values: $columnValues) { id }
-      }`,
-      { boardId, name: topic.name, columnValues: JSON.stringify(topicColumnValues()) },
-      'createTopicFromTemplate'
+  const ambiguousMutationError = (phase, operations, cause = null) => {
+    state.ambiguousMutation = {
+      phase,
+      aliases: (operations || []).map((operation) => operation.alias),
+    };
+    const error = new Error(
+      'החיבור ל-monday נותק בזמן יצירת נושאים או נקודות. היצירה נעצרה כדי למנוע כפילויות; אין לנסות שוב מתוך הטופס הפתוח.'
     );
-    const topicId = res?.create_item?.id;
-    if (!topicId) {
-      // create_item succeeded at the API level but returned no id — can't attach
-      // points. Surface the anomaly (WARN, no toast) rather than silently count it.
-      logger.warn('createTopicsFromTemplate', `הנושא "${topic.name}" נוצר אך לא הוחזר מזהה — דילוג על הנקודות`);
-      return { i, topicId: null, topic };
+    error.name = 'AmbiguousTemplateMutationError';
+    error.code = 'AMBIGUOUS_TEMPLATE_MUTATION';
+    if (cause) error.cause = cause;
+    return error;
+  };
+
+  if (state.ambiguousMutation) {
+    throw attachResumeState(ambiguousMutationError(
+      state.ambiguousMutation.phase,
+      state.ambiguousMutation.aliases.map((alias) => ({ alias }))
+    ));
+  }
+
+  const executeBatch = async (batch, functionName) => {
+    try {
+      // These aliases create real items and are not idempotent. A transport
+      // retry after monday accepted the request could duplicate up to ten rows,
+      // so the central API retry loop is explicitly disabled for this call.
+      const data = await api(batch.query, batch.variables, functionName, { retry: false });
+      const parsed = parseAliasedMutationResult(batch, { data, errors: [] });
+      if (parsed.failed.length) {
+        const missing = new Error(`${functionName} returned ${parsed.failed.length} missing alias result(s)`);
+        missing.batchResult = parsed;
+        missing.batchResponseReceived = true;
+        throw missing;
+      }
+      return parsed;
+    } catch (err) {
+      if (!err?.batchResult) {
+        const parsed = parseAliasedMutationResult(batch, err?.response || {});
+        try {
+          Object.defineProperty(err, 'batchResult', {
+            value: parsed,
+            enumerable: false,
+            configurable: true,
+          });
+        } catch (tagErr) {
+          logger.warn('createTopicsFromTemplate', 'Could not attach partial batch result to error', tagErr);
+        }
+      }
+      throw err;
     }
-    topicsCreated += 1;
-    done += 1;
-    report();
-    return { i, topicId: String(topicId), topic };
-  }));
+  };
 
-  // Ribbon order = TEMPLATE order (by index), valid ids only.
-  const createdTopicIds = topicResults
-    .filter((r) => r.topicId)
-    .sort((a, b) => a.i - b.i)
-    .map((r) => r.topicId);
+  const protectAmbiguousCreate = (err, batch, phase) => {
+    const response = err?.response;
+    const hasServerResponse = Boolean(err?.batchResponseReceived) || (Boolean(response) && (
+      Object.prototype.hasOwnProperty.call(response, 'data')
+      || Array.isArray(response?.errors)
+    ));
+    const createsItems = (batch?.operations || []).some((operation) => (
+      operation.kind === 'topic' || operation.kind === 'point'
+    ));
+    return createsItems && !hasServerResponse
+      ? ambiguousMutationError(phase, batch.operations, err)
+      : err;
+  };
 
-  await Promise.all(topicResults.map(async ({ topicId, topic }) => {
-    if (!topicId) return;
-    const pointCv = JSON.stringify(pointColumnValues());
-    for (const point of topic.points) {
-      await api(
-        `mutation ($parentId: ID!, $name: String!, $cv: JSON!) {
-          create_subitem(parent_item_id: $parentId, item_name: $name, column_values: $cv) { id }
-        }`,
-        { parentId: topicId, name: point, cv: pointCv },
-        'createPointFromTemplate'
-      );
-      pointsCreated += 1;
+  const addTopicSuccesses = (results) => {
+    const bySource = new Map(state.topicResults.map((result) => [result.sourceIndex, result]));
+    for (const result of results) {
+      if (bySource.has(result.sourceIndex)) continue;
+      const normalized = { sourceIndex: result.sourceIndex, id: String(result.id) };
+      bySource.set(result.sourceIndex, normalized);
       done += 1;
       report();
     }
+    state.topicResults = [...bySource.values()];
+  };
+
+  const addPointSuccesses = (results) => {
+    const pointKey = (result) => `${result.topicSourceIndex}:${result.pointIndex}`;
+    const bySource = new Map(state.pointResults.map((result) => [pointKey(result), result]));
+    for (const result of results) {
+      const key = pointKey(result);
+      if (bySource.has(key)) continue;
+      const normalized = {
+        topicSourceIndex: result.topicSourceIndex,
+        pointIndex: result.pointIndex,
+        id: String(result.id),
+      };
+      bySource.set(key, normalized);
+      done += 1;
+      report();
+    }
+    state.pointResults = [...bySource.values()];
+  };
+
+  const createdAt = new Date();
+  const topicCv = {};
+  if (topicDispCol?.id) topicCv[topicDispCol.id] = formatValue('checkbox', true);
+  if (topicCreatedCol?.id) topicCv[topicCreatedCol.id] = formatValue('date', createdAt);
+  const pointCv = {};
+  if (pointDispCol?.id) pointCv[pointDispCol.id] = formatValue('checkbox', true);
+  if (pointCreatedCol?.id) pointCv[pointCreatedCol.id] = formatValue('date', createdAt);
+
+  const existingTopicSources = new Set(state.topicResults.map((result) => result.sourceIndex));
+  const missingTopics = clean.topics
+    .map((topic, sourceIndex) => ({
+      ...topic,
+      sourceIndex,
+      columnValues: JSON.stringify(topicCv),
+    }))
+    .filter((topic) => !existingTopicSources.has(topic.sourceIndex));
+
+  for (const batch of buildTopicCreateBatches({ boardId, topics: missingTopics })) {
+    try {
+      const parsed = await executeBatch(batch, 'createTopicsFromTemplate.batchTopics');
+      addTopicSuccesses(parsed.successful);
+      checkpoint();
+    } catch (err) {
+      addTopicSuccesses(err?.batchResult?.successful || []);
+      throw attachResumeState(protectAmbiguousCreate(err, batch, 'topics'));
+    }
+  }
+
+  if (relation?.id) {
+    const linked = new Set(state.linkedTopicSourceIndexes);
+    const unlinkedTopics = state.topicResults.filter((topic) => !linked.has(topic.sourceIndex));
+    for (const batch of buildTopicRelationBatches({
+      boardId,
+      discussionId,
+      relationColumnId: relation.id,
+      topics: unlinkedTopics,
+    })) {
+      try {
+        const parsed = await executeBatch(batch, 'createTopicsFromTemplate.batchRelations');
+        parsed.successful.forEach((result) => linked.add(result.sourceIndex));
+        state.linkedTopicSourceIndexes = [...linked];
+        checkpoint();
+      } catch (err) {
+        (err?.batchResult?.successful || []).forEach((result) => linked.add(result.sourceIndex));
+        state.linkedTopicSourceIndexes = [...linked];
+        throw attachResumeState(err);
+      }
+    }
+  }
+
+  const completedPoints = new Set(
+    state.pointResults.map((result) => `${result.topicSourceIndex}:${result.pointIndex}`)
+  );
+  const pointTopics = state.topicResults.map((topicResult) => ({
+    id: topicResult.id,
+    sourceIndex: topicResult.sourceIndex,
+    points: clean.topics[topicResult.sourceIndex].points
+      .map((name, pointIndex) => ({
+        name,
+        pointIndex,
+        columnValues: JSON.stringify(pointCv),
+      }))
+      .filter((point) => !completedPoints.has(`${topicResult.sourceIndex}:${point.pointIndex}`)),
   }));
 
-  // round250 — persist the ribbon order so the template lands correctly in the
-  // RTL ribbon (items[0] = rightmost): EXISTING topics keep their place, then the
-  // template's topics are appended AFTER them in TEMPLATE order. Because the
-  // ribbon is RTL this puts the whole template block to the LEFT of existing
-  // topics (owner request E), with the template's FIRST topic to the right of its
-  // second, etc. (owner request D). On a fresh discussion (existingTopicIds=[])
-  // this simply orders the template topics first-to-last = right-to-left.
-  if (createdTopicIds.length) {
+  for (const batch of buildPointCreateBatches({ topics: pointTopics })) {
     try {
-      await saveTopicOrder(discussionId, [...existingTopicIds.map(String), ...createdTopicIds]);
+      const parsed = await executeBatch(batch, 'createTopicsFromTemplate.batchPoints');
+      addPointSuccesses(parsed.successful);
+      checkpoint();
     } catch (err) {
-      // best-effort: a failed order save just leaves the API/default order.
+      addPointSuccesses(err?.batchResult?.successful || []);
+      throw attachResumeState(protectAmbiguousCreate(err, batch, 'points'));
+    }
+  }
+
+  const order = buildFreshTopicOrderPayload({
+    topicResults: state.topicResults,
+    pointResults: state.pointResults,
+  });
+  if (order.topics.length) {
+    try {
+      if (freshDiscussion) await saveFreshTopicOrder(discussionId, order);
+      else await saveTopicOrder(discussionId, [...existingTopicIds.map(String), ...order.topics]);
+    } catch (err) {
       logger.warn('createTopicsFromTemplate', 'שמירת סדר הנושאים מהתבנית נכשלה', err);
     }
   }
 
-  return { topics: topicsCreated, points: pointsCreated, topicIds: createdTopicIds };
+  checkpoint();
+  return {
+    topics: state.topicResults.length,
+    points: state.pointResults.length,
+    topicIds: order.topics,
+  };
 }
 
 /*

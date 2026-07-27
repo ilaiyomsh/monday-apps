@@ -14,6 +14,15 @@
 
 - Development version after synchronizing the production RTL preview hotfix from PR #435 back into `develop`. The correction now lives in the tested preview-pagination DOM helper; no additional production behavior is introduced by this version bump.
 
+- round299: **האצת יצירת דיון עם תבנית.** יצירת הנושאים, קישורם לדיון ויצירת הנקודות
+  נשלחים כעת ב־GraphQL aliased batches של עד 10 פעולות במקום קריאת SDK נפרדת לכל
+  פריט. סדר הנושאים והנקודות נשמר בכתיבת Storage יחידה בדיון חדש. נוסף checkpoint
+  חלקי: אם שלב התבנית נכשל אחרי שהדיון כבר נוצר, ניסיון חוזר ממשיך מאותו דיון ויוצר
+  רק aliases חסרים, בלי לשכפל את הדיון או הצלחות שכבר נשמרו. זמני שלבי היצירה נמדדים
+  בטלמטריית health כדי לאמת את השיפור ב־Draft מול נתוני אמת. קריאות היצירה
+  הלא-idempotent אינן נשלחות שוב אוטומטית; אם תשובת הרשת אבדה לאחר השליחה, הטופס
+  נעצר במצב בטוח במקום להסתכן ביצירת נושאים או נקודות כפולים.
+
 ## 2.3.2 — 2026-07-26
 
 - round298: **יישור RTL עקבי בתצוגה המקדימה של הייצוא.** טקסט עברי בתיבות רקע,
