@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   MONDAY_STATUS_COLORS,
   ensureUniqueStatusColors,
+  fromVibeColorName,
   normalizeStatusColorEnum,
   pickUnusedStatusColor,
   resolveStatusColorHex,
+  toVibeColorName,
   tryNormalizeStatusColorEnum,
 } from './statusColors.js';
 
@@ -55,6 +57,25 @@ describe('tryNormalizeStatusColorEnum', () => {
     expect(tryNormalizeStatusColorEnum(999)).toBeNull();
     expect(tryNormalizeStatusColorEnum('not-a-color')).toBeNull();
     expect(tryNormalizeStatusColorEnum(null)).toBeNull();
+  });
+
+  it('accepts vibe hyphenated names as StatusColumnColors enums', () => {
+    expect(tryNormalizeStatusColorEnum('done-green')).toBe('done_green');
+    expect(tryNormalizeStatusColorEnum('stuck-red')).toBe('stuck_red');
+  });
+});
+
+describe('toVibeColorName / fromVibeColorName', () => {
+  it('round-trips hyphenated vibe names used by ColorPicker', () => {
+    expect(toVibeColorName('done_green')).toBe('done-green');
+    expect(fromVibeColorName('done-green')).toBe('done_green');
+    expect(toVibeColorName('working_orange')).toBe('working_orange');
+    expect(fromVibeColorName('working_orange')).toBe('working_orange');
+  });
+
+  it('returns null for empty vibe selections', () => {
+    expect(fromVibeColorName('')).toBeNull();
+    expect(fromVibeColorName(null)).toBeNull();
   });
 });
 

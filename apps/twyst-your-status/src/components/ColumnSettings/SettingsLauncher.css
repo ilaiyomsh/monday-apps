@@ -3,52 +3,13 @@
   flex-direction: column;
   gap: 12px;
   padding: 14px;
-  max-width: 360px;
+  max-width: 280px;
   margin: 0 auto;
   color: var(--primary-text-color, #323338);
 }
 
-.twyst-settings-launcher header h1 {
-  margin: 4px 0 0;
-  font-size: 18px;
-}
-
-.twyst-settings-launcher header p:last-of-type {
-  margin: 6px 0 0;
-  font-size: 13px;
-  color: var(--secondary-text-color, #676879);
-}
-
 .twyst-settings-launcher-cta {
   width: 100%;
-  border-radius: 6px;
-  border: 1px solid var(--primary-color, #0073ea);
-  background: var(--primary-color, #0073ea);
-  color: #fff;
-  padding: 10px 14px;
-  cursor: pointer;
-  font: inherit;
-}
-
-.twyst-settings-launcher-cta:disabled {
-  opacity: 0.7;
-  cursor: wait;
-}
-
-.twyst-settings-launcher-dismiss {
-  width: 100%;
-  border-radius: 6px;
-  border: 1px solid var(--ui-border-color, #d0d4e4);
-  background: var(--primary-background-color, #fff);
-  padding: 8px 14px;
-  cursor: pointer;
-  font: inherit;
-}
-
-.twyst-settings-launcher .twyst-eyebrow {
-  margin: 0;
-  font-size: 12px;
-  color: var(--secondary-text-color, #676879);
 }
 
 .twyst-settings-launcher .twyst-version {

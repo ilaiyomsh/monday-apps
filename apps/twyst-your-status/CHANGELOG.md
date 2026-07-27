@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.2.0
+
+- Settings UI cleaned up to match discussions: header + scroll body + footer,
+  Vibe ColorPicker (circle) and PersonPicker, no subheadings or help prose.
+- Full-settings overlay size is viewport-relative (`min(744px, 94vw/vh)`), not
+  a fixed 1100×820.
+
 ## 3.1.5
 
 - Picker no longer lists the currently selected status (or shows it as a header

@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import { AttentionBox } from '@vibe/core';
+import { AttentionBox, Button } from '@vibe/core';
 import mondayService from '../../services/mondayService';
 import logger from '../../utils/logger';
+import { settingsModalSize } from '../../utils/settingsModalSize';
 import { VERSION_LABEL } from '../../utils/versionLabel';
 import './SettingsLauncher.css';
 
 const FULL_SETTINGS_PATH = '/settings-full';
 
 /**
- * Tiny Column Settings Dialog shell — monday's native settings iframe is too
- * small for the full label editor. One button opens a nested full-size modal.
+ * Slim Column Settings shell — opens a nested overlay sized to the viewport
+ * (monday openAppFeatureModal only accepts px strings).
  */
 function SettingsLauncher() {
   const [opening, setOpening] = useState(false);
@@ -19,15 +20,15 @@ function SettingsLauncher() {
     try {
       setOpening(true);
       setError(null);
+      const size = settingsModalSize(window);
       await mondayService.openAppFeatureModal({
         urlPath: FULL_SETTINGS_PATH,
-        width: '1100px',
-        height: '820px',
+        ...size,
         returnToPreviousModal: true,
       });
     } catch (err) {
       logger.error('SettingsLauncher', 'Failed to open full settings modal', err);
-      setError('לא הצלחנו לפתוח את חלון ההגדרות המלא. נסו שוב.');
+      setError('לא הצלחנו לפתוח את ההגדרות. נסו שוב.');
     } finally {
       setOpening(false);
     }
@@ -35,31 +36,17 @@ function SettingsLauncher() {
 
   return (
     <main className="twyst-settings-launcher" dir="rtl">
-      <header>
-        <p className="twyst-eyebrow">Twyst Your Status</p>
-        <h1>הגדרות העמודה</h1>
-        <p>ניהול לייבלים, הרשאות ושדות חובה נפתח בחלון מלא לנוחות.</p>
-      </header>
-
       {error && <AttentionBox type="danger" text={error} />}
 
-      <button
-        type="button"
-        className="primary-action twyst-settings-launcher-cta"
+      <Button
+        kind="primary"
+        size="medium"
         disabled={opening}
         onClick={openFullSettings}
+        className="twyst-settings-launcher-cta"
       >
-        {opening ? 'פותח…' : 'פתח הגדרות מלאות'}
-      </button>
-
-      <button
-        type="button"
-        className="twyst-settings-launcher-dismiss"
-        disabled={opening}
-        onClick={() => mondayService.closeDialog()}
-      >
-        סגור
-      </button>
+        {opening ? 'פותח…' : 'הגדרות'}
+      </Button>
 
       <div className="twyst-version" dir="ltr">{VERSION_LABEL}</div>
     </main>
