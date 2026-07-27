@@ -36,6 +36,7 @@ const DIGEST_CONFIG: DigestConfig = {
       dateColumnId: 'date_due',
       dateColumnTitle: 'תאריך סיום',
       buttonId: 'b_done0001',
+      buttonIds: ['b_done0001'],
       includeStatusLabelIds: [0],
     },
   ],
@@ -62,6 +63,7 @@ describe('defaultDigestDraft', () => {
     expect(d.sections[0].dateColumnId).toBeNull();
     expect(d.sections[0].dateColumnTitle).toBe('');
     expect(d.sections[0].buttonId).toBeNull();
+    expect(d.sections[0].buttonIds).toEqual([]);
     expect(d.sections[0].includeStatusLabelIds).toEqual([]);
     // two distinct generated ids
     expect(d.sections[0].id).not.toBe(d.sections[1].id);
@@ -76,6 +78,7 @@ describe('newDigestSection', () => {
     expect(s.dateColumnId).toBeNull();
     expect(s.dateColumnTitle).toBe('');
     expect(s.buttonId).toBeNull();
+    expect(s.buttonIds).toEqual([]);
     expect(s.includeStatusLabelIds).toEqual([]);
   });
 });
@@ -93,9 +96,30 @@ describe('digestFromConfig / draftFromConfig', () => {
         dateColumnId: 'date_due',
         dateColumnTitle: 'תאריך סיום',
         buttonId: 'b_done0001',
+        buttonIds: ['b_done0001'],
         includeStatusLabelIds: [0],
       },
     ]);
+  });
+
+  it('legacy section with only buttonId (no buttonIds) fills buttonIds from buttonId', () => {
+    const legacy: DigestConfig = {
+      ...DIGEST_CONFIG,
+      sections: [
+        {
+          id: 's_done0001',
+          title: 'לסיים:',
+          dateColumnId: 'date_due',
+          dateColumnTitle: 'תאריך סיום',
+          buttonId: 'b_done0001',
+          includeStatusLabelIds: [0],
+        },
+      ],
+    };
+    const d = digestFromConfig(legacy);
+    expect(d.sections[0].buttonIds).toEqual(['b_done0001']);
+    expect(d.sections[0].buttonId).toBe('b_done0001');
+    expect(digestIsComplete(d)).toBe(true);
   });
 
   it('a null/absent digest loads as the disabled default', () => {
@@ -117,16 +141,23 @@ describe('digestIsComplete', () => {
     expect(digestIsComplete(digestFromConfig(DIGEST_CONFIG))).toBe(true);
   });
 
+  it('false when buttonIds is empty even if legacy buttonId is set', () => {
+    const d = digestFromConfig(DIGEST_CONFIG);
+    d.sections[0].buttonIds = [];
+    d.sections[0].buttonId = 'b_done0001';
+    expect(digestIsComplete(d)).toBe(false);
+  });
+
   it.each([
     ['no users board', { usersBoardId: null }],
     ['no people column', { usersPeopleColumnId: null }],
     ['no email column', { usersEmailColumnId: null }],
     ['empty subject', { subject: '  ' }],
     ['no sections', { sections: [] }],
-    ['section without date column', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: null, dateColumnTitle: '', buttonId: 'b_done0001', includeStatusLabelIds: [0] }] }],
-    ['section without button', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: null, includeStatusLabelIds: [0] }] }],
-    ['section with empty title', { sections: [{ id: 's_a1234', title: ' ', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_done0001', includeStatusLabelIds: [0] }] }],
-    ['section with no include statuses', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_done0001', includeStatusLabelIds: [] }] }],
+    ['section without date column', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: null, dateColumnTitle: '', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [0] }] }],
+    ['section without button', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: null, buttonIds: [], includeStatusLabelIds: [0] }] }],
+    ['section with empty title', { sections: [{ id: 's_a1234', title: ' ', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [0] }] }],
+    ['section with no include statuses', { sections: [{ id: 's_a1234', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_done0001', buttonIds: ['b_done0001'], includeStatusLabelIds: [] }] }],
   ])('false when %s', (_name, patch) => {
     expect(digestIsComplete({ ...digestFromConfig(DIGEST_CONFIG), ...patch })).toBe(false);
   });

@@ -2,6 +2,16 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.9.0 — 2026-07-27 — feat: AMP digest — one table per cluster + multi-button columns
+
+- **Layout:** one AMP table per populated מקבץ (cluster title + that cluster's
+  date column only). No mega-table / LabelPicker chrome.
+- **Multi-button:** each cluster may define `buttonIds[]` (admin multi-select);
+  each button is a colored radio column. Primary `buttonId` (= first) still
+  drives the status-column filter. Legacy configs with only `buttonId` work.
+- **Wire unchanged:** one form, `item_<id>=btnId` radios, one **אשר את המסומנות**.
+- Playground sample: `docs/amp-playground-cluster-tables.html`.
+
 ## 0.8.5 — 2026-07-27 — chore: redeploy draft after transient mapps failure
 
 - Re-push of 0.8.4 AMP status-picker styling after monday `code:push` polling

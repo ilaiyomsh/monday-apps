@@ -1,7 +1,6 @@
-// TDD — AMP digest: discussions-style monday table + inlined LabelPicker options.
-// Visual port of apps/discussions TaskTable statusFill + LabelPickerCell menu
-// (AMP cannot host React Dialog — options are colored radios in the cell).
-// Wire: a/p/m/s/sig + item_<id>=btnId; one global submit; all digest date columns.
+// TDD — AMP digest: one table per cluster (מקבץ), cluster date column,
+// radio column per action button, one global submit.
+// Wire unchanged: a/p/m/s/sig + item_<id>=btnId (radio; unchecked = no change).
 
 import { describe, it, expect } from 'vitest';
 import { renderDigestAmp } from '../src/helpers/digest-amp.js';
@@ -23,6 +22,14 @@ const BTN_START = {
   targetLabel: 'בעבודה',
   style: { color: '#fdab3d', icon: '▶', size: 'md' },
 };
+const BTN_STUCK = {
+  id: 'b_stuck001',
+  name: 'תקוע',
+  statusColumnId: 'color_x',
+  targetIndex: 2,
+  targetLabel: 'תקוע',
+  style: { color: '#e2445c', icon: '', size: 'md' },
+};
 const BTN_DONE = {
   id: 'b_done0002',
   name: 'בוצע',
@@ -32,23 +39,23 @@ const BTN_DONE = {
   style: { color: '#00854d', icon: '✓', size: 'md' },
 };
 
-const DATE_COLUMNS = [
-  { id: 'date_start', title: 'תאריך התחלה מתוכנן' },
-  { id: 'date_due', title: 'דדליין' },
-];
-
 const RECIPIENT = {
   email: 'dana@example.com',
   name: 'דנה',
   personId: PERSON_ID,
   taskCount: 3,
-  dateColumns: DATE_COLUMNS,
+  dateColumns: [
+    { id: 'date_start', title: 'תאריך התחלה' },
+    { id: 'date_due', title: 'תאריך סיום' },
+  ],
   sections: [
     {
-      title: 'משימות שנדרש להתחיל',
+      title: 'משימות שנדרש להתחיל וטרם התחילו:',
       buttonId: BTN_START.id,
+      buttonIds: [BTN_START.id, BTN_STUCK.id],
       button: BTN_START,
-      dateColumnTitle: 'תאריך התחלה מתוכנן',
+      buttons: [BTN_START, BTN_STUCK],
+      dateColumnTitle: 'תאריך התחלה',
       tasks: [
         {
           itemId: '9001',
@@ -67,10 +74,12 @@ const RECIPIENT = {
       ],
     },
     {
-      title: 'משימות שנדרש לסיים',
+      title: 'משימות שנדרש לסיים וטרם בוצעו:',
       buttonId: BTN_DONE.id,
+      buttonIds: [BTN_DONE.id],
       button: BTN_DONE,
-      dateColumnTitle: 'דדליין',
+      buttons: [BTN_DONE],
+      dateColumnTitle: 'תאריך סיום',
       tasks: [
         {
           itemId: '9004',
@@ -84,8 +93,10 @@ const RECIPIENT = {
     {
       title: 'קבוצה ריקה',
       buttonId: BTN_DONE.id,
+      buttonIds: [BTN_DONE.id],
       button: BTN_DONE,
-      dateColumnTitle: 'דדליין',
+      buttons: [BTN_DONE],
+      dateColumnTitle: 'תאריך סיום',
       tasks: [],
     },
   ],
@@ -93,7 +104,9 @@ const RECIPIENT = {
 
 const MANIFEST = buildManifest([
   { itemId: '9001', btnId: BTN_START.id },
+  { itemId: '9001', btnId: BTN_STUCK.id },
   { itemId: '9002', btnId: BTN_START.id },
+  { itemId: '9002', btnId: BTN_STUCK.id },
   { itemId: '9004', btnId: BTN_DONE.id },
 ]);
 const SIG = signManifest({
@@ -140,133 +153,132 @@ describe('renderDigestAmp — amp4email document validity', () => {
   });
 });
 
-describe('renderDigestAmp — monday table + inlined LabelPicker', () => {
-  it('renders exactly one form, one board table, and one submit', () => {
+describe('renderDigestAmp — one table per cluster', () => {
+  it('renders exactly one form, one submit, and one board table per populated section', () => {
     const doc = render();
     expect((doc.match(/<form /g) ?? []).length).toBe(1);
-    expect((doc.match(/class="board"/g) ?? []).length).toBe(1);
     expect((doc.match(/type="submit"/g) ?? []).length).toBe(1);
     expect(doc).toMatch(/type="submit"[^>]*value="אשר את המסומנות"/);
-  });
-
-  it('does not use native <select> or per-section group boxes', () => {
-    const doc = render();
-    expect(doc).not.toContain('<select');
-    expect(doc).not.toContain('class="grp"');
+    // two populated sections → two tables; empty section omitted
+    expect((doc.match(/class="board"/g) ?? []).length).toBe(2);
+    expect(doc).toContain('משימות שנדרש להתחיל וטרם התחילו:');
+    expect(doc).toContain('משימות שנדרש לסיים וטרם בוצעו:');
     expect(doc).not.toContain('קבוצה ריקה');
   });
 
-  it('shows current status as a monday statusFill chip', () => {
+  it('does not use LabelPicker chrome, native select, or a status-fill column', () => {
     const doc = render();
-    expect(doc).toContain('class="status-fill"');
-    expect(doc).toContain('טרם החל');
-    // "בעבודה" current status on 9004 picks up BTN_START color via label match
-    expect(doc).toContain(`style="background:${BTN_START.style.color}"`);
+    expect(doc).not.toContain('<select');
+    expect(doc).not.toContain('class="picker"');
+    expect(doc).not.toContain('class="opt-fill"');
+    expect(doc).not.toContain('class="status-fill"');
+    // No LabelPicker "סטטוס חדש" column header (lead copy may still say סטטוס חדש)
+    expect(doc).not.toMatch(/<th[^>]*>[^<]*סטטוס חדש/);
   });
 
-  it('inlines LabelPicker options as colored radios (discussions menu style)', () => {
+  it('shows only that cluster date column (not every digest date on every table)', () => {
     const doc = render();
-    expect((doc.match(/type="radio"/g) ?? []).length).toBe(3);
-    expect(doc).toContain('class="opt-fill"');
-    expect(doc).toContain(`name="item_9001" value="${BTN_START.id}"`);
-    expect(doc).toContain(`name="item_9004" value="${BTN_DONE.id}"`);
+    // Cluster 1 header uses start date; cluster 2 uses end date
+    expect(doc).toContain('תאריך התחלה');
+    expect(doc).toContain('תאריך סיום');
+    // Task dates: start cluster shows 01/03 and 15/03; end cluster shows 28/02
+    expect(doc).toContain('01/03/2026');
+    expect(doc).toContain('15/03/2026');
+    expect(doc).toContain('28/02/2026');
+    // End date 20/03 belongs only to date_due of item 9001 — must NOT appear
+    // in the start-date cluster table (cluster uses task.date = date_start).
+    expect(doc).not.toContain('20/03/2026');
+  });
+
+  it('renders a colored radio column header per section button', () => {
+    const doc = render();
     expect(doc).toContain(`background:${BTN_START.style.color}`);
+    expect(doc).toContain(`background:${BTN_STUCK.style.color}`);
     expect(doc).toContain(`background:${BTN_DONE.style.color}`);
+    expect(doc).toContain('בעבודה');
+    expect(doc).toContain('תקוע');
+    expect(doc).toContain('בוצע');
+  });
+
+  it('offers radios name=item_<id> for every button in the section (multi-button)', () => {
+    const doc = render();
+    // section1: 2 tasks × 2 buttons = 4; section2: 1 × 1 = 1 → 5 radios
+    expect((doc.match(/type="radio"/g) ?? []).length).toBe(5);
+    expect(doc).toContain(`name="item_9001" value="${BTN_START.id}"`);
+    expect(doc).toContain(`name="item_9001" value="${BTN_STUCK.id}"`);
+    expect(doc).toContain(`name="item_9002" value="${BTN_START.id}"`);
+    expect(doc).toContain(`name="item_9004" value="${BTN_DONE.id}"`);
+    expect(doc).not.toContain(`name="item_9004" value="${BTN_START.id}"`);
     expect(doc).not.toMatch(/\schecked(=|\s|>)/);
   });
 
-  it('matches monday status-picker-wrapper-v2 size and typography (200px / 34px / 14px normal)', () => {
-    const doc = render();
-    expect(doc).toContain('class="picker"');
-    const pickerCss = doc.match(/\.picker\s*\{[^}]+\}/)?.[0] ?? '';
-    const optFillCss = doc.match(/\.opt-fill\s*\{[^}]+\}/)?.[0] ?? '';
-    // Container: monday status-picker-wrapper-v2 is ~200px wide (not max-width alone)
-    expect(pickerCss).toMatch(/(?<![-\w])width:200px/);
-    expect(pickerCss).toMatch(/max-width:200px/);
-    expect(pickerCss).toMatch(/padding:10px/);
-    expect(pickerCss).toMatch(/border:1px solid #0073ea/);
-    // Labels: discussions statusOption — 34px tall, 14px / font-weight normal
-    expect(optFillCss).toMatch(/font-size:14px/);
-    expect(optFillCss).toMatch(/font-weight:normal/);
-    expect(optFillCss).toMatch(/line-height:34px/);
-    expect(optFillCss).toMatch(/(?<![-\w])height:34px/);
-    expect(optFillCss).toMatch(/border-radius:4px/);
-    expect(doc).toMatch(/Figtree/);
-    const optInputCss = doc.match(/\.opt input\s*\{[^}]+\}/)?.[0] ?? '';
-    expect(optInputCss).not.toMatch(/position:\s*absolute/);
+  it('falls back to singular buttonId/button when buttonIds/buttons are absent', () => {
+    const legacy = {
+      ...RECIPIENT,
+      sections: [
+        {
+          title: 'מקבץ ישן',
+          buttonId: BTN_DONE.id,
+          button: BTN_DONE,
+          dateColumnTitle: 'דדליין',
+          tasks: [
+            {
+              itemId: '9010',
+              name: 'ישן',
+              date: '2026-01-01',
+              dates: { date_due: '2026-01-01' },
+              statusText: '',
+            },
+          ],
+        },
+      ],
+    };
+    const doc = render(legacy);
+    expect((doc.match(/class="board"/g) ?? []).length).toBe(1);
+    expect(doc).toContain('מקבץ ישן');
+    expect(doc).toContain(`name="item_9010" value="${BTN_DONE.id}"`);
+    expect((doc.match(/type="radio"/g) ?? []).length).toBe(1);
   });
 
-  it('offers only authorized buttons per task and unions when a task spans sections', () => {
-    const doc = render();
-    expect(doc).not.toContain(`name="item_9001" value="${BTN_DONE.id}"`);
-    expect(doc).not.toContain(`name="item_9004" value="${BTN_START.id}"`);
-
+  it('shares the same radio name across clusters when the same item appears twice', () => {
     const dual = {
       ...RECIPIENT,
       sections: [
         {
           title: 'א',
           buttonId: BTN_START.id,
-          button: BTN_START,
-          dateColumnTitle: 'תאריך',
-          tasks: [
-            {
-              itemId: '9001',
-              name: 'כפולה',
-              date: '2026-03-01',
-              dates: { date_start: '2026-03-01', date_due: '2026-03-10' },
-              statusText: 'טרם החל',
-            },
-          ],
+          buttonIds: [BTN_START.id],
+          buttons: [BTN_START],
+          dateColumnTitle: 'תאריך א',
+          tasks: [{ itemId: '9001', name: 'כפולה', date: '2026-03-01', dates: {}, statusText: '' }],
         },
         {
           title: 'ב',
           buttonId: BTN_DONE.id,
-          button: BTN_DONE,
-          dateColumnTitle: 'תאריך',
-          tasks: [
-            {
-              itemId: '9001',
-              name: 'כפולה',
-              date: '2026-03-10',
-              dates: { date_start: '2026-03-01', date_due: '2026-03-10' },
-              statusText: 'טרם החל',
-            },
-          ],
+          buttonIds: [BTN_DONE.id],
+          buttons: [BTN_DONE],
+          dateColumnTitle: 'תאריך ב',
+          tasks: [{ itemId: '9001', name: 'כפולה', date: '2026-03-10', dates: {}, statusText: '' }],
         },
       ],
     };
-    const dualDoc = render(dual);
-    expect((dualDoc.match(/type="radio"/g) ?? []).length).toBe(2);
-    expect(dualDoc).toContain(`name="item_9001" value="${BTN_START.id}"`);
-    expect(dualDoc).toContain(`name="item_9001" value="${BTN_DONE.id}"`);
+    const doc = render(dual);
+    expect((doc.match(/name="item_9001"/g) ?? []).length).toBe(2);
+    expect(doc).toContain(`name="item_9001" value="${BTN_START.id}"`);
+    expect(doc).toContain(`name="item_9001" value="${BTN_DONE.id}"`);
   });
 
-  it('carries signed-manifest fields once and never exposes the secret', () => {
+  it('escapes HTML in task names', () => {
+    expect(render()).toContain('הקמת פורום &lt;נציגים&gt;');
+  });
+
+  it('signs a manifest covering every (item × section button) pair', () => {
     const doc = render();
     expect((doc.match(new RegExp(`name="m" value="${MANIFEST}"`, 'g')) ?? []).length).toBe(1);
     expect((doc.match(new RegExp(`name="sig" value="${SIG}"`, 'g')) ?? []).length).toBe(1);
     expect(doc).not.toContain('name="k"');
     expect(doc).not.toContain(`value="${SECRET}"`);
     expect(doc).toContain(`action-xhr="${BASE}/amp/confirm"`);
-  });
-});
-
-describe('renderDigestAmp — all digest date columns', () => {
-  it('renders one column header per dateColumns entry from digest settings', () => {
-    const doc = render();
-    expect(doc).toContain('תאריך התחלה מתוכנן');
-    expect(doc).toContain('דדליין');
-    expect(doc).toContain('שם הפעולה');
-    expect(doc).toContain('סטטוס חדש');
-  });
-
-  it('fills date cells from task.dates and escapes HTML in names', () => {
-    const doc = render();
-    expect(doc).toContain('01/03/2026');
-    expect(doc).toContain('20/03/2026');
-    expect(doc).toContain('28/02/2026');
-    expect(doc).toContain('הקמת פורום &lt;נציגים&gt;');
   });
 });
 

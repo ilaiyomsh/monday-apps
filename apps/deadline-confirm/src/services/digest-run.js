@@ -5,7 +5,7 @@
 // `email_not_configured`.
 
 import { MANIFEST_TIMEZONE, currentSlot } from './manifest-signature.js';
-import { buildDigest, digestTaskColumnIds } from './digest-service.js';
+import { buildDigest, digestTaskColumnIds, decorateRecipientSections } from './digest-service.js';
 import { MondayApiError } from './monday-api.js';
 import { renderDigestPlain } from '../helpers/digest-plain.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
@@ -110,10 +110,7 @@ export async function runDigestForAccount({
   });
 
   const buttonsById = new Map((config.buttons ?? []).map((b) => [b.id, b]));
-  const withButtons = (recipient) => ({
-    ...recipient,
-    sections: recipient.sections.map((s) => ({ ...s, button: buttonsById.get(s.buttonId) })),
-  });
+  const withButtons = (recipient) => decorateRecipientSections(recipient, buttonsById);
 
   const results = [];
   for (const recipient of recipients) {

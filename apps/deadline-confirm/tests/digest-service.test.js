@@ -147,6 +147,7 @@ describe('buildDigest — show-by-status classification', () => {
             title: 'משימות שנדרש להתחיל וטרם התחילו:',
             dateColumnTitle: 'תאריך התחלה',
             buttonId: 'b_start001',
+            buttonIds: ['b_start001'],
             tasks: [
               {
                 itemId: '9001',
@@ -162,6 +163,7 @@ describe('buildDigest — show-by-status classification', () => {
             title: 'משימות שנדרש לסיים וטרם בוצעו:',
             dateColumnTitle: 'תאריך סיום',
             buttonId: 'b_done0001',
+            buttonIds: ['b_done0001'],
             tasks: [
               {
                 itemId: '9002',
@@ -175,6 +177,26 @@ describe('buildDigest — show-by-status classification', () => {
         ],
       },
     ]);
+  });
+
+  it('emits section.buttonIds from config (multi-button) not only primary buttonId', () => {
+    const config = baseConfig();
+    config.digest.sections[0].buttonIds = ['b_start001', 'b_done0001'];
+    const result = buildDigest({
+      config,
+      users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+      tasks: [
+        taskRow('9001', 'גיבוש', {
+          persons: ['501'],
+          startDate: '2026-07-10',
+          statusA: 0,
+          statusAText: 'בעבודה',
+        }),
+      ],
+      today: TODAY,
+    });
+    expect(result.recipients[0].sections[0].buttonId).toBe('b_start001');
+    expect(result.recipients[0].sections[0].buttonIds).toEqual(['b_start001', 'b_done0001']);
   });
 
   it('attaches every digest date-column value on each task (not only the section filter date)', () => {

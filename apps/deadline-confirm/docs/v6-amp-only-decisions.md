@@ -1,8 +1,7 @@
 # V6 — AMP-only + per-message signed manifest
 
-**Status:** partially implemented on `develop` (0.8.3 LabelPicker + multi-date)
-+ this branch 0.8.4 (monday status-picker-wrapper-v2 size/typography parity).
-**T9/T9b/T9c (Gmail OAuth + send)
+**Status:** partially implemented on `develop` + this branch **0.9.0**
+(cluster tables + multi-button columns). **T9/T9b/T9c (Gmail OAuth + send)
 deferred** until the Google Cloud app is provisioned.
 **App:** `deadline-confirm` (App ID `11704868`, server app on monday-code, pushed dir = app root)
 **Baseline:** `0.8.2` on `develop`. Suite: 568+ green.
@@ -100,7 +99,7 @@ A "resend today" action re-runs the send for **all** recipients using the curren
 slot. Selective resend is out of scope for this round.
 
 ### D9 — Email redesign: multi-button table, one global submit. **IMPLEMENTED
-(T15 + LabelPicker visual 0.8.3 + monday picker size/type 0.8.4).**
+(T15 → LabelPicker 0.8.3–0.8.4 → cluster tables + multi-button 0.9.0).**
 
 Owner briefs:
 - (2026-07-27) one table + **one** approve button — not one form per section.
@@ -109,17 +108,18 @@ Owner briefs:
 - (2026-07-27) picker chrome matches monday `status-picker-wrapper-v2`: ~200px
   wide, 34px×14px/normal option labels, Figtree stack (AMP cannot host the
   floating React Dialog — options stay inlined).
+- (2026-07-27) **supersedes LabelPicker layout:** one table **per cluster**;
+  that cluster's date column only; radio column per action button; clusters may
+  define **multiple** `buttonIds` (admin multi-select). Same item across
+  clusters shares `name="item_<id>"`.
 
 Behaviour:
-- Single monday-like table: name, every digest `dateColumnId`, current status
-  fill, inlined LabelPicker options (colored radios — AMP cannot run the
-  discussions React `LabelPickerCell` Dialog).
-- Options are the ActionButtons offered for that task (`targetLabel` + style
-  color). Wire format stays `item_<id>=btnId`.
+- One AMP form. Populated sections → separate tables (title + date + button cols).
+- Options = section `buttonIds` (fallback `[buttonId]`). Wire `item_<id>=btnId`.
 - **One global submit** (`אשר את המסומנות`) applies every chosen status.
 - Tasks with no selection are unchanged.
 
-Admin UI for multi-button-per-section config remains out of scope.
+Admin: multi-select "כפתורי פעולה"; primary (first) drives status filter column.
 
 ### D10 — One signature per message, over a signed manifest.
 
