@@ -236,11 +236,18 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
       ...recipient,
       sections: recipient.sections.map((s) => ({ ...s, button: buttonsById.get(s.buttonId) })),
     });
+    const sendHour = config.digest?.sendHour ?? 8;
+    // Midday Jerusalem on the preview day — deterministic slot/sig in admin preview.
+    const previewNow = new Date(`${today}T09:00:00+03:00`);
     const renderArgs = { baseUrl: env.baseUrl, secret, accountId: req.session.accountId };
     const renderFor = (recipient) => renderDigestEmail({ ...renderArgs, recipient: withButtons(recipient) });
-    // V5: the dynamic-email (amp4email) part of the same digest — same data,
-    // checkboxes instead of per-task links.
-    const renderAmpFor = (recipient) => renderDigestAmp({ ...renderArgs, recipient: withButtons(recipient) });
+    const renderAmpFor = (recipient) =>
+      renderDigestAmp({
+        ...renderArgs,
+        recipient: withButtons(recipient),
+        sendHour,
+        now: previewNow,
+      });
 
     return {
       digestData: {
