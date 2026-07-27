@@ -73,11 +73,22 @@ jobs:
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
 
+      # Retry once on the transient "Unexpected error ... communicating with
+      # the remote server" (same guard as ship.sh / live deploy).
       - name: Push to latest DRAFT version
-        run: >
-          mapps code:push -c
-          -d apps/twyst-your-status/dist
-          -a "$APP_ID"
+        run: |
+          set -uo pipefail
+          for attempt in 1 2; do
+            if mapps code:push -c \
+                 -d apps/twyst-your-status/dist \
+                 -a "$APP_ID"; then
+              exit 0
+            fi
+            echo "push attempt $attempt failed; retrying once in 15s (transient remote error)…"
+            sleep 15
+          done
+          echo "::error::code:push to draft failed after retry"
+          exit 1
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
           APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}

@@ -36,3 +36,5 @@ mapps code:push -c -d apps/twyst-your-status/dist -a <APP_ID>
 ```
 
 Never run a local `mapps code:push`.
+
+Draft push retries once on the transient monday remote error (same as live).
