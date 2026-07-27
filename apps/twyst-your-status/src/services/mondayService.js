@@ -11,14 +11,43 @@ function wait(milliseconds) {
   });
 }
 
-function assertStorageSucceeded(response, action, key) {
-  if (response?.data?.success === false) {
-    throw new Error(`monday storage ${action} failed for key "${key}"`);
+function safeStringify(value) {
+  try {
+    return JSON.stringify(value);
+  } catch (err) {
+    logger.warn('mondayService', 'Storage response was not serializable', err);
+    return String(value);
   }
 }
 
-// Storage values pass through JSON.parse ג€” a corrupted/hand-edited value must
-// not crash the caller. Log it (never swallow) and treat it as missing.
+function describeStorageError(response) {
+  const raw =
+    response?.errorMessage
+    ?? response?.data?.error
+    ?? response?.data?.errorMessage
+    ?? response?.error
+    ?? null;
+  if (typeof raw === 'string' && raw) return raw;
+  if (raw && typeof raw.message === 'string') return raw.message;
+  return `no reason field; full response: ${safeStringify(response)}`;
+}
+
+function assertStorageWriteOk(response, key, scope) {
+  if (response?.data?.success === true) return;
+  throw new Error(`Failed to persist ${scope} storage key "${key}": ${describeStorageError(response)}`);
+}
+
+function assertStorageReadOk(response, key) {
+  if (response?.data?.success === false) {
+    throw new Error(`monday storage read failed for key "${key}": ${describeStorageError(response)}`);
+  }
+}
+
+// Column-view dialogs have no instanceId — use GLOBAL storage keyed by board+column.
+function columnConfigKey(boardId, columnId) {
+  return `twystStatus:${boardId}:${columnId}`;
+}
+
 function parseStoredValue(raw, key, scope) {
   if (!raw) return null;
   try {
@@ -30,18 +59,15 @@ function parseStoredValue(raw, key, scope) {
 }
 
 const mondayService = {
-  // Get initial context
   async getContext() {
     const response = await monday.get('context');
     return response.data;
   },
 
-  // Listen for context changes
   listenToContext(callback) {
-    const unsubscribe = monday.listen('context', (res) => {
+    return monday.listen('context', (res) => {
       callback(res.data);
     });
-    return unsubscribe;
   },
 
   async getSessionToken() {
@@ -49,7 +75,6 @@ const mondayService = {
     return response.data;
   },
 
-  // Execute GraphQL query
   async query(query, variables = {}) {
     const response = await monday.api(query, { variables, apiVersion: API_VERSION });
 
@@ -60,44 +85,50 @@ const mondayService = {
     return response.data;
   },
 
-  // Close dialog (for column views)
   closeDialog() {
     return monday.execute('closeDialog');
   },
 
-  // Open item card
   openItemCard(itemId) {
     monday.execute('openItemCard', { itemId });
   },
 
-  // Show notice/toast
   showNotice(message, type = 'success') {
     return monday.execute('notice', {
       message,
-      type, // 'success' | 'error' | 'info'
+      type,
       timeout: 3000,
     });
   },
 
-  // Instance storage (per-column/widget)
-  async getInstanceStorage(key) {
-    const response = await monday.storage.instance.getItem(key);
-    return parseStoredValue(response.data?.value, key, 'instance');
-  },
-
-  async setInstanceStorage(key, value) {
-    await monday.storage.instance.setItem(key, JSON.stringify(value));
-  },
-
-  // App storage (app-wide)
-  async getAppStorage(key) {
+  async getColumnConfig(boardId, columnId) {
+    const key = columnConfigKey(boardId, columnId);
     let response = await monday.storage.getItem(key);
-    assertStorageSucceeded(response, 'read', key);
+    assertStorageReadOk(response, key);
 
     if (response.data?.value == null) {
       await wait(STORAGE_RETRY_DELAY_MS);
       response = await monday.storage.getItem(key);
-      assertStorageSucceeded(response, 'read retry', key);
+      assertStorageReadOk(response, key);
+    }
+
+    return parseStoredValue(response.data?.value, key, 'column-config');
+  },
+
+  async setColumnConfig(boardId, columnId, value) {
+    const key = columnConfigKey(boardId, columnId);
+    const response = await monday.storage.setItem(key, JSON.stringify(value));
+    assertStorageWriteOk(response, key, 'column-config');
+  },
+
+  async getAppStorage(key) {
+    let response = await monday.storage.getItem(key);
+    assertStorageReadOk(response, key);
+
+    if (response.data?.value == null) {
+      await wait(STORAGE_RETRY_DELAY_MS);
+      response = await monday.storage.getItem(key);
+      assertStorageReadOk(response, key);
     }
 
     return parseStoredValue(response.data?.value, key, 'app');
@@ -105,9 +136,8 @@ const mondayService = {
 
   async setAppStorage(key, value) {
     const response = await monday.storage.setItem(key, JSON.stringify(value));
-    assertStorageSucceeded(response, 'write', key);
+    assertStorageWriteOk(response, key, 'app');
   },
 };
 
 export default mondayService;
-

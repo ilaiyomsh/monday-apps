@@ -44,8 +44,18 @@ function createHarness() {
   const firstReadDone = new Set(); // keys already read once (for the race toggle)
 
   const seedAppDefaults = () => {
-    const key = 'global:status-guard:v1:1234567890:status';
-    storageMap.set(key, JSON.stringify({ version: 1, restrictedLabelIds: ['1'] }));
+    const key = 'global:twystStatus:1234567890:status';
+    storageMap.set(key, JSON.stringify({
+      version: 1,
+      hiddenLabelIds: ['1'],
+      labels: {
+        '2': {
+          allowedUserIds: ['11111111'],
+          allowedTeamIds: [],
+          requiredColumnIds: [],
+        },
+      },
+    }));
     storageVersions.set(key, 1);
   };
 

@@ -3,6 +3,7 @@ export const GET_STATUS_COLUMN_CONTEXT = `
     $boardIds: [ID!]
     $itemIds: [ID!]
     $columnIds: [String!]
+    $userIds: [ID!]
   ) {
     boards(ids: $boardIds) {
       id
@@ -21,6 +22,7 @@ export const GET_STATUS_COLUMN_CONTEXT = `
         type
         text
         value
+        column { id title type }
         ... on StatusValue {
           index
           label
@@ -31,6 +33,11 @@ export const GET_STATUS_COLUMN_CONTEXT = `
           }
         }
       }
+    }
+    users(ids: $userIds) {
+      id
+      name
+      teams { id }
     }
   }
 `;
@@ -47,6 +54,47 @@ export const GET_STATUS_COLUMN_SETTINGS = `
         title
         type
         settings
+      }
+    }
+  }
+`;
+
+export const GET_BOARD_SETTINGS_METADATA = `
+  query GetBoardSettingsMetadata($boardIds: [ID!]) {
+    boards(ids: $boardIds) {
+      id
+      columns {
+        id
+        title
+        type
+        settings
+      }
+    }
+    users(limit: 500) {
+      id
+      name
+      teams { id }
+    }
+    teams {
+      id
+      name
+    }
+  }
+`;
+
+export const GET_ITEM_FORM_VALUES = `
+  query GetItemFormValues(
+    $itemIds: [ID!]
+    $columnIds: [String!]
+  ) {
+    items(ids: $itemIds) {
+      id
+      column_values(ids: $columnIds) {
+        id
+        type
+        text
+        value
+        column { id title type }
       }
     }
   }
@@ -70,37 +118,18 @@ export const UPDATE_STATUS_COLUMN_VALUE = `
   }
 `;
 
-export const GET_WORKFLOW_BOARD_METADATA = `
-  query WorkflowBoardMetadata($boardIds: [ID!]) {
-    boards(ids: $boardIds) {
+export const UPDATE_MULTIPLE_COLUMN_VALUES = `
+  mutation UpdateMultipleColumnValues(
+    $boardId: ID!
+    $itemId: ID!
+    $columnValues: JSON!
+  ) {
+    change_multiple_column_values(
+      board_id: $boardId
+      item_id: $itemId
+      column_values: $columnValues
+    ) {
       id
-      columns { id title type settings }
     }
-    users(limit: 500) { id name teams { id } }
-    teams { id name }
-  }
-`;
-
-export const GET_WORKFLOW_ITEM_DATA = `
-  query WorkflowItemData($boardIds: [ID!], $itemIds: [ID!], $columnIds: [String!], $statusColumnIds: [String!], $userIds: [ID!]) {
-    boards(ids: $boardIds) { columns(ids: $statusColumnIds) { id title type settings } }
-    items(ids: $itemIds) {
-      id
-      name
-      column_values(ids: $columnIds) {
-        id
-        text
-        value
-        column { id title type }
-        ... on StatusValue { index label label_style { color border } }
-      }
-    }
-    users(ids: $userIds) { id name teams { id } }
-  }
-`;
-
-export const GET_USERS_BY_IDS = `
-  query WorkflowAuditUsers($userIds: [ID!]) {
-    users(ids: $userIds) { id name }
   }
 `;

@@ -1,0 +1,24 @@
+{
+  "apiVersion": "2026-04",
+  "validatedAgainst": ".claude/skills/monday-api/schema-cache/schema-2026-04.sdl",
+  "mutations": {
+    "change_column_value": {
+      "args": ["board_id", "item_id", "column_id", "value"],
+      "statusValue": { "index": "<labelId-not-display-order>" }
+    },
+    "change_multiple_column_values": {
+      "args": ["board_id", "item_id", "column_values"],
+      "column_values": "JSON.stringify({ [columnId]: value })"
+    }
+  },
+  "formColumnFormats": {
+    "text": "string",
+    "long_text": { "text": "..." },
+    "numbers": "string",
+    "date": { "date": "YYYY-MM-DD" },
+    "email": { "email": "...", "text": "..." },
+    "phone": { "phone": "...", "countryShortName": "IL" },
+    "link": { "url": "...", "text": "..." },
+    "dropdown": { "labels": ["..."] }
+  }
+}

@@ -1,38 +1,26 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { useMondayContext } from './hooks/useMondayContext';
 import OnClickDialog from './components/OnClickDialog/OnClickDialog';
-import ColumnSettings from './components/ColumnSettings/ColumnSettings';
 import LoadingState from './components/shared/LoadingState';
 import ErrorState from './components/shared/ErrorState';
-import WorkflowConfigurator from './components/WorkflowConfigurator/WorkflowConfigurator';
-import WorkflowPanel from './components/WorkflowPanel/WorkflowPanel';
+
+// Settings opens rarely; keep it off the picker's critical path.
+const ColumnSettings = lazy(() => import('./components/ColumnSettings/ColumnSettings'));
 
 /**
- * Column View App
- *
- * Context structure from Monday SDK:
- * {
- *   placement: "columnPickers" | "settings",  // Determines which view to show
- *   boardId: number,
- *   columnId: string,
- *   itemId: number,              // Only present in columnPickers (onclick)
- *   selectedItemIds: number[],   // Only present in columnPickers (onclick)
- *   columnType: string,
- *   theme: "light" | "dark",
- *   user: {
- *     id: string,
- *     currentLanguage: string,   // e.g., "en", "he"
- *     isAdmin: boolean,
- *     ...
- *   },
- *   account: { id: string },
- *   app: { id: number, clientId: string },
- *   ...
- * }
+ * Resolve the active surface from the URL pathname.
+ * Feature URLs in monday are configured as …/picker and …/settings.
  */
+export function resolveAppRoute(pathname = window.location.pathname) {
+  const normalized = String(pathname || '').replace(/\/+$/, '') || '/';
+  if (normalized.endsWith('/picker') || normalized === '/picker') return 'picker';
+  if (normalized.endsWith('/settings') || normalized === '/settings') return 'settings';
+  return null;
+}
 
 function App() {
   const { context, loading, error } = useMondayContext();
+  const route = resolveAppRoute();
 
   if (loading) {
     return <LoadingState />;
@@ -43,27 +31,28 @@ function App() {
   }
 
   const themeClass = context?.theme === 'dark' ? 'dark-app-theme' : 'light-app-theme';
-  const placement = context?.placement;
   const isRTL = context?.user?.currentLanguage === 'he';
   const dir = isRTL ? 'rtl' : 'ltr';
-  const requestedView = new URLSearchParams(window.location.search).get('view');
-  const isWorkflowBoardView = requestedView === 'board';
-  const isWorkflowItemView = requestedView === 'item';
 
   return (
     <div className={`app-shell ${themeClass}`} dir={dir}>
-      {placement === 'columnPickers' && (
-        <OnClickDialog context={context} />
+      {route === 'picker' && <OnClickDialog context={context} />}
+      {route === 'settings' && (
+        <Suspense fallback={<LoadingState message="טוען הגדרות…" />}>
+          <ColumnSettings context={context} />
+        </Suspense>
       )}
-      {placement === 'settings' && (
-        <ColumnSettings context={context} />
-      )}
-      {isWorkflowBoardView && <WorkflowConfigurator context={context} />}
-      {isWorkflowItemView && <WorkflowPanel context={context} />}
-      {!placement && !isWorkflowBoardView && !isWorkflowItemView && (
+      {route === null && (
         <div className="placement-message">
           <p>
-            יש לפתוח את האפליקציה מתוך תא בעמודת Status.
+            פתחו את האפליקציה דרך
+            {' '}
+            <code>/picker</code>
+            {' '}
+            או
+            {' '}
+            <code>/settings</code>
+            .
           </p>
         </div>
       )}
@@ -72,4 +61,3 @@ function App() {
 }
 
 export default App;
-

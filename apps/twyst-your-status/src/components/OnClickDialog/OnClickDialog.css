@@ -6,6 +6,44 @@
   color: var(--primary-text-color, #323338);
 }
 
+.twyst-form {
+  display: grid;
+  gap: 12px;
+}
+
+.twyst-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.twyst-form input {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.twyst-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.twyst-form-actions button,
+.status-guard-dialog .primary-action {
+  border-radius: 6px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  background: var(--primary-background-color, #fff);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.status-guard-dialog .primary-action {
+  background: var(--primary-color, #0073ea);
+  border-color: var(--primary-color, #0073ea);
+  color: #fff;
+}
+
 .status-guard-header,
 .current-status-row,
 .status-option,

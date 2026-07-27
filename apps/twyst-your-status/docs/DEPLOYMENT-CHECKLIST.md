@@ -1,62 +1,38 @@
 # Draft deployment checklist
 
-Target app: `11775054`
-Target draft version: `16381642`
+Target app: `11775054` (client-side CDN)
 
-## Version permissions
+## Feature URLs
+
+Configure on the draft version:
+
+1. Status Column on-click → `<CDN_ORIGIN>/picker`
+2. Column settings → `<CDN_ORIGIN>/settings`
+
+The Vite build copies `index.html` into `dist/picker/` and `dist/settings/` so the
+static CDN can serve those paths without rewrite rules.
+
+## Version permissions (scopes)
 
 - `boards:read`
 - `boards:write`
 - `users:read`
 - `teams:read`
-- `webhooks:read`
-- `webhooks:write`
-- `notifications:write`
 
-Changing scopes can require existing installers to authorize the app again. Apply only
-after explicit owner confirmation.
-
-## Features
-
-1. Keep the current Status Column and on-click dialog features.
-2. Add a Board View with the monday-code URL `/?view=board`.
-3. Add an Item View with the monday-code URL `/?view=item`.
-4. Configure OAuth redirect to `<BASE_URL>/oauth/callback`.
-
-## monday-code environment
-
-- `MONDAY_CLIENT_ID`
-- `MONDAY_CLIENT_SECRET`
-- `MONDAY_SIGNING_SECRET`
-
-`MONDAY_CLIENT_SECRET` and `MONDAY_SIGNING_SECRET` must be created with monday code
-Secrets and loaded through `SecretsManager`. The remaining values are environment
-variables loaded through `EnvironmentVariablesManager`. Never expose either secret through
-`process.env` or client-side code.
-- `BASE_URL` — the deployed app origin, without a trailing slash
-- `MONDAY_APP_VERSION_ID` — optional draft version pin during OAuth activation
-
-## monday-code package manager
-
-- Keep `package-lock.json` in this app root so the monday buildpack selects npm.
-- Do not add an app-local `pnpm-lock.yaml` or `pnpm-workspace.yaml`; the monorepo
-  continues to use its root pnpm lockfile for CI, while the uploaded app archive
-  must remain npm-installable with `npm ci`.
+Changing scopes can require existing installers to authorize the app again.
 
 ## Verification before push
 
-- `vitest`: 258 tests green.
-- ESLint: green.
-- Vite production build: green.
-- `/health`: `200 {"ok":true}`.
-- API without a session JWT: `401`.
-- API with a valid signed test session: `200`.
-- Webhook challenge: echoed before JWT enforcement.
-- Test-guard mutation checks are green for the workflow domains, storage, OAuth 2.1,
-  webhook acknowledgement, monday API funnel, and build-version label.
+- `pnpm --filter ./apps/twyst-your-status test`
+- `pnpm --filter ./apps/twyst-your-status lint`
+- `pnpm --filter ./apps/twyst-your-status build` → `dist/` (+ `dist/picker`, `dist/settings`)
 
 ## Deployment
 
-The app is now a server deployment. Deploy only through the repository's draft/live
-GitHub Actions workflows; never run a local `mapps code:push`. The workflows upload the
-whole app root and do not use the previous client-only `--client-side -d dist` mode.
+Deploy only through GitHub Actions (`deploy-draft/live-twyst-your-status.yml`):
+
+```text
+mapps code:push -c -d apps/twyst-your-status/dist -a <APP_ID>
+```
+
+Never run a local `mapps code:push`.

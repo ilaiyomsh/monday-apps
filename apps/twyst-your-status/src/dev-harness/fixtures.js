@@ -113,8 +113,48 @@ const STATUS_GUARD_COLUMN = {
 // captured from a disposable WZ- board on 2026-07-27.
 export const API_FIXTURES = [
   {
+    match: 'UpdateMultipleColumnValues',
+    data: { change_multiple_column_values: { id: '2222222222' } },
+  },
+  {
     match: 'UpdateStatusColumnValue',
     data: { change_column_value: { id: '2222222222' } },
+  },
+  {
+    match: 'GetBoardSettingsMetadata',
+    data: {
+      boards: [{
+        id: '1234567890',
+        columns: [
+          { id: 'name', title: 'שם', type: 'name', settings: {} },
+          STATUS_GUARD_COLUMN,
+          { id: 'text', title: 'הערות', type: 'text', settings: {} },
+          { id: 'date4', title: 'תאריך', type: 'date', settings: {} },
+        ],
+      }],
+      users: USERS.map((user) => ({ ...user, teams: [{ id: '7' }] })),
+      teams: [
+        { id: '7', name: 'צוות דמו' },
+        { id: '8', name: 'צוות שני' },
+      ],
+    },
+  },
+  {
+    match: 'GetItemFormValues',
+    data: {
+      items: [{
+        id: '2222222222',
+        column_values: [
+          {
+            id: 'text',
+            type: 'text',
+            text: 'ערך קיים',
+            value: '"ערך קיים"',
+            column: { id: 'text', title: 'הערות', type: 'text' },
+          },
+        ],
+      }],
+    },
   },
   {
     match: 'GetStatusColumnSettings',
@@ -140,10 +180,12 @@ export const API_FIXTURES = [
               label: 'מאושר אוטומטית',
               is_done: true,
               label_style: { color: '#00c875', border: '#00b461' },
+              column: { id: 'status', title: 'סטטוס', type: 'status' },
             },
           ],
         },
       ],
+      users: [{ id: '11111111', name: 'ידידיה כהן', teams: [{ id: '7' }] }],
     },
   },
   {
@@ -156,29 +198,29 @@ export const API_FIXTURES = [
       boards: [
         {
           id: '1234567890',
-          name: '׳׳•׳— ׳“׳׳•',
+          name: 'לוח דמו',
           items_count: 2,
           items_page: {
             cursor: null,
             items: [
               {
                 id: '2222222222',
-                name: '׳׳©׳™׳׳” ׳¨׳׳©׳•׳ ׳”',
+                name: 'משימה ראשונה',
                 state: 'active',
-                group: { id: 'topics', title: '׳§׳‘׳•׳¦׳” ׳' },
+                group: { id: 'topics', title: 'קבוצה א' },
                 column_values: [
-                  { id: 'status', type: 'status', text: '׳‘׳¢׳‘׳•׳“׳”', value: '{"index":0}' },
-                  { id: 'person', type: 'people', text: '׳™׳“׳™׳“׳™׳” ׳›׳”׳', value: '{"personsAndTeams":[{"id":11111111,"kind":"person"}]}' },
+                  { id: 'status', type: 'status', text: 'בעבודה', value: '{"index":0}' },
+                  { id: 'person', type: 'people', text: 'ידידיה כהן', value: '{"personsAndTeams":[{"id":11111111,"kind":"person"}]}' },
                   { id: 'date4', type: 'date', text: '2026-07-15', value: '{"date":"2026-07-15"}' },
                 ],
               },
               {
                 id: '2222222223',
-                name: '׳׳©׳™׳׳” ׳©׳ ׳™׳™׳”',
+                name: 'משימה שנייה',
                 state: 'active',
-                group: { id: 'topics', title: '׳§׳‘׳•׳¦׳” ׳' },
+                group: { id: 'topics', title: 'קבוצה א' },
                 column_values: [
-                  { id: 'status', type: 'status', text: '׳‘׳•׳¦׳¢', value: '{"index":1}' },
+                  { id: 'status', type: 'status', text: 'בוצע', value: '{"index":1}' },
                   { id: 'person', type: 'people', text: '', value: null },
                   { id: 'date4', type: 'date', text: '', value: null },
                 ],
@@ -195,17 +237,17 @@ export const API_FIXTURES = [
       boards: [
         {
           id: '1234567890',
-          name: '׳׳•׳— ׳“׳׳•',
+          name: 'לוח דמו',
           description: null,
           state: 'active',
           board_kind: 'public',
           columns: [
-            { id: 'name', title: '׳©׳', type: 'name', settings: {} },
-            { id: 'status', title: '׳¡׳˜׳˜׳•׳¡', type: 'status', settings: { labels: { 0: 'בעבודה', 1: 'בוצע', 2: 'תקוע' }, labels_colors: { 0: { color: '#fdab3d' }, 1: { color: '#00c875' }, 2: { color: '#e2445c' } } } },
-            { id: 'person', title: '׳׳—׳¨׳׳™', type: 'people', settings: {} },
-            { id: 'date4', title: '׳×׳׳¨׳™׳', type: 'date', settings: {} },
+            { id: 'name', title: 'שם', type: 'name', settings: {} },
+            { id: 'status', title: 'סטטוס', type: 'status', settings: { labels: STATUS_GUARD_LABELS } },
+            { id: 'person', title: 'אחראי', type: 'people', settings: {} },
+            { id: 'date4', title: 'תאריך', type: 'date', settings: {} },
           ],
-          groups: [{ id: 'topics', title: '׳§׳‘׳•׳¦׳” ׳', color: '#579bfc' }],
+          groups: [{ id: 'topics', title: 'קבוצה א', color: '#579bfc' }],
         },
       ],
     },
@@ -216,10 +258,10 @@ export const API_FIXTURES = [
       items: [
         {
           id: '2222222222',
-          name: '׳׳©׳™׳׳” ׳¨׳׳©׳•׳ ׳”',
-          board: { id: '1234567890', name: '׳׳•׳— ׳“׳׳•' },
+          name: 'משימה ראשונה',
+          board: { id: '1234567890', name: 'לוח דמו' },
           column_values: [
-            { id: 'status', type: 'status', text: '׳‘׳¢׳‘׳•׳“׳”', value: '{"index":0}' },
+            { id: 'status', type: 'status', text: 'בעבודה', value: '{"index":0}' },
           ],
           subitems: [],
         },
