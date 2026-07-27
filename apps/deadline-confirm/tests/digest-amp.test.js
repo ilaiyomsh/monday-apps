@@ -177,8 +177,17 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).toContain('AMP.setState');
     expect(doc).toContain("[class]=\"'dd-trig ' + dd.c");
     expect(doc).not.toContain('[style]');
-    expect(doc).toMatch(/<th class="status-h">[^<]*סטטוס חדש/);
-    expect(doc).toContain('בחרו סטטוס');
+    expect(doc).toMatch(/<th class="status-h">[^<]*סטטוס/);
+    expect(doc).not.toContain('סטטוס חדש');
+    expect(doc).not.toContain('בחרו סטטוס');
+    expect(doc).toContain('טרם החל'); // current status on item 9001
+    expect(doc).toContain('"l9001":"טרם החל"');
+    expect(doc).toContain('"ol9001":"טרם החל"');
+    expect(doc).toContain('"l9002":"—"'); // empty statusText → em dash
+    expect(doc).toContain('"l9004":"בעבודה"');
+    expect(doc).toContain('l9001: dd.ol9001'); // ללא שינוי restores current
+    expect(doc).toContain('c9001: dd.oc9001');
+    expect(doc).toMatch(/AMP\.setState\(\{dd:\{o:'', v9001:'', l9001: dd\.ol9001, c9001: dd\.oc9001\}\}\)/);
     expect(doc).not.toContain('<select');
     expect(doc).not.toContain('label-dd');
     expect(doc).not.toContain('type="radio"');
@@ -192,13 +201,12 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).toContain('.dd-trig.bg_e2445c { background:#e2445c; }');
     expect(doc).toContain('.dd-trig.bg_00854d { background:#00854d; }');
     expect(doc).toContain('.dd-trig.bg_c4c4c4 { background:#c4c4c4; }');
+    // 9001 current "טרם החל" has no matching button color → neutral class
     expect(doc).toContain('"c9001":"bg_c4c4c4"');
-    expect(doc).toContain('"c9002":"bg_c4c4c4"');
-    expect(doc).toContain('"c9004":"bg_c4c4c4"');
+    expect(doc).toContain('"c9004":"bg_fdab3d"'); // current "בעבודה" matches BTN_START color
     expect(doc).toContain("c9001:'bg_fdab3d'");
     expect(doc).toContain("c9001:'bg_e2445c'");
     expect(doc).toContain("c9004:'bg_00854d'");
-    expect(doc).toContain("c9001:'bg_c4c4c4'");
   });
 
   it('hides menus by default and toggles via dd.o state', () => {

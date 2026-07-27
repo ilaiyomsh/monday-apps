@@ -156,12 +156,15 @@ describe('GET /api/digest/preview — amp4email part', () => {
     expect(res.body.amp).not.toContain(`value="${SECRET}"`);
   });
 
-  it('renders a radio per pending task with item_<itemId> name', async () => {
+  it('wires one hidden item_<itemId> per pending task (amp-bind dropdown value)', async () => {
     const res = await preview(harness());
 
-    expect(res.body.amp).toContain('name="item_9001" value="b_start001"');
+    expect(res.body.amp).toContain('name="item_9001" value="" [value]="dd.v9001"');
+    expect(res.body.amp).toContain('class="dd-trig');
     expect(res.body.amp).toContain('גיבוש תכנית עבודה');
     expect(res.body.amp).toContain('תאריך התחלה מתוכנן');
+    expect(res.body.amp).toMatch(/<th class="status-h">[^<]*סטטוס/);
+    expect(res.body.amp).not.toContain('סטטוס חדש');
   });
 
   it('keeps the base secret out of every URL in the AMP part', async () => {

@@ -18,7 +18,8 @@ const DEFAULT_SEND_HOUR = 8;
 const SUBMIT_LABEL = 'אשר את המסומנות';
 const SUBMIT_COLOR = '#0073ea';
 const NEUTRAL_STATUS = '#c4c4c4';
-const TRIGGER_PLACEHOLDER = 'בחרו סטטוס';
+const TRIGGER_EMPTY = '—';
+const STATUS_HEADER = 'סטטוס';
 
 /** YYYY-MM-DD → DD/MM/YYYY (unset → ''). */
 function formatDate(date) {
@@ -141,34 +142,98 @@ function buildColorClassCss(colors) {
 }
 
 /**
- * Collect every button color used in populated sections (+ neutral).
+ * All action buttons across populated sections (for status-color matching).
+ * @param {object} recipient
+ * @returns {Array<{ id: string, label: string, color: string }>}
+ */
+function allRecipientButtons(recipient) {
+  const out = [];
+  const seen = new Set();
+  for (const section of recipient.sections ?? []) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    for (const button of resolveSectionButtons(section)) {
+      if (seen.has(button.id)) continue;
+      seen.add(button.id);
+      out.push(button);
+    }
+  }
+  return out;
+}
+
+/**
+ * Best-effort color for the task's current status label: optional
+ * task.statusColor, else match a known action-button label, else gray.
+ * @param {string} statusText
+ * @param {Array<{ label: string, color: string }>} buttons
+ * @param {string} [statusColor]
+ */
+function resolveCurrentStatusColor(statusText, buttons, statusColor) {
+  if (statusColor && typeof statusColor === 'string' && statusColor.trim()) {
+    return statusColor.trim();
+  }
+  const needle = String(statusText || '').trim();
+  if (!needle) return NEUTRAL_STATUS;
+  const match = buttons.find((b) => b.label === needle);
+  return match?.color || NEUTRAL_STATUS;
+}
+
+/** Closed-trigger label = current status text (or em dash if unset). */
+function currentStatusLabel(task) {
+  const text = typeof task?.statusText === 'string' ? task.statusText.trim() : '';
+  return text || TRIGGER_EMPTY;
+}
+
+/**
+ * Collect button + current-status colors used in this message (+ neutral).
  * @param {object} recipient
  * @returns {string[]}
  */
 function collectColors(recipient) {
   const colors = new Set([NEUTRAL_STATUS]);
+  const palette = allRecipientButtons(recipient);
+  for (const button of palette) colors.add(button.color || NEUTRAL_STATUS);
   for (const section of recipient.sections ?? []) {
     if (!section.tasks || section.tasks.length === 0) continue;
-    for (const button of resolveSectionButtons(section)) {
-      colors.add(button.color || NEUTRAL_STATUS);
+    for (const task of section.tasks) {
+      const label = currentStatusLabel(task);
+      colors.add(
+        resolveCurrentStatusColor(label === TRIGGER_EMPTY ? '' : label, palette, task.statusColor)
+      );
     }
   }
   return [...colors];
 }
 
 /**
- * Initial amp-state for all dropdowns in the message.
- * c<id> holds a CSS class name (not a hex) — [style] is illegal on <button>.
- * @param {string[]} itemIds
+ * Initial amp-state — seeded with each item's current status (first occurrence
+ * wins across clusters). c<id> is a CSS class name (AMP4EMAIL forbids [style]
+ * on button). ol/oc keep the originals for "ללא שינוי".
+ * @param {object} recipient
  */
-function buildDropdownState(itemIds) {
+function buildDropdownState(recipient) {
   /** @type {Record<string, string>} */
   const state = { o: '' };
-  const defaultCls = colorToClass(NEUTRAL_STATUS);
-  for (const id of itemIds) {
-    state[`v${id}`] = '';
-    state[`l${id}`] = TRIGGER_PLACEHOLDER;
-    state[`c${id}`] = defaultCls;
+  const palette = allRecipientButtons(recipient);
+  const seen = new Set();
+  for (const section of recipient.sections ?? []) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    for (const task of section.tasks) {
+      const id = String(task.itemId);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const label = currentStatusLabel(task);
+      const color = resolveCurrentStatusColor(
+        label === TRIGGER_EMPTY ? '' : label,
+        palette,
+        task.statusColor
+      );
+      const cls = colorToClass(color);
+      state[`v${id}`] = '';
+      state[`l${id}`] = label;
+      state[`c${id}`] = cls;
+      state[`ol${id}`] = label;
+      state[`oc${id}`] = cls;
+    }
   }
   return state;
 }
@@ -223,20 +288,32 @@ const STYLES_BASE = `
 `;
 
 /**
- * amp-bind dropdown: closed colored trigger; tap opens menu of colored options.
+ * amp-bind dropdown: closed trigger shows CURRENT status; tap opens colored
+ * options. Selecting updates the cell via [text]/[class]. "ללא שינוי" clears
+ * the wire value and restores the original status display.
  * Trigger color via [class] (AMP4EMAIL forbids [style] on button).
  * @param {string} fieldName escaped name="item_<id>"
- * @param {Array<{ id: string, label: string, color: string }>} buttons
- * @param {string} itemId raw item id
+ * @param {Array<{ id: string, label: string, color: string }>} buttons section options
+ * @param {Array<{ id: string, label: string, color: string }>} palette all digest buttons (color match)
+ * @param {object} task
  * @param {boolean} includeHidden emit the wire hidden input once per item
  */
-function renderLabelDropdown(fieldName, buttons, itemId, includeHidden) {
-  const id = String(itemId);
+function renderLabelDropdown(fieldName, buttons, palette, task, includeHidden) {
+  const id = String(task.itemId);
   const idBind = escapeBindStr(id);
   const vKey = `v${id}`;
   const lKey = `l${id}`;
   const cKey = `c${id}`;
-  const defaultCls = colorToClass(NEUTRAL_STATUS);
+  const olKey = `ol${id}`;
+  const ocKey = `oc${id}`;
+
+  const curLabel = currentStatusLabel(task);
+  const curColor = resolveCurrentStatusColor(
+    curLabel === TRIGGER_EMPTY ? '' : curLabel,
+    palette,
+    task.statusColor
+  );
+  const curCls = colorToClass(curColor);
 
   const options = [
     ...buttons.map((button) => {
@@ -247,7 +324,7 @@ function renderLabelDropdown(fieldName, buttons, itemId, includeHidden) {
                         on="tap:AMP.setState({dd:{o:'', ${vKey}:'${escapeBindStr(button.id)}', ${lKey}:'${escapeBindStr(label)}', ${cKey}:'${escapeBindStr(cls)}'}})">&#8207;${escapeHtml(label)}</button>`;
     }),
     `                <button type="button" class="dd-opt" style="background:${NEUTRAL_STATUS}"
-                        on="tap:AMP.setState({dd:{o:'', ${vKey}:'', ${lKey}:'${escapeBindStr(TRIGGER_PLACEHOLDER)}', ${cKey}:'${escapeBindStr(defaultCls)}'}})">&#8207;ללא שינוי</button>`,
+                        on="tap:AMP.setState({dd:{o:'', ${vKey}:'', ${lKey}: dd.${olKey}, ${cKey}: dd.${ocKey}}})">&#8207;ללא שינוי</button>`,
   ].join('\n');
 
   const hidden = includeHidden
@@ -256,10 +333,10 @@ function renderLabelDropdown(fieldName, buttons, itemId, includeHidden) {
 
   return `              <td class="dd-cell">
               <div class="dd-wrap">
-                <button type="button" class="dd-trig ${defaultCls}"
+                <button type="button" class="dd-trig ${curCls}"
                         [class]="'dd-trig ' + dd.${cKey}"
                         on="tap:AMP.setState({dd:{o: dd.o == '${idBind}' ? '' : '${idBind}'}})">
-                  <span [text]="dd.${lKey}">&#8207;${escapeHtml(TRIGGER_PLACEHOLDER)}</span>
+                  <span [text]="dd.${lKey}">&#8207;${escapeHtml(curLabel)}</span>
                 </button>
                 <div class="dd-menu" hidden [hidden]="dd.o != '${idBind}'">
 ${options}
@@ -271,8 +348,9 @@ ${options}
 /**
  * @param {object} section
  * @param {Set<string>} emittedHidden
+ * @param {Array<{ id: string, label: string, color: string }>} palette
  */
-function renderClusterTable(section, emittedHidden) {
+function renderClusterTable(section, emittedHidden, palette) {
   const buttons = resolveSectionButtons(section);
   if (buttons.length === 0) return '';
 
@@ -290,7 +368,7 @@ function renderClusterTable(section, emittedHidden) {
       return `            <tr>
               <td class="name">&#8207;${escapeHtml(task.name)}</td>
               <td class="date">${formatDate(task.date) || '—'}</td>
-${renderLabelDropdown(fieldName, buttons, itemId, includeHidden)}
+${renderLabelDropdown(fieldName, buttons, palette, task, includeHidden)}
             </tr>`;
     })
     .join('\n');
@@ -301,7 +379,7 @@ ${renderLabelDropdown(fieldName, buttons, itemId, includeHidden)}
             <tr>
               <th class="name-h">&#8207;שם הפעולה</th>
               <th>&#8207;${escapeHtml(dateHeader)}</th>
-              <th class="status-h">&#8207;סטטוס חדש</th>
+              <th class="status-h">&#8207;${STATUS_HEADER}</th>
             </tr>
 ${rows}
           </table>
@@ -363,14 +441,14 @@ export function renderDigestAmp({
   }
 
   const signed = buildSignedManifest({ secret, accountId, personId, recipient, sendHour, now });
-  const itemIds = collectItemIds(recipient);
-  const ddState = buildDropdownState(itemIds);
+  const ddState = buildDropdownState(recipient);
+  const palette = allRecipientButtons(recipient);
   const colorCss = buildColorClassCss(collectColors(recipient));
   const styles = `${STYLES_BASE}\n      ${colorCss}`;
   const emittedHidden = new Set();
   const clusters = (recipient.sections ?? [])
     .filter((section) => section.tasks && section.tasks.length > 0)
-    .map((section) => renderClusterTable(section, emittedHidden))
+    .map((section) => renderClusterTable(section, emittedHidden, palette))
     .filter((html) => html.length > 0)
     .join('\n');
 

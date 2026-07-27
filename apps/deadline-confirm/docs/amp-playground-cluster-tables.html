@@ -141,7 +141,7 @@ font-weight: bold;
 </head>
 <body>
 <amp-state id="dd"><script type="application/json">
-{"o":"","v9001":"","l9001":"בחרו סטטוס","c9001":"bg_c4c4c4","v9003":"","l9003":"בחרו סטטוס","c9003":"bg_c4c4c4"}
+{"o":"","v9001":"","l9001":"טרם החל","c9001":"bg_c4c4c4","ol9001":"טרם החל","oc9001":"bg_c4c4c4","v9003":"","l9003":"בעבודה","c9003":"bg_fdab3d","ol9003":"בעבודה","oc9003":"bg_fdab3d"}
 </script></amp-state>
 <div class="dd-overlay" hidden [hidden]="dd.o == ''" role="button" tabindex="0"
      on="tap:AMP.setState({dd:{o:''}})"></div>
@@ -165,7 +165,7 @@ enctype="application/x-www-form-urlencoded">
 <tr>
 <th class="name-h">&#8207;שם הפעולה</th>
 <th>&#8207;תאריך התחלה</th>
-<th class="status-h">&#8207;סטטוס חדש</th>
+<th class="status-h">&#8207;סטטוס</th>
 </tr>
 <tr>
 <td class="name">&#8207;Item 1</td>
@@ -175,7 +175,7 @@ enctype="application/x-www-form-urlencoded">
 <button type="button" class="dd-trig bg_c4c4c4"
         [class]="'dd-trig ' + dd.c9001"
         on="tap:AMP.setState({dd:{o: dd.o == '9001' ? '' : '9001'}})">
-<span [text]="dd.l9001">&#8207;בחרו סטטוס</span>
+<span [text]="dd.l9001">&#8207;טרם החל</span>
 </button>
 <div class="dd-menu" hidden [hidden]="dd.o != '9001'">
 <button type="button" class="dd-opt" style="background:#fdab3d"
@@ -183,7 +183,7 @@ enctype="application/x-www-form-urlencoded">
 <button type="button" class="dd-opt" style="background:#e2445c"
         on="tap:AMP.setState({dd:{o:'', v9001:'btn_stuck', l9001:'תקוע', c9001:'bg_e2445c'}})">&#8207;תקוע</button>
 <button type="button" class="dd-opt" style="background:#c4c4c4"
-        on="tap:AMP.setState({dd:{o:'', v9001:'', l9001:'בחרו סטטוס', c9001:'bg_c4c4c4'}})">&#8207;ללא שינוי</button>
+        on="tap:AMP.setState({dd:{o:'', v9001:'', l9001: dd.ol9001, c9001: dd.oc9001}})">&#8207;ללא שינוי</button>
 </div>
 </div>
 <input type="hidden" name="item_9001" value="" [value]="dd.v9001">
@@ -194,10 +194,10 @@ enctype="application/x-www-form-urlencoded">
 <td class="date">22/07/2026</td>
 <td class="dd-cell">
 <div class="dd-wrap">
-<button type="button" class="dd-trig bg_c4c4c4"
+<button type="button" class="dd-trig bg_fdab3d"
         [class]="'dd-trig ' + dd.c9003"
         on="tap:AMP.setState({dd:{o: dd.o == '9003' ? '' : '9003'}})">
-<span [text]="dd.l9003">&#8207;בחרו סטטוס</span>
+<span [text]="dd.l9003">&#8207;בעבודה</span>
 </button>
 <div class="dd-menu" hidden [hidden]="dd.o != '9003'">
 <button type="button" class="dd-opt" style="background:#fdab3d"
@@ -205,7 +205,7 @@ enctype="application/x-www-form-urlencoded">
 <button type="button" class="dd-opt" style="background:#e2445c"
         on="tap:AMP.setState({dd:{o:'', v9003:'btn_stuck', l9003:'תקוע', c9003:'bg_e2445c'}})">&#8207;תקוע</button>
 <button type="button" class="dd-opt" style="background:#c4c4c4"
-        on="tap:AMP.setState({dd:{o:'', v9003:'', l9003:'בחרו סטטוס', c9003:'bg_c4c4c4'}})">&#8207;ללא שינוי</button>
+        on="tap:AMP.setState({dd:{o:'', v9003:'', l9003: dd.ol9003, c9003: dd.oc9003}})">&#8207;ללא שינוי</button>
 </div>
 </div>
 <input type="hidden" name="item_9003" value="" [value]="dd.v9003">
@@ -220,7 +220,7 @@ enctype="application/x-www-form-urlencoded">
 <tr>
 <th class="name-h">&#8207;שם הפעולה</th>
 <th>&#8207;תאריך סיום</th>
-<th class="status-h">&#8207;סטטוס חדש</th>
+<th class="status-h">&#8207;סטטוס</th>
 </tr>
 <tr>
 <td class="name">&#8207;Item 1</td>
@@ -230,7 +230,7 @@ enctype="application/x-www-form-urlencoded">
 <button type="button" class="dd-trig bg_c4c4c4"
         [class]="'dd-trig ' + dd.c9001"
         on="tap:AMP.setState({dd:{o: dd.o == '9001' ? '' : '9001'}})">
-<span [text]="dd.l9001">&#8207;בחרו סטטוס</span>
+<span [text]="dd.l9001">&#8207;טרם החל</span>
 </button>
 <div class="dd-menu" hidden [hidden]="dd.o != '9001'">
 <button type="button" class="dd-opt" style="background:#00c875"
@@ -238,7 +238,7 @@ enctype="application/x-www-form-urlencoded">
 <button type="button" class="dd-opt" style="background:#c4c4c4"
         on="tap:AMP.setState({dd:{o:'', v9001:'btn_na', l9001:'לא רלוונטי', c9001:'bg_c4c4c4'}})">&#8207;לא רלוונטי</button>
 <button type="button" class="dd-opt" style="background:#c4c4c4"
-        on="tap:AMP.setState({dd:{o:'', v9001:'', l9001:'בחרו סטטוס', c9001:'bg_c4c4c4'}})">&#8207;ללא שינוי</button>
+        on="tap:AMP.setState({dd:{o:'', v9001:'', l9001: dd.ol9001, c9001: dd.oc9001}})">&#8207;ללא שינוי</button>
 </div>
 </div>
 </td>
@@ -248,16 +248,16 @@ enctype="application/x-www-form-urlencoded">
 <td class="date">27/07/2026</td>
 <td class="dd-cell">
 <div class="dd-wrap">
-<button type="button" class="dd-trig bg_c4c4c4"
+<button type="button" class="dd-trig bg_fdab3d"
         [class]="'dd-trig ' + dd.c9003"
         on="tap:AMP.setState({dd:{o: dd.o == '9003' ? '' : '9003'}})">
-<span [text]="dd.l9003">&#8207;בחרו סטטוס</span>
+<span [text]="dd.l9003">&#8207;בעבודה</span>
 </button>
 <div class="dd-menu" hidden [hidden]="dd.o != '9003'">
 <button type="button" class="dd-opt" style="background:#00c875"
         on="tap:AMP.setState({dd:{o:'', v9003:'btn_done', l9003:'בוצע', c9003:'bg_00c875'}})">&#8207;בוצע</button>
 <button type="button" class="dd-opt" style="background:#c4c4c4"
-        on="tap:AMP.setState({dd:{o:'', v9003:'', l9003:'בחרו סטטוס', c9003:'bg_c4c4c4'}})">&#8207;ללא שינוי</button>
+        on="tap:AMP.setState({dd:{o:'', v9003:'', l9003: dd.ol9003, c9003: dd.oc9003}})">&#8207;ללא שינוי</button>
 </div>
 </div>
 </td>
