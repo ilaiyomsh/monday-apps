@@ -1,8 +1,14 @@
-// Admin API v2 — the ONLY place the secret is readable, always behind the
-// sessionToken middleware. Board/column pickers stay client-side
-// (monday.api() seamless auth).
+// Admin API — always behind the sessionToken middleware. Board/column
+// pickers stay client-side (monday.api() seamless auth).
 //
-// v2 config contract (PUT /api/config), validated field-by-field — respond
+// V6 (docs/v6-amp-only-decisions.md): GET /api/snippet and
+// GET /api/email-template are DELETED (D4) — they were the only endpoints
+// that returned the secret unmasked, and the static pasted-HTML path they
+// served is retired. The `templates` config field died with them; a client
+// that still sends it is silently ignored (old stored configs keep the key
+// harmlessly until the next save).
+//
+// Config contract (PUT /api/config), validated field-by-field — respond
 // 400 { error: 'invalid_config', field } naming the FIRST offending field:
 // - boardId: digits string (required)
 // - peopleColumnId: non-empty string or null
@@ -15,37 +21,23 @@
 //     targetLabel: string 1..40
 //     style: { color: /^#[0-9a-fA-F]{6}$/, icon: string 0..4 chars
 //              (optional, default ''), size: 'sm'|'md'|'lg' }
-// - templates: array 0..10, each:
-//     id: /^t_[A-Za-z0-9_-]{4,16}$/ (server-generated when absent; dupes → 400)
-//     name: string 1..40
-//     blocks: array 1..30 of either
-//       { type:'text', text: string 1..5000, direction:'rtl'|'ltr',
-//         font: ALLOWED_FONTS (email-template.js), fontSize: int 10..32,
-//         align:'right'|'center'|'left' }
-//       { type:'buttons', buttonIds: non-empty array of ids that exist in
-//         buttons (after generation) }
 // Valid → storage.setConfig(normalized) → 200 { ok: true, config } (the
 // normalized config INCLUDING generated ids — the client re-syncs from it).
 //
-// GET /api/snippet?btn=<id>   → 200 {snippet}; 400 missing btn; 409 no
-//                               secret; 404 unknown button
-// GET /api/email-template?tpl=<id> → 200 {html} (renderEmailTemplate); same
-//                               400/409/404 semantics (404 unknown template)
-// GET /api/state + POST /api/secret/rotate — unchanged from v1.
+// GET /api/state + POST /api/secret/rotate — see route comments (V6: rotate
+// stops returning the secret; nothing displays it any more).
 
 import crypto from 'node:crypto';
 import express from 'express';
 import { generateSecret, maskSecret } from '../services/secret.js';
-import { renderSnippet } from '../helpers/snippet.js';
-import { renderEmailTemplate, ALLOWED_FONTS } from '../helpers/email-template.js';
 import { renderDigestEmail } from '../helpers/digest-email.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
+import { renderDigestPlain } from '../helpers/digest-plain.js';
 import { buildDigest, digestTaskColumnIds } from '../services/digest-service.js';
 import { MondayApiError } from '../services/monday-api.js';
 import { logError, logInfo } from '../helpers/logger.js';
 
 const BUTTON_ID_RE = /^b_[A-Za-z0-9_-]{4,16}$/;
-const TEMPLATE_ID_RE = /^t_[A-Za-z0-9_-]{4,16}$/;
 const SECTION_ID_RE = /^s_[A-Za-z0-9_-]{4,16}$/;
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
@@ -101,51 +93,6 @@ function validateConfig(body) {
   if (new Set(buttons.map((b) => b.id)).size !== buttons.length) return { field: 'buttons' };
   const buttonIds = new Set(buttons.map((b) => b.id));
 
-  const rawTemplates = body.templates ?? [];
-  if (!Array.isArray(rawTemplates) || rawTemplates.length > 10) return { field: 'templates' };
-  const templates = [];
-  for (const raw of rawTemplates) {
-    if (typeof raw !== 'object' || raw === null) return { field: 'templates' };
-    if (raw.id !== undefined && !(typeof raw.id === 'string' && TEMPLATE_ID_RE.test(raw.id))) {
-      return { field: 'id' };
-    }
-    if (!isNonEmptyString(raw.name, 40)) return { field: 'name' };
-    if (!Array.isArray(raw.blocks) || raw.blocks.length < 1 || raw.blocks.length > 30) {
-      return { field: 'blocks' };
-    }
-    const blocks = [];
-    for (const block of raw.blocks) {
-      if (typeof block !== 'object' || block === null) return { field: 'blocks' };
-      if (block.type === 'text') {
-        if (!isNonEmptyString(block.text, 5000)) return { field: 'text' };
-        if (!['rtl', 'ltr'].includes(block.direction)) return { field: 'direction' };
-        if (!ALLOWED_FONTS.includes(block.font)) return { field: 'font' };
-        if (!Number.isInteger(block.fontSize) || block.fontSize < 10 || block.fontSize > 32) {
-          return { field: 'fontSize' };
-        }
-        if (!['right', 'center', 'left'].includes(block.align)) return { field: 'align' };
-        blocks.push({
-          type: 'text',
-          text: block.text,
-          direction: block.direction,
-          font: block.font,
-          fontSize: block.fontSize,
-          align: block.align,
-        });
-      } else if (block.type === 'buttons') {
-        if (!Array.isArray(block.buttonIds) || block.buttonIds.length < 1) {
-          return { field: 'buttonIds' };
-        }
-        if (!block.buttonIds.every((id) => buttonIds.has(id))) return { field: 'buttonIds' };
-        blocks.push({ type: 'buttons', buttonIds: [...block.buttonIds] });
-      } else {
-        return { field: 'blocks' };
-      }
-    }
-    templates.push({ id: raw.id ?? generateId('t'), name: raw.name, blocks });
-  }
-  if (new Set(templates.map((t) => t.id)).size !== templates.length) return { field: 'templates' };
-
   // --- v4 digest block (optional; absent/null → digest: null) ---------------
   let digest = null;
   if (body.digest !== undefined && body.digest !== null) {
@@ -194,11 +141,16 @@ function validateConfig(body) {
     if (new Set(sections.map((s) => s.id)).size !== sections.length) {
       return { field: 'digest.sections' };
     }
+    const sendHour = raw.sendHour === undefined || raw.sendHour === null ? 8 : raw.sendHour;
+    if (!Number.isInteger(sendHour) || sendHour < 0 || sendHour > 23) {
+      return { field: 'digest.sendHour' };
+    }
     digest = {
       usersBoardId: raw.usersBoardId,
       usersPeopleColumnId: raw.usersPeopleColumnId,
       usersEmailColumnId: raw.usersEmailColumnId,
       subject: raw.subject,
+      sendHour,
       sections,
     };
   }
@@ -208,7 +160,6 @@ function validateConfig(body) {
       boardId: body.boardId,
       peopleColumnId: body.peopleColumnId ?? null,
       buttons,
-      templates,
       digest,
     },
   };
@@ -291,11 +242,19 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
       ...recipient,
       sections: recipient.sections.map((s) => ({ ...s, button: buttonsById.get(s.buttonId) })),
     });
+    const sendHour = config.digest?.sendHour ?? 8;
+    // Midday Jerusalem on the preview day — deterministic slot/sig in admin preview.
+    const previewNow = new Date(`${today}T09:00:00+03:00`);
     const renderArgs = { baseUrl: env.baseUrl, secret, accountId: req.session.accountId };
     const renderFor = (recipient) => renderDigestEmail({ ...renderArgs, recipient: withButtons(recipient) });
-    // V5: the dynamic-email (amp4email) part of the same digest — same data,
-    // checkboxes instead of per-task links.
-    const renderAmpFor = (recipient) => renderDigestAmp({ ...renderArgs, recipient: withButtons(recipient) });
+    const renderPlainFor = (recipient) => renderDigestPlain({ recipient: withButtons(recipient) });
+    const renderAmpFor = (recipient) =>
+      renderDigestAmp({
+        ...renderArgs,
+        recipient: withButtons(recipient),
+        sendHour,
+        now: previewNow,
+      });
 
     return {
       digestData: {
@@ -304,6 +263,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         skippedUsers,
         truncated: tasksRead.truncated || usersRead.truncated,
         renderFor,
+        renderPlainFor,
         renderAmpFor,
       },
     };
@@ -317,7 +277,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         res.status(prep.status).json(prep.body);
         return;
       }
-      const { recipients, skippedUsers, truncated, renderFor, renderAmpFor } = prep.digestData;
+      const { recipients, skippedUsers, truncated, renderPlainFor, renderAmpFor } = prep.digestData;
       const wanted =
         typeof req.query.recipient === 'string'
           ? recipients.find((r) => r.email === req.query.recipient)
@@ -326,7 +286,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         recipients: recipients.map(({ email, name, taskCount }) => ({ email, name, taskCount })),
         skippedUsers,
         truncated,
-        html: wanted ? renderFor(wanted) : null,
+        plain: wanted ? renderPlainFor(wanted) : null,
         amp: wanted ? renderAmpFor(wanted) : null,
       });
     })
@@ -439,66 +399,9 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     guarded(async (req, res) => {
       const secret = generateSecret();
       await storage.forAccount(req.session.accountId).setLinkSecret(secret);
-      // Returned in FULL exactly once — the admin view regenerates snippets.
-      res.json({ secret });
-    })
-  );
-
-  router.get(
-    '/api/snippet',
-    guarded(async (req, res) => {
-      const btnId = req.query.btn;
-      if (typeof btnId !== 'string' || btnId.length === 0) {
-        res.status(400).json({ error: 'missing_btn' });
-        return;
-      }
-      const scoped = storage.forAccount(req.session.accountId);
-      const secret = await scoped.getLinkSecret();
-      if (!secret) {
-        res.status(409).json({ error: 'no_secret' });
-        return;
-      }
-      const config = await scoped.getConfig();
-      const button = config?.buttons?.find((b) => b.id === btnId) ?? null;
-      if (!button) {
-        res.status(404).json({ error: 'unknown_button' });
-        return;
-      }
-      res.json({
-        snippet: renderSnippet({ baseUrl: env.baseUrl, secret, button, accountId: req.session.accountId }),
-      });
-    })
-  );
-
-  router.get(
-    '/api/email-template',
-    guarded(async (req, res) => {
-      const tplId = req.query.tpl;
-      if (typeof tplId !== 'string' || tplId.length === 0) {
-        res.status(400).json({ error: 'missing_tpl' });
-        return;
-      }
-      const scoped = storage.forAccount(req.session.accountId);
-      const secret = await scoped.getLinkSecret();
-      if (!secret) {
-        res.status(409).json({ error: 'no_secret' });
-        return;
-      }
-      const config = await scoped.getConfig();
-      const template = config?.templates?.find((t) => t.id === tplId) ?? null;
-      if (!template) {
-        res.status(404).json({ error: 'unknown_template' });
-        return;
-      }
-      res.json({
-        html: renderEmailTemplate({
-          baseUrl: env.baseUrl,
-          secret,
-          template,
-          buttons: config?.buttons ?? [],
-          accountId: req.session.accountId,
-        }),
-      });
+      // V6 (D3/D4): the secret is write-only — rotation invalidates outstanding
+      // signatures but never returns the new value to the client.
+      res.json({ ok: true });
     })
   );
 

@@ -135,7 +135,7 @@ describe('buildDigest — show-by-status classification', () => {
       {
         email: 'dana@example.com',
         name: 'דנה כהן',
-        personIds: ['501'],
+        personId: '501',
         taskCount: 2,
         sections: [
           {
@@ -272,7 +272,11 @@ describe('buildDigest — user matching', () => {
     ]);
   });
 
-  it('duplicate email rows merge into ONE recipient (person ids united)', () => {
+  // V6 owner decision (2026-07-27): the users-board people column holds ONE
+  // person, and one email belongs to one user. Rows breaking that are DATA
+  // ANOMALIES — skipped and reported, never merged or guessed, because the
+  // recipient's single personId is SIGNED into the manifest (D11).
+  it('a duplicate email row is SKIPPED (reason duplicate_email) — the first row wins, nothing merges', () => {
     const result = buildDigest({
       config: baseConfig(),
       users: [
@@ -285,8 +289,45 @@ describe('buildDigest — user matching', () => {
       ],
       today: TODAY,
     });
+    expect(result.skippedUsers).toEqual([
+      { itemId: 'u2', name: 'דנה (כפולה)', reason: 'duplicate_email' },
+    ]);
     expect(result.recipients).toHaveLength(1);
-    expect(result.recipients[0].email).toBe('dana@example.com');
-    expect(result.recipients[0].sections[0].tasks.map((t) => t.itemId).sort()).toEqual(['9001', '9002']);
+    expect(result.recipients[0].personId).toBe('501');
+    expect(result.recipients[0].sections[0].tasks.map((t) => t.itemId)).toEqual(['9001']);
+  });
+
+  it('a user row with MORE than one person is SKIPPED (reason multiple_persons) — never guessed', () => {
+    const result = buildDigest({
+      config: baseConfig(),
+      users: [userRow('u1', 'שניים', { persons: ['501', '502'], email: 'two@example.com' })],
+      tasks: [taskRow('9001', 'מ', { persons: ['501'], startDate: '2026-07-10', statusA: 0 })],
+      today: TODAY,
+    });
+    expect(result.recipients).toEqual([]);
+    expect(result.skippedUsers).toEqual([
+      { itemId: 'u1', name: 'שניים', reason: 'multiple_persons' },
+    ]);
+  });
+
+  // R2 invariant (v6 §6): a recipient's digest contains ONLY tasks assigned
+  // to that recipient — the attribution wording and the accepted risks R1/R2
+  // both depend on it.
+  it("R2 invariant: each recipient's digest carries ONLY their own tasks, never a colleague's", () => {
+    const result = buildDigest({
+      config: baseConfig(),
+      users: [
+        userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' }),
+        userRow('u2', 'יוסי', { persons: ['502'], email: 'yossi@example.com' }),
+      ],
+      tasks: [
+        taskRow('9001', 'של דנה', { persons: ['501'], startDate: '2026-07-10', statusA: 0 }),
+        taskRow('9002', 'של יוסי', { persons: ['502'], startDate: '2026-07-10', statusA: 0 }),
+      ],
+      today: TODAY,
+    });
+    const byEmail = Object.fromEntries(result.recipients.map((r) => [r.email, r]));
+    expect(byEmail['dana@example.com'].sections[0].tasks.map((t) => t.itemId)).toEqual(['9001']);
+    expect(byEmail['yossi@example.com'].sections[0].tasks.map((t) => t.itemId)).toEqual(['9002']);
   });
 });
