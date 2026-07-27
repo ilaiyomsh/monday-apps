@@ -9,7 +9,7 @@ import './SettingsLauncher.css';
 const FULL_SETTINGS_PATH = '/settings-full';
 
 /**
- * Slim Column Settings shell — opens a nested overlay sized to the viewport
+ * Slim Column Settings shell — opens a nested overlay at ≥80% of the viewport
  * (monday openAppFeatureModal only accepts px strings).
  */
 function SettingsLauncher() {
