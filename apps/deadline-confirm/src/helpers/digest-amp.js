@@ -110,21 +110,70 @@ function collectItemIds(recipient) {
 }
 
 /**
+ * AMP4EMAIL forbids [style] on <button> — bind background via [class] instead.
+ * @param {string} hex
+ * @returns {string} e.g. bg_fdab3d
+ */
+function colorToClass(hex) {
+  const clean = String(hex || NEUTRAL_STATUS)
+    .trim()
+    .replace(/^#/, '')
+    .replace(/[^a-fA-F0-9]/g, '')
+    .toLowerCase();
+  return `bg_${clean || 'c4c4c4'}`;
+}
+
+/**
+ * @param {Iterable<string>} colors hex colors used in this message
+ * @returns {string} CSS rules for .dd-trig.bg_*
+ */
+function buildColorClassCss(colors) {
+  const seen = new Set();
+  const rules = [];
+  for (const raw of colors) {
+    const cls = colorToClass(raw);
+    if (seen.has(cls)) continue;
+    seen.add(cls);
+    const hexDigits = cls.slice(3); // after bg_
+    rules.push(`.dd-trig.${cls} { background:#${escapeHtml(hexDigits)}; }`);
+  }
+  return rules.join('\n      ');
+}
+
+/**
+ * Collect every button color used in populated sections (+ neutral).
+ * @param {object} recipient
+ * @returns {string[]}
+ */
+function collectColors(recipient) {
+  const colors = new Set([NEUTRAL_STATUS]);
+  for (const section of recipient.sections ?? []) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    for (const button of resolveSectionButtons(section)) {
+      colors.add(button.color || NEUTRAL_STATUS);
+    }
+  }
+  return [...colors];
+}
+
+/**
  * Initial amp-state for all dropdowns in the message.
+ * c<id> holds a CSS class name (not a hex) — [style] is illegal on <button>.
  * @param {string[]} itemIds
  */
 function buildDropdownState(itemIds) {
   /** @type {Record<string, string>} */
   const state = { o: '' };
+  const defaultCls = colorToClass(NEUTRAL_STATUS);
   for (const id of itemIds) {
     state[`v${id}`] = '';
     state[`l${id}`] = TRIGGER_PLACEHOLDER;
-    state[`c${id}`] = NEUTRAL_STATUS;
+    state[`c${id}`] = defaultCls;
   }
   return state;
 }
 
-const STYLES = `
+const STYLES_BASE = `
       body { margin:0; padding:14px 10px; background:#F5F6F8; font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif; color:#323338; }
       .wrap { max-width:720px; margin:0 auto; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; padding:18px; }
       .hi { font-size:18px; font-weight:bold; margin:0 0 6px; }
@@ -175,6 +224,7 @@ const STYLES = `
 
 /**
  * amp-bind dropdown: closed colored trigger; tap opens menu of colored options.
+ * Trigger color via [class] (AMP4EMAIL forbids [style] on button).
  * @param {string} fieldName escaped name="item_<id>"
  * @param {Array<{ id: string, label: string, color: string }>} buttons
  * @param {string} itemId raw item id
@@ -182,21 +232,22 @@ const STYLES = `
  */
 function renderLabelDropdown(fieldName, buttons, itemId, includeHidden) {
   const id = String(itemId);
-  const idEsc = escapeHtml(id);
   const idBind = escapeBindStr(id);
   const vKey = `v${id}`;
   const lKey = `l${id}`;
   const cKey = `c${id}`;
+  const defaultCls = colorToClass(NEUTRAL_STATUS);
 
   const options = [
     ...buttons.map((button) => {
       const color = button.color || NEUTRAL_STATUS;
+      const cls = colorToClass(color);
       const label = button.label;
       return `                <button type="button" class="dd-opt" style="background:${escapeHtml(color)}"
-                        on="tap:AMP.setState({dd:{o:'', ${vKey}:'${escapeBindStr(button.id)}', ${lKey}:'${escapeBindStr(label)}', ${cKey}:'${escapeBindStr(color)}'}})">&#8207;${escapeHtml(label)}</button>`;
+                        on="tap:AMP.setState({dd:{o:'', ${vKey}:'${escapeBindStr(button.id)}', ${lKey}:'${escapeBindStr(label)}', ${cKey}:'${escapeBindStr(cls)}'}})">&#8207;${escapeHtml(label)}</button>`;
     }),
     `                <button type="button" class="dd-opt" style="background:${NEUTRAL_STATUS}"
-                        on="tap:AMP.setState({dd:{o:'', ${vKey}:'', ${lKey}:'${escapeBindStr(TRIGGER_PLACEHOLDER)}', ${cKey}:'${NEUTRAL_STATUS}'}})">&#8207;ללא שינוי</button>`,
+                        on="tap:AMP.setState({dd:{o:'', ${vKey}:'', ${lKey}:'${escapeBindStr(TRIGGER_PLACEHOLDER)}', ${cKey}:'${escapeBindStr(defaultCls)}'}})">&#8207;ללא שינוי</button>`,
   ].join('\n');
 
   const hidden = includeHidden
@@ -205,8 +256,8 @@ function renderLabelDropdown(fieldName, buttons, itemId, includeHidden) {
 
   return `              <td class="dd-cell">
               <div class="dd-wrap">
-                <button type="button" class="dd-trig" style="background:${NEUTRAL_STATUS}"
-                        [style]="'background:' + dd.${cKey}"
+                <button type="button" class="dd-trig ${defaultCls}"
+                        [class]="'dd-trig ' + dd.${cKey}"
                         on="tap:AMP.setState({dd:{o: dd.o == '${idBind}' ? '' : '${idBind}'}})">
                   <span [text]="dd.${lKey}">&#8207;${escapeHtml(TRIGGER_PLACEHOLDER)}</span>
                 </button>
@@ -314,6 +365,8 @@ export function renderDigestAmp({
   const signed = buildSignedManifest({ secret, accountId, personId, recipient, sendHour, now });
   const itemIds = collectItemIds(recipient);
   const ddState = buildDropdownState(itemIds);
+  const colorCss = buildColorClassCss(collectColors(recipient));
+  const styles = `${STYLES_BASE}\n      ${colorCss}`;
   const emittedHidden = new Set();
   const clusters = (recipient.sections ?? [])
     .filter((section) => section.tasks && section.tasks.length > 0)
@@ -330,7 +383,7 @@ export function renderDigestAmp({
     <script async custom-element="amp-bind" src="https://cdn.ampproject.org/v0/amp-bind-0.1.js"></script>
     <script async custom-template="amp-mustache" src="https://cdn.ampproject.org/v0/amp-mustache-0.2.js"></script>
     <style amp4email-boilerplate>body{visibility:hidden}</style>
-    <style amp-custom>${STYLES}    </style>
+    <style amp-custom>${styles}    </style>
   </head>
   <body dir="rtl">
     <amp-state id="dd"><script type="application/json">${JSON.stringify(ddState)}</script></amp-state>

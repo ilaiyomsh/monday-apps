@@ -171,10 +171,12 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
 
   it('uses closed amp-bind dropdown (dd-trig + dd-menu) — not native <select> or always-open radios', () => {
     const doc = render();
-    expect(doc).toContain('class="dd-trig"');
+    expect(doc).toContain('class="dd-trig');
     expect(doc).toContain('class="dd-menu"');
     expect(doc).toContain('class="dd-opt"');
     expect(doc).toContain('AMP.setState');
+    expect(doc).toContain("[class]=\"'dd-trig ' + dd.c");
+    expect(doc).not.toContain('[style]');
     expect(doc).toMatch(/<th class="status-h">[^<]*סטטוס חדש/);
     expect(doc).toContain('בחרו סטטוס');
     expect(doc).not.toContain('<select');
@@ -182,6 +184,21 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).not.toContain('type="radio"');
     expect(doc).not.toContain('class="picker"');
     expect(doc).not.toContain('amp-accordion');
+  });
+
+  it('binds trigger color via CSS class (AMP4EMAIL forbids [style] on button)', () => {
+    const doc = render();
+    expect(doc).toContain('.dd-trig.bg_fdab3d { background:#fdab3d; }');
+    expect(doc).toContain('.dd-trig.bg_e2445c { background:#e2445c; }');
+    expect(doc).toContain('.dd-trig.bg_00854d { background:#00854d; }');
+    expect(doc).toContain('.dd-trig.bg_c4c4c4 { background:#c4c4c4; }');
+    expect(doc).toContain('"c9001":"bg_c4c4c4"');
+    expect(doc).toContain('"c9002":"bg_c4c4c4"');
+    expect(doc).toContain('"c9004":"bg_c4c4c4"');
+    expect(doc).toContain("c9001:'bg_fdab3d'");
+    expect(doc).toContain("c9001:'bg_e2445c'");
+    expect(doc).toContain("c9004:'bg_00854d'");
+    expect(doc).toContain("c9001:'bg_c4c4c4'");
   });
 
   it('hides menus by default and toggles via dd.o state', () => {
@@ -224,7 +241,7 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).toContain(`v9001:'${BTN_STUCK.id}'`);
     expect(doc).toContain(`v9004:'${BTN_DONE.id}'`);
     expect(doc).not.toContain(`v9004:'${BTN_START.id}'`);
-    expect((doc.match(/class="dd-trig"/g) ?? []).length).toBe(3);
+    expect((doc.match(/class="dd-trig /g) ?? []).length).toBe(3);
   });
 
   it('falls back to singular buttonId/button when buttonIds/buttons are absent', () => {
@@ -253,7 +270,7 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).toContain('מקבץ ישן');
     expect(doc).toContain('name="item_9010" value="" [value]="dd.v9010"');
     expect(doc).toContain(`v9010:'${BTN_DONE.id}'`);
-    expect((doc.match(/class="dd-trig"/g) ?? []).length).toBe(1);
+    expect((doc.match(/class="dd-trig /g) ?? []).length).toBe(1);
   });
 
   it('shares one hidden wire field when the same item appears in two clusters', () => {
@@ -280,7 +297,7 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     };
     const doc = render(dual);
     expect((doc.match(/name="item_9001"/g) ?? []).length).toBe(1);
-    expect((doc.match(/class="dd-trig"/g) ?? []).length).toBe(2);
+    expect((doc.match(/class="dd-trig /g) ?? []).length).toBe(2);
     expect(doc).toContain(`v9001:'${BTN_START.id}'`);
     expect(doc).toContain(`v9001:'${BTN_DONE.id}'`);
   });
