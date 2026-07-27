@@ -64,6 +64,8 @@ export interface DigestConfig {
   usersPeopleColumnId: string;
   usersEmailColumnId: string;
   subject: string;
+  /** Hour (0–23, Asia/Jerusalem) when the daily digest is scheduled. Default 8. */
+  sendHour?: number;
   sections: DigestSectionConfig[];
 }
 
@@ -84,15 +86,16 @@ export interface DigestRecipientSummary {
 export interface DigestSkippedUser {
   itemId: string;
   name: string;
-  reason: 'no_email' | 'no_person';
+  reason: 'no_email' | 'no_person' | 'duplicate_email' | 'multiple_persons';
 }
 
 export interface DigestPreviewResponse {
   recipients: DigestRecipientSummary[];
   skippedUsers: DigestSkippedUser[];
   truncated: boolean;
-  html: string | null;
-  /** V5: the amp4email (Gmail dynamic email) part of the same digest. */
+  /** V6: text/plain fallback part — no links, no credentials. */
+  plain: string | null;
+  /** V6: amp4email (Gmail dynamic email) part. */
   amp: string | null;
 }
 

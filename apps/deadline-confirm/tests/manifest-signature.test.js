@@ -490,7 +490,7 @@ describe('verifyManifest', () => {
   });
 
   it('returns false (without throwing) when secret is missing', () => {
-    const { secret, ...rest } = base;
+    const { secret: _secret, ...rest } = base;
     expect(verifyManifest({ ...rest, signature: validSig() })).toBe(false);
   });
 

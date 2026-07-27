@@ -36,8 +36,8 @@ export function App() {
   const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: 'idle' });
 
-  const [rotatedSecret, setRotatedSecret] = useState<string | null>(null);
   const [rotating, setRotating] = useState(false);
+  const [rotateSuccess, setRotateSuccess] = useState(false);
 
   const loadState = useCallback(async (opts: { initDraft: boolean }) => {
     const nextState = await apiFetch<AppState>('/api/state');
@@ -154,9 +154,10 @@ export function App() {
 
   const onRotate = async () => {
     setRotating(true);
+    setRotateSuccess(false);
     try {
-      const res = await apiFetch<{ secret: string }>('/api/secret/rotate', { method: 'POST' });
-      setRotatedSecret(res.secret);
+      await apiFetch<{ ok: boolean }>('/api/secret/rotate', { method: 'POST' });
+      setRotateSuccess(true);
       await loadState({ initDraft: false });
     } catch (err) {
       logger.error('admin', 'secret_rotate_failed', err);
@@ -224,12 +225,11 @@ export function App() {
               <TemplatesSection
                 templates={draft.templates}
                 buttons={draft.buttons}
-                dirty={dirty}
                 onChange={onTemplatesChange}
               />
               <SecretSection
                 maskedSecret={state.secret}
-                rotatedSecret={rotatedSecret}
+                rotateSuccess={rotateSuccess}
                 rotating={rotating}
                 onRotate={onRotate}
               />
