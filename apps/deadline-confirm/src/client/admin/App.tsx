@@ -8,11 +8,13 @@ import type { ActionButton, AppState, Board, BoardColumn, EmailTemplate } from '
 import { type ConfigDraft, type DigestDraft, draftFromConfig, draftToConfig } from './draft';
 import { apiFetch, ApiError } from './services/api';
 import { fetchBoards, fetchBoardColumns } from './services/monday';
+import { backfillDateColumnTitles } from './settings-io';
 import { ConnectionSection } from './components/ConnectionSection';
 import { BoardConfigSection } from './components/BoardConfigSection';
 import { ButtonsSection } from './components/ButtonsSection';
 import { TemplatesSection } from './components/TemplatesSection';
 import { SecretSection } from './components/SecretSection';
+import { SettingsIOSection } from './components/SettingsIOSection';
 import { DigestSection } from './components/DigestSection';
 import logger from './utils/logger';
 import { useViewTracking } from './utils/viewTracking';
@@ -127,7 +129,14 @@ export function App() {
   const onDigestChange = (patch: Partial<DigestDraft>) =>
     onDraftChange({ digest: { ...draft.digest, ...patch } });
 
-  const payload = draftToConfig(draft);
+  // A pre-0.6.0 config stores an empty section.dateColumnTitle (0.7.1 defaults
+  // the missing field to ''), which the server rejects as invalid_config while
+  // the panel looks complete. Derive it from the selected column at the save
+  // boundary so a legacy config can be saved at all.
+  const payload = draftToConfig({
+    ...draft,
+    digest: backfillDateColumnTitles(draft.digest, columns),
+  });
 
   const onSave = async () => {
     if (!payload) return;
@@ -232,6 +241,15 @@ export function App() {
                 rotatedSecret={rotatedSecret}
                 rotating={rotating}
                 onRotate={onRotate}
+              />
+              <SettingsIOSection
+                savedConfig={state.config}
+                draft={draft}
+                appVersion={__APP_VERSION__}
+                onImport={(imported) => {
+                  setDraft(imported);
+                  setDirty(true);
+                }}
               />
             </div>
           </TabPanel>
