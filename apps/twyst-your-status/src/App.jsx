@@ -38,7 +38,7 @@ function App() {
   const dir = isRTL ? 'rtl' : 'ltr';
 
   return (
-    <div className={`app-shell ${themeClass}`} dir={dir}>
+    <div className={`app-shell${route === 'picker' ? ' is-picker' : ''} ${themeClass}`} dir={dir}>
       {route === 'picker' && <OnClickDialog context={context} />}
       {route === 'settings' && (
         <Suspense fallback={<LoadingState message="טוען…" />}>
