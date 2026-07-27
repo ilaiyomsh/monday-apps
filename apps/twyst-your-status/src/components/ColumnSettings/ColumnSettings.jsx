@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AttentionBox, Button, Heading, Text } from '@vibe/core';
+import { AttentionBox, Button, Heading } from '@vibe/core';
 import { validateSettings } from '../../domain/settingsSchema';
 import { isSupportedFormColumnType } from '../../domain/columnValueFormats';
 import { resolveStatusColorHex } from '../../domain/statusColors';
@@ -10,6 +10,7 @@ import {
   createLabelsDraft,
   hasPendingLabelEdits,
   pruneSettingsForActiveLabels,
+  reorderLabelsDraft,
 } from '../../domain/statusLabelDraft';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';
 import {
@@ -30,8 +31,44 @@ import './ColumnSettings.css';
 const TEAMS_SCOPE_HINT =
   'חסר הסקופ teams:read — בחירת צוותים לא זמינה.';
 
-function multiValues(event) {
-  return [...event.target.selectedOptions].map((option) => option.value);
+function ruleHasConfig(rule, hidden) {
+  return Boolean(
+    hidden
+    || (rule.allowedUserIds?.length ?? 0)
+    || (rule.allowedTeamIds?.length ?? 0)
+    || (rule.requiredColumnIds?.length ?? 0)
+    || (rule.requiredPeopleColumnIds?.length ?? 0),
+  );
+}
+
+function OptionChecklist({ options, values, disabled, onChange, emptyText }) {
+  const selected = new Set((values ?? []).map(String));
+  if (!options.length) {
+    return <p className="twyst-field-empty">{emptyText}</p>;
+  }
+  return (
+    <div className="twyst-check-list" role="group">
+      {options.map((option) => {
+        const id = String(option.id);
+        return (
+          <label key={id} className="twyst-check-row">
+            <input
+              type="checkbox"
+              checked={selected.has(id)}
+              disabled={disabled || option.disabled}
+              onChange={() => {
+                const next = new Set(selected);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                onChange([...next]);
+              }}
+            />
+            <span>{option.label}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
 }
 
 function LabelCard({
@@ -46,12 +83,16 @@ function LabelCard({
   usedColors,
   saving,
   showPermissions,
+  isFirst,
+  isLast,
   onRename,
   onRecolor,
   onRemove,
+  onMove,
   onToggleHidden,
   onChangeRule,
 }) {
+  const [open, setOpen] = useState(() => ruleHasConfig(rule, hidden));
   const selectedPeople = (rule.allowedUserIds ?? []).map((id) => {
     const match = users.find((user) => String(user.id) === String(id));
     return match
@@ -59,10 +100,17 @@ function LabelCard({
       : { id: String(id), name: String(id) };
   });
   const gatePeopleColumnId = rule.requiredPeopleColumnIds?.[0] ?? '';
+  const gatePeopleTitle = peopleColumns.find((column) => column.id === gatePeopleColumnId)?.title;
+  const summaryBits = [];
+  if (hidden) summaryBits.push('מוסתר');
+  if (rule.allowedUserIds?.length) summaryBits.push(`${rule.allowedUserIds.length} משתמשים`);
+  if (rule.allowedTeamIds?.length) summaryBits.push(`${rule.allowedTeamIds.length} צוותים`);
+  if (gatePeopleTitle) summaryBits.push(gatePeopleTitle);
+  if (rule.requiredColumnIds?.length) summaryBits.push(`${rule.requiredColumnIds.length} שדות חובה`);
 
   return (
-    <article className="twyst-label-card">
-      <div className="twyst-label-row">
+    <article className={`twyst-label-card${open ? ' is-open' : ''}`}>
+      <div className="twyst-label-identity">
         <StatusColorPicker
           colorValue={label.colorValue}
           usedColorEnums={usedColors}
@@ -77,94 +125,124 @@ function LabelCard({
           disabled={saving}
           onChange={(event) => onRename(label.clientKey, event.target.value)}
         />
-        <Button
-          kind="tertiary"
-          size="small"
-          disabled={saving}
-          onClick={() => onRemove(label.clientKey)}
-        >
-          הסרה
-        </Button>
+        <div className="twyst-label-actions">
+          <div className="twyst-label-order" role="group" aria-label="סדר הלייבל">
+            <button
+              type="button"
+              className="twyst-icon-btn"
+              disabled={saving || isFirst}
+              aria-label="הזז למעלה"
+              onClick={() => onMove(label.clientKey, -1)}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              className="twyst-icon-btn"
+              disabled={saving || isLast}
+              aria-label="הזז למטה"
+              onClick={() => onMove(label.clientKey, 1)}
+            >
+              ↓
+            </button>
+          </div>
+          <button
+            type="button"
+            className="twyst-text-btn is-danger"
+            disabled={saving}
+            onClick={() => onRemove(label.clientKey)}
+          >
+            הסרה
+          </button>
+        </div>
       </div>
 
       {showPermissions && (
-        <>
-          <label className="twyst-check">
-            <input
-              type="checkbox"
-              checked={hidden}
+        <div className="twyst-label-access">
+          <div className="twyst-label-access-bar">
+            <label className="twyst-check">
+              <input
+                type="checkbox"
+                checked={hidden}
+                disabled={saving}
+                onChange={() => onToggleHidden(label.id)}
+              />
+              <span>מוסתר בבורר</span>
+            </label>
+            <button
+              type="button"
+              className="twyst-text-btn"
+              aria-expanded={open}
               disabled={saving}
-              onChange={() => onToggleHidden(label.id)}
-            />
-            <Text type="text2">מוסתר בבורר</Text>
-          </label>
-
-          <div className="twyst-field">
-            <Text type="text2">משתמשים</Text>
-            <PersonPicker
-              selected={selectedPeople}
-              users={users}
-              bordered
-              onChange={(people) => onChangeRule(label.id, {
-                allowedUserIds: (people || []).map((person) => String(person.id)),
-              })}
-            />
+              onClick={() => setOpen((current) => !current)}
+            >
+              {open ? 'הסתר הרשאות' : 'הרשאות'}
+              {!open && summaryBits.length > 0 ? ` · ${summaryBits.join(' · ')}` : ''}
+            </button>
           </div>
 
-          <div className="twyst-field">
-            <Text type="text2">צוותים</Text>
-            <select
-              className="twyst-multi"
-              multiple
-              value={rule.allowedTeamIds}
-              disabled={!teamsAvailable || saving}
-              onChange={(event) => onChangeRule(label.id, { allowedTeamIds: multiValues(event) })}
-            >
-              {teams.map((team) => (
-                <option key={team.id} value={String(team.id)}>{team.name}</option>
-              ))}
-            </select>
-          </div>
+          {open && (
+            <div className="twyst-permissions">
+              <div className="twyst-field twyst-field-users">
+                <span className="twyst-field-label">משתמשים מורשים</span>
+                <PersonPicker
+                  selected={selectedPeople}
+                  users={users}
+                  bordered
+                  onChange={(people) => onChangeRule(label.id, {
+                    allowedUserIds: (people || []).map((person) => String(person.id)),
+                  })}
+                />
+              </div>
 
-          <div className="twyst-field">
-            <Text type="text2">עמודת אנשים</Text>
-            <select
-              className="twyst-select"
-              value={gatePeopleColumnId}
-              disabled={saving || peopleColumns.length === 0}
-              aria-label="עמודת אנשים לתנאי הרשאה"
-              onChange={(event) => onChangeRule(label.id, {
-                requiredPeopleColumnIds: event.target.value ? [event.target.value] : [],
-              })}
-            >
-              <option value="">ללא</option>
-              {peopleColumns.map((column) => (
-                <option key={column.id} value={column.id}>{column.title}</option>
-              ))}
-            </select>
-          </div>
+              <div className="twyst-field twyst-field-teams">
+                <span className="twyst-field-label">צוותים מורשים</span>
+                <OptionChecklist
+                  options={teams.map((team) => ({ id: team.id, label: team.name }))}
+                  values={rule.allowedTeamIds}
+                  disabled={!teamsAvailable || saving}
+                  emptyText={teamsAvailable ? 'אין צוותים בחשבון' : 'חסר סקופ teams:read'}
+                  onChange={(next) => onChangeRule(label.id, { allowedTeamIds: next })}
+                />
+              </div>
 
-          <div className="twyst-field">
-            <Text type="text2">שדות חובה</Text>
-            <select
-              className="twyst-multi"
-              multiple
-              value={rule.requiredColumnIds}
-              disabled={saving}
-              onChange={(event) => onChangeRule(label.id, { requiredColumnIds: multiValues(event) })}
-            >
-              {columns.map((column) => (
-                <option
-                  key={column.id}
-                  value={column.id}
-                  disabled={!isSupportedFormColumnType(column.type)}
+              <div className="twyst-field twyst-field-people-gate">
+                <label className="twyst-field-label" htmlFor={`people-gate-${label.clientKey}`}>
+                  חייב להופיע בעמודת אנשים
+                </label>
+                <select
+                  id={`people-gate-${label.clientKey}`}
+                  className="twyst-select"
+                  value={gatePeopleColumnId}
+                  disabled={saving || peopleColumns.length === 0}
+                  onChange={(event) => onChangeRule(label.id, {
+                    requiredPeopleColumnIds: event.target.value ? [event.target.value] : [],
+                  })}
                 >
-                  {column.title}
-                </option>
-              ))}
-            </select>
-          </div>
-        </>
+                  <option value="">ללא הגבלה</option>
+                  {peopleColumns.map((column) => (
+                    <option key={column.id} value={column.id}>{column.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="twyst-field twyst-field-required">
+                <span className="twyst-field-label">שדות חובה במעבר</span>
+                <OptionChecklist
+                  options={columns.map((column) => ({
+                    id: column.id,
+                    label: column.title,
+                    disabled: !isSupportedFormColumnType(column.type),
+                  }))}
+                  values={rule.requiredColumnIds}
+                  disabled={saving}
+                  emptyText="אין עמודות זמינות"
+                  onChange={(next) => onChangeRule(label.id, { requiredColumnIds: next })}
+                />
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </article>
   );
@@ -309,6 +387,10 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     setLabelsDraft((current) => current.filter((label) => label.clientKey !== clientKey));
   };
 
+  const moveLabel = (clientKey, delta) => {
+    setLabelsDraft((current) => reorderLabelsDraft(current, clientKey, delta));
+  };
+
   const addLabel = () => {
     setLabelsDraft((current) => [...current, createBlankLabelDraft(current)]);
   };
@@ -449,7 +531,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
           </Button>
         </div>
 
-        {labelsDraft.map((label) => {
+        {labelsDraft.map((label, labelIndex) => {
           const usedColors = labelsDraft
             .filter((other) => other.clientKey !== label.clientKey)
             .map((other) => other.colorValue);
@@ -467,9 +549,12 @@ function ColumnSettings({ context, variant = 'overlay' }) {
               usedColors={usedColors}
               saving={saving}
               showPermissions={!label.isNew}
+              isFirst={labelIndex === 0}
+              isLast={labelIndex === labelsDraft.length - 1}
               onRename={renameLabel}
               onRecolor={recolorLabel}
               onRemove={removeLabel}
+              onMove={moveLabel}
               onToggleHidden={toggleHidden}
               onChangeRule={changeRule}
             />
