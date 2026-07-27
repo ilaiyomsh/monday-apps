@@ -99,7 +99,8 @@ A "resend today" action re-runs the send for **all** recipients using the curren
 slot. Selective resend is out of scope for this round.
 
 ### D9 — Email redesign: multi-button table, one global submit. **IMPLEMENTED
-(T15 → LabelPicker 0.8.3–0.8.4 → cluster tables + multi-button 0.9.0).**
+(T15 → LabelPicker 0.8.3–0.8.4 → cluster tables + multi-button 0.9.0 →
+styled label `<select>` dropdown 0.9.1).**
 
 Owner briefs:
 - (2026-07-27) one table + **one** approve button — not one form per section.
@@ -112,12 +113,17 @@ Owner briefs:
   that cluster's date column only; radio column per action button; clusters may
   define **multiple** `buttonIds` (admin multi-select). Same item across
   clusters shares `name="item_<id>"`.
+- (2026-07-27) **label dropdown (0.9.1):** one styled AMP-for-Email
+  `<select class="label-dd">` per row (options = section buttons; empty option
+  `ללא שינוי` = no change). Closed control styled monday-like (~200×34, blue
+  border); OS popup cannot be restyled in Gmail/AMP. Option text only (no
+  reliable `<option>` colors). Not amp-accordion / amp-bind.
 
 Behaviour:
-- One AMP form. Populated sections → separate tables (title + date + button cols).
+- One AMP form. Populated sections → separate tables (title + date + status select).
 - Options = section `buttonIds` (fallback `[buttonId]`). Wire `item_<id>=btnId`.
 - **One global submit** (`אשר את המסומנות`) applies every chosen status.
-- Tasks with no selection are unchanged.
+- Tasks left on "ללא שינוי" are unchanged.
 
 Admin: multi-select "כפתורי פעולה"; primary (first) drives status filter column.
 

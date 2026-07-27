@@ -11,7 +11,7 @@ export interface DigestSectionDraft {
   dateColumnTitle: string; // captured when the date column is picked
   /** @deprecated prefer buttonIds — kept in sync as buttonIds[0] */
   buttonId: string | null;
-  /** Action buttons for this cluster (radio columns). First drives status filter. */
+  /** Action buttons for this cluster's label dropdown. First drives status filter. */
   buttonIds: string[];
   includeStatusLabelIds: number[]; // task shown only if its status is one of these
 }
