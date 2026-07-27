@@ -9,9 +9,9 @@
 // that pass against tidied mocks fail against the live iframe.
 
 export const USERS = [
-  { id: '11111111', name: '׳™׳“׳™׳“׳™׳” ׳›׳”׳', photo_url: { thumb: null } },
-  { id: '22222222', name: '׳ ׳•׳¢׳” ׳׳•׳™', photo_url: { thumb: null } },
-  { id: '33333333', name: 'Dana Fischer', photo_url: { thumb: null } },
+  { id: '11111111', name: 'ידידיה כהן', photo_thumb: null },
+  { id: '22222222', name: 'נועה לוי', photo_thumb: null },
+  { id: '33333333', name: 'Dana Fischer', photo_thumb: null },
 ];
 
 const USER_BASE = {

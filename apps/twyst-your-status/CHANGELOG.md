@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.2.2
+
+- Fix settings load crash: User photos query uses `photo_thumb` (API 2026-04).
+  `photo_url { thumb }` is only available from 2026-07 and was rejected by GraphQL.
+
 ## 3.2.1
 
 - Status picker no longer closes when the mouse moves: the column Dialog Design
