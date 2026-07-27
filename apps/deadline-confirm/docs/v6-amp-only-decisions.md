@@ -162,6 +162,121 @@ no form at all. That blocks the naive forwarding case, but it is Gmail's
 behaviour, not ours, and it does not cover access to the original mailbox, a copy
 of the raw MIME, or a screenshot of the source.
 
+### D12 — Gmail API is the only sending channel. Resend is retired.
+
+Mail is sent exclusively through the Gmail API, from **one dedicated Google
+Workspace mailbox** owned by the vendor. That mailbox is the only account
+connected to the Google Cloud OAuth client. Every recipient, for every tenant,
+receives mail from that one address.
+
+`RESEND_API_KEY` / `DIGEST_FROM`, `src/services/email-sender.js`'s Resend funnel,
+and the `email_not_configured` 409 path are removed. Resend is not kept as a
+backup: its AMP support is undocumented, so it cannot carry the only actionable
+channel anyway, and keeping it would contradict R3 (single channel, knowingly
+accepted) and weaken the "one fewer external data processor" claim.
+
+One sender address, not one per tenant. AMP sender registration with Google is
+per address, takes roughly a working week each, and is separately approved —
+per-tenant addresses do not scale and buy nothing security-wise. Accepted product
+cost: mail arrives from the vendor's address, not the customer's.
+
+**Constraints the implementer must verify before building (not assumptions):**
+
+- The OAuth consent screen should be **Internal** to the vendor's Workspace.
+  External + a Gmail send scope means Google verification, and a client left in
+  *Testing* status issues refresh tokens that **expire after 7 days** — which
+  would silently kill sending a week after launch.
+- Scope: `https://www.googleapis.com/auth/gmail.send` only. Do not request read
+  scopes; the app never reads mail.
+- Sender registration for dynamic email is a separate Google process from OAuth
+  and must be completed against this same address.
+
+### D13 — The Google refresh token lives in SecureStorage, under an app-global key.
+
+Not in monday-code env: rotating a refresh token must not require a deploy, and
+this credential is in the same class as the link secret, which already lives in
+SecureStorage.
+
+**The one place this app's storage convention must be broken.** Everything else in
+this app is reached through `storage.forAccount(accountId)` and is prefixed
+`${accountId}:`. The sender mailbox is global — one mailbox for all tenants — so
+its record must sit at an **unprefixed, app-level key** (e.g. `google_sender`).
+Storing it under a tenant prefix would mean the first tenant to connect owns the
+sending identity of every other tenant.
+
+Google **client** credentials (`GOOGLE_OAUTH_CLIENT_ID` /
+`GOOGLE_OAUTH_CLIENT_SECRET`) stay in monday-code env, like sync-calender. Those
+are app identity, not a user token.
+
+**Reference implementation — `apps/axis/sync-calender`.** Read these before
+writing anything; the mechanics are solved there and should be copied, not
+reinvented:
+
+- `src/services/providers/google/oauth.js` — `exchangeGoogleCode`,
+  `refreshGoogleAccessToken`, and `ensureGoogleAccessToken(config, storage)`:
+  cache the access token with its `expiresAt`, refresh on demand with a 60s
+  cushion, persist the fresh token, throw on failure so the caller can mark the
+  connection dead.
+- `src/routes/oauth-google.js` — the start/callback flow and CSRF state handling.
+
+Deviations required here: the record is app-global (above), the scope is
+`gmail.send`, and there is no per-user config to hang the token on — the stored
+shape is `{ refreshToken, accessToken, accessTokenExpiresAt, senderAddress,
+connectedAt }`.
+
+**Access control on the connect flow — a new requirement, not present in
+sync-calender.** In sync-calender each user connects their own calendar, so
+anyone connecting is harmless. Here, connecting rebinds the *global* sending
+identity. A "Connect Google" button reachable by any tenant admin would let one
+customer's admin redirect or break every other customer's mail. The Google OAuth
+start/callback routes must therefore be **operator-only**: restricted to the
+vendor's own monday account id, not merely to "a valid sessionToken". Implement
+the check server-side, and keep the button hidden for everyone else.
+
+Refresh failure (`invalid_grant`) must surface loudly — sending is the product.
+Mark the sender record disconnected, log at error, and fail
+`POST /api/digest/send` with a distinct code. Do not let the scheduler silently
+no-op day after day.
+
+### D14 — A dedicated low-privilege monday service user per tenant. Record now, implement later.
+
+The monday OAuth token's blast radius is currently described with an adjective
+("low-privilege user"), not a number. The decision: each tenant connects a
+**dedicated service user** that is not a real employee, with access limited to the
+configured task and users boards.
+
+Not a code change — an onboarding requirement. It closes two things at once: the
+blast radius becomes a stated number of boards, and the token stops depending on
+one employee's employment status (monday OAuth tokens never expire and have no
+refresh token, so a deactivated user breaks the app with no warning).
+
+Still owed, and this round does not produce it: the actual board count for each
+existing connection, and a written rotation/offboarding procedure. Do not write
+"low-privilege" in the security document again without the number behind it.
+
+### D15 — `ALLOWED_ACCOUNT_IDS` becomes the tenant roster.
+
+No new index and no new storage key. The scheduler (T10) and the operator summary
+(T11) iterate `env.allowedAccountIds`, skipping any entry whose config or OAuth
+token is missing or incomplete — a listed-but-unconfigured tenant is a normal
+state, not an error, and must not generate operator noise every morning.
+
+**Consequence that must ship with it: empty no longer means "admit everyone".**
+Today `allowedAccountIds: []` admits every installing account
+(`src/helpers/environment.js`, `middlewares/session-token.js`). Once the same
+variable is the send roster, that default is contradictory — nobody would be sent
+to, while everybody would be admitted. Flip it to **default-deny**, matching
+`AMP_ALLOWED_SENDERS`, which is already default-deny.
+
+This is a breaking configuration change. The variable must be set on the platform
+**before** the version that ships this goes live, or every tenant is locked out at
+once. Call it out in the PR description, and add a startup error-level log when
+the list is empty.
+
+Also note: changing the roster is a `mapps code:env` change, which restarts the
+container. Acceptable — onboarding a tenant is already a manual operation — but it
+means the roster cannot be edited from the admin UI.
+
 ---
 
 ## 2. Endpoint inventory after the change
@@ -172,6 +287,8 @@ of the raw MIME, or a screenshot of the source.
 | `OPTIONS /amp/confirm` | sender gate | no | unchanged |
 | `GET /oauth/start?st=` | monday sessionToken (query) | no | unchanged (see §7) |
 | `GET /oauth/callback` | single-use expiring nonce | stores token | unchanged |
+| `GET /oauth/google/start` | sessionToken **+ operator account only** | no | **new (D13)** |
+| `GET /oauth/google/callback` | single-use expiring nonce | stores sender token | **new (D13)** |
 | `GET /api/state` | sessionToken (header) | no | secret stays masked |
 | `PUT /api/config` | sessionToken | yes | may gain button config (D9, later) |
 | `POST /api/secret/rotate` | sessionToken | yes | **stops returning the secret** |
@@ -414,6 +531,9 @@ the only authorization.
 - [ ] T3 — `GET /api/snippet`, `GET /api/email-template`, `helpers/snippet.js`,
       `helpers/email-template.js` and their tests.
 - [ ] T4 — the actionable `text/html` digest renderer.
+- [ ] T4b — the Resend funnel in `src/services/email-sender.js`, `RESEND_API_KEY`
+      / `DIGEST_FROM` from `helpers/environment.js` and the platform env, the
+      `email_not_configured` 409 path, and their tests (D12).
 
 **Build**
 - [ ] T5 — signature module: build manifest, sign, verify, `currentSlot`, and a
@@ -427,9 +547,23 @@ the only authorization.
       never a whole-request rejection.
 - [ ] T7 — two-bucket rate limiter (§4).
 - [ ] T8 — `text/plain` renderer (§5).
-- [ ] T9 — multipart/alternative assembly for the Gmail API send path.
+- [ ] T9 — multipart/alternative assembly + the Gmail API send funnel
+      (`users.messages.send`, base64url raw MIME), replacing the Resend funnel
+      as the single outbound path (D12).
+- [ ] T9b — Google OAuth for the sender mailbox: start/callback routes, token
+      exchange, `ensureGoogleAccessToken` with expiry cushion, app-global
+      SecureStorage record, disconnected state on `invalid_grant` (D13). Port
+      from `apps/axis/sync-calender`; do not reinvent.
+- [ ] T9c — operator-only gate on the Google OAuth routes and on the admin UI
+      button (D13). Needs its own test: a valid sessionToken from a non-operator
+      account must be refused.
 - [ ] T10 — monday-code scheduler that runs the send at the configured hour and
-      replaces the external monday workflow.
+      replaces the external monday workflow. Iterates `env.allowedAccountIds`
+      (D15), skipping unconfigured tenants without raising an error.
+- [ ] T10b — flip the empty-`ALLOWED_ACCOUNT_IDS` default from admit-all to
+      deny-all in `helpers/environment.js` + `middlewares/session-token.js`,
+      with a startup error log when the list is empty (D15). Breaking config
+      change — must be called out in the PR description.
 - [ ] T11 — operator summary email (D8).
 - [ ] T12 — resend-today action, reusing the current slot (D6, D8).
 - [ ] T13 — `POST /api/secret/rotate` stops returning the secret; admin UI stops
@@ -455,7 +589,10 @@ the only authorization.
   - one bad selection rejects the entire batch (the oracle guard);
   - a reassigned item is refused by D11 **without** failing its batch-mates;
   - a tampered `recipientPersonId` fails signature verification;
-  - the R2 invariant: a digest section contains only the recipient's tasks.
+  - the R2 invariant: a digest section contains only the recipient's tasks;
+  - a valid sessionToken from a non-operator account cannot start the Google
+    OAuth flow (D13) — this one guards every tenant's sending identity;
+  - an empty `ALLOWED_ACCOUNT_IDS` admits nobody and sends to nobody (D15).
 - **error-guard:** every catch logs, rethrows, or displays. GraphQL soft errors
   inside 200 responses are thrown at the API funnel.
 - **monday-api skill:** validate any changed query against the live schema and
@@ -484,16 +621,23 @@ the only authorization.
   as **found and fixed in 0.7.2, guarded against regression** — it is currently
   presented as open, which is no longer true. Also correct the test count.
 - Flow diagram: remove the graceful-fallback note and the per-task button line.
+- `README.md` + this app's `CLAUDE.md` env sections — `RESEND_API_KEY` and
+  `DIGEST_FROM` removed, `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`
+  added, and `ALLOWED_ACCOUNT_IDS` documented as **required and default-deny**
+  (D15), no longer "optional; empty = any installing account".
 
 ---
 
-## 11. Still open — do not block on these
+## 11. Still open
+
+O5, O6 and O8 do not block implementation. **O7 does** — resolve it before
+building T6b.
+
+O1–O4 were closed by D12, D13 and D15 (owner, 2026-07-27). What remains:
 
 | # | Question |
 |---|---|
-| O1 | Where the dedicated mailbox's Google refresh token lives — SecureStorage or monday-code env — and who owns the OAuth client. |
-| O2 | No index of configured accounts exists; the scheduler needs a source of truth for "who to run for". |
-| O3 | Resend's fate — fully retired, or kept as a backup channel. Keeping it weakens the "removes an external data processor" argument. |
-| O4 | One organizational sender address or one per account. |
-| O5 | Which monday user the OAuth token is taken from, and how many boards that user can actually see. Needed as a number, not an adjective. |
-| O6 | Lifecycle of that monday token — ownership, rotation, what happens when the user is deactivated. |
+| O5 | For each existing connection: how many boards the connected monday user can actually see. A number, not an adjective. Owner/onboarding task, not code — but the security document cannot be finished without it. |
+| O6 | The written rotation and offboarding procedure for the monday service user of D14. |
+| O7 | Whether `recipientPersonId` is always available. D11 assumes every recipient resolves to a monday person id; `digest-service` matches on person ids today, so it holds in the current flow, but a recipient sourced from an email address alone would have no id to sign. **Confirm with a sandbox probe before building on D11** — if it can be absent, decide whether such a recipient is skipped or sent a non-actionable message. |
+| O8 | The D9 email redesign (multi-button table) — owner will brief with an example. T15 stays unbuilt until then. |
