@@ -260,8 +260,8 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
           <h2>מקבצי משימות</h2>
           <div className="dc-hint">
             כל מקבץ הוא טבלה במייל: עמודת תאריך שקובעת "באיחור" (תאריך שעבר — כולל היום),
-            תנאי סטטוס שקובע אילו משימות נכנסות, ומודול בחירה מעוצב (צבעי לייבל) לבחירת
-            סטטוס חדש מהכפתורים שנבחרו כאן.
+            תנאי סטטוס שקובע אילו משימות נכנסות, ותפריט נפתח מעוצב לבחירת סטטוס חדש
+            (הכפתורים שנבחרו כאן).
           </div>
           {digest.sections.map((section) => {
             const primaryButtonId = section.buttonIds[0] ?? section.buttonId;
@@ -349,7 +349,7 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     />
                     <div className="dc-hint">
                       רק משימות בסטטוסים שנבחרו יופיעו במקבץ — כך משימות שכבר טופלו (למשל "בוצע") לא ייכנסו.
-                      הכפתור הראשון קובע את עמודת הסטטוס לסינון; כל הכפתורים שנבחרו מופיעים במודול הבחירה המעוצב במייל.
+                      הכפתור הראשון קובע את עמודת הסטטוס לסינון; כל הכפתורים שנבחרו מופיעים בתפריט הנפתח במייל.
                     </div>
                   </div>
                 </div>

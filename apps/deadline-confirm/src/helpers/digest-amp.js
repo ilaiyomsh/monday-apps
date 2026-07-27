@@ -1,16 +1,15 @@
 // V6 amp4email digest renderer (docs/v6-amp-only-decisions.md §3, §5, D9).
 //
 // Layout (owner 2026-07-27): ONE table per populated cluster (מקבץ).
-// Columns: name | that cluster's date | styled LabelPicker (colored radio
-// options) — AMP for Email cannot style the native <select> popup, so the
-// monday-like picker is inlined in the cell (status-picker-wrapper-v2 parity).
+// Columns: name | that cluster's date | styled <select class="label-dd">
+// (closed control monday-like; OS popup cannot be restyled in AMP/Gmail).
 // Multiple buttons per cluster via section.buttonIds / section.buttons
 // (fallback: singular buttonId / button). ONE global submit.
 //
 // Wire format unchanged:
 //   hidden: a, p, m, s, sig
-//   selection: radio name="item_<itemId>" value="<btnId>" (unchecked = no change)
-// Same item across clusters shares the same radio name.
+//   selection: <select name="item_<itemId>"> options = btnIds ("" = no change)
+// Same item across clusters shares the same select name.
 
 import { escapeHtml } from './html.js';
 import { buildManifest, signManifest, currentSlot } from '../services/manifest-signature.js';
@@ -20,6 +19,7 @@ const DEFAULT_SEND_HOUR = 8;
 const SUBMIT_LABEL = 'אשר את המסומנות';
 const SUBMIT_COLOR = '#0073ea';
 const NEUTRAL_STATUS = '#c4c4c4';
+const EMPTY_OPTION_LABEL = 'ללא שינוי';
 
 /** YYYY-MM-DD → DD/MM/YYYY (unset → ''). */
 function formatDate(date) {
@@ -95,25 +95,28 @@ const STYLES = `
       td:last-child { border-inline-end:none; }
       td.name { text-align:right; padding-inline-start:12px; white-space:nowrap; }
       td.date { color:#676879; font-size:13px; white-space:nowrap; }
-      /* monday status-picker-wrapper-v2 parity (~200px, 34px×14px labels). AMP-safe (no position). */
-      td.picker-cell { padding:8px; width:220px; vertical-align:top; text-align:right; }
-      .picker {
-        width:200px; max-width:200px; padding:10px; box-sizing:border-box;
-        background:#ffffff; border:1px solid #0073ea;
-        box-shadow:0 4px 16px rgba(0,0,0,0.12);
+      td.pick { width:220px; padding:6px 8px; text-align:right; }
+      /* Closed control styled monday-like (~200×34, blue border).
+         The OS popup panel cannot be restyled in AMP/Gmail. */
+      select.label-dd {
+        width:200px;
+        max-width:100%;
+        height:34px;
+        line-height:34px;
+        padding:0 28px 0 12px;
+        font-size:14px;
+        font-weight:normal;
         font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
+        color:#323338;
+        background-color:#ffffff;
+        border:1px solid #0073ea;
+        border-radius:4px;
+        box-sizing:border-box;
+        vertical-align:middle;
+        box-shadow:0 1px 2px rgba(0,0,0,0.06);
+        -webkit-appearance:none;
+        appearance:none;
       }
-      .opt { display:block; margin:0 0 6px; }
-      .opt:last-child { margin-bottom:0; }
-      .opt input { opacity:0; width:0; height:0; margin:0; padding:0; border:0; overflow:hidden; }
-      .opt-fill {
-        display:block; text-align:center; color:#ffffff;
-        font-size:14px; font-weight:normal; line-height:34px;
-        height:34px; min-height:34px; border-radius:4px; padding:0 12px;
-        border:2px solid transparent; box-sizing:border-box;
-        overflow:hidden; white-space:nowrap; text-overflow:ellipsis;
-      }
-      .opt input:checked + .opt-fill { border-color:#0073ea; }
       .go { margin:8px 0 4px; }
       .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; }
       .ok { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#E6F7EF; color:#00754A; font-size:13px; }
@@ -122,23 +125,23 @@ const STYLES = `
 `;
 
 /**
- * Inlined monday-like LabelPicker: colored option radios (discussions statusOption).
- * Unchecked → field omitted → no change for that task.
+ * One <select> for the row — empty option = no change; each button is an <option>.
+ * Option labels use the button's targetLabel; color is not reliable on <option> in
+ * Gmail AMP, so we keep text-only choices (wire still sends btnId).
  */
-function renderLabelPicker(fieldName, buttons, itemId) {
-  const options = buttons
-    .map((button) => {
-      const boxId = escapeHtml(`sel_${button.id}_${itemId}`);
-      const color = escapeHtml(button.color || NEUTRAL_STATUS);
-      return `              <label class="opt" for="${boxId}">
-                <input type="radio" name="${fieldName}" value="${escapeHtml(button.id)}" id="${boxId}">
-                <span class="opt-fill" style="background:${color}">&#8207;${escapeHtml(button.label)}</span>
-              </label>`;
-    })
-    .join('\n');
-  return `              <td class="picker-cell"><div class="picker">
+function renderLabelSelect(fieldName, buttons) {
+  const options = [
+    `                <option value="">&#8207;${EMPTY_OPTION_LABEL}</option>`,
+    ...buttons.map(
+      (b) =>
+        `                <option value="${escapeHtml(b.id)}">&#8207;${escapeHtml(b.label)}</option>`
+    ),
+  ].join('\n');
+  return `              <td class="pick">
+              <select class="label-dd" name="${fieldName}">
 ${options}
-            </div></td>`;
+              </select>
+            </td>`;
 }
 
 function renderClusterTable(section) {
@@ -156,7 +159,7 @@ function renderClusterTable(section) {
       return `            <tr>
               <td class="name">&#8207;${escapeHtml(task.name)}</td>
               <td class="date">${formatDate(task.date) || '—'}</td>
-${renderLabelPicker(fieldName, buttons, task.itemId)}
+${renderLabelSelect(fieldName, buttons)}
             </tr>`;
     })
     .join('\n');
@@ -248,7 +251,7 @@ export function renderDigestAmp({
   <body dir="rtl">
     <div class="wrap">
       <p class="hi">&#8207;שלום ${escapeHtml(recipient.name)},</p>
-      <p class="lead">&#8207;בחרו סטטוס חדש לכל משימה (מודול הצבעים) ולחצו על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
+      <p class="lead">&#8207;בחרו סטטוס חדש מהתפריט הנפתח לכל משימה ולחצו על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
       <form method="post"
             action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
             enctype="application/x-www-form-urlencoded">
@@ -262,7 +265,7 @@ ${clusters}
         <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
         <div submit-error><template type="amp-mustache"><div class="err">{{message}}</div></template></div>
       </form>
-      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
+      <p class="foot">&#8207;מייל אוטומטי · משימות על "ללא שינוי" לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
     </div>
   </body>
 </html>`;

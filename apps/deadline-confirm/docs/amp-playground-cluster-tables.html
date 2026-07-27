@@ -1,7 +1,6 @@
 <!doctype html>
 <!-- IMPLEMENTED in renderDigestAmp (deadline-confirm 0.9.1). Playground paste sample.
-     Label choice = styled LabelPicker (colored radios). Native <select> popup
-     cannot be styled in AMP for Email / Gmail. -->
+     Label choice = native <select> inside amp-form (AMP for Email supported). -->
 <html amp4email lang="he" dir="rtl">
   <head>
     <meta charset="utf-8">
@@ -25,11 +24,33 @@
         border-radius: 8px;
         padding: 18px;
       }
-      .hi { font-size: 18px; font-weight: bold; margin: 0 0 6px; }
-      .lead { font-size: 14px; color: #676879; line-height: 1.6; margin: 0 0 18px; }
-      .note { font-size: 12px; color: #9699A6; margin: 0 0 14px; line-height: 1.5; }
-      .cluster { margin: 0 0 22px; }
-      .cluster-title { font-size: 15px; font-weight: bold; color: #323338; margin: 0 0 8px; line-height: 1.4; }
+      .hi {
+        font-size: 18px;
+        font-weight: bold;
+        margin: 0 0 6px;
+      }
+      .lead {
+        font-size: 14px;
+        color: #676879;
+        line-height: 1.6;
+        margin: 0 0 18px;
+      }
+      .note {
+        font-size: 12px;
+        color: #9699A6;
+        margin: 0 0 14px;
+        line-height: 1.5;
+      }
+      .cluster {
+        margin: 0 0 22px;
+      }
+      .cluster-title {
+        font-size: 15px;
+        font-weight: bold;
+        color: #323338;
+        margin: 0 0 8px;
+        line-height: 1.4;
+      }
       table.board {
         width: 100%;
         border-collapse: collapse;
@@ -47,9 +68,15 @@
         background: #FAFBFC;
         white-space: nowrap;
       }
-      th.name-h { text-align: right; }
-      th.status-h { min-width: 200px; }
-      th:last-child { border-inline-end: none; }
+      th.name-h {
+        text-align: right;
+      }
+      th.status-h {
+        min-width: 200px;
+      }
+      th:last-child {
+        border-inline-end: none;
+      }
       td {
         font-size: 14px;
         font-weight: normal;
@@ -60,42 +87,46 @@
         height: 44px;
         text-align: center;
       }
-      td:last-child { border-inline-end: none; }
-      td.name { text-align: right; padding-inline-start: 12px; white-space: nowrap; }
-      td.date { color: #676879; font-size: 13px; white-space: nowrap; }
-      td.picker-cell { padding: 8px; width: 220px; vertical-align: top; text-align: right; }
-      .picker {
-        width: 200px;
-        max-width: 200px;
-        padding: 10px;
-        box-sizing: border-box;
-        background: #ffffff;
-        border: 1px solid #0073ea;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-        font-family: Figtree, Roboto, "Noto Sans Hebrew", Arial, Helvetica, sans-serif;
+      td:last-child {
+        border-inline-end: none;
       }
-      .opt { display: block; margin: 0 0 6px; }
-      .opt:last-child { margin-bottom: 0; }
-      .opt input { opacity: 0; width: 0; height: 0; margin: 0; padding: 0; border: 0; overflow: hidden; }
-      .opt-fill {
-        display: block;
-        text-align: center;
-        color: #ffffff;
+      td.name {
+        text-align: right;
+        padding-inline-start: 12px;
+        white-space: nowrap;
+      }
+      td.date {
+        color: #676879;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      td.pick {
+        width: 220px;
+        padding: 6px 8px;
+        text-align: right;
+      }
+      select.label-dd {
+        width: 200px;
+        max-width: 100%;
+        height: 34px;
+        line-height: 34px;
+        padding: 0 28px 0 12px;
         font-size: 14px;
         font-weight: normal;
-        line-height: 34px;
-        height: 34px;
-        min-height: 34px;
+        font-family: Figtree, Roboto, "Noto Sans Hebrew", Arial, Helvetica, sans-serif;
+        color: #323338;
+        background-color: #ffffff;
+        border: 1px solid #0073ea;
         border-radius: 4px;
-        padding: 0 12px;
-        border: 2px solid transparent;
         box-sizing: border-box;
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
+        vertical-align: middle;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+        -webkit-appearance: none;
+        appearance: none;
       }
-      .opt input:checked + .opt-fill { border-color: #0073ea; }
-      .go { margin: 8px 0 4px; }
+      .go {
+        margin: 8px 0 4px;
+      }
       .send {
         color: #ffffff;
         background: #0073ea;
@@ -105,16 +136,37 @@
         font-size: 14px;
         font-weight: bold;
       }
-      .ok { margin: 10px 0 2px; padding: 9px 12px; border-radius: 8px; background: #E6F7EF; color: #00754A; font-size: 13px; }
-      .err { margin: 10px 0 2px; padding: 9px 12px; border-radius: 8px; background: #FDECEE; color: #B4222F; font-size: 13px; }
-      .foot { font-size: 12px; color: #9699A6; line-height: 1.6; border-top: 1px solid #E6E9EF; padding-top: 12px; margin-top: 10px; }
+      .ok {
+        margin: 10px 0 2px;
+        padding: 9px 12px;
+        border-radius: 8px;
+        background: #E6F7EF;
+        color: #00754A;
+        font-size: 13px;
+      }
+      .err {
+        margin: 10px 0 2px;
+        padding: 9px 12px;
+        border-radius: 8px;
+        background: #FDECEE;
+        color: #B4222F;
+        font-size: 13px;
+      }
+      .foot {
+        font-size: 12px;
+        color: #9699A6;
+        line-height: 1.6;
+        border-top: 1px solid #E6E9EF;
+        padding-top: 12px;
+        margin-top: 10px;
+      }
     </style>
   </head>
   <body>
     <div class="wrap">
       <p class="hi">&#8207;שלום עילי שלם,</p>
-      <p class="lead">&#8207;בחרו סטטוס חדש לכל משימה (מודול הצבעים) ולחצו על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
-      <p class="note">&#8207;תצוגת playground · מקבץ = טבלה · מודול בחירה מעוצב (לא &lt;select&gt; מערכת) · אישור אחד</p>
+      <p class="lead">&#8207;בחרו סטטוס חדש מהתפריט הנפתח לכל משימה ולחצו על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
+      <p class="note">&#8207;תצוגת playground · מקבץ = טבלה · תאריך לפי עמודת המקבץ · תפריט נפתח (&lt;select&gt;) לבחירת לייבל · אישור אחד למייל</p>
 
       <form method="post"
             action-xhr="https://example.com/amp/confirm"
@@ -136,33 +188,23 @@
             <tr>
               <td class="name">&#8207;Item 1</td>
               <td class="date">22/07/2026</td>
-              <td class="picker-cell">
-                <div class="picker">
-                  <label class="opt" for="sel_w_9001">
-                    <input type="radio" name="item_9001" value="btn_working" id="sel_w_9001">
-                    <span class="opt-fill" style="background:#fdab3d">&#8207;בעבודה</span>
-                  </label>
-                  <label class="opt" for="sel_s_9001">
-                    <input type="radio" name="item_9001" value="btn_stuck" id="sel_s_9001">
-                    <span class="opt-fill" style="background:#e2445c">&#8207;תקוע</span>
-                  </label>
-                </div>
+              <td class="pick">
+                <select class="label-dd" name="item_9001">
+                  <option value="">&#8207;ללא שינוי</option>
+                  <option value="btn_working">&#8207;בעבודה</option>
+                  <option value="btn_stuck">&#8207;תקוע</option>
+                </select>
               </td>
             </tr>
             <tr>
               <td class="name">&#8207;Item 3</td>
               <td class="date">22/07/2026</td>
-              <td class="picker-cell">
-                <div class="picker">
-                  <label class="opt" for="sel_w_9003">
-                    <input type="radio" name="item_9003" value="btn_working" id="sel_w_9003">
-                    <span class="opt-fill" style="background:#fdab3d">&#8207;בעבודה</span>
-                  </label>
-                  <label class="opt" for="sel_s_9003">
-                    <input type="radio" name="item_9003" value="btn_stuck" id="sel_s_9003">
-                    <span class="opt-fill" style="background:#e2445c">&#8207;תקוע</span>
-                  </label>
-                </div>
+              <td class="pick">
+                <select class="label-dd" name="item_9003">
+                  <option value="">&#8207;ללא שינוי</option>
+                  <option value="btn_working">&#8207;בעבודה</option>
+                  <option value="btn_stuck">&#8207;תקוע</option>
+                </select>
               </td>
             </tr>
           </table>
@@ -179,33 +221,23 @@
             <tr>
               <td class="name">&#8207;Item 1</td>
               <td class="date">27/07/2026</td>
-              <td class="picker-cell">
-                <div class="picker">
-                  <label class="opt" for="sel_d_9001">
-                    <input type="radio" name="item_9001" value="btn_done" id="sel_d_9001">
-                    <span class="opt-fill" style="background:#00c875">&#8207;בוצע</span>
-                  </label>
-                  <label class="opt" for="sel_n_9001">
-                    <input type="radio" name="item_9001" value="btn_na" id="sel_n_9001">
-                    <span class="opt-fill" style="background:#c4c4c4">&#8207;לא רלוונטי</span>
-                  </label>
-                </div>
+              <td class="pick">
+                <select class="label-dd" name="item_9001">
+                  <option value="">&#8207;ללא שינוי</option>
+                  <option value="btn_done">&#8207;בוצע</option>
+                  <option value="btn_na">&#8207;לא רלוונטי</option>
+                </select>
               </td>
             </tr>
             <tr>
               <td class="name">&#8207;Item 3</td>
               <td class="date">27/07/2026</td>
-              <td class="picker-cell">
-                <div class="picker">
-                  <label class="opt" for="sel_d_9003">
-                    <input type="radio" name="item_9003" value="btn_done" id="sel_d_9003">
-                    <span class="opt-fill" style="background:#00c875">&#8207;בוצע</span>
-                  </label>
-                  <label class="opt" for="sel_n_9003">
-                    <input type="radio" name="item_9003" value="btn_na" id="sel_n_9003">
-                    <span class="opt-fill" style="background:#c4c4c4">&#8207;לא רלוונטי</span>
-                  </label>
-                </div>
+              <td class="pick">
+                <select class="label-dd" name="item_9003">
+                  <option value="">&#8207;ללא שינוי</option>
+                  <option value="btn_done">&#8207;בוצע</option>
+                  <option value="btn_na">&#8207;לא רלוונטי</option>
+                </select>
               </td>
             </tr>
           </table>
@@ -222,7 +254,7 @@
         </div>
       </form>
 
-      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל</p>
+      <p class="foot">&#8207;מייל אוטומטי · משימות על "ללא שינוי" לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
     </div>
   </body>
 </html>

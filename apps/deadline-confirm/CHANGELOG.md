@@ -2,14 +2,14 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
-## 0.9.1 — 2026-07-27 — feat: AMP digest — styled LabelPicker per cluster
+## 0.9.1 — 2026-07-27 — feat: AMP digest — styled label dropdown (`<select>`)
 
-- Per-row status choice is a **styled LabelPicker** (colored radio options,
-  monday `status-picker-wrapper-v2` look: ~200×34) — not the browser `<select>`
-  popup (AMP/Gmail cannot restyle native dropdown panels).
-- Cluster tables kept: name | cluster date | **סטטוס חדש** picker.
-- Wire unchanged: `item_<id>=btnId` (unchecked = no change).
-- Playground: `docs/amp-playground-cluster-tables.html`.
+- Per-row status choice is a **styled** AMP-for-Email `<select class="label-dd">`
+  (monday-like closed control: ~200×34, blue border `#0073ea`, Figtree). The OS
+  popup panel itself cannot be restyled in Gmail/AMP.
+- Options = that cluster's action buttons; empty option **ללא שינוי** = no write.
+- Wire unchanged: `item_<id>=btnId`. Cluster tables + multi-button config kept.
+- Playground sample: `docs/amp-playground-cluster-tables.html`.
 
 ## 0.9.0 — 2026-07-27 — feat: AMP digest — one table per cluster + multi-button columns
 
