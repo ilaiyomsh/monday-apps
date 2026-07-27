@@ -21,10 +21,6 @@ import ErrorState from '../shared/ErrorState';
 import LoadingState from '../shared/LoadingState';
 import './OnClickDialog.css';
 
-const UNCONFIGURED_TITLE = 'העמודה לא הוגדרה';
-const UNCONFIGURED_TEXT =
-  'העמודה עדיין לא הוגדרה. פתחו את תפריט העמודה, בחרו "הגדרות", והגדירו הרשאות ושדות חובה ללייבלים.';
-
 function inputTypeFor(columnType) {
   if (columnType === 'numbers') return 'number';
   if (columnType === 'date') return 'date';
@@ -154,14 +150,17 @@ function OnClickDialog({ context }) {
     loadDialogData();
   }, [loadDialogData]);
 
+  // Null storage = no rules yet → everyone may pick every active label.
+  const effectiveSettings = settings ?? { version: 1, hiddenLabelIds: [], labels: {} };
+
   const pickerModel = useMemo(
     () => buildAvailableLabels({
       labels,
-      settings,
+      settings: effectiveSettings,
       actor,
       currentValue,
     }),
-    [actor, currentValue, labels, settings],
+    [actor, currentValue, labels, effectiveSettings],
   );
 
   const writeStatusOnly = async (labelId) => {
@@ -189,7 +188,7 @@ function OnClickDialog({ context }) {
   };
 
   const openRequiredForm = async (label) => {
-    const rule = getLabelRule(settings, label.id);
+    const rule = getLabelRule(effectiveSettings, label.id);
     const fieldIds = rule.requiredColumnIds;
     try {
       setSavingLabelId(label.id);
@@ -226,7 +225,7 @@ function OnClickDialog({ context }) {
     const selectedLabel = pickerModel.options.find((label) => label.id === labelId);
     if (!selectedLabel || user?.isViewOnly) return;
 
-    const rule = getLabelRule(settings, labelId);
+    const rule = getLabelRule(effectiveSettings, labelId);
     if (rule.requiredColumnIds.length > 0) {
       await openRequiredForm(selectedLabel);
       return;
@@ -264,14 +263,6 @@ function OnClickDialog({ context }) {
 
   if (settingsError) {
     return <ErrorState message="טעינת ההגדרות נכשלה. נסו שוב." onRetry={reloadSettings} />;
-  }
-
-  if (!settingsLoading && settings == null) {
-    return (
-      <div className="status-guard-dialog" dir="rtl">
-        <AttentionBox type="primary" title={UNCONFIGURED_TITLE} text={UNCONFIGURED_TEXT} />
-      </div>
-    );
   }
 
   if (settingsLoading || loading) {

@@ -14,6 +14,7 @@ const WAITING_LABEL = {
   index: 0,
   label: '\u05de\u05de\u05ea\u05d9\u05df',
   color: '#fdab3d',
+  colorValue: 0,
   isDone: false,
   isDeactivated: false,
 };
@@ -23,6 +24,7 @@ const AUTOMATION_ONLY_LABEL = {
   index: 1,
   label: '\u05de\u05d0\u05d5\u05e9\u05e8 \u05d0\u05d5\u05d8\u05d5\u05de\u05d8\u05d9\u05ea',
   color: '#00c875',
+  colorValue: 1,
   isDone: true,
   isDeactivated: false,
 };
@@ -32,6 +34,7 @@ const REJECTED_LABEL = {
   index: 2,
   label: '\u05e0\u05d3\u05d7\u05d4',
   color: '#df2f4a',
+  colorValue: 2,
   isDone: false,
   isDeactivated: false,
 };
@@ -41,6 +44,7 @@ const DEACTIVATED_LABEL = {
   index: 3,
   label: 'Archived',
   color: '#c4c4c4',
+  colorValue: undefined,
   isDone: false,
   isDeactivated: true,
 };

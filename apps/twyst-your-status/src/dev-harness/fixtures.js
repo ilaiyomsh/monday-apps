@@ -106,6 +106,7 @@ const STATUS_GUARD_COLUMN = {
   id: 'status',
   title: 'סטטוס',
   type: 'status',
+  revision: 'rev-fixture-1',
   settings: { labels: STATUS_GUARD_LABELS },
 };
 
@@ -166,6 +167,16 @@ export const API_FIXTURES = [
         ],
       }],
     },
+  },
+  {
+    match: 'GetStatusColumnRevision',
+    data: {
+      boards: [{ id: '1234567890', columns: [STATUS_GUARD_COLUMN] }],
+    },
+  },
+  {
+    match: 'UpdateStatusColumnLabels',
+    data: { update_status_column: { id: 'status' } },
   },
   {
     match: 'GetStatusColumnSettings',
