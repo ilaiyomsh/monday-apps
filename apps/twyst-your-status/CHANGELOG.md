@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.3
+
+- Picker labels stretch edge-to-edge inside the monday Dialog Design iframe
+  (removed the 20px app-shell padding and width cap that left side gaps).
+
 ## 3.1.2
 
 - Picker UI matches discussions' monday-native status label menu: full-width
