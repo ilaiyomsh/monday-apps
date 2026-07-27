@@ -2,6 +2,11 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.9.3 — 2026-07-27 — fix: drop «ללא שינוי» from AMP status dropdown
+
+- Status menu shows only the cluster's action buttons (no gray «ללא שינוי»).
+- Unchanged tasks = leave the current-status trigger as-is (`item_<id>` stays empty).
+
 ## 0.9.2 — 2026-07-27 — feat: AMP digest — amp-bind status dropdown (monday colors)
 
 - Per-row status choice is a real **dropdown**: closed colored trigger → tap opens

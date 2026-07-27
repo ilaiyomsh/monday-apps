@@ -182,12 +182,11 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).not.toContain('בחרו סטטוס');
     expect(doc).toContain('טרם החל'); // current status on item 9001
     expect(doc).toContain('"l9001":"טרם החל"');
-    expect(doc).toContain('"ol9001":"טרם החל"');
     expect(doc).toContain('"l9002":"—"'); // empty statusText → em dash
     expect(doc).toContain('"l9004":"בעבודה"');
-    expect(doc).toContain('l9001: dd.ol9001'); // ללא שינוי restores current
-    expect(doc).toContain('c9001: dd.oc9001');
-    expect(doc).toMatch(/AMP\.setState\(\{dd:\{o:'', v9001:'', l9001: dd\.ol9001, c9001: dd\.oc9001\}\}\)/);
+    expect(doc).not.toContain('ללא שינוי');
+    expect(doc).not.toContain('"ol9001"');
+    expect(doc).not.toContain('dd.ol9001');
     expect(doc).not.toContain('<select');
     expect(doc).not.toContain('label-dd');
     expect(doc).not.toContain('type="radio"');
@@ -234,7 +233,7 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).toContain('בעבודה');
     expect(doc).toContain('תקוע');
     expect(doc).toContain('בוצע');
-    expect(doc).toContain('ללא שינוי');
+    expect(doc).not.toContain('ללא שינוי');
   });
 
   it('wires one hidden item_<id> per task bound to dd.v<id> (multi-button options in setState)', () => {

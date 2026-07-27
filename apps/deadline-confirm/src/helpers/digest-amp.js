@@ -187,7 +187,7 @@ function collectColors(recipient) {
 /**
  * Initial amp-state — seeded with each item's current status (first occurrence
  * wins across clusters). c<id> is a CSS class name (AMP4EMAIL forbids [style]
- * on button). ol/oc keep the originals for "ללא שינוי".
+ * on button). v<id> starts empty (= no write until the reader picks an option).
  * @param {object} recipient
  */
 function buildDropdownState(recipient) {
@@ -211,8 +211,6 @@ function buildDropdownState(recipient) {
       state[`v${id}`] = '';
       state[`l${id}`] = label;
       state[`c${id}`] = cls;
-      state[`ol${id}`] = label;
-      state[`oc${id}`] = cls;
     }
   }
   return state;
@@ -269,8 +267,8 @@ const STYLES_BASE = `
 
 /**
  * amp-bind dropdown: closed trigger shows CURRENT status; tap opens colored
- * options. Selecting updates the cell via [text]/[class]. "ללא שינוי" clears
- * the wire value and restores the original status display.
+ * options. Selecting updates the cell via [text]/[class] and sets the wire
+ * value. Leaving the trigger untouched keeps v="" (= no write for that item).
  * Trigger color via [class] (AMP4EMAIL forbids [style] on button).
  * @param {string} fieldName escaped name="item_<id>"
  * @param {Array<{ id: string, label: string, color: string }>} buttons section options
@@ -284,8 +282,6 @@ function renderLabelDropdown(fieldName, buttons, palette, task, includeHidden) {
   const vKey = `v${id}`;
   const lKey = `l${id}`;
   const cKey = `c${id}`;
-  const olKey = `ol${id}`;
-  const ocKey = `oc${id}`;
 
   const curLabel = currentStatusLabel(task);
   const curColor = resolveCurrentStatusColor(
@@ -295,17 +291,15 @@ function renderLabelDropdown(fieldName, buttons, palette, task, includeHidden) {
   );
   const curCls = colorToClass(curColor);
 
-  const options = [
-    ...buttons.map((button) => {
+  const options = buttons
+    .map((button) => {
       const color = button.color || NEUTRAL_STATUS;
       const cls = colorToClass(color);
       const label = button.label;
       return `                <button type="button" class="dd-opt" style="background:${escapeHtml(color)}"
                         on="tap:AMP.setState({dd:{o:'', ${vKey}:'${escapeBindStr(button.id)}', ${lKey}:'${escapeBindStr(label)}', ${cKey}:'${escapeBindStr(cls)}'}})">&#8207;${escapeHtml(label)}</button>`;
-    }),
-    `                <button type="button" class="dd-opt" style="background:${NEUTRAL_STATUS}"
-                        on="tap:AMP.setState({dd:{o:'', ${vKey}:'', ${lKey}: dd.${olKey}, ${cKey}: dd.${ocKey}}})">&#8207;ללא שינוי</button>`,
-  ].join('\n');
+    })
+    .join('\n');
 
   const hidden = includeHidden
     ? `\n              <input type="hidden" name="${fieldName}" value="" [value]="dd.${vKey}">`
@@ -463,7 +457,7 @@ ${clusters}
         <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
         <div submit-error><template type="amp-mustache"><div class="err">{{message}}</div></template></div>
       </form>
-      <p class="foot">&#8207;מייל אוטומטי · משימות על "ללא שינוי" לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
+      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה בתפריט לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
     </div>
   </body>
 </html>`;
