@@ -1,11 +1,10 @@
 # V6 — AMP-only + per-message signed manifest
 
-**Status:** partially implemented on `develop` (0.8.1).
-Phases 1–5 + T6c/T10/T10b/T11/T12 are in. **T9/T9b/T9c (Gmail OAuth + send)
-deferred** until the Google Cloud app is provisioned. T15 (D9 redesign) awaits
-owner briefing.
+**Status:** partially implemented on `develop` (0.8.1 + T15 pending merge).
+Phases 1–5 + T6c/T10/T10b/T11/T12 + **T15/D9 renderer** are in. **T9/T9b/T9c
+(Gmail OAuth + send) deferred** until the Google Cloud app is provisioned.
 **App:** `deadline-confirm` (App ID `11704868`, server app on monday-code, pushed dir = app root)
-**Baseline:** `0.8.0` AMP-only core on `develop`. Suite: 568 green.
+**Baseline:** `0.8.1` on `develop`. Suite: 568+ green.
 **Suggested next version after Gmail:** `0.9.0`.
 
 ---
@@ -99,25 +98,26 @@ and the slot. **Counts and addresses only — no task content and no signatures.
 A "resend today" action re-runs the send for **all** recipients using the current
 slot. Selective resend is out of scope for this round.
 
-### D9 — Email redesign: multi-button table, one global submit. **DO NOT
-IMPLEMENT YET.**
+### D9 — Email redesign: multi-button table, one global submit. **IMPLEMENTED
+(T15).**
 
-Decided, but the owner will brief this separately with a visual example. Recorded
-here so the crypto spec in §3 is designed for it from the start.
+Owner brief (2026-07-27): one table with selection + **one** approve button —
+not one form/submit per section.
 
-Target behaviour:
-- A section may offer **more than one button**.
-- The recipient sees a **table with one column per button** and marks, per task,
-  which status that task moves to — so one task can be sent to "done",
-  "in progress" or "start date reached" as appropriate.
-- **One global submit for the whole message**, not one per section.
+Behaviour:
+- A section may offer **more than one button** (today: one button per section;
+  tasks that appear under several sections get a union of those buttons on one
+  row).
+- The recipient sees a **single table with one column per button** and marks,
+  per task, which status that task moves to.
+- **One global submit** (`אשר את המסומנות`) for the whole message.
 
-**Do not build the renderer or the admin UI for this until the owner briefs it.**
+Admin UI for multi-button-per-section config remains out of scope; the renderer
+already flattens section buttons into columns.
 
 The signed-manifest design in §3 (decision D10) deliberately **decouples the
 signature from the layout**: the manifest enumerates whichever (task, button)
-pairs the renderer chooses to offer, so the crypto layer can be built now and the
-renderer later with no risk of having to re-issue codes.
+pairs the renderer chooses to offer.
 
 ### D10 — One signature per message, over a signed manifest.
 
@@ -568,7 +568,7 @@ the only authorization.
   Not this round.
 - Distributed rate limiting (R4).
 - Selective resend (D8 covers all-recipients only).
-- The D9 renderer and its admin UI — owner will brief.
+- Admin UI for multi-button-per-section config (D9 renderer is in; config UI later).
 
 ---
 
@@ -626,9 +626,9 @@ the only authorization.
       displaying it.
 - [x] T14 — `GET /api/digest/preview` drops `html`, keeps `amp`.
 
-**Do not build yet**
-- [ ] T15 — D9 email redesign (multi-button table, one global submit). Awaiting
-      owner briefing.
+**Done this pass**
+- [x] T15 — D9 email redesign: one multi-button table, one global submit
+      (`helpers/digest-amp.js`).
 
 ---
 
@@ -701,4 +701,4 @@ the only authorization.
 | O5 | Closed at the platform, not in the app: the monday service user of D14 is granted access only to the boards it needs, so the blast radius is bounded by monday permissions rather than by a count taken after the fact. The security document should say that, not "low-privilege". |
 | O6 | Deferred by the owner — not this round. |
 | O7 | Not an availability question. A row with no person is already skipped as `no_person`, so a recipient always has at least one id; the real risk was **several** ids, which D16 removes at the source. `recipientPersonId` stays scalar, guarded by D16b. |
-| O8 | The D9 email redesign — briefed and implemented by a separate agent. T15 is not this agent's work. |
+| O8 | Closed by T15 — D9 renderer (one table, one submit). Multi-button-per-section admin UI still deferred. |
