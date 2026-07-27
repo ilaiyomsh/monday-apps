@@ -1,0 +1,67 @@
+name: Deploy Draft - twyst-your-status
+
+# Spec section 7.1: merges into develop auto-deploy to the app's LATEST
+# DRAFT version. No version IDs are stored anywhere — only the App ID
+# secret; the CLI resolves the latest draft itself.
+#
+# When instantiating this template for a real app, rename the file to:
+#   deploy-draft-twyst-your-status.yml
+# and replace all twyst-your-status / dist / APP_TWYST_YOUR_STATUS_ID placeholders.
+
+on:
+  workflow_dispatch: {}   # manual re-deploy of the draft (e.g. dev-live detach); draft only — live stays merge-triggered
+  push:
+    branches:
+      - develop
+    paths:
+      - "apps/twyst-your-status/**"
+      - "packages/shared/**"
+
+jobs:
+  deploy-draft:
+    name: Build and push twyst-your-status to draft
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-draft-twyst-your-status
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build twyst-your-status
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
+        run: pnpm --filter "./apps/twyst-your-status" build
+
+      - name: Install monday.com apps CLI
+        run: npm install -g @mondaycom/apps-cli
+
+      - name: Authenticate mapps CLI (non-interactive)
+        run: mapps init -t "$MONDAY_TOKEN"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+
+      # -c is "-c" for client-side (CDN) apps, empty for
+      # server-side (monday-code) apps — the only difference between the two.
+      - name: Push to latest DRAFT version
+        run: >
+          mapps code:push --verbose
+          -d apps/twyst-your-status/.
+          -a "$APP_ID"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}

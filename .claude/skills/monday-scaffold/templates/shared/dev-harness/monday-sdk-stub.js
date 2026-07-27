@@ -29,7 +29,8 @@
 
 import { CONTEXTS, THEMES, ROLES, API_FIXTURES, DEFAULT_SETTINGS, USERS } from './fixtures.js';
 
-const FEATURE_TYPE = (typeof process !== 'undefined' && process.env && process.env.VITE_MONDAY_MOCK_CONTEXT)
+const FEATURE_TYPE = import.meta.env?.VITE_MONDAY_MOCK_CONTEXT
+  || (typeof process !== 'undefined' && process.env && process.env.VITE_MONDAY_MOCK_CONTEXT)
   || 'board_view';
 
 function clone(x) {

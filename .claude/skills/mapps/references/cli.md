@@ -51,7 +51,7 @@ _Verified live against `@mondaycom/apps-cli 4.10.8` on 2026-07-02 via `mapps <cm
 | `code:env` / `code:secret` | `-i/--appId` (yes, `-i` means APP id here) | — |
 | `scheduler:*` | `-a/--appId` | — |
 | `storage:*` | `-a/--appId` (+ `-c/--clientAccountId`) | — |
-| `manifest:export` | `-a/--appId` (exports live version) | `-i/--appVersionId` (specific version) |
+| `manifest:export` | `-a/--appId` (exports live version) | `-a/--appId -i/--appVersionId` (specific version; current CLI still requires app id) |
 | `tunnel:create` | `-a/--appId` (+ `-p/--port`, default 8080) | — |
 | `database:connection-string` | `-a/--appId` | — |
 
