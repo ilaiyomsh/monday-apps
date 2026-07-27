@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.5
+
+- Settings overlay ignores the tiny column-settings iframe size (root cause of
+  the postcard modal). Uses the physical screen at ≥80%, floored at the
+  known-good `1100×820`.
+
 ## 3.2.4
 
 - Settings overlay opens at ≥80% of the viewport (min 720×560, capped at 94%

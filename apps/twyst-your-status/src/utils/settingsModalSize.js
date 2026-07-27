@@ -1,32 +1,54 @@
 /**
- * Compute openAppFeatureModal size from the viewport — monday only accepts
- * pixel strings. Settings need a large surface (≥80% of the screen) with a
- * floor so the editor never shrinks to a postcard on mid-size monitors.
+ * Compute openAppFeatureModal size — monday only accepts pixel strings.
+ *
+ * The Column Settings shell runs inside a tiny monday iframe. Measuring that
+ * iframe's `window.innerWidth` (as 3.2.0–3.2.4 did) shrinks the nested modal
+ * to a postcard. Prefer an explicit *large* viewport, else the physical
+ * screen, else the known-good fixed 1100×820 that worked before.
  *
  * @param {{ innerWidth?: number, innerHeight?: number }|null} [viewport]
  * @returns {{ width: string, height: string }}
  */
-export function settingsModalSize(viewport = typeof window !== 'undefined' ? window : null) {
+export function settingsModalSize(viewport = null) {
+  const FIXED = { width: '1100px', height: '820px' };
   const VIEWPORT_FRACTION = 0.8;
   const MAX_FRACTION = 0.94;
-  const MIN_WIDTH = 720;
-  const MIN_HEIGHT = 560;
-  // Fallback ≈ 80% of a common 1440×900 desktop when metrics are unavailable.
-  const FALLBACK_WIDTH = 1152;
-  const FALLBACK_HEIGHT = 720;
+  const MIN_WIDTH = 1100;
+  const MIN_HEIGHT = 820;
 
-  const vw = Number(viewport?.innerWidth);
-  const vh = Number(viewport?.innerHeight);
-  const safeW = Number.isFinite(vw) && vw > 0 ? vw : FALLBACK_WIDTH / VIEWPORT_FRACTION;
-  const safeH = Number.isFinite(vh) && vh > 0 ? vh : FALLBACK_HEIGHT / VIEWPORT_FRACTION;
+  const picked = pickUsefulViewport(viewport);
+  if (!picked) return FIXED;
 
-  const targetW = Math.floor(safeW * VIEWPORT_FRACTION);
-  const targetH = Math.floor(safeH * VIEWPORT_FRACTION);
-  const maxW = Math.floor(safeW * MAX_FRACTION);
-  const maxH = Math.floor(safeH * MAX_FRACTION);
-
-  const width = Math.min(Math.max(targetW, MIN_WIDTH), maxW);
-  const height = Math.min(Math.max(targetH, MIN_HEIGHT), maxH);
+  const width = Math.min(
+    Math.floor(picked.w * MAX_FRACTION),
+    Math.max(MIN_WIDTH, Math.floor(picked.w * VIEWPORT_FRACTION)),
+  );
+  const height = Math.min(
+    Math.floor(picked.h * MAX_FRACTION),
+    Math.max(MIN_HEIGHT, Math.floor(picked.h * VIEWPORT_FRACTION)),
+  );
 
   return { width: `${width}px`, height: `${height}px` };
+}
+
+/** Reject iframe-sized shells; only real desktop-ish metrics count. */
+function asUseful(rawW, rawH) {
+  const w = Number(rawW);
+  const h = Number(rawH);
+  if (!Number.isFinite(w) || !Number.isFinite(h)) return null;
+  if (w < 1000 || h < 700) return null;
+  return { w, h };
+}
+
+function pickUsefulViewport(viewport) {
+  const fromArg = asUseful(viewport?.innerWidth, viewport?.innerHeight);
+  if (fromArg) return fromArg;
+
+  if (typeof window === 'undefined') return null;
+
+  const screen = window.screen;
+  return asUseful(
+    screen?.availWidth || screen?.width,
+    screen?.availHeight || screen?.height,
+  );
 }
