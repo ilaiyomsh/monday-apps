@@ -17,7 +17,7 @@ function copySpaFallbacks() {
     name: 'copy-spa-route-fallbacks',
     closeBundle() {
       const distIndex = join(rootDir, 'dist', 'index.html');
-      for (const route of ['picker', 'settings', 'settings-full']) {
+      for (const route of ['picker', 'picker-full', 'settings', 'settings-full']) {
         const targetDir = join(rootDir, 'dist', route);
         mkdirSync(targetDir, { recursive: true });
         copyFileSync(distIndex, join(targetDir, 'index.html'));

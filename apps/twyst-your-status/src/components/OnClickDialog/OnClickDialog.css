@@ -76,6 +76,11 @@
   font-family: var(--font-family, inherit);
 }
 
+.status-picker-dialog.is-overlay {
+  min-height: 100vh;
+  background: var(--primary-background-color, #fff);
+}
+
 .status-menu {
   display: flex;
   flex-direction: column;
