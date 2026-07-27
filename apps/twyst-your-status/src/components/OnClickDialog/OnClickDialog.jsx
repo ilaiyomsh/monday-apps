@@ -87,8 +87,7 @@ function RequiredFieldsForm({
   );
 }
 
-function OnClickDialog({ context, variant = 'dialog' }) {
-  const isOverlay = variant === 'overlay';
+function OnClickDialog({ context }) {
   const { boardId, columnId, itemId, user } = context || {};
   const {
     settings,
@@ -224,11 +223,7 @@ function OnClickDialog({ context, variant = 'dialog' }) {
 
   const dismissPicker = async () => {
     try {
-      if (isOverlay) {
-        await mondayService.closeAppFeatureModal();
-      } else {
-        await mondayService.closeDialog();
-      }
+      await mondayService.closeDialog();
     } catch (err) {
       logger.error('OnClickDialog', 'Failed to close status picker', err);
     }
@@ -309,11 +304,7 @@ function OnClickDialog({ context, variant = 'dialog' }) {
   const NEUTRAL = 'hsl(0 0% 77%)';
 
   return (
-    <main
-      className={`status-picker-dialog${isOverlay ? ' is-overlay' : ''}`}
-      aria-label="בחירת סטטוס"
-      dir="rtl"
-    >
+    <main className="status-picker-dialog" aria-label="בחירת סטטוס" dir="rtl">
       {pickerModel.currentIsHidden && (
         <p className="status-picker-note">
           הסטטוס הנוכחי נקבע מחוץ לבורר (למשל אוטומציה) ואינו מוצג לבחירה.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.2.3
+
+- Revert status picker to the cell-attached Dialog Design (no centered
+  `openAppFeatureModal`). The previous hand-off looked wrong next to the board.
+  Bind only On-Click to `/picker` — not On-Hover — so the popover stays open
+  while choosing.
+
 ## 3.2.2
 
 - Fix settings load crash: User photos query uses `photo_thumb` (API 2026-04).
