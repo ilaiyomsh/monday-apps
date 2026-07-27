@@ -1,10 +1,12 @@
 # V6 — AMP-only + per-message signed manifest
 
-**Status:** partially implemented (V6 phases 1–5 on branch `cursor/v6-amp-only-0251`).
-T9–T12 (Gmail send, scheduler) and T15 (D9 redesign) remain open.
+**Status:** partially implemented on `develop` (0.8.1).
+Phases 1–5 + T6c/T10/T10b/T11/T12 are in. **T9/T9b/T9c (Gmail OAuth + send)
+deferred** until the Google Cloud app is provisioned. T15 (D9 redesign) awaits
+owner briefing.
 **App:** `deadline-confirm` (App ID `11704868`, server app on monday-code, pushed dir = app root)
-**Baseline:** `0.7.3` on both `develop` and `main`. Suite: 526 green.
-**Suggested target version:** `0.8.0` (breaking product change).
+**Baseline:** `0.8.0` AMP-only core on `develop`. Suite: 568 green.
+**Suggested next version after Gmail:** `0.9.0`.
 
 ---
 
@@ -573,55 +575,56 @@ the only authorization.
 ## 8. Implementation checklist
 
 **Delete**
-- [ ] T1 — `src/routes/confirm.js` and its tests; remove from `app.js`.
-- [ ] T2 — from `helpers/pages.js`, remove only `successPage`, `invalidPage`,
+- [x] T1 — `src/routes/confirm.js` and its tests; remove from `app.js`.
+- [x] T2 — from `helpers/pages.js`, remove only `successPage`, `invalidPage`,
       `badRequestPage`, `confirmLandingPage`. **Keep the file** — `routes/oauth.js`
       still imports `oauthDonePage` and `oauthErrorPage` from it.
-- [ ] T3 — `GET /api/snippet`, `GET /api/email-template`, `helpers/snippet.js`,
+- [x] T3 — `GET /api/snippet`, `GET /api/email-template`, `helpers/snippet.js`,
       `helpers/email-template.js` and their tests.
-- [ ] T4 — the actionable `text/html` digest renderer.
-- [ ] T4b — the Resend funnel in `src/services/email-sender.js`, `RESEND_API_KEY`
+- [x] T4 — the actionable `text/html` digest renderer.
+- [x] T4b — the Resend funnel in `src/services/email-sender.js`, `RESEND_API_KEY`
       / `DIGEST_FROM` from `helpers/environment.js` and the platform env, the
       `email_not_configured` 409 path, and their tests (D12).
 
 **Build**
-- [ ] T5 — signature module: build manifest, sign, verify, `currentSlot`, and a
+- [x] T5 — signature module: build manifest, sign, verify, `currentSlot`, and a
       strict canonical-manifest parser (§3). Pure and unit-testable; no storage,
       no network.
-- [ ] T6 — rewrite `POST /amp/confirm` to the §3 verification order: manifest
+- [x] T6 — rewrite `POST /amp/confirm` to the §3 verification order: manifest
       verified before selections are read, every selection checked against the
       manifest, all-or-nothing for integrity failures, per-selection `btnId`.
-- [ ] T6b — D11 assignee check inside `performAction`, using the person ids
+- [x] T6b — D11 assignee check inside `performAction`, using the person ids
       already fetched from the people column. Returns a per-item state outcome,
       never a whole-request rejection.
-- [ ] T6c — `digest-service.js` recipient model per D16: drop the email
+- [x] T6c — `digest-service.js` recipient model per D16: drop the email
       deduplication so each users-board row is its own message, and skip rows
       whose people column does not hold exactly one person with a new
       `multi_person` reason surfaced in the preview and the D8 summary.
-- [ ] T7 — two-bucket rate limiter (§4).
-- [ ] T8 — `text/plain` renderer (§5).
+- [x] T7 — two-bucket rate limiter (§4).
+- [x] T8 — `text/plain` renderer (§5).
 - [ ] T9 — multipart/alternative assembly + the Gmail API send funnel
       (`users.messages.send`, base64url raw MIME), replacing the Resend funnel
-      as the single outbound path (D12).
+      as the single outbound path (D12). *(MIME assembly helper landed in 0.8.1;
+      Gmail send deferred pending Google Cloud app.)*
 - [ ] T9b — Google OAuth for the sender mailbox: start/callback routes, token
       exchange, `ensureGoogleAccessToken` with expiry cushion, app-global
       SecureStorage record, disconnected state on `invalid_grant` (D13). Port
-      from `apps/axis/sync-calender`; do not reinvent.
+      from `apps/axis/sync-calender`; do not reinvent. **Deferred — Google Cloud.**
 - [ ] T9c — operator-only gate on the Google OAuth routes and on the admin UI
       button (D13). Needs its own test: a valid sessionToken from a non-operator
-      account must be refused.
-- [ ] T10 — monday-code scheduler that runs the send at the configured hour and
+      account must be refused. **Deferred — Google Cloud.**
+- [x] T10 — monday-code scheduler that runs the send at the configured hour and
       replaces the external monday workflow. Iterates `env.allowedAccountIds`
       (D15), skipping unconfigured tenants without raising an error.
-- [ ] T10b — flip the empty-`ALLOWED_ACCOUNT_IDS` default from admit-all to
+- [x] T10b — flip the empty-`ALLOWED_ACCOUNT_IDS` default from admit-all to
       deny-all in `helpers/environment.js` + `middlewares/session-token.js`,
       with a startup error log when the list is empty (D15). Breaking config
       change — must be called out in the PR description.
-- [ ] T11 — operator summary email (D8).
-- [ ] T12 — resend-today action, reusing the current slot (D6, D8).
-- [ ] T13 — `POST /api/secret/rotate` stops returning the secret; admin UI stops
+- [x] T11 — operator summary email (D8).
+- [x] T12 — resend-today action, reusing the current slot (D6, D8).
+- [x] T13 — `POST /api/secret/rotate` stops returning the secret; admin UI stops
       displaying it.
-- [ ] T14 — `GET /api/digest/preview` drops `html`, keeps `amp`.
+- [x] T14 — `GET /api/digest/preview` drops `html`, keeps `amp`.
 
 **Do not build yet**
 - [ ] T15 — D9 email redesign (multi-button table, one global submit). Awaiting

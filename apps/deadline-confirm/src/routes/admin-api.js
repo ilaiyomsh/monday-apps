@@ -30,12 +30,12 @@
 import crypto from 'node:crypto';
 import express from 'express';
 import { generateSecret, maskSecret } from '../services/secret.js';
-import { renderDigestEmail } from '../helpers/digest-email.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
 import { renderDigestPlain } from '../helpers/digest-plain.js';
 import { buildDigest, digestTaskColumnIds } from '../services/digest-service.js';
+import { runDigestForAccount, todayInJerusalem as todayInJerusalemFromRun } from '../services/digest-run.js';
 import { MondayApiError } from '../services/monday-api.js';
-import { logError, logInfo } from '../helpers/logger.js';
+import { logError } from '../helpers/logger.js';
 
 const BUTTON_ID_RE = /^b_[A-Za-z0-9_-]{4,16}$/;
 const SECTION_ID_RE = /^s_[A-Za-z0-9_-]{4,16}$/;
@@ -167,7 +167,7 @@ function validateConfig(body) {
 
 /** YYYY-MM-DD "today" in the app's business timezone (digest overdue rule). */
 function todayInJerusalem() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(new Date());
+  return todayInJerusalemFromRun();
 }
 
 /**
@@ -179,9 +179,10 @@ function todayInJerusalem() {
  * @param {import('express').RequestHandler} deps.requireSession
  * @param {{ send(p: object): Promise<{ id: string }> }} [deps.emailSender] - absent → send answers 409
  * @param {string} [deps.todayIso] - test injection; defaults to Asia/Jerusalem "today"
+ * @param {() => Date} [deps.now] - injectable clock for live slot on send/resend
  * @returns {import('express').Router}
  */
-export function createAdminRouter({ storage, api, env, requireSession, emailSender, todayIso }) {
+export function createAdminRouter({ storage, api, env, requireSession, emailSender, todayIso, now = () => new Date() }) {
   const router = express.Router();
   router.use('/api', requireSession);
 
@@ -246,7 +247,6 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     // Midday Jerusalem on the preview day — deterministic slot/sig in admin preview.
     const previewNow = new Date(`${today}T09:00:00+03:00`);
     const renderArgs = { baseUrl: env.baseUrl, secret, accountId: req.session.accountId };
-    const renderFor = (recipient) => renderDigestEmail({ ...renderArgs, recipient: withButtons(recipient) });
     const renderPlainFor = (recipient) => renderDigestPlain({ recipient: withButtons(recipient) });
     const renderAmpFor = (recipient) =>
       renderDigestAmp({
@@ -262,11 +262,43 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         recipients,
         skippedUsers,
         truncated: tasksRead.truncated || usersRead.truncated,
-        renderFor,
         renderPlainFor,
         renderAmpFor,
       },
     };
+  }
+
+  async function handleDigestSend(req, res) {
+    if (!emailSender) {
+      res.status(409).json({ error: 'email_not_configured' });
+      return;
+    }
+    const out = await runDigestForAccount({
+      accountId: req.session.accountId,
+      storage,
+      api,
+      baseUrl: env.baseUrl,
+      emailSender,
+      todayIso,
+      now,
+    });
+    if (out.skip) {
+      const status =
+        out.skip === 'monday_api_failed'
+          ? 502
+          : out.skip === 'email_not_configured'
+            ? 409
+            : 409;
+      res.status(status).json({ error: out.skip });
+      return;
+    }
+    res.json({
+      ok: out.failed === 0,
+      slot: out.slot,
+      results: out.results,
+      skippedUsers: out.skippedUsers,
+      truncated: out.truncated,
+    });
   }
 
   router.get(
@@ -292,48 +324,11 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     })
   );
 
-  router.post(
-    '/api/digest/send',
-    guarded(async (req, res) => {
-      if (!emailSender) {
-        res.status(409).json({ error: 'email_not_configured' });
-        return;
-      }
-      const prep = await prepareDigest(req);
-      if (!prep.digestData) {
-        res.status(prep.status).json(prep.body);
-        return;
-      }
-      const { config, recipients, skippedUsers, truncated, renderFor } = prep.digestData;
+  router.post('/api/digest/send', guarded(handleDigestSend));
 
-      const results = [];
-      for (const recipient of recipients) {
-        const base = { email: recipient.email, name: recipient.name, taskCount: recipient.taskCount };
-        try {
-          await emailSender.send({
-            to: recipient.email,
-            subject: config.digest.subject,
-            html: renderFor(recipient),
-          });
-          results.push({ ...base, ok: true });
-        } catch (err) {
-          logError('digest', 'send failed for recipient', {
-            email: recipient.email,
-            error: String(err?.message ?? err),
-          });
-          results.push({ ...base, ok: false, error: String(err?.message ?? err) });
-        }
-      }
-
-      const failures = results.filter((r) => !r.ok).length;
-      logInfo('digest', 'manual digest send finished', {
-        recipients: results.length,
-        failures,
-        skipped: skippedUsers.length,
-      });
-      res.json({ ok: failures === 0, results, skippedUsers, truncated });
-    })
-  );
+  // T12 / D8 — resend today for ALL recipients using the current slot
+  // (same pipeline as send; currentSlot is derived from live `now`).
+  router.post('/api/digest/resend-today', guarded(handleDigestSend));
 
 
   function guarded(handler) {

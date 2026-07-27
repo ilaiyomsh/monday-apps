@@ -25,8 +25,9 @@ export function getEnv() {
   return {
     clientId: process.env.MONDAY_CLIENT_ID || '',
     clientSecret: process.env.MONDAY_CLIENT_SECRET || '',
-    // Empty list = every installing account is admitted (isolation is
-    // structural); non-empty = private-app allowlist.
+    // V6 D15: tenant roster for admin admit + scheduler/send. Empty =
+    // default-deny (nobody admitted, nobody sent to). Breaking change from
+    // the v3 "empty = any installing account" default.
     allowedAccountIds,
     baseUrl: (process.env.BASE_URL || '').replace(/\/+$/, ''),
     // Draft-testing only (OAuth settings are per app version): when set, the
@@ -37,5 +38,7 @@ export function getEnv() {
     // V5 Gmail dynamic email: senders whose AMP forms may call /amp/confirm.
     // Empty = endpoint admits NOBODY (default deny, see helpers/amp-cors.js).
     ampAllowedSenders: parseSenderList(process.env.AMP_ALLOWED_SENDERS),
+    // D8 operator summary destination. Absent → summary is skipped (logged).
+    operatorEmail: (process.env.OPERATOR_EMAIL || '').trim().toLowerCase() || null,
   };
 }

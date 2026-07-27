@@ -54,6 +54,15 @@ describe('getEnv().allowedAccountIds (v3)', () => {
 
     expect(getEnv().allowedAccountIds).toEqual([]);
   });
+
+  it('parses OPERATOR_EMAIL trimmed+lowercased; empty/unset → null (D8 summary skipped)', () => {
+    vi.stubEnv('OPERATOR_EMAIL', '  Ops@Twyst.co.IL ');
+    expect(getEnv().operatorEmail).toBe('ops@twyst.co.il');
+    vi.stubEnv('OPERATOR_EMAIL', '');
+    expect(getEnv().operatorEmail).toBeNull();
+    vi.stubEnv('OPERATOR_EMAIL', undefined);
+    expect(getEnv().operatorEmail).toBeNull();
+  });
 });
 
 describe('getEnv() sanity (unchanged v2 behavior)', () => {

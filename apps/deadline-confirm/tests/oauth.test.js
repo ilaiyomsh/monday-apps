@@ -20,7 +20,7 @@ const OTHER_ACCOUNT_ID = '888';
 const ENV = {
   clientId: 'cid-1',
   clientSecret: 'cs-1',
-  allowedAccountIds: [],
+  allowedAccountIds: [ACCOUNT_ID],
   baseUrl: 'https://app.example',
 };
 

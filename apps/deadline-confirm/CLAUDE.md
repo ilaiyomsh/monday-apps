@@ -71,19 +71,26 @@ src/
   read cache invalidated on any write.
 - `/oauth/start` requires `?st=<sessionToken>` — connecting account comes from JWT.
 - monday OAuth tokens don't expire — any API 401 = revoked → admin `broken`.
-- **v4 digest:** recipients from USERS BOARD (single `personId` per row — no
-  merge of multiple persons/emails); pending = date ≤ today (Asia/Jerusalem)
-  AND status in section's `includeStatusLabelIds`.
+- **v4 digest:** recipients from USERS BOARD — **one message per row** (D16; same
+  email on two rows → two messages); rows with ≠1 person skipped as
+  `multi_person`. Pending = date ≤ today (Asia/Jerusalem) AND status in
+  section's `includeStatusLabelIds`.
 - **V6 preview:** `GET /api/digest/preview` → `{ plain, amp }` (no `html`).
   **`POST /api/secret/rotate` → `{ ok: true }` only.**
+- **V6 scheduler:** `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`)
+  walks `ALLOWED_ACCOUNT_IDS`, runs tenants whose `digest.sendHour` matches the
+  current Asia/Jerusalem hour; then optional operator summary to `OPERATOR_EMAIL`.
+- **V6 resend:** `POST /api/digest/resend-today` — all recipients, current slot.
 
 ## Env & deploy
 
 Env (platform: `mapps code:env -i 11704868`; local: `.env`): `MONDAY_CLIENT_ID`,
-`MONDAY_CLIENT_SECRET`, `ALLOWED_ACCOUNT_IDS` (optional), `BASE_URL`, `PORT`,
+`MONDAY_CLIENT_SECRET`, **`ALLOWED_ACCOUNT_IDS` (required tenant roster —
+empty = default-deny: nobody admitted, nobody sent)**, `BASE_URL`, `PORT`,
 `USE_LOCAL_STORAGE` (dev/tests), `AMP_ALLOWED_SENDERS` (empty = nobody admitted
-to `/amp/confirm`). Gmail send credentials (T9) not wired yet —
-`/api/digest/send` answers 409 `email_not_configured`.
+to `/amp/confirm`), `OPERATOR_EMAIL` (optional; D8 summary destination). Gmail
+OAuth/send (T9/T9b/T9c) not wired yet — `/api/digest/send` answers 409
+`email_not_configured` and the scheduler skips with the same reason.
 
 Deploys ONLY via the pipeline (root CLAUDE.md): merge to `develop` → draft,
 merge to `main` → live. Server-type app: workflow pushes app root; CI runs

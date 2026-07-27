@@ -86,7 +86,7 @@ export interface DigestRecipientSummary {
 export interface DigestSkippedUser {
   itemId: string;
   name: string;
-  reason: 'no_email' | 'no_person' | 'duplicate_email' | 'multiple_persons';
+  reason: 'no_email' | 'no_person' | 'multi_person';
 }
 
 export interface DigestPreviewResponse {
