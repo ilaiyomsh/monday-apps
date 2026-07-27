@@ -3,13 +3,9 @@ name: Deploy Draft - twyst-your-status
 # Spec section 7.1: merges into develop auto-deploy to the app's LATEST
 # DRAFT version. No version IDs are stored anywhere — only the App ID
 # secret; the CLI resolves the latest draft itself.
-#
-# When instantiating this template for a real app, rename the file to:
-#   deploy-draft-twyst-your-status.yml
-# and replace all twyst-your-status / dist / APP_TWYST_YOUR_STATUS_ID placeholders.
 
 on:
-  workflow_dispatch: {}   # manual re-deploy of the draft (e.g. dev-live detach); draft only — live stays merge-triggered
+  workflow_dispatch: {}
   push:
     branches:
       - develop
@@ -45,7 +41,29 @@ jobs:
       - name: Build twyst-your-status
         env:
           VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: twyst-your-status
         run: pnpm --filter "./apps/twyst-your-status" build
+
+      - name: Archive sourcemaps as build artifact (for stack symbolication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-twyst-your-status-${{ github.sha }}
+          path: apps/twyst-your-status/dist/**/*.map
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Strip sourcemaps before deploy (never ship .map to the CDN)
+        run: |
+          set -euo pipefail
+          find apps/twyst-your-status/dist -name '*.map' -type f -delete
+          remaining="$(find apps/twyst-your-status/dist -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining .map files in deploy dir: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::sourcemaps still present in deploy dir — refusing to push (would leak source to the CDN)"
+            exit 1
+          fi
 
       - name: Install monday.com apps CLI
         run: npm install -g @mondaycom/apps-cli
@@ -55,12 +73,10 @@ jobs:
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
 
-      # -c is "-c" for client-side (CDN) apps, empty for
-      # server-side (monday-code) apps — the only difference between the two.
       - name: Push to latest DRAFT version
         run: >
-          mapps code:push --verbose
-          -d apps/twyst-your-status/.
+          mapps code:push -c
+          -d apps/twyst-your-status/dist
           -a "$APP_ID"
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}

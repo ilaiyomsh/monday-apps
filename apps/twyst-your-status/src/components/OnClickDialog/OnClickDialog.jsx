@@ -1,52 +1,125 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { AttentionBox } from '@vibe/core';
+import { buildAvailableLabels } from '../../domain/buildAvailableLabels';
 import {
-  STATUS_GUARD_CONFIG_VERSION,
-  buildStatusPickerModel,
-  normalizeStatusGuardConfig,
-  normalizeStatusLabels,
-  serializeStatusMutationValue,
-} from '../../domain/statusPolicy';
+  buildMultiColumnWritePayload,
+  prefillFormValue,
+} from '../../domain/columnValueFormats';
+import { getLabelRule } from '../../domain/settingsSchema';
+import { normalizeStatusLabels, serializeStatusMutationValue } from '../../domain/statusPolicy';
 import {
+  GET_ITEM_FORM_VALUES,
   GET_STATUS_COLUMN_CONTEXT,
+  UPDATE_MULTIPLE_COLUMN_VALUES,
   UPDATE_STATUS_COLUMN_VALUE,
 } from '../../services/graphqlQueries';
 import mondayService from '../../services/mondayService';
-import workflowClient from '../../services/workflowClient';
+import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
 import ErrorState from '../shared/ErrorState';
 import LoadingState from '../shared/LoadingState';
-import GuardSettingsPanel from '../GuardSettingsPanel/GuardSettingsPanel';
 import './OnClickDialog.css';
 
-const EMPTY_CONFIG = normalizeStatusGuardConfig(null);
+const UNCONFIGURED_TITLE = 'העמודה לא הוגדרה';
+const UNCONFIGURED_TEXT =
+  'העמודה עדיין לא הוגדרה. פתחו את תפריט העמודה, בחרו "הגדרות", והגדירו הרשאות ושדות חובה ללייבלים.';
+
+function inputTypeFor(columnType) {
+  if (columnType === 'numbers') return 'number';
+  if (columnType === 'date') return 'date';
+  if (columnType === 'email') return 'email';
+  return 'text';
+}
+
+function RequiredFieldsForm({
+  label,
+  fields,
+  columnsById,
+  initialValues,
+  busy,
+  onCancel,
+  onSubmit,
+}) {
+  const [values, setValues] = useState(initialValues);
+
+  useEffect(() => {
+    setValues(initialValues);
+  }, [initialValues]);
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    onSubmit(values);
+  };
+
+  return (
+    <form className="twyst-form" onSubmit={handleSubmit} aria-labelledby="required-fields-title">
+      <header>
+        <p className="status-guard-eyebrow">מעבר סטטוס</p>
+        <h2 id="required-fields-title">
+          השלמת פרטים לפני מעבר ל״
+          {label.label || 'ללא שם'}
+          ״
+        </h2>
+      </header>
+      {fields.map((field) => {
+        const column = columnsById.get(field.columnId);
+        return (
+          <label key={field.columnId}>
+            {column?.title || field.columnId}
+            <b> *</b>
+            <input
+              type={inputTypeFor(column?.type)}
+              required
+              value={values[field.columnId] ?? ''}
+              disabled={busy}
+              onChange={(event) => setValues({
+                ...values,
+                [field.columnId]: event.target.value,
+              })}
+            />
+          </label>
+        );
+      })}
+      <div className="twyst-form-actions">
+        <button type="button" onClick={onCancel} disabled={busy}>ביטול</button>
+        <button className="primary-action" type="submit" disabled={busy}>
+          {busy ? 'שומר…' : 'שמירה ומעבר'}
+        </button>
+      </div>
+    </form>
+  );
+}
 
 function OnClickDialog({ context }) {
-  const { boardId, columnId, itemId, user } = context;
+  const { boardId, columnId, itemId, user } = context || {};
+  const {
+    settings,
+    loading: settingsLoading,
+    error: settingsError,
+    reload: reloadSettings,
+  } = useColumnSettings(context);
+
   const [labels, setLabels] = useState([]);
   const [currentValue, setCurrentValue] = useState(null);
-  const [config, setConfig] = useState(EMPTY_CONFIG);
-  const [draftRestrictedIds, setDraftRestrictedIds] = useState([]);
-  const [screen, setScreen] = useState('picker');
+  const [actor, setActor] = useState({ userId: String(user?.id ?? ''), teamIds: [] });
+  const [columnsById, setColumnsById] = useState(new Map());
   const [loading, setLoading] = useState(true);
-  const [savingLabelId, setSavingLabelId] = useState(null);
-  const [savingSettings, setSavingSettings] = useState(false);
   const [error, setError] = useState(null);
-  const [workflowConfig, setWorkflowConfig] = useState(null);
-  const [connected, setConnected] = useState(false);
+  const [savingLabelId, setSavingLabelId] = useState(null);
+  const [formTarget, setFormTarget] = useState(null);
+  const [formValues, setFormValues] = useState({});
 
   const loadDialogData = useCallback(async () => {
+    if (!boardId || !columnId || !itemId) return;
     try {
       setLoading(true);
       setError(null);
-
-      const [data, workflow] = await Promise.all([
-        mondayService.query(GET_STATUS_COLUMN_CONTEXT, {
-          boardIds: [boardId],
-          itemIds: [itemId],
-          columnIds: [columnId],
-        }),
-        workflowClient.getItemWorkflow(boardId, itemId),
-      ]);
+      const data = await mondayService.query(GET_STATUS_COLUMN_CONTEXT, {
+        boardIds: [String(boardId)],
+        itemIds: [String(itemId)],
+        columnIds: [columnId],
+        userIds: [String(user?.id)],
+      });
 
       const column = data?.boards?.[0]?.columns?.[0];
       if (!column || column.type !== 'status') {
@@ -55,50 +128,112 @@ function OnClickDialog({ context }) {
 
       const item = data?.items?.[0];
       const statusValue = item?.column_values?.find((value) => value.id === columnId) ?? null;
-      const nextLabels = normalizeStatusLabels(column.settings);
-      const nextConfig = normalizeStatusGuardConfig({
-        version: STATUS_GUARD_CONFIG_VERSION,
-        restrictedLabelIds: workflow.config?.targetColumnId === String(columnId)
-          ? workflow.config.hiddenManualLabelIds
-          : [],
-      });
-
-      setLabels(nextLabels);
+      const me = data?.users?.[0];
+      setLabels(normalizeStatusLabels(column.settings));
       setCurrentValue(statusValue);
-      setConfig(nextConfig);
-      setDraftRestrictedIds(nextConfig.restrictedLabelIds);
-      setWorkflowConfig(workflow.config);
-      setConnected(workflow.connected);
+      setActor({
+        userId: String(user?.id ?? ''),
+        teamIds: (me?.teams ?? []).map((team) => String(team.id)),
+      });
+      setColumnsById(new Map(
+        (item?.column_values ?? [])
+          .filter((value) => value.column)
+          .map((value) => [value.id, value.column]),
+      ));
     } catch (err) {
       logger.error('OnClickDialog', 'Failed to load status picker data', err);
       setError(err.message || 'לא הצלחנו לטעון את הסטטוסים');
     } finally {
       setLoading(false);
     }
-  }, [boardId, columnId, itemId]);
+  }, [boardId, columnId, itemId, user?.id]);
 
   useEffect(() => {
     loadDialogData();
   }, [loadDialogData]);
 
   const pickerModel = useMemo(
-    () => buildStatusPickerModel({ labels, currentValue, config }),
-    [config, currentValue, labels],
+    () => buildAvailableLabels({
+      labels,
+      settings,
+      actor,
+      currentValue,
+    }),
+    [actor, currentValue, labels, settings],
   );
+
+  const writeStatusOnly = async (labelId) => {
+    await mondayService.query(UPDATE_STATUS_COLUMN_VALUE, {
+      boardId: String(boardId),
+      itemId: String(itemId),
+      columnId,
+      value: serializeStatusMutationValue(labelId),
+    });
+  };
+
+  const writeStatusAndFields = async (labelId, fields, values) => {
+    const payload = buildMultiColumnWritePayload({
+      statusColumnId: columnId,
+      statusLabelId: labelId,
+      formFields: fields,
+      formValues: values,
+      columnsById,
+    });
+    await mondayService.query(UPDATE_MULTIPLE_COLUMN_VALUES, {
+      boardId: String(boardId),
+      itemId: String(itemId),
+      columnValues: JSON.stringify(payload),
+    });
+  };
+
+  const openRequiredForm = async (label) => {
+    const rule = getLabelRule(settings, label.id);
+    const fieldIds = rule.requiredColumnIds;
+    try {
+      setSavingLabelId(label.id);
+      setError(null);
+      const data = await mondayService.query(GET_ITEM_FORM_VALUES, {
+        itemIds: [String(itemId)],
+        columnIds: fieldIds,
+      });
+      const values = data?.items?.[0]?.column_values ?? [];
+      const nextColumns = new Map(columnsById);
+      const initial = {};
+      values.forEach((value) => {
+        if (value.column) nextColumns.set(value.id, value.column);
+        initial[value.id] = prefillFormValue(value.column?.type ?? value.type, value);
+      });
+      fieldIds.forEach((id) => {
+        if (initial[id] === undefined) initial[id] = '';
+      });
+      setColumnsById(nextColumns);
+      setFormValues(initial);
+      setFormTarget({
+        label,
+        fields: fieldIds.map((columnIdValue) => ({ columnId: columnIdValue })),
+      });
+    } catch (err) {
+      logger.error('OnClickDialog', 'Failed to load required field values', err);
+      setError(err.message || 'לא הצלחנו לטעון את שדות החובה');
+    } finally {
+      setSavingLabelId(null);
+    }
+  };
 
   const handleSelectLabel = async (labelId) => {
     const selectedLabel = pickerModel.options.find((label) => label.id === labelId);
     if (!selectedLabel || user?.isViewOnly) return;
 
+    const rule = getLabelRule(settings, labelId);
+    if (rule.requiredColumnIds.length > 0) {
+      await openRequiredForm(selectedLabel);
+      return;
+    }
+
     try {
       setSavingLabelId(labelId);
       setError(null);
-      await mondayService.query(UPDATE_STATUS_COLUMN_VALUE, {
-        boardId,
-        itemId,
-        columnId,
-        value: serializeStatusMutationValue(labelId),
-      });
+      await writeStatusOnly(labelId);
       await mondayService.showNotice(`הסטטוס עודכן ל״${selectedLabel.label}״`);
       await mondayService.closeDialog();
     } catch (err) {
@@ -109,59 +244,59 @@ function OnClickDialog({ context }) {
     }
   };
 
-  const handleOpenSettings = () => {
-    setDraftRestrictedIds(config.restrictedLabelIds);
-    setScreen('settings');
-  };
-
-  const handleSaveSettings = async () => {
+  const handleFormSubmit = async (values) => {
+    if (!formTarget) return;
     try {
-      setSavingSettings(true);
+      setSavingLabelId(formTarget.label.id);
       setError(null);
-      const nextConfig = normalizeStatusGuardConfig({
-        version: STATUS_GUARD_CONFIG_VERSION,
-        restrictedLabelIds: draftRestrictedIds,
-      });
-      if (!connected) throw new Error('יש לחבר תחילה את החשבון דרך ה־Board View של האפליקציה.');
-      await workflowClient.saveBoardConfig(boardId, {
-        ...(workflowConfig ?? {
-          schemaVersion: 1,
-          targetColumnId: String(columnId),
-          transitions: [],
-          enforcement: { enabled: false },
-        }),
-        targetColumnId: String(columnId),
-        hiddenManualLabelIds: nextConfig.restrictedLabelIds,
-      });
-      setWorkflowConfig((current) => ({
-        ...(current ?? { schemaVersion: 1, transitions: [], enforcement: { enabled: false } }),
-        targetColumnId: String(columnId),
-        hiddenManualLabelIds: nextConfig.restrictedLabelIds,
-      }));
-      setConfig(nextConfig);
-      setScreen('picker');
-      await mondayService.showNotice('הגדרת הלייבלים המוגנים נשמרה');
+      await writeStatusAndFields(formTarget.label.id, formTarget.fields, values);
+      await mondayService.showNotice(`הסטטוס עודכן ל״${formTarget.label.label}״`);
+      await mondayService.closeDialog();
     } catch (err) {
-      logger.error('OnClickDialog', 'Failed to save status guard settings', err);
-      setError(err.message || 'לא הצלחנו לשמור את ההגדרה');
+      logger.error('OnClickDialog', 'Failed to save status with required fields', err);
+      setError(err.message || 'לא הצלחנו לשמור את המעבר');
     } finally {
-      setSavingSettings(false);
+      setSavingLabelId(null);
     }
   };
 
-  if (loading) return <LoadingState message="טוען את הסטטוסים…" />;
-  if (error) return <ErrorState message={error} onRetry={loadDialogData} />;
+  if (settingsError) {
+    return <ErrorState message="טעינת ההגדרות נכשלה. נסו שוב." onRetry={reloadSettings} />;
+  }
 
-  if (screen === 'settings') {
+  if (!settingsLoading && settings == null) {
     return (
-      <GuardSettingsPanel
-        labels={labels}
-        restrictedLabelIds={draftRestrictedIds}
-        onRestrictedLabelIdsChange={setDraftRestrictedIds}
-        onSave={handleSaveSettings}
-        onCancel={() => setScreen('picker')}
-        saving={savingSettings}
-      />
+      <div className="status-guard-dialog" dir="rtl">
+        <AttentionBox type="primary" title={UNCONFIGURED_TITLE} text={UNCONFIGURED_TEXT} />
+      </div>
+    );
+  }
+
+  if (settingsLoading || loading) {
+    return <LoadingState message="טוען את הסטטוסים…" />;
+  }
+
+  if (error && !formTarget) {
+    return <ErrorState message={error} onRetry={loadDialogData} />;
+  }
+
+  if (formTarget) {
+    return (
+      <main className="status-guard-dialog" dir="rtl">
+        {error && <AttentionBox type="danger" text={error} />}
+        <RequiredFieldsForm
+          label={formTarget.label}
+          fields={formTarget.fields}
+          columnsById={columnsById}
+          initialValues={formValues}
+          busy={savingLabelId !== null}
+          onCancel={() => {
+            setFormTarget(null);
+            setError(null);
+          }}
+          onSubmit={handleFormSubmit}
+        />
+      </main>
     );
   }
 
@@ -172,11 +307,6 @@ function OnClickDialog({ context }) {
           <p className="status-guard-eyebrow">Twyst Your Status</p>
           <h1 id="status-picker-title">בחירת סטטוס</h1>
         </div>
-        {user?.isAdmin && (
-          <button className="settings-button" type="button" onClick={handleOpenSettings}>
-            הגדרות
-          </button>
-        )}
       </header>
 
       <section className="current-status" aria-label="הסטטוס הנוכחי">
@@ -189,14 +319,14 @@ function OnClickDialog({ context }) {
             >
               {pickerModel.currentLabel.label}
             </span>
-            {pickerModel.currentIsRestricted && (
+            {pickerModel.currentIsHidden && (
               <span className="automation-only-badge">לצפייה בלבד</span>
             )}
           </div>
         ) : (
           <span className="empty-current-status">לא נבחר סטטוס</span>
         )}
-        {pickerModel.currentIsRestricted && (
+        {pickerModel.currentIsHidden && (
           <p className="restricted-explanation">
             הסטטוס הזה נקבע מחוץ לבורר — למשל על ידי אוטומציה — ולכן הוא מוצג אך אינו זמין לבחירה ידנית.
           </p>
@@ -232,7 +362,7 @@ function OnClickDialog({ context }) {
             })}
           </div>
         ) : (
-          <p className="empty-options">אין כרגע סטטוסים זמינים לבחירה ידנית.</p>
+          <p className="empty-options">אין כרגע סטטוסים זמינים לבחירה.</p>
         )}
       </section>
 

@@ -26,7 +26,11 @@ function emptyConfig() {
   };
 }
 
-function currentLabelIdFromValue(currentValue) {
+/**
+ * Status cell `index` carries the label **id** (monday naming quirk).
+ * @see monday-api references/column-formats.md
+ */
+export function currentLabelIdFromValue(currentValue) {
   const directIndex = normalizeNonNegativeInteger(currentValue?.index);
   if (directIndex !== null) return String(directIndex);
 
@@ -75,6 +79,10 @@ export function normalizeStatusGuardConfig(rawConfig) {
   };
 }
 
+/**
+ * Normalize monday status column settings.labels.
+ * `id` is the stable write key; `index` is display order only.
+ */
 export function normalizeStatusLabels(columnSettings) {
   const labels = Array.isArray(columnSettings?.labels) ? columnSettings.labels : [];
 
@@ -99,6 +107,10 @@ export function normalizeStatusLabels(columnSettings) {
   });
 }
 
+/**
+ * @deprecated Prefer buildAvailableLabels from ./buildAvailableLabels.js for
+ * permission-aware picking. Kept for legacy restricted-label-only callers/tests.
+ */
 export function buildStatusPickerModel({ labels, currentValue, config }) {
   const normalizedLabels = Array.isArray(labels) ? labels : [];
   const normalizedConfig = normalizeStatusGuardConfig(config);
@@ -118,6 +130,10 @@ export function buildStatusPickerModel({ labels, currentValue, config }) {
   };
 }
 
+/**
+ * Serialize a status mutation. The JSON key is `index` but the value is the
+ * label **id** (monday quirk — see column-formats.md).
+ */
 export function serializeStatusMutationValue(labelId) {
   const normalizedId = normalizeNonNegativeInteger(labelId);
   if (normalizedId === null) {
