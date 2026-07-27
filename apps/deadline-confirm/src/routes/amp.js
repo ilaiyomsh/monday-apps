@@ -18,22 +18,21 @@
 //     the monday complexity budget and must not be drainable by
 //     unauthenticated callers behind the same NAT).
 //  3. parse a /^\d{1,20}$/, p /^\d{1,20}$/, s /^\d{8}$/, sig non-empty,
-//     m strictly canonical (parseManifest) → 400 bad_request.
+//     m strictly canonical (parseManifest) → 400 (bad_fields / bad_manifest).
 //  4. load the account's link_secret (+config) via storage.forAccount(a) —
-//     missing → 403 invalid.
+//     missing → 403 no_config.
 //  5. s must equal currentSlot for config.digest.sendHour (default 8),
-//     Asia/Jerusalem. NO grace for the previous slot → 403 invalid.
+//     Asia/Jerusalem. NO grace for the previous slot → 403 bad_slot.
 //  6. HMAC over `${a}|${p}|${s}|${m}` verified constant-time BEFORE the
-//     selection fields are read → 403 invalid.
+//     selection fields are read → 403 bad_sig.
 //  7. selections: only field names matching ^item_\d{1,20}$ count (others
 //     ignored); none → 400 no_items; identical duplicates collapse; the
-//     same item with two DIFFERENT buttons → 400 bad_request; more than
+//     same item with two DIFFERENT buttons → 400 conflict_item; more than
 //     MAX_ITEMS → 400 too_many_items; every (item, button) pair must be in
-//     the VERIFIED manifest → 403 invalid.
+//     the VERIFIED manifest → 403 manifest_violation.
 //  8. all-or-nothing for integrity failures (3–7): the whole request is
-//     rejected with the generic message and ZERO monday API calls — the
-//     response returns counts, so partial execution here would be a
-//     verification oracle.
+//     rejected with ZERO monday API calls — the response returns counts,
+//     so partial execution here would be a verification oracle.
 //  9. rate limit bucket B — perAccount.allow(`${a}:${ip}`) → 429.
 // 10. performAction per selection with that selection's OWN btnId and
 //     expectedPersonId = p (D11). State failures (not_assignee, not_found,
@@ -41,9 +40,10 @@
 //
 // Responses from step 2 onwards carry the CORS headers and are JSON
 // (amp-mustache templates): { ok, updated, already, failed, message } —
-// counts and a Hebrew message ONLY, never item/board/account data. A request
-// that verified cleanly but updated nothing answers 502 so the reader sees
-// the error template.
+// counts and a Hebrew message ONLY, never item/board/account data.
+// Each failure path has a distinct `error` code + `[E…]` tag in `message`
+// so operators can diagnose from the AMP error box / Network tab.
+// A request that verified cleanly but updated nothing answers 502.
 
 import express from 'express';
 import { performAction } from '../services/confirm-service.js';
@@ -62,13 +62,41 @@ export const MAX_ITEMS = MAX_MANIFEST_ITEMS;
 /** Slot fallback when the account has no digest config (schema default). */
 const DEFAULT_SEND_HOUR = 8;
 
-const MESSAGES = {
-  bad_request: 'הבקשה אינה תקינה.',
-  no_items: 'לא סומנה אף משימה — סמנו לפחות משימה אחת ולחצו שוב.',
-  too_many_items: `אפשר לעדכן עד ${MAX_ITEMS} משימות בפעם אחת.`,
-  invalid: 'הקישור אינו בתוקף. אפשר לעדכן ישירות בלוח.',
-  rate_limited: 'יותר מדי בקשות — נסו שוב בעוד דקה.',
-  none_updated: 'לא הצלחנו לעדכן את המשימות שסומנו. אפשר לעדכן ישירות בלוח.',
+/**
+ * Distinct Hebrew messages — `[E…]` tags map 1:1 to gates for diagnosis.
+ * No item/board/account ids in the text (no verification oracle payload).
+ */
+export const MESSAGES = {
+  // E1 — CORS (step 1); body may be discarded by the client without CORS headers
+  cors_not_configured: '[E1a] שער AMP לא מוגדר (AMP_ALLOWED_SENDERS ריק).',
+  cors_sender_not_allowed: '[E1b] כתובת השולח אינה ברשימת AMP המורשית.',
+  cors_missing_source_origin: '[E1c] חסר __amp_source_origin בבקשת AMP.',
+  cors_no_amp_headers: '[E1d] חסרים כותרות AMP (AMP-Email-Sender / Origin).',
+  // E2 / E9 — rate limits
+  rate_limited: '[E2] יותר מדי בקשות מהכתובת — נסו שוב בעוד דקה.',
+  rate_limited_account: '[E9] יותר מדי בקשות לחשבון — נסו שוב בעוד דקה.',
+  // E3 — field / manifest shape
+  bad_fields: '[E3a] שדות החתימה (a/p/s/sig/m) חסרים או בפורמט שגוי — בדקו העתקה ל־playground.',
+  bad_manifest: '[E3b] המניפסט (m) אינו תקין או נפגם בהעתקה.',
+  // E4–E6 / E8 — authz (were all "invalid")
+  no_config: '[E4] אין הגדרות/סוד לחשבון — הקישור אינו בתוקף.',
+  bad_slot: '[E5] חלון הזמן (s) פג או לא תואם — הקישור אינו בתוקף להיום.',
+  bad_sig: '[E6] החתימה (sig) אינה תקינה — ייתכן שהטופס נפגם או הוחלף.',
+  manifest_violation: '[E8] הבחירה אינה מורשית במניפסט החתום.',
+  // E7 — selections
+  no_items: '[E7a] לא סומנה אף משימה — סמנו לפחות משימה אחת ולחצו שוב.',
+  conflict_item: '[E7b] אותה משימה סומנה עם שני סטטוסים שונים (בשני מקבצים) — בחרו אחד.',
+  too_many_items: `[E7c] אפשר לעדכן עד ${MAX_ITEMS} משימות בפעם אחת.`,
+  // E10 / E99
+  none_updated: '[E10] לא הצלחנו לעדכן את המשימות שסומנו. אפשר לעדכן ישירות בלוח.',
+  internal_error: '[E99] שגיאת שרת פנימית. נסו שוב או עדכנו ישירות בלוח.',
+};
+
+const CORS_MESSAGES = {
+  not_configured: MESSAGES.cors_not_configured,
+  sender_not_allowed: MESSAGES.cors_sender_not_allowed,
+  missing_source_origin: MESSAGES.cors_missing_source_origin,
+  no_amp_headers: MESSAGES.cors_no_amp_headers,
 };
 
 /** Hebrew count phrasing (1 gets the singular form). */
@@ -80,7 +108,7 @@ function phrase(count, singular, plural) {
  * Extract the selection fields from a parsed body. Only names matching
  * ^item_<digits>$ participate; anything else is ignored. Returns
  * { selections: Array<{ itemId, btnId }> } (identical duplicates collapsed)
- * or { error: 'no_items' | 'too_many_items' | 'bad_request' }.
+ * or { error: 'no_items' | 'too_many_items' | 'conflict_item' }.
  */
 function extractSelections(body) {
   /** @type {Map<string, string>} itemId -> btnId */
@@ -95,8 +123,9 @@ function extractSelections(body) {
       const existing = byItem.get(itemId);
       if (existing === undefined) byItem.set(itemId, value);
       // One item, two DIFFERENT buttons in one submission is not producible
-      // by the rendered form — reject rather than pick one arbitrarily.
-      else if (existing !== value) return { error: 'bad_request' };
+      // by a single-table form — with multi-cluster tables it can happen when
+      // the same item is marked in two sections.
+      else if (existing !== value) return { error: 'conflict_item' };
     }
   }
   if (byItem.size === 0) return { error: 'no_items' };
@@ -128,7 +157,8 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
     if (!verdict.ok) {
       // Deliberately headerless: an unauthorized caller gets nothing to read.
       logAttempt({ ip: req.ip ?? '', itemId: null, outcome: `amp_${verdict.reason}` });
-      res.status(403).set('Cache-Control', 'no-store').json({ error: verdict.reason, message: MESSAGES.invalid });
+      const message = CORS_MESSAGES[verdict.reason] ?? MESSAGES.cors_no_amp_headers;
+      res.status(403).set('Cache-Control', 'no-store').json({ error: verdict.reason, message });
       return null;
     }
     res.set(verdict.headers);
@@ -166,21 +196,26 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       // 3. parse a, p, s, sig, m — strict shapes; manifest must be canonical.
       const { a, p, s, sig, m } = req.body ?? {};
       if (
-        typeof a !== 'string' || !ACCOUNT_ID_RE.test(a) ||
-        typeof p !== 'string' || !PERSON_ID_RE.test(p) ||
-        typeof s !== 'string' || !SLOT_RE.test(s) ||
-        typeof sig !== 'string' || sig.length === 0 ||
-        typeof m !== 'string' || m.length === 0
+        typeof a !== 'string' ||
+        !ACCOUNT_ID_RE.test(a) ||
+        typeof p !== 'string' ||
+        !PERSON_ID_RE.test(p) ||
+        typeof s !== 'string' ||
+        !SLOT_RE.test(s) ||
+        typeof sig !== 'string' ||
+        sig.length === 0 ||
+        typeof m !== 'string' ||
+        m.length === 0
       ) {
-        logAttempt({ ip, itemId: null, outcome: 'bad_request' });
-        sendJson(res, 400, { error: 'bad_request', message: MESSAGES.bad_request });
+        logAttempt({ ip, itemId: null, outcome: 'bad_fields' });
+        sendJson(res, 400, { error: 'bad_fields', message: MESSAGES.bad_fields });
         return;
       }
       const manifest = parseManifest(m);
       if (!manifest.ok) {
         logError('amp', 'manifest rejected', { reason: manifest.reason });
-        logAttempt({ ip, itemId: null, outcome: 'bad_request' });
-        sendJson(res, 400, { error: 'bad_request', message: MESSAGES.bad_request });
+        logAttempt({ ip, itemId: null, outcome: 'bad_manifest' });
+        sendJson(res, 400, { error: 'bad_manifest', message: MESSAGES.bad_manifest });
         return;
       }
 
@@ -189,7 +224,7 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       const linkSecret = await scopedStorage.getLinkSecret();
       if (!linkSecret) {
         logAttempt({ ip, itemId: null, outcome: 'no_config' });
-        sendJson(res, 403, { error: 'invalid', message: MESSAGES.invalid });
+        sendJson(res, 403, { error: 'no_config', message: MESSAGES.no_config });
         return;
       }
       const config = await scopedStorage.getConfig();
@@ -198,14 +233,14 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       // 5. slot — exactly the current one; the previous slot gets NO grace.
       if (s !== currentSlot({ sendHour, now: now() })) {
         logAttempt({ ip, itemId: null, outcome: 'bad_slot' });
-        sendJson(res, 403, { error: 'invalid', message: MESSAGES.invalid });
+        sendJson(res, 403, { error: 'bad_slot', message: MESSAGES.bad_slot });
         return;
       }
 
       // 6. signature — verified BEFORE any selection field is read.
       if (!verifyManifest({ secret: linkSecret, accountId: a, personId: p, slot: s, manifest: m, signature: sig })) {
         logAttempt({ ip, itemId: null, outcome: 'bad_sig' });
-        sendJson(res, 403, { error: 'invalid', message: MESSAGES.invalid });
+        sendJson(res, 403, { error: 'bad_sig', message: MESSAGES.bad_sig });
         return;
       }
 
@@ -221,15 +256,15 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       for (const { itemId, btnId } of selections) {
         if (!manifest.entries.get(itemId)?.has(btnId)) {
           logAttempt({ ip, itemId, outcome: 'manifest_violation' });
-          sendJson(res, 403, { error: 'invalid', message: MESSAGES.invalid });
+          sendJson(res, 403, { error: 'manifest_violation', message: MESSAGES.manifest_violation });
           return;
         }
       }
 
       // 9. bucket B — the account's monday-budget guard, post-verification.
       if (!rateLimiters.perAccount.allow(`${a}:${ip}`)) {
-        logAttempt({ ip, itemId: null, outcome: 'rate_limited' });
-        sendJson(res, 429, { error: 'rate_limited', message: MESSAGES.rate_limited });
+        logAttempt({ ip, itemId: null, outcome: 'rate_limited_account' });
+        sendJson(res, 429, { error: 'rate_limited_account', message: MESSAGES.rate_limited_account });
         return;
       }
 
@@ -264,7 +299,7 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
     } catch (err) {
       logError('amp', 'POST handler failure', { error: String(err?.message ?? err) });
       logAttempt({ ip: req.ip ?? '', itemId: null, outcome: 'api_error' });
-      sendJson(res, 502, { error: 'internal_error', message: MESSAGES.none_updated });
+      sendJson(res, 502, { error: 'internal_error', message: MESSAGES.internal_error });
     }
   });
 

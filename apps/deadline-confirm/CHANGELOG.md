@@ -2,6 +2,16 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.9.1 — 2026-07-27 — fix: distinct AMP error codes + `[E…]` Hebrew messages
+
+- Every `/amp/confirm` failure path now returns a **distinct** `error` code and a
+  Hebrew `message` tagged `[E1a]`…`[E10]` / `[E99]` (was collapsed into
+  `bad_request` / `invalid` / generic "הקישור אינו בתוקף").
+- Diagnose from the AMP pink error box or Network JSON: e.g. `bad_fields` [E3a],
+  `bad_manifest` [E3b], `bad_slot` [E5], `bad_sig` [E6], `conflict_item` [E7b],
+  `manifest_violation` [E8], `rate_limited_account` [E9].
+- No ids in messages (no verification oracle). Map: `MESSAGES` in `src/routes/amp.js`.
+
 ## 0.9.0 — 2026-07-27 — feat: AMP digest — one table per cluster + multi-button columns
 
 - **Layout:** one AMP table per populated מקבץ (cluster title + that cluster's

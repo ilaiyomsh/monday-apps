@@ -441,9 +441,12 @@ scheduler failure, not widening the window.
    manifest**; reject on no selections, an unknown item, or a button not offered
    for that item.
 8. **All-or-nothing for integrity failures.** Any failure in 3–7 rejects the whole
-   request with the generic invalid message and performs no mutation. This is not
-   cosmetic: the response returns counts, so partial execution at this stage would
-   turn those counts into a verification oracle.
+   request and performs no mutation. This is not cosmetic: the response returns
+   counts, so partial execution at this stage would turn those counts into a
+   verification oracle. Each gate returns a **distinct** `error` code + Hebrew
+   `message` tagged `[E…]` (see `MESSAGES` in `src/routes/amp.js`) so operators
+   can diagnose from the AMP error box / Network tab without collapsing
+   everything into a generic "invalid".
 9. **Rate limit, bucket B** — the existing `accountId:ip` bucket.
 10. `performAction` per selection, passing that selection's own `btnId`, plus the
     D11 assignee check.
@@ -454,8 +457,8 @@ Steps 3–8 must complete before any monday API call.
 
 | Class | Examples | Handling |
 |---|---|---|
-| **Integrity** (before execution) | bad signature, expired slot, item or button absent from the manifest, malformed manifest | **reject the entire request**, generic message, no mutation |
-| **State** (during execution) | D11 assignee mismatch, already at target, item not found, API error | **per item**, reported in the response counts |
+| **Integrity** (before execution) | bad signature (`bad_sig` [E6]), expired slot (`bad_slot` [E5]), item or button absent from the manifest (`manifest_violation` [E8]), malformed fields/manifest (`bad_fields` [E3a] / `bad_manifest` [E3b]), missing config (`no_config` [E4]) | **reject the entire request**, distinct diagnostic message, no mutation |
+| **State** (during execution) | D11 assignee mismatch, already at target, item not found, API error | **per item**, reported in the response counts; all-failed → `none_updated` [E10] |
 
 Collapsing state failures into all-or-nothing would mean one reassigned task
 silently kills a batch of nine good ones. It does not reopen the oracle: reaching
