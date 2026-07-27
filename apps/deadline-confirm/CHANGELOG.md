@@ -2,6 +2,23 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.8.0 — 2026-07-27 — feat: V6 AMP-only + per-message signed manifest
+
+**Breaking product change.** See `docs/v6-amp-only-decisions.md`.
+
+- **Deleted:** `/confirm` route family, snippet/email-template endpoints, Resend
+  sender path, actionable HTML in digest preview.
+- **Added:** `manifest-signature` module (build/parse/sign/verify/currentSlot);
+  V6 wire format on `POST /amp/confirm` (`a/p/m/s/sig` + `item_<id>` radios);
+  D11 runtime assignee check; two-bucket rate limit on AMP path.
+- **Digest:** single `personId` per recipient; `text/plain` renderer; AMP renderer
+  with one signature per message; preview returns `{ plain, amp }`.
+- **Admin API:** rotate returns `{ ok: true }` only; `digest.sendHour` (0–23,
+  default 8) in config validation.
+- **SPA:** secret rotation without display; digest preview plain+AMP; sendHour field;
+  legacy templates section (no HTML copy).
+- Tests: 548 green; spotchecks on admin-api and draft sendHour.
+
 ## 0.7.3 — 2026-07-27 — fix: board pickers were empty (wrong discriminator field)
 
 - **Reported from the admin panel:** the users-board dropdown rendered
