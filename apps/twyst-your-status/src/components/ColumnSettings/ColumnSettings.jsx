@@ -2,8 +2,20 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AttentionBox } from '@vibe/core';
 import { migrateSettings, validateSettings } from '../../domain/settingsSchema';
 import { isSupportedFormColumnType } from '../../domain/columnValueFormats';
+import { MONDAY_STATUS_COLORS, resolveStatusColorHex } from '../../domain/statusColors';
+import {
+  buildStatusLabelsUpdatePayload,
+  buildUpdateStatusColumnMutation,
+  createBlankLabelDraft,
+  createLabelsDraft,
+  hasPendingLabelEdits,
+  pruneSettingsForActiveLabels,
+} from '../../domain/statusLabelDraft';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';
-import { GET_BOARD_SETTINGS_METADATA } from '../../services/graphqlQueries';
+import {
+  GET_BOARD_SETTINGS_METADATA,
+  GET_STATUS_COLUMN_REVISION,
+} from '../../services/graphqlQueries';
 import mondayService from '../../services/mondayService';
 import { loadAccountTeams } from '../../services/teamsAccess';
 import useColumnSettings from '../../hooks/useColumnSettings';
@@ -18,6 +30,46 @@ const TEAMS_SCOPE_HINT =
 
 function multiValues(event) {
   return [...event.target.selectedOptions].map((option) => option.value);
+}
+
+function LabelEditorRow({
+  label,
+  onRename,
+  onRecolor,
+  onRemove,
+}) {
+  return (
+    <div className="twyst-label-editor-row">
+      <span className="twyst-label-dot" style={{ '--status-color': label.color }} />
+      <input
+        className="twyst-label-name-input"
+        type="text"
+        value={label.label}
+        aria-label="שם הלייבל"
+        onChange={(event) => onRename(label.clientKey, event.target.value)}
+      />
+      <select
+        className="twyst-label-color-select"
+        value={String(label.colorValue)}
+        aria-label="צבע הלייבל"
+        onChange={(event) => onRecolor(label.clientKey, event.target.value)}
+      >
+        {MONDAY_STATUS_COLORS.map((choice) => (
+          <option key={choice.enum} value={choice.enum}>
+            {choice.enum}
+          </option>
+        ))}
+      </select>
+      <span
+        className="twyst-label-color-preview"
+        style={{ background: resolveStatusColorHex(label.colorValue) || label.color }}
+        aria-hidden="true"
+      />
+      <button type="button" className="twyst-label-remove" onClick={() => onRemove(label.clientKey)}>
+        הסרה
+      </button>
+    </div>
+  );
 }
 
 function LabelRuleCard({
@@ -103,6 +155,8 @@ function ColumnSettings({ context }) {
 
   const [metadata, setMetadata] = useState(null);
   const [draft, setDraft] = useState(null);
+  const [labelsDraft, setLabelsDraft] = useState(null);
+  const [labelsBaseline, setLabelsBaseline] = useState(null);
   const [metaLoading, setMetaLoading] = useState(true);
   const [metaError, setMetaError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -152,10 +206,15 @@ function ColumnSettings({ context }) {
     () => metadata?.columns.find((column) => column.id === columnId) ?? null,
     [metadata, columnId],
   );
-  const labels = useMemo(
-    () => normalizeStatusLabels(statusColumn?.settings).filter((label) => !label.isDeactivated),
-    [statusColumn],
-  );
+
+  useEffect(() => {
+    if (!statusColumn) return;
+    const all = normalizeStatusLabels(statusColumn.settings);
+    const draftLabels = createLabelsDraft(all);
+    setLabelsDraft(draftLabels);
+    setLabelsBaseline(draftLabels);
+  }, [statusColumn]);
+
   const formColumns = useMemo(
     () => (metadata?.columns ?? []).filter((column) => column.id !== columnId),
     [metadata, columnId],
@@ -193,11 +252,81 @@ function ColumnSettings({ context }) {
     });
   };
 
+  const renameLabel = (clientKey, nextName) => {
+    setLabelsDraft((current) => current.map((label) => (
+      label.clientKey === clientKey ? { ...label, label: nextName } : label
+    )));
+  };
+
+  const recolorLabel = (clientKey, colorEnum) => {
+    setLabelsDraft((current) => current.map((label) => (
+      label.clientKey === clientKey
+        ? {
+          ...label,
+          colorValue: colorEnum,
+          color: resolveStatusColorHex(colorEnum) || label.color,
+        }
+        : label
+    )));
+  };
+
+  const removeLabel = (clientKey) => {
+    setLabelsDraft((current) => current.filter((label) => label.clientKey !== clientKey));
+  };
+
+  const addLabel = () => {
+    setLabelsDraft((current) => [...current, createBlankLabelDraft(current)]);
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
       setSaveError(null);
-      const next = migrateSettings(draft);
+
+      if (!labelsDraft || labelsDraft.length === 0) {
+        setSaveError('חייבים להשאיר לפחות לייבל פעיל אחד בעמודת הסטטוס.');
+        return;
+      }
+      if (labelsDraft.some((label) => !String(label.label || '').trim())) {
+        setSaveError('לכל לייבל חייב להיות שם.');
+        return;
+      }
+
+      let activeLabelIds = labelsDraft
+        .filter((label) => !label.isNew)
+        .map((label) => String(label.id));
+
+      if (hasPendingLabelEdits(labelsDraft, labelsBaseline)) {
+        const revisionData = await mondayService.query(GET_STATUS_COLUMN_REVISION, {
+          boardIds: [String(boardId)],
+          columnIds: [columnId],
+        });
+        const liveColumn = revisionData?.boards?.[0]?.columns?.[0];
+        const revision = liveColumn?.revision;
+        if (!revision) {
+          throw new Error('חסר revision לעמודת הסטטוס — לא ניתן לעדכן לייבלים');
+        }
+        const liveFresh = normalizeStatusLabels(liveColumn.settings);
+        const payload = buildStatusLabelsUpdatePayload(labelsDraft, liveFresh);
+        const mutation = buildUpdateStatusColumnMutation(payload);
+        await mondayService.query(mutation, {
+          boardId: String(boardId),
+          columnId,
+          revision: String(revision),
+        });
+
+        const refreshed = await mondayService.query(GET_STATUS_COLUMN_REVISION, {
+          boardIds: [String(boardId)],
+          columnIds: [columnId],
+        });
+        const refreshedColumn = refreshed?.boards?.[0]?.columns?.[0];
+        const refreshedLabels = normalizeStatusLabels(refreshedColumn?.settings);
+        activeLabelIds = refreshedLabels
+          .filter((label) => !label.isDeactivated)
+          .map((label) => String(label.id));
+      }
+
+      const next = pruneSettingsForActiveLabels(draft, activeLabelIds);
       const { ok, problems } = validateSettings(next, metadata.columns);
       if (!ok) {
         logger.warn('ColumnSettings', 'Settings failed validation', { problems });
@@ -218,13 +347,18 @@ function ColumnSettings({ context }) {
       mondayService.closeDialog();
     } catch (err) {
       logger.error('ColumnSettings', 'Failed to save column settings', err);
-      setSaveError('שמירת ההגדרות נכשלה. נסו שוב.');
+      const message = err?.message || '';
+      if (/in use|can't delete|cannot delete|default/i.test(message)) {
+        setSaveError('לא ניתן להסיר לייבל שנמצא בשימוש בפריטים או שהוא ברירת המחדל של העמודה.');
+      } else {
+        setSaveError('שמירת ההגדרות נכשלה. נסו שוב.');
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  if (settingsLoading || metaLoading || !draft) {
+  if (settingsLoading || metaLoading || !draft || !labelsDraft) {
     return <LoadingState message="טוען הגדרות…" />;
   }
   if (settingsError) {
@@ -238,20 +372,45 @@ function ColumnSettings({ context }) {
   }
 
   const hiddenSet = new Set(draft.hiddenLabelIds);
+  // Permission cards only for existing (non-new) labels that still have stable ids.
+  const ruleLabels = labelsDraft.filter((label) => !label.isNew);
 
   return (
     <main className="twyst-settings" dir="rtl">
       <header>
         <p className="twyst-eyebrow">Twyst Your Status</p>
         <h1>הגדרות לייבלים</h1>
-        <p>לכל לייבל יעד: מי מורשה לבחור אותו, ואילו שדות חובה למלא לפני המעבר.</p>
+        <p>
+          ערכו את לייבלי הסטטוס בלוח (שם, צבע, הוספה והסרה), ולכל לייבל יעד הגדירו מי מורשה
+          לבחור אותו ואילו שדות חובה למלא לפני המעבר. בלי הגדרות שמורות — כל הסטטוסים מותרים.
+        </p>
       </header>
 
       {!metadata.teamsAvailable && (
         <AttentionBox type="warning" text={TEAMS_SCOPE_HINT} />
       )}
 
-      {labels.map((label) => (
+      <section className="twyst-label-editor" aria-labelledby="label-editor-title">
+        <div className="twyst-label-editor-header">
+          <h2 id="label-editor-title">לייבלים בעמודה</h2>
+          <button type="button" onClick={addLabel} disabled={saving}>הוספת לייבל</button>
+        </div>
+        <p className="twyst-hint">
+          הסרה מבטלת את הלייבל בעמודת הסטטוס (לא ניתן להסיר לייבל שבשימוש בפריטים).
+          הרשאות ללייבל חדש יופיעו אחרי שמירה.
+        </p>
+        {labelsDraft.map((label) => (
+          <LabelEditorRow
+            key={label.clientKey}
+            label={label}
+            onRename={renameLabel}
+            onRecolor={recolorLabel}
+            onRemove={removeLabel}
+          />
+        ))}
+      </section>
+
+      {ruleLabels.map((label) => (
         <LabelRuleCard
           key={label.id}
           label={label}

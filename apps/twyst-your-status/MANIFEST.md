@@ -22,7 +22,9 @@
 - Selecting a label with required fields always opens a fill form (even when filled);
   submit writes the form columns and the status together via
   `change_multiple_column_values`.
-- Unconfigured column (no storage value) shows **"העמודה לא הוגדרה"** in the picker.
+- Unconfigured column (no storage value) ⇒ empty rules: **all active statuses are allowed**.
+- Settings can also edit the board status labels themselves (rename / recolor / add /
+  deactivate) via `update_status_column`, in addition to per-label permissions.
 
 ## Required scopes
 

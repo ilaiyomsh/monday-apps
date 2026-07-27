@@ -10,6 +10,7 @@ export const GET_STATUS_COLUMN_CONTEXT = `
         id
         title
         type
+        revision
         settings
       }
     }
@@ -57,6 +58,7 @@ export const GET_STATUS_COLUMN_SETTINGS = `
         id
         title
         type
+        revision
         settings
       }
     }
@@ -72,6 +74,7 @@ export const GET_BOARD_SETTINGS_METADATA = `
         id
         title
         type
+        revision
         settings
       }
     }
@@ -140,6 +143,24 @@ export const UPDATE_MULTIPLE_COLUMN_VALUES = `
       column_values: $columnValues
     ) {
       id
+    }
+  }
+`;
+
+/** Fresh revision for optimistic concurrency on update_status_column. */
+export const GET_STATUS_COLUMN_REVISION = `
+  query GetStatusColumnRevision(
+    $boardIds: [ID!]
+    $columnIds: [String!]
+  ) {
+    boards(ids: $boardIds) {
+      id
+      columns(ids: $columnIds) {
+        id
+        type
+        revision
+        settings
+      }
     }
   }
 `;

@@ -96,11 +96,19 @@ export function normalizeStatusLabels(columnSettings) {
       return [];
     }
 
+    const colorValue = typeof label.color === 'number' || typeof label.color === 'string'
+      ? label.color
+      : undefined;
+    const color = typeof label.hex === 'string' && label.hex
+      ? label.hex
+      : '#c4c4c4';
+
     return [{
       id: String(label.id),
       index: label.index,
       label: typeof label.label === 'string' ? label.label : '',
-      color: typeof label.hex === 'string' ? label.hex : '#c4c4c4',
+      color,
+      colorValue,
       isDone: label.is_done === true,
       isDeactivated: label.is_deactivated === true,
     }];
