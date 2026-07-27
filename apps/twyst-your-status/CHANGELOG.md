@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.2.4
+
+- Settings overlay opens at ≥80% of the viewport (min 720×560, capped at 94%
+  on tiny screens) — no more postcard-sized `744px` dialog.
+
 ## 3.2.3
 
 - Revert status picker to the cell-attached Dialog Design (no centered
