@@ -53,7 +53,7 @@ jobs:
       - name: Authenticate mapps CLI (non-interactive)
         run: mapps init -t "$MONDAY_TOKEN"
         env:
-          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
 
       # -c is "-c" for client-side (CDN) apps, empty for
       # server-side (monday-code) apps — the only difference between the two.
@@ -63,5 +63,5 @@ jobs:
           -d apps/twyst-your-status/.
           -a "$APP_ID"
         env:
-          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
           APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}
