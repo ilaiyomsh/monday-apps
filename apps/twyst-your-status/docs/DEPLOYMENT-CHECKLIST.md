@@ -27,7 +27,7 @@ Changing scopes can require existing installers to authorize the app again.
 
 - `pnpm --filter ./apps/twyst-your-status test`
 - `pnpm --filter ./apps/twyst-your-status lint`
-- `pnpm --filter ./apps/twyst-your-status build` → `dist/` (+ `dist/picker`, `dist/settings`)
+- `pnpm --filter ./apps/twyst-your-status build` → `dist/` (+ `dist/picker`, `dist/settings`, `dist/settings-full`)
 
 ## Deployment
 
