@@ -23,18 +23,19 @@ function initialsOf(name) {
 }
 
 function photoOf(user) {
-  return user?.photo_url?.thumb ?? null;
+  return user?.photo_thumb ?? user?.photo_url?.thumb ?? null;
 }
 
 // Module-level roster cache: one users query per page load, shared by every
-// picker instance. Avatar URLs use monday's typed photo URL object.
+// picker instance. Avatar URLs use monday's photo_thumb (API 2026-04 pin —
+// photo_url { thumb } only exists from 2026-07).
 let rosterCache = null;
 let rosterPromise = null;
 async function loadRoster() {
   if (rosterCache) return rosterCache;
   if (!rosterPromise) {
     rosterPromise = mondayService
-      .query('query AccountUsers($limit: Int) { users(limit: $limit) { id name photo_url { thumb } } }', { limit: 500 })
+      .query('query AccountUsers($limit: Int) { users(limit: $limit) { id name photo_thumb } }', { limit: 500 })
       .then((data) => {
         rosterCache = data?.users || [];
         return rosterCache;
