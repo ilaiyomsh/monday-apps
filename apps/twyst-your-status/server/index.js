@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { EnvironmentVariablesManager } from '@mondaycom/apps-sdk';
+import { EnvironmentVariablesManager, SecretsManager } from '@mondaycom/apps-sdk';
 import { createApp } from './app.js';
 import { getEnv } from './env.js';
 import logger from './logger.js';
@@ -14,8 +14,9 @@ import { createSecureStorageBackend } from './storage/secureStorageBackend.js';
 import { createWorkflowStore } from './storage/workflowStore.js';
 
 installProcessGuards(logger);
-new EnvironmentVariablesManager({ updateProcessEnv: true });
-const env = getEnv();
+const environmentManager = new EnvironmentVariablesManager();
+const secretsManager = new SecretsManager();
+const env = getEnv({ environmentManager, secretsManager });
 const backend = env.useMemoryStorage ? createMemoryBackend() : createSecureStorageBackend();
 const store = createWorkflowStore({ backend });
 const mondayApi = createMondayApi();
