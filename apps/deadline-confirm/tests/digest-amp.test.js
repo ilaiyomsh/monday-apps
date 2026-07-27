@@ -175,6 +175,27 @@ describe('renderDigestAmp — monday table + inlined LabelPicker', () => {
     expect(doc).not.toMatch(/\schecked(=|\s|>)/);
   });
 
+  it('matches monday status-picker-wrapper-v2 size and typography (200px / 34px / 14px normal)', () => {
+    const doc = render();
+    expect(doc).toContain('class="picker"');
+    const pickerCss = doc.match(/\.picker\s*\{[^}]+\}/)?.[0] ?? '';
+    const optFillCss = doc.match(/\.opt-fill\s*\{[^}]+\}/)?.[0] ?? '';
+    // Container: monday status-picker-wrapper-v2 is ~200px wide (not max-width alone)
+    expect(pickerCss).toMatch(/(?<![-\w])width:200px/);
+    expect(pickerCss).toMatch(/max-width:200px/);
+    expect(pickerCss).toMatch(/padding:10px/);
+    expect(pickerCss).toMatch(/border:1px solid #0073ea/);
+    // Labels: discussions statusOption — 34px tall, 14px / font-weight normal
+    expect(optFillCss).toMatch(/font-size:14px/);
+    expect(optFillCss).toMatch(/font-weight:normal/);
+    expect(optFillCss).toMatch(/line-height:34px/);
+    expect(optFillCss).toMatch(/(?<![-\w])height:34px/);
+    expect(optFillCss).toMatch(/border-radius:4px/);
+    expect(doc).toMatch(/Figtree/);
+    const optInputCss = doc.match(/\.opt input\s*\{[^}]+\}/)?.[0] ?? '';
+    expect(optInputCss).not.toMatch(/position:\s*absolute/);
+  });
+
   it('offers only authorized buttons per task and unions when a task spans sections', () => {
     const doc = render();
     expect(doc).not.toContain(`name="item_9001" value="${BTN_DONE.id}"`);

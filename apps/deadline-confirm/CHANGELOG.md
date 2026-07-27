@@ -2,6 +2,14 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.8.4 — 2026-07-27 — style: AMP status picker matches monday status-picker-wrapper-v2
+
+- Picker column styled like monday's native status picker: **200px** wide,
+  **10px** padding, thin blue border + soft shadow.
+- Option labels: **34px** tall, **14px** / `font-weight: normal`, Figtree/Roboto
+  stack (parity with discussions `statusOption` / monday wrapper ~200×313).
+- Checked option outline uses monday blue `#0073ea`. AMP-safe (no `position`).
+
 ## 0.8.3 — 2026-07-27 — feat: digest AMP — LabelPicker-style status + all date columns
 
 - **AMP digest UI:** monday-like board table; current status as `statusFill`;
