@@ -130,6 +130,38 @@ qualify at 15:00, so a legitimate click gets rejected), and it moves
 authorization out of cryptography and into business logic, where a filter bug
 becomes an authorization bypass.
 
+### D11 — Runtime assignee check. NOT clicker identity.
+
+At execution time, compare the signed `recipientPersonId` against the person ids
+in the item's people column. If the signed person is not among the item's
+assignees, that item is refused.
+
+Costs zero extra API calls: `performAction` already fetches the item with
+`peopleColumnId` for attribution.
+
+What it buys: a task reassigned after the message was sent can no longer be acted
+on with that message; the R2 invariant is enforced at runtime and not only at
+build time; and a leaked manifest is further narrowed to tasks still assigned to
+the person it was issued to.
+
+**What it does NOT buy, and must never be presented as buying: verification of who
+clicked.** AMP for Email transmits no clicker identity — unlike Outlook Actionable
+Messages, which sends a signed token identifying the user. The request carries
+`AMP-Email-Sender` (our own sending mailbox, set by the recipient's mail server)
+and the hidden fields we baked in at send time. Nothing in it reveals the mailbox
+the click came from.
+
+Concretely: if the message is forwarded to Bob and Bob submits the form, the
+request is byte-identical to Alice's, because the hidden fields travel with the
+message. There is no field to compare. Do not implement a "forwarded mailbox"
+check — it is not expressible.
+
+Related fact, worth recording but not a control we own: **Gmail strips the AMP
+part on forward**, so a forwarded message shows only the `text/plain` part and has
+no form at all. That blocks the naive forwarding case, but it is Gmail's
+behaviour, not ours, and it does not cover access to the original mailbox, a copy
+of the raw MIME, or a screenshot of the source.
+
 ---
 
 ## 2. Endpoint inventory after the change
@@ -164,7 +196,7 @@ the message authorizes: which tasks, and for each task which buttons are offered
 slot     = date (YYYYMMDD) of the scheduled send, Asia/Jerusalem
 manifest = "<itemId>:<btnId>[,<btnId>…][;<itemId>:…]"   canonical: items ascending,
                                                         buttons ascending, no spaces
-payload  = accountId | recipientEmail | slot | manifest  (single-byte "|" separator)
+payload  = accountId | recipientPersonId | slot | manifest  (single-byte "|" separator)
 sig      = base64url( HMAC-SHA256(link_secret, payload) )
 ```
 
@@ -172,11 +204,16 @@ The manifest is **not secret** — it lists item and button ids that the message
 already displays. Signing it is what binds authorization to a specific task set,
 so nothing outside the manifest can ever be acted on.
 
-`recipientEmail` is inside the payload. It is not needed to constrain scope (the
-manifest already does that), but it means the server knows **cryptographically**
-which mailbox a code was issued to. That upgrades R2 from an assumption to a
-provable fact and is available for free if the attribution wording is ever
-changed — see §6.
+`recipientPersonId` is inside the payload. It is not needed to constrain scope
+(the manifest already does that); it exists so the server knows
+**cryptographically** which person a code was issued to. Two uses: the runtime
+assignee check in D11, and provable attribution if the wording in R2 is ever
+changed (§6).
+
+A person **id** is signed rather than an email address because the item's people
+column already returns person ids — so the D11 check costs **zero** extra API
+calls. Signing the address instead would force a users-board read on the hot
+path.
 
 ### Current slot
 
@@ -213,10 +250,10 @@ scheduler failure, not widening the window.
 - Radio group name is per task (`item_<itemId>`); accept only field names matching
   `^item_\d{1,20}$` and ignore everything else.
 - Unselected tasks submit nothing.
-- `recipientEmail` is **not** a wire field — the server takes it from the manifest
-  verification step only if it is needed for logging. If it must be transmitted,
-  transmit it and include it in the recompute; do not let a submitted value
-  bypass the signature.
+- `recipientPersonId` must be transmitted (it is an input to the recompute) and it
+  is **not** secret. It is protected by being inside the HMAC: a submitted value
+  that has been altered simply fails verification. Never read it from the request
+  for any purpose other than recomputing the signature.
 
 ### Verification order (security contract — do not reorder)
 
@@ -233,14 +270,27 @@ scheduler failure, not widening the window.
 7. Parse selections. Every `(itemId, btnId)` pair **must appear in the verified
    manifest**; reject on no selections, an unknown item, or a button not offered
    for that item.
-8. **All-or-nothing.** Any failure in 3–7 rejects the whole request with the
-   generic invalid message and performs no mutation. This is not cosmetic: the
-   response returns counts, so partial execution would turn those counts into a
-   verification oracle.
+8. **All-or-nothing for integrity failures.** Any failure in 3–7 rejects the whole
+   request with the generic invalid message and performs no mutation. This is not
+   cosmetic: the response returns counts, so partial execution at this stage would
+   turn those counts into a verification oracle.
 9. **Rate limit, bucket B** — the existing `accountId:ip` bucket.
-10. `performAction` per selection, passing that selection's own `btnId`.
+10. `performAction` per selection, passing that selection's own `btnId`, plus the
+    D11 assignee check.
 
 Steps 3–8 must complete before any monday API call.
+
+### Two classes of failure — do not collapse them
+
+| Class | Examples | Handling |
+|---|---|---|
+| **Integrity** (before execution) | bad signature, expired slot, item or button absent from the manifest, malformed manifest | **reject the entire request**, generic message, no mutation |
+| **State** (during execution) | D11 assignee mismatch, already at target, item not found, API error | **per item**, reported in the response counts |
+
+Collapsing state failures into all-or-nothing would mean one reassigned task
+silently kills a batch of nine good ones. It does not reopen the oracle: reaching
+the execution stage at all requires a valid signature, and a holder of a valid
+signature already knows what their own manifest contains.
 
 Note the inversion from the old `/confirm` contract, where the secret gate ran
 before the rate limit. Here bucket A runs first (§4) and the signature is checked
@@ -316,7 +366,12 @@ mailbox is an organization-level problem with far wider consequences than this
 app.
 
 **R2 — Attribution is an assumption, not proof.** The board update names the
-person from the task's people column, not the actual clicker.
+person from the task's people column, not the actual clicker. D11 narrows the gap
+— the code is cryptographically bound to a person and the task must still be
+assigned to them — but it does not close it: AMP carries no clicker identity, so
+"assigned to" is not "pressed by". If provable attribution is ever wanted, the
+signed `recipientPersonId` already supports wording like "confirmed via the
+message issued to X" at no extra cost.
 
 > **Invariant that R1 and R2 depend on:** a recipient's digest must contain
 > **only tasks assigned to that recipient**. Today `digest-service` builds
@@ -366,7 +421,10 @@ the only authorization.
       no network.
 - [ ] T6 — rewrite `POST /amp/confirm` to the §3 verification order: manifest
       verified before selections are read, every selection checked against the
-      manifest, all-or-nothing, per-selection `btnId`.
+      manifest, all-or-nothing for integrity failures, per-selection `btnId`.
+- [ ] T6b — D11 assignee check inside `performAction`, using the person ids
+      already fetched from the people column. Returns a per-item state outcome,
+      never a whole-request rejection.
 - [ ] T7 — two-bucket rate limiter (§4).
 - [ ] T8 — `text/plain` renderer (§5).
 - [ ] T9 — multipart/alternative assembly for the Gmail API send path.
@@ -395,6 +453,8 @@ the only authorization.
   - a tampered manifest (item added, button added, reordered) is rejected;
   - an invalid signature is rejected **without** the selection fields being read;
   - one bad selection rejects the entire batch (the oracle guard);
+  - a reassigned item is refused by D11 **without** failing its batch-mates;
+  - a tampered `recipientPersonId` fails signature verification;
   - the R2 invariant: a digest section contains only the recipient's tasks.
 - **error-guard:** every catch logs, rethrows, or displays. GraphQL soft errors
   inside 200 responses are thrown at the API funnel.
