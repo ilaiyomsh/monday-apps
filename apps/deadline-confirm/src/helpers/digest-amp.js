@@ -91,26 +91,6 @@ export function resolveSectionButtons(section) {
 }
 
 /**
- * Collect unique item ids (string) across populated sections — for amp-state.
- * @param {object} recipient
- * @returns {string[]}
- */
-function collectItemIds(recipient) {
-  const ids = [];
-  const seen = new Set();
-  for (const section of recipient.sections ?? []) {
-    if (!section.tasks || section.tasks.length === 0) continue;
-    for (const task of section.tasks) {
-      const id = String(task.itemId);
-      if (!id || seen.has(id)) continue;
-      seen.add(id);
-      ids.push(id);
-    }
-  }
-  return ids;
-}
-
-/**
  * AMP4EMAIL forbids [style] on <button> — bind background via [class] instead.
  * @param {string} hex
  * @returns {string} e.g. bg_fdab3d
