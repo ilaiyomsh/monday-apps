@@ -155,13 +155,35 @@ export function App() {
   const onRotate = async () => {
     setRotating(true);
     setRotateSuccess(false);
+    setSaveStatus({ kind: 'idle' });
     try {
-      await apiFetch<{ ok: boolean }>('/api/secret/rotate', { method: 'POST' });
+      // Masked secret only (V6 write-only full secret) — update UI without relying
+      // on a follow-up GET /api/state that can 500 on SecureStorage after write.
+      const res = await apiFetch<{ ok: boolean; secret: string | null }>('/api/secret/rotate', {
+        method: 'POST',
+      });
       setRotateSuccess(true);
-      await loadState({ initDraft: false });
+      setState((s) => (s ? { ...s, secret: res.secret ?? s.secret } : s));
+      try {
+        await loadState({ initDraft: false });
+      } catch (refreshErr) {
+        logger.error('admin', 'secret_rotate_refresh_failed', refreshErr);
+        setSaveStatus({
+          kind: 'error',
+          message: 'המפתח הוחלף, אבל רענון המסך נכשל. רעננו את העמוד.',
+        });
+      }
     } catch (err) {
       logger.error('admin', 'secret_rotate_failed', err);
-      setSaveStatus({ kind: 'error', message: 'יצירת מפתח חדש נכשלה. נסו שוב.' });
+      setRotateSuccess(false);
+      const detail =
+        err instanceof ApiError && typeof err.message === 'string' && err.message.startsWith('[admin ')
+          ? err.message
+          : null;
+      setSaveStatus({
+        kind: 'error',
+        message: detail ?? 'יצירת מפתח חדש נכשלה. נסו שוב.',
+      });
     } finally {
       setRotating(false);
     }

@@ -349,7 +349,11 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
           path: req.path,
           error: String(err?.message ?? err),
         });
-        res.status(500).json({ error: 'internal_error' });
+        res.status(500).json({
+          error: 'internal_error',
+          // Distinct path tag so the admin pink box / Network tab name the failing route.
+          message: `[admin ${req.path}] פעולה נכשלה בשרת. נסו שוב.`,
+        });
       }
     };
   }
@@ -403,9 +407,10 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     guarded(async (req, res) => {
       const secret = generateSecret();
       await storage.forAccount(req.session.accountId).setLinkSecret(secret);
-      // V6 (D3/D4): the secret is write-only — rotation invalidates outstanding
-      // signatures but never returns the new value to the client.
-      res.json({ ok: true });
+      // V6 (D3/D4): the FULL secret is write-only — never returned. The masked
+      // form is safe (same as GET /api/state) and lets the admin UI update
+      // without a follow-up GET that can race SecureStorage after a write.
+      res.json({ ok: true, secret: maskSecret(secret) });
     })
   );
 

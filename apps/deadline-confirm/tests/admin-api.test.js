@@ -416,7 +416,7 @@ describe('PUT /api/config (v6 shape, v3 scoping)', () => {
 });
 
 describe('POST /api/secret/rotate', () => {
-  it("persists a 43-char base64url secret under the SESSION account's link_secret key but returns only { ok: true } (V6: secret is write-only)", async () => {
+  it("persists a 43-char base64url secret and returns { ok:true, secret:masked } only (V6: full secret is write-only)", async () => {
     const { app, backend } = makeHarness();
 
     const res = await request(app)
@@ -424,13 +424,15 @@ describe('POST /api/secret/rotate', () => {
       .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
-    expect(res.body).toStrictEqual({ ok: true });
+    expect(res.body.ok).toBe(true);
+    expect(Object.keys(res.body).toSorted()).toStrictEqual(['ok', 'secret']);
     const stored = await backend.get(scoped('link_secret'));
     expect(stored).toMatch(BASE64URL_43);
+    expect(res.body.secret).toBe(`****${stored.slice(-4)}`);
     expect(await backend.get('link_secret')).toBeNull();
   });
 
-  it('returns a DIFFERENT secret on a second rotation and overwrites the stored one (spec §15.6)', async () => {
+  it('returns a DIFFERENT masked secret on a second rotation and overwrites the stored one (spec §15.6)', async () => {
     const { app, backend } = makeHarness();
 
     await request(app)
@@ -442,10 +444,40 @@ describe('POST /api/secret/rotate', () => {
       .set('Authorization', authHeader());
 
     expect(second.status).toBe(200);
-    expect(second.body).toStrictEqual({ ok: true });
+    expect(second.body.ok).toBe(true);
     const secondStored = await backend.get(scoped('link_secret'));
     expect(secondStored).toMatch(BASE64URL_43);
     expect(secondStored).not.toBe(firstStored);
+    expect(second.body.secret).toBe(`****${secondStored.slice(-4)}`);
+    expect(second.body.secret).not.toBe(`****${firstStored.slice(-4)}`);
+  });
+
+  it('answers 500 internal_error with [admin /api/secret/rotate] message when storage set throws', async () => {
+    const backend = {
+      get: async () => null,
+      set: async () => {
+        throw new Error('secure_storage_set_failed: boom');
+      },
+      delete: async () => {},
+    };
+    const storage = createAppStorage({ backend });
+    const app = createApp({
+      storage,
+      api: { fetchMe: vi.fn() },
+      rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
+      env: ENV,
+      fetchImpl: vi.fn(),
+    });
+
+    const res = await request(app)
+      .post('/api/secret/rotate')
+      .set('Authorization', authHeader());
+
+    expect(res.status).toBe(500);
+    expect(res.body).toStrictEqual({
+      error: 'internal_error',
+      message: '[admin /api/secret/rotate] פעולה נכשלה בשרת. נסו שוב.',
+    });
   });
 });
 
@@ -489,10 +521,12 @@ describe('per-session account scoping (v3 isolation)', () => {
       .post('/api/secret/rotate')
       .set('Authorization', authHeader({ accountId: 777 }));
     expect(rotate.status).toBe(200);
-    expect(rotate.body).toStrictEqual({ ok: true });
+    expect(rotate.body.ok).toBe(true);
+    expect(rotate.body.secret).toMatch(/^\*\*\*\*[A-Za-z0-9_-]{4}$/);
 
     const storedSecret = await backend.get(scoped('link_secret', ACCOUNT_ID));
     expect(storedSecret).toMatch(BASE64URL_43);
+    expect(rotate.body.secret).toBe(`****${storedSecret.slice(-4)}`);
     expect(await backend.get(scoped('link_secret', OTHER_ACCOUNT_ID))).toBeNull();
 
     const stateB = await request(app)

@@ -42,8 +42,11 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     let message = `request failed: ${res.status}`;
     let field: string | undefined;
     try {
-      const body = (await res.json()) as { error?: string; field?: string };
-      if (body.error) message = body.error;
+      const body = (await res.json()) as { error?: string; field?: string; message?: string };
+      // Prefer server `message` (Hebrew diagnostic with [admin …] / [E…] tags)
+      // when present; fall back to the stable `error` code.
+      if (typeof body.message === 'string' && body.message.length > 0) message = body.message;
+      else if (body.error) message = body.error;
       field = body.field;
     } catch {
       // non-JSON error body — keep the status-based message (AbortError-style

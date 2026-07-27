@@ -596,7 +596,7 @@ are **removed**. Resend is retired; Gmail API send is the planned channel (T9).
 | Route | V6 change |
 |---|---|
 | `POST /amp/confirm` | **only** public write path; V6 verification order in `src/routes/amp.js` |
-| `POST /api/secret/rotate` | returns `{ ok: true }` only — secret never exposed |
+| `POST /api/secret/rotate` | returns `{ ok: true, secret: '****xxxx' }` — full secret never exposed |
 | `GET /api/digest/preview` | returns `{ plain, amp }` — drops `html` |
 | `PUT /api/config` | `digest.sendHour` validated 0–23, default 8 |
 

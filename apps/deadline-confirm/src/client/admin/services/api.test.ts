@@ -48,6 +48,22 @@ describe('apiFetch', () => {
     expect((err as ApiError).field).toBe('boardId');
   });
 
+  it('prefers body.message (Hebrew diagnostic) over body.error when both are present', async () => {
+    stubFetch({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        error: 'internal_error',
+        message: '[admin /api/secret/rotate] פעולה נכשלה בשרת. נסו שוב.',
+      }),
+    });
+
+    const err = await apiFetch('/api/secret/rotate', { method: 'POST' }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).message).toBe('[admin /api/secret/rotate] פעולה נכשלה בשרת. נסו שוב.');
+    expect((err as ApiError).status).toBe(500);
+  });
+
   it('falls back to a status-based message when the error body is not JSON', async () => {
     stubFetch({ ok: false, status: 502 });
 

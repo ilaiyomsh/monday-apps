@@ -2,7 +2,7 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
-## 0.9.1 — 2026-07-27 — fix: distinct AMP error codes + `[E…]` Hebrew messages
+## 0.9.1 — 2026-07-27 — fix: distinct AMP errors + secret-rotate UX
 
 - Every `/amp/confirm` failure path now returns a **distinct** `error` code and a
   Hebrew `message` tagged `[E1a]`…`[E10]` / `[E99]` (was collapsed into
@@ -11,6 +11,11 @@
   `bad_manifest` [E3b], `bad_slot` [E5], `bad_sig` [E6], `conflict_item` [E7b],
   `manifest_violation` [E8], `rate_limited_account` [E9].
 - No ids in messages (no verification oracle). Map: `MESSAGES` in `src/routes/amp.js`.
+- **Secret rotate:** `POST /api/secret/rotate` returns masked `secret` so the admin
+  UI no longer depends on a follow-up `GET /api/state` (which could 500 and show
+  both green success and "יצירת מפתח נכשלה"). Refresh failure is reported separately.
+- Admin `internal_error` responses include `[admin <path>]` for Network diagnosis;
+  SecureStorage failures are wrapped as `secure_storage_*_failed`.
 
 ## 0.9.0 — 2026-07-27 — feat: AMP digest — one table per cluster + multi-button columns
 

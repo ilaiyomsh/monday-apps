@@ -76,7 +76,8 @@ src/
   `multi_person`. Pending = date ≤ today (Asia/Jerusalem) AND status in
   section's `includeStatusLabelIds`.
 - **V6 preview:** `GET /api/digest/preview` → `{ plain, amp }` (no `html`).
-  **`POST /api/secret/rotate` → `{ ok: true }` only.**
+  **`POST /api/secret/rotate` → `{ ok: true, secret: '****xxxx' }`** (masked
+  only — full secret never leaves the server).
 - **V6 scheduler:** `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`)
   walks `ALLOWED_ACCOUNT_IDS`, runs tenants whose `digest.sendHour` matches the
   current Asia/Jerusalem hour; then optional operator summary to `OPERATOR_EMAIL`.

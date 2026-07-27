@@ -66,8 +66,10 @@ endpoints that returned the secret unmasked, and static pasted HTML cannot carry
 a signature that changes daily. The per-button-per-task UX they produced is also
 being replaced by D9.
 
-`POST /api/secret/rotate` keeps rotating the secret but **stops returning it** —
-nothing needs to display it any more. Rotation remains the emergency kill switch:
+`POST /api/secret/rotate` keeps rotating the secret but **never returns the
+full value** — response is `{ ok: true, secret: '****xxxx' }` (masked only,
+same form as `GET /api/state`) so the admin UI can update without a follow-up
+SecureStorage read. Rotation remains the emergency kill switch:
 it invalidates every outstanding signature at once, because all of them are
 derived from the base secret.
 
@@ -332,7 +334,7 @@ operator's morning email.
 | `GET /oauth/google/callback` | single-use expiring nonce | stores sender token | **new (D13)** |
 | `GET /api/state` | sessionToken (header) | no | secret stays masked |
 | `PUT /api/config` | sessionToken | yes | may gain button config (D9, later) |
-| `POST /api/secret/rotate` | sessionToken | yes | **stops returning the secret** |
+| `POST /api/secret/rotate` | sessionToken | yes | returns masked `secret` only — full secret never exposed |
 | `GET /api/digest/preview` | sessionToken | no | drops `html`, keeps `amp` |
 | `POST /api/digest/send` | sessionToken | yes | manual trigger retained |
 | `GET /health` | none | no | unchanged |
@@ -627,7 +629,8 @@ the only authorization.
       change — must be called out in the PR description.
 - [x] T11 — operator summary email (D8).
 - [x] T12 — resend-today action, reusing the current slot (D6, D8).
-- [x] T13 — `POST /api/secret/rotate` stops returning the secret; admin UI stops
+- [x] T13 — `POST /api/secret/rotate` returns masked secret only; admin UI never
+      shows/copies the full value.
       displaying it.
 - [x] T14 — `GET /api/digest/preview` drops `html`, keeps `amp`.
 
