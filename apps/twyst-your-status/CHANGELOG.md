@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.8
+
+- Settings: teams join the people picker (no separate checklist); each label
+  accordion starts closed; required-columns list collapsed by default; people-
+  column gate uses a custom dropdown matching the settings chrome.
+
 ## 3.2.7
 
 - Settings UI redesign (Vercel-style clarity): soft canvas, compact label rows,
