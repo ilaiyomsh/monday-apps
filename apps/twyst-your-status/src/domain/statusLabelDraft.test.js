@@ -105,6 +105,8 @@ describe('buildStatusLabelsUpdatePayload', () => {
       },
     ];
 
+    // monday requires unique colors across the full payload (incl. deactivated).
+    // Active keeps done_green; deactivated id:1 is remapped off the collision.
     expect(buildStatusLabelsUpdatePayload(draft, LIVE)).toEqual([
       {
         id: 0,
@@ -121,7 +123,7 @@ describe('buildStatusLabelsUpdatePayload', () => {
       },
       {
         id: 1,
-        color: 'done_green',
+        color: 'stuck_red',
         label: 'בוצע',
         index: 1,
         isDeactivated: true,
@@ -132,6 +134,49 @@ describe('buildStatusLabelsUpdatePayload', () => {
         label: 'ארכיון',
         index: 2,
         isDeactivated: true,
+      },
+    ]);
+  });
+
+  it('remaps duplicate colors on active labels so the second keeps a free enum', () => {
+    const draft = [
+      {
+        clientKey: '0',
+        id: '0',
+        index: 0,
+        label: 'א',
+        color: '#00c875',
+        colorValue: 'done_green',
+        isNew: false,
+      },
+      {
+        clientKey: '1',
+        id: '1',
+        index: 1,
+        label: 'ב',
+        color: '#00c875',
+        colorValue: 'done_green',
+        isNew: false,
+      },
+    ];
+    const live = [
+      { id: '0', index: 0, label: 'א', color: '#00c875', colorValue: 1 },
+      { id: '1', index: 1, label: 'ב', color: '#00c875', colorValue: 1 },
+    ];
+    expect(buildStatusLabelsUpdatePayload(draft, live)).toEqual([
+      {
+        id: 0,
+        color: 'done_green',
+        label: 'א',
+        index: 0,
+        isDeactivated: false,
+      },
+      {
+        id: 1,
+        color: 'working_orange',
+        label: 'ב',
+        index: 1,
+        isDeactivated: false,
       },
     ]);
   });

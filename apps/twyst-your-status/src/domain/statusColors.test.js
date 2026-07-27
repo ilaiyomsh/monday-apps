@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   MONDAY_STATUS_COLORS,
+  ensureUniqueStatusColors,
   normalizeStatusColorEnum,
+  pickUnusedStatusColor,
   resolveStatusColorHex,
+  tryNormalizeStatusColorEnum,
 } from './statusColors.js';
 
 describe('normalizeStatusColorEnum', () => {
@@ -44,5 +47,49 @@ describe('MONDAY_STATUS_COLORS', () => {
       enum: 'done_green',
       hex: '#00c875',
     });
+  });
+});
+
+describe('tryNormalizeStatusColorEnum', () => {
+  it('returns null for unknown values instead of throwing', () => {
+    expect(tryNormalizeStatusColorEnum(999)).toBeNull();
+    expect(tryNormalizeStatusColorEnum('not-a-color')).toBeNull();
+    expect(tryNormalizeStatusColorEnum(null)).toBeNull();
+  });
+});
+
+describe('pickUnusedStatusColor', () => {
+  it('returns the first monday enum not present in the used set', () => {
+    expect(pickUnusedStatusColor(['working_orange', 'done_green'])).toBe('stuck_red');
+    expect(pickUnusedStatusColor([])).toBe('working_orange');
+  });
+
+  it('throws when every monday status color is already used', () => {
+    const all = MONDAY_STATUS_COLORS.map((entry) => entry.enum);
+    expect(() => pickUnusedStatusColor(all)).toThrow(/No unused monday status colors remain/);
+  });
+});
+
+describe('ensureUniqueStatusColors', () => {
+  it('keeps the first active color and reassigns collisions, preferring active over deactivated', () => {
+    expect(ensureUniqueStatusColors([
+      { id: 0, color: 'done_green', isDeactivated: false },
+      { id: 1, color: 'done_green', isDeactivated: false },
+      { id: 2, color: 'done_green', isDeactivated: true },
+    ])).toEqual([
+      { id: 0, color: 'done_green', isDeactivated: false },
+      { id: 1, color: 'working_orange', isDeactivated: false },
+      { id: 2, color: 'stuck_red', isDeactivated: true },
+    ]);
+  });
+
+  it('assigns a free enum when a label color cannot be normalized', () => {
+    expect(ensureUniqueStatusColors([
+      { id: 0, color: 'stuck_red', isDeactivated: false },
+      { id: 1, color: 'not-a-color', isDeactivated: false },
+    ])).toEqual([
+      { id: 0, color: 'stuck_red', isDeactivated: false },
+      { id: 1, color: 'working_orange', isDeactivated: false },
+    ]);
   });
 });

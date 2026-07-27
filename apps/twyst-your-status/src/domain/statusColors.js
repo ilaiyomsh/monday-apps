@@ -94,6 +94,75 @@ export function normalizeStatusColorEnum(color) {
 }
 
 /**
+ * Non-throwing map to a StatusColumnColors enum name.
+ * @param {string|number|undefined|null} color
+ * @returns {string|null}
+ */
+export function tryNormalizeStatusColorEnum(color) {
+  if (typeof color === 'number' && Number.isFinite(color)) {
+    return ENUM_BY_INDEX[color] ?? null;
+  }
+  if (typeof color === 'string') {
+    const normalized = color.trim().toLowerCase();
+    if (ENUM_SET.has(normalized)) return normalized;
+    if (HEX_BY_ENUM[normalized]) return normalized;
+    const asNumber = Number(normalized);
+    if (normalized !== '' && Number.isFinite(asNumber)) {
+      return ENUM_BY_INDEX[asNumber] ?? null;
+    }
+    const byHex = MONDAY_STATUS_COLORS.find(
+      (entry) => entry.hex.toLowerCase() === normalized,
+    );
+    if (byHex) return byHex.enum;
+  }
+  return null;
+}
+
+/**
+ * @param {Iterable<string>} usedEnums
+ * @returns {string} next free StatusColumnColors enum name
+ */
+export function pickUnusedStatusColor(usedEnums) {
+  const used = new Set(
+    [...(usedEnums ?? [])]
+      .map((value) => String(value).trim().toLowerCase())
+      .filter(Boolean),
+  );
+  const free = MONDAY_STATUS_COLORS.find((entry) => !used.has(entry.enum));
+  if (!free) {
+    throw new Error('No unused monday status colors remain');
+  }
+  return free.enum;
+}
+
+/**
+ * monday update_status_column rejects payloads where any two labels share a
+ * color (including deactivated). Keep active colors stable; reassign collisions.
+ * @param {Array<{ color: string, isDeactivated?: boolean }>} payload
+ */
+export function ensureUniqueStatusColors(payload) {
+  const list = Array.isArray(payload) ? payload : [];
+  const active = [];
+  const deactivated = [];
+  list.forEach((label) => {
+    if (label?.isDeactivated) deactivated.push(label);
+    else active.push(label);
+  });
+
+  const used = new Set();
+  const assignUnique = (label) => {
+    let color = tryNormalizeStatusColorEnum(label?.color);
+    if (color == null || used.has(color)) {
+      color = pickUnusedStatusColor(used);
+    }
+    used.add(color);
+    return { ...label, color };
+  };
+
+  return [...active.map(assignUnique), ...deactivated.map(assignUnique)];
+}
+
+/**
  * @param {string|number|undefined|null} color
  * @returns {string|undefined}
  */
