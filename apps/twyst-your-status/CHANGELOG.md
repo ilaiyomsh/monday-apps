@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.1
+
+- Status picker no longer closes when the mouse moves: the column Dialog Design
+  shell immediately opens a stable `openAppFeatureModal` (`/picker-full`) so the
+  label list stays open until a choice or an intentional dismiss.
+
 ## 3.2.0
 
 - Settings UI cleaned up to match discussions: header + scroll body + footer,

@@ -7,12 +7,14 @@ Target app: `11775054` (client-side CDN)
 Configure on the draft version:
 
 1. Status Column on-click → `<CDN_ORIGIN>/picker`
+   (auto-opens a stable modal at `/picker-full` so the list does not close on mouse move)
 2. Column settings (slim launcher) → `<CDN_ORIGIN>/settings`
-3. Full settings overlay (opened from the launcher; no separate Dev Center binding required
-   beyond being on the same CDN) → `<CDN_ORIGIN>/settings-full`
+3. Full settings overlay → `<CDN_ORIGIN>/settings-full`
+4. Stable picker overlay → `<CDN_ORIGIN>/picker-full` (no Dev Center binding; same CDN)
 
-The Vite build copies `index.html` into `dist/picker/`, `dist/settings/`, and
-`dist/settings-full/` so the static CDN can serve those paths without rewrite rules.
+The Vite build copies `index.html` into `dist/picker/`, `dist/picker-full/`,
+`dist/settings/`, and `dist/settings-full/` so the static CDN can serve those
+paths without rewrite rules.
 
 ## Version permissions (scopes)
 

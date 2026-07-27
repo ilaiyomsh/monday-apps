@@ -87,7 +87,8 @@ function RequiredFieldsForm({
   );
 }
 
-function OnClickDialog({ context }) {
+function OnClickDialog({ context, variant = 'dialog' }) {
+  const isOverlay = variant === 'overlay';
   const { boardId, columnId, itemId, user } = context || {};
   const {
     settings,
@@ -221,6 +222,18 @@ function OnClickDialog({ context }) {
     }
   };
 
+  const dismissPicker = async () => {
+    try {
+      if (isOverlay) {
+        await mondayService.closeAppFeatureModal();
+      } else {
+        await mondayService.closeDialog();
+      }
+    } catch (err) {
+      logger.error('OnClickDialog', 'Failed to close status picker', err);
+    }
+  };
+
   const handleSelectLabel = async (labelId) => {
     const selectedLabel = pickerModel.options.find((label) => label.id === labelId);
     if (!selectedLabel || user?.isViewOnly) return;
@@ -236,7 +249,7 @@ function OnClickDialog({ context }) {
       setError(null);
       await writeStatusOnly(labelId);
       await mondayService.showNotice(`הסטטוס עודכן ל״${selectedLabel.label}״`);
-      await mondayService.closeDialog();
+      await dismissPicker();
     } catch (err) {
       logger.error('OnClickDialog', 'Failed to update status value', err);
       setError(err.message || 'לא הצלחנו לעדכן את הסטטוס');
@@ -252,7 +265,7 @@ function OnClickDialog({ context }) {
       setError(null);
       await writeStatusAndFields(formTarget.label.id, formTarget.fields, values);
       await mondayService.showNotice(`הסטטוס עודכן ל״${formTarget.label.label}״`);
-      await mondayService.closeDialog();
+      await dismissPicker();
     } catch (err) {
       logger.error('OnClickDialog', 'Failed to save status with required fields', err);
       setError(err.message || 'לא הצלחנו לשמור את המעבר');
@@ -296,7 +309,11 @@ function OnClickDialog({ context }) {
   const NEUTRAL = 'hsl(0 0% 77%)';
 
   return (
-    <main className="status-picker-dialog" aria-label="בחירת סטטוס" dir="rtl">
+    <main
+      className={`status-picker-dialog${isOverlay ? ' is-overlay' : ''}`}
+      aria-label="בחירת סטטוס"
+      dir="rtl"
+    >
       {pickerModel.currentIsHidden && (
         <p className="status-picker-note">
           הסטטוס הנוכחי נקבע מחוץ לבורר (למשל אוטומציה) ואינו מוצג לבחירה.

@@ -7,7 +7,9 @@
 - Settings feature type: column settings placement
 - Client-only CDN app (no monday-code server)
 - Feature URLs (configure on the draft/live version):
-  - On-click dialog: `<CDN_ORIGIN>/picker`
+  - On-click dialog: `<CDN_ORIGIN>/picker` (shell → stable modal)
+  - Stable picker overlay (opened from the shell via `openAppFeatureModal`):
+    `<CDN_ORIGIN>/picker-full`
   - Column settings (tiny shell): `<CDN_ORIGIN>/settings`
   - Full settings overlay (opened from the shell via `openAppFeatureModal`):
     `<CDN_ORIGIN>/settings-full`
