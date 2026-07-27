@@ -14,7 +14,7 @@ const TODAY = '2026-07-19';
 const SECRET = 'SECRET43';
 const BASE = 'https://app.example';
 const PERSON_ID = '501';
-const SEND_HOUR = 8;
+const SEND_HOUR = 15;
 const PREVIEW_NOW = new Date(`${TODAY}T09:00:00+03:00`);
 const SLOT = currentSlot({ sendHour: SEND_HOUR, now: PREVIEW_NOW });
 const MANIFEST = buildManifest([{ itemId: '9001', btnId: 'b_start001' }]);
@@ -58,6 +58,7 @@ const CONFIG = {
     usersPeopleColumnId: 'people_u',
     usersEmailColumnId: 'email_u',
     subject: 'המשימות שלך',
+    sendHour: SEND_HOUR,
     sections: [
       {
         id: 's_start001',
@@ -128,6 +129,14 @@ describe('GET /api/digest/preview — amp4email part', () => {
     expect(typeof res.body.amp).toBe('string');
     expect(res.body.amp.startsWith('<!doctype html>')).toBe(true);
     expect(res.body.amp).toContain('<html amp4email');
+  });
+
+  it('passes config.digest.sendHour into the AMP renderer (slot differs from the default 8)', async () => {
+    const res = await preview(harness());
+    // At 12:00 Jerusalem with sendHour 15 the slot is YESTERDAY — would NOT match a
+    // signature computed with the default sendHour 8 (today).
+    expect(SLOT).toBe('20260718');
+    expect(res.body.amp).toContain(`name="s" value="${SLOT}"`);
   });
 
   it('wires the forms to this deployment’s /amp/confirm with V6 signed-manifest fields', async () => {
