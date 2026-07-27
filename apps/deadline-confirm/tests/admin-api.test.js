@@ -501,3 +501,35 @@ describe('per-session account scoping (v3 isolation)', () => {
     expect(stateB.body.secret).toBeNull();
   });
 });
+
+describe('GET /api/state guarded 500 detail', () => {
+  it('returns internal_error with message and detail.stack when storage.getConfig throws', async () => {
+    const boom = new Error('secure_storage_boom');
+    const storage = {
+      forAccount: () => ({
+        getConfig: async () => {
+          throw boom;
+        },
+        getLinkSecret: async () => null,
+        getOauthToken: async () => null,
+      }),
+    };
+    const app = createApp({
+      storage,
+      api: { fetchMe: vi.fn() },
+      rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
+      env: ENV,
+      fetchImpl: vi.fn(),
+    });
+
+    const res = await request(app).get('/api/state').set('Authorization', authHeader());
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('internal_error');
+    expect(res.body.message).toBe('secure_storage_boom');
+    expect(res.body.detail).toStrictEqual({
+      name: 'Error',
+      message: 'secure_storage_boom',
+      stack: boom.stack,
+    });
+  });
+});

@@ -483,8 +483,12 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                       {ampCopied ? 'הועתק ✓' : 'העתק גרסת AMP (מייל דינמי בג׳ימייל)'}
                     </Button>
                     <div className="dc-hint">
-                      הגרסה הזאת מציגה תיבות סימון בתוך ג׳ימייל. להדבקה ב-playground.amp.dev (פורמט Email) ומשם
-                      Send to Gmail — הנמען צריך להוסיף את כתובת השולח תחת Dynamic email → Developer settings.
+                      להדבקה ב-playground.amp.dev (פורמט Email). שליחה מה־playground
+                      דורשת ש־<code>AMP_ALLOWED_SENDERS</code> יכלול את{' '}
+                      <code>amp@gmail.dev</code> — אחרת תראו Failed to fetch / בקשה
+                      לא תקינה. עדיף: Send to Gmail משם, ואז לאשר מתוך המייל עצמו
+                      (הנמען מוסיף את כתובת השולח תחת Dynamic email → Developer
+                      settings).
                     </div>
                   </div>
                 )}

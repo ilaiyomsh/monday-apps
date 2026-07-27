@@ -125,7 +125,7 @@ Behaviour:
 - One AMP form. Populated sections → separate tables (title + date + dropdown).
 - Options = section `buttonIds` (fallback `[buttonId]`). Wire `item_<id>=btnId`.
 - **One global submit** (`אשר את המסומנות`) applies every chosen status.
-- Tasks left on "ללא שינוי" / empty value are unchanged.
+- Tasks with no new status chosen (empty `item_<id>`) are unchanged.
 
 Admin: multi-select "כפתורי פעולה"; primary (first) drives status filter column.
 

@@ -40,10 +40,12 @@
 //     api_error…) are PER ITEM and never fail their batch-mates.
 //
 // Responses from step 2 onwards carry the CORS headers and are JSON
-// (amp-mustache templates): { ok, updated, already, failed, message } —
-// counts and a Hebrew message ONLY, never item/board/account data. A request
-// that verified cleanly but updated nothing answers 502 so the reader sees
-// the error template.
+// (amp-mustache templates): { ok, updated, already, failed, message, detail? }.
+// `message` is the Hebrew reader-facing line; on failures `detail` carries the
+// machine reason (and for unexpected throws, a short err text) so it renders
+// inside the email via submit-error — never item/board/account ids beyond what
+// a manifest-parse reason may quote. A request that verified cleanly but
+// updated nothing answers 502 so the reader sees the error template.
 
 import express from 'express';
 import { performAction } from '../services/confirm-service.js';
@@ -70,6 +72,17 @@ const MESSAGES = {
   rate_limited: 'יותר מדי בקשות — נסו שוב בעוד דקה.',
   none_updated: 'לא הצלחנו לעדכן את המשימות שסומנו. אפשר לעדכן ישירות בלוח.',
 };
+
+/**
+ * AMP submit-error body: Hebrew `message` + machine `detail` (shown in the
+ * email). Cap detail length so Gmail's form response stays readable.
+ */
+function ampErrorBody(error, hebrewMessage, detail) {
+  const d = String(detail ?? '').trim().slice(0, 500);
+  return d
+    ? { error, message: hebrewMessage, detail: d }
+    : { error, message: hebrewMessage };
+}
 
 /** Hebrew count phrasing (1 gets the singular form). */
 function phrase(count, singular, plural) {
@@ -128,7 +141,9 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
     if (!verdict.ok) {
       // Deliberately headerless: an unauthorized caller gets nothing to read.
       logAttempt({ ip: req.ip ?? '', itemId: null, outcome: `amp_${verdict.reason}` });
-      res.status(403).set('Cache-Control', 'no-store').json({ error: verdict.reason, message: MESSAGES.invalid });
+      res.status(403).set('Cache-Control', 'no-store').json(
+        ampErrorBody(verdict.reason, MESSAGES.invalid, verdict.reason)
+      );
       return null;
     }
     res.set(verdict.headers);
@@ -159,7 +174,7 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       // 2. bucket A — per-IP, before storage reads and field validation.
       if (!rateLimiters.perIp.allow(ip)) {
         logAttempt({ ip, itemId: null, outcome: 'rate_limited' });
-        sendJson(res, 429, { error: 'rate_limited', message: MESSAGES.rate_limited });
+        sendJson(res, 429, ampErrorBody('rate_limited', MESSAGES.rate_limited, 'rate_limited_ip'));
         return;
       }
 
@@ -173,14 +188,14 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
         typeof m !== 'string' || m.length === 0
       ) {
         logAttempt({ ip, itemId: null, outcome: 'bad_request' });
-        sendJson(res, 400, { error: 'bad_request', message: MESSAGES.bad_request });
+        sendJson(res, 400, ampErrorBody('bad_request', MESSAGES.bad_request, 'missing_or_invalid_fields'));
         return;
       }
       const manifest = parseManifest(m);
       if (!manifest.ok) {
         logError('amp', 'manifest rejected', { reason: manifest.reason });
         logAttempt({ ip, itemId: null, outcome: 'bad_request' });
-        sendJson(res, 400, { error: 'bad_request', message: MESSAGES.bad_request });
+        sendJson(res, 400, ampErrorBody('bad_request', MESSAGES.bad_request, `manifest: ${manifest.reason}`));
         return;
       }
 
@@ -189,23 +204,28 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       const linkSecret = await scopedStorage.getLinkSecret();
       if (!linkSecret) {
         logAttempt({ ip, itemId: null, outcome: 'no_config' });
-        sendJson(res, 403, { error: 'invalid', message: MESSAGES.invalid });
+        sendJson(res, 403, ampErrorBody('invalid', MESSAGES.invalid, 'no_link_secret'));
         return;
       }
       const config = await scopedStorage.getConfig();
       const sendHour = config?.digest?.sendHour ?? DEFAULT_SEND_HOUR;
 
       // 5. slot — exactly the current one; the previous slot gets NO grace.
-      if (s !== currentSlot({ sendHour, now: now() })) {
+      const expectedSlot = currentSlot({ sendHour, now: now() });
+      if (s !== expectedSlot) {
         logAttempt({ ip, itemId: null, outcome: 'bad_slot' });
-        sendJson(res, 403, { error: 'invalid', message: MESSAGES.invalid });
+        sendJson(
+          res,
+          403,
+          ampErrorBody('invalid', MESSAGES.invalid, `bad_slot got=${s} expected=${expectedSlot} sendHour=${sendHour}`)
+        );
         return;
       }
 
       // 6. signature — verified BEFORE any selection field is read.
       if (!verifyManifest({ secret: linkSecret, accountId: a, personId: p, slot: s, manifest: m, signature: sig })) {
         logAttempt({ ip, itemId: null, outcome: 'bad_sig' });
-        sendJson(res, 403, { error: 'invalid', message: MESSAGES.invalid });
+        sendJson(res, 403, ampErrorBody('invalid', MESSAGES.invalid, 'bad_sig'));
         return;
       }
 
@@ -213,7 +233,7 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       const extracted = extractSelections(req.body);
       if (extracted.error) {
         logAttempt({ ip, itemId: null, outcome: extracted.error });
-        sendJson(res, 400, { error: extracted.error, message: MESSAGES[extracted.error] });
+        sendJson(res, 400, ampErrorBody(extracted.error, MESSAGES[extracted.error], extracted.error));
         return;
       }
       const { selections } = extracted;
@@ -221,7 +241,7 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       for (const { itemId, btnId } of selections) {
         if (!manifest.entries.get(itemId)?.has(btnId)) {
           logAttempt({ ip, itemId, outcome: 'manifest_violation' });
-          sendJson(res, 403, { error: 'invalid', message: MESSAGES.invalid });
+          sendJson(res, 403, ampErrorBody('invalid', MESSAGES.invalid, 'manifest_violation'));
           return;
         }
       }
@@ -229,7 +249,7 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       // 9. bucket B — the account's monday-budget guard, post-verification.
       if (!rateLimiters.perAccount.allow(`${a}:${ip}`)) {
         logAttempt({ ip, itemId: null, outcome: 'rate_limited' });
-        sendJson(res, 429, { error: 'rate_limited', message: MESSAGES.rate_limited });
+        sendJson(res, 429, ampErrorBody('rate_limited', MESSAGES.rate_limited, 'rate_limited_account'));
         return;
       }
 
@@ -260,11 +280,19 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
         already,
         failed,
         message: anySucceeded ? parts.join(' · ') : MESSAGES.none_updated,
+        ...(anySucceeded ? {} : { detail: 'none_updated' }),
       });
     } catch (err) {
-      logError('amp', 'POST handler failure', { error: String(err?.message ?? err) });
+      const name = err?.name ? String(err.name) : 'Error';
+      const message = err?.message != null ? String(err.message) : String(err);
+      const stack = typeof err?.stack === 'string' ? err.stack : '';
+      logError('amp', 'POST handler failure', { error: message, errName: name, stack: stack || undefined });
       logAttempt({ ip: req.ip ?? '', itemId: null, outcome: 'api_error' });
-      sendJson(res, 502, { error: 'internal_error', message: MESSAGES.none_updated });
+      sendJson(
+        res,
+        502,
+        ampErrorBody('internal_error', MESSAGES.none_updated, stack || `${name}: ${message}`)
+      );
     }
   });
 
