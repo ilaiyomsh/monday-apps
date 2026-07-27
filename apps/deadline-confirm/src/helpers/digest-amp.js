@@ -1,28 +1,24 @@
-// amp4email digest renderer (V5 — Gmail dynamic email).
+// V6 amp4email digest renderer (docs/v6-amp-only-decisions.md §3, §5).
 //
-// Produces the `text/x-amp-html` MIME part of the digest. Gmail (web, Android,
-// iOS) renders it as DYNAMIC EMAIL: the reader ticks the tasks they want and
-// submits one <amp-form> per section — the whole update happens inside the
-// message, no browser tab. Every other client ignores this part and reads the
-// static `text/html` part (helpers/digest-email.js), whose per-task links keep
-// working; the two are always generated from the same digest data.
+// Produces the `text/x-amp-html` MIME part. Gmail renders it as dynamic email:
+// the reader selects tasks and submits — the update happens inside the message.
+// The paired `text/plain` part (helpers/digest-plain.js) is the non-actionable
+// fallback; there is no HTML part in V6.
 //
-// Format constraints are hard requirements, not style (an invalid document is
-// silently dropped to the HTML fallback):
+// Wire format (one signed manifest per message — the base secret NEVER appears):
+//   hidden: a, p, m, s, sig
+//   selection: radio name="item_<itemId>" value="<btnId>"
+//
+// Format constraints are hard requirements (invalid AMP → silent fallback to plain):
 //   - `<!doctype html>` + `<html amp4email>` + `<meta charset="utf-8">` first
-//     in <head> + the amp4email boilerplate <style>
 //   - scripts ONLY from cdn.ampproject.org (v0 + amp-form + amp-mustache)
-//   - POST via `action-xhr`; `action`/`target` are website-only attributes
-//   - server replies render through <template type="amp-mustache">
-//   - the whole part must stay under 200,000 bytes (style under 50,000)
-//
-// Security: the link secret travels in hidden inputs only — never in a URL
-// inside this part — and the endpoint it posts to is sender-gated
-// (helpers/amp-cors.js). Gmail strips the AMP part on reply/forward.
+//   - POST via `action-xhr`; whole part under 200,000 bytes
 
 import { escapeHtml } from './html.js';
+import { buildManifest, signManifest, currentSlot } from '../services/manifest-signature.js';
 
 const AMP_ENDPOINT_PATH = '/amp/confirm';
+const DEFAULT_SEND_HOUR = 8;
 
 /** YYYY-MM-DD → DD/MM/YYYY (unset → ''). */
 function formatDate(date) {
@@ -53,16 +49,17 @@ const STYLES = `
 `;
 
 function renderRow({ task, buttonId }) {
-  const boxId = escapeHtml(`it_${buttonId}_${task.itemId}`);
+  const fieldName = escapeHtml(`item_${task.itemId}`);
+  const boxId = escapeHtml(`sel_${buttonId}_${task.itemId}`);
   return `            <tr>
-              <td class="pick"><input type="checkbox" name="item" value="${escapeHtml(String(task.itemId))}" id="${boxId}"></td>
+              <td class="pick"><input type="radio" name="${fieldName}" value="${escapeHtml(buttonId)}" id="${boxId}"></td>
               <td><label for="${boxId}">&#8207;${escapeHtml(task.name)}</label></td>
               <td class="meta">${formatDate(task.date)}</td>
               <td class="meta">${escapeHtml(task.statusText ?? '')}</td>
             </tr>`;
 }
 
-function renderSection({ section, baseUrl, secret, accountId }) {
+function renderSection({ section, baseUrl, signed, accountId, personId }) {
   const button = section.button ?? {};
   const buttonId = section.buttonId ?? button.id ?? '';
   const color = button.style?.color ?? '#00854d';
@@ -77,8 +74,10 @@ function renderSection({ section, baseUrl, secret, accountId }) {
               action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
               enctype="application/x-www-form-urlencoded">
           <input type="hidden" name="a" value="${escapeHtml(String(accountId))}">
-          <input type="hidden" name="k" value="${escapeHtml(secret)}">
-          <input type="hidden" name="btn" value="${escapeHtml(buttonId)}">
+          <input type="hidden" name="p" value="${escapeHtml(String(personId))}">
+          <input type="hidden" name="m" value="${escapeHtml(signed.manifest)}">
+          <input type="hidden" name="s" value="${escapeHtml(signed.slot)}">
+          <input type="hidden" name="sig" value="${escapeHtml(signed.signature)}">
           <table>
             <tr>
               <th class="pick"></th>
@@ -96,20 +95,50 @@ ${rows}
 }
 
 /**
+ * Build the signed-manifest bundle shared by every form in one message.
+ * @param {{ secret: string, accountId: string, personId: string, recipient: object, sendHour: number, now: Date }} p
+ */
+function buildSignedManifest({ secret, accountId, personId, recipient, sendHour, now }) {
+  /** @type {Array<{ itemId: string, btnId: string }>} */
+  const pairs = [];
+  for (const section of recipient.sections) {
+    if (section.tasks.length === 0) continue;
+    const btnId = section.buttonId ?? section.button?.id ?? '';
+    for (const task of section.tasks) {
+      pairs.push({ itemId: String(task.itemId), btnId });
+    }
+  }
+  const manifest = buildManifest(pairs);
+  const slot = currentSlot({ sendHour, now });
+  const signature = signManifest({ secret, accountId: String(accountId), personId: String(personId), slot, manifest });
+  return { manifest, slot, signature };
+}
+
+/**
  * Render the dynamic-email (amp4email) part of one recipient's digest.
  *
  * @param {object} p
- * @param {string} p.baseUrl - app base URL (the form posts to `${baseUrl}/amp/confirm`)
- * @param {string} p.secret - account link secret (hidden input, never a URL)
+ * @param {string} p.baseUrl - app base URL (forms post to `${baseUrl}/amp/confirm`)
+ * @param {string} p.secret - account link secret (server-side only; never emitted)
  * @param {string} p.accountId
- * @param {{ name: string, sections: Array<{ title: string, buttonId: string, button?: object,
- *          dateColumnTitle?: string, tasks: Array<object> }> }} p.recipient
+ * @param {{ name: string, personId: string, sections: Array<object> }} p.recipient
+ * @param {number} [p.sendHour=8] - digest send hour (Asia/Jerusalem) for slot math
+ * @param {Date} [p.now=new Date()] - injectable clock (preview + tests)
  * @returns {string} a complete amp4email document
  */
-export function renderDigestAmp({ baseUrl, secret, accountId, recipient }) {
+export function renderDigestAmp({ baseUrl, secret, accountId, recipient, sendHour = DEFAULT_SEND_HOUR, now = new Date() }) {
+  const personId = recipient.personId;
+  if (typeof personId !== 'string' || personId.length === 0) {
+    throw new Error('renderDigestAmp: recipient.personId is required');
+  }
+
+  const signed = buildSignedManifest({ secret, accountId, personId, recipient, sendHour, now });
+
   const sections = recipient.sections
     .filter((s) => s.tasks.length > 0)
-    .map((section) => renderSection({ section, baseUrl, secret, accountId }))
+    .map((section) =>
+      renderSection({ section, baseUrl, signed, accountId, personId })
+    )
     .join('\n');
 
   return `<!doctype html>
@@ -127,7 +156,7 @@ export function renderDigestAmp({ baseUrl, secret, accountId, recipient }) {
       <p class="hi">&#8207;שלום ${escapeHtml(recipient.name)},</p>
       <p class="lead">&#8207;סמנו את המשימות שברצונכם לעדכן ולחצו על הכפתור שמתחת לכל קבוצה — העדכון נשמר בלוח מיד, בלי לצאת מהמייל.</p>
 ${sections}
-      <p class="foot">&#8207;מייל אוטומטי · אם משימה כבר עודכנה, סימון חוזר לא ישנה דבר · אם תיבות הסימון אינן מוצגות אצלך, אפשר להשתמש בכפתורים שבגרסה הרגילה של המייל.</p>
+      <p class="foot">&#8207;מייל אוטומטי · אם משימה כבר עודכנה, סימון חוזר לא ישנה דבר · אם תיבות הסימון אינן מוצגות, עדכנו ישירות ב‑monday.com.</p>
     </div>
   </body>
 </html>`;

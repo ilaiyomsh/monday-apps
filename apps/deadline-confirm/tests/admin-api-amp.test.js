@@ -1,11 +1,5 @@
-// TDD red phase (V5) — GET /api/digest/preview also returns the amp4email part.
-//
-// The digest is a two-part email: the static `text/html` body (already pinned in
-// admin-api-digest.test.js) and the `text/x-amp-html` dynamic-email part Gmail
-// renders with checkboxes. The admin panel needs BOTH from one preview call —
-// the AMP part is what the operator copies into the AMP playground while the
-// sending path is still manual, and later what the sender attaches as a MIME
-// part. Same recipient selection rules as `html` (?recipient= or the first).
+// TDD (V6) — GET /api/digest/preview also returns the amp4email part with
+// signed-manifest wire format (a/p/m/s/sig, no k/btn).
 
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
@@ -13,11 +7,24 @@ import jwt from 'jsonwebtoken';
 import { createApp } from '../src/app.js';
 import { createAppStorage } from '../src/services/storage.js';
 import { createMemoryBackend } from '../src/storage/memory-backend.js';
+import { buildManifest, signManifest, currentSlot } from '../src/services/manifest-signature.js';
 
 const ACCOUNT_ID = '777';
 const TODAY = '2026-07-19';
 const SECRET = 'SECRET43';
 const BASE = 'https://app.example';
+const PERSON_ID = '501';
+const SEND_HOUR = 8;
+const PREVIEW_NOW = new Date(`${TODAY}T09:00:00+03:00`);
+const SLOT = currentSlot({ sendHour: SEND_HOUR, now: PREVIEW_NOW });
+const MANIFEST = buildManifest([{ itemId: '9001', btnId: 'b_start001' }]);
+const SIG = signManifest({
+  secret: SECRET,
+  accountId: ACCOUNT_ID,
+  personId: PERSON_ID,
+  slot: SLOT,
+  manifest: MANIFEST,
+});
 
 const ENV = {
   clientId: 'cid-1',
@@ -123,24 +130,29 @@ describe('GET /api/digest/preview — amp4email part', () => {
     expect(res.body.amp).toContain('<html amp4email');
   });
 
-  it('wires the forms to this deployment’s /amp/confirm with the real credentials', async () => {
+  it('wires the forms to this deployment’s /amp/confirm with V6 signed-manifest fields', async () => {
     const res = await preview(harness());
 
     expect(res.body.amp).toContain(`action-xhr="${BASE}/amp/confirm"`);
     expect(res.body.amp).toContain(`name="a" value="${ACCOUNT_ID}"`);
-    expect(res.body.amp).toContain(`name="k" value="${SECRET}"`);
-    expect(res.body.amp).toContain('name="btn" value="b_start001"');
+    expect(res.body.amp).toContain(`name="p" value="${PERSON_ID}"`);
+    expect(res.body.amp).toContain(`name="m" value="${MANIFEST}"`);
+    expect(res.body.amp).toContain(`name="s" value="${SLOT}"`);
+    expect(res.body.amp).toContain(`name="sig" value="${SIG}"`);
+    expect(res.body.amp).not.toContain('name="k"');
+    expect(res.body.amp).not.toContain('name="btn"');
+    expect(res.body.amp).not.toContain(`value="${SECRET}"`);
   });
 
-  it('renders a checkbox for each pending task of the previewed recipient', async () => {
+  it('renders a radio per pending task with item_<itemId> name', async () => {
     const res = await preview(harness());
 
-    expect(res.body.amp).toContain('name="item" value="9001"');
+    expect(res.body.amp).toContain('name="item_9001" value="b_start001"');
     expect(res.body.amp).toContain('גיבוש תכנית עבודה');
     expect(res.body.amp).toContain('תאריך התחלה מתוכנן');
   });
 
-  it('keeps the secret out of every URL in the AMP part', async () => {
+  it('keeps the base secret out of every URL in the AMP part', async () => {
     const res = await preview(harness());
 
     expect(res.body.amp).not.toContain('/confirm?itemId=');
