@@ -293,75 +293,56 @@ function OnClickDialog({ context }) {
     );
   }
 
+  const NEUTRAL = 'hsl(0 0% 77%)';
+
   return (
-    <main className="status-guard-dialog" aria-labelledby="status-picker-title">
-      <header className="status-guard-header">
-        <div>
-          <p className="status-guard-eyebrow">Twyst Your Status</p>
-          <h1 id="status-picker-title">בחירת סטטוס</h1>
+    <main className="status-picker-dialog" aria-label="בחירת סטטוס" dir="rtl">
+      {pickerModel.currentLabel && (
+        <div className="status-picker-current" aria-label="הסטטוס הנוכחי">
+          <span
+            className="status-fill"
+            style={{ background: pickerModel.currentLabel.color || NEUTRAL }}
+          >
+            {pickerModel.currentLabel.label || 'ללא שם'}
+          </span>
+          {pickerModel.currentIsHidden && (
+            <p className="status-picker-note">
+              הסטטוס נקבע מחוץ לבורר (למשל אוטומציה) ולכן מוצג לקריאה בלבד.
+            </p>
+          )}
         </div>
-      </header>
+      )}
 
-      <section className="current-status" aria-label="הסטטוס הנוכחי">
-        <span className="section-label">הסטטוס הנוכחי</span>
-        {pickerModel.currentLabel ? (
-          <div className="current-status-row">
-            <span
-              className="status-chip"
-              style={{ '--status-color': pickerModel.currentLabel.color }}
-            >
-              {pickerModel.currentLabel.label}
-            </span>
-            {pickerModel.currentIsHidden && (
-              <span className="automation-only-badge">לצפייה בלבד</span>
-            )}
-          </div>
-        ) : (
-          <span className="empty-current-status">לא נבחר סטטוס</span>
-        )}
-        {pickerModel.currentIsHidden && (
-          <p className="restricted-explanation">
-            הסטטוס הזה נקבע מחוץ לבורר — למשל על ידי אוטומציה — ולכן הוא מוצג אך אינו זמין לבחירה ידנית.
-          </p>
-        )}
-      </section>
-
-      <section aria-labelledby="available-statuses-title">
-        <h2 id="available-statuses-title">אפשרויות זמינות</h2>
-        {pickerModel.options.length > 0 ? (
-          <div className="status-options" role="listbox" aria-label="סטטוסים זמינים">
-            {pickerModel.options.map((label) => {
-              const isSelected = label.id === pickerModel.currentLabelId;
-              const isSaving = label.id === savingLabelId;
-              return (
-                <button
-                  key={label.id}
-                  className={`status-option${isSelected ? ' is-selected' : ''}`}
-                  type="button"
-                  role="option"
-                  aria-selected={isSelected}
-                  disabled={savingLabelId !== null || user?.isViewOnly}
-                  onClick={() => handleSelectLabel(label.id)}
-                >
-                  <span className="status-option-name">
-                    <span className="status-dot" style={{ '--status-color': label.color }} />
-                    {label.label || 'ללא שם'}
-                  </span>
-                  <span className="status-option-state">
-                    {isSaving ? 'שומר…' : isSelected ? 'נבחר' : ''}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="empty-options">אין כרגע סטטוסים זמינים לבחירה.</p>
-        )}
-      </section>
+      {pickerModel.options.length > 0 ? (
+        <div className="status-menu" role="listbox" aria-label="סטטוסים זמינים">
+          {pickerModel.options.map((label) => {
+            const isSelected = label.id === pickerModel.currentLabelId;
+            const isSaving = label.id === savingLabelId;
+            return (
+              <button
+                key={label.id}
+                className="status-option"
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                disabled={savingLabelId !== null || user?.isViewOnly}
+                style={{ background: label.color || NEUTRAL }}
+                onClick={() => handleSelectLabel(label.id)}
+              >
+                {isSaving ? 'שומר…' : (label.label || 'ללא שם')}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="status-picker-empty">אין כרגע סטטוסים זמינים לבחירה.</p>
+      )}
 
       {user?.isViewOnly && (
-        <p className="view-only-note">יש לך הרשאת צפייה בלבד ולכן לא ניתן לשנות את הסטטוס.</p>
+        <p className="status-picker-note">יש לך הרשאת צפייה בלבד ולכן לא ניתן לשנות את הסטטוס.</p>
       )}
+
+      {error && <AttentionBox type="danger" text={error} />}
     </main>
   );
 }

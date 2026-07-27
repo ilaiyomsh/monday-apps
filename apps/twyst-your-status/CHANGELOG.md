@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.2
+
+- Picker UI matches discussions' monday-native status label menu: full-width
+  colored pills with white centered text (same look as TaskTableRow statusMenu).
+
 ## 3.1.1
 
 - Column settings shell is now a single button that opens a full-size nested
