@@ -362,7 +362,9 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     } catch (err) {
       logger.error('ColumnSettings', 'Failed to save column settings', err);
       const message = err?.message || '';
-      if (/in use|can't delete|cannot delete|default/i.test(message)) {
+      if (/Colors should be unique|colors should be unique/i.test(message)) {
+        setSaveError('לכל לייבל חייב להיות צבע ייחודי. בחרו צבע אחר ללייבל שחוזר על עצמו ונסו שוב.');
+      } else if (/in use|can't delete|cannot delete|default/i.test(message)) {
         setSaveError('לא ניתן להסיר לייבל שנמצא בשימוש בפריטים או שהוא ברירת המחדל של העמודה.');
       } else {
         setSaveError('שמירת ההגדרות נכשלה. נסו שוב.');

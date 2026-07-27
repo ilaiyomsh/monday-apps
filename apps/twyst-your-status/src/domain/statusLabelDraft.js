@@ -5,7 +5,12 @@
  */
 
 import { migrateSettings } from './settingsSchema.js';
-import { normalizeStatusColorEnum, resolveStatusColorHex } from './statusColors.js';
+import {
+  ensureUniqueStatusColors,
+  normalizeStatusColorEnum,
+  pickUnusedStatusColor,
+  resolveStatusColorHex,
+} from './statusColors.js';
 import logger from '../utils/logger.js';
 
 let newLabelSeq = 0;
@@ -130,7 +135,9 @@ export function buildStatusLabelsUpdatePayload(draftActive, liveAll) {
       isDeactivated: true,
     }));
 
-  return [...activePayload, ...deactivatedPayload];
+  // monday rejects update_status_column when any two labels share a color,
+  // including deactivated rows in the full-replace payload.
+  return ensureUniqueStatusColors([...activePayload, ...deactivatedPayload]);
 }
 
 /**
@@ -186,14 +193,23 @@ export function buildUpdateStatusColumnMutation(labelsPayload) {
 export function createBlankLabelDraft(existingDraft) {
   const list = Array.isArray(existingDraft) ? existingDraft : [];
   const maxIndex = list.reduce((max, label) => Math.max(max, Number(label.index) || 0), -1);
+  const usedColors = list.map((label) => {
+    try {
+      return normalizeStatusColorEnum(label.colorValue ?? label.color);
+    } catch (err) {
+      logger.warn('statusLabelDraft', 'Skipping unrecognized draft color while picking a free one', err);
+      return null;
+    }
+  }).filter(Boolean);
+  const colorValue = pickUnusedStatusColor(usedColors);
   const clientKey = nextNewLabelClientId();
   return {
     clientKey,
     id: clientKey,
     index: maxIndex + 1,
     label: 'לייבל חדש',
-    color: resolveStatusColorHex('done_green') ?? '#00c875',
-    colorValue: 'done_green',
+    color: resolveStatusColorHex(colorValue) ?? '#00c875',
+    colorValue,
     isNew: true,
   };
 }

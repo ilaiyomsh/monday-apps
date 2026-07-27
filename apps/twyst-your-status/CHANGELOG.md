@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.4
+
+- Fix settings save failing with monday `Colors should be unique` on
+  `update_status_column`: payloads now force unique StatusColumnColors across
+  active + deactivated labels (active colors stay; collisions are remapped), and
+  new labels pick the first unused color instead of always `done_green`.
+
 ## 3.1.3
 
 - Picker labels stretch edge-to-edge inside the monday Dialog Design iframe
