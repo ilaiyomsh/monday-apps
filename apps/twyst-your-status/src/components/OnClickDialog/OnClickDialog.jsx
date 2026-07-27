@@ -14,6 +14,7 @@ import {
   UPDATE_STATUS_COLUMN_VALUE,
 } from '../../services/graphqlQueries';
 import mondayService from '../../services/mondayService';
+import { loadUserTeamIds } from '../../services/teamsAccess';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
 import ErrorState from '../shared/ErrorState';
@@ -114,12 +115,14 @@ function OnClickDialog({ context }) {
     try {
       setLoading(true);
       setError(null);
-      const data = await mondayService.query(GET_STATUS_COLUMN_CONTEXT, {
-        boardIds: [String(boardId)],
-        itemIds: [String(itemId)],
-        columnIds: [columnId],
-        userIds: [String(user?.id)],
-      });
+      const [data, teamsResult] = await Promise.all([
+        mondayService.query(GET_STATUS_COLUMN_CONTEXT, {
+          boardIds: [String(boardId)],
+          itemIds: [String(itemId)],
+          columnIds: [columnId],
+        }),
+        loadUserTeamIds(user?.id),
+      ]);
 
       const column = data?.boards?.[0]?.columns?.[0];
       if (!column || column.type !== 'status') {
@@ -128,12 +131,11 @@ function OnClickDialog({ context }) {
 
       const item = data?.items?.[0];
       const statusValue = item?.column_values?.find((value) => value.id === columnId) ?? null;
-      const me = data?.users?.[0];
       setLabels(normalizeStatusLabels(column.settings));
       setCurrentValue(statusValue);
       setActor({
         userId: String(user?.id ?? ''),
-        teamIds: (me?.teams ?? []).map((team) => String(team.id)),
+        teamIds: teamsResult.teamIds,
       });
       setColumnsById(new Map(
         (item?.column_values ?? [])

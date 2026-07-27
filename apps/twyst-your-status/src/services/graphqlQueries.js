@@ -3,7 +3,6 @@ export const GET_STATUS_COLUMN_CONTEXT = `
     $boardIds: [ID!]
     $itemIds: [ID!]
     $columnIds: [String!]
-    $userIds: [ID!]
   ) {
     boards(ids: $boardIds) {
       id
@@ -34,9 +33,14 @@ export const GET_STATUS_COLUMN_CONTEXT = `
         }
       }
     }
+  }
+`;
+
+/** Requires teams:read. Loaded separately so missing scope does not break the picker. */
+export const GET_USER_TEAM_IDS = `
+  query GetUserTeamIds($userIds: [ID!]) {
     users(ids: $userIds) {
       id
-      name
       teams { id }
     }
   }
@@ -59,6 +63,7 @@ export const GET_STATUS_COLUMN_SETTINGS = `
   }
 `;
 
+/** Boards + account users — does not require teams:read. */
 export const GET_BOARD_SETTINGS_METADATA = `
   query GetBoardSettingsMetadata($boardIds: [ID!]) {
     boards(ids: $boardIds) {
@@ -73,8 +78,13 @@ export const GET_BOARD_SETTINGS_METADATA = `
     users(limit: 500) {
       id
       name
-      teams { id }
     }
+  }
+`;
+
+/** Requires teams:read. Loaded separately so missing scope does not break settings. */
+export const GET_ACCOUNT_TEAMS = `
+  query GetAccountTeams {
     teams {
       id
       name

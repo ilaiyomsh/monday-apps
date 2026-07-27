@@ -26,10 +26,16 @@
 
 ## Required scopes
 
+Configure on the **draft** app version (Developer Center → Version → Permissions),
+then reinstall / reauthorize existing installs:
+
 - `boards:read`
 - `boards:write`
 - `users:read`
-- `teams:read`
+- `teams:read` — required for team allowlists and actor team membership
+
+Without `teams:read`, settings still loads (users-only) and shows a warning; team
+pickers stay disabled until the scope is granted.
 
 ## Limits
 
