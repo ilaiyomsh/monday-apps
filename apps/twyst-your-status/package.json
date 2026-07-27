@@ -27,7 +27,7 @@
     "type-check": "echo no-typescript"
   },
   "dependencies": {
-    "@mondaycom/apps-sdk": "0.1.4",
+    "@mondaycom/apps-sdk": "3.3.2",
     "@vibe/core": "3.88.3",
     "@vibe/icons": "1.16.0",
     "dotenv": "16.6.1",

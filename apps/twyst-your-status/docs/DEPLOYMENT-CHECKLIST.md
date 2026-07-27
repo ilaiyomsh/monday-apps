@@ -28,6 +28,11 @@ after explicit owner confirmation.
 - `MONDAY_CLIENT_ID`
 - `MONDAY_CLIENT_SECRET`
 - `MONDAY_SIGNING_SECRET`
+
+`MONDAY_CLIENT_SECRET` and `MONDAY_SIGNING_SECRET` must be created with monday code
+Secrets and loaded through `SecretsManager`. The remaining values are environment
+variables loaded through `EnvironmentVariablesManager`. Never expose either secret through
+`process.env` or client-side code.
 - `BASE_URL` — the deployed app origin, without a trailing slash
 - `MONDAY_APP_VERSION_ID` — optional draft version pin during OAuth activation
 
