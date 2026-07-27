@@ -1,0 +1,239 @@
+<!doctype html>
+<html amp4email lang="he" dir="rtl">
+  <head>
+    <meta charset="utf-8">
+    <script async src="https://cdn.ampproject.org/v0.js"></script>
+    <script async custom-element="amp-form" src="https://cdn.ampproject.org/v0/amp-form-0.1.js"></script>
+    <script async custom-template="amp-mustache" src="https://cdn.ampproject.org/v0/amp-mustache-0.2.js"></script>
+    <style amp4email-boilerplate>body{visibility:hidden}</style>
+    <style amp-custom>
+      body {
+        margin: 0;
+        padding: 14px 10px;
+        background: #F5F6F8;
+        font-family: Figtree, Roboto, "Noto Sans Hebrew", Arial, Helvetica, sans-serif;
+        color: #323338;
+      }
+      .wrap {
+        max-width: 720px;
+        margin: 0 auto;
+        background: #ffffff;
+        border: 1px solid #E6E9EF;
+        border-radius: 8px;
+        padding: 18px;
+      }
+      .hi {
+        font-size: 18px;
+        font-weight: bold;
+        margin: 0 0 6px;
+      }
+      .lead {
+        font-size: 14px;
+        color: #676879;
+        line-height: 1.6;
+        margin: 0 0 18px;
+      }
+      .note {
+        font-size: 12px;
+        color: #9699A6;
+        margin: 0 0 14px;
+        line-height: 1.5;
+      }
+      .cluster {
+        margin: 0 0 22px;
+      }
+      .cluster-title {
+        font-size: 15px;
+        font-weight: bold;
+        color: #323338;
+        margin: 0 0 8px;
+        line-height: 1.4;
+      }
+      table.board {
+        width: 100%;
+        border-collapse: collapse;
+        background: #ffffff;
+        border: 1px solid #E6E9EF;
+      }
+      th {
+        font-size: 12px;
+        color: #676879;
+        font-weight: 500;
+        text-align: center;
+        padding: 8px;
+        border-bottom: 1px solid #E6E9EF;
+        border-inline-end: 1px solid #D0D4E4;
+        background: #FAFBFC;
+        white-space: nowrap;
+      }
+      th.name-h {
+        text-align: right;
+      }
+      th:last-child {
+        border-inline-end: none;
+      }
+      td {
+        font-size: 14px;
+        font-weight: normal;
+        padding: 0 8px;
+        border-bottom: 1px solid #E6E9EF;
+        border-inline-end: 1px solid #D0D4E4;
+        vertical-align: middle;
+        height: 44px;
+        text-align: center;
+      }
+      td:last-child {
+        border-inline-end: none;
+      }
+      td.name {
+        text-align: right;
+        padding-inline-start: 12px;
+        white-space: nowrap;
+      }
+      td.date {
+        color: #676879;
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      th.btn {
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: normal;
+        padding: 6px 10px;
+        min-width: 88px;
+      }
+      td.pick {
+        width: 96px;
+        padding: 6px;
+      }
+      /* Radio (not checkbox): one new status per task across the whole email.
+         Same itemId → same name=item_<id> in every cluster table. */
+      .pick-box {
+        display: inline-block;
+        cursor: pointer;
+        line-height: 0;
+      }
+      .pick-box input {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        vertical-align: middle;
+      }
+      .go {
+        margin: 8px 0 4px;
+      }
+      .send {
+        color: #ffffff;
+        background: #0073ea;
+        border: 0;
+        border-radius: 8px;
+        padding: 11px 18px;
+        font-size: 14px;
+        font-weight: bold;
+      }
+      .ok {
+        margin: 10px 0 2px;
+        padding: 9px 12px;
+        border-radius: 8px;
+        background: #E6F7EF;
+        color: #00754A;
+        font-size: 13px;
+      }
+      .err {
+        margin: 10px 0 2px;
+        padding: 9px 12px;
+        border-radius: 8px;
+        background: #FDECEE;
+        color: #B4222F;
+        font-size: 13px;
+      }
+      .foot {
+        font-size: 12px;
+        color: #9699A6;
+        line-height: 1.6;
+        border-top: 1px solid #E6E9EF;
+        padding-top: 12px;
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <p class="hi">&#8207;שלום עילי שלם,</p>
+      <p class="lead">&#8207;סמנו סטטוס חדש לכל משימה (עמודה אחת בלבד לשורה) ולחצו על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
+      <p class="note">&#8207;תצוגת playground · מקבץ = טבלה · תאריך לפי עמודת המקבץ · עמודת סימון לכל כפתור · אישור אחד למייל · רדיו (לא צ׳קבוקס) כדי למנוע שני סטטוסים לאותה משימה</p>
+
+      <form method="post"
+            action-xhr="https://example.com/amp/confirm"
+            enctype="application/x-www-form-urlencoded">
+        <input type="hidden" name="a" value="playground">
+        <input type="hidden" name="p" value="playground">
+        <input type="hidden" name="m" value="playground">
+        <input type="hidden" name="s" value="playground">
+        <input type="hidden" name="sig" value="playground">
+
+        <!-- מקבץ 1: תאריך התחלה · כפתורים: בעבודה + תקוע (דמו multi-button) -->
+        <div class="cluster">
+          <p class="cluster-title">&#8207;משימות שנדרש להתחיל וטרם התחילו:</p>
+          <table class="board">
+            <tr>
+              <th class="name-h">&#8207;שם הפעולה</th>
+              <th>&#8207;תאריך התחלה</th>
+              <th class="btn" style="background:#fdab3d">&#8207;בעבודה</th>
+              <th class="btn" style="background:#e2445c">&#8207;תקוע</th>
+            </tr>
+            <tr>
+              <td class="name">&#8207;Item 1</td>
+              <td class="date">22/07/2026</td>
+              <td class="pick"><label class="pick-box"><input type="radio" name="item_9001" value="btn_working"></label></td>
+              <td class="pick"><label class="pick-box"><input type="radio" name="item_9001" value="btn_stuck"></label></td>
+            </tr>
+            <tr>
+              <td class="name">&#8207;Item 3</td>
+              <td class="date">22/07/2026</td>
+              <td class="pick"><label class="pick-box"><input type="radio" name="item_9003" value="btn_working"></label></td>
+              <td class="pick"><label class="pick-box"><input type="radio" name="item_9003" value="btn_stuck"></label></td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- מקבץ 2: תאריך סיום · כפתורים: בוצע + לא רלוונטי (דמו multi-button) -->
+        <div class="cluster">
+          <p class="cluster-title">&#8207;משימות שנדרש לסיים וטרם בוצעו:</p>
+          <table class="board">
+            <tr>
+              <th class="name-h">&#8207;שם הפעולה</th>
+              <th>&#8207;תאריך סיום</th>
+              <th class="btn" style="background:#00c875">&#8207;בוצע</th>
+              <th class="btn" style="background:#c4c4c4">&#8207;לא רלוונטי</th>
+            </tr>
+            <tr>
+              <td class="name">&#8207;Item 1</td>
+              <td class="date">27/07/2026</td>
+              <td class="pick"><label class="pick-box"><input type="radio" name="item_9001" value="btn_done"></label></td>
+              <td class="pick"><label class="pick-box"><input type="radio" name="item_9001" value="btn_na"></label></td>
+            </tr>
+            <tr>
+              <td class="name">&#8207;Item 3</td>
+              <td class="date">27/07/2026</td>
+              <td class="pick"><label class="pick-box"><input type="radio" name="item_9003" value="btn_done"></label></td>
+              <td class="pick"><label class="pick-box"><input type="radio" name="item_9003" value="btn_na"></label></td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="go">
+          <input class="send" type="submit" value="אשר את המסומנות">
+        </div>
+        <div submit-success>
+          <template type="amp-mustache"><div class="ok">{{message}}</div></template>
+        </div>
+        <div submit-error>
+          <template type="amp-mustache"><div class="err">{{message}}</div></template>
+        </div>
+      </form>
+
+      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
+    </div>
+  </body>
+</html>
