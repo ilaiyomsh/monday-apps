@@ -102,7 +102,7 @@ function harness() {
   return createApp({
     storage: createAppStorage({ backend }),
     api,
-    rateLimiter: { allow: () => true },
+    rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
     env: ENV,
     fetchImpl: vi.fn(),
     todayIso: TODAY,

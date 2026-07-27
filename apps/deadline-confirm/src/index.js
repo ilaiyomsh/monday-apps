@@ -59,14 +59,21 @@ attachAxiomServerSink(logger, {
 const backend = env.useLocalStorage ? createMemoryBackend() : createSecureStorageBackend();
 const storage = createAppStorage({ backend });
 const api = createMondayApi();
-const rateLimiter = createRateLimiter();
+// V6 §4 two buckets: A (per-IP, generous — abuse control before any secret
+// work) and B (per accountId:ip, 30/min — protects the monday complexity
+// budget after verification). Entropy blocks guessing; these protect
+// resources.
+const rateLimiters = {
+  perIp: createRateLimiter({ capacity: 120 }),
+  perAccount: createRateLimiter(),
+};
 
 // V6: Resend is removed. The digest sender seam stays empty until the
 // Gmail-API send path lands (v6 decisions T9–T12, blocked on O1/O2/O4) —
 // until then POST /api/digest/send answers 409 email_not_configured.
 const emailSender = undefined;
 
-const app = createApp({ storage, api, rateLimiter, env, emailSender });
+const app = createApp({ storage, api, rateLimiters, env, emailSender });
 
 app.listen(env.port, () => {
   logInfo('server', 'deadline-confirm listening', { port: env.port, localStorage: env.useLocalStorage });
