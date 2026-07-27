@@ -10,7 +10,6 @@ import { createApp } from '../src/app.js';
 import { createAppStorage } from '../src/services/storage.js';
 import { createMemoryBackend } from '../src/storage/memory-backend.js';
 import { MondayApiError } from '../src/services/monday-api.js';
-import { EmailSendError } from '../src/services/email-sender.js';
 
 const ACCOUNT_ID = '777';
 const TODAY = '2026-07-19';
@@ -68,7 +67,6 @@ function fullConfig(overrides = {}) {
     boardId: '111',
     peopleColumnId: 'people_t',
     buttons: buttons(),
-    templates: [],
     digest: digestBlock(),
     ...overrides,
   };
@@ -302,7 +300,7 @@ describe('GET /api/digest/preview', () => {
 // ---------------------------------------------------------------------------
 
 describe('POST /api/digest/send', () => {
-  it('409 email_not_configured when no sender is wired (env without RESEND_API_KEY/DIGEST_FROM)', async () => {
+  it('409 email_not_configured when no sender is wired (V6: the Gmail-send seam is empty)', async () => {
     const { app } = seededHarness({ emailSender: undefined });
     const res = await request(app).post('/api/digest/send').set('Authorization', authHeader());
     expect(res.status).toBe(409);
@@ -330,7 +328,7 @@ describe('POST /api/digest/send', () => {
   it('one failing recipient → its result carries ok:false + error; the OTHER recipient is still sent; overall ok:false', async () => {
     const send = vi
       .fn()
-      .mockRejectedValueOnce(new EmailSendError('Invalid `to`', { status: 422 }))
+      .mockRejectedValueOnce(new Error('Invalid `to`'))
       .mockResolvedValueOnce({ id: 'em_2' });
     const { app } = seededHarness({ emailSender: { send } });
     const res = await request(app).post('/api/digest/send').set('Authorization', authHeader());

@@ -6,7 +6,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import { createConfirmRouter } from './routes/confirm.js';
 import { createAmpRouter } from './routes/amp.js';
 import { createOauthRouter } from './routes/oauth.js';
 import { createAdminRouter } from './routes/admin-api.js';
@@ -24,7 +23,7 @@ const ADMIN_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
  * @param {{ clientId: string, clientSecret: string, allowedAccountIds: string[], baseUrl: string, version?: string }} deps.env
  * @param {typeof fetch} [deps.fetchImpl]
  * @param {string} [deps.todayIso]
- * @param {{ send(p: object): Promise<{ id: string }> }} [deps.emailSender] - v4 digest; absent → /api/digest/send answers 409
+ * @param {{ send(p: object): Promise<{ id: string }> }} [deps.emailSender] - digest sender seam (Gmail-send, future round); absent → /api/digest/send answers 409
  * @returns {import('express').Express}
  */
 export function createApp({ storage, api, rateLimiter, env, fetchImpl, todayIso, emailSender }) {
@@ -32,12 +31,9 @@ export function createApp({ storage, api, rateLimiter, env, fetchImpl, todayIso,
   app.set('trust proxy', true); // monday code fronts the container — req.ip must be the client
   app.disable('x-powered-by');
   app.use(express.json());
-  app.use(express.urlencoded({ extended: false })); // v2: the landing page's POSTed confirm form
+  app.use(express.urlencoded({ extended: false })); // amp-form posts application/x-www-form-urlencoded
 
-  // Hot path first.
-  app.use(createConfirmRouter({ storage, api, rateLimiter, todayIso }));
-
-  // V5 Gmail dynamic email — bulk confirm submitted from inside the message.
+  // V6: the ONLY public write path — Gmail dynamic email bulk confirm.
   app.use(createAmpRouter({ storage, api, rateLimiter, allowedSenders: env.ampAllowedSenders ?? [] }));
 
   app.use(createOauthRouter({ storage, api, env, fetchImpl }));
