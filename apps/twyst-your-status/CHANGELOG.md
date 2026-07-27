@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.7
+
+- Settings UI redesign (Vercel-style clarity): soft canvas, compact label rows,
+  capped field widths, checkbox lists instead of stretched multi-selects,
+  collapsible permissions, and ↑/↓ reorder.
+
 ## 3.2.6
 
 - Per-label people-column gate: pick a People column; only actors who appear on
