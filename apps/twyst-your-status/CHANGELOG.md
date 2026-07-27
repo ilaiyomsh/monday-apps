@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.2.6
+
+- Settings layout tightened: capped field widths, two-column permissions grid,
+  and ↑/↓ reorder for status labels (persisted via existing `index` on save).
+
 ## 3.2.5
 
 - Settings overlay ignores the tiny column-settings iframe size (root cause of

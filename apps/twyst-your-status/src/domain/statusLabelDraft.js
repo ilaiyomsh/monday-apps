@@ -213,3 +213,29 @@ export function createBlankLabelDraft(existingDraft) {
     isNew: true,
   };
 }
+
+/**
+ * Move a label by delta (−1 / +1 in display order) and renormalize `index` to 0..n-1.
+ * Out-of-range / unknown key / non-integer delta ⇒ same order with normalized indexes.
+ *
+ * @param {ReturnType<typeof createLabelsDraft>} draft
+ * @param {string} clientKey
+ * @param {number} delta
+ * @returns {ReturnType<typeof createLabelsDraft>}
+ */
+export function reorderLabelsDraft(draft, clientKey, delta) {
+  const list = Array.isArray(draft) ? draft.slice() : [];
+  const withIndexes = (items) => items.map((label, index) => ({ ...label, index }));
+  const from = list.findIndex((label) => label.clientKey === clientKey);
+  const step = Number(delta);
+  if (from < 0 || !Number.isInteger(step) || step === 0) {
+    return withIndexes(list);
+  }
+  const to = from + step;
+  if (to < 0 || to >= list.length) {
+    return withIndexes(list);
+  }
+  const [moved] = list.splice(from, 1);
+  list.splice(to, 0, moved);
+  return withIndexes(list);
+}

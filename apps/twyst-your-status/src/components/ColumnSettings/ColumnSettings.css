@@ -17,7 +17,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 20px;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--ui-border-color, #c3c6d4);
   flex: 0 0 auto;
 }
@@ -46,10 +46,14 @@
 .twyst-settings-body {
   flex: 1 1 auto;
   overflow: auto;
-  padding: 16px 20px;
+  padding: 16px 24px 20px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
+  max-width: 920px;
+  width: 100%;
+  margin-inline: auto;
+  box-sizing: border-box;
 }
 
 .twyst-settings-toolbar {
@@ -60,22 +64,25 @@
 .twyst-label-card {
   border: 1px solid var(--ui-border-color, #c3c6d4);
   border-radius: 8px;
-  padding: 12px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   background: var(--primary-background-color, #fff);
 }
 
-.twyst-label-row {
+.twyst-label-identity {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .twyst-label-name-input {
-  flex: 1 1 auto;
-  min-width: 0;
+  width: 240px;
+  max-width: 100%;
+  flex: 0 1 240px;
+  min-width: 140px;
   border: 1px solid var(--ui-border-color, #c3c6d4);
   border-radius: 6px;
   padding: 8px 10px;
@@ -83,14 +90,43 @@
   background: var(--primary-background-color, #fff);
 }
 
+.twyst-label-order {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-inline-start: auto;
+}
+
+.twyst-permissions-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 280px);
+  gap: 12px 16px;
+  align-items: start;
+}
+
 .twyst-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+}
+
+.twyst-field-users {
+  max-width: 320px;
+}
+
+.twyst-field-teams {
+  max-width: 280px;
+}
+
+.twyst-field-required {
+  grid-column: 1 / -1;
+  max-width: 360px;
 }
 
 .twyst-multi {
   min-height: 88px;
+  width: 100%;
   border: 1px solid var(--ui-border-color, #c3c6d4);
   border-radius: 6px;
   padding: 6px;
@@ -110,7 +146,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 20px;
+  padding: 12px 24px;
   border-top: 1px solid var(--ui-border-color, #c3c6d4);
   flex: 0 0 auto;
   background: var(--primary-background-color, #fff);
@@ -122,14 +158,24 @@
   color: var(--secondary-text-color, #676879);
 }
 
-@media (max-width: 640px) {
+@media (max-width: 720px) {
   .twyst-settings-header,
   .twyst-settings-body,
   .twyst-settings-footer {
     padding-inline: 12px;
   }
 
-  .twyst-label-row {
-    flex-wrap: wrap;
+  .twyst-permissions-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .twyst-field-users,
+  .twyst-field-teams,
+  .twyst-field-required {
+    max-width: none;
+  }
+
+  .twyst-label-order {
+    margin-inline-start: 0;
   }
 }

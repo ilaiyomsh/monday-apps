@@ -10,6 +10,7 @@ import {
   createLabelsDraft,
   hasPendingLabelEdits,
   pruneSettingsForActiveLabels,
+  reorderLabelsDraft,
 } from '../../domain/statusLabelDraft';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';
 import {
@@ -45,9 +46,12 @@ function LabelCard({
   usedColors,
   saving,
   showPermissions,
+  isFirst,
+  isLast,
   onRename,
   onRecolor,
   onRemove,
+  onMove,
   onToggleHidden,
   onChangeRule,
 }) {
@@ -60,7 +64,7 @@ function LabelCard({
 
   return (
     <article className="twyst-label-card">
-      <div className="twyst-label-row">
+      <div className="twyst-label-identity">
         <StatusColorPicker
           colorValue={label.colorValue}
           usedColorEnums={usedColors}
@@ -75,6 +79,26 @@ function LabelCard({
           disabled={saving}
           onChange={(event) => onRename(label.clientKey, event.target.value)}
         />
+        <div className="twyst-label-order" role="group" aria-label="סדר הלייבל">
+          <Button
+            kind="tertiary"
+            size="small"
+            disabled={saving || isFirst}
+            aria-label="הזז למעלה"
+            onClick={() => onMove(label.clientKey, -1)}
+          >
+            ↑
+          </Button>
+          <Button
+            kind="tertiary"
+            size="small"
+            disabled={saving || isLast}
+            aria-label="הזז למטה"
+            onClick={() => onMove(label.clientKey, 1)}
+          >
+            ↓
+          </Button>
+        </div>
         <Button
           kind="tertiary"
           size="small"
@@ -97,52 +121,54 @@ function LabelCard({
             <Text type="text2">מוסתר בבורר</Text>
           </label>
 
-          <div className="twyst-field">
-            <Text type="text2">משתמשים</Text>
-            <PersonPicker
-              selected={selectedPeople}
-              users={users}
-              bordered
-              onChange={(people) => onChangeRule(label.id, {
-                allowedUserIds: (people || []).map((person) => String(person.id)),
-              })}
-            />
-          </div>
+          <div className="twyst-permissions-grid">
+            <div className="twyst-field twyst-field-users">
+              <Text type="text2">משתמשים</Text>
+              <PersonPicker
+                selected={selectedPeople}
+                users={users}
+                bordered
+                onChange={(people) => onChangeRule(label.id, {
+                  allowedUserIds: (people || []).map((person) => String(person.id)),
+                })}
+              />
+            </div>
 
-          <div className="twyst-field">
-            <Text type="text2">צוותים</Text>
-            <select
-              className="twyst-multi"
-              multiple
-              value={rule.allowedTeamIds}
-              disabled={!teamsAvailable || saving}
-              onChange={(event) => onChangeRule(label.id, { allowedTeamIds: multiValues(event) })}
-            >
-              {teams.map((team) => (
-                <option key={team.id} value={String(team.id)}>{team.name}</option>
-              ))}
-            </select>
-          </div>
+            <div className="twyst-field twyst-field-teams">
+              <Text type="text2">צוותים</Text>
+              <select
+                className="twyst-multi"
+                multiple
+                value={rule.allowedTeamIds}
+                disabled={!teamsAvailable || saving}
+                onChange={(event) => onChangeRule(label.id, { allowedTeamIds: multiValues(event) })}
+              >
+                {teams.map((team) => (
+                  <option key={team.id} value={String(team.id)}>{team.name}</option>
+                ))}
+              </select>
+            </div>
 
-          <div className="twyst-field">
-            <Text type="text2">שדות חובה</Text>
-            <select
-              className="twyst-multi"
-              multiple
-              value={rule.requiredColumnIds}
-              disabled={saving}
-              onChange={(event) => onChangeRule(label.id, { requiredColumnIds: multiValues(event) })}
-            >
-              {columns.map((column) => (
-                <option
-                  key={column.id}
-                  value={column.id}
-                  disabled={!isSupportedFormColumnType(column.type)}
-                >
-                  {column.title}
-                </option>
-              ))}
-            </select>
+            <div className="twyst-field twyst-field-required">
+              <Text type="text2">שדות חובה</Text>
+              <select
+                className="twyst-multi"
+                multiple
+                value={rule.requiredColumnIds}
+                disabled={saving}
+                onChange={(event) => onChangeRule(label.id, { requiredColumnIds: multiValues(event) })}
+              >
+                {columns.map((column) => (
+                  <option
+                    key={column.id}
+                    value={column.id}
+                    disabled={!isSupportedFormColumnType(column.type)}
+                  >
+                    {column.title}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </>
       )}
@@ -280,6 +306,10 @@ function ColumnSettings({ context, variant = 'overlay' }) {
 
   const removeLabel = (clientKey) => {
     setLabelsDraft((current) => current.filter((label) => label.clientKey !== clientKey));
+  };
+
+  const moveLabel = (clientKey, delta) => {
+    setLabelsDraft((current) => reorderLabelsDraft(current, clientKey, delta));
   };
 
   const addLabel = () => {
@@ -422,7 +452,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
           </Button>
         </div>
 
-        {labelsDraft.map((label) => {
+        {labelsDraft.map((label, labelIndex) => {
           const usedColors = labelsDraft
             .filter((other) => other.clientKey !== label.clientKey)
             .map((other) => other.colorValue);
@@ -439,9 +469,12 @@ function ColumnSettings({ context, variant = 'overlay' }) {
               usedColors={usedColors}
               saving={saving}
               showPermissions={!label.isNew}
+              isFirst={labelIndex === 0}
+              isLast={labelIndex === labelsDraft.length - 1}
               onRename={renameLabel}
               onRecolor={recolorLabel}
               onRemove={removeLabel}
+              onMove={moveLabel}
               onToggleHidden={toggleHidden}
               onChangeRule={changeRule}
             />
