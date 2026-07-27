@@ -29,6 +29,7 @@ const GET_ITEM_QUERY = `query GetItem($itemIds: [ID!], $columnIds: [String!]) {
       text
       ... on StatusValue { index }
       ... on DateValue { date }
+      ... on PeopleValue { persons_and_teams { id kind } }
     }
   }
 }`;
@@ -114,6 +115,7 @@ export class MondayApiError extends Error {
  * @property {string} [boardId]
  * @property {number|null} [statusLabelId] - StatusValue.index (label id); null when status unset
  * @property {string} [peopleText] - assignee display name; "" when unset
+ * @property {string[]} [peoplePersonIds] - person ids (kind 'person' only) on the people column; [] when unset/unconfigured (V6/D11)
  * @property {string|null} [deadlineDate] - YYYY-MM-DD; null when no expiry column configured or unset
  */
 
@@ -218,6 +220,10 @@ export function createMondayApi({ fetchImpl, url = MONDAY_API_URL } = {}) {
         boardId: item.board?.id ?? null,
         statusLabelId: statusValue?.index ?? null,
         peopleText: peopleValue?.text ?? '',
+        // V6/D11 runtime assignee check — same normalization as board items.
+        peoplePersonIds: (peopleValue?.persons_and_teams ?? [])
+          .filter((p) => p?.kind === 'person')
+          .map((p) => String(p.id)),
         deadlineDate: dateValue?.date ? dateValue.date : null, // "" (never set) → null
       };
     },

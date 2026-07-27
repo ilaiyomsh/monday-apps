@@ -44,7 +44,7 @@ function makeHarness({ seed = {}, env = ENV } = {}) {
   const app = createApp({
     storage,
     api,
-    rateLimiter: { allow: () => true },
+    rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
     env,
     fetchImpl: vi.fn(),
   });

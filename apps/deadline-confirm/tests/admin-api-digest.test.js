@@ -130,7 +130,7 @@ function makeHarness({ seed = {}, emailSender, getBoardItems } = {}) {
   const app = createApp({
     storage,
     api,
-    rateLimiter: { allow: () => true },
+    rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
     env: ENV,
     fetchImpl: vi.fn(),
     todayIso: TODAY,
