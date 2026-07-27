@@ -8,8 +8,16 @@ describe('resolveAppRoute', () => {
     expect(resolveAppRoute('/apps/twyst/picker')).toBe('picker');
   });
 
-  it('routes /settings to settings and rejects unknown paths', () => {
+  it('routes /settings to the slim launcher and /settings-full to the overlay editor', () => {
     expect(resolveAppRoute('/settings')).toBe('settings');
+    expect(resolveAppRoute('/settings/')).toBe('settings');
+    expect(resolveAppRoute('/apps/twyst/settings')).toBe('settings');
+    expect(resolveAppRoute('/settings-full')).toBe('settings-full');
+    expect(resolveAppRoute('/settings-full/')).toBe('settings-full');
+    expect(resolveAppRoute('/apps/twyst/settings-full')).toBe('settings-full');
+  });
+
+  it('rejects unknown paths', () => {
     expect(resolveAppRoute('/')).toBeNull();
     expect(resolveAppRoute('/board')).toBeNull();
   });

@@ -89,6 +89,18 @@ const mondayService = {
     return monday.execute('closeDialog');
   },
 
+  /**
+   * Open a nested full-size app modal (e.g. from the cramped column-settings shell).
+   * @see https://developer.monday.com/apps/docs/mondayexecute#openappfeaturemodal
+   */
+  openAppFeatureModal(options = {}) {
+    return monday.execute('openAppFeatureModal', options);
+  },
+
+  closeAppFeatureModal() {
+    return monday.execute('closeAppFeatureModal');
+  },
+
   openItemCard(itemId) {
     monday.execute('openItemCard', { itemId });
   },

@@ -7,10 +7,12 @@ Target app: `11775054` (client-side CDN)
 Configure on the draft version:
 
 1. Status Column on-click → `<CDN_ORIGIN>/picker`
-2. Column settings → `<CDN_ORIGIN>/settings`
+2. Column settings (slim launcher) → `<CDN_ORIGIN>/settings`
+3. Full settings overlay (opened from the launcher; no separate Dev Center binding required
+   beyond being on the same CDN) → `<CDN_ORIGIN>/settings-full`
 
-The Vite build copies `index.html` into `dist/picker/` and `dist/settings/` so the
-static CDN can serve those paths without rewrite rules.
+The Vite build copies `index.html` into `dist/picker/`, `dist/settings/`, and
+`dist/settings-full/` so the static CDN can serve those paths without rewrite rules.
 
 ## Version permissions (scopes)
 
@@ -25,7 +27,7 @@ Changing scopes can require existing installers to authorize the app again.
 
 - `pnpm --filter ./apps/twyst-your-status test`
 - `pnpm --filter ./apps/twyst-your-status lint`
-- `pnpm --filter ./apps/twyst-your-status build` → `dist/` (+ `dist/picker`, `dist/settings`)
+- `pnpm --filter ./apps/twyst-your-status build` → `dist/` (+ `dist/picker`, `dist/settings`, `dist/settings-full`)
 
 ## Deployment
 
