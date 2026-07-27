@@ -28,6 +28,7 @@ const DIGEST_CONFIG: DigestConfig = {
   usersPeopleColumnId: 'people_u',
   usersEmailColumnId: 'email_u',
   subject: 'המשימות שלך',
+  sendHour: 8,
   sections: [
     {
       id: 's_done0001',
@@ -55,6 +56,7 @@ describe('defaultDigestDraft', () => {
     const d = defaultDigestDraft();
     expect(d.enabled).toBe(false);
     expect(d.subject.length).toBeGreaterThan(0);
+    expect(d.sendHour).toBe(8);
     expect(d.sections).toHaveLength(2);
     expect(d.sections[0].id).toMatch(/^s_/);
     expect(d.sections[0].dateColumnId).toBeNull();
@@ -83,6 +85,7 @@ describe('digestFromConfig / draftFromConfig', () => {
     const d = digestFromConfig(DIGEST_CONFIG);
     expect(d.enabled).toBe(true);
     expect(d.usersBoardId).toBe('222');
+    expect(d.sendHour).toBe(8);
     expect(d.sections).toEqual([
       {
         id: 's_done0001',

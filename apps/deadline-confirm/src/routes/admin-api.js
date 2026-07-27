@@ -32,6 +32,7 @@ import express from 'express';
 import { generateSecret, maskSecret } from '../services/secret.js';
 import { renderDigestEmail } from '../helpers/digest-email.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
+import { renderDigestPlain } from '../helpers/digest-plain.js';
 import { buildDigest, digestTaskColumnIds } from '../services/digest-service.js';
 import { MondayApiError } from '../services/monday-api.js';
 import { logError, logInfo } from '../helpers/logger.js';
@@ -140,11 +141,16 @@ function validateConfig(body) {
     if (new Set(sections.map((s) => s.id)).size !== sections.length) {
       return { field: 'digest.sections' };
     }
+    const sendHour = raw.sendHour === undefined || raw.sendHour === null ? 8 : raw.sendHour;
+    if (!Number.isInteger(sendHour) || sendHour < 0 || sendHour > 23) {
+      return { field: 'digest.sendHour' };
+    }
     digest = {
       usersBoardId: raw.usersBoardId,
       usersPeopleColumnId: raw.usersPeopleColumnId,
       usersEmailColumnId: raw.usersEmailColumnId,
       subject: raw.subject,
+      sendHour,
       sections,
     };
   }
@@ -241,6 +247,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     const previewNow = new Date(`${today}T09:00:00+03:00`);
     const renderArgs = { baseUrl: env.baseUrl, secret, accountId: req.session.accountId };
     const renderFor = (recipient) => renderDigestEmail({ ...renderArgs, recipient: withButtons(recipient) });
+    const renderPlainFor = (recipient) => renderDigestPlain({ recipient: withButtons(recipient) });
     const renderAmpFor = (recipient) =>
       renderDigestAmp({
         ...renderArgs,
@@ -256,6 +263,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         skippedUsers,
         truncated: tasksRead.truncated || usersRead.truncated,
         renderFor,
+        renderPlainFor,
         renderAmpFor,
       },
     };
@@ -269,7 +277,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         res.status(prep.status).json(prep.body);
         return;
       }
-      const { recipients, skippedUsers, truncated, renderFor, renderAmpFor } = prep.digestData;
+      const { recipients, skippedUsers, truncated, renderPlainFor, renderAmpFor } = prep.digestData;
       const wanted =
         typeof req.query.recipient === 'string'
           ? recipients.find((r) => r.email === req.query.recipient)
@@ -278,7 +286,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         recipients: recipients.map(({ email, name, taskCount }) => ({ email, name, taskCount })),
         skippedUsers,
         truncated,
-        html: wanted ? renderFor(wanted) : null,
+        plain: wanted ? renderPlainFor(wanted) : null,
         amp: wanted ? renderAmpFor(wanted) : null,
       });
     })
@@ -391,8 +399,9 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     guarded(async (req, res) => {
       const secret = generateSecret();
       await storage.forAccount(req.session.accountId).setLinkSecret(secret);
-      // Returned in FULL exactly once — the admin view regenerates snippets.
-      res.json({ secret });
+      // V6 (D3/D4): the secret is write-only — rotation invalidates outstanding
+      // signatures but never returns the new value to the client.
+      res.json({ ok: true });
     })
   );
 

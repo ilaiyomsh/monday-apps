@@ -30,7 +30,7 @@ const GUARD_MESSAGES: Record<string, string> = {
   digest_not_configured: 'המייל המסכם עוד לא נשמר — הפעילו אותו, השלימו את השדות ולחצו "שמירת הגדרות".',
   no_secret: 'אין מפתח קישורים פעיל — צרו מפתח בלשונית ההגדרות.',
   not_connected: 'אין חיבור monday פעיל — התחברו מחדש בלשונית ההגדרות.',
-  email_not_configured: 'ערוץ השליחה לא מוגדר בשרת (RESEND_API_KEY / DIGEST_FROM חסרים בסביבת האפליקציה).',
+  email_not_configured: 'ערוץ השליחה לא מוגדר בשרת (Gmail API — חסרים credentials בסביבת האפליקציה).',
   monday_api_failed: 'קריאת הלוחות ממאנדיי נכשלה. נסו שוב.',
 };
 
@@ -53,6 +53,7 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [ampCopied, setAmpCopied] = useState(false);
+  const [plainCopied, setPlainCopied] = useState(false);
 
   const [sendPhase, setSendPhase] = useState<'idle' | 'confirm' | 'sending'>('idle');
   const [sendResult, setSendResult] = useState<DigestSendResponse | null>(null);
@@ -124,6 +125,17 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   };
 
   // V5: hand the amp4email part to the operator's clipboard (playground paste).
+  const copyPlain = async (plain: string) => {
+    setPlainCopied(false);
+    try {
+      await navigator.clipboard.writeText(plain);
+      setPlainCopied(true);
+    } catch (err) {
+      logger.error('admin', 'digest_plain_copy_failed', err);
+      setPreviewError('העתקה נכשלה — אפשר להעתיק ידנית מהתצוגה.');
+    }
+  };
+
   const copyAmp = async (amp: string) => {
     setAmpCopied(false);
     try {
@@ -223,6 +235,19 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                   value={digest.subject}
                   placeholder="נושא"
                   onChange={(value: string) => onChange({ subject: value })}
+                />
+              </div>
+              <div className="dc-field" style={{ maxWidth: 160 }}>
+                <label>שעת שליחה (0–23, ישראל)</label>
+                <TextField
+                  type="number"
+                  value={String(digest.sendHour)}
+                  onChange={(value: string) => {
+                    const parsed = Number(value);
+                    if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 23) {
+                      onChange({ sendHour: parsed });
+                    }
+                  }}
                 />
               </div>
             </div>
@@ -416,16 +441,29 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     clearable={false}
                   />
                 </div>
-                {preview.html && (
-                  <iframe
-                    title="תצוגה מקדימה של המייל"
-                    srcDoc={preview.html}
-                    sandbox=""
-                    style={{ width: '100%', height: 480, border: '1px solid var(--ui-border-color, #d0d4e4)', borderRadius: 8, background: '#fff' }}
-                  />
+                {preview.plain && (
+                  <div style={{ marginTop: 10 }}>
+                    <label>גרסת טקסט (text/plain)</label>
+                    <pre
+                      dir="rtl"
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        background: 'var(--ui-background-color, #f6f7fb)',
+                        padding: 12,
+                        borderRadius: 8,
+                        border: '1px solid var(--ui-border-color, #d0d4e4)',
+                        maxHeight: 240,
+                        overflow: 'auto',
+                        fontSize: 13,
+                      }}
+                    >
+                      {preview.plain}
+                    </pre>
+                    <Button kind="secondary" size="small" onClick={() => void copyPlain(preview.plain as string)}>
+                      {plainCopied ? 'הועתק ✓' : 'העתק גרסת טקסט'}
+                    </Button>
+                  </div>
                 )}
-                {/* V5: the Gmail dynamic-email part. Copied out for the AMP
-                    playground while the AMP sending path is still manual. */}
                 {preview.amp && (
                   <div style={{ marginTop: 10 }}>
                     <Button kind="secondary" size="small" onClick={() => void copyAmp(preview.amp as string)}>
@@ -442,7 +480,19 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
             {preview.skippedUsers.length > 0 && (
               <div className="dc-hint">
                 דולגו {preview.skippedUsers.length} שורות בלוח המשתמשים:{' '}
-                {preview.skippedUsers.map((s) => `${s.name} (${s.reason === 'no_email' ? 'חסר אימייל' : 'חסר איש'})`).join(', ')}
+                {preview.skippedUsers
+                  .map((s) => {
+                    const reason =
+                      s.reason === 'no_email'
+                        ? 'חסר אימייל'
+                        : s.reason === 'no_person'
+                          ? 'חסר איש'
+                          : s.reason === 'duplicate_email'
+                            ? 'אימייל כפול'
+                            : 'יותר מאיש אחד';
+                    return `${s.name} (${reason})`;
+                  })
+                  .join(', ')}
               </div>
             )}
           </div>

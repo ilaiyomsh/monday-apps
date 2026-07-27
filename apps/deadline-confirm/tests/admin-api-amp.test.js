@@ -121,12 +121,15 @@ const preview = (app, query = '') =>
   request(app).get(`/api/digest/preview${query}`).set('Authorization', authHeader());
 
 describe('GET /api/digest/preview — amp4email part', () => {
-  it('returns a complete amp4email document alongside the html body', async () => {
+  it('returns a complete amp4email document alongside the plain text body', async () => {
     const res = await preview(harness());
 
     expect(res.status).toBe(200);
-    expect(typeof res.body.html).toBe('string');
+    expect(typeof res.body.plain).toBe('string');
     expect(typeof res.body.amp).toBe('string');
+    expect(res.body.plain).toContain('שלום דנה כהן');
+    expect(res.body.plain).not.toContain('/confirm');
+    expect(res.body).not.toHaveProperty('html');
     expect(res.body.amp.startsWith('<!doctype html>')).toBe(true);
     expect(res.body.amp).toContain('<html amp4email');
   });
@@ -168,11 +171,11 @@ describe('GET /api/digest/preview — amp4email part', () => {
     expect(res.body.amp).not.toMatch(new RegExp(`href="[^"]*${SECRET}`));
   });
 
-  it('is null — like html — when the requested recipient has nothing pending', async () => {
+  it('is null — like plain — when the requested recipient has nothing pending', async () => {
     const res = await preview(harness(), '?recipient=nobody@example.com');
 
     expect(res.status).toBe(200);
-    expect(res.body.html).toBeNull();
+    expect(res.body.plain).toBeNull();
     expect(res.body.amp).toBeNull();
   });
 });

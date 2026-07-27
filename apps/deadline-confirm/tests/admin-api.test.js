@@ -416,7 +416,7 @@ describe('PUT /api/config (v6 shape, v3 scoping)', () => {
 });
 
 describe('POST /api/secret/rotate', () => {
-  it("returns a 43-char base64url secret in full exactly once and persists it under the SESSION account's link_secret key", async () => {
+  it("persists a 43-char base64url secret under the SESSION account's link_secret key but returns only { ok: true } (V6: secret is write-only)", async () => {
     const { app, backend } = makeHarness();
 
     const res = await request(app)
@@ -424,25 +424,28 @@ describe('POST /api/secret/rotate', () => {
       .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
-    expect(res.body).toStrictEqual({ secret: expect.stringMatching(BASE64URL_43) });
-    expect(await backend.get(scoped('link_secret'))).toBe(res.body.secret);
+    expect(res.body).toStrictEqual({ ok: true });
+    const stored = await backend.get(scoped('link_secret'));
+    expect(stored).toMatch(BASE64URL_43);
     expect(await backend.get('link_secret')).toBeNull();
   });
 
   it('returns a DIFFERENT secret on a second rotation and overwrites the stored one (spec §15.6)', async () => {
     const { app, backend } = makeHarness();
 
-    const first = await request(app)
+    await request(app)
       .post('/api/secret/rotate')
       .set('Authorization', authHeader());
+    const firstStored = await backend.get(scoped('link_secret'));
     const second = await request(app)
       .post('/api/secret/rotate')
       .set('Authorization', authHeader());
 
     expect(second.status).toBe(200);
-    expect(second.body.secret).toMatch(BASE64URL_43);
-    expect(second.body.secret).not.toBe(first.body.secret);
-    expect(await backend.get(scoped('link_secret'))).toBe(second.body.secret);
+    expect(second.body).toStrictEqual({ ok: true });
+    const secondStored = await backend.get(scoped('link_secret'));
+    expect(secondStored).toMatch(BASE64URL_43);
+    expect(secondStored).not.toBe(firstStored);
   });
 });
 
@@ -486,8 +489,10 @@ describe('per-session account scoping (v3 isolation)', () => {
       .post('/api/secret/rotate')
       .set('Authorization', authHeader({ accountId: 777 }));
     expect(rotate.status).toBe(200);
+    expect(rotate.body).toStrictEqual({ ok: true });
 
-    expect(await backend.get(scoped('link_secret', ACCOUNT_ID))).toBe(rotate.body.secret);
+    const storedSecret = await backend.get(scoped('link_secret', ACCOUNT_ID));
+    expect(storedSecret).toMatch(BASE64URL_43);
     expect(await backend.get(scoped('link_secret', OTHER_ACCOUNT_ID))).toBeNull();
 
     const stateB = await request(app)
