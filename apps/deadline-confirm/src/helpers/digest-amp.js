@@ -261,7 +261,8 @@ const STYLES_BASE = `
       .go { margin:8px 0 4px; }
       .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; }
       .ok { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#E6F7EF; color:#00754A; font-size:13px; }
-      .err { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#FDECEE; color:#B4222F; font-size:13px; }
+      .err { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#FDECEE; color:#B4222F; font-size:13px; white-space:pre-wrap; word-break:break-word; }
+      .err-detail { display:block; margin-top:6px; font-size:11px; opacity:0.9; font-family:ui-monospace,Menlo,Consolas,monospace; }
       .foot { font-size:12px; color:#9699A6; line-height:1.6; border-top:1px solid #E6E9EF; padding-top:12px; margin-top:10px; }
 `;
 
@@ -455,7 +456,7 @@ export function renderDigestAmp({
 ${clusters}
         <div class="go"><input class="send" type="submit" style="background:${SUBMIT_COLOR}" value="${SUBMIT_LABEL}"></div>
         <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
-        <div submit-error><template type="amp-mustache"><div class="err">{{message}}</div></template></div>
+        <div submit-error><template type="amp-mustache"><div class="err">{{message}}{{#detail}}<span class="err-detail">{{detail}}</span>{{/detail}}</div></template></div>
       </form>
       <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה בתפריט לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
     </div>

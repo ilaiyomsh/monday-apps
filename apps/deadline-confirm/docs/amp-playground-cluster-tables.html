@@ -135,7 +135,8 @@ font-size: 14px;
 font-weight: bold;
 }
 .ok { margin: 10px 0 2px; padding: 9px 12px; border-radius: 8px; background: #E6F7EF; color: #00754A; font-size: 13px; }
-.err { margin: 10px 0 2px; padding: 9px 12px; border-radius: 8px; background: #FDECEE; color: #B4222F; font-size: 13px; }
+.err { margin: 10px 0 2px; padding: 9px 12px; border-radius: 8px; background: #FDECEE; color: #B4222F; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+.err-detail { display: block; margin-top: 6px; font-size: 11px; opacity: 0.9; font-family: ui-monospace, Menlo, Consolas, monospace; }
 .foot { font-size: 12px; color: #9699A6; line-height: 1.6; border-top: 1px solid #E6E9EF; padding-top: 12px; margin-top: 10px; }
 </style>
 </head>
@@ -264,7 +265,7 @@ enctype="application/x-www-form-urlencoded">
 <template type="amp-mustache"><div class="ok">{{message}}</div></template>
 </div>
 <div submit-error>
-<template type="amp-mustache"><div class="err">{{message}}</div></template>
+<template type="amp-mustache"><div class="err">{{message}}{{#detail}}<span class="err-detail">{{detail}}</span>{{/detail}}</div></template>
 </div>
 </form>
 

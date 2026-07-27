@@ -329,6 +329,8 @@ describe('renderDigestAmp — response + validation', () => {
     expect((doc.match(/<div submit-success>/g) ?? []).length).toBe(1);
     expect((doc.match(/<div submit-error>/g) ?? []).length).toBe(1);
     expect(doc).toContain('{{message}}');
+    expect(doc).toContain('{{#detail}}');
+    expect(doc).toContain('{{detail}}');
     expect(doc).toContain('דנה');
   });
 

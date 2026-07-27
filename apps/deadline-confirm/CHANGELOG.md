@@ -11,6 +11,8 @@
 - Admin hint: playground submit needs `amp@gmail.dev` on `AMP_ALLOWED_SENDERS`.
 - Admin `500 internal_error` now returns `message` + `detail` (name/message/stack);
   the SPA shows them on boot/save and logs the stack to the browser console.
+- AMP submit-error shows machine `detail` in the **email body** (e.g. `bad_slot`,
+  `bad_sig`, `missing_or_invalid_fields`) under the Hebrew message.
 
 ## 0.9.2 — 2026-07-27 — feat: AMP digest — amp-bind status dropdown (monday colors)
 
