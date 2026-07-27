@@ -1,5 +1,6 @@
 <!doctype html>
-<!-- IMPLEMENTED in renderDigestAmp (deadline-confirm 0.9.0). Playground paste sample. -->
+<!-- IMPLEMENTED in renderDigestAmp (deadline-confirm 0.9.1). Playground paste sample.
+     Label choice = native <select> inside amp-form (AMP for Email supported). -->
 <html amp4email lang="he" dir="rtl">
   <head>
     <meta charset="utf-8">
@@ -70,6 +71,9 @@
       th.name-h {
         text-align: right;
       }
+      th.status-h {
+        min-width: 200px;
+      }
       th:last-child {
         border-inline-end: none;
       }
@@ -96,28 +100,24 @@
         font-size: 13px;
         white-space: nowrap;
       }
-      th.btn {
-        color: #ffffff;
-        font-size: 13px;
-        font-weight: normal;
-        padding: 6px 10px;
-        min-width: 88px;
-      }
       td.pick {
-        width: 96px;
-        padding: 6px;
+        width: 220px;
+        padding: 6px 8px;
+        text-align: right;
       }
-      /* Radio (not checkbox): one new status per task across the whole email.
-         Same itemId → same name=item_<id> in every cluster table. */
-      .pick-box {
-        display: inline-block;
-        cursor: pointer;
-        line-height: 0;
-      }
-      .pick-box input {
-        width: 18px;
-        height: 18px;
-        margin: 0;
+      select.label-dd {
+        width: 200px;
+        max-width: 100%;
+        height: 34px;
+        padding: 0 10px;
+        font-size: 14px;
+        font-weight: normal;
+        font-family: Figtree, Roboto, "Noto Sans Hebrew", Arial, Helvetica, sans-serif;
+        color: #323338;
+        background: #ffffff;
+        border: 1px solid #C5C7D0;
+        border-radius: 4px;
+        box-sizing: border-box;
         vertical-align: middle;
       }
       .go {
@@ -161,8 +161,8 @@
   <body>
     <div class="wrap">
       <p class="hi">&#8207;שלום עילי שלם,</p>
-      <p class="lead">&#8207;סמנו סטטוס חדש לכל משימה (עמודה אחת בלבד לשורה) ולחצו על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
-      <p class="note">&#8207;תצוגת playground · מקבץ = טבלה · תאריך לפי עמודת המקבץ · עמודת סימון לכל כפתור · אישור אחד למייל · רדיו (לא צ׳קבוקס) כדי למנוע שני סטטוסים לאותה משימה</p>
+      <p class="lead">&#8207;בחרו סטטוס חדש מהתפריט הנפתח לכל משימה ולחצו על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
+      <p class="note">&#8207;תצוגת playground · מקבץ = טבלה · תאריך לפי עמודת המקבץ · תפריט נפתח (&lt;select&gt;) לבחירת לייבל · אישור אחד למייל</p>
 
       <form method="post"
             action-xhr="https://example.com/amp/confirm"
@@ -173,52 +173,68 @@
         <input type="hidden" name="s" value="playground">
         <input type="hidden" name="sig" value="playground">
 
-        <!-- מקבץ 1: תאריך התחלה · כפתורים: בעבודה + תקוע (דמו multi-button) -->
         <div class="cluster">
           <p class="cluster-title">&#8207;משימות שנדרש להתחיל וטרם התחילו:</p>
           <table class="board">
             <tr>
               <th class="name-h">&#8207;שם הפעולה</th>
               <th>&#8207;תאריך התחלה</th>
-              <th class="btn" style="background:#fdab3d">&#8207;בעבודה</th>
-              <th class="btn" style="background:#e2445c">&#8207;תקוע</th>
+              <th class="status-h">&#8207;סטטוס חדש</th>
             </tr>
             <tr>
               <td class="name">&#8207;Item 1</td>
               <td class="date">22/07/2026</td>
-              <td class="pick"><label class="pick-box"><input type="radio" name="item_9001" value="btn_working"></label></td>
-              <td class="pick"><label class="pick-box"><input type="radio" name="item_9001" value="btn_stuck"></label></td>
+              <td class="pick">
+                <select class="label-dd" name="item_9001">
+                  <option value="">&#8207;ללא שינוי</option>
+                  <option value="btn_working">&#8207;בעבודה</option>
+                  <option value="btn_stuck">&#8207;תקוע</option>
+                </select>
+              </td>
             </tr>
             <tr>
               <td class="name">&#8207;Item 3</td>
               <td class="date">22/07/2026</td>
-              <td class="pick"><label class="pick-box"><input type="radio" name="item_9003" value="btn_working"></label></td>
-              <td class="pick"><label class="pick-box"><input type="radio" name="item_9003" value="btn_stuck"></label></td>
+              <td class="pick">
+                <select class="label-dd" name="item_9003">
+                  <option value="">&#8207;ללא שינוי</option>
+                  <option value="btn_working">&#8207;בעבודה</option>
+                  <option value="btn_stuck">&#8207;תקוע</option>
+                </select>
+              </td>
             </tr>
           </table>
         </div>
 
-        <!-- מקבץ 2: תאריך סיום · כפתורים: בוצע + לא רלוונטי (דמו multi-button) -->
         <div class="cluster">
           <p class="cluster-title">&#8207;משימות שנדרש לסיים וטרם בוצעו:</p>
           <table class="board">
             <tr>
               <th class="name-h">&#8207;שם הפעולה</th>
               <th>&#8207;תאריך סיום</th>
-              <th class="btn" style="background:#00c875">&#8207;בוצע</th>
-              <th class="btn" style="background:#c4c4c4">&#8207;לא רלוונטי</th>
+              <th class="status-h">&#8207;סטטוס חדש</th>
             </tr>
             <tr>
               <td class="name">&#8207;Item 1</td>
               <td class="date">27/07/2026</td>
-              <td class="pick"><label class="pick-box"><input type="radio" name="item_9001" value="btn_done"></label></td>
-              <td class="pick"><label class="pick-box"><input type="radio" name="item_9001" value="btn_na"></label></td>
+              <td class="pick">
+                <select class="label-dd" name="item_9001">
+                  <option value="">&#8207;ללא שינוי</option>
+                  <option value="btn_done">&#8207;בוצע</option>
+                  <option value="btn_na">&#8207;לא רלוונטי</option>
+                </select>
+              </td>
             </tr>
             <tr>
               <td class="name">&#8207;Item 3</td>
               <td class="date">27/07/2026</td>
-              <td class="pick"><label class="pick-box"><input type="radio" name="item_9003" value="btn_done"></label></td>
-              <td class="pick"><label class="pick-box"><input type="radio" name="item_9003" value="btn_na"></label></td>
+              <td class="pick">
+                <select class="label-dd" name="item_9003">
+                  <option value="">&#8207;ללא שינוי</option>
+                  <option value="btn_done">&#8207;בוצע</option>
+                  <option value="btn_na">&#8207;לא רלוונטי</option>
+                </select>
+              </td>
             </tr>
           </table>
         </div>
@@ -234,7 +250,7 @@
         </div>
       </form>
 
-      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
+      <p class="foot">&#8207;מייל אוטומטי · משימות על "ללא שינוי" לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
     </div>
   </body>
 </html>
