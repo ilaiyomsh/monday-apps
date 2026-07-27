@@ -43,6 +43,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build twyst-your-status
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
         run: pnpm --filter "./apps/twyst-your-status" build
 
       - name: Install monday.com apps CLI
@@ -57,8 +59,8 @@ jobs:
       # server-side (monday-code) apps — the only difference between the two.
       - name: Push to latest DRAFT version
         run: >
-          mapps code:push -c
-          -d apps/twyst-your-status/dist
+          mapps code:push --verbose
+          -d apps/twyst-your-status/.
           -a "$APP_ID"
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}

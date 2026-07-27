@@ -3,6 +3,7 @@ import logger from '../utils/logger';
 
 const monday = mondaySdk();
 const STORAGE_RETRY_DELAY_MS = 350;
+const API_VERSION = '2026-04';
 
 function wait(milliseconds) {
   return new Promise((resolve) => {
@@ -43,9 +44,14 @@ const mondayService = {
     return unsubscribe;
   },
 
+  async getSessionToken() {
+    const response = await monday.get('sessionToken');
+    return response.data;
+  },
+
   // Execute GraphQL query
   async query(query, variables = {}) {
-    const response = await monday.api(query, { variables });
+    const response = await monday.api(query, { variables, apiVersion: API_VERSION });
 
     if (response.errors?.length) {
       throw new Error(response.errors[0]?.message || 'GraphQL query failed');

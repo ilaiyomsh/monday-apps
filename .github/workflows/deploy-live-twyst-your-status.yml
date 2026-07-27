@@ -48,6 +48,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build twyst-your-status
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_IS_RELEASE: "true"
         run: pnpm --filter "./apps/twyst-your-status" build
 
       - name: Install monday.com apps CLI
@@ -88,8 +91,8 @@ jobs:
         run: |
           set -uo pipefail
           for attempt in 1 2; do
-            if mapps code:push -c --force \
-                 -d apps/twyst-your-status/dist \
+            if mapps code:push --force \
+                 -d apps/twyst-your-status/. \
                  -i "${{ steps.live.outputs.live_id }}"; then
               exit 0
             fi

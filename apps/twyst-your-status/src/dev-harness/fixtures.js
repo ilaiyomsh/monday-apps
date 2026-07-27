@@ -9,9 +9,9 @@
 // that pass against tidied mocks fail against the live iframe.
 
 export const USERS = [
-  { id: '11111111', name: '׳™׳“׳™׳“׳™׳” ׳›׳”׳', photo_thumb: null },
-  { id: '22222222', name: '׳ ׳•׳¢׳” ׳׳•׳™', photo_thumb: null },
-  { id: '33333333', name: 'Dana Fischer', photo_thumb: null },
+  { id: '11111111', name: '׳™׳“׳™׳“׳™׳” ׳›׳”׳', photo_url: { thumb: null } },
+  { id: '22222222', name: '׳ ׳•׳¢׳” ׳׳•׳™', photo_url: { thumb: null } },
+  { id: '33333333', name: 'Dana Fischer', photo_url: { thumb: null } },
 ];
 
 const USER_BASE = {
@@ -200,10 +200,10 @@ export const API_FIXTURES = [
           state: 'active',
           board_kind: 'public',
           columns: [
-            { id: 'name', title: '׳©׳', type: 'name', settings_str: '{}' },
-            { id: 'status', title: '׳¡׳˜׳˜׳•׳¡', type: 'status', settings_str: '{"labels":{"0":"׳‘׳¢׳‘׳•׳“׳”","1":"׳‘׳•׳¦׳¢","2":"׳×׳§׳•׳¢"},"labels_colors":{"0":{"color":"#fdab3d"},"1":{"color":"#00c875"},"2":{"color":"#e2445c"}}}' },
-            { id: 'person', title: '׳׳—׳¨׳׳™', type: 'people', settings_str: '{}' },
-            { id: 'date4', title: '׳×׳׳¨׳™׳', type: 'date', settings_str: '{}' },
+            { id: 'name', title: '׳©׳', type: 'name', settings: {} },
+            { id: 'status', title: '׳¡׳˜׳˜׳•׳¡', type: 'status', settings: { labels: { 0: 'בעבודה', 1: 'בוצע', 2: 'תקוע' }, labels_colors: { 0: { color: '#fdab3d' }, 1: { color: '#00c875' }, 2: { color: '#e2445c' } } } },
+            { id: 'person', title: '׳׳—׳¨׳׳™', type: 'people', settings: {} },
+            { id: 'date4', title: '׳×׳׳¨׳™׳', type: 'date', settings: {} },
           ],
           groups: [{ id: 'topics', title: '׳§׳‘׳•׳¦׳” ׳', color: '#579bfc' }],
         },

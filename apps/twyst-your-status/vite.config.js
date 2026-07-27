@@ -1,6 +1,9 @@
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
 // Dev harness: a monday-sdk-js stub with realistic fixtures so the app renders
 // OUTSIDE the monday iframe (pnpm dev:mock) and tests never hit the live API.
@@ -18,6 +21,11 @@ export default defineConfig({
     port: 8303,
     host: true,
     allowedHosts: ['.apps-tunnel.monday.app'],
+    proxy: {
+      '/api': 'http://localhost:8080',
+      '/oauth': 'http://localhost:8080',
+      '/webhooks': 'http://localhost:8080',
+    },
   },
   build: {
     outDir: 'dist',
@@ -26,7 +34,9 @@ export default defineConfig({
   define: {
     global: 'globalThis',
     // Version stamp for remote error records (utils/axiomErrorSink.js ג†’ `ver` field).
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_SHA__: JSON.stringify(process.env.VITE_BUILD_SHA ?? 'local'),
+    __IS_RELEASE__: JSON.stringify(process.env.VITE_IS_RELEASE === 'true'),
   },
   test: {
     // vitest ALWAYS uses the stub ג€” tests must run against harness fixtures.

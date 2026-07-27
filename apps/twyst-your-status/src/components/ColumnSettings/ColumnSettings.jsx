@@ -1,12 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  STATUS_GUARD_CONFIG_VERSION,
-  makeStatusGuardStorageKey,
   normalizeStatusGuardConfig,
   normalizeStatusLabels,
 } from '../../domain/statusPolicy';
 import { GET_STATUS_COLUMN_SETTINGS } from '../../services/graphqlQueries';
 import mondayService from '../../services/mondayService';
+import workflowClient from '../../services/workflowClient';
 import logger from '../../utils/logger';
 import ErrorState from '../shared/ErrorState';
 import LoadingState from '../shared/LoadingState';
@@ -19,35 +18,39 @@ function ColumnSettings({ context }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
-  const storageKey = useMemo(
-    () => makeStatusGuardStorageKey(boardId, columnId),
-    [boardId, columnId],
-  );
+  const [workflowConfig, setWorkflowConfig] = useState(null);
+  const [connected, setConnected] = useState(false);
 
   const loadSettings = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const [data, storedConfig] = await Promise.all([
+      const [data, stored] = await Promise.all([
         mondayService.query(GET_STATUS_COLUMN_SETTINGS, {
           boardIds: [boardId],
           columnIds: [columnId],
         }),
-        mondayService.getAppStorage(storageKey),
+        workflowClient.getBoardConfig(boardId),
       ]);
       const column = data?.boards?.[0]?.columns?.[0];
       if (!column || column.type !== 'status') {
         throw new Error('העמודה שנפתחה אינה עמודת Status פעילה');
       }
       setLabels(normalizeStatusLabels(column.settings));
-      setRestrictedLabelIds(normalizeStatusGuardConfig(storedConfig).restrictedLabelIds);
+      setConnected(stored.connected);
+      setWorkflowConfig(stored.config);
+      setRestrictedLabelIds(
+        stored.config?.targetColumnId === String(columnId)
+          ? stored.config.hiddenManualLabelIds
+          : [],
+      );
     } catch (err) {
       logger.error('ColumnSettings', 'Failed to load status guard settings', err);
       setError(err.message || 'לא הצלחנו לטעון את ההגדרה');
     } finally {
       setLoading(false);
     }
-  }, [boardId, columnId, storageKey]);
+  }, [boardId, columnId]);
 
   useEffect(() => {
     loadSettings();
@@ -57,11 +60,18 @@ function ColumnSettings({ context }) {
     try {
       setSaving(true);
       setError(null);
-      const config = normalizeStatusGuardConfig({
-        version: STATUS_GUARD_CONFIG_VERSION,
-        restrictedLabelIds,
+      if (!connected) throw new Error('יש לחבר תחילה את החשבון דרך ה־Board View של האפליקציה.');
+      const hidden = normalizeStatusGuardConfig({ version: 1, restrictedLabelIds });
+      await workflowClient.saveBoardConfig(boardId, {
+        ...(workflowConfig ?? {
+          schemaVersion: 1,
+          targetColumnId: String(columnId),
+          transitions: [],
+          enforcement: { enabled: false },
+        }),
+        targetColumnId: String(columnId),
+        hiddenManualLabelIds: hidden.restrictedLabelIds,
       });
-      await mondayService.setAppStorage(storageKey, config);
       await mondayService.showNotice('הגדרת הלייבלים המוגנים נשמרה');
       await mondayService.closeDialog();
     } catch (err) {

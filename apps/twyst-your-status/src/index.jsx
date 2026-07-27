@@ -25,6 +25,8 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { setupGlobalErrorHandlers } from './utils/globalErrorHandler';
 import { attachAxiomSink } from './utils/axiomErrorSink';
+import logger from './utils/logger';
+import { VERSION_LABEL } from './utils/versionLabel';
 import { AppErrorBoundary } from './components/ErrorBoundary/AppErrorBoundary';
 import App from './App';
 import './index.css';
@@ -39,6 +41,7 @@ setupGlobalErrorHandlers();
 //     monday context loads, also call setAxiomContext({accountId, userId, boardId,
 //     instanceId}) (useMondayContext is the natural place).
 attachAxiomSink();
+logger.health('client_started', { version: VERSION_LABEL });
 
 // 2. React 18 createRoot takes no error options ג€” the boundary + global handlers
 //    are the entire safety net.

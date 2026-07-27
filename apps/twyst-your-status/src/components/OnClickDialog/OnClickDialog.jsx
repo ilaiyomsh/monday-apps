@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   STATUS_GUARD_CONFIG_VERSION,
   buildStatusPickerModel,
-  makeStatusGuardStorageKey,
   normalizeStatusGuardConfig,
   normalizeStatusLabels,
   serializeStatusMutationValue,
@@ -12,6 +11,7 @@ import {
   UPDATE_STATUS_COLUMN_VALUE,
 } from '../../services/graphqlQueries';
 import mondayService from '../../services/mondayService';
+import workflowClient from '../../services/workflowClient';
 import logger from '../../utils/logger';
 import ErrorState from '../shared/ErrorState';
 import LoadingState from '../shared/LoadingState';
@@ -31,24 +31,21 @@ function OnClickDialog({ context }) {
   const [savingLabelId, setSavingLabelId] = useState(null);
   const [savingSettings, setSavingSettings] = useState(false);
   const [error, setError] = useState(null);
-
-  const storageKey = useMemo(
-    () => makeStatusGuardStorageKey(boardId, columnId),
-    [boardId, columnId],
-  );
+  const [workflowConfig, setWorkflowConfig] = useState(null);
+  const [connected, setConnected] = useState(false);
 
   const loadDialogData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const [data, storedConfig] = await Promise.all([
+      const [data, workflow] = await Promise.all([
         mondayService.query(GET_STATUS_COLUMN_CONTEXT, {
           boardIds: [boardId],
           itemIds: [itemId],
           columnIds: [columnId],
         }),
-        mondayService.getAppStorage(storageKey),
+        workflowClient.getItemWorkflow(boardId, itemId),
       ]);
 
       const column = data?.boards?.[0]?.columns?.[0];
@@ -59,19 +56,26 @@ function OnClickDialog({ context }) {
       const item = data?.items?.[0];
       const statusValue = item?.column_values?.find((value) => value.id === columnId) ?? null;
       const nextLabels = normalizeStatusLabels(column.settings);
-      const nextConfig = normalizeStatusGuardConfig(storedConfig);
+      const nextConfig = normalizeStatusGuardConfig({
+        version: STATUS_GUARD_CONFIG_VERSION,
+        restrictedLabelIds: workflow.config?.targetColumnId === String(columnId)
+          ? workflow.config.hiddenManualLabelIds
+          : [],
+      });
 
       setLabels(nextLabels);
       setCurrentValue(statusValue);
       setConfig(nextConfig);
       setDraftRestrictedIds(nextConfig.restrictedLabelIds);
+      setWorkflowConfig(workflow.config);
+      setConnected(workflow.connected);
     } catch (err) {
       logger.error('OnClickDialog', 'Failed to load status picker data', err);
       setError(err.message || 'לא הצלחנו לטעון את הסטטוסים');
     } finally {
       setLoading(false);
     }
-  }, [boardId, columnId, itemId, storageKey]);
+  }, [boardId, columnId, itemId]);
 
   useEffect(() => {
     loadDialogData();
@@ -118,7 +122,22 @@ function OnClickDialog({ context }) {
         version: STATUS_GUARD_CONFIG_VERSION,
         restrictedLabelIds: draftRestrictedIds,
       });
-      await mondayService.setAppStorage(storageKey, nextConfig);
+      if (!connected) throw new Error('יש לחבר תחילה את החשבון דרך ה־Board View של האפליקציה.');
+      await workflowClient.saveBoardConfig(boardId, {
+        ...(workflowConfig ?? {
+          schemaVersion: 1,
+          targetColumnId: String(columnId),
+          transitions: [],
+          enforcement: { enabled: false },
+        }),
+        targetColumnId: String(columnId),
+        hiddenManualLabelIds: nextConfig.restrictedLabelIds,
+      });
+      setWorkflowConfig((current) => ({
+        ...(current ?? { schemaVersion: 1, transitions: [], enforcement: { enabled: false } }),
+        targetColumnId: String(columnId),
+        hiddenManualLabelIds: nextConfig.restrictedLabelIds,
+      }));
       setConfig(nextConfig);
       setScreen('picker');
       await mondayService.showNotice('הגדרת הלייבלים המוגנים נשמרה');

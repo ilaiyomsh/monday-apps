@@ -22,15 +22,19 @@ function initialsOf(name) {
     .slice(0, 2);
 }
 
+function photoOf(user) {
+  return user?.photo_url?.thumb ?? null;
+}
+
 // Module-level roster cache: one users query per page load, shared by every
-// picker instance. Shape: [{ id, name, photo_thumb }].
+// picker instance. Avatar URLs use monday's typed photo URL object.
 let rosterCache = null;
 let rosterPromise = null;
 async function loadRoster() {
   if (rosterCache) return rosterCache;
   if (!rosterPromise) {
     rosterPromise = mondayService
-      .query('query AccountUsers($limit: Int) { users(limit: $limit) { id name photo_thumb } }', { limit: 500 })
+      .query('query AccountUsers($limit: Int) { users(limit: $limit) { id name photo_url { thumb } } }', { limit: 500 })
       .then((data) => {
         rosterCache = data?.users || [];
         return rosterCache;
@@ -220,9 +224,9 @@ export function PersonPicker({
             return (
               <Avatar
                 size="small"
-                src={u?.photo_thumb}
+                src={photoOf(u)}
                 text={initialsOf(p.name || u?.name)}
-                type={u?.photo_thumb ? 'img' : 'text'}
+                type={photoOf(u) ? 'img' : 'text'}
                 ariaLabel={p.name}
               />
             );
@@ -235,9 +239,9 @@ export function PersonPicker({
                 <Avatar
                   key={p.id}
                   size="small"
-                  src={u?.photo_thumb}
+                  src={photoOf(u)}
                   text={initialsOf(p.name || u?.name)}
-                  type={u?.photo_thumb ? 'img' : 'text'}
+                  type={photoOf(u) ? 'img' : 'text'}
                   ariaLabel={p.name}
                 />
               );
@@ -257,7 +261,7 @@ export function PersonPicker({
               <div className={styles.chips}>
                 {selected.map((p) => {
                   const u = getUser(p.id);
-                  const photo = u?.photo_thumb;
+                  const photo = photoOf(u);
                   const name = p.name || u?.name || '';
                   return (
                     <span key={p.id} className={styles.chip}>
@@ -308,9 +312,9 @@ export function PersonPicker({
                       <span className={styles.check}>{isSel && <Check size={16} />}</span>
                       <Avatar
                         size="small"
-                        src={user.photo_thumb}
+                        src={photoOf(user)}
                         text={initialsOf(user.name)}
-                        type={user.photo_thumb ? 'img' : 'text'}
+                        type={photoOf(user) ? 'img' : 'text'}
                         ariaLabel={user.name}
                       />
                       <span className={styles.name}>{user.name}</span>

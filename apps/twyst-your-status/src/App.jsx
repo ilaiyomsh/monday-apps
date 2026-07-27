@@ -4,6 +4,8 @@ import OnClickDialog from './components/OnClickDialog/OnClickDialog';
 import ColumnSettings from './components/ColumnSettings/ColumnSettings';
 import LoadingState from './components/shared/LoadingState';
 import ErrorState from './components/shared/ErrorState';
+import WorkflowConfigurator from './components/WorkflowConfigurator/WorkflowConfigurator';
+import WorkflowPanel from './components/WorkflowPanel/WorkflowPanel';
 
 /**
  * Column View App
@@ -44,6 +46,9 @@ function App() {
   const placement = context?.placement;
   const isRTL = context?.user?.currentLanguage === 'he';
   const dir = isRTL ? 'rtl' : 'ltr';
+  const requestedView = new URLSearchParams(window.location.search).get('view');
+  const isWorkflowBoardView = requestedView === 'board';
+  const isWorkflowItemView = requestedView === 'item';
 
   return (
     <div className={`app-shell ${themeClass}`} dir={dir}>
@@ -53,7 +58,9 @@ function App() {
       {placement === 'settings' && (
         <ColumnSettings context={context} />
       )}
-      {!placement && (
+      {isWorkflowBoardView && <WorkflowConfigurator context={context} />}
+      {isWorkflowItemView && <WorkflowPanel context={context} />}
+      {!placement && !isWorkflowBoardView && !isWorkflowItemView && (
         <div className="placement-message">
           <p>
             יש לפתוח את האפליקציה מתוך תא בעמודת Status.
