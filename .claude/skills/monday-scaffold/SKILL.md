@@ -30,8 +30,9 @@ Generate production-ready Monday.com app skeletons tailored to your feature type
 - **Proven shared components** — PersonPicker, Popover (body portal), StatusChip, DateRangeDisplay — ported from working sibling apps, NOT rebuilt
 - **Local dev harness** — `monday-sdk-js` stub with realistic fixtures and failure toggles, so the app renders outside the monday iframe and vitest tests realistic shapes
 - **Git repository** — `git init` + `.gitignore`, unconditionally
-- **pnpm build-script policy** — package-scoped `allowBuilds` entries for the
-  CLI and esbuild dependencies required by the scaffold
+- **pnpm build-script policy** — a package-scoped `allowBuilds` entry for
+  esbuild; the monday CLI lifecycle scripts stay blocked because its published
+  `patch-package` postinstall is incompatible with pnpm's isolated layout
 - **Starter GraphQL queries** — generated fresh through the `monday-api` skill (never copied from a static file)
 - **error-guard-compliant from birth** — every generated app ships the standard
   error-catching infrastructure (see the `error-guard` skill): a single-choke-point

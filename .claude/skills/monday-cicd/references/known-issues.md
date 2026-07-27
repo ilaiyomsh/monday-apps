@@ -73,8 +73,9 @@ and monday-version checks while explicitly warning which GitHub checks were
 skipped; worktree detection uses `git rev-parse` instead of requiring `.git` to
 be a directory.
 
-The current pnpm also requires a root `allowBuilds` policy. The monorepo now
-allows only the installed toolchain packages whose scripts are required:
-`@mondaycom/apps-cli`, `@parcel/watcher`, `esbuild`, and
-`postinstall-postinstall`. Without this root policy, onboarding aborted after an
-otherwise successful install with `ERR_PNPM_IGNORED_BUILDS`.
+The current pnpm also requires a root `allowBuilds` policy for native build
+tools. The monorepo allows `@parcel/watcher` and `esbuild`. Do not allow
+`@mondaycom/apps-cli` or `postinstall-postinstall`: the CLI's published
+`patch-package` lifecycle hook fails under pnpm isolation because its
+`parse-gitignore` patch target is not linked at the location the hook assumes.
+The packaged `mapps` executable remains usable with that lifecycle hook blocked.

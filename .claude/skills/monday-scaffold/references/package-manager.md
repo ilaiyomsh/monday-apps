@@ -1,16 +1,18 @@
 # Package-manager compatibility
 
-## 2026-07-27 — pnpm blocks required build scripts in a fresh standalone scaffold
+## 2026-07-27 — monday CLI postinstall is incompatible with pnpm isolation
 
-**Observed:** a fresh scaffold on current pnpm downloaded dependencies but ended
-with `ERR_PNPM_IGNORED_BUILDS` for `@mondaycom/apps-cli`, `esbuild`, and
-`postinstall-postinstall`. pnpm generated a `pnpm-workspace.yaml` containing
-unresolved `allowBuilds` prompts, and Vitest could not start because the install
-was incomplete.
+**Observed:** allowing `@mondaycom/apps-cli` and `postinstall-postinstall` in a
+fresh pnpm install executes the CLI package's bundled `patch-package` hook. The
+hook then fails with `Patch file found for package parse-gitignore which is not
+present at node_modules/parse-gitignore` under pnpm's isolated dependency
+layout. The packaged CLI executable does not require that lifecycle hook to run.
 
-**Resolution:** standalone scaffolds include `pnpm-workspace.yaml` with those
-three package names explicitly allowed. This is package-name scoped; it does not
-enable arbitrary dependency scripts.
+**Resolution:** standalone scaffolds allow only `esbuild`. Keep the monday CLI
+and `postinstall-postinstall` lifecycle scripts blocked; do not approve them in
+`allowBuilds`. The monorepo additionally allows its existing native
+`@parcel/watcher` build.
 
-**Verification:** `pnpm install`, `pnpm test`, and `pnpm build` must all complete
-on the generated project before the scaffold is accepted.
+**Verification:** a fresh frozen install must complete, `pnpm exec mapps
+--version` must start, and `pnpm test` plus `pnpm build` must pass before the
+scaffold is accepted.

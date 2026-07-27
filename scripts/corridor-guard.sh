@@ -27,7 +27,19 @@ SHARED_LABEL="${HAS_SHARED_LABEL:-false}"
 CORRIDOR="${CORRIDOR_MODE:-off}"
 fail=0
 
-ver_at()  { git show "$1:$(app_path "$2")/package.json" | jq -r .version; }
+ver_at() {
+  local ref="$1" slug="$2" package_path
+  package_path="$(app_path "$slug")/package.json"
+  git cat-file -e "$ref^{commit}" 2>/dev/null || {
+    echo "ERROR: required base ref is unavailable: $ref" >&2
+    return 1
+  }
+  if ! git cat-file -e "$ref:$package_path" 2>/dev/null; then
+    printf '0.0.0\n'
+    return
+  fi
+  git show "$ref:$package_path" | jq -r .version
+}
 ver_now() { jq -r .version "$(app_path "$1")/package.json"; }
 # strictly_higher OLD NEW -> true if NEW > OLD
 strictly_higher() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$2" ] && [ "$1" != "$2" ]; }
