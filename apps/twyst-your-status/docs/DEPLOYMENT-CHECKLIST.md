@@ -31,6 +31,13 @@ after explicit owner confirmation.
 - `BASE_URL` — the deployed app origin, without a trailing slash
 - `MONDAY_APP_VERSION_ID` — optional draft version pin during OAuth activation
 
+## monday-code package manager
+
+- Keep `package-lock.json` in this app root so the monday buildpack selects npm.
+- Do not add an app-local `pnpm-lock.yaml` or `pnpm-workspace.yaml`; the monorepo
+  continues to use its root pnpm lockfile for CI, while the uploaded app archive
+  must remain npm-installable with `npm ci`.
+
 ## Verification before push
 
 - `vitest`: 258 tests green.
