@@ -1,11 +1,12 @@
-// V6 amp4email digest renderer (docs/v6-amp-only-decisions.md §3, §5).
+// V6 amp4email digest renderer (docs/v6-amp-only-decisions.md §3, §5, D9/T15).
 //
 // Produces the `text/x-amp-html` MIME part. Gmail renders it as dynamic email:
-// the reader selects tasks and submits — the update happens inside the message.
-// The paired `text/plain` part (helpers/digest-plain.js) is the non-actionable
-// fallback; there is no HTML part in V6.
+// the reader selects a status per task and submits once — the update happens
+// inside the message. The paired `text/plain` part (helpers/digest-plain.js)
+// is the non-actionable fallback; there is no HTML part in V6.
 //
-// Wire format (one signed manifest per message — the base secret NEVER appears):
+// Layout (D9): ONE table for the whole message — one radio column per button,
+// one global submit. Wire format unchanged:
 //   hidden: a, p, m, s, sig
 //   selection: radio name="item_<itemId>" value="<btnId>"
 //
@@ -19,6 +20,8 @@ import { buildManifest, signManifest, currentSlot } from '../services/manifest-s
 
 const AMP_ENDPOINT_PATH = '/amp/confirm';
 const DEFAULT_SEND_HOUR = 8;
+const SUBMIT_LABEL = 'אשר את המסומנות';
+const SUBMIT_COLOR = '#0073ea';
 
 /** YYYY-MM-DD → DD/MM/YYYY (unset → ''). */
 function formatDate(date) {
@@ -30,15 +33,13 @@ function formatDate(date) {
 
 const STYLES = `
       body { margin:0; padding:14px 10px; background:#EEF0F4; font-family:Arial,Helvetica,sans-serif; color:#1F2430; }
-      .wrap { max-width:640px; margin:0 auto; background:#ffffff; border:1px solid #E4E7EC; border-radius:12px; padding:18px; }
+      .wrap { max-width:720px; margin:0 auto; background:#ffffff; border:1px solid #E4E7EC; border-radius:12px; padding:18px; }
       .hi { font-size:19px; font-weight:bold; margin:0 0 6px; }
       .lead { font-size:14px; color:#55606E; line-height:1.6; margin:0 0 16px; }
-      .grp { background:#F7F8FA; border:1px solid #E4E7EC; border-radius:10px; padding:12px 12px 8px; margin:0 0 16px; }
-      .grp h2 { font-size:15px; margin:0 0 10px; }
       table { width:100%; border-collapse:collapse; background:#ffffff; }
       th { font-size:12px; color:#55606E; font-weight:bold; text-align:right; padding:7px 8px; border:1px solid #E4E7EC; }
       td { font-size:13px; padding:7px 8px; border:1px solid #E4E7EC; vertical-align:middle; }
-      .pick { text-align:center; width:34px; }
+      .pick { text-align:center; width:56px; white-space:nowrap; }
       .meta { color:#55606E; font-size:12px; text-align:center; white-space:nowrap; }
       label { display:block; }
       .go { margin:12px 0 4px; }
@@ -48,54 +49,73 @@ const STYLES = `
       .foot { font-size:12px; color:#8A919B; line-height:1.6; border-top:1px solid #E9EBEF; padding-top:12px; margin-top:4px; }
 `;
 
-function renderRow({ task, buttonId }) {
+/**
+ * Unique buttons from populated sections, in first-seen order.
+ * @param {Array<object>} sections
+ * @returns {Array<{ id: string, label: string }>}
+ */
+function collectButtons(sections) {
+  /** @type {Array<{ id: string, label: string }>} */
+  const buttons = [];
+  const seen = new Set();
+  for (const section of sections) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    const button = section.button ?? {};
+    const id = section.buttonId ?? button.id ?? '';
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const label = button.targetLabel || button.name || 'עדכן';
+    buttons.push({ id, label });
+  }
+  return buttons;
+}
+
+/**
+ * Flatten tasks across sections: one row per itemId, union of offered button ids.
+ * @param {Array<object>} sections
+ * @returns {Array<{ task: object, buttonIds: Set<string> }>}
+ */
+function flattenTasks(sections) {
+  /** @type {Map<string, { task: object, buttonIds: Set<string> }>} */
+  const byId = new Map();
+  for (const section of sections) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    const btnId = section.buttonId ?? section.button?.id ?? '';
+    for (const task of section.tasks) {
+      const itemId = String(task.itemId);
+      let row = byId.get(itemId);
+      if (!row) {
+        row = { task, buttonIds: new Set() };
+        byId.set(itemId, row);
+      }
+      if (btnId) row.buttonIds.add(btnId);
+    }
+  }
+  return [...byId.values()];
+}
+
+function renderRow({ task, buttonIds, buttons }) {
   const fieldName = escapeHtml(`item_${task.itemId}`);
-  const boxId = escapeHtml(`sel_${buttonId}_${task.itemId}`);
+  const pickCells = buttons
+    .map((button) => {
+      if (!buttonIds.has(button.id)) {
+        return '              <td class="pick"></td>';
+      }
+      const boxId = escapeHtml(`sel_${button.id}_${task.itemId}`);
+      return `              <td class="pick"><input type="radio" name="${fieldName}" value="${escapeHtml(button.id)}" id="${boxId}"></td>`;
+    })
+    .join('\n');
+
   return `            <tr>
-              <td class="pick"><input type="radio" name="${fieldName}" value="${escapeHtml(buttonId)}" id="${boxId}"></td>
-              <td><label for="${boxId}">&#8207;${escapeHtml(task.name)}</label></td>
+${pickCells}
+              <td><label>&#8207;${escapeHtml(task.name)}</label></td>
               <td class="meta">${formatDate(task.date)}</td>
               <td class="meta">${escapeHtml(task.statusText ?? '')}</td>
             </tr>`;
 }
 
-function renderSection({ section, baseUrl, signed, accountId, personId }) {
-  const button = section.button ?? {};
-  const buttonId = section.buttonId ?? button.id ?? '';
-  const color = button.style?.color ?? '#00854d';
-  const icon = button.style?.icon ?? '';
-  const submitLabel = `${icon ? `${icon} ` : ''}${button.name ?? 'עדכן'} — אשר את המסומנות`;
-  const dateHeader = section.dateColumnTitle && section.dateColumnTitle.length > 0 ? section.dateColumnTitle : 'תאריך';
-  const rows = section.tasks.map((task) => renderRow({ task, buttonId })).join('\n');
-
-  return `      <div class="grp">
-        <h2>&#8207;${escapeHtml(section.title)}</h2>
-        <form method="post"
-              action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
-              enctype="application/x-www-form-urlencoded">
-          <input type="hidden" name="a" value="${escapeHtml(String(accountId))}">
-          <input type="hidden" name="p" value="${escapeHtml(String(personId))}">
-          <input type="hidden" name="m" value="${escapeHtml(signed.manifest)}">
-          <input type="hidden" name="s" value="${escapeHtml(signed.slot)}">
-          <input type="hidden" name="sig" value="${escapeHtml(signed.signature)}">
-          <table>
-            <tr>
-              <th class="pick"></th>
-              <th>&#8207;שם הפעולה</th>
-              <th class="meta">${escapeHtml(dateHeader)}</th>
-              <th class="meta">&#8207;סטטוס</th>
-            </tr>
-${rows}
-          </table>
-          <div class="go"><input class="send" type="submit" style="background:${escapeHtml(color)}" value="${escapeHtml(submitLabel)}"></div>
-          <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
-          <div submit-error><template type="amp-mustache"><div class="err">{{message}}</div></template></div>
-        </form>
-      </div>`;
-}
-
 /**
- * Build the signed-manifest bundle shared by every form in one message.
+ * Build the signed-manifest bundle for the single form in one message.
  * @param {{ secret: string, accountId: string, personId: string, recipient: object, sendHour: number, now: Date }} p
  */
 function buildSignedManifest({ secret, accountId, personId, recipient, sendHour, now }) {
@@ -133,12 +153,13 @@ export function renderDigestAmp({ baseUrl, secret, accountId, recipient, sendHou
   }
 
   const signed = buildSignedManifest({ secret, accountId, personId, recipient, sendHour, now });
+  const buttons = collectButtons(recipient.sections);
+  const rows = flattenTasks(recipient.sections)
+    .map(({ task, buttonIds }) => renderRow({ task, buttonIds, buttons }))
+    .join('\n');
 
-  const sections = recipient.sections
-    .filter((s) => s.tasks.length > 0)
-    .map((section) =>
-      renderSection({ section, baseUrl, signed, accountId, personId })
-    )
+  const buttonHeaders = buttons
+    .map((button) => `              <th class="pick">&#8207;${escapeHtml(button.label)}</th>`)
     .join('\n');
 
   return `<!doctype html>
@@ -154,8 +175,28 @@ export function renderDigestAmp({ baseUrl, secret, accountId, recipient, sendHou
   <body dir="rtl">
     <div class="wrap">
       <p class="hi">&#8207;שלום ${escapeHtml(recipient.name)},</p>
-      <p class="lead">&#8207;סמנו את המשימות שברצונכם לעדכן ולחצו על הכפתור שמתחת לכל קבוצה — העדכון נשמר בלוח מיד, בלי לצאת מהמייל.</p>
-${sections}
+      <p class="lead">&#8207;סמנו לכל משימה את הסטטוס הרצוי ולחצו על אישור — העדכון נשמר בלוח מיד, בלי לצאת מהמייל.</p>
+      <form method="post"
+            action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
+            enctype="application/x-www-form-urlencoded">
+        <input type="hidden" name="a" value="${escapeHtml(String(accountId))}">
+        <input type="hidden" name="p" value="${escapeHtml(String(personId))}">
+        <input type="hidden" name="m" value="${escapeHtml(signed.manifest)}">
+        <input type="hidden" name="s" value="${escapeHtml(signed.slot)}">
+        <input type="hidden" name="sig" value="${escapeHtml(signed.signature)}">
+        <table>
+          <tr>
+${buttonHeaders}
+            <th>&#8207;שם הפעולה</th>
+            <th class="meta">&#8207;תאריך</th>
+            <th class="meta">&#8207;סטטוס</th>
+          </tr>
+${rows}
+        </table>
+        <div class="go"><input class="send" type="submit" style="background:${SUBMIT_COLOR}" value="${SUBMIT_LABEL}"></div>
+        <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
+        <div submit-error><template type="amp-mustache"><div class="err">{{message}}</div></template></div>
+      </form>
       <p class="foot">&#8207;מייל אוטומטי · אם משימה כבר עודכנה, סימון חוזר לא ישנה דבר · אם תיבות הסימון אינן מוצגות, עדכנו ישירות ב‑monday.com.</p>
     </div>
   </body>

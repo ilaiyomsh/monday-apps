@@ -1,10 +1,7 @@
-// TDD (V6) — the amp4email digest renderer with signed-manifest wire format.
+// TDD (V6 T15 / D9) — amp4email digest: one multi-button table, one global submit.
 //
-// V6 replaces the V5 static-secret fields (`k` + `btn` + `item[]`) with ONE
-// signed manifest per message: hidden `a`, `p`, `m`, `s`, `sig`; selections as
-// `item_<itemId>=<btnId>` radio fields. The base link secret never appears in
-// the rendered document. Manifests and signatures use the real
-// manifest-signature module — same crypto the /amp/confirm route verifies.
+// Wire format unchanged: hidden a/p/m/s/sig; selections as item_<itemId>=btnId.
+// Layout: one form for the whole message; one column per button; one submit.
 
 import { describe, it, expect } from 'vitest';
 import { renderDigestAmp } from '../src/helpers/digest-amp.js';
@@ -133,11 +130,28 @@ describe('renderDigestAmp — amp4email document validity', () => {
   });
 });
 
-describe('renderDigestAmp — one form per populated section', () => {
-  it('renders a form per section that has tasks and drops empty sections', () => {
+describe('renderDigestAmp — one global form (D9)', () => {
+  it('renders exactly one form for the whole message', () => {
+    expect((render().match(/<form /g) ?? []).length).toBe(1);
+  });
+
+  it('renders exactly one submit control', () => {
+    expect((render().match(/type="submit"/g) ?? []).length).toBe(1);
+  });
+
+  it('labels the single submit as אשר את המסומנות without a per-section status prefix', () => {
     const doc = render();
-    expect((doc.match(/<form /g) ?? []).length).toBe(2);
+    expect(doc).toMatch(/type="submit"[^>]*value="אשר את המסומנות"/);
+    expect(doc).not.toContain('התחלתי — אשר');
+    expect(doc).not.toContain('בוצע — אשר');
+  });
+
+  it('drops empty sections and does not render per-section group boxes', () => {
+    const doc = render();
     expect(doc).not.toContain('קבוצה ריקה');
+    expect(doc).not.toContain('class="grp"');
+    expect(doc).not.toContain('משימות שנדרש להתחיל');
+    expect(doc).not.toContain('משימות שנדרש לסיים');
   });
 
   it('posts to the /amp/confirm endpoint via action-xhr', () => {
@@ -156,13 +170,13 @@ describe('renderDigestAmp — one form per populated section', () => {
     expect(doc).not.toMatch(/\saction="/);
   });
 
-  it('carries the V6 signed-manifest hidden fields in every form (a, p, m, s, sig)', () => {
+  it('carries the V6 signed-manifest hidden fields exactly once (a, p, m, s, sig)', () => {
     const doc = render();
-    expect((doc.match(new RegExp(`name="a" value="${ACCOUNT}"`, 'g')) ?? []).length).toBe(2);
-    expect((doc.match(new RegExp(`name="p" value="${PERSON_ID}"`, 'g')) ?? []).length).toBe(2);
-    expect((doc.match(new RegExp(`name="m" value="${MANIFEST}"`, 'g')) ?? []).length).toBe(2);
-    expect((doc.match(new RegExp(`name="s" value="${SLOT}"`, 'g')) ?? []).length).toBe(2);
-    expect((doc.match(new RegExp(`name="sig" value="${SIG}"`, 'g')) ?? []).length).toBe(2);
+    expect((doc.match(new RegExp(`name="a" value="${ACCOUNT}"`, 'g')) ?? []).length).toBe(1);
+    expect((doc.match(new RegExp(`name="p" value="${PERSON_ID}"`, 'g')) ?? []).length).toBe(1);
+    expect((doc.match(new RegExp(`name="m" value="${MANIFEST}"`, 'g')) ?? []).length).toBe(1);
+    expect((doc.match(new RegExp(`name="s" value="${SLOT}"`, 'g')) ?? []).length).toBe(1);
+    expect((doc.match(new RegExp(`name="sig" value="${SIG}"`, 'g')) ?? []).length).toBe(1);
   });
 
   it('never carries the V5 k or btn fields and never exposes the base secret', () => {
@@ -177,16 +191,63 @@ describe('renderDigestAmp — one form per populated section', () => {
     expect(doc).not.toContain('?itemId=');
     expect(doc).not.toMatch(new RegExp(`href="[^"]*${SECRET}`));
   });
+
+  it('tells the reader to mark tasks and use the single approve button', () => {
+    const doc = render();
+    expect(doc).toContain('סמנו');
+    expect(doc).toContain('אישור');
+    expect(doc).not.toContain('שמתחת לכל קבוצה');
+  });
 });
 
-describe('renderDigestAmp — task rows', () => {
-  it('renders one unchecked radio per task with item_<itemId> name and btnId value', () => {
+describe('renderDigestAmp — multi-button table rows', () => {
+  it('renders one table with a column header per button targetLabel', () => {
+    const doc = render();
+    expect((doc.match(/<table>/g) ?? []).length).toBe(1);
+    expect(doc).toContain(`<th class="pick">&#8207;${BTN_START.targetLabel}</th>`);
+    expect(doc).toContain(`<th class="pick">&#8207;${BTN_DONE.targetLabel}</th>`);
+    expect(doc).toContain('שם הפעולה');
+    expect(doc).toContain('תאריך');
+    expect(doc).toContain('סטטוס');
+  });
+
+  it('renders one unchecked radio per (task, offered button) with item_<itemId> name and btnId value', () => {
     const doc = render();
     expect((doc.match(/type="radio"/g) ?? []).length).toBe(3);
     expect(doc).toContain(`name="item_9001" value="${BTN_START.id}"`);
     expect(doc).toContain(`name="item_9002" value="${BTN_START.id}"`);
     expect(doc).toContain(`name="item_9004" value="${BTN_DONE.id}"`);
+    expect(doc).not.toContain(`name="item_9001" value="${BTN_DONE.id}"`);
+    expect(doc).not.toContain(`name="item_9004" value="${BTN_START.id}"`);
     expect(doc).not.toContain('checked');
+  });
+
+  it('offers both button radios on one row when the same task appears under two sections', () => {
+    const dual = {
+      ...RECIPIENT,
+      sections: [
+        {
+          title: 'התחלה',
+          buttonId: BTN_START.id,
+          button: BTN_START,
+          dateColumnTitle: 'תאריך',
+          tasks: [{ itemId: '9001', name: 'משימה כפולה', date: '2026-03-01', statusText: 'טרם החל' }],
+        },
+        {
+          title: 'סיום',
+          buttonId: BTN_DONE.id,
+          button: BTN_DONE,
+          dateColumnTitle: 'תאריך',
+          tasks: [{ itemId: '9001', name: 'משימה כפולה', date: '2026-03-01', statusText: 'טרם החל' }],
+        },
+      ],
+    };
+    const doc = render(dual);
+    expect((doc.match(/type="radio"/g) ?? []).length).toBe(2);
+    expect(doc).toContain(`name="item_9001" value="${BTN_START.id}"`);
+    expect(doc).toContain(`name="item_9001" value="${BTN_DONE.id}"`);
+    // One data row for the deduped task (header row + 1 body row).
+    expect((doc.match(/<tr>/g) ?? []).length).toBe(2);
   });
 
   it('shows the task name, the formatted date and the current status', () => {
@@ -196,31 +257,19 @@ describe('renderDigestAmp — task rows', () => {
     expect(doc).toContain('טרם החל');
   });
 
-  it('uses the original board column title as the date header', () => {
-    const doc = render();
-    expect(doc).toContain('תאריך התחלה מתוכנן');
-    expect(doc).toContain('דדליין');
-  });
-
-  it('escapes HTML in task and section titles', () => {
+  it('escapes HTML in task names', () => {
     const doc = render();
     expect(doc).toContain('הקמת פורום &lt;נציגים&gt;');
     expect(doc).not.toContain('<נציגים>');
   });
-
-  it('labels the submit button with the section button name', () => {
-    const doc = render();
-    expect(doc).toContain(BTN_START.name);
-    expect(doc).toContain(BTN_DONE.name);
-  });
 });
 
 describe('renderDigestAmp — response rendering', () => {
-  it('provides amp-mustache templates for both success and error', () => {
+  it('provides amp-mustache templates for both success and error exactly once', () => {
     const doc = render();
-    expect((doc.match(/<div submit-success>/g) ?? []).length).toBe(2);
-    expect((doc.match(/<div submit-error>/g) ?? []).length).toBe(2);
-    expect((doc.match(/<template type="amp-mustache">/g) ?? []).length).toBe(4);
+    expect((doc.match(/<div submit-success>/g) ?? []).length).toBe(1);
+    expect((doc.match(/<div submit-error>/g) ?? []).length).toBe(1);
+    expect((doc.match(/<template type="amp-mustache">/g) ?? []).length).toBe(2);
   });
 
   it('renders the server message inside the templates', () => {

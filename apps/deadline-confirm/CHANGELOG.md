@@ -2,6 +2,13 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.8.2 — 2026-07-27 — feat: V6 T15/D9 — one table, one approve button
+
+- **T15 / D9:** AMP digest is a single table with one radio column per status
+  button and **one** global submit (`אשר את המסומנות`). No per-section forms.
+- Tasks that appear under several digest sections get a union of those buttons
+  on one row. Wire format (`a/p/m/s/sig` + `item_<id>`) unchanged.
+
 ## 0.8.1 — 2026-07-27 — feat: V6 T6c/T10–T12 (scheduler, D16, deny-all roster)
 
 Continues V6 from `docs/v6-amp-only-decisions.md`. **Gmail OAuth / send funnel
