@@ -2,6 +2,17 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.9.2 — 2026-07-27 — feat: AMP digest — amp-bind status dropdown (monday colors)
+
+- Per-row status choice is a real **dropdown**: closed colored trigger → tap opens
+  a popup of monday-colored options (`amp-bind` + `AMP.setState`).
+- Trigger shows the **current status** (text + color); choosing an option updates
+  the cell immediately via bind. Header: **סטטוס** (not «סטטוס חדש»).
+  «ללא שינוי» restores the original status display and clears the wire value.
+- Not native `<select>` (OS popup unstyleable) and not an always-open radio stack.
+- Wire: hidden `item_<id>` with `[value]` bound to state (`""` = no change).
+- Playground: `docs/amp-playground-cluster-tables.html`.
+
 ## 0.9.1 — 2026-07-27 — feat: AMP digest — styled label dropdown (`<select>`)
 
 - Per-row status choice is a **styled** AMP-for-Email `<select class="label-dd">`

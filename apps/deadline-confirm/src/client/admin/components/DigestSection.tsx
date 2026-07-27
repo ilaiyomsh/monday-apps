@@ -260,8 +260,8 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
           <h2>מקבצי משימות</h2>
           <div className="dc-hint">
             כל מקבץ הוא טבלה במייל: עמודת תאריך שקובעת "באיחור" (תאריך שעבר — כולל היום),
-            תנאי סטטוס שקובע אילו משימות נכנסות, ותפריט נפתח מעוצב לבחירת סטטוס חדש
-            (הכפתורים שנבחרו כאן).
+            תנאי סטטוס שקובע אילו משימות נכנסות, ותפריט נפתח מעוצב (תגית צבע → אפשרויות)
+            לבחירת סטטוס חדש מהכפתורים שנבחרו כאן.
           </div>
           {digest.sections.map((section) => {
             const primaryButtonId = section.buttonIds[0] ?? section.buttonId;
