@@ -3,7 +3,7 @@ import { PICKER_VISIBLE_LABELS } from '../../utils/pickerDialogSize';
 
 /**
  * Monday-style shimmer placeholders matching status-option pills.
- * Shown on first paint while context / labels load.
+ * No copy — only the bars — so the cell dialog never flashes loading text.
  */
 function StatusPickerSkeleton({ count = PICKER_VISIBLE_LABELS }) {
   const bars = Array.from({ length: count }, (_, index) => (
@@ -15,12 +15,7 @@ function StatusPickerSkeleton({ count = PICKER_VISIBLE_LABELS }) {
   ));
 
   return (
-    <main
-      className="status-picker-dialog status-picker-skeleton"
-      aria-busy="true"
-      aria-label="טוען סטטוסים"
-      dir="rtl"
-    >
+    <main className="status-picker-dialog status-picker-skeleton" aria-busy="true" dir="rtl">
       <div className="status-menu" role="presentation">
         {bars}
       </div>
