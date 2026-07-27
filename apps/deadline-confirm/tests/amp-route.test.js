@@ -545,6 +545,39 @@ describe('POST /amp/confirm — gate 7: selections against the verified manifest
     expectNoApiCalls(api);
   });
 
+  it('skips empty select values (no-change) and answers 400 no_items when every item_ is empty', async () => {
+    const { app, api } = buildApp();
+    const res = await postAmp(app, signedBody({ selections: { [`item_${ITEM_ID}`]: '' } }));
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('no_items');
+    expectNoApiCalls(api);
+  });
+
+  it('applies only non-empty selections when some selects are left on the empty option', async () => {
+    const { app, api } = buildApp({
+      itemStates: { [ITEM_ID]: workingItem(), [ITEM_ID_2]: workingItem() },
+    });
+    const body = signedBody({
+      pairs: [
+        { itemId: ITEM_ID, btnId: BTN_DONE.id },
+        { itemId: ITEM_ID_2, btnId: BTN_DONE.id },
+      ],
+      selections: {
+        [`item_${ITEM_ID}`]: BTN_DONE.id,
+        [`item_${ITEM_ID_2}`]: '',
+      },
+    });
+    const res = await postAmp(app, body);
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(api.changeStatus).toHaveBeenCalledTimes(1);
+    expect(api.changeStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ itemId: ITEM_ID, toLabelId: BTN_DONE.targetIndex })
+    );
+  });
+
   it('answers 400 too_many_items for more than 50 selections', async () => {
     const { app, api } = buildApp();
     const selections = Object.fromEntries(

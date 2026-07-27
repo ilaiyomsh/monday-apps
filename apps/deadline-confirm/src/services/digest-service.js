@@ -39,6 +39,39 @@ function col(item, columnId) {
 }
 
 /**
+ * Unique date columns from digest settings (first title wins per id).
+ * @param {object} digest
+ * @returns {Array<{ id: string, title: string }>}
+ */
+function collectDigestDateColumns(digest) {
+  /** @type {Array<{ id: string, title: string }>} */
+  const cols = [];
+  const seen = new Set();
+  for (const section of digest?.sections ?? []) {
+    const id = section.dateColumnId;
+    if (typeof id !== 'string' || id.length === 0 || seen.has(id)) continue;
+    seen.add(id);
+    cols.push({ id, title: section.dateColumnTitle ?? '' });
+  }
+  return cols;
+}
+
+/**
+ * Snapshot every digest date-column value on a task (null when unset).
+ * @param {object} task
+ * @param {Array<{ id: string }>} dateColumns
+ * @returns {Record<string, string|null>}
+ */
+function snapshotTaskDates(task, dateColumns) {
+  /** @type {Record<string, string|null>} */
+  const dates = {};
+  for (const dc of dateColumns) {
+    dates[dc.id] = col(task, dc.id).date;
+  }
+  return dates;
+}
+
+/**
  * @param {object} p
  * @param {object} p.config - full app config (digest + buttons + peopleColumnId)
  * @param {Array<object>} p.tasks - normalized items of the tasks board
@@ -49,6 +82,7 @@ function col(item, columnId) {
 export function buildDigest({ config, tasks, users, today }) {
   const { digest } = config;
   const buttonsById = new Map((config.buttons ?? []).map((b) => [b.id, b]));
+  const dateColumns = collectDigestDateColumns(digest);
 
   // --- users board -> recipients (D16: one row = one message) --------------
   /** @type {Array<{ email: string, name: string, personId: string }>} */
@@ -91,6 +125,7 @@ export function buildDigest({ config, tasks, users, today }) {
         itemId: task.id,
         name: task.name,
         date,
+        dates: snapshotTaskDates(task, dateColumns),
         statusText: col(task, button.statusColumnId).text ?? '',
         personIds: col(task, config.peopleColumnId).personIds ?? [],
       });
@@ -116,11 +151,24 @@ export function buildDigest({ config, tasks, users, today }) {
         title: section.title,
         dateColumnTitle: section.dateColumnTitle ?? '',
         buttonId: section.buttonId,
-        tasks: mine.map(({ itemId, name, date, statusText }) => ({ itemId, name, date, statusText })),
+        tasks: mine.map(({ itemId, name, date, dates, statusText }) => ({
+          itemId,
+          name,
+          date,
+          dates,
+          statusText,
+        })),
       });
     }
     if (taskCount === 0) continue;
-    recipients.push({ email: r.email, name: r.name, personId: r.personId, taskCount, sections });
+    recipients.push({
+      email: r.email,
+      name: r.name,
+      personId: r.personId,
+      taskCount,
+      dateColumns,
+      sections,
+    });
   }
 
   return { recipients, skippedUsers };

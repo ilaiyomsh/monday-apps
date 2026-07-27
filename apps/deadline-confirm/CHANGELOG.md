@@ -2,6 +2,17 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.8.3 — 2026-07-27 — feat: digest AMP — LabelPicker-style status + all date columns
+
+- **AMP digest UI:** monday-like board table; current status as `statusFill`;
+  new status via inlined LabelPicker-style colored options (visual port of
+  discussions `LabelPickerCell` / TaskTable — AMP cannot host React Dialog).
+- **Dates:** every date column from digest settings appears as its own table
+  column (`recipient.dateColumns` + `task.dates`).
+- **Confirm:** empty `item_*` values are skipped (no-change), so a mixed
+  selection still applies only the chosen statuses.
+- One global **אשר את המסומנות** submits all chosen statuses.
+
 ## 0.8.2 — 2026-07-27 — feat: V6 T15/D9 — one table, one approve button
 
 - **T15 / D9:** AMP digest is a single table with one radio column per status
