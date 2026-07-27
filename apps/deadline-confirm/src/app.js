@@ -9,6 +9,7 @@ import express from 'express';
 import { createAmpRouter } from './routes/amp.js';
 import { createOauthRouter } from './routes/oauth.js';
 import { createAdminRouter } from './routes/admin-api.js';
+import { createSchedulerRouter } from './routes/scheduler.js';
 import { createSessionTokenMiddleware } from './middlewares/session-token.js';
 import { logError } from './helpers/logger.js';
 
@@ -41,11 +42,14 @@ export function createApp({ storage, api, rateLimiters, env, fetchImpl, todayIso
 
   app.use(createOauthRouter({ storage, api, env, fetchImpl }));
 
+  // T10/T11: monday-code scheduler — no session auth (platform cron signing).
+  app.use(createSchedulerRouter({ storage, api, env, emailSender, todayIso, now }));
+
   const requireSession = createSessionTokenMiddleware({
     clientSecret: env.clientSecret,
     allowedAccountIds: env.allowedAccountIds,
   });
-  app.use(createAdminRouter({ storage, api, env, requireSession, emailSender, todayIso }));
+  app.use(createAdminRouter({ storage, api, env, requireSession, emailSender, todayIso, now }));
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true, version: env.version ?? 'dev' });

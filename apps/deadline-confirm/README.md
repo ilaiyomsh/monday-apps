@@ -27,7 +27,7 @@ Admin View → /admin: OAuth, לוח+כפתורים, מייל מסכם (לוח �
 ```bash
 pnpm install                # מריצים משורש המונורפו
 npm run dev                 # שרת (:8080) + vite admin (:5173)
-npm test                    # vitest — 548+ טסטים
+npm test                    # vitest — 568+ טסטים
 npm run typecheck && npm run lint && npm run build
 USE_LOCAL_STORAGE=true npm start
 ```
@@ -37,12 +37,20 @@ USE_LOCAL_STORAGE=true npm start
 ## הקמה (מפעיל)
 
 1. פריסה דרך הצנרת; `BASE_URL` = Live URL קבוע.
-2. Env: `MONDAY_CLIENT_ID`, `MONDAY_CLIENT_SECRET`, `BASE_URL`, `AMP_ALLOWED_SENDERS`.
-3. Dev Center: Administration View → `<BASE_URL>/admin`; OAuth scopes + callback.
-4. במסך האדמין: חיבור OAuth, לוח, כפתורים, הפעלת מייל מסכם, שעת שליחה, מפתח.
-5. Gmail dynamic email: הנמען מאשר את כתובת השולח פעם אחת (Developer settings).
+2. Env חובה: `MONDAY_CLIENT_ID`, `MONDAY_CLIENT_SECRET`, `BASE_URL`,
+   **`ALLOWED_ACCOUNT_IDS`** (רשימת חשבונות — ריק = חסימה מלאה, D15),
+   `AMP_ALLOWED_SENDERS`.
+3. Env אופציונלי: `OPERATOR_EMAIL` (סיכום אחרי ריצת scheduler).
+4. Dev Center: Administration View → `<BASE_URL>/admin`; OAuth scopes + callback.
+5. במסך האדמין: חיבור OAuth, לוח, כפתורים, הפעלת מייל מסכם, שעת שליחה, מפתח.
+6. Scheduler (אחרי פריסה):  
+   `mapps scheduler:create -a 11704868 -n digest-send -s "0 * * * *" -e "/digest-send"`  
+   (שעתי UTC; האפליקציה מסננת לפי `sendHour` בירושלים).
+7. Gmail dynamic email + OAuth שולח — אחרי הקמת אפליקציית Google Cloud (T9).
 
 ## תפעול
 
 - **רוטציית מפתח** מבטלת את כל החתימות הקיימות — kill switch.
-- **שליחה אוטומטית** (scheduler + Gmail) — בפיתוח (T9–T12); כרגע שליחה ידנית בלבד.
+- **שליחה אוטומטית:** endpoint מוכן (`/mndy-cronjob/digest-send`); שליחה אמיתית
+  ממתינה ל-Gmail OAuth. בינתיים `/api/digest/send` ו-`/api/digest/resend-today`
+  מחזירים 409 `email_not_configured`.

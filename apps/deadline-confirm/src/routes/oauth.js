@@ -41,8 +41,8 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
         sendPage(res, 401, oauthErrorPage('חיבור לא מורשה'));
         return;
       }
-      if (env.allowedAccountIds.length > 0 && !env.allowedAccountIds.includes(session.accountId)) {
-        logError('oauth', 'start refused: account not allowlisted', {});
+      if (!env.allowedAccountIds.includes(session.accountId)) {
+        logError('oauth', 'start refused: account not on tenant roster', {});
         sendPage(res, 403, oauthErrorPage('חיבור לא מורשה'));
         return;
       }

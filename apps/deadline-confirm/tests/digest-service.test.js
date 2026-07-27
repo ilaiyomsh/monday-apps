@@ -272,16 +272,14 @@ describe('buildDigest — user matching', () => {
     ]);
   });
 
-  // V6 owner decision (2026-07-27): the users-board people column holds ONE
-  // person, and one email belongs to one user. Rows breaking that are DATA
-  // ANOMALIES — skipped and reported, never merged or guessed, because the
-  // recipient's single personId is SIGNED into the manifest (D11).
-  it('a duplicate email row is SKIPPED (reason duplicate_email) — the first row wins, nothing merges', () => {
+  // V6 D16: one message per users-board row. Same email on two rows → two
+  // messages (no dedup). A row with ≠1 person is skipped as multi_person.
+  it('D16a: two users-board rows sharing one email produce TWO messages with distinct personIds and task sets', () => {
     const result = buildDigest({
       config: baseConfig(),
       users: [
         userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' }),
-        userRow('u2', 'דנה (כפולה)', { persons: ['599'], email: 'dana@example.com' }),
+        userRow('u2', 'דנה (שורה שנייה)', { persons: ['599'], email: 'dana@example.com' }),
       ],
       tasks: [
         taskRow('9001', 'של 501', { persons: ['501'], startDate: '2026-07-10', statusA: 0 }),
@@ -289,15 +287,16 @@ describe('buildDigest — user matching', () => {
       ],
       today: TODAY,
     });
-    expect(result.skippedUsers).toEqual([
-      { itemId: 'u2', name: 'דנה (כפולה)', reason: 'duplicate_email' },
-    ]);
-    expect(result.recipients).toHaveLength(1);
-    expect(result.recipients[0].personId).toBe('501');
-    expect(result.recipients[0].sections[0].tasks.map((t) => t.itemId)).toEqual(['9001']);
+    expect(result.skippedUsers).toEqual([]);
+    expect(result.recipients).toHaveLength(2);
+    expect(result.recipients.map((r) => r.personId).sort()).toEqual(['501', '599']);
+    expect(result.recipients.every((r) => r.email === 'dana@example.com')).toBe(true);
+    const byPerson = Object.fromEntries(result.recipients.map((r) => [r.personId, r]));
+    expect(byPerson['501'].sections[0].tasks.map((t) => t.itemId)).toEqual(['9001']);
+    expect(byPerson['599'].sections[0].tasks.map((t) => t.itemId)).toEqual(['9002']);
   });
 
-  it('a user row with MORE than one person is SKIPPED (reason multiple_persons) — never guessed', () => {
+  it('D16b: a user row with MORE than one person is SKIPPED (reason multi_person) — never guessed', () => {
     const result = buildDigest({
       config: baseConfig(),
       users: [userRow('u1', 'שניים', { persons: ['501', '502'], email: 'two@example.com' })],
@@ -306,7 +305,7 @@ describe('buildDigest — user matching', () => {
     });
     expect(result.recipients).toEqual([]);
     expect(result.skippedUsers).toEqual([
-      { itemId: 'u1', name: 'שניים', reason: 'multiple_persons' },
+      { itemId: 'u1', name: 'שניים', reason: 'multi_person' },
     ]);
   });
 

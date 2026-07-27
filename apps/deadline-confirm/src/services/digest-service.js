@@ -3,11 +3,10 @@
 // ONE person id -> recipient email; tasks come from the configured tasks
 // board, matched by person-id membership on config.peopleColumnId.
 //
-// V6 owner decision (2026-07-27): a recipient carries a SINGLE personId —
-// it is signed into the message manifest and drives the D11 runtime
-// assignee check. A users-board row with more than one person, or a second
-// row reusing an email, is a data anomaly: skipped + reported, never merged
-// or guessed.
+// V6 D16 (2026-07-27): one message per users-board row. A recipient carries a
+// SINGLE personId (signed into the manifest; drives D11). Rows with ≠1 person
+// are skipped as `multi_person`. Email dedup is gone — two rows sharing an
+// address produce two independent messages.
 //
 // Pending semantics (per section, owner decision 2026-07-20):
 //   date set AND date <= today (a past date INCLUDES today) AND the task's
@@ -51,9 +50,9 @@ export function buildDigest({ config, tasks, users, today }) {
   const { digest } = config;
   const buttonsById = new Map((config.buttons ?? []).map((b) => [b.id, b]));
 
-  // --- users board -> recipients (one person, one email — anomalies skip) --
-  /** @type {Map<string, { email: string, name: string, personId: string }>} */
-  const byEmail = new Map();
+  // --- users board -> recipients (D16: one row = one message) --------------
+  /** @type {Array<{ email: string, name: string, personId: string }>} */
+  const userRecipients = [];
   const skippedUsers = [];
   for (const row of users) {
     const personIds = col(row, digest.usersPeopleColumnId).personIds ?? [];
@@ -67,14 +66,10 @@ export function buildDigest({ config, tasks, users, today }) {
       continue;
     }
     if (personIds.length > 1) {
-      skippedUsers.push({ itemId: row.id, name: row.name, reason: 'multiple_persons' });
+      skippedUsers.push({ itemId: row.id, name: row.name, reason: 'multi_person' });
       continue;
     }
-    if (byEmail.has(email)) {
-      skippedUsers.push({ itemId: row.id, name: row.name, reason: 'duplicate_email' });
-      continue;
-    }
-    byEmail.set(email, { email, name: row.name, personId: personIds[0] });
+    userRecipients.push({ email, name: row.name, personId: personIds[0] });
   }
 
   // --- classify every task once per section ---------------------------------
@@ -107,7 +102,7 @@ export function buildDigest({ config, tasks, users, today }) {
   // R2 invariant (v6 §6): a recipient's digest contains ONLY tasks assigned
   // to that recipient — R1/R2 and the attribution wording depend on it.
   const recipients = [];
-  for (const r of byEmail.values()) {
+  for (const r of userRecipients) {
     const sections = [];
     let taskCount = 0;
     for (const section of digest.sections) {

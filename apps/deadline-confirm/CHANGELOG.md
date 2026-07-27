@@ -2,6 +2,26 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.8.1 — 2026-07-27 — feat: V6 T6c/T10–T12 (scheduler, D16, deny-all roster)
+
+Continues V6 from `docs/v6-amp-only-decisions.md`. **Gmail OAuth / send funnel
+(T9/T9b/T9c) deferred** until the Google Cloud app is provisioned — the
+`emailSender` seam stays empty in production.
+
+- **D16 / T6c:** one message per users-board row (no email dedup); multi-person
+  rows skipped as `multi_person`.
+- **D15 / T10b:** empty `ALLOWED_ACCOUNT_IDS` is default-deny (admin + OAuth +
+  scheduler); boot error log when empty. **Breaking config change** — set the
+  roster on the platform before this version goes live.
+- **T10:** `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`) iterates
+  the roster, runs tenants whose `sendHour` matches Asia/Jerusalem hour.
+- **T11:** operator summary email after a scheduled run (`OPERATOR_EMAIL` env);
+  counts/addresses/slot only.
+- **T12:** `POST /api/digest/resend-today` — all recipients, current slot.
+- **MIME helper:** `multipart/alternative` plain + `text/x-amp-html` (ready for T9).
+- Manual/scheduled send path uses plain+AMP MIME via `runDigestForAccount` (no
+  legacy HTML `/confirm` body).
+
 ## 0.8.0 — 2026-07-27 — feat: V6 AMP-only + per-message signed manifest
 
 **Breaking product change.** See `docs/v6-amp-only-decisions.md`.

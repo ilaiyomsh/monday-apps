@@ -487,9 +487,9 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                         ? 'חסר אימייל'
                         : s.reason === 'no_person'
                           ? 'חסר איש'
-                          : s.reason === 'duplicate_email'
-                            ? 'אימייל כפול'
-                            : 'יותר מאיש אחד';
+                          : s.reason === 'multi_person'
+                            ? 'יותר מאיש אחד'
+                            : s.reason;
                     return `${s.name} (${reason})`;
                   })
                   .join(', ')}

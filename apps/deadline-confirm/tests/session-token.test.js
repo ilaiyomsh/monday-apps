@@ -1,9 +1,9 @@
 // Unit tests for the sessionToken middleware factory (spec §9, §13, §15.10) —
-// v3 multi-tenant: the single ALLOWED_ACCOUNT_ID lockdown becomes an OPTIONAL
-// allowedAccountIds ARRAY (empty = every validly-signed account passes), and
-// the module exports verifySessionToken for non-middleware callers (oauth
-// start). Real JWTs signed with jsonwebtoken drive the REAL middleware — the
-// unit under test is never mocked; req/res/next are minimal recording fakes.
+// V6 D15: allowedAccountIds is the tenant roster — empty = default-deny
+// (nobody admitted). The module exports verifySessionToken for non-middleware
+// callers (oauth start). Real JWTs signed with jsonwebtoken drive the REAL
+// middleware — the unit under test is never mocked; req/res/next are minimal
+// recording fakes.
 
 import { describe, it, expect, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
@@ -141,14 +141,15 @@ describe('createSessionTokenMiddleware', () => {
       expect(res.statusCode).toBeNull();
     });
 
-    it('passes ANY validly-signed account when the allowlist is the EMPTY array', async () => {
+    it('refuses ANY validly-signed account with 403 when the allowlist is the EMPTY array (D15 default-deny)', async () => {
       const token = jwt.sign({ dat: { account_id: 999123, user_id: 5 } }, CLIENT_SECRET);
 
       const { req, res, next } = await run(token, []);
 
-      expect(next).toHaveBeenCalledTimes(1);
-      expect(req.session).toStrictEqual({ accountId: '999123', userId: '5' });
-      expect(res.statusCode).toBeNull();
+      expect(res.statusCode).toBe(403);
+      expect(res.body).toStrictEqual({ error: 'forbidden_account' });
+      expect(next).not.toHaveBeenCalled();
+      expect(req.session).toBeUndefined();
     });
 
     it('still responds 401 (never 403) to a badly-signed token when the allowlist is empty', async () => {

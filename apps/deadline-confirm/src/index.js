@@ -22,6 +22,16 @@ import { attachAxiomServerSink, flushAxiom } from './helpers/axiomServerSink.js'
 
 const env = getEnv();
 
+if (env.allowedAccountIds.length === 0) {
+  // D15: empty roster is default-deny. Surfacing loudly at boot so a missing
+  // mapps code:env does not silently lock every tenant out.
+  logError(
+    'server',
+    'ALLOWED_ACCOUNT_IDS is empty — default-deny; nobody is admitted and the scheduler sends to nobody (D15)',
+    {}
+  );
+}
+
 // App version for boot health (read via fs so it works on plain node 20 without
 // JSON import attributes).
 let APP_VERSION = '0.0.0';
@@ -69,8 +79,9 @@ const rateLimiters = {
 };
 
 // V6: Resend is removed. The digest sender seam stays empty until the
-// Gmail-API send path lands (v6 decisions T9–T12, blocked on O1/O2/O4) —
-// until then POST /api/digest/send answers 409 email_not_configured.
+// Gmail-API OAuth + send path lands (T9/T9b/T9c — deferred until the Google
+// Cloud app is provisioned). Until then POST /api/digest/send and the
+// scheduler skip with email_not_configured / skip reasons.
 const emailSender = undefined;
 
 const app = createApp({ storage, api, rateLimiters, env, emailSender });
