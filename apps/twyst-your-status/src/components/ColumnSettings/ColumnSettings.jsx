@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AttentionBox } from '@vibe/core';
-import { migrateSettings, validateSettings } from '../../domain/settingsSchema';
+import { AttentionBox, Button, Heading, Text } from '@vibe/core';
+import { validateSettings } from '../../domain/settingsSchema';
 import { isSupportedFormColumnType } from '../../domain/columnValueFormats';
-import { MONDAY_STATUS_COLORS, resolveStatusColorHex } from '../../domain/statusColors';
+import { resolveStatusColorHex } from '../../domain/statusColors';
 import {
   buildStatusLabelsUpdatePayload,
   buildUpdateStatusColumnMutation,
@@ -23,56 +23,18 @@ import logger from '../../utils/logger';
 import { VERSION_LABEL } from '../../utils/versionLabel';
 import ErrorState from '../shared/ErrorState';
 import LoadingState from '../shared/LoadingState';
+import { PersonPicker } from '../shared/PersonPicker';
+import StatusColorPicker from './StatusColorPicker';
 import './ColumnSettings.css';
 
 const TEAMS_SCOPE_HINT =
-  'חסר הסקופ teams:read בגרסת האפליקציה — בחירת צוותים לא זמינה. הוסיפו teams:read בהרשאות הגרסה והתקינו מחדש / אשרו הרשאות.';
+  'חסר הסקופ teams:read — בחירת צוותים לא זמינה.';
 
 function multiValues(event) {
   return [...event.target.selectedOptions].map((option) => option.value);
 }
 
-function LabelEditorRow({
-  label,
-  onRename,
-  onRecolor,
-  onRemove,
-}) {
-  return (
-    <div className="twyst-label-editor-row">
-      <span className="twyst-label-dot" style={{ '--status-color': label.color }} />
-      <input
-        className="twyst-label-name-input"
-        type="text"
-        value={label.label}
-        aria-label="שם הלייבל"
-        onChange={(event) => onRename(label.clientKey, event.target.value)}
-      />
-      <select
-        className="twyst-label-color-select"
-        value={String(label.colorValue)}
-        aria-label="צבע הלייבל"
-        onChange={(event) => onRecolor(label.clientKey, event.target.value)}
-      >
-        {MONDAY_STATUS_COLORS.map((choice) => (
-          <option key={choice.enum} value={choice.enum}>
-            {choice.enum}
-          </option>
-        ))}
-      </select>
-      <span
-        className="twyst-label-color-preview"
-        style={{ background: resolveStatusColorHex(label.colorValue) || label.color }}
-        aria-hidden="true"
-      />
-      <button type="button" className="twyst-label-remove" onClick={() => onRemove(label.clientKey)}>
-        הסרה
-      </button>
-    </div>
-  );
-}
-
-function LabelRuleCard({
+function LabelCard({
   label,
   hidden,
   rule,
@@ -80,65 +42,110 @@ function LabelRuleCard({
   teams,
   teamsAvailable,
   columns,
+  usedColors,
+  saving,
+  showPermissions,
+  onRename,
+  onRecolor,
+  onRemove,
   onToggleHidden,
   onChangeRule,
 }) {
+  const selectedPeople = (rule.allowedUserIds ?? []).map((id) => {
+    const match = users.find((user) => String(user.id) === String(id));
+    return match
+      ? { id: String(match.id), name: match.name }
+      : { id: String(id), name: String(id) };
+  });
+
   return (
     <article className="twyst-label-card">
-      <header className="twyst-label-card-header">
-        <span className="twyst-label-dot" style={{ '--status-color': label.color }} />
-        <h3>{label.label || 'ללא שם'}</h3>
-      </header>
-
-      <label className="twyst-check">
-        <input type="checkbox" checked={hidden} onChange={() => onToggleHidden(label.id)} />
-        מוסתר בבורר (אוטומציה עדיין יכולה לקבוע)
-      </label>
-
-      <div className="twyst-grid two">
-        <label>
-          משתמשים מורשים
-          <select
-            multiple
-            value={rule.allowedUserIds}
-            onChange={(event) => onChangeRule(label.id, { allowedUserIds: multiValues(event) })}
-          >
-            {users.map((user) => (
-              <option key={user.id} value={String(user.id)}>{user.name}</option>
-            ))}
-          </select>
-        </label>
-        <label>
-          צוותים מורשים
-          <select
-            multiple
-            value={rule.allowedTeamIds}
-            disabled={!teamsAvailable}
-            onChange={(event) => onChangeRule(label.id, { allowedTeamIds: multiValues(event) })}
-          >
-            {teams.map((team) => (
-              <option key={team.id} value={String(team.id)}>{team.name}</option>
-            ))}
-          </select>
-        </label>
-      </div>
-      <p className="twyst-hint">ריק = כולם מורשים. משתמש מורשה אם הוא ברשימה או חבר בצוות מורשה.</p>
-
-      <label>
-        שדות חובה לפני מעבר ללייבל
-        <select
-          multiple
-          value={rule.requiredColumnIds}
-          onChange={(event) => onChangeRule(label.id, { requiredColumnIds: multiValues(event) })}
+      <div className="twyst-label-row">
+        <StatusColorPicker
+          colorValue={label.colorValue}
+          usedColorEnums={usedColors}
+          disabled={saving}
+          onChange={(next) => onRecolor(label.clientKey, next)}
+        />
+        <input
+          className="twyst-label-name-input"
+          type="text"
+          value={label.label}
+          aria-label="שם הלייבל"
+          disabled={saving}
+          onChange={(event) => onRename(label.clientKey, event.target.value)}
+        />
+        <Button
+          kind="tertiary"
+          size="small"
+          disabled={saving}
+          onClick={() => onRemove(label.clientKey)}
         >
-          {columns.map((column) => (
-            <option key={column.id} value={column.id}>
-              {column.title}
-              {!isSupportedFormColumnType(column.type) ? ' (לא נתמך בטופס)' : ''}
-            </option>
-          ))}
-        </select>
-      </label>
+          הסרה
+        </Button>
+      </div>
+
+      {showPermissions && (
+        <>
+          <label className="twyst-check">
+            <input
+              type="checkbox"
+              checked={hidden}
+              disabled={saving}
+              onChange={() => onToggleHidden(label.id)}
+            />
+            <Text type="text2">מוסתר בבורר</Text>
+          </label>
+
+          <div className="twyst-field">
+            <Text type="text2">משתמשים</Text>
+            <PersonPicker
+              selected={selectedPeople}
+              users={users}
+              bordered
+              onChange={(people) => onChangeRule(label.id, {
+                allowedUserIds: (people || []).map((person) => String(person.id)),
+              })}
+            />
+          </div>
+
+          <div className="twyst-field">
+            <Text type="text2">צוותים</Text>
+            <select
+              className="twyst-multi"
+              multiple
+              value={rule.allowedTeamIds}
+              disabled={!teamsAvailable || saving}
+              onChange={(event) => onChangeRule(label.id, { allowedTeamIds: multiValues(event) })}
+            >
+              {teams.map((team) => (
+                <option key={team.id} value={String(team.id)}>{team.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="twyst-field">
+            <Text type="text2">שדות חובה</Text>
+            <select
+              className="twyst-multi"
+              multiple
+              value={rule.requiredColumnIds}
+              disabled={saving}
+              onChange={(event) => onChangeRule(label.id, { requiredColumnIds: multiValues(event) })}
+            >
+              {columns.map((column) => (
+                <option
+                  key={column.id}
+                  value={column.id}
+                  disabled={!isSupportedFormColumnType(column.type)}
+                >
+                  {column.title}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      )}
     </article>
   );
 }
@@ -298,7 +305,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       setSaveError(null);
 
       if (!labelsDraft || labelsDraft.length === 0) {
-        setSaveError('חייבים להשאיר לפחות לייבל פעיל אחד בעמודת הסטטוס.');
+        setSaveError('חייבים להשאיר לפחות לייבל פעיל אחד.');
         return;
       }
       if (labelsDraft.some((label) => !String(label.label || '').trim())) {
@@ -353,7 +360,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
           return column && !isSupportedFormColumnType(column.type);
         });
       if (unsupported.length > 0) {
-        setSaveError('חלק משדות החובה אינם נתמכים בטופס המעבר. בחרו עמודות טקסט/מספר/תאריך/אימייל/טלפון/קישור/דרופדאון.');
+        setSaveError('חלק משדות החובה אינם נתמכים בטופס המעבר.');
         return;
       }
       await mondayService.setColumnConfig(boardId, columnId, next);
@@ -363,9 +370,9 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       logger.error('ColumnSettings', 'Failed to save column settings', err);
       const message = err?.message || '';
       if (/Colors should be unique|colors should be unique/i.test(message)) {
-        setSaveError('לכל לייבל חייב להיות צבע ייחודי. בחרו צבע אחר ללייבל שחוזר על עצמו ונסו שוב.');
+        setSaveError('לכל לייבל חייב להיות צבע ייחודי.');
       } else if (/in use|can't delete|cannot delete|default/i.test(message)) {
-        setSaveError('לא ניתן להסיר לייבל שנמצא בשימוש בפריטים או שהוא ברירת המחדל של העמודה.');
+        setSaveError('לא ניתן להסיר לייבל שנמצא בשימוש או שהוא ברירת המחדל.');
       } else {
         setSaveError('שמירת ההגדרות נכשלה. נסו שוב.');
       }
@@ -388,72 +395,71 @@ function ColumnSettings({ context, variant = 'overlay' }) {
   }
 
   const hiddenSet = new Set(draft.hiddenLabelIds);
-  // Permission cards only for existing (non-new) labels that still have stable ids.
-  const ruleLabels = labelsDraft.filter((label) => !label.isNew);
 
   return (
     <main className={`twyst-settings${isOverlay ? ' is-overlay' : ''}`} dir="rtl">
-      <header>
-        <p className="twyst-eyebrow">Twyst Your Status</p>
-        <h1>הגדרות לייבלים</h1>
-        <p>
-          ערכו את לייבלי הסטטוס בלוח (שם, צבע, הוספה והסרה), ולכל לייבל יעד הגדירו מי מורשה
-          לבחור אותו ואילו שדות חובה למלא לפני המעבר. בלי הגדרות שמורות — כל הסטטוסים מותרים.
-        </p>
+      <header className="twyst-settings-header">
+        <button
+          type="button"
+          className="twyst-settings-close"
+          onClick={() => dismiss()}
+          aria-label="סגירה"
+          disabled={saving}
+        >
+          ×
+        </button>
+        <Heading type="h4">הגדרות</Heading>
       </header>
 
-      {!metadata.teamsAvailable && (
-        <AttentionBox type="warning" text={TEAMS_SCOPE_HINT} />
-      )}
+      <div className="twyst-settings-body">
+        {!metadata.teamsAvailable && (
+          <AttentionBox type="warning" text={TEAMS_SCOPE_HINT} />
+        )}
 
-      <section className="twyst-label-editor" aria-labelledby="label-editor-title">
-        <div className="twyst-label-editor-header">
-          <h2 id="label-editor-title">לייבלים בעמודה</h2>
-          <button type="button" onClick={addLabel} disabled={saving}>הוספת לייבל</button>
+        <div className="twyst-settings-toolbar">
+          <Button kind="secondary" size="small" disabled={saving} onClick={addLabel}>
+            הוספת לייבל
+          </Button>
         </div>
-        <p className="twyst-hint">
-          הסרה מבטלת את הלייבל בעמודת הסטטוס (לא ניתן להסיר לייבל שבשימוש בפריטים).
-          הרשאות ללייבל חדש יופיעו אחרי שמירה.
-        </p>
-        {labelsDraft.map((label) => (
-          <LabelEditorRow
-            key={label.clientKey}
-            label={label}
-            onRename={renameLabel}
-            onRecolor={recolorLabel}
-            onRemove={removeLabel}
-          />
-        ))}
-      </section>
 
-      {ruleLabels.map((label) => (
-        <LabelRuleCard
-          key={label.id}
-          label={label}
-          hidden={hiddenSet.has(label.id)}
-          rule={getRule(label.id)}
-          users={metadata.users}
-          teams={metadata.teams}
-          teamsAvailable={metadata.teamsAvailable}
-          columns={formColumns}
-          onToggleHidden={toggleHidden}
-          onChangeRule={changeRule}
-        />
-      ))}
+        {labelsDraft.map((label) => {
+          const usedColors = labelsDraft
+            .filter((other) => other.clientKey !== label.clientKey)
+            .map((other) => other.colorValue);
+          return (
+            <LabelCard
+              key={label.clientKey}
+              label={label}
+              hidden={hiddenSet.has(label.id)}
+              rule={getRule(label.id)}
+              users={metadata.users}
+              teams={metadata.teams}
+              teamsAvailable={metadata.teamsAvailable}
+              columns={formColumns}
+              usedColors={usedColors}
+              saving={saving}
+              showPermissions={!label.isNew}
+              onRename={renameLabel}
+              onRecolor={recolorLabel}
+              onRemove={removeLabel}
+              onToggleHidden={toggleHidden}
+              onChangeRule={changeRule}
+            />
+          );
+        })}
 
-      {saveError && (
-        <AttentionBox type="danger" text={saveError} />
-      )}
-
-      <div className="twyst-actions">
-        <button type="button" className="primary-action" disabled={saving} onClick={handleSave}>
-          {saving ? 'שומר…' : 'שמירה'}
-        </button>
-        <button type="button" disabled={saving} onClick={() => dismiss()}>
-          ביטול
-        </button>
+        {saveError && <AttentionBox type="danger" text={saveError} />}
       </div>
-      <div className="twyst-version" dir="ltr">{VERSION_LABEL}</div>
+
+      <footer className="twyst-settings-footer">
+        <Button kind="primary" size="small" disabled={saving} onClick={handleSave}>
+          {saving ? 'שומר…' : 'שמור'}
+        </Button>
+        <Button kind="tertiary" size="small" disabled={saving} onClick={() => dismiss()}>
+          ביטול
+        </Button>
+        <span className="twyst-version" dir="ltr">{VERSION_LABEL}</span>
+      </footer>
     </main>
   );
 }

@@ -105,7 +105,8 @@ export function tryNormalizeStatusColorEnum(color) {
   if (typeof color === 'string') {
     const normalized = color.trim().toLowerCase();
     if (ENUM_SET.has(normalized)) return normalized;
-    if (HEX_BY_ENUM[normalized]) return normalized;
+    const underscored = normalized.replace(/-/g, '_');
+    if (ENUM_SET.has(underscored)) return underscored;
     const asNumber = Number(normalized);
     if (normalized !== '' && Number.isFinite(asNumber)) {
       return ENUM_BY_INDEX[asNumber] ?? null;
@@ -117,6 +118,55 @@ export function tryNormalizeStatusColorEnum(color) {
   }
   return null;
 }
+
+/**
+ * Vibe ColorPicker uses hyphens for some monday content colors; GraphQL
+ * StatusColumnColors uses underscores. Bridge both directions.
+ */
+const VIBE_HYPHEN_BY_ENUM = {
+  done_green: 'done-green',
+  stuck_red: 'stuck-red',
+  bright_green: 'bright-green',
+  dark_orange: 'dark-orange',
+  dark_red: 'dark-red',
+  bright_blue: 'bright-blue',
+  dark_blue: 'dark-blue',
+  chili_blue: 'chili-blue',
+};
+const ENUM_BY_VIBE_HYPHEN = Object.fromEntries(
+  Object.entries(VIBE_HYPHEN_BY_ENUM).map(([enumName, vibe]) => [vibe, enumName]),
+);
+
+/**
+ * @param {string|number|undefined|null} statusEnum
+ * @returns {string}
+ */
+export function toVibeColorName(statusEnum) {
+  const normalized = tryNormalizeStatusColorEnum(statusEnum)
+    ?? String(statusEnum ?? '').trim().toLowerCase().replace(/-/g, '_');
+  return VIBE_HYPHEN_BY_ENUM[normalized] ?? normalized;
+}
+
+/**
+ * @param {string|undefined|null} vibeName
+ * @returns {string|null} StatusColumnColors enum name
+ */
+export function fromVibeColorName(vibeName) {
+  const raw = String(vibeName ?? '').trim().toLowerCase();
+  if (!raw) return null;
+  // ColorPicker returns vibe names (often hyphenated). Resolve via the explicit
+  // map first — do not fall through to tryNormalize's hyphen rewrite, so the
+  // ColorPicker contract stays pinned to this bridge.
+  if (ENUM_BY_VIBE_HYPHEN[raw]) return ENUM_BY_VIBE_HYPHEN[raw];
+  if (ENUM_SET.has(raw)) return raw;
+  return null;
+}
+
+/** Whitelist for Vibe ColorPicker (status-column writeable colors). */
+export const VIBE_STATUS_COLOR_NAMES = MONDAY_STATUS_COLORS.map((entry) => (
+  toVibeColorName(entry.enum)
+));
+
 
 /**
  * @param {Iterable<string>} usedEnums

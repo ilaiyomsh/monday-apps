@@ -1,6 +1,6 @@
 {
   "name": "twyst-your-status",
-  "version": "3.1.5",
+  "version": "3.2.0",
   "description": "Governed Status column picker for monday.com — per-label permissions and required fields (client-only)",
   "private": true,
   "type": "module",

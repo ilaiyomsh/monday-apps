@@ -81,6 +81,9 @@ export const GET_BOARD_SETTINGS_METADATA = `
     users(limit: 500) {
       id
       name
+      photo_url {
+        thumb
+      }
     }
   }
 `;
