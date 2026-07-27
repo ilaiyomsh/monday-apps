@@ -183,6 +183,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const { options: typeOptions, loading: typeOptionsLoading } = useDropdownOptions('discussions', 'discussionTypeID');
   const titleRef = useRef(null);
   const timeMenuRef = useRef(null);
+  // If the root discussion was saved but template seeding failed, retain its id
+  // and the per-alias checkpoint so a retry resumes instead of duplicating the
+  // discussion or already-created topics/points.
+  const creationResumeRef = useRef(null);
+  const creationSessionRef = useRef(null);
 
   // Hide "דיון קודם" when the Previous-tasks tab won't use the link for this
   // discussion: always in DISCUSSION_TYPE mode, and — in AUTO mode — only while a
@@ -249,6 +254,20 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     }
     loadDiscussions();
   }, [open, hidePreviousDiscussion]);
+
+  // Reset resumable creation state only when the logical modal session changes
+  // (closed/reopened or a different source discussion). Parent rerenders often
+  // replace prop objects with equivalent copies; resetting on object identity
+  // could otherwise lose a saved root id after a partial failure.
+  useEffect(() => {
+    const sessionKey = open
+      ? `${isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create')}:${editDiscussion?.id || duplicateFrom?.id || 'new'}`
+      : null;
+    if (creationSessionRef.current !== sessionKey) {
+      creationSessionRef.current = sessionKey;
+      creationResumeRef.current = null;
+    }
+  }, [open, isEdit, isDuplicate, editDiscussion?.id, duplicateFrom?.id]);
 
   // Seed the form when opening: prefill from editDiscussion (edit), from
   // duplicateFrom (duplicate), or clear (plain create).
@@ -436,8 +455,29 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const handleSubmit = async () => {
     // Name, date AND time are required — every discussion is scheduled at an hour.
     if (!name.trim() || !date || !time) return;
+    const submitStartedAt = Date.now();
+    let submitSucceeded = false;
     try {
       setCreating(true);
+      const submissionKey = JSON.stringify({
+        mode: isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create'),
+        sourceId: isEdit ? editDiscussion?.id : duplicateFrom?.id,
+        name: name.trim(),
+        date,
+        time,
+        lead: lead.map((person) => String(person.id)),
+        coordinator: coordinator.map((person) => String(person.id)),
+        participants: participants.map((person) => String(person.id)),
+        externalParticipants,
+        discussionType,
+        previousDiscussionId,
+        templateId,
+        typeTopics,
+      });
+      let resume = creationResumeRef.current;
+      if (resume && resume.submissionKey !== submissionKey) {
+        throw new Error('הדיון כבר נוצר חלקית. כדי למנוע כפילות, יש לסגור את הטופס ולפתוח דיון חדש לפני שינוי הפרטים.');
+      }
       // Item 6 — real step progress: 1 step for the item save + one per
       // topic/point the picked template will create (refined live by
       // createTopicsFromTemplate's onProgress, which knows the sanitized total).
@@ -445,9 +485,21 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // round127 — duplicate: read the source topics BEFORE creating the item so
       // plannedSteps counts every clone step (the bar used to fake 100% after
       // the item save, seconds before the clone even started).
-      const duplicateTemplate = isDuplicate ? await readDiscussionTopicsAsTemplate(duplicateFrom.id) : null;
-      const plannedTopics = pickedTemplate?.topics
-        || (typeTopics?.length ? typeTopics : (duplicateTemplate?.topics || []));
+      const duplicateReadStartedAt = Date.now();
+      const duplicateTemplate = isDuplicate
+        ? (resume?.duplicateTemplate || await readDiscussionTopicsAsTemplate(duplicateFrom.id))
+        : null;
+      if (isDuplicate && !resume?.duplicateTemplate) {
+        logger.health?.('discussion_create_phase', {
+          step: 'duplicate_read',
+          duration_ms: Date.now() - duplicateReadStartedAt,
+        });
+      }
+      const primaryTopics = pickedTemplate?.topics || (typeTopics?.length ? typeTopics : []);
+      const plannedTopics = [
+        ...primaryTopics,
+        ...(duplicateTemplate?.topics || []),
+      ];
       const plannedSteps = 1 + plannedTopics.reduce((n, t) => n + 1 + (t.points?.length || 0), 0);
       setCreateProgress({ done: 0, total: plannedSteps });
       const onTemplateProgress = ({ done, total }) =>
@@ -527,23 +579,63 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // already created on the column by handleAddType (addDropdownLabel) — and
       // on a MANAGED column the flag can't create labels anyway (it fails the
       // whole save with ColumnValueException; 2026-07-12 incident).
-      let savedId;
-      if (isEdit) {
-        await board.item(editDiscussion.id).update(payload).execute();
-        savedId = editDiscussion.id;
-      } else {
-        const created = await board.item().create(payload).execute();
-        savedId = created.id;
+      const rootSaveStartedAt = Date.now();
+      let savedId = resume?.savedId || (isEdit ? editDiscussion.id : null);
+      const resumedRoot = Boolean(resume?.rootSaved);
+      if (!resumedRoot) {
+        if (isEdit) {
+          await board.item(editDiscussion.id).update(payload).execute();
+          savedId = editDiscussion.id;
+        } else {
+          const created = await board.item().create(payload).execute();
+          savedId = created.id;
+        }
+        resume = {
+          ...(resume || {}),
+          submissionKey,
+          savedId: String(savedId),
+          duplicateTemplate,
+          rootSaved: true,
+          templateResumeState: resume?.templateResumeState || null,
+        };
+        creationResumeRef.current = resume;
       }
+      logger.health?.('discussion_create_phase', {
+        step: resumedRoot ? 'root_resume' : 'root_save',
+        duration_ms: Date.now() - rootSaveStartedAt,
+        operation: isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create'),
+      });
       setCreateProgress((p) => (p ? { ...p, done: 1 } : { done: 1, total: 1 }));
 
-      // Optionally seed topics + points. A manual topic-template pick takes
-      // precedence; otherwise fall back to topics auto-filled from the unified
-      // type template (typeTopics). (create: always; edit: applies onto the item.)
-      if (savedId && pickedTemplate) {
-        await createTopicsFromTemplate(savedId, pickedTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
-      } else if (savedId && typeTopics?.length) {
-        await createTopicsFromTemplate(savedId, { topics: typeTopics }, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
+      // Seed every planned topic in ONE resumable pipeline. The helper batches
+      // actual GraphQL mutations (not Promise.all over SDK calls, which monday's
+      // iframe bridge serializes). A checkpoint is retained after each batch.
+      if (savedId && plannedTopics.length) {
+        const seedStartedAt = Date.now();
+        let seedSucceeded = false;
+        try {
+          await createTopicsFromTemplate(savedId, { topics: plannedTopics }, {
+            onProgress: onTemplateProgress,
+            freshDiscussion: !isEdit,
+            resumeState: resume?.templateResumeState || null,
+            onCheckpoint: (nextState) => {
+              if (
+                creationResumeRef.current?.savedId === String(savedId)
+                && creationResumeRef.current?.submissionKey === submissionKey
+              ) {
+                creationResumeRef.current.templateResumeState = nextState;
+              }
+            },
+          });
+          seedSucceeded = true;
+        } finally {
+          logger.health?.('discussion_create_phase', {
+            step: 'template_seed',
+            duration_ms: Date.now() - seedStartedAt,
+            items: plannedSteps - 1,
+            ok: seedSucceeded,
+          });
+        }
       }
 
       // Duplicate: clone the source discussion's topics + points onto the new
@@ -552,16 +644,33 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // monday reads lag writes, and opening the card early is what showed an
       // empty discussion "filling in slowly".
       if (savedId && isDuplicate && duplicateTemplate?.topics?.length) {
-        await createTopicsFromTemplate(savedId, duplicateTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
+        const readinessStartedAt = Date.now();
+        const expectedTopicCount = plannedTopics.length;
+        const expectedPointCount = plannedTopics.reduce(
+          (count, topic) => count + (topic.points?.length || 0),
+          0
+        );
         for (let attempt = 0; attempt < 10; attempt += 1) {
           try {
             const readBack = await readDiscussionTopicsAsTemplate(savedId);
-            if ((readBack?.topics?.length || 0) >= duplicateTemplate.topics.length) break;
+            const readableTopics = readBack?.topics || [];
+            const readablePointCount = readableTopics.reduce(
+              (count, topic) => count + (topic.points?.length || 0),
+              0
+            );
+            if (
+              readableTopics.length >= expectedTopicCount
+              && readablePointCount >= expectedPointCount
+            ) break;
           } catch (err) {
             if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי השכפול נכשלה — ממשיך להמתין', err);
           }
           await new Promise((resolve) => { setTimeout(resolve, 1000); });
         }
+        logger.health?.('discussion_create_phase', {
+          step: 'duplicate_readiness',
+          duration_ms: Date.now() - readinessStartedAt,
+        });
       }
 
       // Item 6 — the fun part: full bar + a confetti burst before handing off
@@ -589,6 +698,8 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       setTypeTopics(null);
       setPreviousDiscussionId('none');
       setTemplateId('none');
+      submitSucceeded = true;
+      creationResumeRef.current = null;
       // Hand back the discussion shape so the caller can refresh the open card
       // (edit) or open the freshly created/duplicated one immediately (create /
       // duplicate — savedId is the new item's id). Second arg tells the caller
@@ -619,6 +730,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     } catch (err) {
       logger.error('CreateDiscussionModal', isEdit ? 'שגיאה בעדכון הדיון' : 'שגיאה ביצירת הדיון', err);
     } finally {
+      logger.health?.('discussion_create_total', {
+        duration_ms: Date.now() - submitStartedAt,
+        ok: submitSucceeded,
+        operation: isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create'),
+      });
       setCreating(false);
       setCreateProgress(null);
       setCelebrate(false);
