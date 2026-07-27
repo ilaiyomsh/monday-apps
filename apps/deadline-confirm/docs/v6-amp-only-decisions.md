@@ -132,9 +132,11 @@ becomes an authorization bypass.
 
 ### D11 — Runtime assignee check. NOT clicker identity.
 
-At execution time, compare the signed `recipientPersonId` against the person ids
-in the item's people column. If the signed person is not among the item's
-assignees, that item is refused.
+At execution time, intersect the signed `personIds` set with the person ids in the
+item's people column. **Empty intersection → that item is refused.** This is the
+same rule `digest-service.js` used to put the task in the message, so a task that
+was legitimately sent always passes — see §3 on why this is a set and not a single
+id.
 
 Costs zero extra API calls: `performAction` already fetches the item with
 `peopleColumnId` for attribution.
@@ -310,24 +312,41 @@ means the roster cannot be edited from the admin UI.
 the message authorizes: which tasks, and for each task which buttons are offered.
 
 ```
-slot     = date (YYYYMMDD) of the scheduled send, Asia/Jerusalem
-manifest = "<itemId>:<btnId>[,<btnId>…][;<itemId>:…]"   canonical: items ascending,
-                                                        buttons ascending, no spaces
-payload  = accountId | recipientPersonId | slot | manifest  (single-byte "|" separator)
-sig      = base64url( HMAC-SHA256(link_secret, payload) )
+slot      = date (YYYYMMDD) of the scheduled send, Asia/Jerusalem
+manifest  = "<itemId>:<btnId>[,<btnId>…][;<itemId>:…]"   canonical: items ascending,
+                                                         buttons ascending, no spaces
+personIds = "<id>[,<id>…]"                               canonical: ascending, deduped,
+                                                         no spaces
+payload   = accountId | personIds | slot | manifest      (single-byte "|" separator)
+sig       = base64url( HMAC-SHA256(link_secret, payload) )
 ```
 
 The manifest is **not secret** — it lists item and button ids that the message
 already displays. Signing it is what binds authorization to a specific task set,
 so nothing outside the manifest can ever be acted on.
 
-`recipientPersonId` is inside the payload. It is not needed to constrain scope
-(the manifest already does that); it exists so the server knows
-**cryptographically** which person a code was issued to. Two uses: the runtime
-assignee check in D11, and provable attribution if the wording in R2 is ever
-changed (§6).
+`personIds` is inside the payload. It is not needed to constrain scope (the
+manifest already does that); it exists so the server knows **cryptographically**
+which person the message was issued to. Two uses: the runtime assignee check in
+D11, and provable attribution if the wording in R2 is ever changed (§6).
 
-A person **id** is signed rather than an email address because the item's people
+**It is a set, not one id — do not "simplify" it to a scalar.** A recipient in
+`digest-service.js` legitimately carries several monday person ids: rows in the
+users board are deduplicated by email address and their person ids are **united**
+(`existing.personIds.push(id)`), and a single users-board row's people column may
+itself hold several people. A task enters the recipient's digest when **any** of
+those ids appears in the task's people column:
+
+```js
+const mine = pending.filter((t) => t.personIds.some((id) => personSet.has(id)));
+```
+
+Signing only one id would make D11 refuse every task that was matched through one
+of the others — tasks the recipient can see in the message, clicks, and silently
+fails to update. Sign the whole set; the canonical ascending order is what makes
+the signature reproducible on resend (D6).
+
+Person **ids** are signed rather than email addresses because the item's people
 column already returns person ids — so the D11 check costs **zero** extra API
 calls. Signing the address instead would force a users-board read on the hot
 path.
@@ -354,6 +373,7 @@ scheduler failure, not widening the window.
 
 ```html
 <input type="hidden" name="a"   value="1234567">
+<input type="hidden" name="p"   value="55501,55742">
 <input type="hidden" name="m"   value="9871234567:done,in-progress;9871234599:done">
 <input type="hidden" name="s"   value="20260728">
 <input type="hidden" name="sig" value="a7f3c91e4b2d…">
@@ -367,23 +387,26 @@ scheduler failure, not widening the window.
 - Radio group name is per task (`item_<itemId>`); accept only field names matching
   `^item_\d{1,20}$` and ignore everything else.
 - Unselected tasks submit nothing.
-- `recipientPersonId` must be transmitted (it is an input to the recompute) and it
-  is **not** secret. It is protected by being inside the HMAC: a submitted value
-  that has been altered simply fails verification. Never read it from the request
-  for any purpose other than recomputing the signature.
+- `p` (the `personIds` set) must be transmitted — it is an input to the recompute —
+  and it is **not** secret. It is protected by being inside the HMAC: a submitted
+  value that has been altered, reordered, or extended simply fails verification.
+  Parse it with the same canonical rules as the manifest (ascending, deduped,
+  digits only), and never read it for any purpose other than recomputing the
+  signature and running D11.
 
 ### Verification order (security contract — do not reorder)
 
 1. **AMP CORS sender gate** — first, pure header work, no I/O. Unchanged.
 2. **Rate limit, bucket A** — per-IP, generous. See §4. New position: *before*
    any secret work.
-3. Parse `a`, `m`, `s`, `sig`. Reject a malformed or non-canonical manifest, a
-   manifest listing more than `MAX_ITEMS` (50) tasks, or duplicate item ids.
+3. Parse `a`, `p`, `m`, `s`, `sig`. Reject a malformed or non-canonical manifest
+   or `p`, a manifest listing more than `MAX_ITEMS` (50) tasks, or duplicate item
+   ids.
 4. Load the account's base secret via `storage.forAccount(a)`.
 5. `s` must equal `currentSlot`.
-6. Recompute the HMAC over `accountId|recipientEmail|s|m` and compare with
-   `timingSafeEqual`. **Reject before parsing selections** — an invalid signature
-   must never lead to reading the selection fields.
+6. Recompute the HMAC over `a|p|s|m` and compare with `timingSafeEqual`.
+   **Reject before parsing selections** — an invalid signature must never lead to
+   reading the selection fields.
 7. Parse selections. Every `(itemId, btnId)` pair **must appear in the verified
    manifest**; reject on no selections, an unknown item, or a button not offered
    for that item.
@@ -487,7 +510,7 @@ person from the task's people column, not the actual clicker. D11 narrows the ga
 — the code is cryptographically bound to a person and the task must still be
 assigned to them — but it does not close it: AMP carries no clicker identity, so
 "assigned to" is not "pressed by". If provable attribution is ever wanted, the
-signed `recipientPersonId` already supports wording like "confirmed via the
+signed `personIds` set already supports wording like "confirmed via the
 message issued to X" at no extra cost.
 
 > **Invariant that R1 and R2 depend on:** a recipient's digest must contain
@@ -588,7 +611,11 @@ the only authorization.
   - an invalid signature is rejected **without** the selection fields being read;
   - one bad selection rejects the entire batch (the oracle guard);
   - a reassigned item is refused by D11 **without** failing its batch-mates;
-  - a tampered `recipientPersonId` fails signature verification;
+  - a tampered `p` fails signature verification — altered, reordered, **and**
+    extended with an extra id;
+  - a recipient holding two person ids can act on a task matched through the
+    second one (the D11 set-intersection rule, §3) — this is the case a scalar
+    `recipientPersonId` would silently break;
   - the R2 invariant: a digest section contains only the recipient's tasks;
   - a valid sessionToken from a non-operator account cannot start the Google
     OAuth flow (D13) — this one guards every tenant's sending identity;
@@ -630,14 +657,19 @@ the only authorization.
 
 ## 11. Still open
 
-O5, O6 and O8 do not block implementation. **O7 does** — resolve it before
-building T6b.
-
-O1–O4 were closed by D12, D13 and D15 (owner, 2026-07-27). What remains:
+**Nothing here blocks implementation.** O1–O4 were closed by D12/D13/D15 and O7
+by the §3 correction (owner, 2026-07-27); O6 was deferred by the owner as not
+currently relevant. What remains:
 
 | # | Question |
 |---|---|
 | O5 | For each existing connection: how many boards the connected monday user can actually see. A number, not an adjective. Owner/onboarding task, not code — but the security document cannot be finished without it. |
-| O6 | The written rotation and offboarding procedure for the monday service user of D14. |
-| O7 | Whether `recipientPersonId` is always available. D11 assumes every recipient resolves to a monday person id; `digest-service` matches on person ids today, so it holds in the current flow, but a recipient sourced from an email address alone would have no id to sign. **Confirm with a sandbox probe before building on D11** — if it can be absent, decide whether such a recipient is skipped or sent a non-actionable message. |
+| O6 | The written rotation and offboarding procedure for the monday service user of D14. **Deferred by the owner** — not this round. |
 | O8 | The D9 email redesign (multi-button table) — owner will brief with an example. T15 stays unbuilt until then. |
+
+O7 (whether a recipient always has a person id) was **resolved by reading the
+code, and it corrected the spec.** Absence is already handled — a users-board row
+with no person is skipped as `no_person`, so a recipient always has at least one
+id. The real issue was the opposite: a recipient can have **several**, and §3
+originally signed a single `recipientPersonId`. That is now a signed **set** with
+an intersection rule in D11. No probe needed.
