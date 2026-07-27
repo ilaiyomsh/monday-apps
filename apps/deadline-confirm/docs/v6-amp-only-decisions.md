@@ -100,7 +100,7 @@ slot. Selective resend is out of scope for this round.
 
 ### D9 — Email redesign: multi-button table, one global submit. **IMPLEMENTED
 (T15 → LabelPicker 0.8.3–0.8.4 → cluster tables + multi-button 0.9.0 →
-label `<select>` dropdown 0.9.1).**
+styled LabelPicker in cluster cell 0.9.1).**
 
 Owner briefs:
 - (2026-07-27) one table + **one** approve button — not one form per section.
@@ -113,16 +113,17 @@ Owner briefs:
   that cluster's date column only; radio column per action button; clusters may
   define **multiple** `buttonIds` (admin multi-select). Same item across
   clusters shares `name="item_<id>"`.
-- (2026-07-27) **label dropdown:** replace per-button radio columns with one
-  native AMP-for-Email `<select class="label-dd">` per row (options = section
-  buttons; empty option `ללא שינוי` = no change). Wire unchanged. Gmail does
-  not reliably color `<option>` — labels are text. Not amp-accordion / amp-bind.
+- (2026-07-27) **tried native `<select>`:** AMP/Gmail cannot restyle the OS
+  dropdown panel — rejected for product UX.
+- (2026-07-27) **styled LabelPicker (0.9.1):** inlined colored radio options
+  (`.picker` / `.opt-fill`, monday picker parity) inside the cluster **סטטוס חדש**
+  cell. Unchecked = no change. Wire unchanged.
 
 Behaviour:
-- One AMP form. Populated sections → separate tables (title + date + status select).
+- One AMP form. Populated sections → separate tables (title + date + LabelPicker).
 - Options = section `buttonIds` (fallback `[buttonId]`). Wire `item_<id>=btnId`.
 - **One global submit** (`אשר את המסומנות`) applies every chosen status.
-- Tasks left on "ללא שינוי" are unchanged.
+- Tasks with no radio selected are unchanged.
 
 Admin: multi-select "כפתורי פעולה"; primary (first) drives status filter column.
 
