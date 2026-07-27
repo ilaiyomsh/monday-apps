@@ -2,13 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { resolveAppRoute } from './App.jsx';
 
 describe('resolveAppRoute', () => {
-  it('routes /picker to the column-dialog launcher and /picker-full to the stable modal', () => {
+  it('routes /picker and nested CDN paths to the cell-attached picker', () => {
     expect(resolveAppRoute('/picker')).toBe('picker');
     expect(resolveAppRoute('/picker/')).toBe('picker');
     expect(resolveAppRoute('/apps/twyst/picker')).toBe('picker');
-    expect(resolveAppRoute('/picker-full')).toBe('picker-full');
-    expect(resolveAppRoute('/picker-full/')).toBe('picker-full');
-    expect(resolveAppRoute('/apps/twyst/picker-full')).toBe('picker-full');
   });
 
   it('routes /settings to the slim launcher and /settings-full to the overlay editor', () => {
@@ -23,5 +20,6 @@ describe('resolveAppRoute', () => {
   it('rejects unknown paths', () => {
     expect(resolveAppRoute('/')).toBeNull();
     expect(resolveAppRoute('/board')).toBeNull();
+    expect(resolveAppRoute('/picker-full')).toBeNull();
   });
 });

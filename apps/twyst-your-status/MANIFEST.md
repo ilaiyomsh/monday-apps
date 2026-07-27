@@ -7,12 +7,13 @@
 - Settings feature type: column settings placement
 - Client-only CDN app (no monday-code server)
 - Feature URLs (configure on the draft/live version):
-  - On-click dialog: `<CDN_ORIGIN>/picker` (shell → stable modal)
-  - Stable picker overlay (opened from the shell via `openAppFeatureModal`):
-    `<CDN_ORIGIN>/picker-full`
+  - On-click dialog: `<CDN_ORIGIN>/picker`
   - Column settings (tiny shell): `<CDN_ORIGIN>/settings`
   - Full settings overlay (opened from the shell via `openAppFeatureModal`):
     `<CDN_ORIGIN>/settings-full`
+
+Do **not** bind an On-Hover Dialog to `/picker` — hover dialogs close when the
+pointer leaves the cell, which feels like the picker vanishing while choosing.
 
 ## Product rules
 
