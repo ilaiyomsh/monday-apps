@@ -1,6 +1,7 @@
 # V6 — AMP-only + per-message signed manifest
 
-**Status:** decided, not implemented. This document is the implementation brief.
+**Status:** partially implemented (V6 phases 1–5 on branch `cursor/v6-amp-only-0251`).
+T9–T12 (Gmail send, scheduler) and T15 (D9 redesign) remain open.
 **App:** `deadline-confirm` (App ID `11704868`, server app on monday-code, pushed dir = app root)
 **Baseline:** `0.7.3` on both `develop` and `main`. Suite: 526 green.
 **Suggested target version:** `0.8.0` (breaking product change).
