@@ -133,4 +133,4 @@ Each rule file contains:
 
 ## Full Compiled Document
 
-For the complete guide with all rules expanded: `AGENTS.md`
+For the complete guide with all rules expanded: `REFERENCE.md` (on-demand only — not named `AGENTS.md` so Cursor does not inject ~40K tokens into every session)
