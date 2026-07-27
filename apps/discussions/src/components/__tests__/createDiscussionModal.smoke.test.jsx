@@ -281,4 +281,35 @@ describe('CreateDiscussionModal', () => {
     expect(templateApi.createTopicsFromTemplate.mock.calls[1][2].resumeState).toBe(checkpoint);
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1), { timeout: 2000 });
   });
+
+  it('round300 — optimistic create: opens the card instantly (id-less), then patches the real id', async () => {
+    const onOptimisticCreate = vi.fn();
+    const onCreated = vi.fn();
+    await renderOpen({ onOptimisticCreate, onCreated });
+    const submit = screen.getByText('צור דיון').closest('button');
+    await act(async () => { fireEvent.click(submit); });
+    // The card is handed off IMMEDIATELY, before the create_item write resolves —
+    // with a shape that carries NO id yet (the header renders from it).
+    expect(onOptimisticCreate).toHaveBeenCalledTimes(1);
+    const shape = onOptimisticCreate.mock.calls[0][0];
+    expect(shape.id).toBeNull();
+    expect(typeof shape.name).toBe('string');
+    expect(shape.name.length).toBeGreaterThan(0);
+    // The background create was NOT awaited before hand-off.
+    await flush();
+    // …and once create_item resolves, the REAL id is patched in via onCreated.
+    expect(onCreated).toHaveBeenCalledTimes(1);
+    expect(onCreated.mock.calls[0][0].id).toBe('99');
+    expect(onCreated.mock.calls[0][1]).toMatchObject({ isEdit: false, isDuplicate: false });
+  });
+
+  it('round300 — without onOptimisticCreate it keeps the awaited path (id via onCreated only)', async () => {
+    const onCreated = vi.fn();
+    await renderOpen({ onCreated }); // no onOptimisticCreate
+    const submit = screen.getByText('צור דיון').closest('button');
+    await act(async () => { fireEvent.click(submit); });
+    await flush();
+    expect(onCreated).toHaveBeenCalledTimes(1);
+    expect(onCreated.mock.calls[0][0].id).toBe('99');
+  });
 });

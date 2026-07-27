@@ -103,7 +103,7 @@ async function resolvePreviousDiscussion(discussionId, onResolved) {
 // empty date and the name selected for immediate editing.
 // `prefill` ({date:'YYYY-MM-DD', time:'HH:MM'}) seeds a PLAIN create — set when
 // the user clicks an empty hour slot in the calendar's week view.
-export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion = null, duplicateFrom = null, prefill = null, canManageSettings = false }) {
+export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCreate = null, onCreateError = null, editDiscussion = null, duplicateFrom = null, prefill = null, canManageSettings = false }) {
   const isEdit = !!editDiscussion;
   const isDuplicate = !isEdit && !!duplicateFrom;
   const { currentUser } = useMondayContext();
@@ -457,6 +457,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     if (!name.trim() || !date || !time) return;
     const submitStartedAt = Date.now();
     let submitSucceeded = false;
+    // round300 — when the optimistic path hands off, the synchronous flow returns
+    // before the write resolves, so the finally's total would log a misleading
+    // ok=false. This flag makes the finally skip it; the background closure emits
+    // the REAL total (round299's health metric stays accurate).
+    let optimisticHandoff = false;
     try {
       setCreating(true);
       const submissionKey = JSON.stringify({
@@ -575,6 +580,66 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         },
       });
 
+      // round300 — OPTIMISTIC create (plain NEW discussion only; edit + duplicate
+      // keep the awaited flow below). Instead of blocking the card open on monday's
+      // full create_item round-trip (people + type columns, plus any retry backoff),
+      // open the discussion card INSTANTLY from the entered data and run the write
+      // in the BACKGROUND. The card header renders from the passed shape; the card's
+      // data hooks no-op on the null id, then fetch once the real id is patched in
+      // by onCreated. On a (rare) failure onCreateError reverts the card.
+      if (!isEdit && !isDuplicate && onOptimisticCreate) {
+        optimisticHandoff = true;
+        const optimisticShape = {
+          id: null,
+          name: name.trim(),
+          discussionDateID: date ? composeLocalDate(date, time) : null,
+          discussionLeadID: lead,
+          discussionCoordinatorID: coordinator,
+          participantsID: participants,
+          externalParticipantsID: formatExternalParticipants(externalParticipants),
+          ...(typeIsSubmittable ? { discussionTypeID: discussionType } : {}),
+        };
+        // Template inputs are captured here (submit-time) so the form reset below
+        // can't affect the background write. (People/date/type are already baked
+        // into `payload` and `optimisticShape` above.)
+        const bgTemplate = pickedTemplate, bgTypeTopics = typeTopics;
+        const creatorId = currentUser?.id != null ? String(currentUser.id) : null;
+        onOptimisticCreate(optimisticShape); // open the card + close the modal NOW
+        // Reset the form for next time (the modal is unmounting).
+        setName(''); setDate(''); setTime(''); setLead([]); setCoordinator([]);
+        setParticipants([]); setExternalParticipants([]); setExternalDraft('');
+        setDiscussionType(null); setTypeTopics(null); setPreviousDiscussionId('none');
+        setTemplateId('none'); setCreating(false); setCreateProgress(null);
+        (async () => {
+          const bgStartedAt = Date.now();
+          let bgOk = false;
+          try {
+            const created = await board.item().create(payload).execute();
+            const newId = created.id;
+            if (bgTemplate) {
+              await createTopicsFromTemplate(newId, bgTemplate, { creatorId });
+            } else if (bgTypeTopics?.length) {
+              await createTopicsFromTemplate(newId, { topics: bgTypeTopics }, { creatorId });
+            }
+            bgOk = true;
+            onCreated({ ...optimisticShape, id: newId }, { isEdit: false, isDuplicate: false });
+          } catch (err) {
+            if (!err?.__loggedId) logger.error('CreateDiscussionModal', 'שגיאה ביצירת הדיון (רקע)', err);
+            onCreateError?.();
+          } finally {
+            // The real total for the optimistic path — measured over the BACKGROUND
+            // write, tagged optimistic so it's distinguishable from the awaited flow.
+            logger.health?.('discussion_create_total', {
+              duration_ms: Date.now() - bgStartedAt,
+              ok: bgOk,
+              operation: 'create',
+              optimistic: true,
+            });
+          }
+        })();
+        return;
+      }
+
       // NO create_labels_if_missing here: a freshly-added "סוג" label was
       // already created on the column by handleAddType (addDropdownLabel) — and
       // on a MANAGED column the flag can't create labels anyway (it fails the
@@ -678,12 +743,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // celebration window — the discussion is already saved at this point.
       setCreateProgress((p) => (p ? { ...p, done: p.total } : { done: 1, total: 1 }));
       if (!isEdit) {
-        // round297 — the discussion is ALREADY saved here; this window is pure
-        // celebration. Trimmed 1500 → 500ms so the card opens far sooner after
-        // "צור דיון" (owner: creation felt slow). The confetti still flashes.
+        // round298 — the discussion is ALREADY saved here; drop the blocking
+        // celebration wait entirely so the card opens the instant the save
+        // resolves (owner: creation still felt slow). A brief confetti still
+        // flashes but never delays the hand-off.
         setCelebrate(true);
-        await new Promise((resolve) => { setTimeout(resolve, 500); });
-        setCelebrate(false);
       }
 
       setName('');
@@ -730,11 +794,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     } catch (err) {
       logger.error('CreateDiscussionModal', isEdit ? 'שגיאה בעדכון הדיון' : 'שגיאה ביצירת הדיון', err);
     } finally {
-      logger.health?.('discussion_create_total', {
-        duration_ms: Date.now() - submitStartedAt,
-        ok: submitSucceeded,
-        operation: isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create'),
-      });
+      if (!optimisticHandoff) {
+        logger.health?.('discussion_create_total', {
+          duration_ms: Date.now() - submitStartedAt,
+          ok: submitSucceeded,
+          operation: isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create'),
+        });
+      }
       setCreating(false);
       setCreateProgress(null);
       setCelebrate(false);

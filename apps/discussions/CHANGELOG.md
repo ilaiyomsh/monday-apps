@@ -14,6 +14,15 @@
 
 - Development version after synchronizing the production RTL preview hotfix from PR #435 back into `develop`. The correction now lives in the tested preview-pagination DOM helper; no additional production behavior is introduced by this version bump.
 
+- round300: **יצירת דיון מיידית (אופטימית).** גם אחרי האצת התבנית ב-round299, יצירת דיון
+  עדיין הרגישה איטית כי הכרטיס נפתח רק אחרי שכל קריאת ה-`create_item` חוזרת מ-monday
+  (עמודות people/type + backoff של ניסיונות חוזרים). כעת בלחיצה על "צור דיון" הכרטיס
+  נפתח **מיד** עם הנתונים שהוזנו (הכותרת/תאריך/אנשים מוצגים מהצורה שנשלחה), וה-`create_item`
+  + יצירת הנושאים מהתבנית רצים **ברקע**; ה-hooks של הכרטיס ממתינים בשקט עד שה-id האמיתי
+  מוזרק. בכישלון (נדיר) הכרטיס נסגר עם הודעת שגיאה. עריכה ושכפול ממשיכים בזרימה הרגילה
+  (כולל מנגנון ה-checkpoint/resume), וגם הקונפטי כבר לא חוסם. משלים את round299: הרקע
+  מהיר יותר, והפתיחה מיידית. (מכוסה ב-2 מוטציות שנהרגו ב-createDiscussionModal.smoke.)
+
 - round299: **האצת יצירת דיון עם תבנית.** יצירת הנושאים, קישורם לדיון ויצירת הנקודות
   נשלחים כעת ב־GraphQL aliased batches של עד 10 פעולות במקום קריאת SDK נפרדת לכל
   פריט. סדר הנושאים והנקודות נשמר בכתיבת Storage יחידה בדיון חדש. נוסף checkpoint
