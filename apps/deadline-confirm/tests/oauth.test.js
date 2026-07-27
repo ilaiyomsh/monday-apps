@@ -190,6 +190,19 @@ describe('GET /oauth/start — sessionToken gate (v3)', () => {
     expect(issuedStateKeys()).toHaveLength(0);
   });
 
+  it('responds 403 and issues no state when allowedAccountIds is EMPTY (D15 default-deny)', async () => {
+    const { app, issuedStateKeys } = makeHarness({
+      env: { ...ENV, allowedAccountIds: [] },
+    });
+
+    const res = await request(app).get('/oauth/start').query({ st: signSt({ accountId: 777 }) });
+
+    expect(res.status).toBe(403);
+    expect(res.text).toContain(OAUTH_ERROR_HEADING);
+    expect(res.headers.location).toBeUndefined();
+    expect(issuedStateKeys()).toHaveLength(0);
+  });
+
   it("302-redirects when the token's account IS in a non-empty allowlist", async () => {
     const { app } = makeHarness({
       env: { ...ENV, allowedAccountIds: [ACCOUNT_ID, OTHER_ACCOUNT_ID] },
