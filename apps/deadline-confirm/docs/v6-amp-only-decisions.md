@@ -1,10 +1,10 @@
 # V6 — AMP-only + per-message signed manifest
 
-**Status:** partially implemented on `develop` (0.8.1 + T15 pending merge).
-Phases 1–5 + T6c/T10/T10b/T11/T12 + **T15/D9 renderer** are in. **T9/T9b/T9c
-(Gmail OAuth + send) deferred** until the Google Cloud app is provisioned.
+**Status:** partially implemented on `develop` (0.8.2) + this branch 0.8.3
+(LabelPicker visual + multi-date columns). **T9/T9b/T9c (Gmail OAuth + send)
+deferred** until the Google Cloud app is provisioned.
 **App:** `deadline-confirm` (App ID `11704868`, server app on monday-code, pushed dir = app root)
-**Baseline:** `0.8.1` on `develop`. Suite: 568+ green.
+**Baseline:** `0.8.2` on `develop`. Suite: 568+ green.
 **Suggested next version after Gmail:** `0.9.0`.
 
 ---
