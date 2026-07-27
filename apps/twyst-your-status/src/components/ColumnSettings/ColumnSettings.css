@@ -98,6 +98,16 @@
   background: var(--primary-background-color, #fff);
 }
 
+.twyst-select {
+  max-width: 320px;
+  width: 100%;
+  border: 1px solid var(--ui-border-color, #c3c6d4);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+  background: var(--primary-background-color, #fff);
+}
+
 .twyst-check {
   display: flex;
   flex-direction: row;

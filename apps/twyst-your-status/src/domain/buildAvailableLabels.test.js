@@ -20,6 +20,7 @@ const SETTINGS = {
       allowedUserIds: ['42'],
       allowedTeamIds: ['7'],
       requiredColumnIds: ['notes'],
+      requiredPeopleColumnIds: [],
     },
   },
 };
@@ -32,18 +33,81 @@ describe('currentLabelIdFromValue', () => {
 });
 
 describe('isActorAllowedForLabel', () => {
-  it('allows everyone when allowlists are empty', () => {
+  it('allows everyone when allowlists and people gates are empty', () => {
     expect(isActorAllowedForLabel(
-      { allowedUserIds: [], allowedTeamIds: [], requiredColumnIds: [] },
+      {
+        allowedUserIds: [],
+        allowedTeamIds: [],
+        requiredColumnIds: [],
+        requiredPeopleColumnIds: [],
+      },
       { userId: '9', teamIds: [] },
     )).toBe(true);
   });
 
   it('allows by user id or by team membership', () => {
-    const rule = { allowedUserIds: ['42'], allowedTeamIds: ['7'], requiredColumnIds: [] };
+    const rule = {
+      allowedUserIds: ['42'],
+      allowedTeamIds: ['7'],
+      requiredColumnIds: [],
+      requiredPeopleColumnIds: [],
+    };
     expect(isActorAllowedForLabel(rule, { userId: '42', teamIds: [] })).toBe(true);
     expect(isActorAllowedForLabel(rule, { userId: '99', teamIds: ['7'] })).toBe(true);
     expect(isActorAllowedForLabel(rule, { userId: '99', teamIds: ['8'] })).toBe(false);
+  });
+
+  it('requires the actor to appear in every gated people column (person or team)', () => {
+    const rule = {
+      allowedUserIds: [],
+      allowedTeamIds: [],
+      requiredColumnIds: [],
+      requiredPeopleColumnIds: ['owner'],
+    };
+    const peopleByColumnId = {
+      owner: { personIds: ['42'], teamIds: ['7'] },
+    };
+    expect(isActorAllowedForLabel(rule, { userId: '42', teamIds: [] }, { peopleByColumnId })).toBe(true);
+    expect(isActorAllowedForLabel(rule, { userId: '99', teamIds: ['7'] }, { peopleByColumnId })).toBe(true);
+    expect(isActorAllowedForLabel(rule, { userId: '99', teamIds: ['8'] }, { peopleByColumnId })).toBe(false);
+    expect(isActorAllowedForLabel(rule, { userId: '42', teamIds: [] }, { peopleByColumnId: {} })).toBe(false);
+  });
+
+  it('requires ALL gated people columns (AND), not just one', () => {
+    const rule = {
+      allowedUserIds: [],
+      allowedTeamIds: [],
+      requiredColumnIds: [],
+      requiredPeopleColumnIds: ['owner', 'qa'],
+    };
+    const peopleByColumnId = {
+      owner: { personIds: ['42'], teamIds: [] },
+      qa: { personIds: ['99'], teamIds: [] },
+    };
+    expect(isActorAllowedForLabel(rule, { userId: '42', teamIds: [] }, { peopleByColumnId })).toBe(false);
+    expect(isActorAllowedForLabel(rule, { userId: '99', teamIds: [] }, { peopleByColumnId })).toBe(false);
+    expect(isActorAllowedForLabel(
+      rule,
+      { userId: '42', teamIds: [] },
+      { peopleByColumnId: {
+        owner: { personIds: ['42'], teamIds: [] },
+        qa: { personIds: ['42'], teamIds: [] },
+      } },
+    )).toBe(true);
+  });
+
+  it('ANDs the allowlist with the people-column gate', () => {
+    const rule = {
+      allowedUserIds: ['42'],
+      allowedTeamIds: [],
+      requiredColumnIds: [],
+      requiredPeopleColumnIds: ['owner'],
+    };
+    const peopleByColumnId = {
+      owner: { personIds: ['42', '99'], teamIds: [] },
+    };
+    expect(isActorAllowedForLabel(rule, { userId: '42', teamIds: [] }, { peopleByColumnId })).toBe(true);
+    expect(isActorAllowedForLabel(rule, { userId: '99', teamIds: [] }, { peopleByColumnId })).toBe(false);
   });
 });
 
@@ -99,5 +163,30 @@ describe('buildAvailableLabels', () => {
       currentValue: null,
     });
     expect(model.options.map((label) => label.id)).toEqual(['0', '1', '2']);
+  });
+
+  it('omits labels whose people-column gate the actor fails', () => {
+    const settings = {
+      version: 1,
+      hiddenLabelIds: [],
+      labels: {
+        '0': {
+          allowedUserIds: [],
+          allowedTeamIds: [],
+          requiredColumnIds: [],
+          requiredPeopleColumnIds: ['owner'],
+        },
+      },
+    };
+    const model = buildAvailableLabels({
+      labels: LABELS,
+      settings,
+      actor: { userId: '99', teamIds: [] },
+      currentValue: null,
+      peopleByColumnId: {
+        owner: { personIds: ['42'], teamIds: [] },
+      },
+    });
+    expect(model.options.map((label) => label.id)).toEqual(['1', '2']);
   });
 });
