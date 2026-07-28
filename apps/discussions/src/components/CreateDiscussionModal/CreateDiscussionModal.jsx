@@ -18,7 +18,7 @@ import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
-import { createTopicsFromTemplate, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
+import { createTopicsFromTemplate, linkTemplateTopics, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
 import { parseExternalParticipants, formatExternalParticipants } from '@generated/utils/externalParticipants.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -692,12 +692,36 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
             // card's read path, the agenda appears complete in one shot.
             if (stageTemplate) {
               const stage2At = Date.now();
-              await createTopicsFromTemplate(newId, stageTemplate, {
+              // With linkLast a mid-run failure leaves created topics INVISIBLE
+              // (they exist but are not connected, and the card reads through the
+              // connection). So: one resumed retry — the checkpoint guarantees
+              // nothing is created twice — and if that fails too, a best-effort
+              // salvage link of whatever WAS created, so no real item is stranded
+              // unreachable. Only then does the failure surface.
+              const buildAgenda = () => createTopicsFromTemplate(newId, stageTemplate, {
                 freshDiscussion: true,
                 linkLast: true,
                 resumeState: stage1Checkpoint,
                 onCheckpoint: (cp) => { stage1Checkpoint = cp; },
               });
+              try {
+                await buildAgenda();
+              } catch (firstErr) {
+                if (!firstErr?.__loggedId) logger.warn('CreateDiscussionModal', 'בניית האג׳נדה נכשלה — ניסיון חוזר מה-checkpoint', firstErr);
+                if (firstErr?.templateResumeState) stage1Checkpoint = firstErr.templateResumeState;
+                try {
+                  await buildAgenda();
+                } catch (secondErr) {
+                  if (secondErr?.templateResumeState) stage1Checkpoint = secondErr.templateResumeState;
+                  try {
+                    const salvaged = await linkTemplateTopics(newId, stage1Checkpoint);
+                    logger.warn('CreateDiscussionModal', `בניית האג׳נדה נכשלה פעמיים — ${salvaged} נושאים שנוצרו קושרו לדיון כדי שלא יאבדו`, secondErr);
+                  } catch (salvageErr) {
+                    if (!salvageErr?.__loggedId) logger.error('CreateDiscussionModal', 'גם קישור ההצלה של נושאי האג׳נדה נכשל', salvageErr);
+                  }
+                  throw secondErr;
+                }
+              }
               logger.health?.('discussion_create_phase', {
                 step: 'staged_agenda_link_last', duration_ms: Date.now() - stage2At,
               });

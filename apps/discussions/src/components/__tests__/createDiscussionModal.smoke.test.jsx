@@ -91,11 +91,13 @@ vi.mock('@generated/utils/mondayApi/board-config-store.js', () => ({
 
 const templateApi = vi.hoisted(() => ({
   createTopicsFromTemplate: vi.fn(),
+  linkTemplateTopics: vi.fn(),
   readDiscussionTopicsAsTemplate: vi.fn(),
 }));
 
 vi.mock('@generated/utils/templates.js', () => ({
   createTopicsFromTemplate: templateApi.createTopicsFromTemplate,
+  linkTemplateTopics: templateApi.linkTemplateTopics,
   countPoints: () => 0,
   readDiscussionTopicsAsTemplate: templateApi.readDiscussionTopicsAsTemplate,
 }));
@@ -169,6 +171,7 @@ beforeEach(() => {
   templateApi.readDiscussionTopicsAsTemplate.mockResolvedValue({
     topics: [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }],
   });
+  templateApi.linkTemplateTopics.mockResolvedValue(0);
 });
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -387,18 +390,50 @@ describe('CreateDiscussionModal', () => {
     await waitFor(() => expect(onStageAdvance).toHaveBeenCalled());
   });
 
-  it('round303 — a background template failure reports through onStageError with the id; the hand-off already happened', async () => {
-    // The template now runs entirely AFTER the hand-off (round303), so its failure
-    // is a card-side event: onStageError (which drops __building so the loader
-    // cannot spin forever) — never a form error, and never a second root item.
+  it('round303 — a failed agenda build RETRIES from the checkpoint, then salvage-links created topics before reporting', async () => {
+    // linkLast means a mid-run failure leaves created topics INVISIBLE (unlinked).
+    // Contract: one resumed retry; if that fails too, whatever WAS created is
+    // linked to the discussion (salvage) so no real item is stranded — and only
+    // then does onStageError fire.
+    const TOPICS = [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }];
+    templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: TOPICS }];
+    const checkpoint = {
+      templateKey: 'k', topicResults: [{ sourceIndex: 0, id: 'T1' }],
+      pointResults: [], linkedTopicSourceIndexes: [],
+    };
+    templateApi.createTopicsFromTemplate.mockImplementation(async () => {
+      const err = new Error('agenda build failed');
+      err.templateResumeState = checkpoint;
+      throw err;
+    });
+    const onStageError = vi.fn();
+    await renderOpen({ onOptimisticCreate: vi.fn(), onCreated: vi.fn(), onStageError });
+    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
+    await act(async () => { fireEvent.click(screen.getByText('צור דיון').closest('button')); });
+
+    await waitFor(() => expect(onStageError).toHaveBeenCalled());
+    // Exactly two build attempts (original + one resumed retry)…
+    expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(2);
+    // …the retry resumed from the failure's checkpoint (nothing recreated)…
+    expect(templateApi.createTopicsFromTemplate.mock.calls[1][2].resumeState).toBe(checkpoint);
+    // …and the salvage link ran over that checkpoint before the error surfaced.
+    expect(templateApi.linkTemplateTopics).toHaveBeenCalledWith('99', checkpoint);
+  });
+
+  it('round303 — a SINGLE transient build failure recovers silently via the resumed retry', async () => {
+    // With the retry in place, one transient failure must NOT surface: the second
+    // attempt resumes from the checkpoint and finishes, the card completes as if
+    // nothing happened, and the discussion is never duplicated.
     const TOPICS = [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }];
     templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: TOPICS }];
     templateApi.createTopicsFromTemplate.mockImplementationOnce(async () => {
-      throw new Error('background template failed');
+      throw new Error('transient background failure');
     });
     const onOptimisticCreate = vi.fn();
+    const onCreated = vi.fn();
     const onStageError = vi.fn();
-    await renderOpen({ onOptimisticCreate, onCreated: vi.fn(), onStageError });
+    await renderOpen({ onOptimisticCreate, onCreated, onStageError });
     fireEvent.click(screen.getByText('בחר סוג דיון'));
     await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
     const submit = screen.getByText('צור דיון').closest('button');
@@ -406,9 +441,11 @@ describe('CreateDiscussionModal', () => {
 
     // The card WAS handed off (the failure came later, in the background)…
     await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
-    // …and the failure surfaces on the card, carrying the discussion's real id.
-    await waitFor(() => expect(onStageError).toHaveBeenCalledWith(expect.objectContaining({ id: '99' })));
-    // One root item only — a background failure must never duplicate the discussion.
+    // …the retry finished the agenda, so the flow COMPLETES rather than erroring…
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(2);
+    expect(onStageError).not.toHaveBeenCalled();
+    // …and one root item only — a background failure must never duplicate it.
     expect(boardApi.create).toHaveBeenCalledTimes(1);
   });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clampTopicWords, splitTopicNameLines } from '../topicName.js';
+import { clampTopicWords, clampTopicName, displayTopicNameLines, splitTopicNameLines } from '../topicName.js';
 
 // round303 — the owner's topic-name rules: a ribbon line holds at most 3 words OR
 // 16 characters (whichever is hit first), overflow wraps automatically, and a
@@ -62,5 +62,54 @@ describe('splitTopicNameLines — 3 words / 16 chars per line, the smaller wins'
   it('returns [] for empty input', () => {
     expect(splitTopicNameLines('')).toEqual([]);
     expect(splitTopicNameLines('   ')).toEqual([]);
+  });
+});
+
+describe('clampTopicName — 6 words AND at most 2 display lines (PR-review fix)', () => {
+  it('keeps a name whose 6 words fit two lines', () => {
+    const six = 'אחת שתיים שלוש ארבע חמש שש';
+    expect(clampTopicName(six)).toEqual({ name: six, clamped: false });
+  });
+
+  it('drops words when 6 SHORT-line words would need more than two lines', () => {
+    // Six 8-char words: pairs exceed 16 chars, so each line holds ONE word ⇒ six
+    // lines — the exact case the review flagged. Accepting it would clip lines
+    // 3-6 invisibly, so the name must be cut to what two lines can show.
+    const name = 'אבגדהוזח אבגדהוזח אבגדהוזח אבגדהוזח אבגדהוזח אבגדהוזח';
+    const res = clampTopicName(name);
+    expect(res.clamped).toBe(true);
+    expect(res.name).toBe('אבגדהוזח אבגדהוזח');
+    expect(splitTopicNameLines(res.name).length).toBeLessThanOrEqual(2);
+  });
+
+  it('every accepted name renders fully within two lines (the invariant itself)', () => {
+    const inputs = [
+      'תקציב', 'תקציב שנתי מפורט', 'אחת שתיים שלוש ארבע חמש שש',
+      'אינטגרציות ארגוניות מורכבות ברבעון הקרוב מאוד',
+      'אבגדהוזח אבגדהוזח אבגדהוזח אבגדהוזח אבגדהוזח אבגדהוזח',
+    ];
+    for (const input of inputs) {
+      const { name } = clampTopicName(input);
+      expect(splitTopicNameLines(name).length).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('never returns an empty name for non-empty input (a single word always survives)', () => {
+    const { name } = clampTopicName('אינטרדיסציפלינריותמאודמאודארוכה');
+    expect(name.length).toBeGreaterThan(0);
+  });
+});
+
+describe('displayTopicNameLines — legacy names fold into two visible rows', () => {
+  it('passes a compliant name through unchanged', () => {
+    expect(displayTopicNameLines('תקציב שנתי')).toEqual(['תקציב שנתי']);
+  });
+
+  it('folds a pre-rule long name into two rows (row 2 carries the rest, ellipsized by CSS)', () => {
+    const legacy = 'אבגדהוזח אבגדהוזח אבגדהוזח אבגדהוזח';
+    const lines = displayTopicNameLines(legacy);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toBe('אבגדהוזח');
+    expect(lines[1]).toBe('אבגדהוזח אבגדהוזח אבגדהוזח');
   });
 });

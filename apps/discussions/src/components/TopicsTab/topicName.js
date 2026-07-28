@@ -25,6 +25,38 @@ export function clampTopicWords(name, maxWords = TOPIC_MAX_WORDS) {
 }
 
 /**
+ * The full acceptance rule for a NEW/renamed topic name: at most 6 words AND at
+ * most 2 display lines. The word cap alone is not enough — six 8-character words
+ * split into six one-word lines, and the tile only shows two — so words are
+ * dropped until the split fits, keeping the promise that an accepted name is
+ * always fully visible.
+ */
+export function clampTopicName(name, {
+  maxWords = TOPIC_MAX_WORDS, maxLines = 2, maxLineWords = LINE_MAX_WORDS, maxLineChars = LINE_MAX_CHARS,
+} = {}) {
+  let { name: current, clamped } = clampTopicWords(name, maxWords);
+  let parts = current ? current.split(' ') : [];
+  while (parts.length > 1
+    && splitTopicNameLines(parts.join(' '), { maxWords: maxLineWords, maxChars: maxLineChars }).length > maxLines) {
+    parts = parts.slice(0, -1);
+    clamped = true;
+  }
+  return { name: parts.join(' '), clamped };
+}
+
+/**
+ * Lines for DISPLAY: the computed split, folded to at most 2 rows. Names that
+ * pre-date the rule (or arrive from templates) may split into more; everything
+ * past row 1 is merged into row 2, whose CSS ellipsis then shows the cut — the
+ * text is clipped visibly instead of silently vanishing below the tile.
+ */
+export function displayTopicNameLines(name, opts) {
+  const lines = splitTopicNameLines(name, opts);
+  if (lines.length <= 2) return lines;
+  return [lines[0], lines.slice(1).join(' ')];
+}
+
+/**
  * Split a topic name into display lines: each line takes words while it holds at
  * most `maxWords` of them AND at most `maxChars` characters (a single word longer
  * than the budget still gets its own line — words are never cut mid-word).

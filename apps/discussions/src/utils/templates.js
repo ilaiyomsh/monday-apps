@@ -174,6 +174,34 @@ export function sanitizeTypeTemplate(template, id) {
  *
  * @returns {Promise<{topics:number, points:number}>} how many were created.
  */
+/*
+ * round303 — SALVAGE for a failed linkLast run. With linkLast the topics are
+ * created before they are connected, so a mid-run failure leaves them as real
+ * but INVISIBLE board items (the card reads through the relation). This links
+ * whatever the checkpoint says was created and not yet linked, so nothing that
+ * exists stays unreachable. Best-effort by design: the caller reports the
+ * failure either way; this only bounds the damage.
+ */
+export async function linkTemplateTopics(discussionId, resumeState) {
+  const boardId = getBoardId('topics');
+  const relation = (getColumns('topics') || {}).discussionLinkID;
+  if (!discussionId || !boardId || !relation?.id) return 0;
+  const linked = new Set((resumeState?.linkedTopicSourceIndexes || []).map(Number));
+  const topics = (resumeState?.topicResults || [])
+    .filter((t) => t?.id != null && !linked.has(Number(t.sourceIndex)))
+    .map((t) => ({ id: String(t.id), sourceIndex: Number(t.sourceIndex) }));
+  if (!topics.length) return 0;
+  let count = 0;
+  for (const batch of buildTopicRelationBatches({
+    boardId, discussionId, relationColumnId: relation.id, topics,
+  })) {
+    const data = await api(batch.query, batch.variables, 'linkTemplateTopics', { retry: false });
+    const parsed = parseAliasedMutationResult(batch, { data, errors: [] });
+    count += parsed.successful.length;
+  }
+  return count;
+}
+
 export async function createTopicsFromTemplate(discussionId, template, {
   onProgress,
   existingTopicIds = [],

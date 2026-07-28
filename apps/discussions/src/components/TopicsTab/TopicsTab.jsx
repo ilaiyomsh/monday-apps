@@ -31,7 +31,7 @@ import { computeRibbonDropTarget } from './ribbonDrop.js';
 import {
   maxPos, readPos, writePos, computeEdges, computeThumb, posFromThumbDrag, stepFrom,
 } from './ribbonScroll.js';
-import { clampTopicWords, splitTopicNameLines } from './topicName.js';
+import { clampTopicName, displayTopicNameLines } from './topicName.js';
 import { assignTopicAccents, topicColorStartIndex } from './topicAccents.js';
 import { buildMentionRoster } from '@generated/utils/mention.js';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
@@ -1063,8 +1063,8 @@ export function TopicsTab({
     // round303 (owner rule) — a topic name holds at most 6 words. Truncate rather
     // than block (blur commits, so blocking would swallow the whole add), but say
     // so, so no text is lost silently.
-    const { name: clampedName, clamped } = clampTopicWords(newTopicText);
-    if (clamped) onNotify?.('שם נושא מוגבל ל-6 מילים — השם קוצר', 'error');
+    const { name: clampedName, clamped } = clampTopicName(newTopicText);
+    if (clamped) onNotify?.('שם נושא מוגבל ל-6 מילים ולשתי שורות — השם קוצר', 'error');
     pendingActivateWhereRef.current = w === 'start' ? 'start' : 'end';
     addTopic(clampedName, w === 'start' ? {} : { position: 'bottom' });
     setNewTopicText('');
@@ -1074,8 +1074,8 @@ export function TopicsTab({
   const commitTopicRename = (topic, rawValue) => {
     const v = String(rawValue ?? '').trim();
     if (!v || !renameTopic) return;
-    const { name: clampedName, clamped } = clampTopicWords(v);
-    if (clamped) onNotify?.('שם נושא מוגבל ל-6 מילים — השם קוצר', 'error');
+    const { name: clampedName, clamped } = clampTopicName(v);
+    if (clamped) onNotify?.('שם נושא מוגבל ל-6 מילים ולשתי שורות — השם קוצר', 'error');
     if (clampedName !== topic.name) renameTopic(topic.id, clampedName);
   };
   useEffect(() => {
@@ -1555,7 +1555,7 @@ export function TopicsTab({
                 // round303 — explicit line breaks per the owner's rule (≤3 words /
                 // ≤16 chars per line), instead of letting the browser wrap wherever.
                 <span className={styles.ribbonName}>
-                  {splitTopicNameLines(topic.name).map((line, li) => (
+                  {displayTopicNameLines(topic.name).map((line, li) => (
                     <span key={li} className={styles.ribbonNameLine}>{line}</span>
                   ))}
                 </span>
