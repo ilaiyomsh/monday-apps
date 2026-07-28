@@ -35,6 +35,8 @@ const TASK_CAPS = [
   'editTaskPriority',
   'editTaskDeadline',
   'editTaskAssignee',
+  // round305 — the שותפים (partnersID) people column added to "המשימות שלי".
+  'editTaskPartners',
   'editTaskName',
   'deleteTask',
 ];
@@ -184,12 +186,15 @@ describe('DEFAULT_PERMISSION_SEED (LOCKED defaults)', () => {
     TASK_CAPS.forEach((id) => expect(caps[id]).toBe(true));
   });
 
-  it('responsible: status + priority on; deadline/assignee/name/delete off', () => {
+  it('responsible: status + priority + partners on; deadline/assignee/name/delete off', () => {
     const caps = DEFAULT_PERMISSION_SEED['tasks:responsibilityID'].capabilities;
     expect(caps.editTaskStatus).toBe(true);
     expect(caps.editTaskPriority).toBe(true);
     expect(caps.editTaskDeadline).toBe(false);
     expect(caps.editTaskAssignee).toBe(false);
+    // round305 (owner spec) — the task's responsible MAY edit שותפים, even though
+    // they may not reassign אחריות itself.
+    expect(caps.editTaskPartners).toBe(true);
     expect(caps.editTaskName).toBe(false);
     expect(caps.deleteTask).toBe(false);
   });

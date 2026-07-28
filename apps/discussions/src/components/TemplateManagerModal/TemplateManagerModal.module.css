@@ -59,6 +59,26 @@
   box-shadow: 0 0 0 2px var(--primary-color, #0073ea);
 }
 
+/* round304 — rename the open type template (pencil beside its name + color). */
+.renameBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+}
+.renameBtn:hover {
+  background: var(--primary-background-hover-color, #f0f1f4);
+  color: var(--primary-text-color, #323338);
+}
+
 /* Search box above the "סוג דיון" template list — icon + input, like the
    discussion search. */
 .searchWrap {

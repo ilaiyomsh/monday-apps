@@ -135,7 +135,11 @@ function labelsFromSettingsStr(settingsStr) {
   let s;
   try {
     s = JSON.parse(settingsStr || '{}');
-  } catch {
+  } catch (err) {
+    // Malformed legacy settings_str → no labels to match on. Recorded (not
+    // swallowed) so a broken column config is visible in the funnel; callers
+    // degrade to "regular column", which is the safe path.
+    logger.warn('managedColumns', 'settings_str parse failed — no labels resolved', err);
     return [];
   }
   const labels = s?.labels;
@@ -274,6 +278,74 @@ export async function addManagedDropdownLabel({ managedColumnId, title }) {
   );
   assertNoGraphQLErrors(res, { functionName: 'addManagedDropdownLabel' });
   logger.info('managedColumns', 'added label to managed dropdown column', { managedColumnId, name });
+  return { ok: true };
+}
+
+/**
+ * round304 — RENAME an existing label on an account managed DROPDOWN column.
+ * Same mutation and full-label-set contract as addManagedDropdownLabel; the only
+ * difference is that the target label keeps its ID and gets new text, which is
+ * exactly why items keep their value (a dropdown item stores label IDs, so every
+ * discussion of that type simply displays the new name).
+ *
+ * Behavior contract:
+ * - Throws on missing managedColumnId/labelId/title, a missing managed column, or
+ *   a labelId that is not on the column.
+ * - A trimmed title equal to the current one returns { ok: true, unchanged: true }
+ *   WITHOUT mutating.
+ * - A different ACTIVE label already carrying that name throws with code
+ *   'duplicate' (renaming onto an existing type would merge two types silently).
+ * - Otherwise re-sends the FULL label set with the target's text replaced, at the
+ *   freshly-read integer revision.
+ *
+ * @param {{ managedColumnId: string, labelId: string|number, title: string }} args
+ * @returns {Promise<{ ok: true, unchanged?: boolean }>}
+ */
+export async function renameManagedDropdownLabel({ managedColumnId, labelId, title }) {
+  const name = String(title || '').trim();
+  if (!managedColumnId || labelId == null || !name) {
+    throw new Error('renameManagedDropdownLabel: missing managedColumnId/labelId/title');
+  }
+
+  const read = await api(
+    `query ($id: [String!]) { managed_column(id: $id) { id revision settings_json } }`,
+    { id: [String(managedColumnId)] },
+    'renameManagedDropdownLabel.read'
+  );
+  const mc = read?.managed_column?.[0];
+  if (!mc) throw new Error('renameManagedDropdownLabel: managed column not found');
+  const revision = Number(mc.revision);
+  const labels = Array.isArray(mc.settings_json?.labels) ? mc.settings_json.labels : [];
+
+  const target = labels.find((l) => String(l.id) === String(labelId));
+  if (!target) throw new Error('renameManagedDropdownLabel: label not found');
+  if ((target.label ?? '').trim() === name) return { ok: true, unchanged: true };
+  const clash = labels.find((l) => (
+    !l.is_deactivated
+    && String(l.id) !== String(labelId)
+    && (l.label ?? '').trim().toLowerCase() === name.toLowerCase()
+  ));
+  if (clash) {
+    const err = new Error(`סוג דיון בשם "${name}" כבר קיים`);
+    err.code = 'duplicate';
+    throw err;
+  }
+
+  const labelsInput = labels.map((l) => ({
+    id: Number(l.id),
+    label: String(l.id) === String(labelId) ? name : (l.label ?? ''),
+    is_deactivated: l.is_deactivated === true,
+  }));
+
+  const res = await api(
+    `mutation ($id: String!, $rev: Int!, $s: UpdateDropdownColumnSettingsInput!) {
+       update_dropdown_managed_column(id: $id, revision: $rev, settings: $s) { id revision }
+     }`,
+    { id: String(managedColumnId), rev: revision, s: { labels: labelsInput } },
+    'renameManagedDropdownLabel'
+  );
+  assertNoGraphQLErrors(res, { functionName: 'renameManagedDropdownLabel' });
+  logger.info('managedColumns', 'renamed label on managed dropdown column', { managedColumnId, labelId, name });
   return { ok: true };
 }
 

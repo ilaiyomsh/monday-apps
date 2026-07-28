@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeLedDiscussionIds, collectLedTaskIds } from '../ledDiscussions.js';
+import { computeLedDiscussionIds, collectLedTaskIds, mapLedTaskDiscussionRoles } from '../ledDiscussions.js';
 
 const ME = '7';
 const me = { id: 7, name: 'אני' };
@@ -45,5 +45,58 @@ describe('collectLedTaskIds', () => {
   it('handles discussions with no relation value', () => {
     expect(collectLedTaskIds([{ id: 1 }, { id: 2, tasksBoardLinkID: null }], ['1', '2'])).toEqual([]);
     expect(collectLedTaskIds([], [])).toEqual([]);
+  });
+});
+
+/*
+ * round305 — the personal "בדיונים שהובלתי" rows carry their parent discussion's
+ * ROLE people, because some capabilities (שותפים) are granted to the discussion's
+ * lead/coordinator/creator and that surface has no discussion object in context.
+ */
+describe('mapLedTaskDiscussionRoles', () => {
+  const lead = [{ id: '1', name: 'מנהל' }];
+  const coord = [{ id: '2', name: 'מרכז' }];
+  const creator = [{ id: '3', name: 'יוצר' }];
+  const discussions = [
+    {
+      id: 'D1',
+      discussionLeadID: lead,
+      discussionCoordinatorID: coord,
+      discussionCreatorID: creator,
+      tasksBoardLinkID: { ids: ['T1', 'T2'] },
+    },
+    { id: 'D2', discussionLeadID: [], tasksBoardLinkID: { ids: ['T3'] } },
+  ];
+
+  it('maps every task of a led discussion to that discussion\'s three role columns', () => {
+    const map = mapLedTaskDiscussionRoles(discussions, ['D1']);
+    expect([...map.keys()]).toEqual(['T1', 'T2']);
+    expect(map.get('T1')).toEqual({
+      discussionLeadID: lead, discussionCoordinatorID: coord, discussionCreatorID: creator,
+    });
+    // the same roles object serves every task of that discussion
+    expect(map.get('T2')).toEqual(map.get('T1'));
+  });
+
+  it('skips discussions that are NOT in the led set', () => {
+    const map = mapLedTaskDiscussionRoles(discussions, ['D2']);
+    expect([...map.keys()]).toEqual(['T3']);
+  });
+
+  it('normalizes missing role columns to empty arrays (never undefined)', () => {
+    const map = mapLedTaskDiscussionRoles([{ id: 'D3', tasksBoardLinkID: { ids: ['T9'] } }], ['D3']);
+    expect(map.get('T9')).toEqual({
+      discussionLeadID: [], discussionCoordinatorID: [], discussionCreatorID: [],
+    });
+  });
+
+  it('keeps the FIRST discussion for a task linked to two, and tolerates junk input', () => {
+    const dup = [
+      { id: 'D1', discussionLeadID: lead, tasksBoardLinkID: { ids: ['T1'] } },
+      { id: 'D2', discussionLeadID: coord, tasksBoardLinkID: { ids: ['T1'] } },
+    ];
+    expect(mapLedTaskDiscussionRoles(dup, ['D1', 'D2']).get('T1').discussionLeadID).toBe(lead);
+    expect(mapLedTaskDiscussionRoles(null, ['D1']).size).toBe(0);
+    expect(mapLedTaskDiscussionRoles(discussions, null).size).toBe(0);
   });
 });

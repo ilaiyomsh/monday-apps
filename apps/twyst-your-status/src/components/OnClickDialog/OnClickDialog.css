@@ -26,8 +26,26 @@
  */
 .twyst-required-fields-modal {
   display: grid;
+  /*
+   * minmax(0, 1fr) — NOT the default implicit `auto` row.
+   *
+   * This is what actually pins the title and the submit button. An `auto` row is sized
+   * by its CONTENT, and `align-content: stretch` only distributes POSITIVE free space —
+   * so as soon as the form wanted more height than the iframe had, the row grew past
+   * the box instead of shrinking to it, and the whole form scrolled as one piece,
+   * carrying the header and footer with it. (`overflow: hidden` then clipped the
+   * submit button outright, which is worse: it cannot be reached at all.)
+   *
+   * A zero minimum lets the row shrink to the window it actually got, which hands the
+   * overflow down to .twyst-form's `1fr` middle row and .twyst-form-rows — the only box
+   * in this modal that is allowed to scroll. It holds no matter how wrong the requested
+   * height turns out to be, which matters because the height we ask monday for is not
+   * the height we are given (see MODAL_CHROME_PX in requiredFormModalSize.js).
+   */
+  grid-template-rows: minmax(0, 1fr);
   box-sizing: border-box;
   block-size: 100vh;
+  block-size: 100dvh; /* dvh where supported; the vh above is the fallback */
   overflow: hidden;
   padding: 20px;
   color: var(--primary-text-color, #323338);

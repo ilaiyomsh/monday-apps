@@ -48,9 +48,25 @@ Size is computed by `src/utils/requiredFormModalSize.js` and passed to
   count.
 - **Height follows the rows**: one row per field, at most **8 visible** (`FORM_MAX_ROWS`,
   raised from 4 in 3.6.0); past that the LIST scrolls and the modal keeps its opened
-  height. Only the list scrolls — `.twyst-form`'s `auto 1fr auto` grid inside a
-  `block-size: 100vh; overflow: hidden` modal pins the title and the actions, so a ninth
-  field cannot push the submit button off screen.
+  height.
+- **What actually pins the title and the actions is `grid-template-rows: minmax(0, 1fr)`
+  on `.twyst-required-fields-modal`** — do not let that become an implicit `auto` row.
+  An `auto` row is sized by its CONTENT, and `align-content: stretch` only distributes
+  space that is LEFT OVER; it never takes space away. So a form taller than the iframe
+  grew past the box and the whole thing scrolled, header and footer included, and the
+  `overflow: hidden` beside it clipped the submit button out of reach instead. A zero
+  minimum lets the row shrink to the window it was actually given, which hands the
+  overflow down to `.twyst-form`'s `1fr` middle row and `.twyst-form-rows` — the only box
+  in this modal permitted to scroll (fixed in 3.6.1; 3.6.0 claimed this and did not do it).
+- **Never sized below `FORM_MIN_ROWS` (2).** One required column sized to one row opened a
+  sliver barely taller than the picker that launched it. The floor is applied in
+  `requiredFormModalSize` only — `requiredFormLayout` keeps reporting the real row count,
+  so the list renders one row and the spare height falls below it. Do not move the floor
+  into the layout function: the form would render a phantom row.
+- **The height we ASK for is not the height we GET.** monday draws its own modal chrome
+  inside the box, and rows can render a pixel over budget, so `MODAL_CHROME_PX` (24) is
+  flat headroom on the request. The CSS above is the guarantee; this constant only keeps
+  a form that fits from scrolling at all.
 - The row height, gaps, paddings and the two column widths in that module MUST match
   `OnClickDialog.css`. Drift shows up as a clipped form or dead space. `FIELD_ROW_HEIGHT_PX`
   is 40 against a real 36px row (4px of tolerance); it was 48, and those 12 spare pixels
@@ -131,6 +147,19 @@ second loader starts its animation from 0 and reads as a jump.
   listed on that column. Empty ⇒ no extra gate. Combines with allowlists as AND.
 - `hiddenLabelIds` are omitted from the picker only; automation/API may still set them.
   A hidden current value remains visible as read-only.
+- **Closing rules (owner decision, 3.6.1).** A menu closes when the choice is COMPLETE:
+  single-select (status, a single-link `board_relation`) closes on the pick; the date
+  picker closes on a day click when the hour toggle is off and stays open when it is on,
+  because the time input is the rest of the answer; **multi-select (dropdown, people,
+  multi-link `board_relation`) closes on click-outside only** — closing after each pick
+  would make choosing two values two round trips. A surface with a save button closes
+  itself on a SUCCESSFUL save (the fill form and the settings screen both do).
+- **No success toast for a status change**, in the picker or after the fill form — the
+  cell shows the result and the surface closing is the confirmation. Failures do notify.
+- Selecting a label with NO required fields closes the picker as soon as the write lands.
+  The write is awaited, not fired and forgotten: `closeDialog` tears the iframe down and
+  cancels a request still in flight, which would close the dialog on a status that was
+  never written. The pill's spinner covers the round trip.
 - Selecting a label with required fields always opens the fill form (even when
   filled) as a sized modal on `/required-fields`; submit writes the form columns and
   the status together via `change_multiple_column_values`, then closes the modal.

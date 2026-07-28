@@ -34,29 +34,50 @@ jobs:
             path="$(app_path "$slug")"
             old=$(git show "HEAD^:$path/package.json" 2>/dev/null | jq -r .version || echo "")
             new=$(jq -r .version "$path/package.json")
-            if [ -n "$old" ] && [ "$old" != "$new" ]; then
-              tag="$slug@$new"
-              if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
-                echo "::warning::tag $tag already exists — skipping"
+
+            # An app ABSENT from the previous main tip is having its FIRST release, and
+            # `old` reads empty. The guard here used to be
+            #   [ -n "$old" ] && [ "$old" != "$new" ]
+            # whose first half silently filtered that case out — so the one release that
+            # most deserves a marker was the only kind that never got one. It is not
+            # hypothetical: twyst-your-status 3.6.0 went live on 2026-07-28 untagged and
+            # with no release record, and had to be tagged by hand afterwards. Same
+            # root cause as the release-guard.sh gap fixed in the same release: "app was
+            # not on main before" was simply never a considered state.
+            if [ -z "$old" ] || [ "$old" = "null" ]; then
+              # A version we cannot read is not a version we can tag.
+              if [ -z "$new" ] || [ "$new" = "null" ]; then
+                echo "::warning::$slug: first release but no readable version — not tagging"
                 continue
               fi
-              git tag "$tag"
-              git push origin "$tag"
-              # Release notes = the exact commits belonging to this jump
-              # (owner requirement 2026-07-14: every jump maps to its commits,
-              # with zero discipline needed). HEAD^..HEAD on the release merge
-              # = everything this release brought; filtered to the app's paths.
-              notes="$(mktemp)"
-              {
-                echo "## Commits in $old -> $new"
-                git log --format='- %h %s' "HEAD^..HEAD" -- "$path" "${SHARED_PATHS[@]}"
-                echo ""
-                echo "Story: [\`$path/CHANGELOG.md\`](../../blob/main/$path/CHANGELOG.md)"
-              } > "$notes"
-              gh release create "$tag" \
-                --title "$slug v$new" \
-                --notes-file "$notes" || \
-                echo "::warning::release record for $tag failed (tag itself was pushed)"
-              echo "tagged $tag ($old -> $new)"
+              span="first release — $new"
+            elif [ "$old" != "$new" ]; then
+              span="$old -> $new"
+            else
+              continue
             fi
+
+            tag="$slug@$new"
+            if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+              echo "::warning::tag $tag already exists — skipping"
+              continue
+            fi
+            git tag "$tag"
+            git push origin "$tag"
+            # Release notes = the exact commits belonging to this jump
+            # (owner requirement 2026-07-14: every jump maps to its commits,
+            # with zero discipline needed). HEAD^..HEAD on the release merge
+            # = everything this release brought; filtered to the app's paths.
+            notes="$(mktemp)"
+            {
+              echo "## Commits in $span"
+              git log --format='- %h %s' "HEAD^..HEAD" -- "$path" "${SHARED_PATHS[@]}"
+              echo ""
+              echo "Story: [\`$path/CHANGELOG.md\`](../../blob/main/$path/CHANGELOG.md)"
+            } > "$notes"
+            gh release create "$tag" \
+              --title "$slug v$new" \
+              --notes-file "$notes" || \
+              echo "::warning::release record for $tag failed (tag itself was pushed)"
+            echo "tagged $tag ($span)"
           done
