@@ -134,3 +134,103 @@ describe('createSessionTokenMiddleware — auth denials are logged at WARN', () 
     expect(logger.warn).not.toHaveBeenCalled();
   });
 });
+
+// Audit finding 8: session_token_rejected is emitted BEFORE any credential is verified —
+// any caller can reach it with no token at all — and WARN ships to Axiom under the default
+// policy. Unbounded, 10k unauthenticated requests are 10k Axiom writes, which lets an
+// external party choose our ingest bill. The 401 must stay unconditional while the write
+// volume becomes bounded.
+describe('createSessionTokenMiddleware — the pre-auth rejection WARN is budget-bounded', () => {
+  /** A throttle double with an explicit budget, so the test never depends on the real cap. */
+  function budget(limit) {
+    let emitted = 0;
+    let suppressed = 0;
+    return {
+      check() {
+        if (emitted < limit) {
+          emitted += 1;
+          const s = suppressed;
+          suppressed = 0;
+          return { suppressed: s };
+        }
+        suppressed += 1;
+        return null;
+      },
+    };
+  }
+
+  it('emits at most the budgeted number of WARNs no matter how many probes arrive', () => {
+    const logger = makeLogger();
+    const mw = createSessionTokenMiddleware({
+      clientSecret: SECRET,
+      allowedAccountIds: [],
+      logger,
+      throttle: budget(2),
+    });
+
+    for (let i = 0; i < 25; i++) {
+      mw({ headers: {} }, makeRes(), vi.fn());
+    }
+
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('still 401s every unauthenticated request while the WARN budget is exhausted', () => {
+    const logger = makeLogger();
+    const mw = createSessionTokenMiddleware({
+      clientSecret: SECRET,
+      allowedAccountIds: [],
+      logger,
+      throttle: budget(0),
+    });
+
+    const statuses = [];
+    const nexts = [];
+    for (let i = 0; i < 5; i++) {
+      const res = makeRes();
+      const next = vi.fn();
+      mw({ headers: {} }, res, next);
+      statuses.push(res.statusCode);
+      nexts.push(next.mock.calls.length);
+    }
+
+    // Security is never throttled: every probe is still rejected, none reaches the handler.
+    expect(statuses).toEqual([401, 401, 401, 401, 401]);
+    expect(nexts).toEqual([0, 0, 0, 0, 0]);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('reports the suppressed count on the next emitted WARN so the loss is never silent', () => {
+    const logger = makeLogger();
+    const scripted = { check: vi.fn() };
+    scripted.check
+      .mockReturnValueOnce({ suppressed: 0 })
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce({ suppressed: 2 });
+
+    const mw = createSessionTokenMiddleware({
+      clientSecret: SECRET,
+      allowedAccountIds: [],
+      logger,
+      throttle: scripted,
+    });
+    for (let i = 0; i < 4; i++) mw({ headers: {} }, makeRes(), vi.fn());
+
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+    // no noise key when nothing was lost, explicit count when it was
+    expect(logger.warn).toHaveBeenNthCalledWith(1, 'session_token_rejected', 'auth', { reason: 'missing' });
+    expect(logger.warn).toHaveBeenNthCalledWith(2, 'session_token_rejected', 'auth', { reason: 'missing', suppressed: 2 });
+  });
+
+  it('defaults to a real throttle when none is injected (the budget is not opt-in)', () => {
+    const logger = makeLogger();
+    const mw = createSessionTokenMiddleware({ clientSecret: SECRET, allowedAccountIds: [], logger });
+
+    for (let i = 0; i < 200; i++) mw({ headers: {} }, makeRes(), vi.fn());
+
+    // The real default cap is well under 200/min; the exact number is an implementation
+    // detail, but "unbounded" must not be the default.
+    expect(logger.warn.mock.calls.length).toBeLessThan(200);
+  });
+});

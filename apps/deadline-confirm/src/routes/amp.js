@@ -295,7 +295,15 @@ export function createAmpRouter({ storage, api, rateLimiters, allowedSenders, no
       let failed = 0;
       for (const { itemId, btnId } of selections) {
         const result = await performAction({ storage: scopedStorage, api, itemId, btnId, expectedPersonId: p });
-        logAttempt({ ip, itemId, outcome: result.outcome });
+        // A partial write — status changed, attribution create_update did not — must not be
+        // recorded as a clean 'ok' (audit finding 10). performAction surfaces it on
+        // `result.audit`, and this is the fold into the attempt line its contract promises;
+        // the field was produced and tested but never read here, so 'ok_no_audit' existed
+        // nowhere and every partial failure looked complete. Only the outcome VALUE changes:
+        // the locked { ts, ip, itemId, outcome } shape is untouched, and `updated` still
+        // counts the item because the status change really did land.
+        const outcome = result.outcome === 'ok' && result.audit === 'failed' ? 'ok_no_audit' : result.outcome;
+        logAttempt({ ip, itemId, outcome });
         if (result.outcome === 'ok') updated += 1;
         else if (result.outcome === 'already_done') already += 1;
         else failed += 1;

@@ -39,10 +39,16 @@ const ACTIVE = import.meta.env.PROD === true && Boolean(DATASET) && Boolean(TOKE
 
 const REMOTE_LEVEL_KEY = `${APP ?? 'app'}:remoteLogLevel`;
 
-let transport: AxiomTransport | null = null;
-if (ACTIVE) {
+/**
+ * Build the module's own transport, or null when the gate is off / construction fails.
+ * Extracted from the module body so a teardown can dispose the current one and the NEXT
+ * attach can build a fresh replacement (audit finding 5) — a disposed transport is inert,
+ * so re-attaching to it would silently ship nothing.
+ */
+function buildTransport(): AxiomTransport | null {
+  if (!ACTIVE) return null;
   try {
-    transport = createAxiomBrowserTransport({
+    return createAxiomBrowserTransport({
       dataset: DATASET as string,
       token: TOKEN as string,
       app: APP as string,
@@ -52,9 +58,11 @@ if (ACTIVE) {
   } catch (e) {
     // one breadcrumb, then the sink degrades to a permanent no-op — the app never pays
     console.error('[axiom-sink] init failed — remote logging disabled for this session:', e);
-    transport = null;
+    return null;
   }
 }
+
+let transport: AxiomTransport | null = buildTransport();
 
 // Incident mode: remote level read ONCE at module load so it survives reload.
 let remoteLevel: string | null = null;
@@ -189,7 +197,12 @@ export function mapRecordToEvent(record: LogRecord | null | undefined): AxiomEve
   if (r.correlationId != null) ev.corr = String(r.correlationId); // key OMITTED when absent
   const err = r.error as ExtendedError | undefined;
   if (err != null) {
-    if (err.name != null) ev.err_name = err.name;
+    // String() is load-bearing (audit finding 6): the generic-name fallback below guards
+    // with `typeof ev.err_name === 'string'`, so a non-string name fails that check and the
+    // stable logger message overwrites the real discriminator. The transport's dedup key
+    // reads err_name the same guarded way, so distinct errors would collapse under one key
+    // and after dedupMaxPerWindow (5) in 60s the rest are dropped.
+    if (err.name != null) ev.err_name = String(err.name);
     const code = err.errorCode ?? err.status ?? err.code; // MondayApiError.errorCode / HTTP status
     if (code != null) ev.err_code = String(code);
     const stack1 = firstStackFrame(err.stack);
@@ -235,7 +248,17 @@ export function mapRecordToEvent(record: LogRecord | null | undefined): AxiomEve
 
 interface AttachSeams {
   log?: typeof logger;
+  /**
+   * A BORROWED transport. Its lifecycle belongs to the caller, so teardown unsubscribes the
+   * sink but never disposes it. Pass null to force the sink inert.
+   */
   t?: AxiomTransport | null;
+  /**
+   * Builds the transport this module OWNS and will dispose on teardown. Defaults to
+   * buildTransport; overridden in tests, where the activation gate is false and the owned
+   * branch would otherwise be unreachable.
+   */
+  create?: () => AxiomTransport | null;
 }
 
 /** The sink fn: shouldShip (live remoteLevel) → mapRecordToEvent → t.enqueue, all try/catched. */
@@ -261,15 +284,39 @@ interface GlobalWithFlag {
  * evaluation in the app entry, BEFORE createRoot(...).render — the ring buffer at that
  * instant holds only import-time records, so there is no double-ship.
  */
-export function attachAxiomSink({ log = logger, t = transport }: AttachSeams = {}): () => void {
-  if (!t) return () => {};
+export function attachAxiomSink({ log = logger, t, create = buildTransport }: AttachSeams = {}): () => void {
+  // An explicit null means "stay inert"; undefined means "use the transport we own".
+  if (t === null) return () => {};
+  const borrowed = t !== undefined;
+  if (!borrowed && transport === null) transport = create(); // rebuild after a teardown
+  const active = borrowed ? t : transport;
+  if (!active) return () => {};
+
   const g = (typeof globalThis !== 'undefined' ? globalThis : {}) as GlobalWithFlag;
   if (g.__ERROR_GUARD_AXIOM_SINK_ATTACHED__) return () => {}; // survives HMR module re-eval
   g.__ERROR_GUARD_AXIOM_SINK_ATTACHED__ = true; // set BEFORE replay
-  const sink = makeSink(t);
+  const sink = makeSink(active);
   // replay — ships import-time ERROR/WARN records, respecting shouldShip + duplicate:true
   for (const rec of log.getBuffer()) sink(rec);
-  return log.addSink(sink);
+  const unsubscribe = log.addSink(sink);
+
+  // Teardown must undo ALL THREE things the attach did (audit finding 5). Returning
+  // addSink's bare unsubscribe left the guard set — so every later attach hit it and became
+  // a permanent no-op, killing remote logging for the session — and left the flush timer and
+  // visibility/pagehide listeners running on a transport nothing fed.
+  let torn = false;
+  return () => {
+    if (torn) return; // idempotent: a second teardown must not double-dispose
+    torn = true;
+    unsubscribe();
+    if (!borrowed) {
+      active.dispose(); // stop the flush timer + lifecycle listeners
+      // Clear the slot so the next attach builds a fresh transport rather than reattaching
+      // to this disposed (inert) one. Guarded, in case another attach already replaced it.
+      if (transport === active) transport = null;
+    }
+    g.__ERROR_GUARD_AXIOM_SINK_ATTACHED__ = false;
+  };
 }
 
 // ============================================

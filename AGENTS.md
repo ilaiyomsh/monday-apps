@@ -72,7 +72,9 @@ those scripts expect. Setup and caveats: [`.codex/README.md`](./.codex/README.md
    plan): **the agent IS the enforcement layer** — no hook will stop you.
 2. **Deploys happen ONLY on GitHub Actions runners** — never from a laptop or
    sandbox. No exceptions, including emergencies. Never run `mapps code:push`,
-   `ship.sh`, or `pnpm run deploy` from a machine.
+   `ship.sh`, `scripts/mapps-push-retry.sh` (the CI-only retry wrapper around the
+   push), or `pnpm run deploy` from a machine. deploy-guard blocks all of them;
+   a future wrapper around the push must be added to that guard too.
 3. **`MONDAY_TOKEN` is user-only.** Never read, print, set, or commit it. All
    agent-side monday API calls go through `.claude/skills/mapps/mapps-api.sh`.
 4. **API probes and destructive tests run ONLY in the sandbox workspace**
@@ -142,6 +144,13 @@ apps.
   workspace (`pnpm -r --if-present`) — blocking. Tests run as a separate
   **non-blocking visibility job**; read its summary on the PR and treat any new red
   as yours until proven otherwise.
+- **Lockfile sync gate (blocking):** `scripts/lockfile-sync-audit.mjs` runs
+  `npm ci --dry-run` inside every SERVER app that has a `package-lock.json` — the
+  platform's own deploy-time command, since `npm ci` refuses to install when the
+  manifest and lockfile disagree. Scope comes from each deploy workflow's `-c`/`-d`
+  flags, so a new server app is covered when its workflow lands; every app prints as
+  checked or skipped-with-reason. A desync here is a **deploy** failure, so fix the
+  lockfile with `npm install` in that app dir — never by hand.
 - **Known-red baseline:** tracker carries 2 deferred failing tests (FOLLOW-UPS F1).
   Not your breakage — do not "fix" them without the owner.
 - **Onboarding-debt expiry:** any stubbed check must be logged in

@@ -44,6 +44,10 @@ export {
   shouldShip,
   mapRecordToEvent,
   scrubMessage,
+  // getAxiomStats was re-exported by the shim and promised by its docstring, but omitted
+  // here (audit finding 11) — so `import { getAxiomStats } from '@axis/app-core'` failed
+  // with TS2305. test/barrel.test.ts now holds the whole shim surface to the barrel.
+  getAxiomStats,
   type AxiomSinkOptions,
 } from './errors/axiomSink';
 

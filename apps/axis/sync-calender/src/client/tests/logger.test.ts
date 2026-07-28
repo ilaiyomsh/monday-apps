@@ -113,3 +113,94 @@ describe('encodeDims', () => {
     expect(encodeDims('base')).toBe('base');
   });
 });
+
+// Audit finding 7: this logger never stamped __loggedId / correlationId / duplicate onto
+// its records, unlike every other logger in the monorepo. Two consequences, both live in
+// production: there was NO log-once dedup, so one Error caught and logged at two levels of
+// the stack shipped TWICE (the sink only drops records flagged duplicate:true); and
+// `corr` was empty on every single event, so nothing in Axiom could be correlated back to
+// one originating failure.
+describe('logger log-once — __loggedId / correlationId / duplicate stamping', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Capture the records a sink receives for one logging burst. */
+  function capture(fn: () => void): LogRecord[] {
+    const seen: LogRecord[] = [];
+    const off = addSink((r) => seen.push(r));
+    try {
+      fn();
+    } finally {
+      off();
+    }
+    return seen;
+  }
+
+  it('stamps a correlationId on the first log of an error, and marks it not-duplicate', () => {
+    const err = new Error('boom');
+    const [record] = capture(() => logger.error('svc', 'op_failed', err));
+
+    expect(record.correlationId).toBeDefined();
+    expect(record.duplicate).toBe(false);
+  });
+
+  it('marks the SECOND log of the same Error instance as a duplicate (log-once)', () => {
+    const err = new Error('boom');
+    const seen = capture(() => {
+      logger.error('inner', 'op_failed', err);
+      logger.error('outer', 'op_failed', err); // same instance, re-logged up the stack
+    });
+
+    expect(seen[0].duplicate).toBe(false);
+    // Without this the sink ships the same failure twice — it only drops duplicate:true.
+    expect(seen[1].duplicate).toBe(true);
+  });
+
+  it('gives both logs of one Error the SAME correlationId, so Axiom can join them', () => {
+    const err = new Error('boom');
+    const seen = capture(() => {
+      logger.error('inner', 'op_failed', err);
+      logger.warn('outer', 'op_degraded', err);
+    });
+
+    // Both-undefined would satisfy a bare equality check, so pin that they are real first.
+    expect(seen[0].correlationId).toBeDefined();
+    expect(seen[0].correlationId).toBe(seen[1].correlationId);
+  });
+
+  it('gives DIFFERENT errors different correlationIds', () => {
+    const seen = capture(() => {
+      logger.error('svc', 'op_failed', new Error('a'));
+      logger.error('svc', 'op_failed', new Error('b'));
+    });
+
+    expect(seen[0].correlationId).not.toBe(seen[1].correlationId);
+  });
+
+  it('stamps the id non-enumerably, so it never leaks into a JSON payload', () => {
+    const err = new Error('boom');
+    capture(() => logger.error('svc', 'op_failed', err));
+
+    expect(Object.keys(err)).not.toContain('__loggedId');
+    expect(Object.keys(err)).not.toContain('correlationId');
+    expect(JSON.stringify(err)).not.toContain('__loggedId');
+  });
+
+  it('does not throw on a FROZEN error — logging must never be blocked by stamping', () => {
+    const err = Object.freeze(new Error('frozen'));
+    const seen = capture(() => {
+      expect(() => logger.error('svc', 'op_failed', err)).not.toThrow();
+    });
+
+    // The record still carries a correlationId even though the instance could not be branded.
+    expect(seen[0].correlationId).toBeDefined();
+  });
+
+  it('leaves records with no error object alone (nothing to dedup on)', () => {
+    const [record] = capture(() => logger.warn('svc', 'no_payload'));
+    expect(record.duplicate).toBeUndefined();
+  });
+});

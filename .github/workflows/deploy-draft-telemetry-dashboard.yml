@@ -100,7 +100,7 @@ jobs:
       - name: Push to latest DRAFT version
         if: ${{ env.APP_ID != '' }}
         run: >
-          mapps code:push --verbose
+          bash scripts/mapps-push-retry.sh --verbose
           -d apps/telemetry-dashboard
           -a "$APP_ID"
         env:

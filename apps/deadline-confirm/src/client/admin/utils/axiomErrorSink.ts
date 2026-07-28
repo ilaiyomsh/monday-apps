@@ -191,7 +191,12 @@ export function mapRecordToEvent(record: LogRecord | null | undefined): Record<s
   if (r.correlationId != null) ev.corr = String(r.correlationId); // key OMITTED when absent
   const err = r.error as ExtendedError | undefined;
   if (err != null) {
-    if (err.name != null) ev.err_name = err.name;
+    // String() is load-bearing (audit finding 6): the generic-name fallback below guards
+    // with `typeof ev.err_name === 'string'`, so a non-string name fails that check and the
+    // stable logger message overwrites the real discriminator. The transport's dedup key
+    // reads err_name the same guarded way, so distinct errors would collapse under one key
+    // and after dedupMaxPerWindow (5) in 60s the rest are dropped.
+    if (err.name != null) ev.err_name = String(err.name);
     const code = err.errorCode ?? err.status ?? err.code; // MondayApiError.errorCode / HTTP status
     if (code != null) ev.err_code = String(code);
     const stack1 = firstStackFrame(err.stack);

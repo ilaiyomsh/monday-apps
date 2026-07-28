@@ -275,3 +275,89 @@ describe('verifySessionToken — verification-failure telemetry (WARN, reason on
     expect(warnRecords()).toHaveLength(0);
   });
 });
+
+// Audit finding 8: the verification-failure WARN is reachable WITHOUT credentials
+// (/oauth/start takes ?st=<sessionToken>), and WARN ships to Axiom by default. Unbounded,
+// 10k unauthenticated requests are 10k Axiom writes — an external party choosing our
+// ingest bill. The rejection must stay VISIBLE while the write volume stays BOUNDED.
+describe('verifySessionToken — the rejection WARN is budget-bounded (audit finding 8)', () => {
+  let errSpy;
+  beforeEach(() => {
+    errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const warnRecords = () =>
+    errSpy.mock.calls
+      .map((c) => c[0])
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter((e) => e && e.level === 'warn');
+
+  /** A throttle double with an explicit budget, so the test never depends on the real cap. */
+  function budget(limit) {
+    let emitted = 0;
+    let suppressed = 0;
+    return {
+      check() {
+        if (emitted < limit) {
+          emitted += 1;
+          const s = suppressed;
+          suppressed = 0;
+          return { suppressed: s };
+        }
+        suppressed += 1;
+        return null;
+      },
+    };
+  }
+
+  it('emits at most the budgeted number of WARNs no matter how many rejections arrive', () => {
+    const token = jwt.sign(VALID_PAYLOAD, OTHER_SECRET);
+    const throttle = budget(2);
+
+    for (let i = 0; i < 25; i++) {
+      expect(verifySessionToken(token, CLIENT_SECRET, throttle)).toBeNull();
+    }
+
+    // 25 unauthenticated probes must not become 25 Axiom writes.
+    expect(warnRecords()).toHaveLength(2);
+  });
+
+  it('still rejects every token while the WARN budget is exhausted (security is not throttled)', () => {
+    const token = jwt.sign(VALID_PAYLOAD, OTHER_SECRET);
+    const throttle = budget(0);
+
+    const results = [];
+    for (let i = 0; i < 5; i++) results.push(verifySessionToken(token, CLIENT_SECRET, throttle));
+
+    expect(results).toEqual([null, null, null, null, null]);
+    expect(warnRecords()).toHaveLength(0);
+  });
+
+  it('reports the suppressed count on the next emitted WARN so the loss is never silent', () => {
+    const token = jwt.sign(VALID_PAYLOAD, OTHER_SECRET);
+    // A throttle that allows one, suppresses two, then allows again.
+    const scripted = { check: vi.fn() };
+    scripted.check
+      .mockReturnValueOnce({ suppressed: 0 })
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce({ suppressed: 2 });
+
+    for (let i = 0; i < 4; i++) verifySessionToken(token, CLIENT_SECRET, scripted);
+
+    const warns = warnRecords();
+    expect(warns).toHaveLength(2);
+    expect(warns[0].suppressed).toBeUndefined(); // no noise key when nothing was lost
+    expect(warns[1].suppressed).toBe(2);
+    expect(warns[1].reason).toBe('JsonWebTokenError');
+  });
+});

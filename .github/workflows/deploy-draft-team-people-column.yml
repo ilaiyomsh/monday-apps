@@ -89,7 +89,7 @@ jobs:
       # server-side (monday-code) apps — the only difference between the two.
       - name: Push to latest DRAFT version
         run: >
-          mapps code:push -c
+          bash scripts/mapps-push-retry.sh -c
           -d apps/team-people-column/dist
           -a "$APP_ID"
         env:

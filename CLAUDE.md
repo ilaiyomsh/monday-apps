@@ -83,7 +83,11 @@ and adds the Codex-specific wiring. See "Codex sessions" below.
   server/SPA apps vendor a copy instead, so they are unaffected (drift-tested, not imported).
 - `workflow_dispatch` exists on draft workflows only (post-detach redeploys).
   A draft deploy that fails after merge is fixed FORWARD on a new feature branch.
-- **Never run `mapps code:push` from a machine — with or without ship.sh.**
+- **Never run `mapps code:push` from a machine — with or without ship.sh**, and not via
+  `scripts/mapps-push-retry.sh` either. That wrapper is the CI-only retry around the push
+  (bounded attempts + backoff, one implementation shared by every deploy workflow);
+  deploy-guard blocks running it locally for exactly the reason it blocks ship.sh — it wraps
+  the push out of the guard's sight. Any future wrapper must be added to that guard too.
   Inside this repo the pipeline supersedes the mapps ship path (ship.sh serves
   standalone apps outside the monorepo). The ONLY emergency lever (e.g. GitHub
   Actions down) is promoting an already-pushed draft via `mapps app:promote`
@@ -140,6 +144,13 @@ packages/shared                     EMPTY STUB — see below
   whole workspace (`pnpm -r --if-present`) — blocking. Tests run as a separate
   **non-blocking visibility job**; read its summary on the PR and treat any new
   red as yours until proven otherwise.
+- **Lockfile sync gate (blocking):** `scripts/lockfile-sync-audit.mjs` runs
+  `npm ci --dry-run` inside every SERVER app that has a `package-lock.json` —
+  the platform's own deploy-time command, since `npm ci` refuses to install when
+  the manifest and lockfile disagree. Scope comes from each deploy workflow's
+  `-c`/`-d` flags, so a new server app is covered when its workflow lands; every
+  app prints as checked or skipped-with-reason. A desync here is a **deploy**
+  failure, so fix the lockfile with `npm install` in that app dir — never by hand.
 - **Known-red baseline:** tracker carries 2 deferred failing tests
   (FOLLOW-UPS F1). Not your breakage — do not "fix" them without the owner.
 - **test-guard:** red gate for new code; retrofits prove themselves with ≥2

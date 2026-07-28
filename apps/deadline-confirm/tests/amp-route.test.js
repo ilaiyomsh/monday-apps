@@ -899,3 +899,71 @@ describe('POST /amp/confirm — failure detail for AMP email body', () => {
     expect(res.body.detail).toBe('no_items');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Audit finding 10 — the `audit` field was produced but never READ
+// ---------------------------------------------------------------------------
+// confirm-service.performAction surfaces a partial failure as `audit: 'failed'`: the status
+// change succeeded but the attribution create_update did not. Its own comment states the
+// route "folds it into the usage signal as outcome 'ok_no_audit'" — and the route never read
+// the field, so that outcome existed nowhere in the codebase and every partial failure was
+// recorded as a clean 'ok'. The write is silently half-done from the attempt line's view.
+describe('attempt-line outcome distinguishes a partial write (ok_no_audit)', () => {
+  /** Every attempt line this suite's console.log spy captured. */
+  const attemptLines = () =>
+    logSpy.mock.calls
+      .map((c) => c[0])
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter((e) => e && typeof e.outcome === 'string');
+
+  it("records outcome 'ok' when the attribution update succeeds", async () => {
+    const { app } = buildApp();
+    const res = await postAmp(app, signedBody());
+
+    expect(res.status).toBe(200);
+    expect(attemptLines().map((e) => e.outcome)).toContain('ok');
+  });
+
+  it("records outcome 'ok_no_audit' when the status change lands but the attribution update fails", async () => {
+    const { app, api } = buildApp();
+    api.createUpdate.mockRejectedValueOnce(new Error('monday 500'));
+
+    const res = await postAmp(app, signedBody());
+
+    // The status DID change, so the user-facing count must stay truthful...
+    expect(res.status).toBe(200);
+    expect(res.body.updated).toBe(1);
+    // ...while the attempt line stops claiming a clean 'ok'.
+    const outcomes = attemptLines().map((e) => e.outcome);
+    expect(outcomes).toContain('ok_no_audit');
+    expect(outcomes).not.toContain('ok');
+  });
+
+  it('keeps the locked attempt-line SHAPE unchanged for the partial case', async () => {
+    const { app, api } = buildApp();
+    api.createUpdate.mockRejectedValueOnce(new Error('monday 500'));
+    await postAmp(app, signedBody());
+
+    const line = attemptLines().find((e) => e.outcome === 'ok_no_audit');
+    // spec §6 contract: exactly { ts, ip, itemId, outcome } — only the VALUE changes.
+    expect(Object.keys(line).sort()).toEqual(['ip', 'itemId', 'outcome', 'ts']);
+  });
+
+  it('leaves a non-ok outcome alone (audit is only meaningful once the status changed)', async () => {
+    // already at the target label: no status change, so no attribution write is attempted.
+    const { app } = buildApp({ itemStates: { [ITEM_ID]: doneItem() } });
+    const res = await postAmp(app, signedBody());
+
+    expect(res.status).toBe(200);
+    expect(res.body.already).toBe(1);
+    const outcomes = attemptLines().map((e) => e.outcome);
+    expect(outcomes).not.toContain('ok_no_audit');
+    expect(outcomes).not.toContain('ok');
+  });
+});

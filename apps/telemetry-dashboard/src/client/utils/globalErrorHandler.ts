@@ -78,6 +78,53 @@ export function setupGlobalErrorHandlers(
   if (win.__errorGuardHandlersInstalled === true) return;
   win.__errorGuardHandlersInstalled = true;
 
+  /**
+   * Best-effort textual description of a non-Error value. Never throws: a circular
+   * structure or a hostile `toJSON`/`toString` is RECORDED (never swallowed) and returns
+   * '' so the caller falls back to its stated message. Only `typeof` is logged — passing
+   * the offending value on would hand the same hostile object to the logger.
+   */
+  const describeValue = (value: unknown): string => {
+    try {
+      if (typeof value === 'object' && value !== null) {
+        const json = JSON.stringify(value);
+        if (typeof json === 'string' && json !== '' && json !== '{}') return json;
+      }
+      return String(value);
+    } catch (describeError) {
+      logger.warn(
+        'globalErrorHandler',
+        'could not describe a non-Error value; using the fallback message',
+        { valueType: typeof value, reason: describeError },
+      );
+      return '';
+    }
+  };
+
+  /**
+   * Normalize an arbitrary thrown/rejected value into a real Error (audit finding 2).
+   *
+   * The sink reads `err_name` / `err_msg` / `stack` off `record.error` only when it is an
+   * object carrying those fields, so a string reason shipped NOTHING and `err_name` fell
+   * back to the generic logger message — a record that costs an Axiom write and answers no
+   * question. A rejection reason can be any value, and `event.error` is null for
+   * cross-origin script failures, so normalization is what makes those reports readable.
+   *
+   * A real Error is returned as the SAME INSTANCE: the log-once funnel brands the instance
+   * (`__loggedId`), so cloning it here would defeat deduplication.
+   */
+  const toError = (value: unknown, fallbackMessage: string): Error => {
+    if (value instanceof Error) return value;
+    const described = value === null || value === undefined ? '' : describeValue(value);
+    const error = new Error(described === '' ? fallbackMessage : described);
+    // Carry a non-Error's own `name` so err_name still groups by something meaningful
+    // (e.g. a DOMException-shaped 'QuotaExceededError') instead of a flat 'Error'.
+    const name =
+      typeof value === 'object' && value !== null ? (value as { name?: unknown }).name : undefined;
+    if (typeof name === 'string' && name !== '') error.name = name;
+    return error;
+  };
+
   // Run the wired chunk handler, if any. Never throws — a broken handler must not swallow
   // the original error, so it is recorded and we fall back to normal logging.
   const tryHandleChunkError = (error: unknown): boolean => {
@@ -106,8 +153,9 @@ export function setupGlobalErrorHandlers(
 
       const url = target.src || target.href || '';
       // Resource error events carry no `message`; the chunk detector matches on message
-      // text, so build a pseudo-error for it.
-      const pseudoError = new Error(`Failed to load resource: ${url}`);
+      // text, so build a pseudo-error for it. The tag is folded into the message so a
+      // failed stylesheet stays distinguishable from a failed script.
+      const pseudoError = new Error(`Failed to load resource: ${tag} ${url}`);
       if (tryHandleChunkError(pseudoError)) {
         e.preventDefault?.();
         return;
@@ -115,7 +163,13 @@ export function setupGlobalErrorHandlers(
 
       // A NON-chunk resource failure (stylesheet / image / non-chunk script) must still be
       // recorded — WARN, not ERROR, so a missing asset does not pop an error toast.
-      logger.warn('globalErrorHandler', 'Resource failed to load', { url, tag });
+      //
+      // The pseudo-error is the PAYLOAD, not a `{ url, tag }` object (audit finding 1):
+      // a plain object lands in record.data, which the sink deliberately never copies
+      // (privacy) and which is not on the transport allowlist either — so the one fact
+      // that makes this actionable, WHICH asset failed, could never reach Axiom. As an
+      // Error it rides `err_msg`, an allowlisted field that scrubMessage redacts and caps.
+      logger.warn('globalErrorHandler', 'Resource failed to load', pseudoError);
     },
     true,
   );
@@ -123,7 +177,10 @@ export function setupGlobalErrorHandlers(
   // --- Unhandled promise rejections ---
   win.addEventListener('unhandledrejection', (event: unknown) => {
     const e = event as { reason?: unknown; preventDefault?: () => void };
-    const reason = e.reason;
+    // Normalized BEFORE the chunk check: the detector matches on message TEXT, which a
+    // string or plain-object rejection reason does not have — so a chunk-load failure
+    // rejected with a bare string used to slip past the detector as well.
+    const reason = toError(e.reason, 'Unhandled promise rejection with no reason');
     if (tryHandleChunkError(reason)) {
       e.preventDefault?.();
       return;
@@ -134,7 +191,15 @@ export function setupGlobalErrorHandlers(
   // --- Uncaught errors (bubble phase) ---
   win.addEventListener('error', (event: unknown) => {
     const e = event as { error?: unknown; message?: string; preventDefault?: () => void };
-    const error = e.error;
+    // `event.error` is null for a cross-origin script failure — the browser withholds the
+    // Error and `event.message` ("Script error.") is the only content on offer. Reading it
+    // is the difference between a report with content and an empty one.
+    const error = toError(
+      e.error,
+      typeof e.message === 'string' && e.message !== ''
+        ? e.message
+        : 'Uncaught error with no error object',
+    );
     if (tryHandleChunkError(error)) {
       e.preventDefault?.();
       return;

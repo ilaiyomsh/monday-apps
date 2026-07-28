@@ -72,6 +72,17 @@ jobs:
       - name: Error-wiring audit
         run: node scripts/error-wiring-audit.mjs
 
+      # Lockfile sync gate (blocking). monday-code runs `npm ci` inside a SERVER app's
+      # pushed directory at deploy time, and `npm ci` refuses to install when
+      # package.json and package-lock.json disagree. Nothing in CI read those lockfiles,
+      # so a desync stayed invisible until the deploy failed — which is how sync-calender
+      # broke, caught only AFTER the merge. This runs the platform's own command
+      # (--dry-run), deriving scope from each deploy workflow's -c/-d flags, and prints
+      # every app as checked or skipped-with-reason. Needs npm (bundled with Node) and
+      # registry access; pnpm stays the workspace installer.
+      - name: Lockfile sync audit (server apps)
+        run: node scripts/lockfile-sync-audit.mjs
+
       - name: Type-check (skips packages with no type-check script)
         run: pnpm -r --if-present run type-check
 

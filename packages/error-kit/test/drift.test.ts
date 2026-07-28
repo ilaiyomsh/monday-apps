@@ -201,6 +201,50 @@ const BROWSER_CHECKS: BrowserCheck[] = [
     },
   },
   {
+    // Audit finding 4: the fix2 override lived INSIDE the `open` branch, so a tab hidden
+    // while the breaker was HALF-OPEN fell through to the probe path and hit
+    // `if (probeInFlight) return`, losing the whole queue silently — neither shipped nor
+    // counted as dropped. The terminal flush must outrank every breaker state.
+    name: 'finding4: terminal (hidden) flush ships even with the breaker HALF-OPEN',
+    async run(create) {
+      const h = harness(create);
+      await openBreaker(h); // 3 fetches, breaker open
+      // Past breakerOpenMs, so the next non-terminal flush would go half-open.
+      vi.setSystemTime(new Date(Date.now() + 61_000)); // relative to this suite's fake clock
+      const before = h.calls.length;
+      h.t.enqueue(ev({ message: 'tail-1' }));
+      h.t.enqueue(ev({ message: 'tail-2' }));
+      h.doc.visibilityState = 'hidden';
+      h.doc.emit('visibilitychange');
+      await tick();
+      const shipped = bodies(h.calls.slice(before)).flat().map((e) => e.message);
+      expect(shipped).toContain('tail-1');
+      expect(shipped).toContain('tail-2');
+      expect(h.t.stats().queued).toBe(0); // nothing left behind to die with the tab
+    },
+  },
+  {
+    // The terminal flush cuts the WHOLE queue, not one batch. Only observable above
+    // caps.batchMaxEvents (20), and only reachable because an open breaker lets the queue
+    // accumulate — at or below the cap the two behaviours are indistinguishable.
+    name: 'finding4: terminal (hidden) flush ships the WHOLE over-cap queue, not one batch',
+    async run(create) {
+      const h = harness(create);
+      await openBreaker(h);
+      const before = h.calls.length;
+      const QUEUED = 25;
+      for (let i = 0; i < QUEUED; i++) h.t.enqueue(ev({ message: `tail-${i}` }));
+      expect(h.calls).toHaveLength(before); // open breaker → the queue really accumulated
+      h.doc.visibilityState = 'hidden';
+      h.doc.emit('visibilitychange');
+      await tick();
+      const sent = h.calls.slice(before);
+      expect(sent).toHaveLength(1);
+      expect(bodies(sent).flat()).toHaveLength(QUEUED); // all 25, not just the first 20
+      expect(h.t.stats().queued).toBe(0);
+    },
+  },
+  {
     name: 'fix3: stack (cap 1500) + component_stack (cap 1000) are allowlisted + capped',
     async run(create) {
       const h = harness(create);
@@ -273,6 +317,77 @@ describe('drift — vendored BROWSER copies conform to the transport contract', 
         expect(errorListeners.some((l) => l.capture === true)).toBe(true);
         // and the unhandledrejection net is present
         expect(win.listenersFor('unhandledrejection').length).toBeGreaterThanOrEqual(1);
+      });
+
+      // Audit finding 2: the sink reads err_name/err_msg/stack off record.error only when
+      // it is an object carrying those fields, so a non-Error rejection reason — and an
+      // `event.error` of null, which is what a cross-origin script failure delivers —
+      // produced a report with no retrievable content at all. Every copy must normalize.
+      it('globalErrorHandler normalizes a non-Error rejection reason into an Error', () => {
+        const win = fakeTarget();
+        const logger = { warn: vi.fn(), error: vi.fn() };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        surface.geh(logger as any, { win: win as any });
+
+        for (const l of win.listenersFor('unhandledrejection')) l.cb({ reason: 'token refresh failed' });
+
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        const payload = logger.error.mock.calls[0][2];
+        expect(payload).toBeInstanceOf(Error);
+        expect((payload as Error).message).toBe('token refresh failed');
+      });
+
+      it('globalErrorHandler reads event.message when event.error is null', () => {
+        const win = fakeTarget();
+        const logger = { warn: vi.fn(), error: vi.fn() };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        surface.geh(logger as any, { win: win as any });
+
+        // Bubble-phase listeners only — the capture listener owns resource failures.
+        for (const l of win.listenersFor('error')) {
+          if (!l.capture) l.cb({ error: null, message: 'Script error.', target: win });
+        }
+
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        const payload = logger.error.mock.calls[0][2];
+        expect(payload).toBeInstanceOf(Error);
+        expect((payload as Error).message).toBe('Script error.');
+      });
+
+      // Audit finding 1: the failed URL was passed as a `{ url, tag }` object, which lands
+      // in record.data — a field the sink deliberately never copies (privacy) and which is
+      // not on the transport allowlist either. So WHICH asset failed could not reach Axiom
+      // at all. It now rides err_msg, an allowlisted field that is scrubbed and capped.
+      it('globalErrorHandler reports a resource failure as an Error naming the URL and tag', () => {
+        const win = fakeTarget();
+        const logger = { warn: vi.fn(), error: vi.fn() };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        surface.geh(logger as any, { win: win as any });
+
+        // Resource failures reach the CAPTURE listener only (they do not bubble).
+        for (const l of win.listenersFor('error')) {
+          if (l.capture) {
+            l.cb({ target: { tagName: 'SCRIPT', src: 'https://cdn.example.com/app.js' }, preventDefault() {} });
+          }
+        }
+
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+        const payload = logger.warn.mock.calls[0][2];
+        expect(payload).toBeInstanceOf(Error);
+        expect((payload as Error).message).toContain('https://cdn.example.com/app.js');
+        expect((payload as Error).message).toContain('SCRIPT');
+      });
+
+      it('globalErrorHandler passes a real Error through as the SAME instance (log-once identity)', () => {
+        const win = fakeTarget();
+        const logger = { warn: vi.fn(), error: vi.fn() };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        surface.geh(logger as any, { win: win as any });
+        const original = new Error('genuine failure');
+
+        for (const l of win.listenersFor('unhandledrejection')) l.cb({ reason: original });
+
+        expect(logger.error.mock.calls[0][2]).toBe(original);
       });
     });
   }
@@ -471,6 +586,33 @@ describe('drift — vendored BROWSER sinks conform to the sink contract', () => 
         const serialized = JSON.stringify(mapped);
         expect(serialized).not.toContain('admin@corp.com');
         expect(serialized).not.toContain('12345678');
+      });
+
+      // Audit finding 6: a copy that assigned `ev.err_name = err.name` without String()
+      // let a NON-STRING name through. The generic-name fallback right below it guards with
+      // `typeof ev.err_name === 'string'`, which then fails — so the stable logger message
+      // OVERWRITES the real discriminator. The transport's dedup key reads err_name the same
+      // guarded way, so distinct errors collapse under one key and after dedupMaxPerWindow
+      // (5) in 60s the rest are silently dropped. The pre-existing check above could not see
+      // this because it asserted String(mapped.err_name) — coercing in the test hid a
+      // missing coercion in the source.
+      it('mapRecordToEvent coerces a NON-STRING err.name instead of losing it to the generic message', () => {
+        const { mapRecordToEvent } = surface.mod;
+        // A thrown non-Error whose `name` is not a string (a numeric status, a clobbered name).
+        const err = { name: 500, message: 'upstream exploded', stack: 'at a (f.js:1:1)' };
+        const mapped = mapRecordToEvent({ level: 'ERROR', module: 'svc', message: 'op_failed', error: err });
+        expect(typeof mapped.err_name).toBe('string');
+        expect(mapped.err_name).toBe('500');   // the discriminator survives...
+        expect(mapped.err_name).not.toBe('op_failed'); // ...and is NOT replaced by the message
+      });
+
+      it('mapRecordToEvent keeps distinct non-string names distinct (one dedup key per error)', () => {
+        const { mapRecordToEvent } = surface.mod;
+        // Two different failures behind ONE stable logger message: if both collapse to
+        // 'op_failed' they share a dedup key and the second is throttled away.
+        const a = mapRecordToEvent({ level: 'ERROR', module: 'svc', message: 'op_failed', error: { name: 500, message: 'a' } });
+        const b = mapRecordToEvent({ level: 'ERROR', module: 'svc', message: 'op_failed', error: { name: 503, message: 'b' } });
+        expect(a.err_name).not.toBe(b.err_name);
       });
 
       it('mapRecordToEvent guarantees err_name on ERROR events (Error name → message → tag → unknown)', () => {

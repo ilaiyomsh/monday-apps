@@ -81,7 +81,12 @@ describe('setupGlobalErrorHandlers — routing', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].level).toBe('WARN');
     expect(calls[0].module).toBe('globalErrorHandler');
-    expect(calls[0].payload).toEqual({ url: 'https://cdn.example.com/logo.png', tag: 'IMG' });
+    // url + tag ride the Error's message, NOT a `{ url, tag }` object (audit finding 1):
+    // a plain object lands in record.data, which the sink never copies and the transport
+    // allowlist does not carry, so the failed URL could not reach the dataset.
+    expect(calls[0].payload).toBeInstanceOf(Error);
+    expect((calls[0].payload as Error).message).toContain('https://cdn.example.com/logo.png');
+    expect((calls[0].payload as Error).message).toContain('IMG');
   });
 
   it('ignores a capture-phase error whose target is the window itself (that is the bubble listener\'s job)', () => {
@@ -139,5 +144,171 @@ describe('setupGlobalErrorHandlers — routing', () => {
     // one WARN for the broken handler, then the ERROR for the original error — never swallowed
     expect(calls.map((c) => c.level)).toEqual(['WARN', 'ERROR']);
     expect(calls[1].module).toBe('UncaughtError');
+  });
+});
+
+// Audit finding 2: a rejection whose reason is not an Error, and a window 'error' event
+// whose `event.error` is null (what cross-origin scripts produce), were logged with NO
+// retrievable content. mapRecordToEvent pulls err_name/err_msg/stack off `record.error`
+// only when it is an object with those fields, so a string reason shipped nothing and
+// err_name fell back to the generic logger message — a record that costs an Axiom write
+// and answers no question. `event.message` was declared in the event type and never read.
+describe('setupGlobalErrorHandlers — every reported error carries retrievable content', () => {
+  /** The payload the sink would read err_name/err_msg/stack from. */
+  const reported = (calls: Array<{ level: string; payload?: unknown }>) =>
+    calls.filter((c) => c.level === 'ERROR').map((c) => c.payload);
+
+  it('normalizes a STRING rejection reason into an Error carrying the text', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('unhandledrejection', { reason: 'token refresh failed' });
+
+    const [payload] = reported(calls);
+    expect(payload).toBeInstanceOf(Error);
+    expect((payload as Error).message).toBe('token refresh failed');
+  });
+
+  it('serializes a non-Error OBJECT rejection reason so its fields are queryable', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('unhandledrejection', { reason: { status: 502, detail: 'upstream gone' } });
+
+    const [payload] = reported(calls);
+    expect(payload).toBeInstanceOf(Error);
+    expect((payload as Error).message).toContain('502');
+    expect((payload as Error).message).toContain('upstream gone');
+  });
+
+  it('preserves a non-Error reason\'s `name` so err_name still groups meaningfully', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('unhandledrejection', { reason: { name: 'QuotaExceededError', message: 'over budget' } });
+
+    expect((reported(calls)[0] as Error).name).toBe('QuotaExceededError');
+  });
+
+  it('falls back to a stated message when the rejection has NO reason at all', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('unhandledrejection', { reason: undefined });
+
+    const payload = reported(calls)[0] as Error;
+    expect(payload).toBeInstanceOf(Error);
+    expect(payload.message.length).toBeGreaterThan(0);
+  });
+
+  it('reads event.message when event.error is null (the cross-origin "Script error." case)', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    // A cross-origin script failure: the browser withholds the Error and gives only a message.
+    emit('error', { error: null, message: 'Script error.', target: win }, 'bubble');
+
+    const payload = reported(calls)[0] as Error;
+    expect(payload).toBeInstanceOf(Error);
+    expect(payload.message).toBe('Script error.');
+  });
+
+  it('passes a real Error through UNCHANGED (same instance — log-once identity must survive)', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+    const original = new Error('genuine failure');
+
+    emit('unhandledrejection', { reason: original });
+
+    // Identity matters: the sink's log-once dedup brands the Error instance itself.
+    expect(reported(calls)[0]).toBe(original);
+  });
+
+  it('normalizes BEFORE the chunk check, so a string chunk-load reason is still detected', () => {
+    const { win, emit } = fakeWin();
+    const { logger } = fakeLogger();
+    const seen: unknown[] = [];
+    setupGlobalErrorHandlers(logger, {
+      win,
+      handleChunkError: (error) => {
+        seen.push(error);
+        return false;
+      },
+    });
+
+    emit('unhandledrejection', { reason: 'Failed to fetch dynamically imported module' });
+
+    // The detector matches on message text, which a bare string does not have.
+    expect(seen[0]).toBeInstanceOf(Error);
+    expect((seen[0] as Error).message).toBe('Failed to fetch dynamically imported module');
+  });
+
+  it('survives a reason whose serialization throws (circular / hostile toJSON)', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+    const circular: Record<string, unknown> = { name: 'CircularError' };
+    circular.self = circular;
+
+    emit('unhandledrejection', { reason: circular });
+
+    const payload = reported(calls)[0] as Error;
+    expect(payload).toBeInstanceOf(Error);
+    expect(payload.message.length).toBeGreaterThan(0);
+  });
+});
+
+// Audit finding 1: the failed resource URL was passed as the logger PAYLOAD position's
+// plain object ({ url, tag }), which lands in record.data — a field the sink deliberately
+// never copies (privacy) and which is not on the transport allowlist either. So the one
+// fact that makes a resource failure actionable, WHICH asset failed, could not reach Axiom
+// at all. The URL now rides err_msg, an allowlisted field that is scrubbed and capped.
+describe('setupGlobalErrorHandlers — a resource failure carries its URL where the sink can read it', () => {
+  const resourceEvent = (over: Record<string, unknown> = {}) => ({
+    target: { tagName: 'SCRIPT', src: 'https://cdn.example.com/assets/app.js', ...over },
+    preventDefault: () => {},
+  });
+
+  it('reports the failure as an Error whose message names the failed URL', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('error', resourceEvent(), 'capture');
+
+    const warn = calls.find((c) => c.level === 'WARN');
+    expect(warn).toBeDefined();
+    // The payload must be an Error: that is the ONLY position mapRecordToEvent reads
+    // err_msg from, so a plain object here cannot reach the dataset.
+    expect(warn!.payload).toBeInstanceOf(Error);
+    expect((warn!.payload as Error).message).toContain('https://cdn.example.com/assets/app.js');
+  });
+
+  it('names the failing element type too, so a stylesheet is distinguishable from a script', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('error', resourceEvent({ tagName: 'LINK', src: undefined, href: 'https://cdn.example.com/app.css' }), 'capture');
+
+    const warn = calls.find((c) => c.level === 'WARN')!;
+    expect((warn.payload as Error).message).toContain('LINK');
+    expect((warn.payload as Error).message).toContain('https://cdn.example.com/app.css');
+  });
+
+  it('still logs at WARN, not ERROR (a missing asset must not pop an error toast)', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('error', resourceEvent(), 'capture');
+
+    expect(calls.map((c) => c.level)).toEqual(['WARN']);
   });
 });
