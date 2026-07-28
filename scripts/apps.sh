@@ -11,6 +11,7 @@ APP_SLUGS=(
   axis-tracker
   discussions
   team-people-column
+  twyst-your-status
 )
 
 app_path() {
@@ -21,6 +22,7 @@ app_path() {
     axis-tracker)        echo "apps/axis/tracker" ;;
     discussions)         echo "apps/discussions" ;;
     team-people-column)  echo "apps/team-people-column" ;;
+    twyst-your-status)   echo "apps/twyst-your-status" ;;
     *) echo "unknown app slug: $1" >&2; return 1 ;;
   esac
 }

@@ -1,0 +1,105 @@
+{
+  "source": {
+    "kind": "monday-api-scratch-probe",
+    "date": "2026-07-27",
+    "workspaceId": "16291824",
+    "scratchBoardDeleted": true
+  },
+  "query": {
+    "complexity": {
+      "query": 24,
+      "before": 19939999,
+      "after": 19939975
+    },
+    "boards": [
+      {
+        "id": "18423828028",
+        "columns": [
+          {
+            "id": "status_guard",
+            "title": "סטטוס מוגן",
+            "type": "status",
+            "settings": {
+              "labels": [
+                {
+                  "id": 0,
+                  "color": 0,
+                  "label": "ממתין",
+                  "index": 0,
+                  "is_done": false,
+                  "is_deactivated": false,
+                  "hex": "#fdab3d"
+                },
+                {
+                  "id": 1,
+                  "color": 1,
+                  "label": "מאושר אוטומטית",
+                  "index": 1,
+                  "is_done": true,
+                  "is_deactivated": false,
+                  "hex": "#00c875"
+                },
+                {
+                  "id": 2,
+                  "color": 2,
+                  "label": "נדחה",
+                  "index": 2,
+                  "is_done": false,
+                  "is_deactivated": false,
+                  "hex": "#df2f4a"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "items": [
+      {
+        "id": "12632784783",
+        "name": "WZ-probe-item",
+        "column_values": [
+          {
+            "id": "status_guard",
+            "type": "status",
+            "text": "מאושר אוטומטית",
+            "value": "{\"index\":1}",
+            "index": 1,
+            "label": "מאושר אוטומטית",
+            "is_done": true,
+            "label_style": {
+              "color": "#00c875",
+              "border": "#00b461"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "mutation": {
+    "variables": {
+      "boardId": "18423828028",
+      "itemId": "12632784783",
+      "columnId": "status_guard",
+      "value": "{\"index\":0}"
+    },
+    "response": {
+      "change_column_value": {
+        "id": "12632784783"
+      }
+    }
+  },
+  "readback": {
+    "id": "status_guard",
+    "type": "status",
+    "text": "ממתין",
+    "value": "{\"index\":0,\"changed_at\":\"2026-07-26T21:36:23.392Z\"}",
+    "index": 0,
+    "label": "ממתין",
+    "is_done": false,
+    "label_style": {
+      "color": "#fdab3d",
+      "border": "#e99729"
+    }
+  }
+}
