@@ -140,6 +140,13 @@ packages/shared                     EMPTY STUB — see below
   whole workspace (`pnpm -r --if-present`) — blocking. Tests run as a separate
   **non-blocking visibility job**; read its summary on the PR and treat any new
   red as yours until proven otherwise.
+- **Lockfile sync gate (blocking):** `scripts/lockfile-sync-audit.mjs` runs
+  `npm ci --dry-run` inside every SERVER app that has a `package-lock.json` —
+  the platform's own deploy-time command, since `npm ci` refuses to install when
+  the manifest and lockfile disagree. Scope comes from each deploy workflow's
+  `-c`/`-d` flags, so a new server app is covered when its workflow lands; every
+  app prints as checked or skipped-with-reason. A desync here is a **deploy**
+  failure, so fix the lockfile with `npm install` in that app dir — never by hand.
 - **Known-red baseline:** tracker carries 2 deferred failing tests
   (FOLLOW-UPS F1). Not your breakage — do not "fix" them without the owner.
 - **test-guard:** red gate for new code; retrofits prove themselves with ≥2
