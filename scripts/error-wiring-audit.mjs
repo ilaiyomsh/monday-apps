@@ -29,6 +29,7 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
+import { auditWorkflowEnv } from './lib/workflow-env.mjs';
 
 // Root defaults to this script's parent (the repo). AUDIT_REPO_ROOT overrides it — used by
 // the test suite to point the audit at a fixture tree (and prove it fails on a broken one).
@@ -304,21 +305,37 @@ function checkClient(s) {
     ? { label: 'root ErrorBoundary present', status: 'pass' }
     : { label: 'root ErrorBoundary present', status: 'fail', detail: `no ErrorBoundary under ${s.boundaryDirs.join(', ')}` });
 
-  // deploy workflow env
-  const wf = read(s.workflow);
-  if (wf === null) {
-    checks.push({ label: 'deploy workflow exists', status: 'fail', detail: s.workflow });
-  } else {
-    const missing = s.deployEnv.keys.filter((k) => !wf.includes(k));
-    if (missing.length === 0) {
-      checks.push({ label: 'workflow bakes VITE_AXIOM_*', status: 'pass' });
+  // Deploy workflow env — BOTH the draft workflow and its live twin. Auditing draft only
+  // left the customer-facing build unchecked: the exact regression this gate exists to
+  // catch could ship to production while CI stayed green. And the check is structural
+  // (see scripts/lib/workflow-env.mjs), not a substring scan — a key in a comment, in a
+  // `run:` body, or in a duplicate `env:` block is no longer mistaken for real wiring.
+  for (const wfPath of workflowPair(s.workflow)) {
+    const label = `${wfPath.includes('deploy-live-') ? 'live' : 'draft'} workflow bakes VITE_AXIOM_* (structural)`;
+    const wf = read(wfPath);
+    if (wf === null) {
+      checks.push({ label: 'deploy workflow exists', status: 'fail', detail: wfPath });
+      continue;
+    }
+    const { errors } = auditWorkflowEnv(wf, { requiredKeys: s.deployEnv.keys });
+    if (errors.length === 0) {
+      checks.push({ label, status: 'pass' });
     } else if (s.deployEnv.knownGap) {
-      checks.push({ label: 'workflow bakes VITE_AXIOM_*', status: 'warn', detail: `${s.deployEnv.knownGap} [missing: ${missing.join(', ')}]` });
+      checks.push({ label, status: 'warn', detail: `${s.deployEnv.knownGap} [${errors.join('; ')}]` });
     } else {
-      checks.push({ label: 'workflow bakes VITE_AXIOM_*', status: 'fail', detail: `missing in ${s.workflow}: ${missing.join(', ')}` });
+      checks.push({ label, status: 'fail', detail: `${wfPath}: ${errors.join('; ')}` });
     }
   }
   return checks;
+}
+
+/**
+ * A surface declares its draft workflow; the live twin is the same file with the
+ * `deploy-draft-` prefix swapped. Returns both so neither side can drift unaudited.
+ */
+function workflowPair(draftPath) {
+  const live = draftPath.replace('/deploy-draft-', '/deploy-live-');
+  return live === draftPath ? [draftPath] : [draftPath, live];
 }
 
 function checkServer(s) {
@@ -334,9 +351,15 @@ function checkServer(s) {
       ? { label: 'process guards (uncaughtException + unhandledRejection)', status: 'pass' }
       : { label: 'process guards (uncaughtException + unhandledRejection)', status: 'fail', detail: `missing one of the two in ${s.processGuardsFile}` });
   }
-  if (entry && !/installProcessGuards\s*\(/.test(entry)) {
+  // A MISSING entry file must fail, not vanish. The previous shape (`if (entry && …) / else
+  // if (entry)`) pushed no check at all when the file could not be read, so renaming a
+  // server entry without updating SURFACES silently deleted the process-guards requirement
+  // from a passing report — a fail-open in a blocking gate.
+  if (entry === null) {
+    checks.push({ label: 'server entry exists', status: 'fail', detail: `cannot read ${s.entry} (stale SURFACES entry?)` });
+  } else if (!/installProcessGuards\s*\(/.test(entry)) {
     checks.push({ label: 'entry installs process guards', status: 'fail', detail: `installProcessGuards(...) not called in ${s.entry}` });
-  } else if (entry) {
+  } else {
     checks.push({ label: 'entry installs process guards', status: 'pass' });
   }
 

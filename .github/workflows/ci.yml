@@ -61,6 +61,14 @@ jobs:
       # Error-wiring audit (blocking): every client surface wires the global handlers +
       # Axiom sink before render and has a root boundary; every server has process guards,
       # a terminal error middleware, and an opts-injected sink. Structural, node:fs only.
+      # The audit's own structure reader is unit-tested (node:test, stdlib — the audit and its
+      # lib stay dependency-free). Runs FIRST: a broken parser would make the gate below
+      # report green on a workflow it can no longer read correctly.
+      - name: Audit lib unit tests
+        # Explicit glob, not a directory: `node --test <dir>` does not resolve a bare
+        # directory the same way across Node majors, and a silent 0-test pass is worthless.
+        run: node --test scripts/lib/*.test.mjs
+
       - name: Error-wiring audit
         run: node scripts/error-wiring-audit.mjs
 
