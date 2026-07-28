@@ -27,6 +27,22 @@ export function resolveAppRoute(pathname = window.location.pathname) {
   return null;
 }
 
+/**
+ * Shell modifier for a route that OWNS its whole iframe.
+ *
+ * Both of these open at a size monday was given explicitly, so the shell must add no
+ * padding and must not let the document scroll — `index.css` hangs the height and
+ * `overflow: hidden` chain off these classes. Losing the modifier does not break
+ * anything visibly at first glance; it silently returns the 40px document scroll that
+ * dragged the required-fields form's title and submit button out of view, which is why
+ * appRoute.test.jsx pins the mapping.
+ */
+export function shellModifier(route) {
+  if (route === 'picker') return ' is-picker';
+  if (route === 'required-fields') return ' is-modal';
+  return '';
+}
+
 function App() {
   const { context, loading, error } = useMondayContext();
   const route = resolveAppRoute();
@@ -58,7 +74,7 @@ function App() {
   const dir = isRTL ? 'rtl' : 'ltr';
 
   return (
-    <div className={`app-shell${route === 'picker' ? ' is-picker' : ''} ${themeClass}`} dir={dir}>
+    <div className={`app-shell${shellModifier(route)} ${themeClass}`} dir={dir}>
       {route === 'picker' && <OnClickDialog context={context} />}
       {route === 'settings' && (
         <Suspense fallback={<LoadingState message="טוען…" />}>

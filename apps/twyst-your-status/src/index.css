@@ -33,8 +33,28 @@ input {
   padding: 20px;
 }
 
-/* On-click status picker: fill the monday Dialog Design iframe edge-to-edge. */
-.app-shell.is-picker {
+/*
+ * Routes that OWN their whole iframe: the on-click picker (a cell-attached Dialog
+ * Design) and the required-fields modal (opened at an exact pixel size).
+ *
+ * Both need the same thing, and the modal did not have it until 3.7.1: the shell's
+ * 20px padding removed, and a height/overflow constraint on every ancestor.
+ *
+ * Why the ancestors matter — measured, not reasoned. The modal is `block-size: 100%`
+ * of this shell and hides its own overflow, but that is powerless while `.app-shell`
+ * still adds `padding: 20px` around it and nothing above is height-constrained:
+ * the modal filled the viewport, the padding pushed 40px past it, and `body` (which
+ * carries only `min-height`) grew instead of clipping. So the DOCUMENT scrolled —
+ * taking the form's title and its submit button with it — while the field list, the
+ * one box meant to scroll, did not scroll at all. The 40px was constant at every
+ * field count, which is what gave the ancestors away: a content-driven overflow
+ * would have grown with the rows.
+ *
+ * requiredFormModalSize budgets exactly ONE padding box (FORM_PADDING_PX), and the
+ * modal is the element that owns it. The shell must therefore add none.
+ */
+.app-shell.is-picker,
+.app-shell.is-modal {
   min-block-size: 100%;
   height: 100%;
   padding: 0;
@@ -43,7 +63,10 @@ input {
 
 html:has(.app-shell.is-picker),
 html:has(.app-shell.is-picker) body,
-html:has(.app-shell.is-picker) #root {
+html:has(.app-shell.is-picker) #root,
+html:has(.app-shell.is-modal),
+html:has(.app-shell.is-modal) body,
+html:has(.app-shell.is-modal) #root {
   height: 100%;
   min-height: 100%;
   overflow: hidden;
