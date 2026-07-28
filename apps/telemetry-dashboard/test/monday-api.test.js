@@ -370,3 +370,50 @@ describe('createMondayApi — getToken resolution (Change #143 continuation)', (
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+
+describe('createMondayApi — non-Error network rejections wrap cleanly (gap #10)', () => {
+  it('wraps a null rejection as MondayApiError instead of throwing TypeError on err.message', async () => {
+    const logger = makeLogger();
+    // Before the fix, `${err.message}` on a null err threw a TypeError that escaped the
+    // wrap — the caller saw a TypeError, not a MondayApiError.
+    const api = createMondayApi({
+      getToken: async () => TOKEN,
+      fetchImpl: vi.fn().mockRejectedValue(null),
+      logger,
+    });
+
+    const err = await rejectionOf(api.graphql('query Ping { boards { id } }'));
+
+    expect(err).toBeInstanceOf(MondayApiError);
+    expect(err.name).toBe('MondayApiError');
+    expect(err.message).toBe('monday API network failure: null');
+  });
+
+  it('wraps a string rejection using the string itself (no Error.message present)', async () => {
+    const logger = makeLogger();
+    const api = createMondayApi({
+      getToken: async () => TOKEN,
+      fetchImpl: vi.fn().mockRejectedValue('ECONNRESET'),
+      logger,
+    });
+
+    const err = await rejectionOf(api.graphql('query Ping { boards { id } }'));
+
+    expect(err).toBeInstanceOf(MondayApiError);
+    expect(err.message).toBe('monday API network failure: ECONNRESET');
+  });
+
+  it('still uses Error.message for a real Error rejection', async () => {
+    const logger = makeLogger();
+    const api = createMondayApi({
+      getToken: async () => TOKEN,
+      fetchImpl: vi.fn().mockRejectedValue(new Error('socket hang up')),
+      logger,
+    });
+
+    const err = await rejectionOf(api.graphql('query Ping { boards { id } }'));
+
+    expect(err).toBeInstanceOf(MondayApiError);
+    expect(err.message).toBe('monday API network failure: socket hang up');
+  });
+});

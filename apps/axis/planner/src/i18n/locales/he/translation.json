@@ -227,7 +227,9 @@
   "ganttProvider": {
     "toast": {
       "deleteFailed": "שגיאה במחיקת ההקצאה. ההקצאה שוחזרה.",
-      "bulkPmUpdateFailed": "עדכון מנהל: {{failed}} מתוך {{total}} נכשלו"
+      "bulkPmUpdateFailed": "עדכון מנהל: {{failed}} מתוך {{total}} נכשלו",
+      "modalCrashed": "החלון נכשל בפתיחה. יש לנסות שוב.",
+      "saveFailed": "שמירת השינוי נכשלה. הערכים הקודמים שוחזרו."
     }
   },
   "timeline": {

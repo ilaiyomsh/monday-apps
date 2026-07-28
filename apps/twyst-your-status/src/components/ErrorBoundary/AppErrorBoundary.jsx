@@ -122,8 +122,12 @@ export const AppErrorBoundary = ({ children, scope = 'root', FallbackComponent, 
         // Canonical render-throw record. Pass the component stack in context so a
         // remote sink can attribute the crash; do NOT also toast here ג€” the
         // fallback screen is the single user-facing surface for render throws.
-        logger.error(`ErrorBoundary:${scope}`, 'React render error caught', error);
-        logger.debug(`ErrorBoundary:${scope}`, 'Component stack', { componentStack: info?.componentStack });
+        // componentStack rides the ERROR record's context — the sink maps it to
+        // component_stack. It used to be a separate DEBUG record, which never ships
+        // (default policy is WARN/ERROR only), so the stack was collected then dropped.
+        logger.error(`ErrorBoundary:${scope}`, 'React render error caught', error, {
+            componentStack: info?.componentStack,
+        });
     };
 
     return (

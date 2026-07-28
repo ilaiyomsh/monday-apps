@@ -328,6 +328,42 @@ describe('GET /oauth/callback', () => {
     expect(await backend.get(`${ACCOUNT_ID}:oauth_token`)).toBeNull();
   });
 
+  it('WARNs (reason only, no body) but still responds 502 when reading the error body itself throws', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { app, storage } = makeHarness({
+      exchangeResponse: {
+        ok: false,
+        status: 500,
+        text: async () => {
+          throw new Error('stream broken');
+        },
+      },
+    });
+    await storage.issueOauthState('state-unreadable-body', ACCOUNT_ID);
+
+    const res = await request(app)
+      .get('/oauth/callback')
+      .query({ code: 'code-abc', state: 'state-unreadable-body' });
+
+    expect(res.status).toBe(502);
+
+    const warn = errSpy.mock.calls
+      .map((c) => c[0])
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .find((e) => e && e.level === 'warn' && e.message === 'token exchange error body unreadable');
+    expect(warn).toBeTruthy();
+    expect(warn.tag).toBe('oauth');
+    expect(warn.status).toBe(500);
+    expect(warn.reason).toBe('Error');
+    errSpy.mockRestore();
+  });
+
   it('still completes the flow (done page + account-scoped token, no identity) when fetchMe rejects', async () => {
     const { app, backend, storage, api } = makeHarness();
     api.fetchMe.mockRejectedValue(new Error('me endpoint down'));

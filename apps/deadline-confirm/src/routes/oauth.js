@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import express from 'express';
 import { oauthDonePage, oauthErrorPage } from '../helpers/pages.js';
 import { verifySessionToken } from '../middlewares/session-token.js';
-import { logError, logInfo } from '../helpers/logger.js';
+import logger from '../helpers/logger.js';
 
 export const OAUTH_SCOPES = 'me:read boards:read boards:write updates:write';
 export const AUTHORIZE_URL = 'https://auth.monday.com/oauth2/authorize';
@@ -37,12 +37,15 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
       // the admin SPA (?st=) — the callback stores the token under it.
       const session = verifySessionToken(req.query.st, env.clientSecret);
       if (!session) {
-        logError('oauth', 'start refused: missing/invalid sessionToken', {});
+        logger.logError('oauth', 'start refused: missing/invalid sessionToken', {});
         sendPage(res, 401, oauthErrorPage('חיבור לא מורשה'));
         return;
       }
+      // V6 D-roster: an empty ALLOWED_ACCOUNT_IDS is default-DENY (no bypass) — the
+      // `.length > 0` escape hatch is gone. Call style follows this file's default
+      // `logger` import.
       if (!env.allowedAccountIds.includes(session.accountId)) {
-        logError('oauth', 'start refused: account not on tenant roster', {});
+        logger.logError('oauth', 'start refused: account not on tenant roster', {});
         sendPage(res, 403, oauthErrorPage('חיבור לא מורשה'));
         return;
       }
@@ -61,7 +64,7 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
       if (env.oauthAppVersionId) params.set('app_version_id', env.oauthAppVersionId);
       res.redirect(`${AUTHORIZE_URL}?${params}`);
     } catch (err) {
-      logError('oauth', 'start failed', { error: String(err?.message ?? err) });
+      logger.logError('oauth', 'start failed', { error: String(err?.message ?? err) });
       sendPage(res, 500, oauthErrorPage());
     }
   });
@@ -70,7 +73,7 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
     const { code, state, error: consentError } = req.query;
     try {
       if (consentError) {
-        logError('oauth', 'consent denied', { cause: String(consentError) });
+        logger.logError('oauth', 'consent denied', { cause: String(consentError) });
         sendPage(res, 200, oauthErrorPage('החיבור בוטל'));
         return;
       }
@@ -82,7 +85,7 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
       // CSRF nonce — single-use, expiring (spec §13); carries the account.
       const stateRecord = await storage.consumeOauthState(state);
       if (!stateRecord) {
-        logError('oauth', 'invalid or replayed state nonce', {});
+        logger.logError('oauth', 'invalid or replayed state nonce', {});
         sendPage(res, 400, oauthErrorPage('הקישור פג תוקף'));
         return;
       }
@@ -103,10 +106,15 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
         let detail = '';
         try {
           detail = (await exchangeRes.text()).slice(0, 200);
-        } catch {
-          // body unreadable — status alone is logged below
+        } catch (readErr) {
+          // Body unreadable — keep the flow (status alone is logged below) but do not
+          // swallow the read failure: WARN with the reason only (no body content).
+          logger.logWarn('oauth', 'token exchange error body unreadable', {
+            status: exchangeRes.status,
+            reason: String(readErr?.name ?? 'read_error'),
+          });
         }
-        logError('oauth', 'token exchange failed', { status: exchangeRes.status, detail });
+        logger.logError('oauth', 'token exchange failed', { status: exchangeRes.status, detail });
         sendPage(res, 502, oauthErrorPage());
         return;
       }
@@ -114,7 +122,7 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
       const tokens = await exchangeRes.json();
       const accessToken = tokens?.access_token;
       if (!accessToken) {
-        logError('oauth', 'token exchange returned no access_token', {});
+        logger.logError('oauth', 'token exchange returned no access_token', {});
         sendPage(res, 502, oauthErrorPage());
         return;
       }
@@ -125,16 +133,16 @@ export function createOauthRouter({ storage, api, env, fetchImpl }) {
       try {
         const me = await api.fetchMe({ token: accessToken });
         await scoped.setOauthIdentity({ id: me.id, name: me.name });
-        logInfo('oauth', 'connected', { name: me.name });
+        logger.logInfo('oauth', 'connected', { name: me.name });
       } catch (err) {
-        logError('oauth', 'identity fetch failed (connection still stored)', {
+        logger.logError('oauth', 'identity fetch failed (connection still stored)', {
           error: String(err?.message ?? err),
         });
       }
 
       sendPage(res, 200, oauthDonePage());
     } catch (err) {
-      logError('oauth', 'callback failed', { error: String(err?.message ?? err) });
+      logger.logError('oauth', 'callback failed', { error: String(err?.message ?? err) });
       sendPage(res, 500, oauthErrorPage());
     }
   });

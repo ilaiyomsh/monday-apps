@@ -383,13 +383,15 @@
     "companyDayUpdated": "יום החברה עודכן",
     "companyDayAdded": "יום החברה נוסף",
     "companyDayDeleted": "יום החברה נמחק",
-    "writeBlockedInvalidSettings": "הפעולה נחסמה: הגדרות הלוח חסרות או לא תקינות. השלם את המיפוי במסך ההגדרות ונסה שוב."
+    "writeBlockedInvalidSettings": "הפעולה נחסמה: הגדרות הלוח חסרות או לא תקינות. השלם את המיפוי במסך ההגדרות ונסה שוב.",
+    "attachmentPickFailed": "לא ניתן לצרף את הקובץ שנבחר. נסה שוב."
   },
   "settings": {
     "title": "הגדרות",
     "open": "הגדרות",
     "boardId": "מזהה לוח",
     "fixErrors": "יש לתקן את השדות המסומנים",
+    "saveError": "שמירת ההגדרות נכשלה. נסה שוב.",
     "validation": {
       "columnRequired": "חובה למפות עמודה זו",
       "columnMissing": "עמודת \"{{field}}\" לא מופתה",

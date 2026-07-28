@@ -5,7 +5,7 @@
 // middleware — the unit under test is never mocked; req/res/next are minimal
 // recording fakes.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import jwt from 'jsonwebtoken';
 import {
   createSessionTokenMiddleware,
@@ -217,5 +217,61 @@ describe('verifySessionToken (v3 export)', () => {
   it('returns null when dat.user_id is missing', () => {
     const token = jwt.sign({ dat: { account_id: 777 } }, CLIENT_SECRET);
     expect(verifySessionToken(token, CLIENT_SECRET)).toBeNull();
+  });
+});
+
+describe('verifySessionToken — verification-failure telemetry (WARN, reason only, no token)', () => {
+  let errSpy;
+  beforeEach(() => {
+    errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** All console.error lines that parse as JSON WARN records. */
+  const warnRecords = () =>
+    errSpy.mock.calls
+      .map((c) => c[0])
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter((e) => e && e.level === 'warn');
+
+  it("logs exactly ONE WARN {tag:'auth', reason:'JsonWebTokenError'} and never the token for a wrong-secret token", () => {
+    const token = jwt.sign(VALID_PAYLOAD, OTHER_SECRET);
+
+    expect(verifySessionToken(token, CLIENT_SECRET)).toBeNull();
+
+    const warns = warnRecords();
+    expect(warns).toHaveLength(1);
+    expect(warns[0].tag).toBe('auth');
+    expect(warns[0].message).toBe('session token verification failed');
+    expect(warns[0].reason).toBe('JsonWebTokenError');
+    // the raw token must never appear anywhere in the logged output
+    for (const call of errSpy.mock.calls) {
+      expect(call.map(String).join(' ')).not.toContain(token);
+    }
+  });
+
+  it("reports reason 'TokenExpiredError' for an expired but correctly-signed token", () => {
+    const token = jwt.sign(VALID_PAYLOAD, CLIENT_SECRET, { expiresIn: -10 });
+    verifySessionToken(token, CLIENT_SECRET);
+    expect(warnRecords()[0].reason).toBe('TokenExpiredError');
+  });
+
+  it('does NOT log a WARN when the token is simply absent (empty string is not a verification failure)', () => {
+    expect(verifySessionToken('', CLIENT_SECRET)).toBeNull();
+    expect(warnRecords()).toHaveLength(0);
+  });
+
+  it('does NOT log a WARN for a validly-signed token that merely lacks the dat identity (verify succeeded)', () => {
+    const token = jwt.sign({ account_id: 777, user_id: 12 }, CLIENT_SECRET);
+    expect(verifySessionToken(token, CLIENT_SECRET)).toBeNull();
+    expect(warnRecords()).toHaveLength(0);
   });
 });

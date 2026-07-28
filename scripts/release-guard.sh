@@ -22,8 +22,15 @@ strictly_higher() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -1)" = "$2
 for slug in "${APP_SLUGS[@]}"; do
   path="$(app_path "$slug")"
   changed=$(git diff --name-only "$MAIN"...HEAD -- "$path" "${SHARED_PATHS[@]}" | wc -l | tr -d ' ')
-  vo="$(git show "$MAIN:$path/package.json" | jq -r .version)"
+  vo="$(git show "$MAIN:$path/package.json" 2>/dev/null | jq -r .version 2>/dev/null || echo "")"
   vn="$(jq -r .version "$path/package.json")"
+
+  if [ -z "$vo" ]; then
+    # App not yet on main (pre-first-release): first go-live is a deliberate promote
+    # (pipeline-model.md §4b), so there is no released version to check consistency against.
+    echo "::notice::$slug: not yet on main — first release, consistency checks skipped"
+    continue
+  fi
 
   if [ "$changed" -gt 0 ] && [ "$vo" = "$vn" ]; then
     echo "::error::$slug changed since main but version was not bumped ($vo)"; fail=1

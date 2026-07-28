@@ -16,6 +16,7 @@ on:
     paths:
       - "apps/axis/tracker/**"
       - "packages/shared/**"
+      - "packages/error-kit/**"
       - "apps/axis/services/**"
 
 jobs:

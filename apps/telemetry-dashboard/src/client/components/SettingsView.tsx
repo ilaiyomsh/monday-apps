@@ -12,6 +12,7 @@ import {
   provisionBoard,
   type SettingsState,
 } from '../lib/settings-api';
+import logger from '../utils/logger';
 
 const COLUMN_LABELS: Record<string, string> = {
   event_time: 'Event Time',
@@ -39,8 +40,8 @@ export function SettingsView() {
       setLoadError(
         'Could not load settings (open this from inside monday, signed in as an allowed account).'
       );
-      // Surface the cause for debugging without breaking the UI.
-      console.warn('settings load failed', err);
+      // Surface the cause for debugging without breaking the UI (ships to Axiom via the sink).
+      logger.warn('SettingsView', 'settings load failed', err);
     }
   }, []);
 

@@ -1,9 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import logger, { encodeDims } from '../logger';
-import { scrubMessage, shouldShip, mapRecordToEvent } from '../axiomErrorSink';
 
-// Locks the Axiom logging v2 primitives ported into this app (usage/health telemetry +
-// privacy scrubbing + domain-kind wire schema). Mirrors app-core/tracker/tpc suites.
+// Locks the app-OWNED Axiom logging primitives: the usage/health telemetry encoder
+// (encodeDims) and the logger.track/health records that carry domainKind + alwaysShip.
+//
+// The wire-shipping primitives (scrubMessage / shouldShip / mapRecordToEvent) moved to
+// the shared @mapps/error-kit/browser package with the migration off the vendored sink;
+// they are covered by error-kit's own suite (packages/error-kit/test/axiomSink.test.ts).
+// The app-side bridge that keeps domainKind landing on the shipped `kind` field lives in
+// src/utils/axiomLoggerAdapter.js and is locked by axiomLoggerAdapter.test.js.
 
 describe('encodeDims', () => {
   it('returns the base unchanged when there are no dims', () => {
@@ -47,59 +52,3 @@ describe('logger.track / logger.health', () => {
   });
 });
 
-describe('scrubMessage (privacy D2)', () => {
-  it('redacts emails, long tokens, and digit runs; caps length; non-strings -> empty', () => {
-    expect(scrubMessage('mail admin@corp.co bounced')).toBe('mail [email] bounced');
-    expect(scrubMessage('token ABCDEF0123456789ghij')).toBe('token [redacted]');
-    expect(scrubMessage('id 12345678 failed')).toBe('id [num] failed');
-    expect(scrubMessage('reach me at a.b@sub.example.com now')).not.toContain('@');
-    expect(scrubMessage('ab '.repeat(100)).length).toBe(200);
-    expect(scrubMessage(null)).toBe('');
-  });
-});
-
-describe('mapRecordToEvent (wire schema)', () => {
-  it('sets ev.kind = domainKind ?? "error" and never the rendering kind', () => {
-    expect(mapRecordToEvent({ level: 'INFO', module: 'usage', message: 'view_open', kind: 'simple', domainKind: 'usage' }).kind).toBe('usage');
-    expect(mapRecordToEvent({ level: 'ERROR', module: 'x', message: 'boom', kind: 'error' }).kind).toBe('error');
-  });
-  it('ships error.message ONLY scrubbed as err_msg', () => {
-    const ev = mapRecordToEvent({ level: 'ERROR', module: 'x', message: 'boom', error: { name: 'Error', message: 'mail a@b.co failed' } });
-    expect(ev.err_msg).toBe('mail [email] failed');
-    expect(ev.err_name).toBe('Error');
-  });
-
-  it('a real Error keeps its name — no fallback', () => {
-    const ev = mapRecordToEvent({ level: 'ERROR', module: 'x', message: 'boom', kind: 'error', error: { name: 'TypeError' } });
-    expect(ev.err_name).toBe('TypeError');
-  });
-
-  it('falls back err_name to the message event-id when no Error name is present', () => {
-    // e.g. the global handler: logger.error("Uncaught error") with no Error object
-    const ev = mapRecordToEvent({ level: 'ERROR', module: 'globalerrorhandler', message: 'Uncaught error', kind: 'error' });
-    expect(ev.err_name).toBe('Uncaught error');
-  });
-
-  it('falls back err_name to the tag when message is empty too', () => {
-    const ev = mapRecordToEvent({ level: 'ERROR', module: 'boot', message: '', kind: 'error' });
-    expect(ev.err_name).toBe('boot');
-  });
-
-  it('never adds err_name to non-error kinds (usage/health)', () => {
-    const usage = mapRecordToEvent({ level: 'INFO', module: 'usage', message: 'view_open', domainKind: 'usage' });
-    const health = mapRecordToEvent({ level: 'INFO', module: 'health', message: 'boot', domainKind: 'health' });
-    expect(usage.err_name).toBeUndefined();
-    expect(health.err_name).toBeUndefined();
-  });
-});
-
-describe('shouldShip (level policy + alwaysShip bypass)', () => {
-  it('duplicate first, then alwaysShip, then WARN/ERROR-only default', () => {
-    expect(shouldShip({ level: 'ERROR' })).toBe(true);
-    expect(shouldShip({ level: 'WARN' })).toBe(true);
-    expect(shouldShip({ level: 'INFO' })).toBe(false);
-    expect(shouldShip({ level: 'INFO', alwaysShip: true })).toBe(true);
-    expect(shouldShip({ level: 'ERROR', duplicate: true })).toBe(false);
-    expect(shouldShip({ level: 'INFO', alwaysShip: true, duplicate: true })).toBe(false);
-  });
-});

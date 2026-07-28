@@ -11,6 +11,7 @@ on:
     paths:
       - "apps/twyst-your-status/**"
       - "packages/shared/**"
+      - "packages/error-kit/**"
 
 jobs:
   deploy-live:

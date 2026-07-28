@@ -11,6 +11,9 @@
   "files": [
     "src"
   ],
+  "dependencies": {
+    "@mapps/error-kit": "workspace:*"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

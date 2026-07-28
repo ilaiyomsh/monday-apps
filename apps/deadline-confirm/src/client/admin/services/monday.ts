@@ -43,8 +43,12 @@ async function seamlessApi<T>(query: string, variables?: Record<string, unknown>
   try {
     res = (await monday.api(query, variables ? { variables } : undefined)) as GraphQLResponse<T>;
   } catch (err) {
-    // network/SDK throw (not a GraphQL error response) — record latency + rethrow
+    // network/SDK throw (not a GraphQL error response) — record latency, log at the
+    // funnel (stable event id; the Error rides record.error → scrubbed err_msg), rethrow.
+    // The logger dedups by Error instance, so a caller that re-logs this same error
+    // won't double-SHIP it.
     reportLatency(false);
+    logger.error('monday', 'seamless_api_failed', err);
     throw err;
   }
   // GraphQL soft errors arrive inside a resolved promise — throw at the funnel.

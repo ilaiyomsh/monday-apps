@@ -24,8 +24,9 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { setupGlobalErrorHandlers } from './utils/globalErrorHandler';
-import { attachAxiomSink } from './utils/axiomErrorSink';
+import { attachAxiomSink } from '@mapps/error-kit/browser';
 import logger from './utils/logger';
+import { makeAxiomLogger } from './utils/axiomLoggerAdapter';
 import { VERSION_LABEL } from './utils/versionLabel';
 import { AppErrorBoundary } from './components/ErrorBoundary/AppErrorBoundary';
 import App from './App';
@@ -40,7 +41,26 @@ setupGlobalErrorHandlers();
 //     one-time Axiom setup: error-guard references/remote-monitoring.md. Once the
 //     monday context loads, also call setAxiomContext({accountId, userId, boardId,
 //     instanceId}) (useMondayContext is the natural place).
-attachAxiomSink();
+// Now the SHARED @mapps/error-kit/browser transport + sink (the vendored copies were
+// retired — a 4th private copy is exactly the drift the package exists to prevent).
+// The logger is wrapped by makeAxiomLogger so record.domainKind still lands on the
+// shipped `kind` field; the activation gate below preserves the vendored one exactly,
+// including VITE_AXIOM_APP (error-kit's default gate checks only dataset + token).
+const AXIOM_APP = import.meta.env.VITE_AXIOM_APP;
+const AXIOM_DATASET = import.meta.env.VITE_AXIOM_DATASET;
+const AXIOM_TOKEN = import.meta.env.VITE_AXIOM_TOKEN;
+attachAxiomSink(makeAxiomLogger(logger), {
+  app: AXIOM_APP,
+  dataset: AXIOM_DATASET,
+  token: AXIOM_TOKEN,
+  appVersion: VERSION_LABEL,
+  environment: import.meta.env.VITE_AXIOM_ENV ?? 'production',
+  active:
+    import.meta.env.PROD === true &&
+    Boolean(AXIOM_DATASET) &&
+    Boolean(AXIOM_TOKEN) &&
+    Boolean(AXIOM_APP),
+});
 logger.health('client_started', { version: VERSION_LABEL });
 
 // 2. React 18 createRoot takes no error options ג€” the boundary + global handlers

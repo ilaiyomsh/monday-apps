@@ -1,11 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import logger, { encodeDims } from '../Logger';
-import { scrubMessage, shouldShip, mapRecordToEvent } from '../axiomErrorSink';
-import { createAxiomBrowserTransport } from '../axiomBrowserTransport';
+import { scrubMessage, shouldShip, mapRecordToEvent, createAxiomBrowserTransport } from '@mapps/error-kit/browser';
+import { adaptRecord } from '../errorReporting';
 
-// Locks the Axiom logging v2 primitives ported into planner (usage/health telemetry + privacy
-// scrubbing + domain-kind wire schema + transport allowlist). Mirrors the app-core/tracker/
-// template/tpc suites — the wire schema is load-bearing (identical across every app).
+// Locks the Axiom logging v2 primitives now sourced from the SHARED @mapps/error-kit package
+// (usage/health telemetry emitted by the app-local Logger + privacy scrubbing + domain-kind
+// wire schema + transport allowlist). planner's Logger keeps the domain on `domainKind`; the
+// domainKind→kind promotion is the app-local `adaptRecord` bridge (src/utils/errorReporting.ts),
+// which every record passes through before error-kit's mapRecordToEvent sees it.
 
 describe('encodeDims', () => {
   it('returns the base unchanged when there are no dims', () => {
@@ -69,11 +71,47 @@ describe('logger.track / logger.health', () => {
     expect(rec).toBeTruthy();
     expect(rec!.error).toBe(boom); // the Error instance still travels for err_name/err_code/stack
     expect(rec!.message).toBe('leak [email] token [redacted] id [num]');
-    // end-to-end: the scrubbed message survives into the wire envelope with no raw PII
-    const ev = mapRecordToEvent(rec as unknown as Parameters<typeof mapRecordToEvent>[0]);
+    // end-to-end through the real pipeline (adaptRecord → error-kit mapRecordToEvent): the
+    // scrubbed message survives into the wire envelope with no raw PII.
+    const ev = mapRecordToEvent(adaptRecord(rec as never));
     expect(ev.message).toBe('leak [email] token [redacted] id [num]');
     expect(String(ev.message)).not.toContain('@');
     expect(String(ev.message)).not.toContain('12345678');
+  });
+
+  it('log-once: the SAME Error instance ships to sinks exactly once (dedup)', () => {
+    // A create/edit failure is logged by the hook AND re-logged by the modal's catch.
+    // Both pass the identical Error instance; Axiom must get ONE record, not two.
+    const boom = new Error('save failed');
+    const recs = capture(() => {
+      logger.error('[useAllocations] Failed to add allocation:', boom);
+      logger.error('Failed to save allocation:', boom); // modal's re-log, same instance
+    });
+    const errShipped = recs.filter((r) => r.level === 'ERROR' && r.error === boom);
+    expect(errShipped).toHaveLength(1);
+    expect(errShipped[0].duplicate).toBeUndefined();
+  });
+
+  it('log-once: distinct Error instances each ship (no over-dedup)', () => {
+    const recs = capture(() => {
+      logger.error('[a] first', new Error('one'));
+      logger.error('[b] second', new Error('two'));
+    });
+    expect(recs.filter((r) => r.level === 'ERROR')).toHaveLength(2);
+  });
+
+  it('log-once: a repeat pass carries the first pass correlationId', () => {
+    const boom = new Error('correlated');
+    const recs = capture(() => {
+      logger.error('[x] first', boom);
+      logger.error('[x] again', boom);
+    });
+    // The second pass is buffered (not shipped) but shares the id stamped on the first.
+    const buffered = logger.getBuffer().filter((r) => r.error === boom);
+    const ids = new Set(buffered.map((r) => r.correlationId));
+    expect(ids.size).toBe(1);
+    expect([...ids][0]).toBeTruthy();
+    expect(recs.filter((r) => r.error === boom)).toHaveLength(1);
   });
 });
 
@@ -88,20 +126,14 @@ describe('scrubMessage (privacy D2)', () => {
   });
 });
 
-describe('mapRecordToEvent (wire schema)', () => {
-  it('sets ev.kind = domainKind ?? "error" and never the rendering kind', () => {
-    expect(
-      mapRecordToEvent({
-        level: 'INFO',
-        module: 'usage',
-        message: 'view_open',
-        kind: 'simple',
-        domainKind: 'usage',
-      }).kind
-    ).toBe('usage');
-    expect(mapRecordToEvent({ level: 'ERROR', module: 'x', message: 'boom', kind: 'error' }).kind).toBe(
-      'error'
-    );
+describe('adaptRecord + mapRecordToEvent (domain discriminator wiring)', () => {
+  it('adaptRecord promotes domainKind onto kind so ev.kind is the domain value, not the rendering kind', () => {
+    // planner Logger record: rendering kind 'simple', domain on domainKind.
+    const usageRec = { level: 'INFO', module: 'usage', message: 'view_open', kind: 'simple', domainKind: 'usage' } as never;
+    expect(mapRecordToEvent(adaptRecord(usageRec)).kind).toBe('usage');
+    // An error record with no domainKind defaults to 'error' (not the rendering kind).
+    const errRec = { level: 'ERROR', module: 'x', message: 'boom', kind: 'error' } as never;
+    expect(mapRecordToEvent(adaptRecord(errRec)).kind).toBe('error');
   });
   it('ships error.message ONLY scrubbed as err_msg', () => {
     const ev = mapRecordToEvent({

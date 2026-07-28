@@ -2,6 +2,7 @@ import i18next from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import he from './locales/he/translation.json';
 import en from './locales/en/translation.json';
+import logger from '../utils/logger.js';
 
 /**
  * i18n infrastructure for the discussions app.
@@ -10,8 +11,8 @@ import en from './locales/en/translation.json';
  * - resolveLanguage chains: settings.languageOverride →
  *   monday.context.user.currentLanguage → default 'he'.
  *
- * NOTE: init failures are logged to console here; once the observability
- * stack lands (Phase 3) this is upgraded to route through `logger`.
+ * Init failures route through `logger` (ERROR) so they ship to the Axiom
+ * error sink like every other failure — never a bare console.error.
  */
 
 export const SUPPORTED_LANGUAGES = ['he', 'en'];
@@ -29,8 +30,7 @@ i18next
     returnEmptyString: false,
   })
   .catch((error) => {
-    // eslint-disable-next-line no-console
-    console.error('[i18n] i18next initialization failed', error);
+    logger.error('i18n', 'i18next initialization failed', error);
   });
 
 /**

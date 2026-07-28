@@ -54,7 +54,8 @@ jobs:
         env:
           VITE_AXIOM_DATASET: app-errors
           VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
-          VITE_AXIOM_APP: deadline-confirm
+          VITE_AXIOM_APP: deadline-confirm-admin
+          VITE_IS_RELEASE: "true"
         run: pnpm --filter "./apps/deadline-confirm" build
 
       # The admin CLIENT bundle ('hidden' sourcemaps) is served to browsers, so its

@@ -145,9 +145,20 @@ Templates (drop-in infra, adapt names/i18n per app):
 - `references/known-issues.md` — the skill's self-correction log: sanctioned
   rule exceptions, documented holes, and the defect log (see Self-correction).
 
-Scripts:
-- `scripts/check.sh` — error-rules-only ESLint on given files (the hook and ship gate call this).
-- `scripts/audit.sh` — deterministic whole-tree gap count by severity (mode C default).
+Scripts (ESLint 9 flat config — ported 2026-07-21, see known-issues.md):
+- `scripts/lib-eslint-flat.sh` — shared engine both scripts source: file filter,
+  ESLint/plugin resolution (repo root preferred), generated flat config
+  (`eslint.config.mjs`), and the ESLint invocation. One engine so the two gates
+  cannot drift apart again.
+- `scripts/check.sh` — error-rules-only ESLint on given files (the hook and ship
+  gate call this). Syntax-level rules only (fast, ~0.7s/file); no type-aware pass.
+- `scripts/audit.sh` — deterministic whole-tree gap count by severity (mode C
+  default). Adds type-aware `no-floating-promises` in full-tree mode when a
+  tsconfig + the TS plugin are present (best-effort, fails open to syntax-only).
+- **Plugin resolution:** the kit's plugins (`eslint-plugin-promise`,
+  `@typescript-eslint/parser`, `@typescript-eslint/eslint-plugin`) live in the
+  **repo root** `devDependencies`, so the gate runs the full rule set regardless
+  of what each app installs.
 
 ## Definition of done (mode A)
 

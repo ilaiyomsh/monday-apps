@@ -537,7 +537,7 @@ const logger = {
   /**
    * Error log. ERROR is forwarded to sinks even when the console is muted (production).
    */
-  error: (module, message, error = null) => {
+  error: (module, message, error = null, context = null) => {
     emit({
       kind: 'error',
       level: 'ERROR',
@@ -546,6 +546,10 @@ const logger = {
       error: error instanceof Error ? error : undefined,
       // If error is not an Error instance (object/string), keep it on data for rendering/sinks.
       data: error instanceof Error ? undefined : error,
+      // Structured diagnostic context (e.g. { componentStack }) — the Axiom sink reads
+      // context.componentStack and maps it to component_stack. A 3-arg call leaves it
+      // undefined, so every existing caller is unaffected.
+      context: context || undefined,
       consoleEnabled: currentLevel <= LOG_LEVELS.ERROR
     });
   },

@@ -26,6 +26,7 @@ on:
     paths:
       - "apps/team-people-column/**"
       - "packages/shared/**"
+      - "packages/error-kit/**"
 
 jobs:
   deploy-live:

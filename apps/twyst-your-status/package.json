@@ -24,6 +24,7 @@
     "type-check": "echo no-typescript"
   },
   "dependencies": {
+    "@mapps/error-kit": "workspace:*",
     "@vibe/core": "3.88.3",
     "@vibe/icons": "1.16.0",
     "monday-sdk-js": "0.5.9",
@@ -117,8 +118,6 @@
       {
         "files": [
           "src/hooks/useUiErrorSink.js",
-          "src/utils/axiomErrorSink.js",
-          "src/utils/axiomBrowserTransport.js",
           "vite.config.js"
         ],
         "rules": {

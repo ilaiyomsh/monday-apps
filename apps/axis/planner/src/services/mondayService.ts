@@ -47,7 +47,15 @@ export interface ReportedHoursAggregateConfig {
 function parseColumnSettings(settings: any): any {
   if (!settings) return {};
   if (typeof settings === 'string') {
-    try { return JSON.parse(settings); } catch { return {}; }
+    try {
+      return JSON.parse(settings);
+    } catch (err) {
+      // Was a silent swallow that masked malformed column settings invisibly. WARN so the
+      // failure is observable; the Axiom transport's own dedup (5/60s per identical message)
+      // prevents a flood when many columns share the same bad shape.
+      logger.warn('[mondayService] parseColumnSettings: malformed column settings JSON, defaulting to {}', err);
+      return {};
+    }
   }
   return settings;
 }
@@ -364,7 +372,12 @@ export const mondayService = {
         const projCol = allocCols.find((c: any) => c.id === settings.projectColumnId);
         const s = parseColumnSettings(projCol?.settings);
         projectsBoardId = (s.boardIds && s.boardIds[0]) ? s.boardIds[0].toString() : undefined;
-      } catch { /* fall through */ }
+      } catch (err) {
+        // Previously a fully silent swallow: the projects-board derivation would fail with no
+        // trace and the reported-hours aggregate could misroute invisibly. WARN (recoverable —
+        // we fall through and return null when the board stays unresolvable).
+        logger.warn('[mondayService] resolveLogsProjectColumnId: projects-board derivation failed:', err);
+      }
     }
     if (!projectsBoardId) return null;
     try {

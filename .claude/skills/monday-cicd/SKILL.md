@@ -147,6 +147,15 @@ resolvable APP_ID (package.json deploy script or `.env`) and a `build` script.
      manually "Set as active for me" once in the Developer Center to preview
      it — this cannot be automated (no CLI/API exists for personal active
      version).
+5. **Error-wiring (do not skip) — follow `docs/ERROR-AXIOM-STANDARD.md`.**
+   Every onboarded app joins the error-kit standard: wire the entry
+   (`setupGlobalErrorHandlers` + `attachAxiomSink` before render + root
+   `ErrorBoundary` for clients; process guards + terminal error middleware +
+   opts-injected sink for servers), add a `SURFACES` entry in
+   `scripts/error-wiring-audit.mjs`, inject `VITE_AXIOM_*` into the deploy
+   workflow Build step (clients), and add a drift entry to
+   `packages/error-kit/test/drift.test.ts` if the app vendors a copy
+   (server / embedded SPA). `node scripts/error-wiring-audit.mjs` must exit 0.
 
 ---
 

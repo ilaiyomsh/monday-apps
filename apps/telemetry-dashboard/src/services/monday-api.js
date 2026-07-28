@@ -114,7 +114,10 @@ export function createMondayApi({ getToken, url = MONDAY_API_URL, fetchImpl, log
         body: JSON.stringify({ query, variables }),
       });
     } catch (err) {
-      throw new MondayApiError(`monday API network failure: ${err.message}`, {});
+      // err may be a non-Error rejection (a string, or null/undefined from a hostile
+      // fetch impl); reading `.message` off null/undefined would throw a TypeError that
+      // escapes this wrap. String(err?.message ?? err) is total.
+      throw new MondayApiError(`monday API network failure: ${String(err?.message ?? err)}`, {});
     }
 
     if (!res.ok) {

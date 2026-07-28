@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { monday } from '../utils/mondayApi/monday-client.js';
 import logger from '../utils/logger.js';
+import { setAxiomContext } from '@mapps/error-kit/browser';
 
 // Diagnostic helper: log a raw SDK payload as BOTH an explorable object and a
 // copy-paste-friendly JSON string. Permanent (see enableDebugLogs()). Used to
@@ -8,7 +9,7 @@ import logger from '../utils/logger.js';
 const dumpRaw = (label, data) => {
   logger.info('MondayContext', `🔎 ${label} (object)`, data);
   let json;
-  try { json = JSON.stringify(data, null, 2); } catch { json = '[unserializable]'; }
+  try { json = JSON.stringify(data, null, 2); } catch (e) { json = '[unserializable]'; logger.warn('MondayContext', 'dumpRaw JSON.stringify failed', e); }
   logger.info('MondayContext', `🔎 ${label} (JSON — copy this)`, json);
 };
 
@@ -49,6 +50,16 @@ export function MondayProvider({ children }) {
         if (typeof window !== 'undefined') window.__mondayContext = res.data;
         dumpRaw('RAW SDK CONTEXT', res.data);
         setContext(res.data);
+        // Stamp monday identity onto every future Axiom envelope. Merge semantics —
+        // undefined never clobbers — and a no-op when the sink is inert (dev/tunnel/tests).
+        setAxiomContext({
+          accountId: res.data.account?.id ?? res.data.accountId,
+          userId: res.data.user?.id,
+          boardId:
+            res.data.boardId ??
+            (Array.isArray(res.data.boardIds) ? res.data.boardIds[0] : undefined),
+          instanceId: res.data.instanceId,
+        });
       }
       if (res.data.user) {
         const next = { id: res.data.user.id || null, name: res.data.user.name || '' };
@@ -60,7 +71,9 @@ export function MondayProvider({ children }) {
       }
     };
 
-    monday.get('context').then(handleContext).catch(() => {});
+    monday.get('context')
+      .then(handleContext)
+      .catch((err) => logger.warn('MondayContext', 'initial context fetch failed', err));
     const unsubscribe = monday.listen('context', handleContext);
 
     const watchdog = setTimeout(() => {

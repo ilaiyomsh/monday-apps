@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import mondaySdk from 'monday-sdk-js';
 import { mondayService } from '../services/mondayService';
 import { logger } from '../utils/Logger';
+import { setAxiomContext, mondayIdsForAxiom } from '../utils/errorReporting';
 import { withTimeout } from '../utils/sdkUtils';
 
 const monday = mondaySdk();
@@ -129,6 +130,10 @@ export const useMondayContextInternal = () => {
 
       setContext(ctx);
       setPermissions(perms);
+      // Enrich every future Axiom envelope with the monday iframe identity (ids only —
+      // acc/usr/obj/board). Merge semantics; inert when the sink is gated off (dev/tunnel/tests).
+      // Id-mapping logic lives in the unit-tested mondayIdsForAxiom (errorReporting.ts).
+      setAxiomContext(mondayIdsForAxiom(ctx as never));
       logger.info(`[LOAD_FLOW] [2/5] Context phase DONE in ${Math.round(performance.now() - t0)}ms`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to fetch context';

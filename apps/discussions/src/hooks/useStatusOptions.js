@@ -79,9 +79,9 @@ function parseTypedSettings(settings) {
 // Legacy fallback for instances that don't return the typed `settings` object.
 // In settings_str the labels MAP key IS the stable id; labels_positions_v2 maps
 // that id -> display position. (is_done isn't exposed here, so doneId is unknown.)
-function parseSettingsStr(settingsStr) {
+export function parseSettingsStr(settingsStr) {
   let s;
-  try { s = JSON.parse(settingsStr || '{}'); } catch { return []; }
+  try { s = JSON.parse(settingsStr || '{}'); } catch (err) { logger.warn('useStatusOptions', 'parseSettingsStr: malformed settings_str', err); return []; }
   const labels = s.labels || {};
   const colors = s.labels_colors || {};
   const positions = s.labels_positions_v2 || {};
@@ -140,11 +140,21 @@ export function useStatusOptions(boardKey = 'tasks', alias = 'statusID') {
     if (cache.has(key)) { setState({ ...cache.get(key), loading: false }); return; }
     setState((s) => ({ ...s, loading: true }));
     let p = inflight.get(key);
-    if (!p) { p = load(boardId, colId).catch(() => ({ ...EMPTY })); inflight.set(key, p); }
+    if (!p) {
+      p = load(boardId, colId).catch((err) => {
+        // load failure is non-fatal — fall back to empty options — but must be visible.
+        logger.warn('useStatusOptions', 'status options load failed', err);
+        return { ...EMPTY };
+      });
+      inflight.set(key, p);
+    }
     p.then((res) => {
       cache.set(key, res);
       inflight.delete(key);
       if (!cancelled) setState({ ...res, loading: false });
+    }).catch((err) => {
+      // p already resolves EMPTY on load failure; this guards the then-callback.
+      logger.error('useStatusOptions', 'options state update failed', err);
     });
     return () => { cancelled = true; };
   }, [key, boardId, colId]);
@@ -188,7 +198,7 @@ async function loadRawLabels(boardId, colId) {
     strColors = s.labels_colors || {};
     strLabels = s.labels || {};
     strPositions = s.labels_positions_v2 || {};
-  } catch { /* ignore malformed settings_str */ }
+  } catch (err) { logger.warn('useStatusOptions', 'malformed settings_str; using defaults', err); }
 
   const typed = Array.isArray(col?.settings?.labels) ? col.settings.labels : null;
   let labels;

@@ -279,6 +279,13 @@ path-filtered workflows (`apps/telemetry-dashboard/**`):
    mapps code:env -i <APP_ID> -k MONDAY_CLIENT_SECRET -v <client_secret>
    mapps code:env -i <APP_ID> -k AXIOM_QUERY_TOKEN     -v <axiom_read_token>
    mapps code:env -i <APP_ID> -k AXIOM_DATASET         -v app-errors
+   # error observability — activates the server Axiom sink (helpers/axiomServerSink.js).
+   # WITHOUT these three the sink is structurally inert: the app's own errors are
+   # console-only and never reach the shared app-errors dataset. AXIOM_TOKEN is an
+   # INGEST/write token (distinct from AXIOM_QUERY_TOKEN, which is read-only);
+   # AXIOM_DATASET (app-errors, set above) is shared by the reader and the sink.
+   mapps code:env -i <APP_ID> -k AXIOM_TOKEN          -v <axiom_ingest_token>
+   mapps code:env -i <APP_ID> -k AXIOM_APP_NAME       -v telemetry-dashboard
    # optional:
    mapps code:env -i <APP_ID> -k ALLOWED_ACCOUNT_IDS   -v <acc1,acc2>
    mapps code:env -i <APP_ID> -k AXIOM_ORG_ID          -v <org_id>

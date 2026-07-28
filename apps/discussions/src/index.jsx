@@ -16,19 +16,42 @@ import { SettingsModal } from './components/SettingsModal';
 import { SetupWizard } from './components/SetupWizard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { setupGlobalErrorHandlers } from './utils/globalErrorHandler';
-import { attachAxiomSink } from './utils/axiomErrorSink';
+import { attachAxiomSink } from '@mapps/error-kit/browser';
+import logger from './utils/logger.js';
+import { makeAxiomLogger } from './utils/axiomLoggerAdapter.js';
 import { getVersionLabel } from './utils/versionLabel.js';
 
 // Layer 5: window.onerror / unhandledrejection -> logger, BEFORE React mounts.
 setupGlobalErrorHandlers();
 
-// Axiom v2 telemetry sink — register on the same logger.addSink fan-out that
-// useUiErrorSink uses, BEFORE createRoot so the ring-buffer replay ships any
-// import-time ERROR/WARN records. Idempotent (globalThis guard) so StrictMode's
-// double-invoke never double-registers; inert unless PROD + VITE_AXIOM_* baked in.
-// log-once (correlationId) already withholds duplicates from every sink, so an
-// error shown by the UI sink is never double-shipped here.
-attachAxiomSink();
+// Axiom telemetry sink — now the SHARED @mapps/error-kit/browser transport + sink
+// (the vendored axiomErrorSink/axiomBrowserTransport copies were retired). Registered on
+// the same logger.addSink fan-out useUiErrorSink uses, BEFORE createRoot so the ring-buffer
+// replay ships any import-time ERROR/WARN records. Idempotent (globalThis guard inside the
+// sink) so StrictMode's double-invoke never double-registers; inert unless PROD + VITE_AXIOM_*
+// baked in. log-once (correlationId) already withholds duplicates from every sink. The logger
+// is wrapped by makeAxiomLogger so record.domainKind still lands on the shipped `kind` field
+// (error-kit reads the discriminator off record.kind, this app carries it as domainKind).
+const AXIOM_APP = import.meta.env.VITE_AXIOM_APP;
+const AXIOM_DATASET = import.meta.env.VITE_AXIOM_DATASET;
+const AXIOM_TOKEN = import.meta.env.VITE_AXIOM_TOKEN;
+attachAxiomSink(makeAxiomLogger(logger), {
+  app: AXIOM_APP,
+  dataset: AXIOM_DATASET,
+  token: AXIOM_TOKEN,
+  // Version layer: semver + build SHA (e.g. "2.2.0+a1b2c3f") for exact-commit traceability.
+  appVersion:
+    (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0') +
+    (typeof __BUILD_SHA__ !== 'undefined' ? `+${__BUILD_SHA__.slice(0, 7)}` : ''),
+  environment: import.meta.env.VITE_AXIOM_ENV ?? 'production',
+  // Preserve the vendored activation gate EXACTLY, including VITE_AXIOM_APP (error-kit's
+  // default gate checks only dataset+token, so the app-slug requirement is passed explicitly).
+  active:
+    import.meta.env.PROD === true &&
+    Boolean(AXIOM_DATASET) &&
+    Boolean(AXIOM_TOKEN) &&
+    Boolean(AXIOM_APP),
+});
 
 console.info('[discussions] ' + getVersionLabel());
 

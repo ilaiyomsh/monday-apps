@@ -129,6 +129,8 @@ packages/shared                     EMPTY STUB — do not add code there
 | axis-sync-calender | `apps/axis/sync-calender` | 11666315 | server, app root |
 | team-people-column | `apps/team-people-column` | 11689948 | client, `dist/` |
 | deadline-confirm | `apps/deadline-confirm` | 11704868 | server, app root |
+| telemetry-dashboard | `apps/telemetry-dashboard` | pending — secret `APP_TELEMETRY_DASHBOARD_ID` not yet set (slug `telemetry-dashboard`) | server, app root |
+| twyst-your-status | `apps/twyst-your-status` | pending — secret `APP_TWYST_YOUR_STATUS_ID` (slug `twyst-your-status`) | client, `dist/` |
 
 Real shared runtime code is `@axis/app-core` (`apps/axis/services/app-core`).
 `packages/shared` is an empty stub no app imports — touching it redeploys all six

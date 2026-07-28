@@ -11,7 +11,9 @@ import {
 import { Warning, Update, Connect, LogOut, Time, CloseSmall, DropdownChevronDown, Show, Download } from '@vibe/icons';
 import { ConfirmDialog } from '../feedback/ConfirmDialog';
 import { ViewConfigDialog } from './ViewConfigDialog';
+import { useToast } from '../feedback/ToastProvider';
 import { buildConditionsFileName, buildExportJson, downloadJson } from '../../lib/conditionalsExport';
+import logger from '../../lib/logger';
 import type { MondayUser, SyncConfig } from '../../types';
 
 // ---------------------------------------------------------------------------
@@ -721,6 +723,7 @@ function OwnerActionsCell({
   // because the parent fires those immediately and the blast radius on
   // another user's row warrants the extra step.
   const [confirm, setConfirm] = useState<null | 'backfill' | 'disconnect'>(null);
+  const toast = useToast();
 
   const conditionalsCount = row.conditionals?.length ?? 0;
   const hasCalendar = row.hasGoogleConnection || row.hasMicrosoftConnection;
@@ -738,8 +741,13 @@ function OwnerActionsCell({
       icon: Download,
       disabled: conditionalsCount === 0,
       onClick: () => {
-        const json = buildExportJson(row.conditionals ?? [], policyBoardId);
-        downloadJson(json, buildConditionsFileName(userName));
+        try {
+          const json = buildExportJson(row.conditionals ?? [], policyBoardId);
+          downloadJson(json, buildConditionsFileName(userName));
+        } catch (err) {
+          logger.error('users', 'export_conditions_failed', err);
+          toast.error(`Export failed: ${(err as Error).message}`);
+        }
       },
     },
     { label: '', divider: true },

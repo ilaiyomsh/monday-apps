@@ -3,6 +3,7 @@
 // V6: server-side HTML copy (/api/email-template) was deleted — templates are
 // retained in config for backward compatibility but no longer ship actionable email.
 
+import { useState } from 'react';
 import { Button, Dropdown, TextField } from '@vibe/core';
 import type {
   ActionButton,
@@ -15,6 +16,7 @@ import type {
 import { EMAIL_FONTS } from '../types';
 import { newButtonsBlock, newTemplate, newTextBlock } from '../draft';
 import { ButtonPreview } from './ButtonPreview';
+import logger from '../utils/logger';
 
 interface Option {
   value: string;
@@ -47,6 +49,10 @@ function moveBlock(blocks: TemplateBlock[], index: number, delta: -1 | 1): Templ
 }
 
 export function TemplatesSection({ templates, buttons, onChange }: Props) {
+  // Surfaces the one fallible action left in this editor (see the add-template
+  // guard below) — V6 removed the server HTML copy path and its error state.
+  const [addError, setAddError] = useState<string | null>(null);
+
   const patchTemplate = (id: string, patch: Partial<EmailTemplate>) => {
     onChange(templates.map((t) => (t.id === id ? { ...t, ...patch } : t)));
   };
@@ -231,10 +237,23 @@ export function TemplatesSection({ templates, buttons, onChange }: Props) {
         </div>
       ))}
       <div className="dc-row">
-        <Button size="small" onClick={() => onChange([...templates, newTemplate()])}>
+        <Button
+          size="small"
+          onClick={() => {
+            // newTemplate() calls crypto.getRandomValues — guard the event handler.
+            setAddError(null);
+            try {
+              onChange([...templates, newTemplate()]);
+            } catch (err) {
+              logger.error('admin', 'add_template_failed', err);
+              setAddError('הוספת תבנית נכשלה. נסו שוב.');
+            }
+          }}
+        >
           + הוסף תבנית
         </Button>
       </div>
+      {addError && <div className="dc-error">{addError}</div>}
     </section>
   );
 }

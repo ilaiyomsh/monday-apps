@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # error-guard/audit.sh — deterministic gap report for a whole app.
 #
-# Runs the same error-guard rule set (via check.sh's engine, re-implemented here
-# for a tree) over the app's src/ tree, then adds cheap grep/awk heuristics that
-# static rules cannot cover. Prints a severity-bucketed summary:
+# Runs the same error-guard rule set (via the shared flat-config engine in
+# lib-eslint-flat.sh) over the app's src/ tree, then adds cheap grep/awk
+# heuristics that static rules cannot cover. Prints a severity-bucketed summary:
 #   HIGH   — ESLint rule violations (the enforced kit; also the CI/ship gate).
 #   REVIEW — heuristics a human confirms: bare JSON.parse outside try, console.*
 #            in non-exempt files, and a catch-block census.
+#
+# Full-tree mode adds ONE type-aware rule the per-edit hook cannot afford:
+# @typescript-eslint/no-floating-promises (ignoreVoid:false), enabled only when
+# the app has a tsconfig and the TS plugin resolves. It is best-effort and fails
+# open: a type-service error just drops the type-aware rule, never the audit.
 #
 # Arg: an app directory.
 # FAIL OPEN on missing ESLint (rule section is skipped with a note).
@@ -21,6 +26,9 @@ TEMPLATE="$SKILL_DIR/templates/eslint-error-rules.json"
 # this script's own location (scripts -> error-guard -> skills -> .claude -> <project root>).
 APPS_ROOT="${CLAUDE_PROJECT_DIR:-$(cd "$SCRIPT_DIR/../../../.." && pwd)}"
 
+# shellcheck source=./lib-eslint-flat.sh
+. "$SCRIPT_DIR/lib-eslint-flat.sh"
+
 note() { printf 'error-guard/audit: %s\n' "$1" >&2; }
 
 APPDIR="${1:-}"
@@ -33,37 +41,10 @@ APPDIR="$(cd "$APPDIR" && pwd)"
 SCAN_ROOT="$APPDIR/src"
 if [ ! -d "$SCAN_ROOT" ]; then SCAN_ROOT="$APPDIR"; fi
 
-# --- shared file filter (matches check.sh) ----------------------------------
-should_skip() {
-  local f="$1" base
-  base="$(basename "$f")"
-  case "$f" in
-    *.js|*.jsx|*.ts|*.tsx) : ;;
-    *) return 0 ;;
-  esac
-  case "$f" in
-    */node_modules/*|*/dist/*|*/build/*) return 0 ;;
-    */__tests__/*|*/test-utils/*) return 0 ;;
-    */dev-harness/*) return 0 ;;
-    *.test.js|*.test.jsx|*.test.ts|*.test.tsx) return 0 ;;
-    *.spec.js|*.spec.jsx|*.spec.ts|*.spec.tsx) return 0 ;;
-  esac
-  case "$f" in
-    */services/logger/*) return 0 ;;   # server logger dir (basename is index.js)
-  esac
-  case "$base" in
-    setupTests.*|logger.js|logger.ts) return 0 ;;
-    *Sink*|*-sink.*) return 0 ;;
-    # sanctioned infra files: console breadcrumbs + intentional exit-path catches
-    axiomBrowserTransport.js|processGuards.js|process-guards.js) return 0 ;;
-  esac
-  return 1
-}
-
 # --- collect target files ---------------------------------------------------
 declare -a FILES=()
 while IFS= read -r f; do
-  should_skip "$f" && continue
+  eg_should_skip "$f" && continue
   FILES+=("$f")
 done < <(find "$SCAN_ROOT" -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.ts' -o -name '*.tsx' \) \
            -not -path '*/node_modules/*' -not -path '*/dist/*' -not -path '*/build/*' 2>/dev/null | sort)
@@ -76,56 +57,31 @@ echo
 RULE_VIOLATIONS=0
 
 # --- HIGH: ESLint rule set --------------------------------------------------
-find_eslint_dir() {
-  local d="$1"
-  while [ -n "$d" ] && [ "$d" != "/" ]; do
-    if [ -x "$d/node_modules/.bin/eslint" ]; then printf '%s' "$d"; return 0; fi
-    d="$(dirname "$d")"
-  done
-  return 1
-}
-sibling_eslint_dir() {
-  # Prefer an install where eslint-plugin-promise also resolves, so borrow mode
-  # keeps the full rule kit (promise/catch-or-return) whenever any app has it.
-  local d
-  for d in "$APPS_ROOT"/*/ "$APPS_ROOT"/*/*/; do
-    if [ -x "${d}node_modules/.bin/eslint" ] && [ -d "${d}node_modules/eslint-plugin-promise" ]; then
-      printf '%s' "${d%/}"; return 0
-    fi
-  done
-  for d in "$APPS_ROOT"/*/ "$APPS_ROOT"/*/*/; do
-    [ -x "${d}node_modules/.bin/eslint" ] && { printf '%s' "${d%/}"; return 0; }
-  done
-  return 1
-}
-resolve_module() {
-  local base="$1" mod="$2"
-  (cd "$base" && node -e 'try{process.stdout.write(require.resolve(process.argv[1]))}catch(e){}' "$mod") 2>/dev/null || true
-}
-
 echo "--- HIGH: rule violations (enforced kit) ---"
 if [ "${#FILES[@]}" -eq 0 ] || [ ! -f "$TEMPLATE" ]; then
   note "nothing to lint (no files or missing template)"
 else
-  RESOLVE_DIR=""
-  if ! RESOLVE_DIR="$(find_eslint_dir "$APPDIR")"; then
-    if RESOLVE_DIR="$(sibling_eslint_dir)"; then
-      note "no ESLint in app; borrowing $RESOLVE_DIR/node_modules"
-    else
-      RESOLVE_DIR=""
-    fi
-  fi
-
-  if [ -z "$RESOLVE_DIR" ]; then
+  if ! RESOLVE_DIR="$(eg_resolve_eslint_root "$APPDIR")"; then
     note "no ESLint available — rule section skipped (fail open)"
     echo "(skipped: no ESLint available)"
-  else
+    RESOLVE_DIR=""
+  fi
+
+  if [ -n "$RESOLVE_DIR" ]; then
+    [ "$RESOLVE_DIR" = "$APPS_ROOT" ] || note "repo-root ESLint kit not found; borrowing $RESOLVE_DIR/node_modules (rule kit may be reduced)"
     ESLINT_BIN="$RESOLVE_DIR/node_modules/.bin/eslint"
-    PARSER_PATH="$(resolve_module "$RESOLVE_DIR" '@typescript-eslint/parser')"
-    HAS_PROMISE=false
-    [ -n "$(resolve_module "$RESOLVE_DIR" 'eslint-plugin-promise')" ] && HAS_PROMISE=true
-    if [ "$HAS_PROMISE" = false ]; then
-      note "promise/catch-or-return skipped — eslint-plugin-promise not resolvable from $RESOLVE_DIR; floating promises are NOT counted in HIGH (install: pnpm add -D eslint-plugin-promise)"
+    PARSER_PATH="$(eg_resolve_module '@typescript-eslint/parser' "$RESOLVE_DIR")"
+    PROMISE_PATH="$(eg_resolve_module 'eslint-plugin-promise' "$RESOLVE_DIR")"
+    TSPLUGIN_PATH="$(eg_resolve_module '@typescript-eslint/eslint-plugin' "$RESOLVE_DIR")"
+    [ -z "$PROMISE_PATH" ] && note "promise/catch-or-return skipped — eslint-plugin-promise not resolvable; floating .then() chains are NOT counted in HIGH"
+
+    # Type-aware pass: only with a tsconfig, TS files, and the TS plugin present.
+    TYPE_AWARE=0
+    if [ -n "$PARSER_PATH" ] && [ -n "$TSPLUGIN_PATH" ] && [ -f "$APPDIR/tsconfig.json" ]; then
+      if ls "$SCAN_ROOT"/**/*.ts "$SCAN_ROOT"/*.ts "$SCAN_ROOT"/**/*.tsx "$SCAN_ROOT"/*.tsx >/dev/null 2>&1 \
+         || find "$SCAN_ROOT" -name '*.ts' -o -name '*.tsx' 2>/dev/null | grep -q .; then
+        TYPE_AWARE=1
+      fi
     fi
 
     declare -a LINT_FILES=()
@@ -143,47 +99,26 @@ else
     else
       TMPDIR_EG="$(mktemp -d)"
       trap 'rm -rf "$TMPDIR_EG"' EXIT
-      CONFIG="$TMPDIR_EG/eslintrc.json"
-      # Union catch-must-log selector (client + server allowances) — same rationale
-      # as check.sh: one config covers both worlds; per-app kits stay precise.
-      UNION_SELECTOR="CatchClause > BlockStatement:not(:has(CallExpression[callee.object.name='logger'])):not(:has(ThrowStatement)):not(:has(CallExpression[callee.name='showErrorWithDetails'])):not(:has(CallExpression[callee.name='next']))"
-      node - "$TEMPLATE" "$CONFIG" "$PARSER_PATH" "$UNION_SELECTOR" "$HAS_PROMISE" <<'NODE'
-const fs = require('fs');
-const [templatePath, configPath, parserPath, unionSelector, hasPromiseRaw] = process.argv.slice(2);
-const template = JSON.parse(fs.readFileSync(templatePath, 'utf8'));
-const hasPromise = hasPromiseRaw === 'true';
-const rules = { ...template.rules };
-if (!hasPromise) delete rules['promise/catch-or-return'];
-rules['no-restricted-syntax'] = rules['no-restricted-syntax'].map((entry, index) => (
-  index === 1 && entry && typeof entry === 'object'
-    ? { ...entry, selector: unionSelector }
-    : entry
-));
-const config = {
-  root: true,
-  parserOptions: { ecmaVersion: 'latest', sourceType: 'module', ecmaFeatures: { jsx: true } },
-  plugins: hasPromise ? ['promise'] : [],
-  rules,
-};
-if (parserPath) config.parser = parserPath;
-fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-NODE
-
+      CONFIG="$TMPDIR_EG/eslint.config.mjs"
       OUT="$TMPDIR_EG/out.json"
-      # ESLINT_USE_FLAT_CONFIG=false — force eslintrc mode so this rule kit works on
-      # ESLint v9 (which defaults to flat config and rejects --no-eslintrc, making the
-      # gate fail open) as well as v8. Migrate to a flat config before ESLint v10, which
-      # removes eslintrc support. (Same fix as scripts/check.sh.)
-      # --no-inline-config: parity with check.sh (6414c5e) — an app file's own
-      # eslint-disable comments can name rules this minimal config doesn't define, which
-      # ESLint then reports as ruleId-bearing messages that false-fail the gate.
-      ESLINT_USE_FLAT_CONFIG=false "$ESLINT_BIN" --no-eslintrc --no-inline-config --config "$CONFIG" \
-        --resolve-plugins-relative-to "$RESOLVE_DIR" \
-        --format json "${LINT_FILES[@]}" > "$OUT" 2>"$TMPDIR_EG/err.txt" || true
+      ERR="$TMPDIR_EG/err.txt"
+
+      eg_gen_config "$CONFIG" "$PROMISE_PATH" "$PARSER_PATH" "$TSPLUGIN_PATH" "$TYPE_AWARE" "$APPDIR"
+      [ "$TYPE_AWARE" = 1 ] && note "type-aware pass ON (@typescript-eslint/no-floating-promises via tsconfig)"
+      eg_run_eslint "$OUT" "$ERR" "$ESLINT_BIN" "$CONFIG" "${LINT_FILES[@]}"
+
+      # If a type-aware run produced no parseable output (project-service error),
+      # retry once WITHOUT type awareness so the syntax kit still reports.
+      if [ "$TYPE_AWARE" = 1 ] && ! node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$OUT" >/dev/null 2>&1; then
+        note "type-aware pass failed to produce output; retrying syntax-only"
+        [ -s "$ERR" ] && note "$(head -2 "$ERR")"
+        eg_gen_config "$CONFIG" "$PROMISE_PATH" "$PARSER_PATH" "" 0 ""
+        eg_run_eslint "$OUT" "$ERR" "$ESLINT_BIN" "$CONFIG" "${LINT_FILES[@]}"
+      fi
 
       if ! node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$OUT" >/dev/null 2>&1; then
         note "ESLint produced no parseable output — rule section skipped (fail open)"
-        [ -s "$TMPDIR_EG/err.txt" ] && note "$(head -3 "$TMPDIR_EG/err.txt")"
+        [ -s "$ERR" ] && note "$(head -3 "$ERR")"
         echo "(skipped: ESLint error)"
       else
         RULE_VIOLATIONS="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(r.flatMap(x=>x.messages).filter(x=>x.ruleId!=null).length)' "$OUT")"

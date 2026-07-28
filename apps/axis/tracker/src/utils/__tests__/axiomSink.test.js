@@ -186,6 +186,10 @@ describe('mapRecordToEvent — §4.3 mapping table, nothing else copied', () => 
             err_code: 'ComplexityException',
             err_msg: 'complexity budget exhausted',     // v2: scrubbed error.message (no PII here)
             stack1: 'at safeApi (client.js:120:5)',
+            // v3 (fix 3): top-5 extended stack, scrubbed + joined, IN ADDITION to stack1.
+            // scrubMessage redacts the 20-char all-letter frame 'fetchProjectsForUser'
+            // (the documented >=16-char trade-off) — same behavior as every other client.
+            stack: 'at safeApi (client.js:120:5)\nat async [redacted] (mondayApi.js:42:9)',
         });
         // belt-and-braces absence assertions (toEqual above already pins the exact key set)
         const json = JSON.stringify(ev);
@@ -223,6 +227,60 @@ describe('mapRecordToEvent — §4.3 mapping table, nothing else copied', () => 
             error: { name: 'Error', stack: 'Error: mail admin@twyst.co.il bounced\n    at notify (mailer.js:5:1)' },
         });
         expect(emailMsg.stack1).toBe('at notify (mailer.js:5:1)');
+    });
+
+    it('S9b: extended stack = top-5 frames (scrubbed, joined, cap 1500); the 6th frame dropped; parity with all other clients', () => {
+        // six-frame V8 stack — top-5 anchoring is observable, the 6th must be dropped
+        const sixFrame = [
+            'Error: boom',
+            '    at a (f.js:1:1)',
+            '    at b (f.js:2:2)',
+            '    at c (f.js:3:3)',
+            '    at d (f.js:4:4)',
+            '    at e (f.js:5:5)',
+            '    at f (f.js:6:6)',
+        ].join('\n');
+        const ev = mapRecordToEvent({ level: 'ERROR', module: 'X', message: 'm', error: { name: 'Error', stack: sixFrame } });
+        const frames = ev.stack.split('\n');
+        expect(frames).toHaveLength(5);                       // top-5 only, 6th dropped
+        expect(frames[0]).toBe('at a (f.js:1:1)');
+        expect(frames[4]).toBe('at e (f.js:5:5)');
+        expect(ev.stack).not.toContain('f.js:6:6');
+        expect(ev.stack.length).toBeLessThanOrEqual(1500);
+        // stack1 stays the single-frame query field alongside the extended stack
+        expect(ev.stack1).toBe('at a (f.js:1:1)');
+        // each frame in the extended stack is scrubbed — a PII-bearing NON-first frame never
+        // ships raw (frame 1 is the clean stack1; stack1 itself stays the unscrubbed query field,
+        // parity with the canonical sink — realistic frame-1 paths carry no PII).
+        const piiFrame = mapRecordToEvent({
+            level: 'ERROR', module: 'X', message: 'm',
+            error: { name: 'Error', stack: 'Error: boom\n    at notify (mailer.js:5:1)\n    at handler (https://cdn.app/u/admin@corp.com/main.js:1:1)' },
+        });
+        expect(piiFrame.stack1).toBe('at notify (mailer.js:5:1)');
+        expect(piiFrame.stack).toContain('[email]');
+        expect(JSON.stringify(piiFrame)).not.toContain('admin@corp.com');
+        // frameless stack → key omitted (no empty string shipped)
+        expect(mapRecordToEvent({ level: 'ERROR', module: 'X', message: 'm', error: { name: 'Error', stack: 'Error: boom' } })).not.toHaveProperty('stack');
+    });
+
+    it('S13d: component_stack ships scrubbed (cap 1000) from context OR the error object; absent otherwise', () => {
+        const cs = 'in Row prop=admin@corp.com id=12345678\n'.repeat(60); // ~2340 chars, PII-laden
+        // canonical path: context.componentStack (parity with the shared error-kit sink)
+        const fromCtx = mapRecordToEvent({ level: 'ERROR', module: 'X', message: 'm', error: new Error('x'), context: { componentStack: cs } });
+        expect(fromCtx.component_stack).not.toContain('admin@corp.com');
+        expect(fromCtx.component_stack).not.toContain('12345678');
+        expect(fromCtx.component_stack.length).toBeLessThanOrEqual(1000);
+        expect(fromCtx.component_stack.length).toBeGreaterThan(200);   // NOT clipped to the err_msg cap
+        // tracker's real path: logger.error carries no context bag, so the ErrorBoundary stamps
+        // componentStack onto the caught error — the sink must read it from there too
+        const errWithCs = Object.assign(new Error('render boom'), { componentStack: cs });
+        const fromErr = mapRecordToEvent({ level: 'ERROR', module: 'ErrorBoundary', message: 'React error caught', error: errWithCs });
+        expect(fromErr.component_stack).not.toContain('admin@corp.com');
+        expect(fromErr.component_stack.length).toBeLessThanOrEqual(1000);
+        expect(fromErr.component_stack.length).toBeGreaterThan(200);
+        // absent when neither source carries it — ordinary errors never gain the key
+        expect(mapRecordToEvent({ level: 'ERROR', module: 'X', message: 'm', error: new Error('x') })).not.toHaveProperty('component_stack');
+        expect(mapRecordToEvent({ level: 'WARN', module: 'X', message: 'm' })).not.toHaveProperty('component_stack');
     });
 
     it('S10: record.data is never copied (names/emails stay out)', () => {

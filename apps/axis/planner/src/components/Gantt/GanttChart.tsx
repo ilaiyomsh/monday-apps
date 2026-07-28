@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useMemo, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useCallback, useState, useMemo, useEffect, useRef, lazy } from 'react';
 import { DndContext, PointerSensor, useSensor, useSensors, DragOverlay, DragStartEvent } from '@dnd-kit/core';
 import { restrictToHorizontalAxis } from '@dnd-kit/modifiers';
 import { createPortal } from 'react-dom';
@@ -17,6 +17,7 @@ import { AllocationsErrorBanner } from './AllocationsErrorBanner';
 import { findOverlappingAllocations } from '../../utils/overlapUtils';
 import { FreeFallLoader } from '../ui';
 import { SNAP_DAYS } from '../../utils/constants';
+import { LazyBoundary } from '../ui/LazyBoundary';
 import { useLocale } from '../../hooks/useLocale';
 import { logger } from '../../utils/Logger';
 import { useViewTracking } from '../../utils/viewTracking';
@@ -67,6 +68,7 @@ export const GanttChart: React.FC = () => {
     timelineEnd,
     pendingDelete,
     undoDelete,
+    showToast,
   } = useGantt();
 
   // Scroll so today's red marker lands at the absolute center of the viewport
@@ -179,14 +181,17 @@ export const GanttChart: React.FC = () => {
         }
       }
 
-      updateTask(active.id as string, {
+      // updateTask rethrows on a failed save (it reverts the optimistic state first), so this
+      // fire-and-forget call MUST catch — an unhandled rejection would leave the drag looking
+      // saved with nothing telling the user otherwise.
+      void updateTask(active.id as string, {
         startDate: formatDate(newStart),
         endDate: formatDate(newEnd),
-      });
+      }).catch(() => showToast(t('ganttProvider.toast.saveFailed'), 'error'));
     }
 
     setActiveTask(null);
-  }, [pixelsPerSnapUnit, snapDays, pixelsPerDay, updateTask, rawAllocations]);
+  }, [pixelsPerSnapUnit, snapDays, pixelsPerDay, updateTask, rawAllocations, showToast, t]);
 
   // Count active rows for display
   const activeRowCount = flattenedRows.length;
@@ -354,12 +359,12 @@ export const GanttChart: React.FC = () => {
       </div>
       
       {/* Settings Dialog - Lazy loaded */}
-      <Suspense fallback={null}>
+      <LazyBoundary>
         <SettingsDialog
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
         />
-      </Suspense>
+      </LazyBoundary>
 
       {/* Drag Overlay for smoother performance */}
       {createPortal(

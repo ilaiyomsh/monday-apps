@@ -1,66 +1,45 @@
 // axiomServerSink.js — ships server logger records to Axiom (the SHARED errors
-// dataset). Uses @axiomhq/js, the same client verified in production by
-// sync-calender. The SDK batches in the background; flushAxiom() drains the
-// buffer (the graceful-shutdown guard in index.js calls it).
+// dataset). Uses @axiomhq/js; the SDK batches in the background and flushAxiom()
+// drains the buffer on shutdown (the graceful-shutdown + process guards in
+// index.js call it).
 //
-// Activation gate: AXIOM_TOKEN + AXIOM_DATASET (+ AXIOM_APP_NAME, defaulted).
-// Local dev without them is structurally inert — attachAxiomServerSink() is a
-// no-op and the console transport keeps working untouched.
+// Config is OPTS-INJECTED (the deadline-confirm / packages/error-kit canonical
+// model): this module reads ZERO process.env. The caller (index.js) resolves
+// { token, dataset, app, env, ver, shipLevel } through the monday-code
+// EnvironmentVariablesManager (platform secrets live in a mounted file the SDK
+// reads, NOT process.env) and passes them in. Server apps deploy by pushing the
+// app ROOT only, so a workspace dependency does not resolve at runtime — this is
+// the LOCAL copy, drift-tested against packages/error-kit/src/server/axiomServerSink.ts.
+//
+// Without token+dataset+app, attachAxiomServerSink() is inert (returns a no-op)
+// and the console transport keeps working untouched.
 //
 // Ship policy: usage/health (alwaysShip) always; otherwise WARN/ERROR only by
-// default. Incident mode: set LOG_SHIP_LEVEL=DEBUG (or INFO) in env to widen —
-// remember to unset it after the investigation.
+// default. Incident mode: pass shipLevel:'DEBUG'|'INFO' (from LOG_SHIP_LEVEL) to
+// widen — remember to unset it after the investigation.
 //
-// PRIVACY: ships level/tag/message/kind + static app/env/ver/sess dims + err_name/err_code/err_msg (error.message
-// ONLY scrubbed via scrubMessage: emails / tokens&hex>=16 / digit-runs>=7 redacted,
-// capped 200) + first stack frame + allow-listed short id/counter context fields.
-// Free-form payloads (emails, event titles, links, GraphQL bodies, tokens) are
-// NEVER shipped — the CTX_ALLOW filter mirrors the client transport's discipline.
+// PRIVACY: ships level/tag/message/kind + static app/env/ver/sess dims + err_name/err_code/err_msg
+// (error.message ONLY scrubbed via scrubMessage: emails / tokens&hex>=16 / digit-runs>=7 redacted,
+// capped 200) + first stack frame + allow-listed short id/counter context fields. Free-form
+// payloads (emails, event titles, links, GraphQL bodies, tokens) are NEVER shipped — the
+// CTX_ALLOW filter mirrors the client transport's discipline.
 //
 // This is a sink file — exempt from the no-console rule (breadcrumbs only,
 // never re-enters the logger: recursion hazard).
 
-import { readFileSync } from 'node:fs';
 import { Axiom } from '@axiomhq/js';
 
 const RANK = { ERROR: 3, WARN: 2, INFO: 1, DEBUG: 0 };
 
-const DATASET = process.env.AXIOM_DATASET || null;
-const TOKEN = process.env.AXIOM_TOKEN || null;
-const APP = process.env.AXIOM_APP_NAME || 'calendar-sync';
-const ENV_NAME = process.env.NODE_ENV || 'production';
-
-// ver/sess — mirror the browser transport's envelope so server events carry the
-// same two dimensions (Fable #6). `ver` is the deployed app version (package.json
-// is the source of truth, exactly as index.js resolves it); `sess` is a random
-// per-process boot id so every event from one server instance/deploy groups
-// together. Both are static for the process lifetime.
-let VERSION = '0.0.0';
-try {
-  VERSION = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version || VERSION;
-} catch { /* keep the default — never block logging over a version lookup */ }
-const SESSION = Math.random().toString(36).slice(2, 10);
-const SHIP_LEVEL = RANK[String(process.env.LOG_SHIP_LEVEL ?? '').toUpperCase()] ?? RANK.WARN;
-
-// Preserve the prior activation gate: Axiom was enabled whenever TOKEN + DATASET
-// were present (APP_NAME always had a default). APP is truthy by default here.
-const ACTIVE = Boolean(DATASET && TOKEN && APP);
-
-let client = null;
-if (ACTIVE) {
-  try {
-    client = new Axiom({
-      token: TOKEN,
-      // Never let an Axiom transport error recurse through the logger.
-      onError: (err) => {
-        try { console.error(`[axiom-sink] ${err?.message || err}`); } catch { /* */ }
-      },
-    });
-  } catch (e) {
-    try { console.error('[axiom-sink] init failed — remote logging disabled:', e); } catch { /* */ }
-    client = null;
-  }
-}
+// scrubMessage — privacy-scrub error.message before it ships as err_msg (D2). Order matters:
+// emails FIRST (their local part would otherwise be eaten by the token rule), then long
+// token/hex runs (>=16), then digit-runs (>=7). Pre-capped at 1000 to bound regex work, final
+// slice 200. Identical spec across app-core, the client template, and this server template.
+const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+const TOKEN_RE = /[A-Za-z0-9_-]{16,}/g;
+const DIGITS_RE = /\d{7,}/g;
+const MSG_PRECAP = 1000;
+const MSG_MAXLEN = 200;
 
 // Context fields worth shipping as-is: short identifiers, operation names and
 // counters from this app's log-context vocabulary (helpers/log-context.js) plus
@@ -85,16 +64,6 @@ function firstStackFrame(stack) {
   return undefined;
 }
 
-// scrubMessage — privacy-scrub error.message before it ships as err_msg (D2). Order matters:
-// emails FIRST (their local part would otherwise be eaten by the token rule), then long
-// token/hex runs (>=16), then digit-runs (>=7). Pre-capped at 1000 to bound regex work, final
-// slice 200. Identical spec across app-core, the client template, and this server template.
-const EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-const TOKEN_RE = /[A-Za-z0-9_-]{16,}/g;
-const DIGITS_RE = /\d{7,}/g;
-const MSG_PRECAP = 1000;
-const MSG_MAXLEN = 200;
-
 /** Redact PII/secrets from an error message so it can ship as `err_msg` (D2). */
 export function scrubMessage(raw) {
   if (typeof raw !== 'string' || raw === '') return '';
@@ -105,19 +74,28 @@ export function scrubMessage(raw) {
   return s.slice(0, MSG_MAXLEN);
 }
 
-/** record → flat Axiom event. Pure function (unit-test seam). */
-export function mapRecordToEvent(record) {
+/**
+ * record → flat Axiom event. Pure function (unit-test seam). Reads config from
+ * the passed cfg so it stays testable without env.
+ * @param {object} record
+ * @param {{ app?: string, env?: string, ver?: string|null, sess?: string|null }} [cfg]
+ */
+export function mapRecordToEvent(record, cfg = {}) {
   const r = record || {};
   const ev = {
     _time: r.timestampISO || new Date().toISOString(),
     level: String(r.level ?? '').toLowerCase(),
     tag: String(r.tag || 'app').toLowerCase(),
     message: String(r.message ?? '').slice(0, 300),
-    app: APP,
-    env: ENV_NAME,
-    ver: VERSION,
-    sess: SESSION,
+    app: cfg.app ?? null,
+    env: cfg.env ?? 'production',
   };
+  // ver/sess — mirror the browser transport's envelope so server events carry the
+  // same two dimensions (Fable #6). `ver` is the deployed app version; `sess` is a
+  // random per-process boot id so every event from one server instance/deploy groups
+  // together. Omitted when absent so the pure-function tests (no cfg) stay unaffected.
+  if (cfg.ver != null) ev.ver = String(cfg.ver).slice(0, FIELD_MAX);
+  if (cfg.sess != null) ev.sess = String(cfg.sess).slice(0, FIELD_MAX);
   // DOMAIN discriminator (matches the client + app-core): error (default) | usage | health.
   // track()/health() set record.domainKind; NEVER ship a rendering kind.
   ev.kind = r.domainKind ?? 'error';
@@ -144,43 +122,79 @@ export function mapRecordToEvent(record) {
       if (key === 'cause') continue;                 // handled above (scrubbed) — never ship raw
       if (!CTX_ALLOW.has(key)) continue;
       if (typeof val === 'number' && Number.isFinite(val)) ev[key] = val;
+      else if (typeof val === 'boolean') ev[key] = val;
       else if (typeof val === 'string') ev[key] = val.slice(0, FIELD_MAX);
     }
   }
   return ev;
 }
 
-/** Ship policy — pure function (unit-test seam). */
-export function shouldShip(record) {
+/**
+ * Ship policy — pure function (unit-test seam). Order: !record → false,
+ * duplicate → false, alwaysShip → true, THEN level policy.
+ * @param {object} record
+ * @param {number} [shipLevel] - RANK threshold (default WARN)
+ */
+export function shouldShip(record, shipLevel = RANK.WARN) {
   if (!record) return false;
   if (record.duplicate === true) return false; // logger already skips dupes from sinks — defense in depth
   if (record.alwaysShip === true) return true;  // usage/health (INFO) bypass the WARN/ERROR policy (D3/D5)
   const rank = RANK[String(record.level ?? '').toUpperCase()];
-  if (rank === undefined || rank < SHIP_LEVEL) return false;
+  if (rank === undefined || rank < shipLevel) return false;
   return true;
 }
 
+let activeClient = null;
+
 /**
- * Register the Axiom sink on the server logger. Call once at server startup,
- * right after imports:
- *   import logger from './logger.js';
- *   import { attachAxiomServerSink } from './axiomServerSink.js';
- *   attachAxiomServerSink(logger);
+ * Register the Axiom sink on the server logger. Call once at server startup:
+ *   attachAxiomServerSink(logger, { token, dataset, app, env, ver, shipLevel });
+ * Inert (returns a no-op) unless token+dataset+app are all present.
  *
+ * @param {{ addSink: (fn: (r: object) => void) => (() => void) }} logger
+ * @param {{ token?: string|null, dataset?: string|null, app?: string|null, env?: string, ver?: string|null, shipLevel?: string }} [opts]
  * @returns {function():void} unsubscribe (no-op when gated off)
  */
-export function attachAxiomServerSink(logger) {
-  if (!client || !logger?.addSink) return () => {};
+export function attachAxiomServerSink(logger, opts = {}) {
+  const token = opts.token || null;
+  const dataset = opts.dataset || null;
+  const app = opts.app || null;
+  const env = opts.env || 'production';
+  const ver = opts.ver || null;
+  // Per-process session id — stamped on every event so a burst of errors can be tied to
+  // one process instance across a restart (parity with the browser transport's `sess`).
+  const sess = Math.random().toString(36).slice(2, 10);
+  const shipLevel = RANK[String(opts.shipLevel ?? '').toUpperCase()] ?? RANK.WARN;
+
+  if (!token || !dataset || !app || !logger?.addSink) return () => {};
+
+  let client = null;
+  try {
+    client = new Axiom({
+      token,
+      // Never let an Axiom transport error recurse through the logger.
+      onError: (err) => {
+        try { console.error(`[axiom-sink] ${err?.message || err}`); } catch { /* breadcrumb best-effort */ }
+      },
+    });
+  } catch (e) {
+    try { console.error('[axiom-sink] init failed — remote logging disabled:', e); } catch { /* breadcrumb best-effort */ }
+    return () => {};
+  }
+
+  // Stash the client for flushAxiom() (shutdown drain).
+  activeClient = client;
+
   return logger.addSink((record) => {
     // logger fan-out already isolates sink throws; keep the hot path lean
-    if (!shouldShip(record)) return;
-    client.ingest(DATASET, [mapRecordToEvent(record)]);
+    if (!shouldShip(record, shipLevel)) return;
+    client.ingest(dataset, [mapRecordToEvent(record, { app, env, ver, sess })]);
   });
 }
 
-/** True only when the env gate passed AND the client constructed. */
+/** True only when a client has been constructed (opts gate passed). */
 export function isAxiomSinkActive() {
-  return ACTIVE && Boolean(client);
+  return Boolean(activeClient);
 }
 
 /**
@@ -188,10 +202,10 @@ export function isAxiomSinkActive() {
  * last error before a crash is not lost. Never throws.
  */
 export async function flushAxiom() {
-  if (!client) return;
+  if (!activeClient) return;
   try {
-    await client.flush();
+    await activeClient.flush();
   } catch (e) {
-    try { console.error('[axiom-sink] flush failed:', e?.message || e); } catch { /* */ }
+    try { console.error('[axiom-sink] flush failed:', e?.message || e); } catch { /* breadcrumb best-effort */ }
   }
 }

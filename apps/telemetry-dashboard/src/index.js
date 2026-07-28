@@ -6,18 +6,32 @@ import { EnvironmentVariablesManager } from '@mondaycom/apps-sdk';
 // monday-code does NOT inject platform env vars into process.env — they live in
 // a mounted secrets file the SDK reads. updateProcessEnv copies them in;
 // locally the manager is a no-op over process.env, so dotenv keeps working.
-new EnvironmentVariablesManager({ updateProcessEnv: true });
+const envManager = new EnvironmentVariablesManager({ updateProcessEnv: true });
 
-// Everything app-side is imported DYNAMICALLY (top-level await): logger.js and
-// axiomServerSink.js read LOG_LEVEL / AXIOM_* from process.env at module load,
-// and a static import would hoist ABOVE the manager call — the platform
-// secrets would be invisible and the Axiom sink permanently inert in prod.
+// logger.js still reads LOG_LEVEL from process.env at module load, so app-side
+// imports stay DYNAMIC (top-level await) — a static import would hoist ABOVE the
+// manager call and the platform env would be invisible. The Axiom sink is now
+// OPTS-INJECTED (reads zero process.env itself): index.js resolves AXIOM_* here
+// and passes them in, so this file is the single place env is read (error-guard
+// server-patterns.md: sink configured via opts, no process.env inside the sink).
 const { default: logger } = await import('./helpers/logger.js');
 const { attachAxiomServerSink, flushAxiom } = await import('./helpers/axiomServerSink.js');
 const { installProcessGuards, setGracefulServer } = await import('./helpers/processGuards.js');
 
+// Resolve the Axiom sink config through the SDK manager (updateProcessEnv mirrors
+// platform secrets into process.env, so either read path works; envManager.get is
+// canonical). Without token+dataset+app the sink is structurally inert.
+const axiomEnv = (key) => envManager.get(key) ?? process.env[key];
+
 // Sink + process-level nets first, before anything else can throw.
-attachAxiomServerSink(logger);
+attachAxiomServerSink(logger, {
+  token: axiomEnv('AXIOM_TOKEN'),
+  dataset: axiomEnv('AXIOM_DATASET'),
+  app: axiomEnv('AXIOM_APP_NAME'),
+  env: axiomEnv('NODE_ENV') || 'production',
+  ver: axiomEnv('npm_package_version') || axiomEnv('APP_VERSION'),
+  shipLevel: axiomEnv('LOG_SHIP_LEVEL'),
+});
 installProcessGuards(logger, { flush: flushAxiom });
 
 const { createApp } = await import('./app.js');
@@ -51,6 +65,7 @@ const telemetry = createTelemetryService({
   axiomToken: env.axiomToken,
   axiomDataset: env.axiomDataset,
   axiomOrgId: env.axiomOrgId,
+  logger,
 });
 
 // --- OAuth app-identity token (Change #143, OAuth 2.1 in #144) -------------

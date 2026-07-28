@@ -35,6 +35,12 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 
 const STORAGE_KEY = 'planner_logger_config';
 
+// Monotonic id for log-once correlation. Stamped (non-enumerable) on an Error the
+// first time it reaches emit(); a later pass of the SAME instance is marked duplicate
+// and skipped from sinks — so a create/edit failure logged by both the hook and the
+// modal's catch produces ONE Axiom record, not two. (Ports discussions' __loggedId.)
+let loggedIdCounter = 0;
+
 // Ring buffer capacity — retains the most recent records for sink replay (see attachAxiomSink).
 const RING_BUFFER_SIZE = 150;
 
@@ -64,8 +70,12 @@ export interface LogRecord {
   /** usage/health INFO records bypass the WARN/ERROR ship policy (D3/D5) */
   alwaysShip?: boolean;
   error?: Error;
-  /** numeric timings the sink may forward (duration → ms, totalMs, step) */
-  context?: { duration?: number; totalMs?: number; step?: number };
+  /**
+   * Structured context the sink may forward: numeric timings (duration → ms, totalMs, step)
+   * and the React `componentStack` (attached by the @mapps/error-kit ErrorBoundary via the
+   * bridge() entry, shipped as `component_stack`).
+   */
+  context?: { duration?: number; totalMs?: number; step?: number; componentStack?: string };
   correlationId?: string;
   duplicate?: boolean;
   timestamp?: number;
@@ -317,6 +327,32 @@ class Logger {
    * throw back or recurse).
    */
   private emit(record: LogRecord): void {
+    // log-once dedup: the SAME Error instance ships to sinks exactly once. A repeat
+    // pass (e.g. a create/edit failure logged by the hook AND re-logged by the modal's
+    // catch) is buffered but marked duplicate so the sink fan-out below skips it —
+    // one Axiom record, not N. Records without an Error (usage/health/string-only) are
+    // never deduped. Stamp is non-enumerable so it can't pollute JSON/serialization.
+    const err = record.error;
+    if (err && typeof err === 'object') {
+      const stamped = (err as { __loggedId?: string }).__loggedId;
+      if (stamped !== undefined) {
+        record.duplicate = true;
+        record.correlationId = record.correlationId || stamped;
+      } else {
+        const id = record.correlationId || `log_${++loggedIdCounter}`;
+        try {
+          Object.defineProperty(err, '__loggedId', {
+            value: id,
+            enumerable: false,
+            configurable: true,
+            writable: true,
+          });
+        } catch {
+          // frozen/non-configurable Error — never blocks this record from shipping.
+        }
+        record.correlationId = id;
+      }
+    }
     const ts = Date.now();
     record.timestamp = ts;
     record.timestampISO = new Date(ts).toISOString();
@@ -519,6 +555,57 @@ class Logger {
     // WARN/ERROR labeled records ship too (module = the label). INFO/DEBUG stay console-only.
     if (level === 'WARN' || level === 'ERROR') {
       this.emit(this.buildRecord(level, label, args));
+    }
+  }
+
+  /**
+   * bridge — the structured entry used by the @mapps/error-kit adapter
+   * (setupGlobalErrorHandlers + ErrorBoundary), whose Logger contract is
+   * `(module, message, payload?, context?)`. Unlike the variadic surface, bridge
+   * carries an explicit `context` object (e.g. the ErrorBoundary's componentStack)
+   * onto the record so the Axiom sink can ship it. Routes through the SAME choke-point
+   * as warn()/error(): console render at the given level, then WARN/ERROR fan out to
+   * sinks (INFO/DEBUG stay console-only, matching labeled()).
+   */
+  bridge(
+    level: LogLevel,
+    module: string,
+    message: string,
+    payload?: unknown,
+    context?: LogRecord['context']
+  ): void {
+    const error = payload instanceof Error ? payload : undefined;
+    if (this.shouldLog(level)) {
+      const colors: Record<LogLevel, string> = {
+        DEBUG: '#6366f1',
+        INFO: '#22c55e',
+        WARN: '#f59e0b',
+        ERROR: '#ef4444',
+      };
+      const method = level === 'DEBUG' ? 'debug'
+                   : level === 'INFO' ? 'info'
+                   : level === 'WARN' ? 'warn'
+                   : 'error';
+      // Include the payload in the console line only when it's present (Error or value).
+      const extras = payload === undefined ? [] : [payload];
+      console[method](
+        `%c${this.getTimestamp()} %c[${module}]`,
+        'color: #64748b',
+        `color: ${colors[level]}`,
+        message,
+        ...extras
+      );
+    }
+    // Only WARN/ERROR fan out to sinks (parity with labeled()); INFO/DEBUG stay console-only.
+    if (level === 'WARN' || level === 'ERROR') {
+      this.emit({
+        kind: error ? 'error' : 'simple',
+        level,
+        module,
+        message: typeof message === 'string' ? message : String(message),
+        error,
+        context,
+      });
     }
   }
 

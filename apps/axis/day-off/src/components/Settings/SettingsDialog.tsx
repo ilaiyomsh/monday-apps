@@ -224,6 +224,75 @@ function useAccountBoards(enabled: boolean) {
 }
 
 /**
+ * Thrown when a fresh status-column snapshot has no `revision` to write against
+ * (needed for the optimistic-concurrency update in `updateStatusColumnSettings`).
+ * Should not happen in practice, but a plain `Error` here shipped with no
+ * identity — name + code make it filterable in Axiom (err_name/err_code).
+ */
+export class MissingStatusColumnRevisionError extends Error {
+  readonly code = 'MISSING_STATUS_COLUMN_REVISION' as const;
+
+  constructor(
+    readonly boardId: string,
+    readonly statusColumnId: string,
+  ) {
+    super(
+      `Missing status column revision (board=${boardId}, column=${statusColumnId}) — cannot safely update personal-type labels`,
+    );
+    this.name = 'MissingStatusColumnRevisionError';
+  }
+}
+
+/**
+ * Diff the draft personal-type labels against the live status column, push any
+ * change (add/edit/deactivate) through mondayApi, and return `next` with a fresh
+ * label snapshot. Depends only on its argument plus the module-level mondayApi/
+ * vacationService singletons (no component state) — exported standalone so it is
+ * unit-testable without rendering the dialog, and safe to call directly from
+ * onSave without a useCallback wrapper (it never changes identity).
+ */
+export async function syncAndPersistPersonalTypes(next: DayOffSettings): Promise<DayOffSettings> {
+  const boardId = next.vacationBoardId;
+  const statusColumnId = next.columns.personalTypeColumnId;
+  if (!boardId || !statusColumnId) return { ...next, personalTypes: [] };
+
+  const liveMeta = await mondayApi.getStatusColumnSnapshotMeta(boardId, statusColumnId);
+  const live = liveMeta.labels;
+  const revision = liveMeta.revision;
+  const edited = (next.personalTypes ?? []).slice().sort((a, b) => a.index - b.index);
+
+  const isSame =
+    edited.length === live.length &&
+    edited.every((label) => {
+      const src = live.find((l) => l.id === label.id);
+      return (
+        src != null &&
+        src.title === label.title &&
+        String(src.colorValue ?? src.color) === String(label.colorValue ?? label.color)
+      );
+    });
+  if (!isSame) {
+    if (!revision) throw new MissingStatusColumnRevisionError(boardId, statusColumnId);
+    const existingLabelIds = new Set(
+      live.map((label) => Number(label.id)).filter((id) => Number.isFinite(id)),
+    );
+    const editedIds = new Set(edited.map((label) => label.id));
+    const deactivated = live
+      .filter((label) => !editedIds.has(label.id) && existingLabelIds.has(Number(label.id)))
+      .map((label) => ({ ...label, isDeactivated: true }));
+    for (const label of deactivated) {
+      if (await isPersonalTypeLabelInUse(boardId, statusColumnId, label.id)) {
+        throw new PersonalTypeInUseError();
+      }
+    }
+    const payload = [...edited.map((label) => ({ ...label, isDeactivated: false })), ...deactivated];
+    await mondayApi.updateStatusColumnSettings(boardId, statusColumnId, revision, payload, existingLabelIds);
+  }
+  const snapshot = isSame ? live : await mondayApi.getStatusColumnSnapshot(boardId, statusColumnId);
+  return { ...next, personalTypes: snapshot };
+}
+
+/**
  * Day-off settings UI — built on app-core's SettingsDialogShell (#17). One board
  * holds every entry; the kind status column splits general vs personal. The shell
  * owns the frame/tabs/draft/save; this file declares the tabs + fields.
@@ -235,50 +304,6 @@ export function SettingsDialog({ isOpen, onClose }: { isOpen: boolean; onClose: 
   const { settings, updateSettings } = useSettings();
   const { boards, loading } = useAccountBoards(isOpen);
   const [personalTypeError, setPersonalTypeError] = useState<string | null>(null);
-
-  const syncAndPersistPersonalTypes = useCallback(
-    async (next: DayOffSettings): Promise<DayOffSettings> => {
-      const boardId = next.vacationBoardId;
-      const statusColumnId = next.columns.personalTypeColumnId;
-      if (!boardId || !statusColumnId) return { ...next, personalTypes: [] };
-
-      const liveMeta = await mondayApi.getStatusColumnSnapshotMeta(boardId, statusColumnId);
-      const live = liveMeta.labels;
-      const revision = liveMeta.revision;
-      const edited = (next.personalTypes ?? []).slice().sort((a, b) => a.index - b.index);
-
-      const isSame =
-        edited.length === live.length &&
-        edited.every((label) => {
-          const src = live.find((l) => l.id === label.id);
-          return (
-            src != null &&
-            src.title === label.title &&
-            String(src.colorValue ?? src.color) === String(label.colorValue ?? label.color)
-          );
-        });
-      if (!isSame) {
-        if (!revision) throw new Error('Missing status column revision');
-        const existingLabelIds = new Set(
-          live.map((label) => Number(label.id)).filter((id) => Number.isFinite(id)),
-        );
-        const editedIds = new Set(edited.map((label) => label.id));
-        const deactivated = live
-          .filter((label) => !editedIds.has(label.id) && existingLabelIds.has(Number(label.id)))
-          .map((label) => ({ ...label, isDeactivated: true }));
-        for (const label of deactivated) {
-          if (await isPersonalTypeLabelInUse(boardId, statusColumnId, label.id)) {
-            throw new PersonalTypeInUseError();
-          }
-        }
-        const payload = [...edited.map((label) => ({ ...label, isDeactivated: false })), ...deactivated];
-        await mondayApi.updateStatusColumnSettings(boardId, statusColumnId, revision, payload, existingLabelIds);
-      }
-      const snapshot = isSame ? live : await mondayApi.getStatusColumnSnapshot(boardId, statusColumnId);
-      return { ...next, personalTypes: snapshot };
-    },
-    [],
-  );
 
   const tabs: SettingsTabDef<DayOffSettings>[] = [
     {
@@ -369,8 +394,13 @@ export function SettingsDialog({ isOpen, onClose }: { isOpen: boolean; onClose: 
         export: t('common.export'),
         import: t('common.import'),
         invalid: t('settings.fixErrors'),
+        saveError: t('settings.saveError'),
       }}
       allowExportImport
+      // error-guard: any save failure the onSave callback above didn't already
+      // catch+display (PersonalTypeInUseError returns false, never reaches this)
+      // gets logged at ERROR here and shown as an inline banner without closing.
+      logger={logger}
     />
   );
 }

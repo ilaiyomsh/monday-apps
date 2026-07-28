@@ -714,6 +714,12 @@ export const useAllocations = (viewMode: ViewMode = 'projects') => {
       // Revert on error
       await fetchAllocations();
       setAllocationsVersion(v => v + 1);
+      // Re-throw so the caller (AllocationModal.handleSubmit) sees the rejection and
+      // fires the specific save-error toast + keeps the modal open — parity with the
+      // create path (addAllocation). Without this, an edit-save failure silently closed
+      // the modal as if it succeeded. The logger's log-once dedup ensures the modal's
+      // re-log of this same Error instance does not double-ship to Axiom.
+      throw err;
     }
   }, [fetchAllocations, settings, viewMode]);
 

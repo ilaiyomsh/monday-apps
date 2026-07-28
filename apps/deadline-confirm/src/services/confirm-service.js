@@ -17,7 +17,7 @@
 // none.
 
 import { MondayApiError } from './monday-api.js';
-import { logError } from '../helpers/logger.js';
+import logger from '../helpers/logger.js';
 
 /**
  * Find a button by id on the stored config.
@@ -72,7 +72,7 @@ export async function performAction({ storage, api, itemId, btnId, expectedPerso
   const token = await storage.getOauthToken();
 
   if (!configIsComplete(config) || !token) {
-    logError('confirm', 'missing or incomplete config/token', {
+    logger.logError('confirm', 'missing or incomplete config/token', {
       hasConfig: Boolean(config),
       hasToken: Boolean(token),
     });
@@ -81,7 +81,7 @@ export async function performAction({ storage, api, itemId, btnId, expectedPerso
 
   const button = resolveButton(config, btnId);
   if (!button) {
-    logError('confirm', 'unknown button id', { itemId, btnId });
+    logger.logError('confirm', 'unknown button id', { itemId, btnId });
     return { outcome: 'unknown_button' };
   }
 
@@ -94,16 +94,16 @@ export async function performAction({ storage, api, itemId, btnId, expectedPerso
       peopleColumnId: config.peopleColumnId ?? null,
     });
   } catch (err) {
-    logError('confirm', 'item query failed', describeApiError(err, itemId));
+    logger.logError('confirm', 'item query failed', describeApiError(err, itemId));
     return { outcome: 'api_error' };
   }
 
   if (!item.found) {
-    logError('confirm', 'guard failed: not_found', { itemId });
+    logger.logError('confirm', 'guard failed: not_found', { itemId });
     return { outcome: 'not_found' };
   }
   if (String(item.boardId) !== String(config.boardId)) {
-    logError('confirm', 'guard failed: wrong_board', { itemId });
+    logger.logError('confirm', 'guard failed: wrong_board', { itemId });
     return { outcome: 'wrong_board' };
   }
 
@@ -112,7 +112,7 @@ export async function performAction({ storage, api, itemId, btnId, expectedPerso
   if (expectedPersonId !== null && expectedPersonId !== undefined && expectedPersonId !== '') {
     const assigneeIds = item.peoplePersonIds ?? [];
     if (!assigneeIds.includes(String(expectedPersonId))) {
-      logError('confirm', 'guard failed: not_assignee', { itemId });
+      logger.logError('confirm', 'guard failed: not_assignee', { itemId });
       return { outcome: 'not_assignee' };
     }
   }
@@ -131,21 +131,26 @@ export async function performAction({ storage, api, itemId, btnId, expectedPerso
       toLabelId: button.targetIndex,
     });
   } catch (err) {
-    logError('confirm', 'status mutation failed', describeApiError(err, itemId));
+    logger.logError('confirm', 'status mutation failed', describeApiError(err, itemId));
     return { outcome: 'api_error' };
   }
 
   const body = item.peopleText
     ? `סומן "${button.targetLabel}" במייל על ידי ${item.peopleText}`
     : `סומן "${button.targetLabel}" במייל`;
+  let audit = 'ok';
   try {
     await api.createUpdate({ token, itemId, body });
   } catch (err) {
-    // The status change already succeeded — log, still success.
-    logError('confirm', 'attribution update failed after status change', describeApiError(err, itemId));
+    // The status change already succeeded — the user-facing outcome stays 'ok' (the
+    // locked /confirm attempt-line contract). But the attribution write is a partial
+    // failure, so we surface it on `audit` (the route folds it into the usage signal as
+    // outcome 'ok_no_audit') instead of masking it behind a clean 'ok'.
+    logger.logError('confirm', 'attribution update failed after status change', describeApiError(err, itemId));
+    audit = 'failed';
   }
 
-  return { outcome: 'ok', button };
+  return { outcome: 'ok', button, audit };
 }
 
 function describeApiError(err, itemId) {

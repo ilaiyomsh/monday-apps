@@ -56,3 +56,21 @@ describe('track / health', () => {
     expect(r.alwaysShip).toBeUndefined();
   });
 });
+
+describe('context forwarding (error-kit ErrorBoundary componentStack → ERROR record)', () => {
+  it('error() forwards a 4th context arg onto record.context (so component_stack ships)', () => {
+    const { logger, records } = capture();
+    logger.error('ErrorBoundary', 'boom', new Error('x'), { componentStack: '\n  in App\n  in Provider' });
+    expect(records[0].context).toEqual({ componentStack: '\n  in App\n  in Provider' });
+  });
+  it('warn() forwards a 4th context arg onto record.context', () => {
+    const { logger, records } = capture();
+    logger.warn('mod', 'msg', undefined, { url: 'x', tag: 'IMG' });
+    expect(records[0].context).toEqual({ url: 'x', tag: 'IMG' });
+  });
+  it('a 3-arg error() call leaves record.context undefined (back-compat)', () => {
+    const { logger, records } = capture();
+    logger.error('mod', 'msg', new Error('x'));
+    expect(records[0].context).toBeUndefined();
+  });
+});

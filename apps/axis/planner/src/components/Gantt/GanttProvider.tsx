@@ -1,4 +1,4 @@
-import React, { useState, useRef, type ReactNode, useMemo, useCallback, useEffect, useTransition, lazy, Suspense } from 'react';
+import React, { useState, useRef, type ReactNode, useMemo, useCallback, useEffect, useTransition, lazy } from 'react';
 import { parseISO, addDays, startOfDay } from 'date-fns';
 import type { ZoomLevel, ViewMode, TaskId, Task, Group, Allocation, ProjectClassification, RoleAvailability, RoleAvailabilityDay, RoleCapacity, ProjectMetrics } from '../../types/gantt.types';
 import type { TimeframeFilter, UtilizationFilter, PMFilter, ProjectTypeFilter, AvailablePM, AvailableProjectType } from './GanttContext';
@@ -30,6 +30,7 @@ import { getProjectColor } from '../../utils/colorUtils';
 import { classifyProject, isClassificationEnabled, CLASSIFICATION_ORDER } from '../../utils/projectClassification';
 import { getDefaultEffortModeByZoom } from '../../utils/effortUtils';
 import { useDisplayUnit } from '../../hooks/useDisplayUnit';
+import { LazyBoundary } from '../ui/LazyBoundary';
 import mondaySdk from 'monday-sdk-js';
 import { useTranslation } from 'react-i18next';
 import { useLocale } from '../../hooks/useLocale';
@@ -78,7 +79,11 @@ export const GanttProvider: React.FC<GanttProviderProps> = ({
 
   const saveSidebarWidth = useCallback((width: number) => {
     const newWidth = Math.max(width, MIN_SIDEBAR_WIDTH);
-    (monday.storage.instance as any).setItem(SIDEBAR_WIDTH_KEY, newWidth.toString());
+    // Fire-and-forget persistence: a setItem rejection was previously a fully silent
+    // unhandled promise rejection (fires on every sidebar resize). Attach a catch so the
+    // failure ships to Axiom (WARN — losing a sidebar-width preference is non-critical).
+    Promise.resolve((monday.storage.instance as any).setItem(SIDEBAR_WIDTH_KEY, newWidth.toString()))
+      .catch((err: unknown) => logger.warn('[GanttProvider] Failed to persist sidebar width:', err));
   }, []);
   
   const setViewMode = useCallback((mode: ViewMode) => {
@@ -409,6 +414,24 @@ export const GanttProvider: React.FC<GanttProviderProps> = ({
   // Bulk allocation modal state
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkModalData, setBulkModalData] = useState<{projectId: string; projectName: string} | null>(null);
+
+  // Remount counter for the modal ErrorBoundary (see the LazyBoundary mount site below).
+  const [modalBoundaryEpoch, setModalBoundaryEpoch] = useState(0);
+
+  /**
+   * A modal subtree threw during render. The boundary already shipped the error; this closes
+   * the modals so the persistent backdrop unmounts (it is a SIBLING of the boundary, so the
+   * fallback alone would leave the whole app dimmed under a click-blocking overlay with no
+   * way out), tells the user, and bumps the boundary epoch so the next open starts clean.
+   */
+  const onModalCrash = useCallback(() => {
+    setIsModalOpen(false);
+    setModalData(undefined);
+    setIsBulkModalOpen(false);
+    setBulkModalData(null);
+    setModalBoundaryEpoch(e => e + 1);
+    showToast(t('ganttProvider.toast.modalCrashed'), 'error');
+  }, [showToast, t]);
 
   // Initialize expanded groups when data loads or view mode changes
   // Note: company-load is collapsed by default (not added to initialExpanded)
@@ -760,6 +783,10 @@ export const GanttProvider: React.FC<GanttProviderProps> = ({
     const task = groups.flatMap(g => g.tasks).find(t => t.id === taskId);
     if (task) {
       await updateAllocation({ ...task, ...updates });
+    } else {
+      // An update for an id not in the loaded groups is a real anomaly (stale UI / lost
+      // optimistic row), not a normal no-op — WARN so it ships instead of vanishing silently.
+      logger.warn('[GanttProvider] updateTask: no task for id', { taskId: String(taskId) });
     }
   }, [groups, updateAllocation]);
 
@@ -983,16 +1010,24 @@ export const GanttProvider: React.FC<GanttProviderProps> = ({
       {(isModalOpen || (isBulkModalOpen && bulkModalData)) && (
         <div className="fixed inset-0 z-[99] bg-black/20" />
       )}
-      <Suspense fallback={null}>
+      {/* `key` is the boundary's only reset path — @mapps/error-kit's ErrorBoundary never
+          clears hasError, so a crashed modal subtree stays swapped for the fallback until the
+          boundary is remounted. onModalCrash closes the modals (which unmounts the backdrop
+          above, so the app is not left dimmed and unclickable) and bumps the epoch, giving the
+          next open a fresh boundary. */}
+      <LazyBoundary key={modalBoundaryEpoch} onError={onModalCrash}>
         <AllocationModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
           onSave={(data) => {
+            // RETURN the inner promise so AllocationModal.handleSubmit's `await onSave(...)`
+            // actually waits: on the create path addAllocation logs-then-rethrows, and this
+            // propagation is what lets the modal's catch (toast + log) fire instead of the
+            // rejection becoming an unhandled promise rejection.
             if (data.id) {
-              updateTask(data.id, data);
-            } else {
-              addAllocation(data);
+              return updateTask(data.id, data);
             }
+            return addAllocation(data);
           }}
           onDelete={deleteAllocation}
           onDuplicate={duplicateAllocation}
@@ -1020,7 +1055,7 @@ export const GanttProvider: React.FC<GanttProviderProps> = ({
             onSwitchToSingle={switchToSingle}
           />
         )}
-      </Suspense>
+      </LazyBoundary>
 
       {/* Toast Notifications */}
       {toast && (

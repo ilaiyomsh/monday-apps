@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from '../services/api';
+import logger from '../lib/logger';
 import type { Conditional, SyncConfig } from '../types';
 
 // Rewrite legacy status overrides that stored the label id under `value.index`
@@ -42,6 +43,9 @@ export function useConfigs(objectId: string, tokenReady: boolean) {
       );
       setRows((res.rows || []).map(normalizeConfigRow));
     } catch (err) {
+      // Surface to the UI (error state, rendered in App) AND ship to Axiom — a failed
+      // /api/configs load was previously invisible to operators.
+      logger.error('useConfigs', 'configs_load_failed', err);
       setError((err as Error).message);
     } finally {
       setLoading(false);

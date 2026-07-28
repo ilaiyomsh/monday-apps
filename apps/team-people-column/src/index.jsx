@@ -23,15 +23,18 @@
 
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import { setupGlobalErrorHandlers, handleGlobalError } from './utils/globalErrorHandler';
-import { attachAxiomSink } from './utils/axiomErrorSink';
+import { setupGlobalErrorHandlers, attachAxiomSink } from '@mapps/error-kit/browser';
+import logger from './utils/logger';
+import { toAxiomLogger } from './utils/axiomLogger';
 import { getVersionLabel } from './utils/versionLabel.js';
 import { AppErrorBoundary } from './components/ErrorBoundary/AppErrorBoundary';
 import App from './App';
 import './index.css';
 
-// 1. Global handlers FIRST — before any React render can throw.
-setupGlobalErrorHandlers();
+// 1. Global handlers FIRST — before any React render can throw. error-kit's
+//    setupGlobalErrorHandlers takes the app logger explicitly (no module-local
+//    logger import inside the package).
+setupGlobalErrorHandlers(logger);
 
 // Version layer (docs/monday-cicd-spec.md): one build-identity breadcrumb per
 // load — see error-guard/references/known-issues.md FP-4 for why this stays a
@@ -44,7 +47,25 @@ console.info('[team-people-column] ' + getVersionLabel());
 //     one-time Axiom setup: error-guard references/remote-monitoring.md. Once the
 //     monday context loads, also call setAxiomContext({accountId, userId, boardId,
 //     instanceId}) (useMondayContext is the natural place).
-attachAxiomSink();
+//
+//     The package's default active-gate does not require an `app` slug — this
+//     app's original gate did (VITE_AXIOM_APP), so `active` is computed
+//     explicitly here to preserve that requirement.
+const AXIOM_DATASET = import.meta.env.VITE_AXIOM_DATASET;
+const AXIOM_TOKEN = import.meta.env.VITE_AXIOM_TOKEN;
+const AXIOM_APP = import.meta.env.VITE_AXIOM_APP;
+attachAxiomSink(toAxiomLogger(logger), {
+  app: AXIOM_APP,
+  dataset: AXIOM_DATASET,
+  token: AXIOM_TOKEN,
+  active: import.meta.env.PROD === true && Boolean(AXIOM_DATASET) && Boolean(AXIOM_TOKEN) && Boolean(AXIOM_APP),
+  // Version layer: semver + build SHA (e.g. "2.2.0+a1b2c3f") for exact-commit
+  // traceability of remote error records.
+  appVersion:
+    (typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0') +
+    (typeof __BUILD_SHA__ !== 'undefined' ? `+${__BUILD_SHA__.slice(0, 7)}` : ''),
+  environment: import.meta.env.VITE_AXIOM_ENV ?? 'production',
+});
 
 // 1c. Dev-mock harness bootstrap — ONLY when running `pnpm dev:mock`
 //     (VITE_MONDAY_MOCK truthy). Must run BEFORE React mounts: it seeds the
@@ -76,7 +97,10 @@ async function boot() {
 // unhandledrejection record. Log it and write a minimal static Hebrew fallback
 // into #root so a pre-mount failure still has a display path.
 boot().catch((err) => {
-  handleGlobalError(err, { functionName: 'boot' });
+  // Same canonical shape the removed local handleGlobalError() used to produce
+  // (module 'boot', message 'Global error caught') — logger.error stamps the
+  // log-once id so nothing downstream re-logs this same error object.
+  logger.error('boot', 'Global error caught', err);
   const rootEl = document.getElementById('root');
   if (rootEl) {
     rootEl.innerHTML =

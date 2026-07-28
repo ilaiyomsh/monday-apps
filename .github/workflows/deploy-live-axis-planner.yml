@@ -26,6 +26,7 @@ on:
     paths:
       - "apps/axis/planner/**"
       - "packages/shared/**"
+      - "packages/error-kit/**"
       - "apps/axis/services/**"
 
 jobs:

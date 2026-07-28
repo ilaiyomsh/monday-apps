@@ -227,7 +227,9 @@
   "ganttProvider": {
     "toast": {
       "deleteFailed": "Failed to delete the allocation. The allocation has been restored.",
-      "bulkPmUpdateFailed": "Manager update: {{failed}}/{{total}} failed"
+      "bulkPmUpdateFailed": "Manager update: {{failed}}/{{total}} failed",
+      "modalCrashed": "The window failed to open. Please try again.",
+      "saveFailed": "Failed to save the change. The previous values were restored."
     }
   },
   "timeline": {

@@ -61,6 +61,13 @@ class ErrorBoundary extends React.Component {
     }
 
     componentDidCatch(error, errorInfo) {
+        // מטביעים את componentStack של React על אובייקט השגיאה כדי שיזרום ל-Axiom sink:
+        // logger.error(module,message,error) של tracker נעול-טסטים ואינו נושא context bag,
+        // לכן ה-sink קורא את errorInfo.componentStack מתוך אובייקט השגיאה (mapRecordToEvent →
+        // component_stack). Object.isExtensible מונע זריקה על שגיאה קפואה בלי catch ריק.
+        if (error && typeof error === 'object' && errorInfo?.componentStack && Object.isExtensible(error)) {
+            error.componentStack = errorInfo.componentStack;
+        }
         // נשאר logger.error (הרשומה הקנונית ל-sink חיצוני עתידי). ה-UI sink מדלג על
         // module='ErrorBoundary' ולכן אין טוסט כפול — ההצגה היא מסך ה-fallback בלבד.
         logger.error('ErrorBoundary', 'React error caught', error);

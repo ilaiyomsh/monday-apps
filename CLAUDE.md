@@ -69,15 +69,18 @@ and adds the Codex-specific wiring. See "Codex sessions" below.
   promotion of the tested draft — the release freeze is what keeps draft ≈ live.
 - Workflows: `.github/workflows/deploy-{draft,live}-<slug>.yml` per app + one
   shared `ci.yml`. Slugs: `discussions`, `axis-planner`, `axis-tracker`,
-  `axis-day-off`, `axis-sync-calender`, `team-people-column`, `deadline-confirm`
-  (slug ≠ directory name for axis apps).
+  `axis-day-off`, `axis-sync-calender`, `team-people-column`, `deadline-confirm`,
+  `telemetry-dashboard`, `twyst-your-status` (slug ≠ directory name for axis apps).
 - Secrets: `MONDAY_TOKEN` + one `APP_<SLUG_UPPERCASE_UNDERSCORED>_ID` per app.
   **No version IDs anywhere** — the CLI resolves latest draft/live itself.
 - Client vs server apps differ ONLY in the `-c` flag and pushed directory.
   Build output dirs vary per app (`dist` / `build` / app root) — **read the
   app's workflow file, never assume**.
 - Shared-path fan-out: `packages/shared/**` redeploys ALL apps;
-  `apps/axis/services/**` redeploys the four axis apps.
+  `apps/axis/services/**` redeploys the four axis apps;
+  `packages/error-kit/**` redeploys the five apps that IMPORT it (tracker, day-off,
+  planner, discussions, team-people-column) via their workflow path triggers — the
+  server/SPA apps vendor a copy instead, so they are unaffected (drift-tested, not imported).
 - `workflow_dispatch` exists on draft workflows only (post-detach redeploys).
   A draft deploy that fails after merge is fixed FORWARD on a new feature branch.
 - **Never run `mapps code:push` from a machine — with or without ship.sh.**
@@ -103,9 +106,13 @@ and adds the Codex-specific wiring. See "Codex sessions" below.
 apps/discussions                    flat app (client, build/)
 apps/team-people-column             flat app (client, dist/)
 apps/deadline-confirm               flat app (server, app root; admin SPA served from it)
+apps/telemetry-dashboard            flat app (server, app root; dashboard SPA served from it)
 apps/axis/{planner,tracker,day-off,sync-calender}   nested system
 apps/axis/services/{app-core,monday-api}            axis shared runtime code
 apps/axis/docs/FOLLOW-UPS.md        onboarding-debt ledger
+packages/error-kit                  canonical error→Axiom shipping (@mapps/error-kit): clients
+                                    import it, axis via the app-core facade, servers+SPAs
+                                    vendor a copy that drift.test.ts keeps in sync
 packages/shared                     EMPTY STUB — see below
 ```
 
@@ -124,6 +131,8 @@ packages/shared                     EMPTY STUB — see below
   | axis-sync-calender | `apps/axis/sync-calender` | 11666315 | server, app root |
   | team-people-column | `apps/team-people-column` | 11689948 | client, `dist/` |
   | deadline-confirm | `apps/deadline-confirm` | 11704868 | server, app root |
+  | telemetry-dashboard | `apps/telemetry-dashboard` | pending — secret `APP_TELEMETRY_DASHBOARD_ID` not yet set (slug `telemetry-dashboard`) | server, app root |
+  | twyst-your-status | `apps/twyst-your-status` | pending — secret `APP_TWYST_YOUR_STATUS_ID` (slug `twyst-your-status`) | client, `dist/` |
 
 ## Quality gates
 
@@ -246,9 +255,12 @@ packages/shared                     EMPTY STUB — see below
 ## Error handling & observability
 
 One unified standard, from catching an error to shipping it to Axiom:
-**`docs/ERROR-AXIOM-STANDARD.md`** (authority: the `error-guard` skill). Client apps
-ship through the single hardened transport in `@axis/app-core` via `attachAxiomSink` —
-never a raw fetch. Shared dataset `app-errors`, discriminated by `app`.
+**`docs/ERROR-AXIOM-STANDARD.md`** (authority: the `error-guard` skill). The canonical
+shipping layer is **`packages/error-kit` (`@mapps/error-kit`)** — pure clients import it,
+axis apps consume it via the `@axis/app-core` facade, and server apps + embedded SPAs
+vendor a copy that `packages/error-kit/test/drift.test.ts` keeps behaviorally in sync.
+Never a raw fetch. Shared dataset `app-errors`, discriminated by `app`. Wiring is enforced
+in CI by `scripts/error-wiring-audit.mjs` + the error-kit test suite (both blocking).
 
 To **query/triage** `app-errors` (send an agent to check errors), use the `axiom-sre`
 skill — agent playbook with the live schema, conventions/gotchas (e.g. `err_name` is

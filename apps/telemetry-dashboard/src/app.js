@@ -111,6 +111,7 @@ export function createApp({
   const requireSession = createSessionTokenMiddleware({
     clientSecret: env.clientSecret,
     allowedAccountIds: env.allowedAccountIds,
+    logger,
   });
 
   app.get('/api/telemetry', requireSession, async (req, res) => {

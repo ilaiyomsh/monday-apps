@@ -3,6 +3,7 @@ import { Button, Chips, ExpandCollapse, Flex, IconButton, Text, Tooltip } from '
 import { Check, CloseSmall, Undo } from '@vibe/icons';
 import { EditorDispatcher } from './EditorDispatcher';
 import { isMeaningful } from '../../lib/mappingEntry';
+import logger from '../../lib/logger';
 import type { Column, ColumnMapping, ColumnMappingEntry, Policy } from '../../types';
 
 interface Props {
@@ -76,6 +77,10 @@ export function ColumnMappingTable({ columns, policy, canEdit, onSaveMapping }: 
     try {
       await onSaveMapping(mapping);
       setSavedSnapshot(JSON.stringify(mapping));
+    } catch (err) {
+      // onSaveMapping (SetupTab handlePatch) already displays the failure toast and rethrows;
+      // log here so the failure reaches Axiom, and swallow so it isn't an unhandled rejection.
+      logger.error('mapping', 'column_mapping_save_failed', err);
     } finally {
       setSaving(false);
     }
