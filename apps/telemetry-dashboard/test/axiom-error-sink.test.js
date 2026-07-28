@@ -7,8 +7,8 @@
 // without String(), and drift's own check asserted String(mapped.err_name), so coercing in
 // the test hid the missing coercion in the source.
 
-import { describe, it, expect } from 'vitest';
-import { shouldShip, scrubMessage, mapRecordToEvent } from '../src/client/utils/axiomErrorSink.ts';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { shouldShip, scrubMessage, mapRecordToEvent, attachAxiomSink } from '../src/client/utils/axiomErrorSink.ts';
 
 const record = (over = {}) => ({ level: 'ERROR', module: 'svc', message: 'op_failed', ...over });
 
@@ -105,5 +105,145 @@ describe('shouldShip — WARN/ERROR policy, duplicate drop, alwaysShip bypass', 
   it('drops a nullish record rather than throwing', () => {
     expect(shouldShip(null)).toBe(false);
     expect(shouldShip(undefined)).toBe(false);
+  });
+});
+
+// Audit finding 5: the teardown returned by attachAxiomSink was just logger.addSink's raw
+// unsubscribe. It left the global attach guard SET, so every later attach hit the guard and
+// became a permanent no-op — remote logging was gone for the rest of the session — and it
+// never disposed the transport, so the flush timer plus the visibility/pagehide listeners
+// kept running on a transport nobody fed.
+//
+// Ownership is the subtlety: a transport this module BUILT is ours to dispose, while one
+// handed in by a caller is not (its lifecycle belongs to them). The `create` seam exists so
+// the owned path is testable — under vitest the activation gate is false, so the module's
+// own transport is null and the owned branch would otherwise be unreachable.
+describe('attachAxiomSink teardown — releases the guard and the transport it owns', () => {
+  function fakeTransport() {
+    return {
+      enqueue: vi.fn(),
+      setContext: vi.fn(),
+      flush: vi.fn(),
+      stats: vi.fn(() => ({})),
+      dispose: vi.fn(),
+    };
+  }
+
+  /** A logger double exposing just the surface attachAxiomSink touches. */
+  function fakeLogger(buffer = []) {
+    const sinks = new Set();
+    return {
+      getBuffer: () => buffer,
+      addSink: (fn) => {
+        sinks.add(fn);
+        return () => sinks.delete(fn);
+      },
+      emit: (record) => sinks.forEach((fn) => fn(record)),
+      sinkCount: () => sinks.size,
+    };
+  }
+
+  const shippable = { level: 'ERROR', module: 'svc', message: 'boom' };
+
+  // Two pieces of module state outlive a test: the globalThis attach guard, and the
+  // module's own transport slot. Leaving either set meant the next attach reused a stale
+  // transport instead of calling create() — so tests asserted on the wrong spy. Every
+  // attachment is registered and torn down.
+  const teardowns = [];
+  const attach = (opts) => {
+    const fn = attachAxiomSink(opts);
+    teardowns.push(fn);
+    return fn;
+  };
+
+  beforeEach(() => {
+    delete globalThis.__ERROR_GUARD_AXIOM_SINK_ATTACHED__;
+  });
+
+  afterEach(() => {
+    // Teardown is idempotent, so re-running one a test already called is safe.
+    while (teardowns.length > 0) teardowns.pop()();
+    delete globalThis.__ERROR_GUARD_AXIOM_SINK_ATTACHED__;
+  });
+
+  it('disposes the transport it built, so the flush timer and listeners stop', () => {
+    const t = fakeTransport();
+    const log = fakeLogger();
+    attach({ log, create: () => t })();
+    expect(t.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('unsubscribes the sink, so records stop reaching the transport', () => {
+    const t = fakeTransport();
+    const log = fakeLogger();
+    const teardown = attach({ log, create: () => t });
+
+    log.emit(shippable);
+    expect(t.enqueue).toHaveBeenCalledTimes(1);
+
+    teardown();
+    log.emit(shippable);
+    expect(t.enqueue).toHaveBeenCalledTimes(1); // no further ships
+    expect(log.sinkCount()).toBe(0);
+  });
+
+  it('clears the attach guard, so a later attach really attaches again', () => {
+    const first = fakeTransport();
+    const log1 = fakeLogger();
+    attach({ log: log1, create: () => first })();
+
+    // THE bug: with the guard still set this second attach was a permanent no-op.
+    const second = fakeTransport();
+    const log2 = fakeLogger();
+    attach({ log: log2, create: () => second });
+    log2.emit(shippable);
+
+    expect(second.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('builds a FRESH transport on re-attach rather than reusing the disposed one', () => {
+    const first = fakeTransport();
+    const second = fakeTransport();
+    const builds = [first, second];
+
+    const log1 = fakeLogger();
+    attach({ log: log1, create: () => builds.shift() })();
+    const log2 = fakeLogger();
+    attach({ log: log2, create: () => builds.shift() });
+    log2.emit(shippable);
+
+    expect(second.enqueue).toHaveBeenCalledTimes(1);
+    expect(first.enqueue).not.toHaveBeenCalled(); // the disposed one is never fed again
+  });
+
+  it('never disposes a BORROWED transport — the caller owns its lifecycle', () => {
+    const t = fakeTransport();
+    const log = fakeLogger();
+    attach({ log, t })();
+    expect(t.dispose).not.toHaveBeenCalled();
+  });
+
+  it('a second attach while one is live is a no-op that does not tear the live one down', () => {
+    const live = fakeTransport();
+    const log = fakeLogger();
+    attach({ log, create: () => live });
+
+    const intruder = fakeTransport();
+    const teardownOfNoop = attach({ log: fakeLogger(), create: () => intruder });
+    teardownOfNoop();
+
+    // The live transport must survive the no-op's teardown, and still be fed.
+    expect(live.dispose).not.toHaveBeenCalled();
+    log.emit(shippable);
+    expect(live.enqueue).toHaveBeenCalledTimes(1);
+  });
+
+  it('is safe to tear down twice', () => {
+    const t = fakeTransport();
+    const log = fakeLogger();
+    const teardown = attach({ log, create: () => t });
+    teardown();
+    expect(() => teardown()).not.toThrow();
+    expect(t.dispose).toHaveBeenCalledTimes(1);
   });
 });
