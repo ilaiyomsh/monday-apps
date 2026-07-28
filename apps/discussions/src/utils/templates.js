@@ -180,6 +180,11 @@ export async function createTopicsFromTemplate(discussionId, template, {
   freshDiscussion = false,
   resumeState = null,
   onCheckpoint,
+  // round301 — STAGED creation. When set, this pass creates every topic but only
+  // the points of the listed topic sourceIndexes; a later pass resuming from this
+  // pass's checkpoint creates the rest. Lets a fresh discussion open as soon as
+  // its topics + the first topic's points exist, instead of after every point.
+  pointTopicIndexes = null,
 } = {}) {
   const clean = sanitizeTemplate(template);
   if (!discussionId || !clean.topics.length) return { topics: 0, points: 0, topicIds: [] };
@@ -236,7 +241,17 @@ export async function createTopicsFromTemplate(discussionId, template, {
     return snapshot;
   };
 
-  const total = clean.topics.reduce((count, topic) => count + 1 + topic.points.length, 0);
+  // A staged pass only owns the points it is going to create, so the progress
+  // total must exclude the deferred ones — otherwise stage 1's bar stalls short
+  // of full and looks stuck.
+  const stagedTopicIndexes = Array.isArray(pointTopicIndexes)
+    ? new Set(pointTopicIndexes.map(Number))
+    : null;
+  const createsPointsFor = (sourceIndex) => !stagedTopicIndexes || stagedTopicIndexes.has(sourceIndex);
+  const total = clean.topics.reduce(
+    (count, topic, sourceIndex) => count + 1 + (createsPointsFor(sourceIndex) ? topic.points.length : 0),
+    0
+  );
   let done = state.topicResults.length + state.pointResults.length;
   const report = () => {
     if (typeof onProgress !== 'function') return;
@@ -411,7 +426,9 @@ export async function createTopicsFromTemplate(discussionId, template, {
   const completedPoints = new Set(
     state.pointResults.map((result) => `${result.topicSourceIndex}:${result.pointIndex}`)
   );
-  const pointTopics = state.topicResults.map((topicResult) => ({
+  const pointTopics = state.topicResults
+    .filter((topicResult) => createsPointsFor(topicResult.sourceIndex))
+    .map((topicResult) => ({
     id: topicResult.id,
     sourceIndex: topicResult.sourceIndex,
     points: clean.topics[topicResult.sourceIndex].points

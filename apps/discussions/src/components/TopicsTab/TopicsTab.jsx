@@ -590,7 +590,11 @@ export function TopicsTab({
     items, loading, addTopic, addPoint, retryCreate, togglePoint, refetch,
     togglePointNotForDiscussion, toggleTopicNotForDiscussion, updateTopicPriority,
     renameTopic, deleteTopic, softDeleteTopic, renamePoint, softDeletePoints, reorderTopics, reorderPoints,
-  } = useTopics(discussion.id, { onSuccess: onNotify, onLoading: onNotifyLoading, onDismiss: onDismissToast });
+  } = useTopics(discussion.id, {
+    onSuccess: onNotify, onLoading: onNotifyLoading, onDismiss: onDismissToast,
+    // round301 — refetch when a background creation stage adds more topics/points.
+    reloadKey: discussion.__reloadStamp,
+  });
   useEffect(() => { onLoadingChange?.(loading); }, [loading, onLoadingChange]);
 
   // round220 — the @-mention roster for the triple box: the discussion's people,
