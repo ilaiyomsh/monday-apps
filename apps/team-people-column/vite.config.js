@@ -24,7 +24,12 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: false,
+    // Emit sourcemaps as SEPARATE .map files WITHOUT the //# sourceMappingURL
+    // comment ('hidden') so CI can archive them for stack symbolication
+    // (axiom-sre scripts/symbolicate) while the browser never fetches them.
+    // The deploy workflow archives + deletes dist/**/*.map before code:push.
+    // See docs/LOGGING-ARCHITECTURE.md §6.
+    sourcemap: 'hidden',
     rollupOptions: {
       output: {
         // Stable vendor chunks: the dialog iframe reloads on every cell click,

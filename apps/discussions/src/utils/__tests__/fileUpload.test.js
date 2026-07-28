@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { uploadFileToColumn } from '../mondayApi/fileUpload.js';
+
+// clearFileColumn goes through the seamless monday.api(); mock it so we can
+// assert the mutation variables without a network call.
+const apiMock = vi.hoisted(() => vi.fn());
+vi.mock('../mondayApi/monday-client.js', () => ({ api: apiMock }));
+
+import { uploadFileToColumn, clearFileColumn } from '../mondayApi/fileUpload.js';
 
 describe('uploadFileToColumn', () => {
   afterEach(() => { vi.restoreAllMocks(); });
@@ -46,5 +52,25 @@ describe('uploadFileToColumn', () => {
     await expect(
       uploadFileToColumn({ itemId: '1', columnId: 'files', blob: new Blob(['x']), token: 'tok' })
     ).rejects.toThrow(/invalid column/);
+  });
+});
+
+describe('clearFileColumn (round244)', () => {
+  afterEach(() => { apiMock.mockReset(); });
+
+  it('throws when any of itemId / columnId / boardId is missing', async () => {
+    await expect(clearFileColumn({ itemId: '', columnId: 'files', boardId: '9' })).rejects.toThrow(/required/i);
+    await expect(clearFileColumn({ itemId: '1', columnId: '', boardId: '9' })).rejects.toThrow(/required/i);
+    await expect(clearFileColumn({ itemId: '1', columnId: 'files', boardId: '' })).rejects.toThrow(/required/i);
+    expect(apiMock).not.toHaveBeenCalled();
+  });
+
+  it('calls change_column_value with the {"clear_all":true} value and stringified ids', async () => {
+    apiMock.mockResolvedValue({ change_column_value: { id: '1' } });
+    await clearFileColumn({ itemId: 123, columnId: 'files', boardId: 456 });
+    expect(apiMock).toHaveBeenCalledTimes(1);
+    const [query, vars] = apiMock.mock.calls[0];
+    expect(query).toContain('change_column_value');
+    expect(vars).toEqual({ board: '456', item: '123', col: 'files', val: '{"clear_all":true}' });
   });
 });

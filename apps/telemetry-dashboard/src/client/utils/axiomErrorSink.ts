@@ -213,6 +213,19 @@ export function mapRecordToEvent(record: LogRecord | null | undefined): AxiomEve
       ev.component_stack = scrubCapped(ctx.componentStack, COMPONENT_STACK_MAXLEN);
     }
   }
+  // Guarantee an err_name on every ERROR event — canonical @mapps/error-kit behaviour,
+  // drift-locked. Real Errors keep err.name; otherwise fall back to the stable message
+  // event-id, then the tag, so nothing ships nameless (the telemetry dashboard groups by
+  // err_name, and the dedup key reads it).
+  // Both candidates are trimmed: a whitespace-only name groups no better than a missing
+  // one, so it must fall through to 'unknown' rather than ship as ' '.
+  // (err_name comes off the `[key: string]: unknown` index signature — narrow before use.)
+  const existingName = typeof ev.err_name === 'string' ? ev.err_name : '';
+  if (ev.kind === 'error' && existingName.trim() === '') {
+    const msg = typeof ev.message === 'string' ? ev.message.trim() : '';
+    const tag = typeof ev.tag === 'string' ? ev.tag.trim() : '';
+    ev.err_name = msg || tag || 'unknown';
+  }
   return ev;
 }
 

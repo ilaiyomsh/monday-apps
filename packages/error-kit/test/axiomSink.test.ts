@@ -164,6 +164,30 @@ describe('mapRecordToEvent — allowlisted mapping', () => {
     expect(s).not.toContain('abcdef0123456789ABCD');
     expect(s).not.toContain('12345678');
   });
+
+  // err_name guarantee — discussions Change #149, generalised into error-kit when that
+  // app migrated off its vendored sink. The dashboard groups by err_name and the dedup
+  // key reads it, so an ERROR event must never ship nameless.
+  it('a real Error keeps its own name — no fallback applied', () => {
+    const err = Object.assign(new TypeError('boom'), { stack: 'TypeError: boom\n    at f (a.js:1:1)' });
+    expect(mapRecordToEvent(rec({ error: err })).err_name).toBe('TypeError');
+  });
+  it('falls back err_name to the message event-id when the record carries no Error', () => {
+    const ev = mapRecordToEvent(rec({ module: 'globalerrorhandler', message: 'Uncaught error' }));
+    expect(ev.err_name).toBe('Uncaught error');
+  });
+  it('falls back err_name to the tag when the message is empty too', () => {
+    expect(mapRecordToEvent(rec({ module: 'boot', message: '' })).err_name).toBe('boot');
+  });
+  it("falls back err_name to 'unknown' when neither message nor tag can name it", () => {
+    // module '' -> the tag defaults to 'app'; only a blank-after-trim tag reaches 'unknown'.
+    const ev = mapRecordToEvent({ ...rec({ message: '   ' }), module: ' ' } as LogRecord);
+    expect(ev.err_name).toBe('unknown');
+  });
+  it('never adds err_name to non-error kinds (usage/health)', () => {
+    expect(mapRecordToEvent(rec({ level: 'INFO', kind: 'usage', message: 'view_open' })).err_name).toBeUndefined();
+    expect(mapRecordToEvent(rec({ level: 'INFO', kind: 'health', message: 'boot' })).err_name).toBeUndefined();
+  });
 });
 
 describe('attachAxiomSink', () => {

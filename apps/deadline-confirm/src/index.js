@@ -13,7 +13,6 @@ const envManager = new EnvironmentVariablesManager({ updateProcessEnv: true });
 import { createApp } from './app.js';
 import { createAppStorage } from './services/storage.js';
 import { createMondayApi } from './services/monday-api.js';
-import { createEmailSender } from './services/email-sender.js';
 import { createRateLimiter } from './helpers/rate-limit.js';
 import { createSecureStorageBackend } from './storage/secure-storage-backend.js';
 import { createMemoryBackend } from './storage/memory-backend.js';
@@ -28,6 +27,16 @@ import {
 } from './helpers/process-guards.js';
 
 const env = getEnv();
+
+if (env.allowedAccountIds.length === 0) {
+  // D15: empty roster is default-deny. Surfacing loudly at boot so a missing
+  // mapps code:env does not silently lock every tenant out.
+  logger.logError(
+    'server',
+    'ALLOWED_ACCOUNT_IDS is empty — default-deny; nobody is admitted and the scheduler sends to nobody (D15)',
+    {}
+  );
+}
 
 // App version for boot health (read via fs so it works on plain node 20 without
 // JSON import attributes). Never fatal, never a silent empty catch — the guard
@@ -74,16 +83,22 @@ const backend = safeBootInit(
 );
 const storage = createAppStorage({ backend });
 const api = createMondayApi();
-const rateLimiter = createRateLimiter();
+// V6 §4 two buckets: A (per-IP, generous — abuse control before any secret
+// work) and B (per accountId:ip, 30/min — protects the monday complexity
+// budget after verification). Entropy blocks guessing; these protect
+// resources.
+const rateLimiters = {
+  perIp: createRateLimiter({ capacity: 120 }),
+  perAccount: createRateLimiter(),
+};
 
-// v4 digest sender — wired only when BOTH env values exist; otherwise the
-// digest send endpoint answers 409 email_not_configured (admin shows a hint).
-const emailSender =
-  env.resendApiKey && env.digestFrom
-    ? createEmailSender({ apiKey: env.resendApiKey, from: env.digestFrom })
-    : undefined;
+// V6: Resend is removed. The digest sender seam stays empty until the
+// Gmail-API OAuth + send path lands (T9/T9b/T9c — deferred until the Google
+// Cloud app is provisioned). Until then POST /api/digest/send and the
+// scheduler skip with email_not_configured / skip reasons.
+const emailSender = undefined;
 
-const app = createApp({ storage, api, rateLimiter, env, emailSender });
+const app = createApp({ storage, api, rateLimiters, env, emailSender });
 
 const server = app.listen(env.port, () => {
   logInfo('server', 'deadline-confirm listening', { port: env.port, localStorage: env.useLocalStorage });

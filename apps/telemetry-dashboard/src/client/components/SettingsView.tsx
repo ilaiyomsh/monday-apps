@@ -6,7 +6,12 @@
 // returns not_authorized and this view links them to /oauth/start.
 
 import { useCallback, useEffect, useState } from 'react';
-import { fetchSettings, provisionBoard, type SettingsState } from '../lib/settings-api';
+import {
+  disconnectApp,
+  fetchSettings,
+  provisionBoard,
+  type SettingsState,
+} from '../lib/settings-api';
 import logger from '../utils/logger';
 
 const COLUMN_LABELS: Record<string, string> = {
@@ -59,6 +64,19 @@ export function SettingsView() {
     setBusy(false);
   }, [load]);
 
+  const onDisconnect = useCallback(async () => {
+    setBusy(true);
+    setNotice(null);
+    const res = await disconnectApp();
+    if (res.ok) {
+      setNotice(res.revoked ? 'Disconnected ✓' : 'Disconnected (remote revocation failed — token cleared locally).');
+      await load();
+    } else {
+      setNotice('Disconnect failed — try again.');
+    }
+    setBusy(false);
+  }, [load]);
+
   if (loadError) {
     return (
       <div className="settings">
@@ -82,8 +100,21 @@ export function SettingsView() {
         <p className="page__sub">
           Board writes use the app's own monday identity, authorized once by the owner.
         </p>
-        {state.oauthConnected ? (
-          <p className="settings__status settings__status--ok">Authorized ✓</p>
+        {state.oauthStatus === 'connected' ? (
+          <>
+            <p className="settings__status settings__status--ok">Authorized ✓</p>
+            <button className="settings__btn" onClick={onDisconnect} disabled={busy}>
+              {busy ? 'Working…' : 'Disconnect'}
+            </button>
+          </>
+        ) : state.oauthStatus === 'reauth_required' ? (
+          <p className="settings__status settings__status--warn">
+            Authorization expired (monday tokens live at most 6 months) —{' '}
+            <a href="/oauth/start" target="_blank" rel="noreferrer">
+              reauthorize the app
+            </a>
+            , then reload.
+          </p>
         ) : (
           <p className="settings__status settings__status--warn">
             Not authorized —{' '}

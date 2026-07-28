@@ -237,6 +237,7 @@ const executeWithRetry = async (fn, { onRetry } = {}) => {
  * @param {string} query - שאילתת GraphQL
  * @param {Object} [options] - אפשרויות נוספות
  * @param {Object} [options.variables] - משתנים לשאילתה
+ * @param {boolean} [options.retry=true] - false for non-idempotent mutations
  * @returns {Promise<Object>} - התשובה הגולמית מה-API
  */
 export const safeApi = async (monday, callerName, query, options = {}) => {
@@ -301,6 +302,7 @@ export const safeApi = async (monday, callerName, query, options = {}) => {
     };
 
     try {
+        if (options.retry === false) return await oneAttempt();
         return await executeWithRetry(oneAttempt, {
             onRetry: ({ error, attempt, delay }) => {
                 const retryCode = error.errorCode || _getErrorExtensions(error)?.code;

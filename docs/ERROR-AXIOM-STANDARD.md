@@ -54,6 +54,12 @@ How each surface gets that code depends on how it deploys:
 > no batching/breaker/sanitizer, serialized the full record (a privacy leak). Never
 > reintroduce a raw fetch to Axiom anywhere but the sanctioned transport/query files.
 
+The shipped `stack1` is a single **minified** frame. To read it as `File.jsx:line`,
+every client bundle builds `sourcemap: 'hidden'` and CI archives the maps as an
+artifact (never served) — resolve on demand with
+`.claude/skills/axiom-sre/scripts/symbolicate '<stack1>' --app <app> --ver <ver>`.
+See `LOGGING-ARCHITECTURE.md` §6.
+
 ## Dataset model (fixed decision)
 
 **ONE shared dataset `app-errors` for the whole portfolio**, discriminated by the `app`
@@ -72,12 +78,13 @@ alerting — dashboards (telemetry-dashboard) + ad-hoc `axiom-sre` queries only.
 | 5 | axis-planner | client | package | `apps/axis/planner/src/utils/errorReporting.ts` (`initErrorReporting`) |
 | 6 | discussions | client | package | `apps/discussions/src/utils/axiomLoggerAdapter.js` |
 | 7 | team-people-column | client | package | `apps/team-people-column/src/utils/axiomLogger.js` |
-| 8 | sync-calender admin SPA | client | vendored | `apps/axis/sync-calender/src/client/admin/utils/*` |
-| 9 | deadline-confirm admin SPA | client | vendored | `apps/deadline-confirm/src/client/admin/utils/*` |
-| 10 | telemetry-dashboard client | client | vendored | `apps/telemetry-dashboard/src/client/utils/*` |
-| 11 | sync-calender server | server | vendored | `apps/axis/sync-calender/src/services/axiomServerSink.js` |
-| 12 | deadline-confirm server | server | vendored | `apps/deadline-confirm/src/helpers/axiomServerSink.js` |
-| 13 | telemetry-dashboard server | server | vendored | `apps/telemetry-dashboard/src/helpers/axiomServerSink.js` |
+| 8 | twyst-your-status | client | package | `apps/twyst-your-status/src/utils/axiomLoggerAdapter.js` |
+| 9 | sync-calender admin SPA | client | vendored | `apps/axis/sync-calender/src/client/admin/utils/*` |
+| 10 | deadline-confirm admin SPA | client | vendored | `apps/deadline-confirm/src/client/admin/utils/*` |
+| 11 | telemetry-dashboard client | client | vendored | `apps/telemetry-dashboard/src/client/utils/*` |
+| 12 | sync-calender server | server | vendored | `apps/axis/sync-calender/src/services/axiomServerSink.js` |
+| 13 | deadline-confirm server | server | vendored | `apps/deadline-confirm/src/helpers/axiomServerSink.js` |
+| 14 | telemetry-dashboard server | server | vendored | `apps/telemetry-dashboard/src/helpers/axiomServerSink.js` |
 
 Every client surface has: a root `ErrorBoundary`, `setupGlobalErrorHandlers()` +
 `attachAxiomSink()` before render, identity enrichment. Every server has: process guards

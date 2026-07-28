@@ -28,6 +28,10 @@ function opName(query) {
   return m ? m[1] : 'anon';
 }
 
+const ME_QUERY = `query Me {
+  me { account { id slug } }
+}`;
+
 const CREATE_ITEM_MUTATION = `mutation CreateItem($boardId: ID!, $groupId: String, $itemName: String!, $columnValues: JSON) {
   create_item(board_id: $boardId, group_id: $groupId, item_name: $itemName, column_values: $columnValues) { id }
 }`;
@@ -151,6 +155,20 @@ export function createMondayApi({ getToken, url = MONDAY_API_URL, fetchImpl, log
 
   return {
     graphql,
+
+    /**
+     * The token's own account identity — id + slug (for instance URLs).
+     * Shape mirrors sync-calender's fetchMondayIdentity (live-verified).
+     * @returns {Promise<{ accountId: string|null, accountSlug: string|null }>}
+     */
+    async fetchMe() {
+      const data = await graphql(ME_QUERY, {});
+      const account = data.me?.account ?? {};
+      return {
+        accountId: account.id == null ? null : String(account.id),
+        accountSlug: typeof account.slug === 'string' ? account.slug : null,
+      };
+    },
 
     /**
      * Create an item, optionally inside a group. column_values travels as a

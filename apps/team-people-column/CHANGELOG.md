@@ -1,5 +1,13 @@
 # Changelog - team-people-column
 
+## 2026-07-22 — Stack symbolication (hidden sourcemaps)
+
+### 🔧 Infrastructure
+
+- **2026-07-22** — Build now emits `sourcemap: 'hidden'` (maps written without the `//# sourceMappingURL` comment). CI archives the maps as artifact `sourcemaps-team-people-column-<sha>` (90d) then deletes them from the deploy dir before `mapps code:push`, so maps are never served to the browser. Minified `stack1` frames in the shared `app-errors` dataset are now resolvable to source via `.claude/skills/axiom-sre/scripts/symbolicate '<frame>' --app team-people-column --ver <x.y.z+sha>`. No version bump. (#356)
+  - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
+  - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
+
 ## 2.2.0 — 2026-07-17
 
 - Axiom logging v2 (Phase 3): the local logger/sink gain the shared v2 telemetry

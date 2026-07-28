@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Text, Button, Flex } from '@vibe/core';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { computeBoundedAnchorStyle } from './anchorBounds.js';
 import styles from './QuickCreateModal.module.css';
 
 /**
@@ -71,10 +72,15 @@ export function QuickCreateModal({
     setDeadline(null);
   }, [open, initialMode, allowDecision, allowTask]);
 
-  // Focus the text input on open (matches NewTaskModal).
+  // round229 (owner request) — focus the text input the moment the card opens
+  // AND every time the משימה/החלטה toggle switches, so the user can type
+  // immediately without clicking into the field. rAF defers the focus to after
+  // the (re)render so the anchored/re-keyed input actually receives it.
   useEffect(() => {
-    if (open && inputRef.current) inputRef.current.focus();
-  }, [open]);
+    if (!open) return undefined;
+    const id = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [open, mode]);
 
   // Escape closes the modal.
   useEffect(() => {
@@ -85,7 +91,10 @@ export function QuickCreateModal({
   }, [open, onClose]);
 
   const isDecision = mode === 'decision';
-  const showToggle = !scopedPoint; // mockup: fabShowToggle = !pointId
+  // round226 (approved mockup — unified תוצרים): the משימה/החלטה toggle shows
+  // for POINT-SCOPED creates too (the point's single + opens ONE box, task
+  // default). It hides only when a side is capability-disabled at the callsite.
+  const showToggle = allowTask && allowDecision;
   const scopeLabel = useMemo(() => {
     if (scopedPoint?.name) return `משויך לנקודה: ${scopedPoint.name}`;
     if (discussion?.name) return `דיון: ${discussion.name}`;
@@ -131,21 +140,35 @@ export function QuickCreateModal({
   // the button's center, clamped so the 520px shell never leaves the viewport.
   // Desktop only — the ≤768px bottom-sheet keeps its own layout.
   const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
-  const anchorStyle = (anchor && isDesktop)
-    ? (() => {
-        const width = Math.min(520, window.innerWidth - 32);
-        const centerX = anchor.left + anchor.width / 2;
-        const left = Math.max(16, Math.min(centerX - width / 2, window.innerWidth - width - 16));
-        const top = Math.max(16, Math.min(anchor.bottom + 8, window.innerHeight - 380));
-        return { position: 'absolute', top, left, margin: 0 };
-      })()
-    : undefined;
+  // round243 (round237 point 1) — a per-point "+" open carries the אג'נדה box
+  // bounds (anchor.bounds); when present the card is confined INSIDE the box
+  // (never spilling outside the topics card) instead of clamping to the whole
+  // viewport. The pure computeBoundedAnchorStyle does the geometry.
+  const bounded = (anchor?.bounds && isDesktop)
+    ? computeBoundedAnchorStyle({ anchor, bounds: anchor.bounds })
+    : null;
+  const anchorStyle = bounded
+    ? { position: 'absolute', top: bounded.top, left: bounded.left, width: bounded.width, maxHeight: bounded.maxHeight, overflowY: 'auto', margin: 0 }
+    : (anchor && isDesktop)
+      ? (() => {
+          // round235/266 — the shell is a compact ~280px popover-like card.
+          const width = Math.min(280, window.innerWidth - 32);
+          const centerX = anchor.left + anchor.width / 2;
+          const left = Math.max(16, Math.min(centerX - width / 2, window.innerWidth - width - 16));
+          const top = Math.max(16, Math.min(anchor.bottom + 8, window.innerHeight - 280));
+          return { position: 'absolute', top, left, margin: 0 };
+        })()
+      : undefined;
 
   // Centered layout applies only when no anchor is in effect (an anchored
-  // per-point open always wins; mobile keeps the bottom sheet either way).
-  const overlayClass = (centered && !anchorStyle)
-    ? `${styles.overlay} ${styles.overlayCentered}`
-    : styles.overlay;
+  // per-point open always wins; mobile keeps the bottom sheet either way). A
+  // box-confined open uses a transparent backdrop so it reads as a popover
+  // living inside the agenda card, not a screen-dimming modal.
+  const overlayClass = bounded
+    ? `${styles.overlay} ${styles.overlayBounded}`
+    : (centered && !anchorStyle)
+      ? `${styles.overlay} ${styles.overlayCentered}`
+      : styles.overlay;
 
   return (
     <div className={overlayClass} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -235,11 +258,12 @@ export function QuickCreateModal({
             </div>
           )}
 
-          <Flex gap={8} justify="end" className={styles.footer}>
-            <Button kind="tertiary" onClick={onClose}>
+          {/* round266 — compact (small) footer buttons scaled to the smaller card. */}
+          <Flex gap={6} justify="end" className={styles.footer}>
+            <Button kind="tertiary" size="small" onClick={onClose}>
               ביטול
             </Button>
-            <Button onClick={submit} disabled={!canSubmit}>
+            <Button size="small" onClick={submit} disabled={!canSubmit}>
               {isDecision ? 'צור החלטה' : 'צור משימה'}
             </Button>
           </Flex>

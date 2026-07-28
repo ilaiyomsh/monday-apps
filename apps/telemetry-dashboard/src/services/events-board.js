@@ -72,6 +72,17 @@ export function createEventsBoardService({ mondayApi, getConfig, logger }) {
     put('feature', String(evt.feature ?? ''));
     put('account_id', String(evt.accountId ?? ''));
     put('user_id', String(evt.userId ?? ''));
+    // #145 enrichment columns (skipped automatically on pre-#145 boards
+    // whose stored column map has no ids for them).
+    put('user_name', String(evt.userName ?? ''));
+    put('user_email', String(evt.userEmail ?? ''));
+    put('workspace', String(evt.workspace ?? ''));
+    put('object_name', String(evt.objectName ?? ''));
+    if (typeof evt.objectUrl === 'string' && evt.objectUrl.length > 0) {
+      // monday link column value: { url, text } — text falls back to the url.
+      put('object_url', { url: evt.objectUrl, text: String(evt.objectName || evt.objectUrl) });
+    }
+    put('app_version', String(evt.appVersion ?? ''));
     put('details', { text: stringifyDetails(evt.details) });
     put('event_id', String(evt.eventId ?? ''));
     return values;

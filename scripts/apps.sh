@@ -13,6 +13,7 @@ APP_SLUGS=(
   discussions
   team-people-column
   telemetry-dashboard
+  twyst-your-status
 )
 
 app_path() {
@@ -25,6 +26,7 @@ app_path() {
     discussions)         echo "apps/discussions" ;;
     team-people-column)  echo "apps/team-people-column" ;;
     telemetry-dashboard) echo "apps/telemetry-dashboard" ;;
+    twyst-your-status)   echo "apps/twyst-your-status" ;;
     *) echo "unknown app slug: $1" >&2; return 1 ;;
   esac
 }

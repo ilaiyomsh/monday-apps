@@ -109,27 +109,25 @@ else
 
       # If a type-aware run produced no parseable output (project-service error),
       # retry once WITHOUT type awareness so the syntax kit still reports.
-      if [ "$TYPE_AWARE" = 1 ] && ! jq -e . "$OUT" >/dev/null 2>&1; then
+      if [ "$TYPE_AWARE" = 1 ] && ! node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$OUT" >/dev/null 2>&1; then
         note "type-aware pass failed to produce output; retrying syntax-only"
         [ -s "$ERR" ] && note "$(head -2 "$ERR")"
         eg_gen_config "$CONFIG" "$PROMISE_PATH" "$PARSER_PATH" "" 0 ""
         eg_run_eslint "$OUT" "$ERR" "$ESLINT_BIN" "$CONFIG" "${LINT_FILES[@]}"
       fi
 
-      if ! jq -e . "$OUT" >/dev/null 2>&1; then
+      if ! node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$OUT" >/dev/null 2>&1; then
         note "ESLint produced no parseable output — rule section skipped (fail open)"
         [ -s "$ERR" ] && note "$(head -3 "$ERR")"
         echo "(skipped: ESLint error)"
       else
-        RULE_VIOLATIONS="$(jq '[.[].messages[] | select(.ruleId != null)] | length' "$OUT")"
+        RULE_VIOLATIONS="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(r.flatMap(x=>x.messages).filter(x=>x.ruleId!=null).length)' "$OUT")"
         if [ "$RULE_VIOLATIONS" -gt 0 ]; then
-          jq -r '.[] | .filePath as $f | .messages[]
-                   | select(.ruleId != null)
-                   | "\($f):\(.line):\(.column)  [\(.ruleId)]  \(.message)"' "$OUT"
+          node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); for(const f of r){for(const m of f.messages){if(m.ruleId!=null) console.log(`${f.filePath}:${m.line}:${m.column}  [${m.ruleId}]  ${m.message}`)}}' "$OUT"
           echo
           # per-rule tally
           echo "rule tally:"
-          jq -r '[.[].messages[] | select(.ruleId != null) | .ruleId] | group_by(.) | .[] | "  \(length)  \(.[0])"' "$OUT"
+          node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); const c={}; for(const m of r.flatMap(x=>x.messages)){if(m.ruleId!=null)c[m.ruleId]=(c[m.ruleId]||0)+1} for(const k of Object.keys(c).sort()) console.log(`  ${c[k]}  ${k}`)' "$OUT"
         else
           echo "(none)"
         fi

@@ -6,9 +6,9 @@ import {
 } from 'recharts';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { BrandLoader } from '@generated/components/BrandLoader';
+import { EmptyState } from '@generated/components/EmptyState';
 import { useDashboardData } from '@generated/hooks/useDashboardData.js';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { aggregateDashboard } from './dashboardAgg.js';
 import {
   WIDGET_IDS, WIDGETS, GRID_COLS, GRID_GAP, LAYOUT_VERSION,
@@ -153,9 +153,18 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
   useEffect(() => {
     const el = canvasRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return undefined;
-    const ro = new ResizeObserver(() => setCanvasW(el.clientWidth || 0));
+    // round245 — coalesce resize notifications through one rAF and only commit a
+    // CHANGED, integer width. With .scroll's reserved scrollbar gutter this stops
+    // the narrow-screen "shaking" (a ResizeObserver ⇄ scrollbar feedback loop)
+    // and silences the "ResizeObserver loop" console warning.
+    let raf = 0;
+    const ro = new ResizeObserver((entries) => {
+      const w = Math.round(entries[0]?.contentRect?.width || el.clientWidth || 0);
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setCanvasW((prev) => (prev !== w ? w : prev)));
+    });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => { if (raf) cancelAnimationFrame(raf); ro.disconnect(); };
   }, [loading, error, editing]);
 
   const toStored = useCallback((l) => {
@@ -311,7 +320,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
         return (
           <div className={`${styles.card} ${styles.barCard}`}>
             <div className={styles.cardTitle}>דיונים {model.axisLabel}</div>
-            {barData.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+            {barData.length === 0 ? <EmptyState>אין נתונים בטווח</EmptyState> : (
               <div className={styles.chartFill}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={barData} margin={{ top: 18, right: 8, left: 8, bottom: 4 }}>
@@ -339,7 +348,7 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
         return (
           <div className={`${styles.card} ${styles.donutCard}`}>
             <div className={styles.cardTitle}>התפלגות לפי סוג דיון</div>
-            {model.byType.length === 0 ? <div className={styles.empty}>אין נתונים בטווח</div> : (
+            {model.byType.length === 0 ? <EmptyState>אין נתונים בטווח</EmptyState> : (
               <div className={styles.donutWrap}>
                 <div className={styles.donutChart}>
                   <ResponsiveContainer width="100%" height="100%">
@@ -493,11 +502,14 @@ export function DiscussionsDashboard({ onBackToDiscussions, canManageSettings = 
               <button type="button" className={styles.drillClose} onClick={() => setDrill(null)}>סגור ✕</button>
             </div>
             <div className={styles.drillList}>
+              {/* round244 (owner request) — the drill-down rows are READ-ONLY:
+                  clicking a discussion here must NOT open its monday Updates
+                  card. They list name + date only. */}
               {drillView.items.map((it) => (
-                <button key={it.id} type="button" className={styles.drillItem} onClick={() => openOrToggleItemCard(it.id)}>
+                <div key={it.id} className={styles.drillItem}>
                   <span className={styles.drillName}>{it.name}</span>
                   <span className={styles.drillDate}>{fmtDate(it.date)}</span>
-                </button>
+                </div>
               ))}
             </div>
           </div>

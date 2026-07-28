@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Skeleton, Button, Checkbox } from '@vibe/core';
 import { DropdownChevronDown, Filter } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
+import { EmptyState } from '@generated/components/EmptyState';
 import { useColumnOrder } from '@generated/hooks/useColumnOrder.js';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -79,7 +80,7 @@ const DEC_FILTER_COLUMNS = [
 ];
 const DEC_FILTER_TYPE_ICON = { status: 'status', date: 'date', person: 'person' };
 const DEC_FILTER_COL_NAME = { status: 'סטאטוס', deadline: 'תאריך', person: 'מחליט' };
-const decRangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'Choose a date range';
+const decRangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'בחרו טווח תאריכים';
 const decRangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
 
 
@@ -396,7 +397,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   if (!boardMapped) {
     return (
       <div className={styles.decisionsRoot}>
-        <div className={styles.decEmptyState}>לוח ההחלטות טרם הוגדר — מפו אותו בהגדרות</div>
+        <EmptyState>לוח ההחלטות טרם הוגדר — מפו אותו בהגדרות</EmptyState>
       </div>
     );
   }
@@ -420,7 +421,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
   const renderFilterRow = (col, i, mobile, openId, setOpenId) => {
     const fcfg = DEC_FILTER_COLUMNS.find((c) => c.key === col);
     const colSeg = (
-      <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+      <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
         icon={DEC_FILTER_TYPE_ICON[fcfg.type]} text={DEC_FILTER_COL_NAME[col]}
         options={DEC_FILTER_COLUMNS.map((c) => ({
           key: c.key, label: DEC_FILTER_COL_NAME[c.key], icon: DEC_FILTER_TYPE_ICON[c.type],
@@ -429,7 +430,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         onPick={(to) => retargetFilterRow(col, to)} />
     );
     const opSeg = (
-      <Segment id={`fop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Condition"
+      <Segment id={`fop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="תנאי"
         text={OP_LABEL[filter[col].op]}
         options={fcfg.ops.map((op) => ({ key: op, label: OP_LABEL[op], selected: filter[col].op === op }))}
         onPick={(op) => setFilterOp(col, op)} />
@@ -439,8 +440,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
       const f = filter.deadline;
       if (f.op === 'within') {
         valueCtl = (
-          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="When"
-            icon={f.range ? decRangeIcon(f.range) : 'date'} text={f.range ? decRangeLabel(f.range) : 'Choose a date range'} placeholder={!f.range}
+          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="מתי"
+            icon={f.range ? decRangeIcon(f.range) : 'date'} text={f.range ? decRangeLabel(f.range) : 'בחרו טווח תאריכים'} placeholder={!f.range}
             options={DEADLINE_RANGES.map((r) => ({ key: r.key, label: r.label, icon: r.icon, selected: f.range === r.key }))}
             onPick={setDeadlineRange} />
         );
@@ -473,8 +474,8 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
             <span className={bs.bWhereLead}>{lead}</span>
             {removeBtn}
           </div>
-          {field(true, 'Column', colSeg)}
-          {field(true, 'Condition', opSeg)}
+          {field(true, 'עמודה', colSeg)}
+          {field(true, 'תנאי', opSeg)}
           {valueCtl ? field(true, 'Value', valueCtl) : null}
         </div>
       );
@@ -608,7 +609,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
         <div className={styles.decToolbarRight}>
           <SearchPill value={search} onChange={setSearch} />
           <BuilderControl
-            icon={Filter} label="Filter" title="Filter by" mobile={isMobile} width={isMobile ? undefined : 620}
+            icon={Filter} label="סינון" title="סינון לפי" mobile={isMobile} width={isMobile ? undefined : 620}
             applied={fc > 0} badge={fc}
             onClear={fc > 0 ? clearFilter : null}
             onSave={canSaveView ? () => {
@@ -664,7 +665,7 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
 
       <div className={styles.decBoard}>
         {items.length === 0 && !canCreateDecision ? (
-          <div className={styles.decEmptyRow}>אין החלטות עדיין</div>
+          <EmptyState>אין החלטות עדיין</EmptyState>
         ) : !isGrouped ? (
           renderDecisionTable(filteredDecisions, true, `${groupBy}_all`)
         ) : (

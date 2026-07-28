@@ -35,6 +35,15 @@ function instanceKey(context) {
   return `${STORAGE_KEY_BASE}_${instanceId}`;
 }
 
+// round254 — per-discussion-TYPE export assets (logos + uploaded .docx) live under
+// their own key so a type's export template can carry its own brand binaries,
+// independent of the instance globals. Keyed by instance + the type label TEXT
+// (encoded, since type names are free Hebrew text with spaces).
+function typeKey(context, typeName) {
+  const instanceId = context?.instanceId || context?.boardId || 'default';
+  return `${STORAGE_KEY_BASE}_type_${instanceId}_${encodeURIComponent(typeName || '')}`;
+}
+
 function withTimeout(p) {
   return Promise.race([
     p,
@@ -71,8 +80,8 @@ export async function loadExportAssets(context) {
     const res = await withTimeout(monday.storage.getItem(instanceKey(context)));
     if (res?.data?.value) return normalize(JSON.parse(res.data.value));
   } catch (err) {
-    // storage unavailable / parse error — treat as no assets, but keep it visible.
-    logger.warn('exportAssets', 'load export assets failed', err);
+    // storage unavailable / parse error — treat as no assets (non-fatal).
+    logger.warn('exportAssets', 'קריאת נכסי הייצוא נכשלה — ממשיכים ללא נכסים', err);
   }
   return { ...EMPTY };
 }
@@ -102,6 +111,49 @@ export async function saveExportAssets(context, assets) {
     // local dev — storage unavailable; keep quiet (in-memory only), matching
     // TemplatesContext/SettingsContext tolerance.
     logger.warn('exportAssets', 'אחסון נכסי ייצוא לא זמין (פיתוח מקומי) — נשמר בזיכרון בלבד', err);
+  }
+  return clean;
+}
+
+/**
+ * round254 — load a discussion-TYPE's own export assets (its brand binaries), or
+ * EMPTY when none. Best-effort; never throws.
+ */
+export async function loadTypeExportAssets(context, typeName) {
+  if (!typeName) return { ...EMPTY };
+  try {
+    const res = await withTimeout(monday.storage.getItem(typeKey(context, typeName)));
+    if (res?.data?.value) return normalize(JSON.parse(res.data.value));
+  } catch (err) {
+    logger.warn('exportAssets', 'קריאת נכסי הייצוא של סוג הדיון נכשלה — משתמשים בברירת המחדל', err);
+  }
+  return { ...EMPTY };
+}
+
+/**
+ * round254 — persist a discussion-TYPE's own export assets. Same 6MB budget as
+ * the instance globals.
+ * @throws {Error} with `code:'quota'` when over EXPORT_ASSETS_MAX_BYTES.
+ */
+export async function saveTypeExportAssets(context, typeName, assets) {
+  const clean = normalize(assets);
+  if (!typeName) return clean;
+  const bytes = estimateAssetsBytes(clean);
+  if (bytes > EXPORT_ASSETS_MAX_BYTES) {
+    const err = new Error(
+      `נכסי הייצוא של הסוג חורגים ממגבלת האחסון (${(bytes / 1024 / 1024).toFixed(1)}MB מתוך 6MB). הקטינו את הלוגו או קובץ התבנית.`
+    );
+    err.code = 'quota';
+    throw err;
+  }
+  try {
+    await withTimeout(monday.storage.setItem(typeKey(context, typeName), JSON.stringify(clean)));
+  } catch (err) {
+    if (context?.instanceId || context?.boardId) {
+      logger.error('exportAssets', 'שמירת נכסי הייצוא של סוג הדיון נכשלה — ייתכן שהשינוי לא נשמר', err);
+      throw err;
+    }
+    logger.warn('exportAssets', 'אחסון נכסי ייצוא לסוג לא זמין (פיתוח מקומי) — נשמר בזיכרון בלבד', err);
   }
   return clean;
 }

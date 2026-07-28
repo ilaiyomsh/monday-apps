@@ -35,9 +35,11 @@ import { getColumns, getBoardId } from './mondayApi/board-config-store.js';
 import { DEFAULT_EXPORT_TEMPLATE, EXPORT_FONTS, DEFAULT_EXPORT_FONT } from './mondayApi/boards.config.js';
 import { loadSummaryUpdateId } from './summaryStore.js';
 import { loadReferencesUpdateId } from './referencesStore.js';
+import { loadBackgroundUpdateId } from './backgroundStore.js';
 import { getItemUpdate } from './mondayApi/updates.js';
 import { isSummaryHtmlEmpty } from './summaryHtml.js';
-import { uploadFileToColumnSeamless } from './mondayApi/fileUpload.js';
+import { parseExternalParticipants } from './externalParticipants.js';
+import { uploadFileToColumnSeamless, clearFileColumn } from './mondayApi/fileUpload.js';
 import { spliceBodyIntoTemplate } from './docxTemplateMerge.js';
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import logger from './logger.js';
@@ -48,13 +50,16 @@ const TASK_COLS = ['responsibilityID', 'deadlineID', 'statusID']; // assignee, d
 const DECISION_COLS = ['deciderID', 'decisionStatusID', 'decisionDateID'];
 // round193 — decisions table trimmed to 3 columns (owner request; date + status
 // dropped): מס׳, החלטה, מחליט. Sum 9000 DXA to match the tasks table width.
-const DECISION_COL_WIDTHS = [700, 5300, 3000];
+// round286 (owner request) — tables no longer span the full text width; scaled
+// to ~80% (sum 7200 DXA) so `alignment: CENTER` leaves visible side margins and
+// the table sits centered on the page. (Was sum 9000 = full width.)
+const DECISION_COL_WIDTHS = [560, 4240, 2400];
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const HEADER_FILL = '4F6B8F';
 // round191 — the "מדיון קודם" column was removed (owner request); its 900 DXA were
 // folded into the task-name column so the table still fills the same width.
 // 5 task columns, DXA (twips): #, task, assignee, deadline, status. Sum 9000.
-const TASK_COL_WIDTHS = [600, 3800, 1900, 1400, 1300];
+const TASK_COL_WIDTHS = [480, 3040, 1520, 1120, 1040];
 
 // Decode a base64 string to a Uint8Array (browser + node/jsdom both have atob).
 function base64ToU8(b64) {
@@ -186,7 +191,7 @@ function formatHeDate(value) {
  * shaping is testable without docx. The summary stays as HTML (`summaryHtml`) and
  * is converted to docx inside renderDocx (needs the docx classes + DOMParser).
  */
-export function buildDiscussionModel({ discussion, topics = [], summaryHtml = '', referencesHtml = '', tasks = [], decisions = [], previousDiscussionName = '', typeLabel = '' }) {
+export function buildDiscussionModel({ discussion, topics = [], summaryHtml = '', referencesHtml = '', backgroundHtml = '', tasks = [], decisions = [], previousDiscussionName = '', typeLabel = '' }) {
   const participants = Array.isArray(discussion?.participantsID) ? discussion.participantsID : [];
   const lead = Array.isArray(discussion?.discussionLeadID) ? discussion.discussionLeadID : [];
   // "סוג" is a status column — its value is a label id; the caller resolves the
@@ -196,6 +201,10 @@ export function buildDiscussionModel({ discussion, topics = [], summaryHtml = ''
     title: discussion?.name || 'דיון',
     dateText: formatHeDate(discussion?.discussionDateID),
     participantsText: participants.map((p) => p?.name).filter(Boolean).join(', '),
+    // round211 — EXTERNAL participants (text-only names, comma-separated in a
+    // long_text column). When present, the meta renderer splits the participants
+    // row into פנימיים/חיצוניים (see buildMeta).
+    externalParticipantsText: parseExternalParticipants(discussion?.externalParticipantsID).join(', '),
     leadText: lead.map((p) => p?.name).filter(Boolean).join(', '),
     typesText,
     previousText: previousDiscussionName || '',
@@ -204,6 +213,8 @@ export function buildDiscussionModel({ discussion, topics = [], summaryHtml = ''
     // round200 — the References (התייחסויות) box HTML; converted to docx like
     // the summary (bold/lists survive; the template font applies to its runs).
     referencesHtml: referencesHtml || '',
+    // round219 — the רקע (background) box HTML; same HTML→docx converter.
+    backgroundHtml: backgroundHtml || '',
     // round191 — the exported tasks table is ordered by RESPONSIBLE (owner request):
     // all of one person's tasks together, then the next. Stable sort by assignee
     // text (Hebrew collation); tasks with no assignee sort last.
@@ -433,6 +444,21 @@ async function fetchReferencesHtml(discussionId) {
   }
 }
 
+// round219 — the רקע (background) box lives in its own single monday Update
+// (backgroundStore tracks its id), exactly like the summary/references. Same
+// HTML-in-update read; rendered through the same HTML→docx converter.
+async function fetchBackgroundHtml(discussionId) {
+  try {
+    const updateId = await loadBackgroundUpdateId(discussionId);
+    if (!updateId) return '';
+    const update = await getItemUpdate(discussionId, updateId);
+    return update?.body || '';
+  } catch (err) {
+    if (!err?.__loggedId) logger.warn('docxExport', 'טעינת הרקע לייצוא נכשלה', err);
+    return '';
+  }
+}
+
 /* ----------------------------------------------------------- docx render */
 
 function buildFilename(discussion) {
@@ -467,7 +493,13 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   // EXPORT_FONTS). Defaults to `brand` (Figtree Latin/numerals + Noto Sans Hebrew
   // complex-script), matching the app's on-screen typography and today's output.
   const FONT = (EXPORT_FONTS[template?.font] || EXPORT_FONTS[DEFAULT_EXPORT_FONT]).docx;
-  const run = (text, extra) => new TextRun({ text: String(text ?? ''), rightToLeft: true, ...extra });
+  // round227 (owner request) — pin the font on EVERY run, not only via the
+  // document/heading styles. Table cells and (when Word's theme wins) headings
+  // don't reliably inherit the docDefaults font, so they used to render in a
+  // different typeface than the body. Setting `font` on the run itself makes
+  // body, headings AND table cells all reference the same ascii/hAnsi/cs
+  // triplet. `extra` can still override, but no call site passes `font`.
+  const run = (text, extra) => new TextRun({ text: String(text ?? ''), rightToLeft: true, font: FONT, ...extra });
   const para = (text, extra) => new Paragraph({ ...RTL, children: [run(text, extra)] });
   const heading = (text, level) => new Paragraph({ ...RTL, heading: level, children: [run(text)] });
 
@@ -600,6 +632,21 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     for (const f of fields) {
       if (!f || f.enabled === false) continue;
       const value = model[f.key];
+      // round211 — the participants row splits when EXTERNAL participants exist:
+      // the regular people are labeled "משתתפים פנימיים" (only when the owner
+      // kept the default label) and a "משתתפים חיצוניים" row follows. Without
+      // externals the row renders exactly as before.
+      if (f.key === 'participantsText') {
+        const ext = model.externalParticipantsText;
+        if (value) {
+          const label = ext && (!f.label || f.label === 'משתתפים')
+            ? 'משתתפים פנימיים'
+            : (f.label || '');
+          out.push(metaPara(label, value));
+        }
+        if (ext) out.push(metaPara('משתתפים חיצוניים', ext));
+        continue;
+      }
       if (value) out.push(metaPara(f.label || '', value));
     }
     return out;
@@ -638,6 +685,15 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     return out;
   };
 
+  // round219 — the Background (רקע) box, same HTML→docx converter as the
+  // summary/references so its rich formatting survives with the template font.
+  const buildBackground = (section) => {
+    const out = [heading(section?.label || 'רקע', HeadingLevel.HEADING_2)];
+    if (isSummaryHtmlEmpty(model.backgroundHtml)) out.push(para('אין רקע.'));
+    else out.push(...htmlToParagraphs(model.backgroundHtml));
+    return out;
+  };
+
   const buildTasks = (section) => {
     // `keepNext` keeps the heading with the first table row; combined with keepNext
     // on every cell paragraph + cantSplit on every row, Word keeps the whole table
@@ -648,13 +704,14 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
       out.push(para('אין משימות.'));
       return out;
     }
-    // Every column is centered EXCEPT the task name, which stays right-aligned
-    // (RTL natural leading edge — omit alignment so weak viewers don't flip it).
+    // round259 (owner spec) — header cells ALWAYS centered; body cells centered
+    // EXCEPT text columns (the task name + the assignee), which are right-aligned
+    // (RTL natural leading edge, like the document body). `center` toggles it.
     const cell = (text, widthDxa, isHeader, center) => new TableCell({
       width: { size: widthDxa, type: WidthType.DXA },
       verticalAlign: VerticalAlignTable.CENTER,
       shading: isHeader ? { type: 'clear', color: 'auto', fill: HEADER_FILL } : undefined,
-      margins: { marginUnitType: WidthType.DXA, top: 40, bottom: 40, left: 90, right: 90 },
+      margins: { marginUnitType: WidthType.DXA, top: 90, bottom: 90, left: 130, right: 130 },
       children: [new Paragraph({
         ...RTL,
         ...(center ? { alignment: AlignmentType.CENTER } : {}),
@@ -662,19 +719,19 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
         children: [run(text, isHeader ? { bold: true, color: 'FFFFFF' } : undefined)],
       })],
     });
-    const NAME_COL = 1; // the "משימה" column — right-aligned, all others centered.
     // round191 — the "מדיון קודם" column was removed (owner request); 5 columns now.
     const headers = ['מס׳', 'משימה', 'אחראי', 'דד ליין', 'סטטוס'];
-    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, TASK_COL_WIDTHS[i], true, i !== NAME_COL)) })];
+    // round259 — every header cell centered.
+    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, TASK_COL_WIDTHS[i], true, true)) })];
     model.tasks.forEach((t, i) => {
       rows.push(new TableRow({
         cantSplit: true,
         children: [
-          cell(String(i + 1), TASK_COL_WIDTHS[0], false, true),
-          cell(t.name, TASK_COL_WIDTHS[1], false, false),
-          cell(t.assigneesText, TASK_COL_WIDTHS[2], false, true),
-          cell(t.deadlineText, TASK_COL_WIDTHS[3], false, true),
-          cell(t.status || '—', TASK_COL_WIDTHS[4], false, true),
+          cell(String(i + 1), TASK_COL_WIDTHS[0], false, true),   // מס׳ — center
+          cell(t.name, TASK_COL_WIDTHS[1], false, false),          // משימה — right (text)
+          cell(t.assigneesText, TASK_COL_WIDTHS[2], false, false), // אחראי — right (text)
+          cell(t.deadlineText, TASK_COL_WIDTHS[3], false, true),   // דד ליין — center (date)
+          cell(t.status || '—', TASK_COL_WIDTHS[4], false, true),  // סטטוס — center
         ],
       }));
     });
@@ -682,6 +739,8 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     out.push(new Table({
       columnWidths: TASK_COL_WIDTHS,
       layout: TableLayoutType.FIXED,
+      // round259 — center the whole table between the page margins.
+      alignment: AlignmentType.CENTER,
       width: { size: TASK_COL_WIDTHS.reduce((a, b) => a + b, 0), type: WidthType.DXA },
       visuallyRightToLeft: true,
       borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border },
@@ -692,8 +751,9 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
 
   // round192 — decisions table (owner request): same monday-board look as the tasks
   // table (heading kept with the table via keepNext/cantSplit). Columns:
-  // מס׳ · החלטה · מחליט · תאריך · סטאטוס. The "החלטה" (name) column is right-aligned;
-  // the rest centered.
+  // מס׳ · החלטה · מחליט. round259 (owner spec) — headers ALWAYS centered; body text
+  // columns (החלטה + מחליט, person text) right-aligned; the numeric מס׳ centered; the
+  // whole table centered between the page margins.
   const buildDecisions = (section) => {
     const out = [new Paragraph({ ...RTL, keepNext: true, heading: HeadingLevel.HEADING_2, children: [run(section?.label || 'החלטות')] })];
     if (!model.decisions.length) {
@@ -704,7 +764,7 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
       width: { size: widthDxa, type: WidthType.DXA },
       verticalAlign: VerticalAlignTable.CENTER,
       shading: isHeader ? { type: 'clear', color: 'auto', fill: HEADER_FILL } : undefined,
-      margins: { marginUnitType: WidthType.DXA, top: 40, bottom: 40, left: 90, right: 90 },
+      margins: { marginUnitType: WidthType.DXA, top: 90, bottom: 90, left: 130, right: 130 },
       children: [new Paragraph({
         ...RTL,
         ...(center ? { alignment: AlignmentType.CENTER } : {}),
@@ -712,17 +772,17 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
         children: [run(text, isHeader ? { bold: true, color: 'FFFFFF' } : undefined)],
       })],
     });
-    const NAME_COL = 1; // "החלטה" — right-aligned, all others centered.
     // round193 — only מס׳ · החלטה · מחליט (date + status columns removed).
     const headers = ['מס׳', 'החלטה', 'מחליט'];
-    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, DECISION_COL_WIDTHS[i], true, i !== NAME_COL)) })];
+    // round259 — every header cell centered.
+    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, DECISION_COL_WIDTHS[i], true, true)) })];
     model.decisions.forEach((d, i) => {
       rows.push(new TableRow({
         cantSplit: true,
         children: [
-          cell(String(i + 1), DECISION_COL_WIDTHS[0], false, true),
-          cell(d.name, DECISION_COL_WIDTHS[1], false, false),
-          cell(d.deciderText, DECISION_COL_WIDTHS[2], false, true),
+          cell(String(i + 1), DECISION_COL_WIDTHS[0], false, true),    // מס׳ — center
+          cell(d.name, DECISION_COL_WIDTHS[1], false, false),          // החלטה — right (text)
+          cell(d.deciderText, DECISION_COL_WIDTHS[2], false, false),   // מחליט — right (person text)
         ],
       }));
     });
@@ -730,6 +790,8 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     out.push(new Table({
       columnWidths: DECISION_COL_WIDTHS,
       layout: TableLayoutType.FIXED,
+      // round259 — center the whole table between the page margins.
+      alignment: AlignmentType.CENTER,
       width: { size: DECISION_COL_WIDTHS.reduce((a, b) => a + b, 0), type: WidthType.DXA },
       visuallyRightToLeft: true,
       borders: { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border },
@@ -738,17 +800,8 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     return out;
   };
 
-  // Free-text block — a heading (its title) + one paragraph per line of body.
-  // Emits nothing when both title and body are empty.
-  const buildFreeText = (section) => {
-    const title = (section?.title || '').trim();
-    const body = section?.body || '';
-    if (!title && !body) return [];
-    const out = [];
-    if (title) out.push(heading(title, HeadingLevel.HEADING_2));
-    String(body).split(/\r?\n/).forEach((line) => out.push(para(line)));
-    return out;
-  };
+  // round203 — the 'freeText' ("פתיחה") section was retired (owner request);
+  // seedExportTemplate drops it from stored templates, so no case renders it.
 
   // ---- assemble (data-driven). Title is always first; the rest is driven by the
   // template's ordered `sections` list (skip disabled), so reordering/toggling in
@@ -761,12 +814,12 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
     if (!section || section.enabled === false) continue;
     switch (section.key) {
       case 'meta': children.push(...buildMeta(section)); break;
+      case 'background': children.push(...buildBackground(section)); break;
       case 'topics': children.push(...buildTopics(section)); break;
       case 'summary': children.push(...buildSummary(section)); break;
       case 'references': children.push(...buildReferences(section)); break;
       case 'tasks': children.push(...buildTasks(section)); break;
       case 'decisions': children.push(...buildDecisions(section)); break;
-      case 'freeText': children.push(...buildFreeText(section)); break;
       default: break;
     }
   }
@@ -902,12 +955,27 @@ export const __testHooks = { buildExportDoc };
  */
 export async function exportDiscussionToDocx(discussion, { template = DEFAULT_EXPORT_TEMPLATE, assets = null } = {}) {
   if (!discussion?.id) throw new Error('exportDiscussionToDocx: discussion is required');
+  const { model, filename } = await assembleDiscussionModel(discussion);
+  return deliverDiscussionDocx(model, filename, {
+    template, assets, discussionId: String(discussion.id),
+  });
+}
+
+/**
+ * round207 — fetch everything and build the export MODEL (no rendering). The
+ * per-discussion export dialog reuses this once for its live preview, then
+ * hands the same model to deliverDiscussionDocx on "הפק מסמך".
+ * @returns {{ model: object, filename: string }}
+ */
+export async function assembleDiscussionModel(discussion) {
+  if (!discussion?.id) throw new Error('assembleDiscussionModel: discussion is required');
   const discussionId = String(discussion.id);
 
-  const [topics, summaryHtml, referencesHtml, currentTasks, decisions, previous, fullDiscussion] = await Promise.all([
+  const [topics, summaryHtml, referencesHtml, backgroundHtml, currentTasks, decisions, previous, fullDiscussion] = await Promise.all([
     fetchTopicsForExport(discussionId),
     fetchSummaryHtml(discussionId),
     fetchReferencesHtml(discussionId),
+    fetchBackgroundHtml(discussionId),
     fetchTasksOfDiscussion(discussionId),
     fetchDecisionsOfDiscussion(discussionId),
     resolvePreviousDiscussion(discussionId),
@@ -925,13 +993,24 @@ export async function exportDiscussionToDocx(discussion, { template = DEFAULT_EX
     topics,
     summaryHtml,
     referencesHtml,
+    backgroundHtml,
     tasks: mergeTasksForExport(currentTasks, previousTasks),
     decisions,
     previousDiscussionName: previous?.name || '',
     typeLabel,
   });
 
-  const filename = buildFilename(discussion);
+  return { model, filename: buildFilename(discussion) };
+}
+
+/**
+ * round207 — render an ALREADY-ASSEMBLED model to .docx, download it, and
+ * best-effort upload it into the mapped summary file column (identical to the
+ * tail of the classic export; extracted so the dialog can deliver without
+ * re-fetching).
+ * @returns {{ uploadAttempted: boolean, uploaded: boolean }}
+ */
+export async function deliverDiscussionDocx(model, filename, { template = DEFAULT_EXPORT_TEMPLATE, assets = null, discussionId } = {}) {
   // UPLOAD mode: render a body-only .docx (buildExportDoc omits header/footer when
   // headerMode==='upload') and splice it into the owner's uploaded template so its
   // header/footer survive. Any failure falls back to the plain render so export
@@ -966,6 +1045,15 @@ export async function exportDiscussionToDocx(discussion, { template = DEFAULT_EX
   const uploadAttempted = !!fileColumnId;
   let uploaded = false;
   if (uploadAttempted) {
+    // round244 (owner request) — the summary column keeps only the LATEST export:
+    // clear the prior files first, then upload the fresh one. Clearing is
+    // best-effort (a failure is logged, never blocks the new upload/download).
+    try {
+      const boardId = getBoardId('discussions');
+      if (boardId) await clearFileColumn({ itemId: discussionId, columnId: fileColumnId, boardId });
+    } catch (clearErr) {
+      if (!clearErr?.__loggedId) logger.error('docxExport', 'ניקוי הקבצים הקודמים בעמודת הסיכום נכשל', clearErr);
+    }
     try {
       const file = typeof File !== 'undefined' ? new File([blob], filename, { type: DOCX_MIME }) : blob;
       await uploadFileToColumnSeamless({ itemId: discussionId, columnId: fileColumnId, file });

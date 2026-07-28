@@ -41,6 +41,8 @@ const { createEventsBoardService } = await import('./services/events-board.js');
 const { createBoardProvisioner } = await import('./services/board-provisioner.js');
 const { createLifecycleService } = await import('./services/lifecycle-service.js');
 const { createStorageService } = await import('./services/storage.js');
+const { createMondayOauthClient } = await import('./services/monday-oauth-client.js');
+const { createOauthTokenProvider } = await import('./services/oauth-token-provider.js');
 const { createSecureStorageBackend } = await import('./storage/secure-storage-backend.js');
 const { getEnv } = await import('./helpers/environment.js');
 
@@ -66,14 +68,22 @@ const telemetry = createTelemetryService({
   logger,
 });
 
-// --- OAuth app-identity token (Change #143 continuation) ------------------
-// The owner authorizes ONCE at /oauth/start (mounted in app.js); the token is
-// stored in SecureStorage (services/storage.js, key owner:oauth_token) with
-// a 60s read cache. getWriteToken resolves it per monday-api call, falling
-// back to the personal MONDAY_API_TOKEN only when no OAuth token exists yet.
+// --- OAuth app-identity token (Change #143, OAuth 2.1 in #144) -------------
+// The owner authorizes ONCE at /oauth/start (mounted in app.js); the token
+// RECORD (access + rotating refresh + expiry) is stored in SecureStorage
+// (services/storage.js, key owner:oauth_token) with a 60s read cache. The
+// token provider refreshes proactively (5-min cushion, single-flight) and
+// getWriteToken resolves it per monday-api call, falling back to the
+// personal MONDAY_API_TOKEN only when no usable OAuth token exists.
 const storageBackend = createSecureStorageBackend();
 const storage = createStorageService({ backend: storageBackend, logger });
-const getWriteToken = async () => (await storage.getOwnerToken()) ?? (env.mondayApiToken || null);
+const oauthClient = createMondayOauthClient({
+  clientId: env.mondayClientId,
+  clientSecret: env.clientSecret,
+});
+const tokenProvider = createOauthTokenProvider({ storage, oauthClient, logger });
+const getWriteToken = async () =>
+  (await tokenProvider.getFreshAccessToken()) ?? (env.mondayApiToken || null);
 
 // --- Lifecycle events → monday board (config now lives in SecureStorage) --
 // The monday API client resolves its write token PER CALL (getWriteToken).
@@ -91,13 +101,22 @@ const eventsBoard = createEventsBoardService({
   logger,
 });
 const provisioner = createBoardProvisioner({ mondayApi, storage, logger });
-const lifecycleService = createLifecycleService({ eventsBoard, logger });
+const { createAccountSlugResolver } = await import('./services/account-slug.js');
+const slugResolver = createAccountSlugResolver({ mondayApi, logger });
+const lifecycleService = createLifecycleService({
+  eventsBoard,
+  logger,
+  debugRawPayload: env.debugLifecyclePayload,
+  slugResolver,
+});
 
 const app = createApp({
   telemetry,
   env,
   storage,
   provisioner,
+  tokenProvider,
+  oauthClient,
   lifecycle: {
     service: lifecycleService,
     signingSecrets: env.lifecycleSigningSecrets,

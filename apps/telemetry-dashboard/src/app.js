@@ -26,6 +26,7 @@ import { createWebhooksRouter } from './routes/webhooks.js';
 import { createOauthRouter } from './routes/oauth.js';
 import { createSettingsRouter } from './routes/settings.js';
 import { createLifecycleService } from './services/lifecycle-service.js';
+import { createMondayOauthClient } from './services/monday-oauth-client.js';
 import logger from './helpers/logger.js';
 
 const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public');
@@ -45,11 +46,27 @@ const PUBLIC_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
  * @param {{ provision: Function }} [deps.provisioner] - board provisioner for
  *   the Settings UI (index.js always provides it). Omitted → settings route
  *   is not mounted (used by telemetry-only tests).
+ * @param {ReturnType<import('./services/oauth-token-provider.js').createOauthTokenProvider>} [deps.tokenProvider]
+ *   OAuth status/refresh/disconnect provider (index.js always provides it).
+ *   Omitted → settings route is not mounted.
+ * @param {ReturnType<import('./services/monday-oauth-client.js').createMondayOauthClient>} [deps.oauthClient]
+ *   monday OAuth 2.1 endpoint client for the oauth router. Omitted →
+ *   constructed inline from env + fetchImpl (preserves the test idiom of
+ *   passing only fetchImpl).
  * @param {typeof fetch} [deps.fetchImpl] - injected for tests; the oauth
- *   router's exchange/identity calls only (defaults to global fetch).
+ *   router's identity call + the inline oauthClient (defaults to global fetch).
  * @returns {import('express').Express}
  */
-export function createApp({ telemetry, env, lifecycle = {}, storage, provisioner, fetchImpl }) {
+export function createApp({
+  telemetry,
+  env,
+  lifecycle = {},
+  storage,
+  provisioner,
+  tokenProvider,
+  oauthClient,
+  fetchImpl,
+}) {
   const app = express();
   app.set('trust proxy', true);
   app.disable('x-powered-by');
@@ -60,7 +77,17 @@ export function createApp({ telemetry, env, lifecycle = {}, storage, provisioner
   });
 
   // --- OAuth app-identity token (own auth — NOT behind requireSession) ---
-  app.use('/oauth', createOauthRouter({ env, storage, logger, fetchImpl }));
+  const resolvedOauthClient =
+    oauthClient ??
+    createMondayOauthClient({
+      clientId: env.mondayClientId,
+      clientSecret: env.clientSecret,
+      fetchImpl,
+    });
+  app.use(
+    '/oauth',
+    createOauthRouter({ env, storage, logger, fetchImpl, oauthClient: resolvedOauthClient })
+  );
 
   // --- Webhooks (own JWT auth — NOT behind requireSession) ---------------
   const lifecycleService =
@@ -100,14 +127,35 @@ export function createApp({ telemetry, env, lifecycle = {}, storage, provisioner
     }
   });
 
+  // Error drill-down: the raw occurrences behind one Top-errors row, so the
+  // operator sees full per-event context in the dashboard instead of leaving
+  // for Axiom. Same session gate as /api/telemetry. err_name is required (400)
+  // and is escaped downstream (queries.js) before it reaches APL.
+  app.get('/api/telemetry/error-detail', requireSession, async (req, res) => {
+    const errName = String(req.query.err_name ?? '').trim();
+    if (!errName) {
+      return res.status(400).json({ error: 'err_name_required' });
+    }
+    try {
+      const result = await telemetry.getErrorDetail(String(req.query.window ?? '7d'), errName);
+      res.json(result);
+    } catch (err) {
+      logger.error('telemetry_detail_error', 'http', {
+        path: req.path,
+        error: err instanceof Error ? err : new Error(String(err)),
+      });
+      res.status(502).json({ error: 'telemetry_unavailable' });
+    }
+  });
+
   // --- Settings (board provisioning + status) — same session gate ---------
   // Owner-scoped configuration of the lifecycle events board. Behind
   // requireSession (+ allowlist) exactly like /api/telemetry.
-  if (storage && provisioner) {
+  if (storage && provisioner && tokenProvider) {
     app.use(
       '/api/settings',
       requireSession,
-      createSettingsRouter({ storage, provisioner, logger })
+      createSettingsRouter({ storage, provisioner, tokenProvider, logger })
     );
   }
 

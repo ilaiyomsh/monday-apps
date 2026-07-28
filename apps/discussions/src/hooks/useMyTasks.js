@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { משימות1Board } from '@api/BoardSDK.js';
+import { משימות1Board, דיונים1Board } from '@api/BoardSDK.js';
 import { api, parseValue, cvSelection } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
 import { makeViewCacheKey, readViewCache, writeViewCache, reconcileSeeded } from '../utils/viewCache.js';
+import { computeLedDiscussionIds, collectLedTaskIds } from '../utils/ledDiscussions.js';
 import logger from '../utils/logger.js';
 
 /*
@@ -48,6 +49,15 @@ const LAST_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 // "creator" role in resolveCan) — it isn't rendered as a column here.
 const RENDERED_COLUMNS = ['responsibilityID', 'taskCreatorID', 'deadlineID', 'statusID', 'discussionLinkID', 'taskNotesID', 'priorityID'];
 
+// round272 — is the current user among a task's responsibility people? Drives
+// the "משימות של אחרים" scope, which is the led-discussion tasks MINUS the ones
+// the user is responsible for. Pure, so it's unit-testable.
+export function isUserResponsible(task, userId) {
+  const people = task?.responsibilityID;
+  if (!Array.isArray(people) || userId == null) return false;
+  return people.some((p) => String(p?.id) === String(userId));
+}
+
 // Resolve the current user's person id as a string, tolerant of the few shapes
 // monday's context exposes it in (currentUser.id, context.user.id).
 export function resolveUserId(currentUser, context) {
@@ -85,7 +95,70 @@ function tasksItemsQuery({ where, sort }) {
   return q;
 }
 
-export function useMyTasks({ currentUser, context, taskCreatorId = null, search = '', sort = null, notDoneStatusIds = [] } = {}) {
+// round224 — the "משימות בדיונים שהובלתי" scope (owner mockup): fetch ALL the
+// tasks linked to discussions the user LED. Pipeline (proven query shapes only):
+//   1. Three server-side people-filtered pages of the DISCUSSIONS board (lead /
+//      coordinator / creator = me — BoardSDK formats person-<id>), unioned by id.
+//   2. computeLedDiscussionIds applies the owner's rule (lead/coordinator; the
+//      creator counts only when the discussion has neither) and
+//      collectLedTaskIds gathers the linked task ids off tasksBoardLinkID.
+//   3. The tasks are read by id (items(ids:) — the same read shape useTasks
+//      uses via linked_items), chunked ≤100, with the SAME lean columns as the
+//      default scope so the table renders identically.
+const LED_DISCUSSION_COLUMNS = ['discussionLeadID', 'discussionCoordinatorID', 'discussionCreatorID', 'tasksBoardLinkID'];
+const LED_CHUNK = 100;
+
+async function fetchLedTasksPage(userId) {
+  const dCols = getColumns('discussions') || {};
+  const roleWheres = [
+    dCols.discussionLeadID?.id && { discussionLeadID: String(userId) },
+    dCols.discussionCoordinatorID?.id && { discussionCoordinatorID: String(userId) },
+    dCols.discussionCreatorID?.id && { discussionCreatorID: String(userId) },
+  ].filter(Boolean);
+  if (!getBoardId('discussions') || !roleWheres.length) return [];
+  const results = await Promise.all(roleWheres.map((where) =>
+    new דיונים1Board().items()
+      .withColumns(LED_DISCUSSION_COLUMNS)
+      .withPagination({ limit: PAGE_SIZE })
+      .where(where)
+      .execute()
+  ));
+  const byId = new Map();
+  results.forEach((r) => (r.items || []).forEach((d) => {
+    if (!byId.has(String(d.id))) byId.set(String(d.id), d);
+  }));
+  const discussions = [...byId.values()];
+  const ledIds = computeLedDiscussionIds(discussions, userId);
+  const taskIds = collectLedTaskIds(discussions, ledIds);
+  if (!taskIds.length) return [];
+
+  const tCols = getColumns('tasks') || {};
+  const colIds = RENDERED_COLUMNS.map((a) => tCols?.[a]?.id).filter(Boolean);
+  const cv = cvSelection(RENDERED_COLUMNS.map((a) => tCols?.[a]?.type));
+  const chunks = [];
+  for (let i = 0; i < taskIds.length; i += LED_CHUNK) chunks.push(taskIds.slice(i, i + LED_CHUNK));
+  const pages = await Promise.all(chunks.map((ids) => api(
+    `query ($ids: [ID!], $cols: [String!]) {
+       items(ids: $ids) { id name created_at group { id title } column_values(ids: $cols) { ${cv} } }
+     }`,
+    { ids, cols: colIds },
+    'useMyTasks.fetchLedTasksPage'
+  )));
+  const tasks = [];
+  pages.forEach((data) => (data?.items || []).forEach((item) => {
+    const byCol = {};
+    (item.column_values || []).forEach((c) => { byCol[c.id] = c; });
+    const mapped = { id: String(item.id), name: item.name, created_at: item.created_at, group: item.group || null };
+    RENDERED_COLUMNS.forEach((alias) => {
+      const col = tCols?.[alias];
+      if (col?.id) mapped[alias] = parseValue(col.type, byCol[col.id]);
+    });
+    tasks.push(mapped);
+  }));
+  return tasks;
+}
+
+export function useMyTasks({ currentUser, context, taskCreatorId = null, search = '', sort = null, notDoneStatusIds = [], scope = 'mine' } = {}) {
   const userId = resolveUserId(currentUser, context);
   // Instant-cache seed (stale-while-revalidate): on the FIRST mount only, seed
   // state SYNCHRONOUSLY from the versioned view cache for an instant first
@@ -93,7 +166,7 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
   // sort) is cached, so a filtered result never seeds the default view. The
   // seed is ALWAYS revalidated by the fetch below (which overwrites the cache);
   // a cache miss ⇒ behavior is exactly as before (empty list + loading:true).
-  const isDefaultQuery = !taskCreatorId && !(search && String(search).trim()) && !sort?.column;
+  const isDefaultQuery = scope === 'mine' && !taskCreatorId && !(search && String(search).trim()) && !sort?.column;
   const cacheKey = isDefaultQuery ? makeViewCacheKey('myTasks', { userId, boardId: getBoardId('tasks') }) : null;
   const seedRef = useRef(undefined);
   if (seedRef.current === undefined) {
@@ -117,7 +190,7 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
   const dirtyIdsRef = useRef(new Set());
 
   // Stable filter key so the fetch effect only re-runs on a real change.
-  const filterKey = JSON.stringify({ userId, taskCreatorId, search: (search || '').trim(), sort });
+  const filterKey = JSON.stringify({ userId, taskCreatorId, search: (search || '').trim(), sort, scope });
   const reqIdRef = useRef(0);
   // Mirror of `items` for SYNCHRONOUS snapshots: an optimistic edit needs the
   // pre-edit list captured at call time so it can revert on error. Reading it
@@ -137,6 +210,33 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
       setItems([]);
       setCursor(null);
       setLoading(false);
+      return;
+    }
+    // round224 — the LED scope replaces the whole page pipeline (discussions I
+    // led → their linked tasks); one full load, no cursor, client-side search.
+    // All the inline edit/delete handlers below operate on the same `items`
+    // state, so they work unchanged in this scope too.
+    if (scope === 'led' || scope === 'others') {
+      try {
+        setLoading(true);
+        let full = await fetchLedTasksPage(userId);
+        if (reqId !== reqIdRef.current) return;
+        // round272 — "משימות של אחרים": same led-discussion source, minus the
+        // tasks the current user is responsible for (those are "המשימות שלי").
+        if (scope === 'others') full = full.filter((tk) => !isUserResponsible(tk, userId));
+        const q = (search || '').trim();
+        setItems(q ? full.filter((tk) => (tk.name || '').includes(q)) : full);
+        setCursor(null);
+        setError(null);
+      } catch (err) {
+        if (reqId !== reqIdRef.current) return;
+        logger.error('useMyTasks', 'Error fetching led-discussion tasks', { userId, err });
+        setError(err?.message || 'fetch failed');
+        setItems([]);
+        setCursor(null);
+      } finally {
+        if (reqId === reqIdRef.current) setLoading(false);
+      }
       return;
     }
     const baseWhere = buildMyTasksWhere({ userId, taskCreatorId, search });
@@ -229,7 +329,7 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     } finally {
       if (reqId === reqIdRef.current) setLoading(false);
     }
-  }, [userId, taskCreatorId, search, sort?.column, sort?.direction]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, taskCreatorId, search, sort?.column, sort?.direction, scope]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchPage();

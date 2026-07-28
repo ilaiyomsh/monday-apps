@@ -210,6 +210,20 @@ export function mapRecordToEvent(record: LogRecord): AxiomEventInput {
       ev.component_stack = scrubCapped(c.componentStack, COMPONENT_STACK_MAXLEN);
     }
   }
+  // Guarantee an err_name on every ERROR event (discussions Change #149, generalised here
+  // when that app migrated off its vendored sink): real Errors keep err.name; otherwise fall
+  // back to the stable message event-id, then the tag, so nothing ships nameless — the
+  // telemetry dashboard groups and drills down by err_name, and fix-5's dedup key reads it.
+  // Interim safety net; the goal is still a real Error per throw at the call sites.
+  // Both candidates are trimmed: a whitespace-only name groups no better than a missing
+  // one, so it must fall through to 'unknown' rather than ship as ' '.
+  // (err_name comes off the `[key: string]: unknown` index signature — narrow before use.)
+  const existingName = typeof ev.err_name === 'string' ? ev.err_name : '';
+  if (ev.kind === 'error' && existingName.trim() === '') {
+    const msg = typeof ev.message === 'string' ? ev.message.trim() : '';
+    const tag = typeof ev.tag === 'string' ? ev.tag.trim() : '';
+    ev.err_name = msg || tag || 'unknown';
+  }
   return ev;
 }
 

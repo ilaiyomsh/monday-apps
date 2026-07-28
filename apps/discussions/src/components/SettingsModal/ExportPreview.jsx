@@ -11,6 +11,19 @@ import {
 // renderDocx. Only docx-preview is dynamically imported (its own chunk).
 import { buildDiscussionModel, renderDocx, injectSectionRtlIntoZip } from '../../utils/docxExport.js';
 import { spliceBodyIntoTemplate } from '../../utils/docxTemplateMerge.js';
+// round202 — the page-geometry toolbox (pagination, page numbers, image-load
+// wait, floating-anchor re-anchoring) moved to a pure-DOM module so it is
+// testable and shared with the Chromium validation harness.
+import {
+  paginateRenderedDocx,
+  patchPageNumbers,
+  waitForImages,
+  extractTemplateAnchors,
+  reanchorFloatingDrawings,
+  extractTemplateTabParagraphs,
+  applyTemplateTabStops,
+} from './previewPagination.js';
+import { normalizeRenderedDocxRtl } from './exportPreviewRtl.js';
 import logger from '../../utils/logger';
 import styles from './ExportPreview.module.css';
 
@@ -61,6 +74,9 @@ const LIVE_SAMPLE_INPUTS = {
   summaryHtml:
     '<h3>עיקרי הדיון</h3><p>סיכום הדיון יופיע כאן — כולל <strong>הדגשות</strong>, <em>הטיות</em> ורשימות.</p>' +
     '<ul><li>נקודה מרכזית ראשונה</li><li>נקודה מרכזית שנייה</li></ul>',
+  // round219 — the Background box sample; same converter as the summary.
+  backgroundHtml:
+    '<p>רקע והקשר לדיון יופיעו כאן — הנסיבות שקדמו לישיבה והמטרות שהוגדרו.</p>',
   // round200 — the References box sample; same converter as the summary.
   referencesHtml:
     '<p><strong>דנה כהן:</strong> מבקשת לבחון מחדש את מסגרת התקציב.</p>' +
@@ -92,105 +108,6 @@ function canRunLivePreview() {
   return typeof Blob !== 'undefined' && typeof Blob.prototype.arrayBuffer === 'function';
 }
 
-// round197 — height-based pagination, like Word. docx-preview breaks pages ONLY
-// at explicit page-break marks; a generated doc has none, so everything landed on
-// ONE clipped/overlapping "page" and only the first page was visible. This splits
-// the rendered section into true fixed-height A4 pages: whole blocks (paragraphs /
-// tables) move to the next page when they cross the content budget — a heading
-// glued above a moved block moves with it (mirrors the doc's keepNext, so the
-// tasks/decisions table drops to the next page exactly like Word pushes it) — and
-// each page clones the section shell + header + footer. Must run while the stage
-// is ATTACHED (hidden) so offsets/heights are real.
-function paginateRenderedDocx(stage) {
-  const wrapper = stage.querySelector('.docx-wrapper') || stage;
-  const src = wrapper.querySelector('section.docx');
-  const article = src?.querySelector(':scope > article');
-  if (!src || !article) return;
-  const cs = getComputedStyle(src);
-  const pageH = parseFloat(cs.minHeight);
-  if (!Number.isFinite(pageH) || pageH <= 0) return;
-
-  // Content budget = page height minus everything that isn't body flow: the
-  // article's real offset from the page top (top margin + header flow, measured,
-  // so negative header margins are accounted for), the footer's flow height
-  // (offsetHeight + its calc margins), and the bottom page margin.
-  const srcTop = src.getBoundingClientRect().top;
-  const articleTopRel = article.getBoundingClientRect().top - srcTop;
-  const header = src.querySelector(':scope > header');
-  const footer = src.querySelector(':scope > footer');
-  let footerFlow = 0;
-  if (footer) {
-    const fcs = getComputedStyle(footer);
-    footerFlow = footer.offsetHeight + (parseFloat(fcs.marginTop) || 0) + (parseFloat(fcs.marginBottom) || 0);
-  }
-  const padB = parseFloat(cs.paddingBottom) || 0;
-  const budget = pageH - articleTopRel - footerFlow - padB;
-  if (!Number.isFinite(budget) || budget <= 40) return;
-
-  const children = Array.from(article.children);
-  if (!children.length) {
-    src.style.height = cs.minHeight; // pin the exact page height anyway
-    return;
-  }
-  const articleRectTop = article.getBoundingClientRect().top;
-  const tops = children.map((el) => el.getBoundingClientRect().top - articleRectTop);
-  const bottoms = children.map((el, i) => tops[i] + el.offsetHeight);
-  // docx-preview classes paragraph styles as docx_heading1..3 — the keepNext glue.
-  const isHeading = (el) => /heading/i.test(String(el.className || ''));
-
-  const breaks = [];
-  let pageStart = 0;
-  for (let i = 0; i < children.length; i += 1) {
-    if (i === pageStart) continue; // a page's first block always stays on it
-    if (bottoms[i] - tops[pageStart] > budget) {
-      let b = i;
-      while (b > pageStart + 1 && isHeading(children[b - 1])) b -= 1;
-      breaks.push(b);
-      pageStart = b;
-    }
-  }
-  // Pin EXACT page height (not min) so the footer sits at the physical bottom and
-  // overflow can never overlap it — also on a single-page doc.
-  if (!breaks.length) {
-    src.style.height = cs.minHeight;
-    return;
-  }
-
-  const ranges = [0, ...breaks, children.length];
-  const pages = [];
-  for (let p = 0; p < ranges.length - 1; p += 1) {
-    const shell = src.cloneNode(false);
-    shell.style.height = cs.minHeight;
-    if (header) shell.appendChild(header.cloneNode(true));
-    const art = article.cloneNode(false);
-    shell.appendChild(art);
-    if (footer) shell.appendChild(footer.cloneNode(true));
-    for (let i = ranges[p]; i < ranges[p + 1]; i += 1) art.appendChild(children[i]);
-    pages.push(shell);
-  }
-  src.remove();
-  pages.forEach((pg) => wrapper.appendChild(pg));
-}
-
-// docx-preview parses but never EVALUATES page-number fields (PAGE/NUMPAGES),
-// leaving "עמוד  מתוך " blanks. After pagination the real page count is known —
-// stamp k/N per page (preview-only; the exported file keeps real Word fields).
-function patchPageNumbers(stage) {
-  const sections = stage.querySelectorAll('section.docx');
-  const total = sections.length;
-  sections.forEach((sec, idx) => {
-    sec.querySelectorAll('p').forEach((p) => {
-      const t = p.textContent || '';
-      if (t.includes('עמוד') && t.includes('מתוך') && !/\d/.test(t)) {
-        p.querySelectorAll('span').forEach((s) => {
-          if (s.textContent === 'עמוד ') s.textContent = `עמוד ${idx + 1}`;
-          else if (s.textContent === ' מתוך ') s.textContent = ` מתוך ${total}`;
-        });
-      }
-    });
-  });
-}
-
 /**
  * Export-template preview (round195 rewrite).
  *
@@ -206,7 +123,13 @@ function patchPageNumbers(stage) {
  * the first live render builds, in test/jsdom environments, and if the live
  * pipeline ever fails (each failure is logged through the funnel).
  */
-export default function ExportPreview({ template, assets }) {
+/*
+ * round207 props: `model` (optional) — a REAL, pre-assembled discussion export
+ * model (assembleDiscussionModel); when provided the live preview renders THAT
+ * discussion instead of the built-in sample. `modelKey` identifies it in the
+ * rebuild signature (the model object is stable per dialog mount).
+ */
+export default function ExportPreview({ template, assets, model = null, modelKey = null }) {
   const fontCss = (EXPORT_FONTS[template?.font] || EXPORT_FONTS[DEFAULT_EXPORT_FONT]).css;
   const isConfig = (template?.headerMode || EXPORT_HEADER_MODES.CONFIG) !== EXPORT_HEADER_MODES.UPLOAD;
   const sections = Array.isArray(template?.sections) ? template.sections : [];
@@ -285,7 +208,7 @@ export default function ExportPreview({ template, assets }) {
   // typing in the free-text/header fields doesn't rebuild on every keystroke.
   useEffect(() => {
     if (!canRunLivePreview()) return undefined;
-    const sig = `${JSON.stringify(template)}|${assets?.headerLogo?.length || 0}|${assets?.footerLogo?.length || 0}|${assets?.templateDocx?.length || 0}`;
+    const sig = `${modelKey || 'sample'}|${JSON.stringify(template)}|${assets?.headerLogo?.length || 0}|${assets?.footerLogo?.length || 0}|${assets?.templateDocx?.length || 0}`;
     if (sig === lastSigRef.current) {
       setBuilding(false); // identity churn only — the shown render is current
       return undefined;
@@ -298,19 +221,28 @@ export default function ExportPreview({ template, assets }) {
         const docxPreview = await import('docx-preview');
         if (cancelled || seq !== seqRef.current) return;
 
-        const model = buildDiscussionModel(LIVE_SAMPLE_INPUTS);
+        // round207 — a provided REAL model (the per-discussion dialog) wins
+        // over the built-in sample.
+        const previewModel = model || buildDiscussionModel(LIVE_SAMPLE_INPUTS);
         // Identical to the export path: renderDocx builds + injects section RTL…
-        const blob = await renderDocx(model, template, assets);
+        const blob = await renderDocx(previewModel, template, assets);
         if (cancelled || seq !== seqRef.current) return; // stale — skip the zip work
         let bytes = new Uint8Array(await blob.arrayBuffer());
         // …and in UPLOAD mode the body is spliced into the uploaded template so
         // its real header/footer show in the preview, exactly like the export.
         const uploadMode = (template?.headerMode || EXPORT_HEADER_MODES.CONFIG) === EXPORT_HEADER_MODES.UPLOAD;
+        // round202 — the true geometry of the template's floating header/footer
+        // art (anchored drawings) and its tab-stop paragraph layouts, read
+        // straight from its XML; docx-preview collapses anchors to mis-placed
+        // 0×0 boxes and evaluates tab stops LTR-only (see previewPagination.js).
+        let templateAnchors = null;
+        let templateTabParas = null;
         if (uploadMode && assets?.templateDocx) {
           try {
-            bytes = injectSectionRtlIntoZip(
-              spliceBodyIntoTemplate(base64ToU8(assets.templateDocx), bytes)
-            );
+            const tplBytes = base64ToU8(assets.templateDocx);
+            templateAnchors = extractTemplateAnchors(tplBytes);
+            templateTabParas = extractTemplateTabParagraphs(tplBytes);
+            bytes = injectSectionRtlIntoZip(spliceBodyIntoTemplate(tplBytes, bytes));
           } catch (err) {
             logger.warn('ExportPreview', 'שילוב קובץ התבנית בתצוגה המקדימה נכשל — מציג את גוף המסמך בלבד', err);
           }
@@ -321,10 +253,12 @@ export default function ExportPreview({ template, assets }) {
         // pagination measures real offsets, which a detached node can't give
         // (visibility:hidden + fixed offscreen keeps it laid out but invisible);
         // still swapped atomically at the end — no blank flash on rebuilds.
-        // experimental:false (review finding): its deferred tab-stop measuring
-        // pass mixes zoom-scaled and unzoomed geometry under our CSS zoom and
-        // DISTORTS tab-aligned headers from uploaded templates; the generated
-        // doc emits no tab stops, so the pass buys nothing here.
+        // round202 — experimental stays FALSE: docx-preview's experimental
+        // tab-stop pass is LTR-only (Chromium-harness-verified: an RTL template
+        // footer centered by a tab stayed ~145px off-center under it) and fires
+        // on an internal 500ms timer. Template header/footer tabs are laid out
+        // deterministically by applyTemplateTabStops below instead, from the
+        // template's own XML.
         if (typeof document.fonts?.ready?.then === 'function') {
           await document.fonts.ready; // measure with the real webfonts loaded
           if (cancelled || seq !== seqRef.current) return;
@@ -343,6 +277,26 @@ export default function ExportPreview({ template, assets }) {
             renderFooters: true,
             useBase64URL: true,
           });
+          // round202 — images load AFTER renderAsync resolves; measuring before
+          // they decode under-counted the header/footer flow heights and let
+          // body content overlap the footer. Wait for real image geometry.
+          await waitForImages(stage);
+          if (cancelled || seq !== seqRef.current) return;
+          // Normalize the rendered BODY before measuring/paginating so the
+          // preview uses the same RTL flow and physical right edge as Word.
+          normalizeRenderedDocxRtl(stage);
+          // round202 — put the template's floating header/footer art where the
+          // file actually anchors it (page-frame absolute, real extent) and lay
+          // out its tab-stop paragraphs RTL-correctly — the "not centered"
+          // header/footer fix AND the phantom-overlap fix, both verified with
+          // the Chromium geometry harness.
+          // Tab layout FIRST (it makes paragraphs position:relative), then the
+          // anchors — reanchorFloatingDrawings rebases against the actual
+          // containing block, so the order keeps both exact.
+          stage.querySelectorAll('section.docx').forEach((sec) => {
+            if (templateTabParas) applyTemplateTabStops(sec, templateTabParas);
+            if (templateAnchors) reanchorFloatingDrawings(sec, templateAnchors);
+          });
           paginateRenderedDocx(stage);   // true Word-like page breaks by height
           patchPageNumbers(stage);       // stamp עמוד k מתוך N per page
           pageTotal = stage.querySelectorAll('section.docx').length || 1;
@@ -351,6 +305,10 @@ export default function ExportPreview({ template, assets }) {
         }
         if (cancelled || seq !== seqRef.current || !hostRef.current) return;
         hostRef.current.replaceChildren(...stage.childNodes);
+        // Re-assert on the final mounted tree as well. This makes the result
+        // deterministic even if inherited preview styles differ offscreen vs
+        // inside the LTR scroll frame.
+        normalizeRenderedDocxRtl(hostRef.current);
         lastSigRef.current = sig;
         setPageCount(pageTotal);
         setCurPage(1);
@@ -369,7 +327,7 @@ export default function ExportPreview({ template, assets }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [template, assets]);
+  }, [template, assets, model, modelKey]);
 
   /* ------------------------------------------------ static sketch (fallback) */
 
@@ -442,6 +400,13 @@ export default function ExportPreview({ template, assets }) {
           </div>
         );
       }
+      case 'background':
+        return (
+          <div key="background" className={styles.docSection}>
+            <div className={styles.h2}>רקע</div>
+            <p className={styles.para}>רקע והקשר לדיון יופיעו כאן — הנסיבות שקדמו לישיבה והמטרות שהוגדרו.</p>
+          </div>
+        );
       case 'topics':
         return (
           <div key="topics" className={styles.docSection}>
@@ -483,14 +448,6 @@ export default function ExportPreview({ template, assets }) {
               ['מס׳', 'החלטה', 'מחליט'],
               DECISIONS_SAMPLE.map((d, i) => [String(i + 1), d.name, d.decider]),
             )}
-          </div>
-        );
-      case 'freeText':
-        return (
-          <div key="freeText" className={styles.docSection}>
-            {section.title && <div className={styles.h2}>{section.title}</div>}
-            {section.body && <p className={styles.para}>{section.body}</p>}
-            {!section.title && !section.body && <p className={styles.paraMuted}>פתיחה (ריק)</p>}
           </div>
         );
       default:

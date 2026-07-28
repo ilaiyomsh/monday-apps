@@ -41,8 +41,44 @@ export const PREVIOUS_TASKS_MODES = {
   DISCUSSION_TYPE: 'discussionType',
   AUTO: 'auto',
 };
+/*
+ * round205 — the owner-selectable APP COMPONENTS (Settings → העדפות, owners
+ * only): every major surface a board owner may hide for the whole instance.
+ * Visibility is stored under preferences.visibleComponents as an EXPLICIT-false
+ * map — a key that was never touched stays visible (default-on), so new
+ * components appear automatically on existing instances.
+ */
+export const APP_COMPONENTS = [
+  { key: 'previous', label: 'דיונים קודמים' },
+  { key: 'background', label: 'רקע' },
+  { key: 'references', label: 'התייחסויות' },
+  { key: 'summary', label: 'סיכום' },
+  { key: 'topics', label: 'נושאים ונקודות' },
+  { key: 'tasks', label: 'משימות' },
+  { key: 'decisions', label: 'החלטות' },
+  { key: 'effectiveness', label: 'אפקטיביות' },
+  { key: 'personalArea', label: 'אזור אישי' },
+  { key: 'myTasks', label: 'המשימות שלי' },
+  { key: 'myDecisions', label: 'ההחלטות שלי' },
+  { key: 'dashboard', label: 'דשבורד' },
+];
+
+/** A component is visible unless the owner EXPLICITLY hid it (stored false). */
+export function isComponentVisible(preferences, key) {
+  return preferences?.visibleComponents?.[key] !== false;
+}
+
 export const DEFAULT_PREFERENCES = {
   previousTasksMode: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION,
+  // round296 — default width split of the ניהול-דיון row: the AGENDA box's share
+  // (0..1, clamped [0.25,0.75] by discussionLayout). 0.6 ⇒ agenda 60% / triple
+  // box 40% (owner request). Owner-configurable in Settings → העדפות. A per-
+  // discussion drag override is saved on that discussion only; a NEW discussion
+  // (no saved layout) opens at THIS default.
+  defaultLayoutRatio: 0.6,
+  // round205 — per-component visibility map ({ [componentKey]: false } hides);
+  // see APP_COMPONENTS + isComponentVisible above. Empty = everything shown.
+  visibleComponents: {},
   // round108 — owner-set logo shown at the top-right of the discussion header
   // (parallel to the title). Stored as a small downscaled data-URI (self-contained,
   // no asset hosting); null = no logo. Set only by owners in Settings → העדפות.
@@ -152,12 +188,9 @@ export const DEFAULT_EXPORT_TEMPLATE = {
   // Selected export font key (see EXPORT_FONTS). Default = brand (today's output).
   font: DEFAULT_EXPORT_FONT,
   // Body sections in render order. `enabled:false` drops a section entirely.
+  // round203 — the "פתיחה" (freeText) section was RETIRED (owner request);
+  // seedExportTemplate drops it from previously-stored templates.
   sections: [
-    // round191 — "פתיחה" (was 'מידע כללי') is now FIRST and enabled by default
-    // (owner request): an intro block at the head of the document. Empty title+body
-    // still emit nothing (buildFreeText returns []), so a fresh export with no
-    // opening text is byte-identical to before — only its position/default changed.
-    { key: 'freeText', enabled: true, title: '', body: '' },
     {
       key: 'meta',
       enabled: true,
@@ -171,6 +204,11 @@ export const DEFAULT_EXPORT_TEMPLATE = {
         { key: 'previousText', enabled: true, label: 'דיון קודם' },
       ],
     },
+    // round219 — the רקע (background) box from the Topics tab's triple box;
+    // rendered through the same HTML→docx converter as the summary/references.
+    // Placed right after the metadata so it reads as the discussion's context;
+    // seedExportTemplate back-fills it into previously-stored templates.
+    { key: 'background', enabled: true, label: 'רקע' },
     { key: 'topics', enabled: true, label: 'נושאים לדיון' },
     { key: 'summary', enabled: true, label: 'סיכום' },
     // round200 — the References (התייחסויות) box from the Topics tab; rendered
@@ -241,10 +279,23 @@ export const CAPABILITY_DEFAULTS = {
   // a user in no people column of the discussion is denied. The resolver keeps
   // two safety valves (unready discussion / unseeded roles map → allow).
   viewDiscussion: 'creatorLeadOwner',
+  // round209 — the box-view caps default to 'all' so EXISTING stored role maps
+  // (which lack these new keys) keep today's behavior: everyone who can open
+  // the discussion sees the boxes. Unlike other 'all' caps the resolver does
+  // NOT short-circuit these — an explicit `false` on a held role (e.g. the
+  // owner unchecking participants) hides the pane. See usePermission.js
+  // BOX_VIEW_CAPS.
+  viewReferencesBox: 'all',
+  viewSummaryBox: 'all',
   editDiscussionFields: 'creatorLeadOwner',
+  // round212 — triple-box writes: default like editSummary (creator/lead/owner).
+  writeBackground: 'creatorLeadOwner',
+  writeReferences: 'creatorLeadOwner',
   editSummary: 'creatorLeadOwner',
   exportDocs: 'creatorLeadOwner',
-  createTask: 'creatorLeadOwner',
+  // round291 (owner spec) — ANYONE can create a task, both standalone (My Tasks,
+  // already ungated) and inside a discussion. Mirrors createDiscussion: 'all'.
+  createTask: 'all',
   addTopicOrPoint: 'creatorLeadOwner',
   editTopicOrPoint: 'creatorLeadOwner',
   deleteTopicOrPoint: 'creatorLeadOwner',
@@ -284,14 +335,24 @@ export const CAPABILITY_DEFAULTS = {
 export const CAPABILITIES = [
   // ---- discussion tier ----
   { id: 'viewDiscussion', tier: 'disc', group: 'discussion', label: 'צפייה בדיון' },
+  // round209 — per-role VIEW gates for the triple-box panes (owner spec: decide
+  // whether participants may SEE the התייחסויות / סיכום boxes).
+  { id: 'viewReferencesBox', tier: 'disc', group: 'discussion', label: 'צפייה בתיבת התייחסויות' },
+  { id: 'viewSummaryBox', tier: 'disc', group: 'discussion', label: 'צפייה בתיבת סיכום' },
   { id: 'editDiscussionFields', tier: 'disc', group: 'discussion', label: 'עריכת פרטי הדיון' },
-  { id: 'editSummary', tier: 'disc', group: 'discussion', label: 'עריכת סיכום' },
+  // round212 — the triple-box WRITE gates are matrix capabilities now (owner
+  // spec: full ✓-table control). editSummary keeps its id (stored configs
+  // survive) but reads "כתיבת סיכום" alongside the two new siblings.
+  { id: 'writeBackground', tier: 'disc', group: 'discussion', label: 'כתיבת רקע' },
+  { id: 'writeReferences', tier: 'disc', group: 'discussion', label: 'כתיבת התייחסויות' },
+  { id: 'editSummary', tier: 'disc', group: 'discussion', label: 'כתיבת סיכום' },
   { id: 'exportDocs', tier: 'disc', group: 'discussion', label: 'ייצוא' },
   { id: 'addTopicOrPoint', tier: 'disc', group: 'topics', label: 'הוספת נושא/נקודה' },
   { id: 'editTopicOrPoint', tier: 'disc', group: 'topics', label: 'עריכת נושא/נקודה' },
   { id: 'deleteTopicOrPoint', tier: 'disc', group: 'topics', label: 'מחיקת נושא/נקודה' },
   { id: 'checkPoint', tier: 'disc', group: 'topics', label: 'סימון נקודה כנידונה' },
-  { id: 'editResponses', tier: 'disc', group: 'topics', label: 'עריכת התייחסויות' },
+  // round212 — relabeled "לנקודות" so it can't be confused with the references BOX write.
+  { id: 'editResponses', tier: 'disc', group: 'topics', label: 'עריכת התייחסויות לנקודות' },
   // discussion-scoped "משימות" card (creating a task lives in the discussion)
   { id: 'createTask', tier: 'disc', group: 'tasks', label: 'יצירת משימה בדיון' },
   // discussion-scoped "החלטות" card (creating a decision lives in the discussion)
@@ -358,7 +419,11 @@ export const DEFAULT_PERMISSION_SEED = {
   'discussions:discussionCreatorID': {
     capabilities: {
       viewDiscussion: true,
+      viewReferencesBox: true,
+      viewSummaryBox: true,
       editDiscussionFields: true,
+      writeBackground: true,
+      writeReferences: true,
       editSummary: true,
       exportDocs: true,
       createTask: true,
@@ -374,7 +439,11 @@ export const DEFAULT_PERMISSION_SEED = {
   'discussions:discussionLeadID': {
     capabilities: {
       viewDiscussion: true,
+      viewReferencesBox: true,
+      viewSummaryBox: true,
       editDiscussionFields: true,
+      writeBackground: true,
+      writeReferences: true,
       editSummary: true,
       exportDocs: true,
       createTask: true,
@@ -390,7 +459,11 @@ export const DEFAULT_PERMISSION_SEED = {
   'discussions:discussionCoordinatorID': {
     capabilities: {
       viewDiscussion: true,
+      viewReferencesBox: true,
+      viewSummaryBox: true,
       editDiscussionFields: true,
+      writeBackground: true,
+      writeReferences: true,
       editSummary: true,
       exportDocs: true,
       createTask: true,
@@ -408,7 +481,11 @@ export const DEFAULT_PERMISSION_SEED = {
   'discussions:participantsID': {
     capabilities: {
       viewDiscussion: true,
+      viewReferencesBox: true,
+      viewSummaryBox: true,
       editDiscussionFields: false,
+      writeBackground: false,
+      writeReferences: false,
       editSummary: false,
       exportDocs: true,
       createTask: true,
@@ -534,8 +611,16 @@ export const COLUMN_SCHEMA = {
     discussionDateID: { type: 'date', title: 'תאריך הדיון' },
     creationDateID: { type: 'date', title: 'תאריך יצירה' },
     participantsID: { type: 'people', title: 'משתתפים' },
+    // round211 — EXTERNAL participants (not monday users): a plain text column
+    // holding comma-separated names. They can never be assigned tasks; editable
+    // by the discussion creator/lead/coordinator + board owners. Unmapped → the
+    // whole feature hides.
+    externalParticipantsID: { type: 'long_text', title: 'משתתפים חיצוניים' },
     // File column the exported summary .docx is uploaded into (add_file_to_column).
     summaryFileID: { type: 'file', title: 'קובץ סיכום (DOCS)' },
+    // round216 — the three triple-box files columns (קבצי רקע/התייחסויות/סיכום,
+    // rounds 204/206) were REMOVED from the schema + mapping (owner request):
+    // with no mapped column the 📎 attach button and file chips simply hide.
     tasksBoardLinkID: { type: 'board_relation', title: 'לוח משימות' },
     topicsBoardLinkID: { type: 'board_relation', title: 'לוח נושאים לדיון' },
     // סוג דיון — a DROPDOWN column. Its value is the label TEXT (not a numeric

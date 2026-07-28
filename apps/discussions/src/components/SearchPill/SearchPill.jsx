@@ -10,7 +10,7 @@ import styles from './SearchPill.module.css';
  * collapses back to the pill on blur when empty. Filtering itself is the
  * consumer's job — this component only owns the value.
  */
-export function SearchPill({ value, onChange, placeholder = 'Search' }) {
+export function SearchPill({ value, onChange, placeholder = 'חיפוש' }) {
   const [open, setOpen] = useState(false);
   const expanded = open || (value || '').length > 0;
 

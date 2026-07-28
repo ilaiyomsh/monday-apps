@@ -16,6 +16,7 @@ location or the repo root, never hardcoded.
 | `error-guard` | Error-catching standard: no silent catches; templates + rule kit |
 | `add-to-status-hub` | Wiring an app into the multi-app status hub / Axiom observability |
 | `axiom-sre` | Incident investigation across Axiom/Grafana/Pyroscope/Sentry |
+| `monday-oauth` | monday auth model (which secret verifies what) + OAuth 2.1: PKCE, rotating refresh tokens, 6-month lifetime, revocation; new-app quickstart + legacy migration runbook |
 
 ## One-time setup per developer
 

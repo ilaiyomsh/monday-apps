@@ -22,6 +22,14 @@
   background: rgba(0, 0, 0, 0.32);
 }
 
+/* round243 (round237 point 1) — a per-point "+" open confined to the agenda box
+   uses a TRANSPARENT backdrop so the card reads as a popover inside the topics
+   card, not a screen-dimming modal (click-away still works — the overlay still
+   covers the viewport to catch the outside click). */
+.overlayBounded {
+  background: transparent;
+}
+
 /* Owner request 2026-07-14: opened from the Tasks/Decisions TAB the box sits
    dead-center of the screen (the round-57 right-leaning placement stays for
    point-anchored / FAB opens). Overrides the .overlay start-pinning + gap. */
@@ -32,13 +40,15 @@
   padding-inline-start: 16px;
 }
 
+/* round235 (owner request) — the create box is MUCH smaller: a compact 320px
+   popover-like card (was 520px), tighter paddings, smaller type. */
 .modal {
-  width: min(520px, calc(100vw - 32px));
+  width: min(320px, calc(100vw - 32px));
   display: flex;
   flex-direction: column;
-  border-radius: var(--border-radius-big, 12px);
+  border-radius: var(--border-radius-medium, 8px);
   background: var(--primary-background-color, #fff);
-  box-shadow: var(--box-shadow-medium, 0 24px 70px rgba(0, 0, 0, 0.3));
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.22);
   overflow: visible; /* popovers (status menu) escape the shell */
 }
 
@@ -47,20 +57,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 18px 0;
+  padding: 8px 10px 0;
 }
 
 .topRowStart {
-  min-height: 30px; /* keeps the close button aligned when the toggle is hidden */
+  min-height: 26px; /* keeps the close button aligned when the toggle is hidden */
   display: flex;
   align-items: center;
 }
 
 .segmented {
   display: inline-flex;
-  gap: 4px;
-  padding: 3px;
-  border-radius: 9px;
+  gap: 3px;
+  padding: 2px;
+  border-radius: 7px;
   background: var(--allgrey-background-color, #f0f1f3);
 }
 
@@ -68,9 +78,9 @@
   border: none;
   background: transparent;
   color: var(--secondary-text-color, #676879);
-  padding: 6px 20px;
-  border-radius: 7px;
-  font-size: 14px;
+  padding: 4px 14px;
+  border-radius: 6px;
+  font-size: 12.5px;
   font-weight: var(--font-weight-normal, 500);
   cursor: pointer;
 }
@@ -88,8 +98,8 @@
 }
 
 .closeButton {
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   border: none;
   background: transparent;
   color: var(--secondary-text-color, #676879);
@@ -104,20 +114,21 @@
 }
 
 .body {
-  padding: 14px 18px 18px;
+  /* round266 — tighter paddings so the from-"+" card is scaled to the agenda box. */
+  padding: 6px 10px 8px;
   overflow: visible;
 }
 
-/* Big underlined text input (mockup: 18px semi-bold, blue bottom border). */
+/* Compact underlined text input (round235 — was 18px in the big card). */
 .textInput {
   width: 100%;
-  font-size: 18px;
+  font-size: 14px;
   font-weight: var(--font-weight-bold, 600);
   color: var(--text-color, #323338);
   border: none;
-  border-bottom: 2px solid var(--primary-color, #0073ea);
+  border-bottom: 1.5px solid var(--primary-color, #0073ea);
   outline: none;
-  padding: 4px 2px 8px;
+  padding: 3px 2px 6px;
   background: transparent;
   text-align: start;
 }
@@ -127,17 +138,20 @@
 }
 
 .scopeCaption {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--disabled-text-color, #9699a6);
-  margin-top: 6px;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Two optional fields side by side; stacks on narrow widths. */
 .row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 16px;
+  gap: 8px;
+  margin-top: 8px;
   align-items: start;
 }
 
@@ -283,7 +297,7 @@
 }
 
 .footer {
-  margin-top: 20px;
+  margin-top: 8px;
 }
 
 @media (max-width: 768px) {

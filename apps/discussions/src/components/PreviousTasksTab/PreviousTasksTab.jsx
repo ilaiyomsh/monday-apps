@@ -3,7 +3,8 @@ import { Button, Text, Dropdown } from '@vibe/core';
 import { DropdownChevronDown, Filter } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
 import { CollapseAllButton } from '@generated/components/CollapseAllButton';
-import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS } from '@generated/components/GroupByBuilder';
+import { GroupByBuilder, GROUP_STATUS_ORDERS, GROUP_AZ_ORDERS, sortGroupsByOrder } from '@generated/components/GroupByBuilder';
+import { EmptyState } from '@generated/components/EmptyState';
 // Varied stable group-title colors (owner request 2026-07-14) — shared engine.
 import { ensureGroupColors, groupTabTasks } from '@generated/components/MyTasksView/grouping.js';
 import { useGroupColors } from '@generated/hooks/useGroupColors.jsx';
@@ -32,10 +33,14 @@ import { משימות1Board } from '@api/BoardSDK.js';
 import { TaskTable } from '@generated/components/TaskTable';
 import { PreviousTasksSkeleton } from '@generated/components/PreviousTasksSkeleton';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
+import { isValidStatus } from '@generated/constants/statusConfig';
+import { usePreviousDecisions } from './usePreviousDecisions.js';
+import { PreviousDecisionsTable } from './PreviousDecisionsTable.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
 // Quick-filter status battery (round 81) — shared buckets + presentation chip.
 import { TaskStatusBattery } from '@generated/components/TaskStatusBattery';
+import battery from '@generated/components/TaskStatusBattery/TaskStatusBattery.module.css';
 import { countBuckets, taskInBucket } from '@generated/components/TaskStatusBattery/taskBuckets.js';
 import { resolveDoneStatusIds, startOfToday } from '@generated/components/EffectivenessTab/effectiveness.js';
 import logger from '@generated/utils/logger.js';
@@ -77,11 +82,44 @@ const PREV_FILTER_COLUMNS = [
 ];
 const PREV_TYPE_ICON = { status: 'status', date: 'date', person: 'person' };
 const PREV_COL_NAME = { status: 'סטטוס', deadline: 'דד ליין', person: 'אחראי' };
-const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'Choose a date range';
+const rangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'בחרו טווח תאריכים';
 const rangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
 
+// ---- Previous-discussions DECISIONS view config (round280) ----------------
+// Mirrors DecisionsTab's decisions controls verbatim so the "דיונים קודמים →
+// החלטות" view gets the SAME Search / Filter / Sort / Group-by / Collapse
+// toolbar as the in-discussion decisions tab (and the personal "ההחלטות שלי").
+// Group by: none / סטאטוס (decisionStatusID) / מחליט (decider person).
+const DEC_GROUP_OPTIONS = [
+  { value: 'none', label: 'ללא קיבוץ' },
+  { value: 'status', label: 'סטאטוס', icon: 'status', orders: GROUP_STATUS_ORDERS },
+  { value: 'decider', label: 'מחליט', icon: 'person', orders: GROUP_AZ_ORDERS },
+];
+// Sort: החלטה (name) / סטאטוס / תאריך. `value` keys map to sortTasks(); a
+// decision is mapped to the { name, statusID, deadlineID } shape before sorting.
+const DEC_SORT_OPTIONS = [
+  { value: 'name', label: 'החלטה', icon: 'text', dirs: SORT_TEXT_DIRS },
+  { value: 'status', label: 'סטאטוס', icon: 'status', dirs: SORT_STATUS_DIRS },
+  { value: 'deadline', label: 'תאריך', icon: 'date', dirs: SORT_DATE_DIRS },
+];
+const firstDecSortDir = (col) => (DEC_SORT_OPTIONS.find((o) => o.value === col) || DEC_SORT_OPTIONS[0])?.dirs?.[0]?.key;
+const DEC_NO_STATUS = '__none__';
+const DEC_NO_DECIDER = '__nodecider__';
+// Filter columns: status + date + decider (person). Reuses the shared
+// controls.js engine (which reads statusID / responsibilityID / deadlineID) via
+// a filterView that maps each decision to that shape (see decFilterView below).
+const DEC_FILTER_COLUMNS = [
+  FILTER_COLUMNS.find((c) => c.key === 'status'),
+  FILTER_COLUMNS.find((c) => c.key === 'deadline'),
+  FILTER_COLUMN_PERSON,
+];
+const DEC_FILTER_TYPE_ICON = { status: 'status', date: 'date', person: 'person' };
+const DEC_FILTER_COL_NAME = { status: 'סטאטוס', deadline: 'תאריך', person: 'מחליט' };
+const decRangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label || 'בחרו טווח תאריכים';
+const decRangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
 
-export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUndo, onNotify, onNotifyLoading, onDismissToast, canTask = () => true, canCreateTask = true, canEditDiscussion = true, canReorderColumns, canManageSettings = false }) {
+
+export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUndo, onNotify, onNotifyLoading, onDismissToast, canTask = () => true, canCreateTask = true, canEditDiscussion = true, canDecision = () => true, canReorderColumns, canManageSettings = false }) {
   // Load-time grouping/filter = the shared saved view (empty default otherwise);
   // in-session changes are local until someone with permission hits Save.
   const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('previousTasks', { canManageSettings });
@@ -111,6 +149,105 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     mode === PREVIOUS_TASKS_MODES.DISCUSSION_TYPE
     || (mode === PREVIOUS_TASKS_MODES.AUTO && !!discussion?.discussionTypeID);
 
+  // round274 — by-type scope: 'last' ("הפעם האחרונה", default) shows only the most
+  // recent previous discussion of this type; 'all' ("כל הדיונים הקודמים") shows
+  // every occurrence. Meaningless in linked mode (a single previous discussion),
+  // so the toolbar shows the pill only when byType.
+  const [scope, setScope] = useState('last');
+
+  // round275 — content mode: 'tasks' (default) or 'decisions'. The mode toggle
+  // sits in the toolbar (right after the source chip, per the approved layout)
+  // and swaps the whole view: tasks table + tasks toolbar features ⇄ a read-only
+  // decisions table + a decisions search + a tracking-label quick-filter battery.
+  const [contentMode, setContentMode] = useState('tasks');
+  const [decSearch, setDecSearch] = useState('');
+  const [decQuick, setDecQuick] = useState(null); // a decisionTrackingID label id, or null
+  const tracking = useStatusOptions('decisions', 'decisionTrackingID');
+  // Decision STATUS labels/order/colors — drive the decisions Filter/Sort/Group
+  // controls (mirrors DecisionsTab's useStatusOptions('decisions','decisionStatusID')).
+  const decStatus = useStatusOptions('decisions', 'decisionStatusID');
+  // round279 — keep the WHOLE hook result: it now also exposes the optimistic
+  // updaters wired into the interactive decisions table (edit/reorder/resize).
+  const decisionsData =
+    usePreviousDecisions(discussion, { byType, scope, enabled: contentMode === 'decisions' });
+  const { decisions: allDecisions, loading: decisionsLoading } = decisionsData;
+
+  // ---- Decisions Filter / Sort / Group / Save-to-view (round280) ------------
+  // Same shared engine + builder chrome as DecisionsTab, but persisted under a
+  // SEPARATE saved-view key ('previousDecisions') so it never clobbers the
+  // in-discussion decisions tab ('decisionsTab').
+  const { view: decSavedView, canSave: decCanSaveView, saveView: decSaveView } =
+    useSavedViews('previousDecisions', { canManageSettings });
+  const decSavedGroup = DEC_GROUP_OPTIONS.some((o) => o.value === decSavedView?.group?.col) ? decSavedView.group : null;
+  const [decGroupBy, setDecGroupBy] = useState(decSavedGroup ? decSavedGroup.col : 'none');
+  const [decGroupOrder, setDecGroupOrder] = useState(decSavedGroup?.order || 'labelAsc');
+  const [decCollapsed, setDecCollapsed] = useState({});
+  const [decSort, setDecSort] = useState(() => {
+    const s = decSavedView?.sort;
+    if (!s || !s.active || !DEC_SORT_OPTIONS.some((o) => o.value === s.col)) return { col: null, dir: null, active: false };
+    return { col: s.col, dir: s.dir || firstDecSortDir(s.col), active: true };
+  });
+  const {
+    filter: decFilter, filterRows: decFilterRows, setFilterOp: setDecFilterOp,
+    toggleFilterVal: toggleDecFilterVal, setDeadlineRange: setDecDeadlineRange, setDeadlineDate: setDecDeadlineDate,
+    addFilterRow: addDecFilterRow, removeFilterRow: removeDecFilterRow, retargetFilterRow: retargetDecFilterRow, clearFilter: clearDecFilter,
+  } = useFilterBuilder({ columns: DEC_FILTER_COLUMNS, defaultRows: ['status'], savedView: decSavedView });
+  const decFc = filterCount(decFilter);
+  const onDecSortChange = ({ col, dir }) => setDecSort({ col, dir: dir || firstDecSortDir(col), active: true });
+  const clearDecSort = () => setDecSort({ col: null, dir: null, active: false });
+
+  // Map a decision to the shape controls.js' engine expects (verbatim from
+  // DecisionsTab): status + decider(person) + date.
+  const decFilterView = (d) => ({
+    id: d.id,
+    statusID: d.decisionStatusID,
+    responsibilityID: Array.isArray(d.deciderID) ? d.deciderID : [],
+    deadlineID: d.decisionDateID instanceof Date ? d.decisionDateID : null,
+  });
+  // Client pipeline: filter -> search -> quick-filter -> sort, over allDecisions.
+  const filteredDecisions = useMemo(() => {
+    let list = allDecisions || [];
+    if (filterCount(decFilter) > 0) {
+      const passing = new Set(filterTasks(list.map(decFilterView), decFilter).map((v) => String(v.id)));
+      list = list.filter((d) => passing.has(String(d.id)));
+    }
+    const q = decSearch.trim();
+    if (q) list = list.filter((d) => matchesSearch(d.name, q));
+    if (decQuick != null) list = list.filter((d) => String(d.decisionTrackingID) === String(decQuick));
+    if (!decSort.active || !decSort.col) return list;
+    const views = list.map((d) => ({
+      id: d.id, name: d.name,
+      statusID: d.decisionStatusID,
+      deadlineID: d.decisionDateID instanceof Date ? d.decisionDateID : null,
+    }));
+    const orderIds = sortTasks(views, decSort, { orderById: decStatus.orderById, labelById: decStatus.labelById })
+      .map((v) => String(v.id));
+    const byId = new Map(list.map((d) => [String(d.id), d]));
+    return orderIds.map((id) => byId.get(id)).filter(Boolean);
+  }, [allDecisions, decFilter, decSearch, decQuick, decSort, decStatus.orderById, decStatus.labelById]);
+
+  // Decider person options = the distinct deciders across the loaded decisions.
+  const decPersonOptions = useMemo(() => {
+    const seen = new Map();
+    (allDecisions || []).forEach((d) => (Array.isArray(d.deciderID) ? d.deciderID : []).forEach((p) => {
+      if (p && p.id != null && !seen.has(String(p.id))) {
+        seen.set(String(p.id), { id: String(p.id), label: p.name || String(p.id), color: null });
+      }
+    }));
+    return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label, 'he'));
+  }, [allDecisions]);
+  // Tracking-label chips for the decisions quick-filter battery (owner-configured
+  // labels + colors, e.g. התקבלה / מיושמת חלקית / מיושמת במלואה).
+  const trackingChips = useMemo(
+    () => (tracking.options || []).map((o) => ({
+      id: o.id,
+      label: o.label,
+      color: o.color,
+      count: (allDecisions || []).filter((d) => String(d.decisionTrackingID) === String(o.id)).length,
+    })),
+    [tracking.options, allDecisions]
+  );
+
   // Data layer (round146 split): mode-resolved task list + previous-discussion
   // link/picker plumbing live in usePreviousTasksData; the optimistic update
   // handlers live in taskUpdaters.js. Behavior unchanged.
@@ -119,7 +256,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     resolving, picking, setPicking, discussionOptions, savingPrev, setPrevious,
     previousDiscussionId, previousDiscussionLabel,
     typeFilter, typeMapsLoading,
-  } = usePreviousTasksData(discussion, byType, { onResetSelection: () => setSelectedIds(new Set()) });
+  } = usePreviousTasksData(discussion, byType, { onResetSelection: () => setSelectedIds(new Set()), scope });
   const {
     updateName, updateStatus, updatePriority, updateAssignee, updateDeadline,
     updateStatusBatch, updateAssigneeBatch, updateDeadlineBatch,
@@ -157,6 +294,38 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     saveView({ hiddenColumns: [...hiddenColumns] });
     onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
   }, [saveView, hiddenColumns, onNotify]);
+
+  // round286 (owner request) — the DECISIONS view gets its own "הסתר" (columns)
+  // control, mirroring "ההחלטות שלי". Columns match MyDecisionsTable's set (name
+  // locked); persisted to the previousDecisions saved view. Applied at the render
+  // layer only (MyDecisionsTable's `hiddenColumns`), so order/width are untouched.
+  const decCols = getColumns('decisions') || {};
+  const decColumnList = [
+    { key: 'name', label: 'החלטה', icon: 'text', locked: true },
+    decCols.deciderID?.id && { key: 'decider', label: 'מחליט', icon: 'person' },
+    decCols.affectedID?.id && { key: 'affected', label: 'מושפעים', icon: 'person' },
+    decCols.decisionPriorityID?.id && { key: 'priority', label: 'עדיפות', icon: 'status' },
+    { key: 'status', label: 'סטאטוס', icon: 'status' },
+    decCols.decisionTrackingID?.id && { key: 'tracking', label: 'מעקב החלטה', icon: 'status' },
+    decCols.decisionDateID?.id && { key: 'date', label: 'תאריך', icon: 'date' },
+    decCols.discussionLinkID?.id && { key: 'discussion', label: 'דיון מקור', icon: 'relation' },
+  ].filter(Boolean);
+  const decHideableKeys = decColumnList.filter((c) => !c.locked).map((c) => c.key);
+  const [decHiddenColumns, setDecHiddenColumns] = useState(
+    () => new Set(Array.isArray(decSavedView?.hiddenColumns) ? decSavedView.hiddenColumns : [])
+  );
+  const toggleDecColumn = useCallback((key) => setDecHiddenColumns((prev) => {
+    const next = new Set(prev);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    return next;
+  }), []);
+  const showAllDecColumns = useCallback((show) => {
+    setDecHiddenColumns(show ? new Set() : new Set(decHideableKeys));
+  }, [decHideableKeys]);
+  const saveDecHiddenColumns = useCallback(() => {
+    decSaveView({ hiddenColumns: [...decHiddenColumns] });
+    onNotify?.('התצוגה נשמרה עבור כל המשתמשים', 'success');
+  }, [decSaveView, decHiddenColumns, onNotify]);
 
 
 
@@ -408,6 +577,49 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
 
   const groupOptions = byType ? [...GROUP_OPTIONS, GROUP_OPTION_DISCUSSION] : GROUP_OPTIONS;
 
+  // Decisions grouping (round280) — status groups key by the stable label id and
+  // resolve label/color via useStatusOptions; decider groups key by the sorted
+  // person-id set. Verbatim from DecisionsTab.groupedRaw. Shares the same
+  // useGroupColors instance (colorsByKey/openMenuFor) as the tasks groups above.
+  const decGroupedRaw = useMemo(() => {
+    if (decGroupBy === 'status') {
+      const groups = new Map();
+      filteredDecisions.forEach((d) => {
+        const id = isValidStatus(d.decisionStatusID) && decStatus.labelById[d.decisionStatusID] != null ? d.decisionStatusID : null;
+        const key = id == null ? DEC_NO_STATUS : String(id);
+        if (!groups.has(key)) groups.set(key, { key, statusId: id, items: [] });
+        groups.get(key).items.push(d);
+      });
+      const list = [...groups.values()].map((g) => ({
+        key: g.key,
+        label: g.statusId == null ? 'ללא סטאטוס' : (decStatus.labelById[g.statusId] ?? 'ללא סטאטוס'),
+        color: g.statusId == null ? null : (decStatus.colorById[g.statusId] || null),
+        items: g.items,
+      }));
+      return ensureGroupColors(sortGroupsByOrder(list, { order: decGroupOrder, orderById: decStatus.orderById, noKey: DEC_NO_STATUS }));
+    }
+    if (decGroupBy === 'decider') {
+      const groups = new Map();
+      filteredDecisions.forEach((d) => {
+        const people = Array.isArray(d.deciderID) ? d.deciderID : [];
+        const key = people.map((p) => String(p.id)).sort().join('|') || DEC_NO_DECIDER;
+        const label = people.map((p) => p.name).filter(Boolean).join(', ') || 'ללא מחליט';
+        if (!groups.has(key)) groups.set(key, { key, label: key, color: null, items: [] });
+        groups.get(key).label = label;
+        groups.get(key).items.push(d);
+      });
+      return ensureGroupColors(sortGroupsByOrder([...groups.values()], { order: decGroupOrder, noKey: DEC_NO_DECIDER }));
+    }
+    return [{ key: '__all__', label: '', color: null, items: filteredDecisions }];
+  }, [filteredDecisions, decGroupBy, decGroupOrder, decStatus.labelById, decStatus.colorById, decStatus.orderById]);
+  const decGrouped = useMemo(() => ensureGroupColors(decGroupedRaw, colorsByKey), [decGroupedRaw, colorsByKey]);
+  const decIsGrouped = decGroupBy !== 'none';
+  const decAllCollapsed = decGrouped.length > 0 && decGrouped.every((g) => decCollapsed[g.key]);
+  const toggleDecAll = () => {
+    if (decAllCollapsed) setDecCollapsed({});
+    else { const c = {}; decGrouped.forEach((g) => { c[g.key] = true; }); setDecCollapsed(c); }
+  };
+
   // ---------- Filter panel body (mirrors My Tasks; status + deadline + person) ----------
   const field = (mobile, label, seg) => (mobile
     ? <div className={bs.bField} key={label}><div className={bs.bFieldLabel}>{label}</div>{seg}</div>
@@ -419,7 +631,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const renderFilterRow = (col, i, mobile, openId, setOpenId) => {
     const fcfg = PREV_FILTER_COLUMNS.find((c) => c.key === col);
     const colSeg = (
-      <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Column"
+      <Segment id={`fcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
         icon={PREV_TYPE_ICON[fcfg.type]} text={PREV_COL_NAME[col]}
         options={PREV_FILTER_COLUMNS.map((c) => ({
           key: c.key, label: PREV_COL_NAME[c.key], icon: PREV_TYPE_ICON[c.type],
@@ -428,7 +640,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         onPick={(to) => retargetFilterRow(col, to)} />
     );
     const opSeg = (
-      <Segment id={`fop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="Condition"
+      <Segment id={`fop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="תנאי"
         text={OP_LABEL[filter[col].op]}
         options={fcfg.ops.map((op) => ({ key: op, label: OP_LABEL[op], selected: filter[col].op === op }))}
         onPick={(op) => setFilterOp(col, op)} />
@@ -438,8 +650,8 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       const f = filter.deadline;
       if (f.op === 'within') {
         valueCtl = (
-          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="When"
-            icon={f.range ? rangeIcon(f.range) : 'date'} text={f.range ? rangeLabel(f.range) : 'Choose a date range'} placeholder={!f.range}
+          <Segment id="fval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="מתי"
+            icon={f.range ? rangeIcon(f.range) : 'date'} text={f.range ? rangeLabel(f.range) : 'בחרו טווח תאריכים'} placeholder={!f.range}
             options={DEADLINE_RANGES.map((r) => ({ key: r.key, label: r.label, icon: r.icon, selected: f.range === r.key }))}
             onPick={setDeadlineRange} />
         );
@@ -472,8 +684,8 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
             <span className={bs.bWhereLead}>{lead}</span>
             {removeBtn}
           </div>
-          {field(true, 'Column', colSeg)}
-          {field(true, 'Condition', opSeg)}
+          {field(true, 'עמודה', colSeg)}
+          {field(true, 'תנאי', opSeg)}
           {valueCtl ? field(true, 'Value', valueCtl) : null}
         </div>
       );
@@ -495,6 +707,90 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     </>
   );
 
+  // ---------- Decisions Filter panel body (round280 — mirrors DecisionsTab) ----------
+  const decValueChips = (col) => {
+    const opts = col === 'person' ? decPersonOptions : decStatus.options;
+    return (opts || []).filter((o) => decFilter[col].values.has(String(o.id))).map((o) => ({ color: o.color, text: o.label }));
+  };
+  const renderDecFilterRow = (col, i, mobile, openId, setOpenId) => {
+    const fcfg = DEC_FILTER_COLUMNS.find((c) => c.key === col);
+    const colSeg = (
+      <Segment id={`dfcol-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="עמודה"
+        icon={DEC_FILTER_TYPE_ICON[fcfg.type]} text={DEC_FILTER_COL_NAME[col]}
+        options={DEC_FILTER_COLUMNS.map((c) => ({
+          key: c.key, label: DEC_FILTER_COL_NAME[c.key], icon: DEC_FILTER_TYPE_ICON[c.type],
+          selected: c.key === col, disabled: c.key !== col && decFilterRows.includes(c.key),
+        }))}
+        onPick={(to) => retargetDecFilterRow(col, to)} />
+    );
+    const opSeg = (
+      <Segment id={`dfop-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="תנאי"
+        text={OP_LABEL[decFilter[col].op]}
+        options={fcfg.ops.map((op) => ({ key: op, label: OP_LABEL[op], selected: decFilter[col].op === op }))}
+        onPick={(op) => setDecFilterOp(col, op)} />
+    );
+    let valueCtl = null;
+    if (col === 'deadline') {
+      const f = decFilter.deadline;
+      if (f.op === 'within') {
+        valueCtl = (
+          <Segment id="dfval-deadline" openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle="מתי"
+            icon={f.range ? decRangeIcon(f.range) : 'date'} text={f.range ? decRangeLabel(f.range) : 'בחרו טווח תאריכים'} placeholder={!f.range}
+            options={DEADLINE_RANGES.map((r) => ({ key: r.key, label: r.label, icon: r.icon, selected: f.range === r.key }))}
+            onPick={setDecDeadlineRange} />
+        );
+      } else {
+        valueCtl = (
+          <div className={mobile ? bs.bDateWrapFull : bs.bDateWrap}>
+            <DatePickerPopover value={f.date || null} onChange={setDecDeadlineDate} />
+          </div>
+        );
+      }
+    } else {
+      const opts = col === 'person' ? decPersonOptions : decStatus.options;
+      valueCtl = (
+        <Segment id={`dfval-${col}`} openId={openId} setOpenId={setOpenId} mobile={mobile} sheetTitle={DEC_FILTER_COL_NAME[col]} multi
+          chips={decValueChips(col)}
+          options={(opts || []).map((o) => ({ key: String(o.id), label: o.label, dot: o.color, selected: decFilter[col].values.has(String(o.id)) }))}
+          onPick={(id) => toggleDecFilterVal(col, id)} />
+      );
+    }
+    const lead = i === 0 ? 'Where' : 'And';
+    const removeBtn = (
+      <button type="button" className={bs.bIconBtn} onClick={() => removeDecFilterRow(col)} aria-label="Remove filter">
+        <BuilderIcon name="x" size={16} />
+      </button>
+    );
+    if (mobile) {
+      return (
+        <div className={bs.bWhere} style={{ display: 'block' }} key={col}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span className={bs.bWhereLead}>{lead}</span>
+            {removeBtn}
+          </div>
+          {field(true, 'עמודה', colSeg)}
+          {field(true, 'תנאי', opSeg)}
+          {valueCtl ? field(true, 'Value', valueCtl) : null}
+        </div>
+      );
+    }
+    return (
+      <div className={bs.bWhere} key={col}>
+        <span className={bs.bWhereLead}>{lead}</span>
+        {colSeg}{opSeg}{valueCtl}{removeBtn}
+      </div>
+    );
+  };
+  const renderDecFilterBody = ({ mobile, openId, setOpenId }) => (
+    <>
+      {decFilterRows.map((col, i) => renderDecFilterRow(col, i, mobile, openId, setOpenId))}
+      {decFilterRows.length === 0 ? <div className={bs.bEmpty}>No filters — showing all decisions</div> : null}
+      {decFilterRows.length < DEC_FILTER_COLUMNS.length
+        ? <button type="button" className={bs.bAddLink} onClick={addDecFilterRow}>+ New filter</button>
+        : null}
+    </>
+  );
+
   // Loader-first: until the previous-discussion link (or the by-type bridge
   // maps) are resolved, don't render anything definitive (avoids flashing a
   // "nothing here" message before resolution completes).
@@ -511,13 +807,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   if (byType && !typeFilter.taskTypeId) {
     return (
       <div className={styles.root}>
-        <div className={styles.noPrevious}>
-          <Text type={"text2"} color={"secondary"}>
-            {!discussion?.discussionTypeID
-              ? 'לא הוגדר סוג לדיון זה'
-              : 'לא נמצאו משימות מסוג דיון זה'}
-          </Text>
-        </div>
+        <EmptyState bleedStart>
+          {!discussion?.discussionTypeID
+            ? 'לא הוגדר סוג לדיון זה'
+            : 'לא נמצאו משימות מסוג דיון זה'}
+        </EmptyState>
       </div>
     );
   }
@@ -559,10 +853,44 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
           <span className={styles.prevChipLabel}>{byType ? 'סוג דיון' : 'דיון קודם'}</span>
           <span className={styles.prevChipName}>{byType ? typeFilter.label : previousDiscussionLabel}</span>
         </div>
+        {/* round275 — content mode toggle (משימות/החלטות), right after the source
+            chip per the owner's order: source → mode → scope → features. */}
+        {/* round279 — segment is dir="rtl", so the FIRST array item renders on the
+            RIGHT. Owner wants משימות on the LEFT of החלטות, so החלטות is listed
+            first (rightmost) and משימות second (leftmost). Default stays 'tasks'. */}
+        <div className={styles.modeSeg} dir="rtl" role="tablist" aria-label="סוג התוכן">
+          {[{ key: 'decisions', label: 'החלטות' }, { key: 'tasks', label: 'משימות' }].map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              role="tab"
+              aria-selected={contentMode === m.key}
+              className={`${styles.modeSegBtn}${contentMode === m.key ? ` ${styles.modeSegOn}` : ''}`}
+              onClick={() => { setContentMode(m.key); setSelectedIds(new Set()); }}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+        {/* round274 — by-type scope toggle, folded into the toolbar as a compact
+            pill (owner spec: one top row). Only shown in by-type mode. */}
+        {byType && (
+          <button
+            type="button"
+            className={styles.scopePill}
+            dir="rtl"
+            onClick={() => { setScope((s) => (s === 'last' ? 'all' : 'last')); setSelectedIds(new Set()); }}
+            title="החלפת טווח התצוגה בין הפעם האחרונה לכל הדיונים הקודמים"
+          >
+            טווח: <b>{scope === 'last' ? 'הפעם האחרונה' : 'כל הדיונים הקודמים'}</b>
+            <span className={styles.scopePillChev} aria-hidden="true">▾</span>
+          </button>
+        )}
+        {contentMode === 'tasks' && (
         <div className={styles.toolbarActions} dir="ltr">
           <SearchPill value={search} onChange={setSearch} />
           <BuilderControl
-            icon={Filter} label="Filter" title="Filter by" mobile={isMobile} width={isMobile ? undefined : 620}
+            icon={Filter} label="סינון" title="סינון לפי" mobile={isMobile} width={isMobile ? undefined : 620}
             applied={fc > 0} badge={fc}
             onClear={fc > 0 ? clearFilter : null}
             onSave={canSaveView ? () => {
@@ -608,13 +936,95 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
             <CollapseAllButton collapsed={allCollapsed} onClick={toggleAll} />
           )}
         </div>
-        {/* Quick-filter battery (round 81) — last flex child + auto start-margin
-            pushes it to the RIGHT edge (LTR layout); the rest stay on the left. */}
+        )}
+        {/* round275 — decisions feature cluster: just the search here; the quick
+            filter is a battery pinned to the far edge (batterySlot) below, so it
+            matches the tasks battery's look AND position exactly. */}
+        {contentMode === 'decisions' && (
+          <div className={styles.toolbarActions} dir="ltr">
+            <SearchPill value={decSearch} onChange={setDecSearch} />
+            <BuilderControl
+              icon={Filter} label="סינון" title="סינון לפי" mobile={isMobile} width={isMobile ? undefined : 620}
+              applied={decFc > 0} badge={decFc}
+              onClear={decFc > 0 ? clearDecFilter : null}
+              onSave={decCanSaveView ? () => {
+                decSaveView({ filter: serializeFilter(decFilter), filterRows: decFilterRows });
+                onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
+              } : null}
+              renderBody={renderDecFilterBody}
+            />
+            <SortByBuilder
+              options={DEC_SORT_OPTIONS}
+              value={decSort}
+              mobile={isMobile}
+              onChange={onDecSortChange}
+              onClear={clearDecSort}
+              onSave={decCanSaveView ? () => {
+                decSaveView({ sort: decSort });
+                onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
+              } : null}
+            />
+            <GroupByBuilder
+              options={DEC_GROUP_OPTIONS}
+              value={{ col: decGroupBy, order: decGroupOrder }}
+              noneValue="none"
+              mobile={isMobile}
+              onChange={(g) => { setDecGroupBy(g.col ?? 'none'); if (g.order) setDecGroupOrder(g.order); setDecCollapsed({}); }}
+              onSave={decCanSaveView ? () => {
+                decSaveView({ group: { col: decGroupBy, order: decGroupOrder } });
+                onNotify?.('הבחירה נשמרה עבור כל המשתמשים', 'success');
+              } : null}
+            />
+            {/* round286 — "הסתר" (columns) for the decisions view, owners only,
+                exactly like "ההחלטות שלי". */}
+            {canManageSettings && (
+              <HideColumnsControl
+                columns={decColumnList}
+                hidden={decHiddenColumns}
+                onToggle={toggleDecColumn}
+                onToggleAll={showAllDecColumns}
+                onSave={decCanSaveView ? saveDecHiddenColumns : null}
+              />
+            )}
+            {decIsGrouped && filteredDecisions.length > 0 && (
+              <CollapseAllButton collapsed={decAllCollapsed} onClick={toggleDecAll} />
+            )}
+          </div>
+        )}
+        {/* Quick-filter battery — pushed to the RIGHT edge (batterySlot). Tasks:
+            open/done/delayed. round277 — decisions: one chip per "מעקב החלטה"
+            label, rendered with the SAME battery styling + position as tasks. */}
+        {contentMode === 'tasks' && (
         <div className={styles.batterySlot}>
           <TaskStatusBattery counts={bucketCounts} active={quickStatus} onPick={setQuickStatus} />
         </div>
+        )}
+        {contentMode === 'decisions' && trackingChips.length > 0 && (
+        <div className={styles.batterySlot}>
+          <div className={battery.battery} role="group" aria-label="סינון מהיר לפי מעקב החלטה" dir="rtl">
+            {trackingChips.map((c) => {
+              const isActive = String(decQuick) === String(c.id);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`${battery.chip} ${isActive ? battery.chipActive : ''}`}
+                  aria-pressed={isActive}
+                  title={`הצג ${c.label}`}
+                  onClick={() => setDecQuick((q) => (String(q) === String(c.id) ? null : c.id))}
+                >
+                  <span className={battery.dot} style={{ background: c.color || 'hsl(var(--status-default))' }} />
+                  <span className={battery.label}>{c.label}</span>
+                  <span className={battery.count}>{c.count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        )}
       </div>
 
+      {contentMode === 'tasks' && (<>
       <SelectionActionBar count={selectedIds.size} onClear={clearSelection} ariaLabel="פעולות על משימות נבחרות">
         {/* "Move to next discussion" carries tasks forward along the
             discussion-to-discussion link — meaningless in by-type mode,
@@ -632,11 +1042,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
       {tasksLoading ? (
         <PreviousTasksSkeleton showToolbar={false} />
       ) : tasks.length === 0 ? (
-        <div className={styles.emptyState}>
-          <Text type={"text2"} color={"secondary"}>
-            {byType ? 'לא נמצאו הנחיות מסוג דיון זה' : 'לא נמצאו הנחיות בדיון הקודם'}
-          </Text>
-        </div>
+        <EmptyState bleedStart>
+          {byType
+            ? `אין משימות שנוצרו ${scope === 'all' ? 'בדיונים האחרונים' : 'בדיון האחרון'} מסוג זה`
+            : 'לא נמצאו משימות בדיון הקודם'}
+        </EmptyState>
       ) : (
         <div className={styles.board}>
         <div className={styles.groupScrollInner}>
@@ -695,6 +1105,64 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
         </div>
         </div>
         </div>
+      )}
+      </>)}
+
+      {/* round275 — decisions mode: read-only decisions from previous discussions. */}
+      {contentMode === 'decisions' && (
+        decisionsLoading ? (
+          <PreviousTasksSkeleton showToolbar={false} />
+        ) : filteredDecisions.length === 0 ? (
+          <EmptyState bleedStart>
+            {(allDecisions || []).length === 0
+              ? (byType
+                  ? `אין החלטות שנוצרו ${scope === 'all' ? 'בדיונים האחרונים' : 'בדיון האחרון'} מסוג זה`
+                  : 'לא נמצאו החלטות בדיונים קודמים')
+              : 'לא נמצאו החלטות התואמות לסינון'}
+          </EmptyState>
+        ) : !decIsGrouped ? (
+          <div className={styles.board}>
+            <PreviousDecisionsTable
+              decisions={filteredDecisions}
+              data={decisionsData}
+              canDecision={canDecision}
+              canManageSettings={canManageSettings}
+              hiddenColumns={decHiddenColumns}
+            />
+          </div>
+        ) : (
+          <div className={styles.board}>
+            <div className={styles.groupScrollInner}>
+              <div className={styles.groupStack}>
+                {decGrouped.map((grp) => (
+                  <div key={grp.key}>
+                    {grp.label && (
+                      <button type="button" onClick={() => setDecCollapsed((p) => ({ ...p, [grp.key]: !p[grp.key] }))}
+                        onContextMenu={(e) => openMenuFor(grp.key, e)}
+                        className={styles.groupHeader}>
+                        <DropdownChevronDown
+                          className={`${styles.groupChevron} ${decCollapsed[grp.key] ? styles.groupChevronCollapsed : ''}`}
+                          style={grp.color ? { color: grp.color } : undefined}
+                        />
+                        <span className={styles.groupTitle} style={grp.color ? { color: grp.color } : undefined}>{grp.label}</span>
+                      </button>
+                    )}
+                    {!decCollapsed[grp.key] && (
+                      <PreviousDecisionsTable
+                        decisions={grp.items}
+                        data={decisionsData}
+                        canDecision={canDecision}
+                        canManageSettings={canManageSettings}
+                        color={grp.color}
+                        hiddenColumns={decHiddenColumns}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )
       )}
     </div>
   );

@@ -61,11 +61,15 @@ export function KpiRow({ kpi }: { kpi: KpiSummary | Record<string, unknown> | nu
   return (
     <div className="kpi-row">
       {tiles.map((t) => (
-        <div className="kpi" key={t.label} style={{ borderColor: chrome.border }}>
+        <div
+          className={t.accent ? 'kpi kpi--accent' : 'kpi'}
+          key={t.label}
+          style={{ borderColor: chrome.border, ['--kpi-accent' as string]: t.accent ?? 'transparent' }}
+        >
           <div className="kpi__value" style={{ color: t.accent ?? chrome.textPrimary }}>
             {t.value}
           </div>
-          <div className="kpi__label" style={{ color: chrome.textSecondary }}>
+          <div className="kpi__label" style={{ color: chrome.muted }}>
             {t.label}
           </div>
         </div>

@@ -44,21 +44,21 @@ import { MyTasksView } from '../MyTasksView.jsx';
 describe('MyTasksView — Hide columns (owner gating + shared persistence)', () => {
   it('does NOT show the Hide control for non-owners', () => {
     render(<MyTasksView canManageSettings={false} onNotify={() => {}} />);
-    expect(screen.queryByRole('button', { name: 'Hide' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'הסתר' })).toBeNull();
     // ...but the saved hidden config is still applied to the table for everyone.
     expect(screen.getAllByTestId('table')[0].getAttribute('data-hidden')).toContain('priority');
   });
 
   it('shows Hide for owners and applies the saved hiddenColumns to the table', () => {
     render(<MyTasksView canManageSettings onNotify={() => {}} />);
-    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'הסתר' })).toBeInTheDocument();
     expect(screen.getAllByTestId('table')[0].getAttribute('data-hidden')).toContain('priority');
   });
 
   it('owner "Save to this view" persists the current selection to the shared view', () => {
     render(<MyTasksView canManageSettings onNotify={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
-    fireEvent.click(screen.getByText('Save to this view'));
+    fireEvent.click(screen.getByRole('button', { name: 'הסתר' }));
+    fireEvent.click(screen.getByText('שמירה לתצוגה'));
     expect(saveView).toHaveBeenCalledWith({ hiddenColumns: ['priority'] });
   });
 });

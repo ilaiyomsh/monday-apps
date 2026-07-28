@@ -17,7 +17,7 @@ For employees/managers to record and view days off. **Fully implemented app** (n
 ## 3. Technologies
 - React `19.2` · Vite `7.2` · Language: **TypeScript** (standard #2 — new app chose TS)
 - `monday-sdk-js@0.5.7` (client API) · `@mondaycom/apps-cli@4.10.5` (deploy CLI)  *(standard #3)*
-- **`@axis/app-core`** (`file:../Services/axis-app-core`) — startup, MondayContext, settings module, logger, error pipeline (standard #17). Wired in `src/core.ts`.
+- **`@axis/app-core`** (`workspace:*`, at `apps/axis/services/app-core`) — startup, MondayContext, settings module, logger, error pipeline (standard #17). Wired in `src/core.ts`.
 - `i18next` + `react-i18next`. `@vibe/core` + `@vibe/icons` (added for the `PeoplePicker`; tokens imported in `main.tsx`).
 
 ## 4. Constants
@@ -25,31 +25,35 @@ For employees/managers to record and view days off. **Fully implemented app** (n
 - Storage keys: `customSettings_${instanceId}` (settings). `instanceId = context.instanceId || boardId || 'default'`.
 - i18n: `lng='he'`, `fallbackLng='he'`; locales in `src/i18n/locales/{he,en}`.
 
-## 5. Deploy — **External hosting on GitHub Pages** (NOT monday code)
-> We hit the monday code private-app limit (5). This app is hosted **externally**: the build is published to GitHub Pages, and the monday feature points to that URL via `custom_url`. monday code is **not** used here — do **not** run `mapps code:push`.
+## 5. Deploy — monorepo CI/CD pipeline (monday-code)
 
-**Why local build + push (no CI):** `@axis/app-core` is a local `link:` dependency outside this repo, so GitHub Actions can't resolve it. The build must run locally (where the link resolves), and only the built `dist/` is published to the `gh-pages` branch.
+Day-off is onboarded to the shared monorepo pipeline like every other app.
+**No local build+push, no GitHub Pages / `gh-pages`, no `custom_url`.** Deploys run
+ONLY on GitHub Actions runners — never run `mapps code:push` from a machine.
 
-- **GitHub repo:** https://github.com/ilaiyomsh/day-off (source on `main`, built output on `gh-pages`).
-- **Live URL (stable):** https://ilaiyomsh.github.io/day-off/ — wired into the monday feature as `custom_url`.
+- **Merge to `develop`** → `.github/workflows/deploy-draft-axis-day-off.yml` builds
+  (`pnpm --filter "./apps/axis/day-off" build`, Vite → `dist/`) and pushes the app's
+  **latest draft**: `mapps code:push -c -d apps/axis/day-off/dist` (App ID `11459177`
+  via the `APP_AXIS_DAY_OFF_ID` secret; the CLI resolves the version — no version IDs).
+- **Merge to `main`** (approved release PR only) → `deploy-live-axis-day-off.yml`
+  force-deploys the resolved LIVE version.
+- `@axis/app-core` is a **pnpm workspace** dependency (`workspace:*`, at
+  `apps/axis/services/app-core`), so CI resolves it — the old "must build locally
+  because the `link:` dep is outside the repo" constraint no longer applies.
+
+See the root `CLAUDE.md` (Deploys — pipeline only) and the `monday-cicd` skill for
+the full model and the customer-release procedure.
 
 ```bash
 # Development
 pnpm start                    # vite (port 8301) + mapps tunnel
-
-# Deploy — one command: builds locally, publishes dist/ to gh-pages → live in monday automatically.
-pnpm run deploy               # = deploy:build (vite build) + deploy:pages (gh-pages -d dist)
+# Deploy: never run locally — merge to develop (draft) / main (live); CI does the push.
 ```
-**The monday deploy is automatic**: the feature's `custom_url` is fixed, so every `pnpm deploy` (which republishes `gh-pages`) goes live in monday immediately — no `code:push`, no version promote.
 
-One-time wiring (already done — repeat only when creating a **new draft version**, since `custom_url` is per-version):
-```bash
-mapps app-features:build -a 11459177 -i <APP_VERSION_ID> -d 22016827 \
-  -t custom_url --customUrl="https://ilaiyomsh.github.io/day-off/"
-```
-GitHub Pages setup (already done): Pages source = `gh-pages` branch / root; `public/.nojekyll` disables Jekyll; `vite base: './'` makes assets load under the `/day-off/` sub-path.
-
-`.env` (`VITE_*` only): see `.env.example`. Axiom token is optional (console-only without it).
+Client build env (`VITE_*`): see `.env.example`. The Axiom ingest token is injected by
+CI (`VITE_AXIOM_TOKEN` ← the `AXIOM_INGEST_TOKEN` secret) and is inert without it — no
+token locally means console-only logging. Client bundles build `sourcemap: 'hidden'`;
+CI archives the maps and strips them before push (see `docs/LOGGING-ARCHITECTURE.md` §6).
 
 ---
 

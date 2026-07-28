@@ -71,12 +71,10 @@ import { PreviousTasksTab } from '../PreviousTasksTab.jsx';
 // discussionTypeID is now the dropdown label TEXT (bridged to taskTypeID by text).
 const DISCUSSION = { id: 'D1', name: 'דיון נוכחי', discussionTypeID: 'תכנון' };
 
-// Open the group builder sheet, then its "Column" segment flyout, exposing the
-// option list. Default is NO grouping, so the segment trigger is the
-// "Choose a column" placeholder; tapping it reveals the full option list.
+// round224 — the group builder is ONE flat option list now ("קבץ לפי"): opening
+// the sheet exposes the options directly (no Column segment, no order picker).
 async function openGroupOptions() {
-  fireEvent.click(await screen.findByLabelText('Group by'));
-  fireEvent.click(screen.getByText('Choose a column'));
+  fireEvent.click(await screen.findByLabelText('קבץ לפי'));
 }
 
 describe('PreviousTasksTab — group-by builder (smoke)', () => {
@@ -99,6 +97,9 @@ describe('PreviousTasksTab — group-by builder (smoke)', () => {
   it('byType=true (mobile): picking לפי אחראי regroups by person (unassigned header appears)', async () => {
     cfg.byType = true;
     render(<PreviousTasksTab discussion={DISCUSSION} />);
+    // round274 — by-type defaults to "הפעם האחרונה" (a different fetch path); switch
+    // to "כל הדיונים הקודמים" so the mocked type task set renders for the regroup.
+    fireEvent.click(await screen.findByTitle(/החלפת טווח/));
     await openGroupOptions();
     fireEvent.click(screen.getByText('אחראי'));
     expect(await screen.findByText('לא הוקצה')).toBeTruthy();

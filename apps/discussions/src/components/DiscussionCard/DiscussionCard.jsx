@@ -1,21 +1,27 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, useSyncExternalStore, lazy, Suspense } from 'react';
+import { createPortal } from 'react-dom';
 import { TabsContext, TabList, Tab, IconButton } from '@vibe/core';
 import { MoveArrowLeft, Info } from '@vibe/icons';
+import { Pencil } from 'lucide-react';
 import { דיונים1Board } from '@api/BoardSDK.js';
 import { useTasks } from '@generated/hooks/useTasks';
 import { useDecisions } from '@generated/hooks/useDecisions';
 import { useDiscussionDetails } from '@generated/hooks/useDiscussions';
 import { useMondayContext } from '@generated/contexts/MondayContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
-import { DEFAULT_PREFERENCES, resolveAccessPeople } from '@api/boards.config.js';
+import { DEFAULT_PREFERENCES, resolveAccessPeople, isComponentVisible } from '@api/boards.config.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { usePermissions } from '@generated/hooks/usePermission.js';
 import { PersonList } from '@generated/components/PersonAvatar';
 import { PersonPicker } from '@generated/components/PersonPicker';
+import { ExternalPeople } from '@generated/components/ExternalPeople';
+import { parseExternalParticipants, formatExternalParticipants } from '@generated/utils/externalParticipants.js';
+import { getColumns } from '@api/board-config-store.js';
 import {
   ensurePeopleColumns,
   getColumnTitle,
+  isColumnMapped,
   subscribe as subscribePeopleColumns,
   getVersion as getPeopleColumnsVersion,
 } from '@api/peopleColumns.js';
@@ -23,13 +29,13 @@ import { PreviousTasksTab } from '@generated/components/PreviousTasksTab';
 import { TopicsTab } from '@generated/components/TopicsTab';
 import { TasksTab } from '@generated/components/TasksTab';
 import { DecisionsTab } from '@generated/components/DecisionsTab';
-import { SummaryTab } from '@generated/components/SummaryTab';
 import lazyRetry from '@generated/utils/lazyRetry.js';
 import { NewTaskModal } from '@generated/components/NewTaskModal';
 import { QuickCreateFab } from '@generated/components/QuickCreateFab';
 import { QuickCreateModal } from '@generated/components/QuickCreateModal';
 import { fmtTimeLabel, composeLocalDate, localYmd, toDateInput, toTimeInput } from '@generated/utils/dateTime.js';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
+import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import logger from '@generated/utils/logger.js';
 import { useViewTracking } from '@generated/utils/viewTracking.js';
 import { loadPointItems, addPointItem, mergePointItemIn, prunePointItems } from '@generated/utils/pointItems.js';
@@ -44,7 +50,18 @@ const EffectivenessTab = lazy(lazyRetry(() => import('@generated/components/Effe
 
 // Ordered tab keys — index <-> key mapping for @vibe/core's index-based Tabs.
 // 'decisions' is also a valid deep-link tab (?app[tab]=decisions).
-const TAB_KEYS = ['previous', 'topics', 'tasks', 'decisions', 'summary', 'effectiveness'];
+const TAB_KEYS = ['previous', 'topics', 'tasks', 'decisions', 'effectiveness'];
+// round205 — labels + visibility-component key per tab (the tab list is now
+// DYNAMIC: an owner may hide components in Settings → העדפות).
+const TAB_DEFS = [
+  { key: 'previous', label: 'דיונים קודמים' },
+  { key: 'topics', label: 'ניהול דיון' },
+  { key: 'tasks', label: 'משימות' },
+  { key: 'decisions', label: 'החלטות' },
+  // round206 — the summary TAB was retired: the summary lives in the triple
+  // box inside ניהול דיון (approved mockup).
+  { key: 'effectiveness', label: 'אפקטיביות' },
+];
 
 // Half-hour steps for the header's time menu — full day (the create modal's
 // 6:00–23:00 window is too narrow here: existing discussions carry times like
@@ -59,6 +76,9 @@ const HEADER_DATE_FMT = { weekday: 'long', day: 'numeric', month: 'long', year: 
 function normalizeTabName(tabName) {
   if (!tabName) return null;
   const value = String(tabName).trim().toLowerCase();
+  // round206 — the summary tab was retired; legacy ?tab=summary deep-links
+  // land on ניהול דיון, where the summary now lives (the triple box).
+  if (value === 'summary') return 'topics';
   return TAB_KEYS.includes(value) ? value : null;
 }
 
@@ -73,6 +93,9 @@ export function DiscussionCard({
   initialTab = null,
   initialTabDiscussionId = null,
   onInitialTabReady = null,
+  // round230 — bumps on every produced-link activation; forces the ניהול-דיון
+  // landing state (background pane active + topics collapsed) via TopicsTab.
+  deepLinkNonce = 0,
   canManageSettings = false,
 }) {
   const { currentUser } = useMondayContext();
@@ -122,6 +145,27 @@ export function DiscussionCard({
   const { isMobile } = useViewport();
   const [infoOpen, setInfoOpen] = useState(false);
   const [timeMenuOpen, setTimeMenuOpen] = useState(false);
+  // round294 — the half-hour time menu is PORTALED to <body> (fixed position)
+  // so it floats above the header's sibling rows (the status counters/tabs
+  // previously painted THROUGH it — a stacking-context trap a local z-index
+  // can't escape, owner-reported). The trigger ref anchors the float; the menu
+  // is measured/placed via computeFloatingPosition (flips up when short on room).
+  const timeTriggerRef = useRef(null);
+  const [timeMenuPos, setTimeMenuPos] = useState(null);
+  useLayoutEffect(() => {
+    if (!timeMenuOpen) { setTimeMenuPos(null); return undefined; }
+    const place = () => {
+      const rect = timeTriggerRef.current?.getBoundingClientRect();
+      if (rect) setTimeMenuPos(computeFloatingPosition({ anchorRect: rect, preferred: 'bottom-start', popupWidth: 120, popupHeight: 280 }));
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [timeMenuOpen]);
   // Round 51 — hide the header PEOPLE meta (מנהל / מרכז / משתתפים) when the header
   // row is too crowded to fit everything on ONE line, keeping the date + time.
   // This replaces round-50's fixed 600px width threshold, which never fired: when
@@ -247,16 +291,53 @@ export function DiscussionCard({
     Array.isArray(people) && people.some((p) => String(p?.id) === String(currentUser?.id));
   const canHideTopicOrPoint =
     canManageSettings || holdsRole(data?.discussionLeadID) || holdsRole(data?.discussionCoordinatorID);
-  // round200 (owner decision): the Summary box AND the new References box are
-  // editable ONLY by the discussion coordinator (מרכז דיון), its creator, or its
-  // lead (מנהל דיון) — plus the board owner. A FIXED rule like canHideTopicOrPoint,
-  // deliberately not a matrix capability. Until the details load, the people
-  // columns are unknown → read-only for non-owners (never a brief edit flash).
-  const canEditSummaryBox =
+  // round212 — the triple-box WRITES are MATRIX capabilities now (owner spec:
+  // the permissions ✓-table controls them). The seeds reproduce the old fixed
+  // rule (creator/lead/coordinator + owner) out of the box; the owner can now
+  // grant/revoke each pane per role — participants included.
+  const canEditBackgroundPane = can('writeBackground');
+  const canEditReferencesPane = can('writeReferences');
+  const canEditSummaryPane = can('editSummary');
+  // round203 (owner decision): renaming the discussion FROM ITS TITLE is a FIXED
+  // rule — not a matrix capability. round205 added the CREATOR to the rule
+  // (owner request), alongside the lead, the coordinator and the board owner.
+  const canEditTitle =
     canManageSettings ||
     holdsRole(data?.discussionCreatorID) ||
     holdsRole(data?.discussionLeadID) ||
     holdsRole(data?.discussionCoordinatorID);
+  // round211 — EXTERNAL participants (text-only names): the SAME fixed rule —
+  // creator / lead / coordinator + board owner — may add/remove them.
+  const canEditExternalParticipants = canEditTitle;
+  // The feature exists only when the long_text column is mapped in Settings.
+  const externalColumnMapped = Boolean(getColumns('discussions')?.externalParticipantsID?.id);
+  const externalNames = externalColumnMapped
+    ? parseExternalParticipants(data?.externalParticipantsID)
+    : [];
+
+  // round205 — owner-configurable component visibility (Settings → העדפות):
+  // hidden tabs drop from the strip. The ניהול-דיון tab hosts THREE components
+  // (topic tables + the רקע/התייחסויות boxes) and stays as long as any of them
+  // is visible; the inner pieces gate individually.
+  const prefs = settings?.preferences;
+  const showTopicsTables = isComponentVisible(prefs, 'topics');
+  const showBackground = isComponentVisible(prefs, 'background');
+  // round209 — the התייחסויות/סיכום panes are ALSO per-role view-gated (owner
+  // decides in the permissions tab whether e.g. participants may see them);
+  // the component-visibility preference and the permission gate must BOTH pass.
+  const showReferences = isComponentVisible(prefs, 'references') && can('viewReferencesBox');
+  const showSummaryPane = isComponentVisible(prefs, 'summary') && can('viewSummaryBox'); // round206 — a triple-box pane now
+  const visibleTabs = useMemo(() => TAB_DEFS.filter((t) => (
+    t.key === 'topics'
+      ? (showTopicsTables || showBackground || showReferences || showSummaryPane)
+      : isComponentVisible(prefs, t.key)
+  )), [prefs, showTopicsTables, showBackground, showReferences, showSummaryPane]);
+  // Snap back when the active tab's component was hidden by the owner.
+  useEffect(() => {
+    if (visibleTabs.length && !visibleTabs.some((t) => t.key === activeTab)) {
+      setActiveTab(visibleTabs[0].key);
+    }
+  }, [visibleTabs, activeTab]);
 
   // Item 19 / round 78 — access-column payload for every task created FROM this
   // discussion. Which discussion ROLES fill each tasks access column is
@@ -316,9 +397,15 @@ export function DiscussionCard({
   // see the columns that actually have people. The live titles resolve via
   // ensurePeopleColumns (falling back to the schema title until they arrive).
   const headerPeopleGroups = useMemo(() => {
+    // round219 — the מרכז דיון (coordinator) group appears iff that column is
+    // MAPPED (isColumnMapped); an unmapped coordinator column simply drops from
+    // the header, mirroring the permissions matrix. Replaces the old
+    // permissions.noCoordinator switch — mapping is the single source of truth.
     const defs = [
       { alias: 'discussionLeadID', fallback: 'מנהל דיון' },
-      { alias: 'discussionCoordinatorID', fallback: 'מרכז דיון' },
+      ...(isColumnMapped('discussions', 'discussionCoordinatorID')
+        ? [{ alias: 'discussionCoordinatorID', fallback: 'מרכז דיון' }]
+        : []),
       { alias: 'participantsID', fallback: 'משתתפים' },
     ];
     return defs
@@ -403,6 +490,14 @@ export function DiscussionCard({
     if (nextTab) setActiveTab(nextTab);
   }, [discussion?.id, initialTab, initialTabDiscussionId]);
 
+  // round230 — every produced-link activation forces the ניהול-דיון tab (the
+  // collapse-all + background-pane reset is driven from TopicsTab via the same
+  // nonce). Runs only when the nonce actually bumps (>0), so a manual open never
+  // yanks the user's tab.
+  useEffect(() => {
+    if (deepLinkNonce > 0) setActiveTab('topics');
+  }, [deepLinkNonce]);
+
   // round132 — deep-link readiness: report up (App drops its splash overlay)
   // only once the deep-linked discussion's data is COMPLETE — the card details
   // are merged in, and, when the link targets the topics tab, the topics list
@@ -431,7 +526,7 @@ export function DiscussionCard({
     );
   }
 
-  const activeIndex = TAB_KEYS.indexOf(activeTab);
+  const activeIndex = visibleTabs.findIndex((t) => t.key === activeTab);
 
   // Persist a single-field edit (name or column16) to the board, optimistically.
   const persistField = async (alias, value) => {
@@ -463,6 +558,23 @@ export function DiscussionCard({
     }
   };
 
+  // round211 — persist the external-participants names list (long_text column).
+  // Gated by the FIXED rule (creator/lead/coordinator/owner) — deliberately NOT
+  // persistField's matrix canEdit gate. Optimistic + revert, like its siblings.
+  const persistExternalParticipants = async (names) => {
+    if (!canEditExternalParticipants) return;
+    const text = formatExternalParticipants(names);
+    const alias = 'externalParticipantsID';
+    setOverrides((o) => ({ ...o, [alias]: text }));
+    try {
+      await new דיונים1Board().item(discussion.id).update({ [alias]: text }).execute();
+      onUpdated?.({ ...data, [alias]: text });
+    } catch (err) {
+      if (!err?.__loggedId) logger.error('DiscussionCard', 'עדכון המשתתפים החיצוניים נכשל', err);
+      setOverrides((o) => { const next = { ...o }; delete next[alias]; return next; });
+    }
+  };
+
   // Header date/time inline edit — both write the SAME date column, so each
   // change re-composes the full value: picking a new date keeps the current
   // time, picking a new time keeps the current date. persistField is optimistic
@@ -477,7 +589,8 @@ export function DiscussionCard({
     persistField('discussionDateID', composeLocalDate(toDateInput(data.discussionDateID), timeStr));
   };
 
-  const startEditTitle = () => { if (!canEdit) return; setTitleDraft(data.name || ''); setEditingTitle(true); };
+  // round203 — gated by canEditTitle (lead/coordinator/owner), no longer canEdit.
+  const startEditTitle = () => { if (!canEditTitle) return; setTitleDraft(data.name || ''); setEditingTitle(true); };
   const saveTitle = () => {
     setEditingTitle(false);
     const t = titleDraft.trim();
@@ -660,11 +773,24 @@ export function DiscussionCard({
               <div className={styles.titleMainRow}>
                 <h1
                   className={styles.title}
-                  onDoubleClick={canEdit ? startEditTitle : undefined}
-                  title={canEdit ? 'לחיצה כפולה לעריכה' : undefined}
+                  onDoubleClick={canEditTitle ? startEditTitle : undefined}
+                  title={canEditTitle ? 'לחיצה כפולה לעריכה' : undefined}
                 >
                   {data.name}
                 </h1>
+                {/* round203 — hover pencil: a discoverable edit affordance next to
+                    the title for lead/coordinator/owner (dbl-click still works). */}
+                {canEditTitle && (
+                  <button
+                    type="button"
+                    className={styles.titleEditBtn}
+                    onClick={startEditTitle}
+                    aria-label="ערוך שם דיון"
+                    title="ערוך שם דיון"
+                  >
+                    <Pencil size={15} />
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -739,6 +865,7 @@ export function DiscussionCard({
                       <div className={styles.timeMenuWrap}>
                         <button
                           type="button"
+                          ref={timeTriggerRef}
                           className={styles.dateTrigger}
                           onClick={() => setTimeMenuOpen((o) => !o)}
                           aria-haspopup="listbox"
@@ -746,10 +873,18 @@ export function DiscussionCard({
                         >
                           {data.discussionDateID.hasTime ? fmtTimeLabel(data.discussionDateID) : 'קבע שעה'}
                         </button>
-                        {timeMenuOpen && (
+                        {/* round294 — portal to <body> (fixed) so the menu floats
+                            above the header's sibling rows instead of being painted
+                            through by the status counters below it. */}
+                        {timeMenuOpen && timeMenuPos && createPortal(
                           <>
-                            <div className={styles.infoBackdrop} onClick={() => setTimeMenuOpen(false)} />
-                            <div className={styles.timeMenu} role="listbox" aria-label="בחירת שעה">
+                            <div className={styles.timeMenuBackdrop} onClick={() => setTimeMenuOpen(false)} />
+                            <div
+                              className={styles.timeMenu}
+                              role="listbox"
+                              aria-label="בחירת שעה"
+                              style={{ position: 'fixed', top: timeMenuPos.top, insetInlineStart: timeMenuPos.left, maxHeight: timeMenuPos.height }}
+                            >
                               {HEADER_TIME_OPTIONS.map((t) => {
                                 const selected = t === toTimeInput(data.discussionDateID);
                                 return (
@@ -767,7 +902,8 @@ export function DiscussionCard({
                                 );
                               })}
                             </div>
-                          </>
+                          </>,
+                          document.body
                         )}
                       </div>
                     ) : (
@@ -775,62 +911,84 @@ export function DiscussionCard({
                     )}
                   </div>
                 )}
-                {headerPeopleGroups.length > 0 && (
-                  /* In this dir=rtl row the chevron sits LEFT of the time; the
-                     glyphs: ‹ (points left) = open the roles, › = close them. */
+                {(headerPeopleGroups.length > 0
+                  || (externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0))) && (
+                  /* round227/231 (owner request) — a DOWN chevron: clicking opens
+                     the role-holders + participants on the TAB-NAMES line, pinned
+                     to its end (see .tabsRoster). Rotates 180° (points up) when
+                     open. */
                   <button
                     type="button"
-                    className={styles.metaToggle}
+                    className={`${styles.metaToggle} ${metaOpen ? styles.metaToggleOpen : ''}`}
                     onClick={() => setMetaOpen((o) => !o)}
                     aria-expanded={metaOpen}
                     aria-label={metaOpen ? 'הסתר בעלי תפקידים' : 'הצג בעלי תפקידים'}
                   >
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      {metaOpen ? <path d="M9 18l6-6-6-6" /> : <path d="M15 18l-6-6 6-6" />}
+                      <path d="M6 9l6 6 6-6" />
                     </svg>
                   </button>
                 )}
-                {metaOpen && headerPeopleGroups.map((g) => {
-                  // מנהל (lead) + רשם דיון (coordinator) — and any future single
-                  // role — are one-person fields: cap them at a single person and
-                  // CLOSE the picker right after a pick (exactly like the decision/
-                  // task row pickers, and the create modal's lead/coordinator).
-                  // Only משתתפים (participants) is multi-select, so it stays open
-                  // after each selection.
-                  const singleRole = g.alias !== 'participantsID';
-                  return (
-                    <div key={g.alias} className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
-                      <span className={styles.peopleGroupLabel}>{g.title}</span>
-                      {editDiscussionFields ? (
-                        <PersonPicker
-                          selected={g.people}
-                          onChange={(p) => persistPeople(g.alias, p)}
-                          single={singleRole}
-                          closeOnSelect={singleRole}
-                          boardKey="discussions"
-                          accountWide
-                        />
-                      ) : (
-                        <PersonList people={g.people} size="sm" showNames={false} max={3} />
-                      )}
-                    </div>
-                  );
-                })}
               </div>
             )
           )}
         </div>
         <div className={styles.tabsRow} dir="ltr">
           <TabsContext activeTabId={activeIndex}>
-            <TabList activeTabId={activeIndex} onTabChange={(id) => setActiveTab(TAB_KEYS[id])}>
-              <Tab>הנחיות קודמות</Tab>
-              <Tab>נושאים</Tab>
-              <Tab>משימות</Tab>
-              <Tab>החלטות</Tab>
-              <Tab>סיכום</Tab>
-              <Tab>אפקטיביות</Tab>
+            {/* round205 — the strip renders only the OWNER-VISIBLE components
+                (TAB_DEFS filtered; round204 renamed נושאים → ניהול דיון). */}
+            <TabList activeTabId={activeIndex} onTabChange={(id) => setActiveTab(visibleTabs[id]?.key || visibleTabs[0]?.key)}>
+              {visibleTabs.map((t) => <Tab key={t.key}>{t.label}</Tab>)}
             </TabList>
           </TabsContext>
+          {/* round231 (approved mockup) — the role-holders + participants roster
+              sits on the SAME line as the tab names, pinned to the END (physical
+              right in this ltr row), sharing the tab baseline + bottom rule. The
+              date-row chevron toggles it (metaOpen). Its own dir=rtl orders the
+              groups right-to-left. Desktop only — the phone keeps its info popover. */}
+          {!isMobile && metaOpen && (headerPeopleGroups.length > 0
+            || (externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0))) && (
+            <div dir="rtl" className={styles.tabsRoster}>
+              {headerPeopleGroups.map((g) => {
+                // מנהל (lead) + רשם דיון (coordinator) — and any future single role —
+                // are one-person fields: cap at one and CLOSE the picker after a pick.
+                // Only משתתפים (participants) is multi-select, so it stays open.
+                const singleRole = g.alias !== 'participantsID';
+                return (
+                  <div key={g.alias} className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
+                    <span className={styles.peopleGroupLabel}>{g.title}</span>
+                    {editDiscussionFields ? (
+                      <PersonPicker
+                        selected={g.people}
+                        onChange={(p) => persistPeople(g.alias, p)}
+                        single={singleRole}
+                        closeOnSelect={singleRole}
+                        boardKey="discussions"
+                        accountWide
+                      />
+                    ) : (
+                      /* round227 — cap the avatar stack at 5 + a "+N" (AvatarGroup). */
+                      <PersonList people={g.people} size="sm" showNames={false} max={5} />
+                    )}
+                  </div>
+                );
+              })}
+              {/* round211 — EXTERNAL participants (text-only names): same group
+                  styling; the stack caps at 5 + "+N" and click-to-list-all
+                  (round227). round238 — labeled "משתתפים חיצוניים" (was just
+                  "משתתפים", which duplicated the internal-participants label). */}
+              {externalColumnMapped && (canEditExternalParticipants || externalNames.length > 0) && (
+                <div className={`${styles.peopleGroup} ${styles.peopleGroupAvatars}`}>
+                  <span className={styles.peopleGroupLabel}>משתתפים חיצוניים</span>
+                  <ExternalPeople
+                    names={externalNames}
+                    canEdit={canEditExternalParticipants}
+                    onChange={persistExternalParticipants}
+                  />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -839,15 +997,21 @@ export function DiscussionCard({
           the shared prefetched tasksData, so every switch is instant.
           Every wrapper div gets .tabPane when active so it fades in smoothly. */}
       <div className={styles.body} key={discussion.id}>
+        {isComponentVisible(prefs, 'previous') && (
         <div className={activeTab === 'previous' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'previous' ? undefined : 'none' }}>
-          <PreviousTasksTab discussion={data} onCarryForward={tasksData.mergeTasks} onCarryForwardUndo={tasksData.removeTasks} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} canTask={canTask} canCreateTask={createTask} canEditDiscussion={editDiscussionFields} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
+          <PreviousTasksTab discussion={data} onCarryForward={tasksData.mergeTasks} onCarryForwardUndo={tasksData.removeTasks} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} canTask={canTask} canCreateTask={createTask} canEditDiscussion={editDiscussionFields} canDecision={canDecision} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
         </div>
+        )}
+        {(showTopicsTables || showBackground || showReferences || showSummaryPane) && (
         <div className={activeTab === 'topics' ? `${styles.tabPane} ${styles.tabPaneWide}` : styles.tabPaneWide} style={{ display: activeTab === 'topics' ? undefined : 'none' }}>
           <TopicsTab discussion={data} createTask={tasksData.createTask} onNotify={onNotify} onNotifyLoading={onShowLoading} onDismissToast={onDismissToast} onLoadingChange={handleTopicsLoadingChange}
-            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditReferences={canEditSummaryBox} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+            addTopicOrPoint={addTopicOrPoint} editTopicOrPoint={editTopicOrPoint} deleteTopicOrPoint={deleteTopicOrPoint} checkPoint={checkPoint} editResponses={editResponses} canHide={canHideTopicOrPoint} canEditBackground={canEditBackgroundPane} canEditReferences={canEditReferencesPane} canEditSummary={canEditSummaryPane} canAttachDocuments={canEditTitle} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings}
+            showTopics={showTopicsTables} showBackground={showBackground} showReferences={showReferences} showSummary={showSummaryPane}
             onCreateFromPoint={(createTask || canCreateDecision) ? handleCreateFromPoint : undefined}
-            decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus} />
+            decisionsItems={decisionsData.items} tasksItems={tasksData.items} pointItemsByPoint={pointItemsByPoint} createStatusByPoint={pointCreateStatus}
+            resetViewNonce={deepLinkNonce} />
         </div>
+        )}
         {activeTab === 'tasks' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
             <TasksTab data={tasksData} discussionId={discussion.id} onNewTask={openNewTaskModal} onInlineCreateTask={handleInlineCreateTask} onNotify={onNotify} canTask={canTask} canCreateTask={createTask} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
@@ -856,13 +1020,6 @@ export function DiscussionCard({
         {activeTab === 'decisions' && (
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
             <DecisionsTab data={decisionsData} discussionId={discussion.id} onNewDecision={() => openQuickCreate('decision', null, 'topButton')} onInlineCreate={handleInlineCreateDecision} onNotify={onNotify} canDecision={canDecision} canCreateDecision={canCreateDecision} canReorderColumns={canReorderColumns} canManageSettings={canManageSettings} />
-          </div>
-        )}
-        {activeTab === 'summary' && (
-          <div className={styles.tabPane}>
-            {/* round200 — summary editing narrowed to coordinator/creator/lead
-                (+ board owner), the same fixed rule as the references box. */}
-            <SummaryTab discussion={data} canEdit={canEditSummaryBox} />
           </div>
         )}
         {activeTab === 'effectiveness' && (
@@ -875,11 +1032,11 @@ export function DiscussionCard({
         )}
       </div>
 
-      {/* Quick-create FAB — ONLY on the summary + effectiveness tabs (owner
-          decision 2026-07-14; the other tabs have their own inline/toolbar
+      {/* Quick-create FAB — ONLY on the effectiveness tab (round206: the
+          summary tab was retired; the other tabs have their own inline/toolbar
           create affordances). Hidden while either create modal is open, and
           entirely absent when the user can create neither tasks nor decisions. */}
-      {(activeTab === 'summary' || activeTab === 'effectiveness') &&
+      {activeTab === 'effectiveness' &&
         (createTask || canCreateDecision) && !newTaskOpen && !quickCreate && (
         <QuickCreateFab
           onClick={() => openQuickCreate('task', null, 'fab')}

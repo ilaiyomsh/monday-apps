@@ -95,6 +95,15 @@ const SURFACES = [
     deployEnv: { keys: ['VITE_AXIOM_DATASET', 'VITE_AXIOM_TOKEN', 'VITE_AXIOM_APP'] },
   },
   {
+    name: 'twyst-your-status', kind: 'client',
+    entry: 'apps/twyst-your-status/src/index.jsx',
+    wiring: [{ anyOf: ['setupGlobalErrorHandlers'], beforeRender: true }, { anyOf: ['attachAxiomSink'], beforeRender: true }],
+    renderMarkers: ['createRoot('],
+    boundaryDirs: ['apps/twyst-your-status/src'],
+    workflow: '.github/workflows/deploy-draft-twyst-your-status.yml',
+    deployEnv: { keys: ['VITE_AXIOM_DATASET', 'VITE_AXIOM_TOKEN', 'VITE_AXIOM_APP'] },
+  },
+  {
     name: 'team-people-column', kind: 'client',
     entry: 'apps/team-people-column/src/index.jsx',
     wiring: [{ anyOf: ['setupGlobalErrorHandlers'], beforeRender: true }, { anyOf: ['attachAxiomSink'], beforeRender: true }],

@@ -1,0 +1,95 @@
+name: Deploy Draft - twyst-your-status
+
+# Spec section 7.1: merges into develop auto-deploy to the app's LATEST
+# DRAFT version. No version IDs are stored anywhere — only the App ID
+# secret; the CLI resolves the latest draft itself.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - develop
+    paths:
+      - "apps/twyst-your-status/**"
+      - "packages/shared/**"
+      - "packages/error-kit/**"
+
+jobs:
+  deploy-draft:
+    name: Build and push twyst-your-status to draft
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-draft-twyst-your-status
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build twyst-your-status
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: twyst-your-status
+        run: pnpm --filter "./apps/twyst-your-status" build
+
+      - name: Archive sourcemaps as build artifact (for stack symbolication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-twyst-your-status-${{ github.sha }}
+          path: apps/twyst-your-status/dist/**/*.map
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Strip sourcemaps before deploy (never ship .map to the CDN)
+        run: |
+          set -euo pipefail
+          find apps/twyst-your-status/dist -name '*.map' -type f -delete
+          remaining="$(find apps/twyst-your-status/dist -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining .map files in deploy dir: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::sourcemaps still present in deploy dir — refusing to push (would leak source to the CDN)"
+            exit 1
+          fi
+
+      - name: Install monday.com apps CLI
+        run: npm install -g @mondaycom/apps-cli
+
+      - name: Authenticate mapps CLI (non-interactive)
+        run: mapps init -t "$MONDAY_TOKEN"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
+
+      # Retry once on the transient "Unexpected error ... communicating with
+      # the remote server" (same guard as ship.sh / live deploy).
+      - name: Push to latest DRAFT version
+        run: |
+          set -uo pipefail
+          for attempt in 1 2; do
+            if mapps code:push -c \
+                 -d apps/twyst-your-status/dist \
+                 -a "$APP_ID"; then
+              exit 0
+            fi
+            echo "push attempt $attempt failed; retrying once in 15s (transient remote error)…"
+            sleep 15
+          done
+          echo "::error::code:push to draft failed after retry"
+          exit 1
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
+          APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}

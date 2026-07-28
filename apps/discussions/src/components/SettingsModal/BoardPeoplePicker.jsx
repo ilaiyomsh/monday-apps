@@ -299,8 +299,10 @@ export default function BoardPeoplePicker({ disabled = false }) {
 
   return (
     <div className={styles.root} dir="ltr">
-      <div className={styles.sectionTitle}>People on this board</div>
-
+      {/* round220 — the internal "People on this board" title was dropped: the
+          card header (OWNERS · MEMBERS badge) already names it, so the two rows
+          now read as clean bordered picker fields matching the SUPER MEMBERS
+          card's PersonPicker (owner request). */}
       <button type="button" className={styles.peopleRow} onClick={openBox} disabled={disabled || !boardId}>
         <span className={styles.peopleRowLabel}>Members</span>
         <span className={styles.peopleRowAvatars}>{renderPreview(members)}</span>

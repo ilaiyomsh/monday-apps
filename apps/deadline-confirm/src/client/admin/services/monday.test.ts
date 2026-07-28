@@ -126,7 +126,10 @@ describe('seamlessApi — funnel logging on a network/SDK throw', () => {
       default: () => ({
         get: vi.fn(async () => ({ data: 'tok' })),
         api: vi.fn(async () => ({
-          data: { boards: [{ id: '1', name: 'B', object_type_unique_key: 'board' }] },
+          // isRealBoard gates on BOTH discriminators — `type` (develop's 5e27562, "board
+          // pickers were empty — wrong discriminator field") and object_type_unique_key.
+          // Omitting either filters the row out and the happy path asserts on [].
+          data: { boards: [{ id: '1', name: 'B', type: 'board', object_type_unique_key: 'board' }] },
         })),
       }),
     }));

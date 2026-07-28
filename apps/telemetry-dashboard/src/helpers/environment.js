@@ -56,6 +56,10 @@ export function getEnv() {
     // (`${baseUrl}/oauth/callback`) — must match the redirect URI registered
     // in the monday Developer Center OAuth config exactly.
     baseUrl: process.env.BASE_URL || '',
+    // OAuth config (scopes/redirects + the New OAuth Flow toggle) is per app
+    // version — during draft testing the authorize request targets this
+    // version instead of the live one (deadline-confirm's idiom).
+    oauthAppVersionId: process.env.MONDAY_APP_VERSION_ID || '',
 
     // --- Lifecycle events → monday board (all inert by default) -----------
     // Optional fallback: a personal monday API token used to WRITE items on
@@ -73,6 +77,9 @@ export function getEnv() {
     // JSON map appSlug → Signing Secret (feature-level lifecycle webhooks).
     // Empty map = fail-closed 401 on POST /api/webhooks/lifecycle.
     lifecycleSigningSecrets: parseJsonObject(process.env.LIFECYCLE_SIGNING_SECRETS),
+    // Debug: dump each verified webhook's RAW body to the monday-code console
+    // (never Axiom — see lifecycle-service privacy contract). '1' = on.
+    debugLifecyclePayload: process.env.DEBUG_LIFECYCLE_PAYLOAD === '1',
     // JSON map appSlug → Client Secret (app-level install/subscription webhooks).
     // Empty map = fail-closed 401 on POST /api/webhooks/app-events.
     appEventsClientSecrets: parseJsonObject(process.env.APP_EVENTS_CLIENT_SECRETS),

@@ -1,8 +1,9 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
-// One topic WITH a priority (p1='גבוה') and one WITHOUT (empty → "עדיפות").
+// One topic WITH a priority (p1='גבוה') and one WITHOUT.
+const spies = vi.hoisted(() => ({ updateTopicPriority: null }));
 vi.mock('@generated/hooks/useTopics', () => ({
   useTopics: () => ({
     items: [
@@ -12,12 +13,13 @@ vi.mock('@generated/hooks/useTopics', () => ({
     loading: false,
     addTopic: () => {}, addPoint: () => {}, togglePoint: () => {}, refetch: () => {},
     togglePointNotForDiscussion: () => {}, toggleTopicNotForDiscussion: () => {},
-    updateTopicPriority: () => {},
-    renameTopic: () => {}, deleteTopic: () => {}, renamePoint: () => {}, deletePoint: () => {},
+    updateTopicPriority: (...a) => spies.updateTopicPriority?.(...a),
+    renameTopic: () => {}, deleteTopic: () => {}, renamePoint: () => {},
+    softDeletePoints: () => ({ undo: () => {}, count: 0 }),
     reorderTopics: () => {}, reorderPoints: () => {},
   }),
 }));
-// priorityID is mapped → the pill renders; label text + colors come from here.
+// priorityID is mapped → the ribbon tints by priority + the ⋮ menu offers it.
 vi.mock('@generated/utils/mondayApi/board-config-store.js', () => ({
   getColumns: (board) => (board === 'topics' ? { topicPriorityID: { id: 'status_x' } } : {}),
 }));
@@ -29,23 +31,25 @@ vi.mock('@generated/hooks/useStatusOptions', () => ({
 }));
 vi.mock('@generated/components/TopicPointRow', () => ({ TopicPointRow: () => <div data-testid="point-row" />, RowKebabMenu: () => <div data-testid="kebab" />, CreatorAvatar: () => <div data-testid="avatar" /> }));
 vi.mock('@generated/components/ApplyTemplateMenu', () => ({ ApplyTemplateMenu: () => <div data-testid="apply-template" /> }));
-// round200 — stub the references panel (monday.storage + lazy TipTap).
-vi.mock('../ReferencesPanel.jsx', () => ({ ReferencesPanel: () => <div data-testid="references-panel" /> }));
+vi.mock('../UpdatesTripleBox.jsx', () => ({ UpdatesTripleBox: () => <div data-testid="updates-triple-box" /> }));
 
 import { TopicsTab } from '../TopicsTab.jsx';
 
-describe('TopicsTab — per-topic priority pill (smoke)', () => {
-  it('shows the column label for a set priority and "עדיפות" for an unset one', () => {
+describe('TopicsTab — round235 topic priority via the ribbon ⋮ menu (smoke)', () => {
+  it('a topic WITH a priority tints its ribbon label with the priority color', () => {
     render(<TopicsTab discussion={{ id: 'D1' }} canEdit />);
-    expect(screen.getByText('גבוה')).toBeTruthy();   // value from the column (t1)
-    expect(screen.getByText('עדיפות')).toBeTruthy();  // empty placeholder (t2)
+    const tabs = screen.getAllByRole('tab');
+    // t1 carries the priority color; t2 falls back to its palette accent var.
+    expect(tabs[0].style.getPropertyValue('--tile-accent')).toBe('#e2445c');
+    expect(tabs[1].style.getPropertyValue('--tile-accent')).toContain('--topic-color-');
   });
 
-  it('does not render the pill when priorityID is unmapped', () => {
-    // Re-mock getColumns to unmapped for this assertion path is overkill; instead
-    // assert the mapped case rendered exactly one set-label — the unmapped path is
-    // covered by the existing toolbar test (no pill, no crash).
+  it('round237 — the right-click menu lists the priority options and picking one writes it', () => {
+    spies.updateTopicPriority = vi.fn();
     render(<TopicsTab discussion={{ id: 'D1' }} canEdit />);
-    expect(screen.getAllByText('גבוה').length).toBe(1);
+    fireEvent.contextMenu(screen.getAllByRole('tab')[1]); // נושא ב
+    expect(screen.getByText('עדיפות')).toBeTruthy();
+    fireEvent.click(screen.getByText('גבוה'));
+    expect(spies.updateTopicPriority).toHaveBeenCalledWith('t2', 'p1');
   });
 });

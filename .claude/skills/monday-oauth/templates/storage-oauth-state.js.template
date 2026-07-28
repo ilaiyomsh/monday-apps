@@ -1,0 +1,87 @@
+// CANONICAL TEMPLATE — synced from apps/telemetry-dashboard (reference impl, Change #144).
+// Apps keep SELF-CONTAINED copies (packages/shared is forbidden for server runtime).
+// Fix the reference app first, then re-sync this template.
+//
+// This template carries ONLY the OAuth-relevant storage pieces — the token
+// RECORD (with legacy bare-string normalization) and the single-use expiring
+// state nonces. Merge them into the app's own storage service; tenancy is
+// app-specific (telemetry-dashboard: one global key; deadline-confirm:
+// `${accountId}:` prefixes; sync-calender: fields on sync_config records).
+
+export const OWNER_TOKEN_KEY = 'owner:oauth_token'; // app-specific key/prefix
+// Single-use OAuth state nonces: `oauth_state:<nonce>` → { createdAt, verifier }.
+export const OAUTH_STATE_PREFIX = 'oauth_state:';
+
+/**
+ * @typedef {object} OwnerTokenRecord
+ * @property {1|2} v - 1 = legacy bare-string normalization, 2 = OAuth 2.1
+ * @property {string|null} accessToken
+ * @property {string|null} refreshToken - null on legacy records (never refreshed)
+ * @property {number|null} expiresAt - ms epoch (JWT exp, decode-only); null = non-expiring legacy
+ * @property {number|null} obtainedAt - ORIGINAL authorization time (the 6-month anchor)
+ * @property {number|null} refreshedAt
+ * @property {'active'|'reauth_required'} status
+ */
+
+/**
+ * Normalize whatever is stored under the token key to an OwnerTokenRecord.
+ * A bare string = a token stored by the LEGACY flow → v1 record (keeps
+ * working, never refreshed). A corrupt value degrades to null (fail-soft).
+ */
+function normalizeOwnerToken(raw) {
+  if (raw == null) return { record: null, corrupt: false };
+  if (typeof raw === 'string') {
+    return {
+      record: {
+        v: 1,
+        accessToken: raw,
+        refreshToken: null,
+        expiresAt: null,
+        obtainedAt: null,
+        refreshedAt: null,
+        status: 'active',
+      },
+      corrupt: false,
+    };
+  }
+  if (
+    typeof raw === 'object' &&
+    !Array.isArray(raw) &&
+    ('accessToken' in raw || raw.status === 'reauth_required')
+  ) {
+    return { record: raw, corrupt: false };
+  }
+  return { record: null, corrupt: true };
+}
+
+/**
+ * The four OAuth storage operations to graft onto the app's storage service
+ * (alongside its existing caching conventions — the reference app keeps a
+ * 60s read cache with write-through and an invalidateTokenCache() hook the
+ * refresh provider uses for its in-mutex re-read):
+ *
+ *   getOwnerTokenRecord()  — cached read; normalizeOwnerToken; fail-soft null
+ *   setOwnerTokenRecord(r) — write-through
+ *   clearOwnerToken()      — delete + immediate cache visibility
+ *   invalidateTokenCache() — drop the cache (provider re-reads before
+ *                            spending the SINGLE-USE refresh token)
+ *
+ * State nonces (NEVER cached), 10-min TTL, delete-then-check single-use:
+ */
+export function grafOauthStateOps({ backend, now = Date.now, stateMaxAgeMs = 600_000 }) {
+  return {
+    async issueOauthState(nonce, { verifier }) {
+      await backend.set(`${OAUTH_STATE_PREFIX}${nonce}`, { createdAt: now(), verifier });
+    },
+    async consumeOauthState(nonce) {
+      const key = `${OAUTH_STATE_PREFIX}${nonce}`;
+      const entry = (await backend.get(key)) ?? null;
+      if (!entry) return null;
+      await backend.delete(key); // single-use: gone regardless of age
+      if (now() - entry.createdAt >= stateMaxAgeMs) return null;
+      return { verifier: entry.verifier };
+    },
+  };
+}
+
+export { normalizeOwnerToken };

@@ -2,6 +2,14 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 2026-07-22 — Client sourcemaps for stack symbolication
+
+### 🔧 Infrastructure
+
+- **2026-07-22** — The browser-served client bundle now builds `sourcemap: 'hidden'` instead of `true`; CI archives `public/admin/**/*.map` as artifact `sourcemaps-sync-calender-<sha>` then strips them before `mapps code:push`. This also closed a prior leak (the client maps were served publicly). Server code runs from source (`node ./src/index.js`, unbundled) — already-readable stacks, not symbolicated. (#360)
+  - _Why:_ minified client `stack1` frames were uninvestigable, and `sourcemap: true` served source maps publicly.
+  - _Done:_ Part of the portfolio-wide rollout; see `docs/LOGGING-ARCHITECTURE.md` §6.
+
 ## 2.2.0 — 2026-07-17
 
 - Telemetry hardening: the server sink allowlists the `stage` field and ships the failure

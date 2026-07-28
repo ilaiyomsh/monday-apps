@@ -1,6 +1,7 @@
 // v2 — saved email templates: block editor (text blocks with direction/font/
-// size/align + button rows), live client preview, copy of the FULL
-// server-rendered email HTML per template.
+// size/align + button rows) + client-side preview.
+// V6: server-side HTML copy (/api/email-template) was deleted — templates are
+// retained in config for backward compatibility but no longer ship actionable email.
 
 import { useState } from 'react';
 import { Button, Dropdown, TextField } from '@vibe/core';
@@ -15,7 +16,6 @@ import type {
 import { EMAIL_FONTS } from '../types';
 import { newButtonsBlock, newTemplate, newTextBlock } from '../draft';
 import { ButtonPreview } from './ButtonPreview';
-import { apiFetch, ApiError } from '../services/api';
 import logger from '../utils/logger';
 
 interface Option {
@@ -26,7 +26,6 @@ interface Option {
 interface Props {
   templates: EmailTemplate[];
   buttons: ActionButton[];
-  dirty: boolean;
   onChange: (templates: EmailTemplate[]) => void;
 }
 
@@ -49,9 +48,10 @@ function moveBlock(blocks: TemplateBlock[], index: number, delta: -1 | 1): Templ
   return next;
 }
 
-export function TemplatesSection({ templates, buttons, dirty, onChange }: Props) {
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [copyError, setCopyError] = useState<string | null>(null);
+export function TemplatesSection({ templates, buttons, onChange }: Props) {
+  // Surfaces the one fallible action left in this editor (see the add-template
+  // guard below) — V6 removed the server HTML copy path and its error state.
+  const [addError, setAddError] = useState<string | null>(null);
 
   const patchTemplate = (id: string, patch: Partial<EmailTemplate>) => {
     onChange(templates.map((t) => (t.id === id ? { ...t, ...patch } : t)));
@@ -62,30 +62,11 @@ export function TemplatesSection({ templates, buttons, dirty, onChange }: Props)
     patchTemplate(template.id, { blocks });
   };
 
-  const copyFullHtml = async (id: string) => {
-    setCopyError(null);
-    try {
-      const res = await apiFetch<{ html: string }>(
-        `/api/email-template?tpl=${encodeURIComponent(id)}`
-      );
-      await navigator.clipboard.writeText(res.html);
-      setCopiedId(id);
-    } catch (err) {
-      logger.error('admin', 'email_html_copy_failed', err);
-      setCopyError(
-        err instanceof ApiError && err.status === 409
-          ? 'צרו מפתח קישור לפני העתקת ה-HTML'
-          : 'העתקת ה-HTML נכשלה — ודאו שההגדרות נשמרו'
-      );
-    }
-  };
-
   return (
     <section className="dc-section">
-      <h2>תבניות מייל</h2>
+      <h2>תבניות מייל (legacy)</h2>
       <div className="dc-hint">
-        כתבו כאן את המייל המלא — בלוקי טקסט ושורות כפתורים. בסיום, "העתק HTML מלא" נותן
-        את הקוד להדבקה בעורך המייל של ה-workflow (מזהה האייטם {'{ITEM_ID}'} ממופה שם).
+        תבניות אלו נשמרות לתאימות לאחור. V6 שולח רק מייל AMP דינמי — אין עוד HTML להעתקה ל-workflow.
       </div>
       {templates.map((template) => (
         <div key={template.id} className="dc-card">
@@ -244,9 +225,6 @@ export function TemplatesSection({ templates, buttons, dirty, onChange }: Props)
           <TemplateClientPreview template={template} buttons={buttons} />
 
           <div className="dc-row">
-            <Button size="small" disabled={dirty} onClick={() => copyFullHtml(template.id)}>
-              {copiedId === template.id ? 'הועתק ✓' : 'העתק HTML מלא'}
-            </Button>
             <Button
               size="small"
               kind="tertiary"
@@ -255,27 +233,27 @@ export function TemplatesSection({ templates, buttons, dirty, onChange }: Props)
             >
               מחק תבנית
             </Button>
-            {dirty && <span className="dc-hint">שמרו את ההגדרות כדי להעתיק HTML עדכני</span>}
           </div>
         </div>
       ))}
-      {copyError && <div className="dc-error">{copyError}</div>}
       <div className="dc-row">
         <Button
           size="small"
           onClick={() => {
             // newTemplate() calls crypto.getRandomValues — guard the event handler.
+            setAddError(null);
             try {
               onChange([...templates, newTemplate()]);
             } catch (err) {
               logger.error('admin', 'add_template_failed', err);
-              setCopyError('הוספת תבנית נכשלה. נסו שוב.');
+              setAddError('הוספת תבנית נכשלה. נסו שוב.');
             }
           }}
         >
           + הוסף תבנית
         </Button>
       </div>
+      {addError && <div className="dc-error">{addError}</div>}
     </section>
   );
 }

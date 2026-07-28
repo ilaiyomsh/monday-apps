@@ -27,12 +27,18 @@ SHARED_LABEL="${HAS_SHARED_LABEL:-false}"
 CORRIDOR="${CORRIDOR_MODE:-off}"
 fail=0
 
-# version at a git ref; empty string when the app does not exist at that ref yet
-# (a pre-first-release app is in apps.sh + on develop but not on main).
-ver_at()  {
-  local spec="$1:$(app_path "$2")/package.json"
-  git cat-file -e "$spec" 2>/dev/null || return 0
-  git show "$spec" | jq -r .version
+ver_at() {
+  local ref="$1" slug="$2" package_path
+  package_path="$(app_path "$slug")/package.json"
+  git cat-file -e "$ref^{commit}" 2>/dev/null || {
+    echo "ERROR: required base ref is unavailable: $ref" >&2
+    return 1
+  }
+  if ! git cat-file -e "$ref:$package_path" 2>/dev/null; then
+    printf '0.0.0\n'
+    return
+  fi
+  git show "$ref:$package_path" | jq -r .version
 }
 ver_now() { jq -r .version "$(app_path "$1")/package.json"; }
 # strictly_higher OLD NEW -> true if NEW > OLD
@@ -63,18 +69,12 @@ targets=("${touched[@]:-}")
 for slug in "${targets[@]}"; do
   [ -n "$slug" ] || continue
   vm="$(ver_at "$MAIN" "$slug")"; vd="$(ver_at "$DEV" "$slug")"; vn="$(ver_now "$slug")"
-  if [ -z "$vm" ]; then
-    # App not yet on main (pre-first-release): there is no baseline to bump above.
-    # Its first go-live is a deliberate promote (pipeline-model.md §4b), not this rule.
-    echo "::notice::$slug: not yet released to main — 'bump above main' check skipped (first release)"
-  else
-    strictly_higher "$vm" "$vn" || { echo "::error::$slug: version must bump above main ($vm) — got $vn. Run: scripts/bump.sh $slug"; fail=1; }
-  fi
+  strictly_higher "$vm" "$vn" || { echo "::error::$slug: version must bump above main ($vm) — got $vn. Run: scripts/bump.sh $slug"; fail=1; }
   not_lower "$vd" "$vn"       || { echo "::error::$slug: version went backwards vs develop ($vd -> $vn)"; fail=1; }
   # Bump-once-per-candidate (owner rule 2026-07-14): numbers count RELEASES,
   # not PRs. Raising an already-pending candidate is sanctioned ONLY as a
   # deliberate magnitude raise — warn so needless per-PR bumps stay visible.
-  if [ -n "$vm" ] && strictly_higher "$vm" "$vd" && strictly_higher "$vd" "$vn"; then
+  if strictly_higher "$vm" "$vd" && strictly_higher "$vd" "$vn"; then
     echo "::warning::$slug: raising an unreleased candidate ($vd -> $vn, main has $vm). Draft iterations keep the number; raise only for a bigger change (bump-once rule)."
   fi
 done

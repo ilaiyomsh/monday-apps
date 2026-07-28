@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore, forwardRef, useImperativeHandle } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, TextField, Text, Loader, ColorPicker } from '@vibe/core';
 import { Search } from '@vibe/icons';
@@ -13,11 +13,14 @@ import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from 
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
+import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { countPoints } from '@generated/utils/templates.js';
 import { useDropdownOptions, addDropdownLabel } from '@generated/hooks/useDropdownOptions.js';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { MONDAY_COLOR_NAMES, colorNameToCss } from '@generated/constants/mondayPalette.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
+import ExportTemplateTab from '@generated/components/SettingsModal/ExportTemplateTab.jsx';
+import { seedExportTemplate } from '@generated/components/SettingsModal/SettingsModal.jsx';
 import logger from '@generated/utils/logger.js';
 import styles from './TemplateManagerModal.module.css';
 
@@ -113,15 +116,25 @@ function TypeDropdown({ value, onChange, options, colorFn, takenNames }) {
 }
 
 /* One draggable point row inside a topic (keyed by stable _uid). */
-function SortablePointRow({ topicUid, point, onChange, onRemove, onEnterAddPoint }) {
+function SortablePointRow({ topicUid, point, onChange, onRemove, onEnterAddPoint, autoFocus = false, onFocused }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: point._uid });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
+  // round295 — when ENTER on the previous point created THIS (freshly added) row,
+  // move the caret straight into it so the user keeps typing the next point with
+  // no mouse. The parent flags the new row via autoFocus and clears it once used.
+  const fieldRef = useRef(null);
+  useEffect(() => {
+    if (!autoFocus) return;
+    const input = fieldRef.current?.querySelector('input, textarea');
+    if (input) input.focus();
+    onFocused?.();
+  }, [autoFocus]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div ref={setNodeRef} style={style} className={styles.pointRow}>
       <button type="button" className={styles.dragGrip} {...attributes} {...listeners} aria-label="גרור נקודה">
         <GripVertical size={14} />
       </button>
-      <div className={styles.pointField}>
+      <div className={styles.pointField} ref={fieldRef}>
         <TextField
           value={point.text}
           onChange={(v) => onChange(topicUid, point._uid, v)}
@@ -138,7 +151,7 @@ function SortablePointRow({ topicUid, point, onChange, onRemove, onEnterAddPoint
 }
 
 /* One draggable topic card with its own sortable points list. */
-function SortableTopicCard({ topic, sensors, canRemove, onSetName, onRemove, onAddPoint, onRemovePoint, onSetPoint, onPointsDragEnd }) {
+function SortableTopicCard({ topic, sensors, canRemove, onSetName, onRemove, onAddPoint, onRemovePoint, onSetPoint, onPointsDragEnd, autoFocusPointUid, onPointFocused }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: topic._uid });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 };
   return (
@@ -158,7 +171,7 @@ function SortableTopicCard({ topic, sensors, canRemove, onSetName, onRemove, onA
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={(e) => onPointsDragEnd(topic._uid, e)}>
           <SortableContext items={topic.points.map((p) => p._uid)} strategy={verticalListSortingStrategy}>
             {topic.points.map((point) => (
-              <SortablePointRow key={point._uid} topicUid={topic._uid} point={point} onChange={onSetPoint} onRemove={onRemovePoint} onEnterAddPoint={onAddPoint} />
+              <SortablePointRow key={point._uid} topicUid={topic._uid} point={point} onChange={onSetPoint} onRemove={onRemovePoint} onEnterAddPoint={onAddPoint} autoFocus={point._uid === autoFocusPointUid} onFocused={onPointFocused} />
             ))}
           </SortableContext>
         </DndContext>
@@ -214,7 +227,8 @@ function draftToTemplate(draft) {
  * People pickers for a role column appear ONLY when that column is mapped in
  * Settings (the "יוצר" creator column is intentionally never shown/edited here).
  */
-export function TemplateManagerModal() {
+export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ onExportWide } = {}, ref) {
+  const { settings } = useSettings();
   const {
     templates,
     participantTemplates,
@@ -232,6 +246,8 @@ export function TemplateManagerModal() {
     typeColorName,
     setTypeColor,
     assignRandomTypeColor,
+    loadTypeExportAssets,
+    saveTypeExportAssets,
   } = useTemplates();
   // "סוג דיון" is a DROPDOWN column — its labels are the assignable types.
   const { options: typeOptions } = useDropdownOptions('discussions', 'discussionTypeID');
@@ -266,8 +282,20 @@ export function TemplateManagerModal() {
   // Item 18 — per-type default decider: when true, NEW decisions in discussions
   // of this type default their מחליט to the discussion's מנהל דיון.
   const [typeDeciderIsLead, setTypeDeciderIsLead] = useState(false);
+  // round256 — the type editor is split into 3 sub-tabs: roles / agenda / export.
+  const [typeSubTab, setTypeSubTab] = useState('roles'); // 'roles' | 'agenda' | 'export'
+  // round254/256 — per-type export template (config on the TypeTemplate) + its own
+  // brand assets. The export tab ALWAYS shows (default = the system template);
+  // it is persisted as the type's OWN only if the user edits it here (dirty).
+  const [typeExportTemplate, setTypeExportTemplate] = useState(null); // seeded object
+  const [typeExportAssets, setTypeExportAssets] = useState(null);
+  const [typeExportAssetError, setTypeExportAssetError] = useState(null);
+  const [typeExportDirty, setTypeExportDirty] = useState(false);
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
+  // round295 — uid of a freshly-added point row that should grab keyboard focus
+  // (set by addPoint, cleared once the row focuses).
+  const [autoFocusPointUid, setAutoFocusPointUid] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
   const [typeSearch, setTypeSearch] = useState(''); // filters the "סוג דיון" list (also the typed source for the inline "create" affordance)
   const [addingType, setAddingType] = useState(false); // add-type mutation in-flight
@@ -346,6 +374,17 @@ export function TemplateManagerModal() {
     setTypeParticipants(existing?.participants || []);
     setTypeColorDraft(typeColorName(typeName));
     setTypeDeciderIsLead(existing?.deciderIsLead === true);
+    // round256 — always open on the roles sub-tab; the export tab seeds from the
+    // type's OWN template if it has one, otherwise from the system default
+    // (settings.exportTemplate) → the built-in default. Not dirty until edited.
+    setTypeSubTab('roles');
+    setTypeExportDirty(false);
+    setTypeExportTemplate(seedExportTemplate(existing?.exportTemplate || settings?.exportTemplate || null));
+    setTypeExportAssetError(null);
+    setTypeExportAssets(null);
+    Promise.resolve(loadTypeExportAssets?.(typeName))
+      .then((a) => { if (a) setTypeExportAssets(a); })
+      .catch((err) => logger.warn('TemplateManagerModal', 'טעינת נכסי הייצוא של הסוג נכשלה', err));
     setIsNew(!existing);
     setView('edit');
   };
@@ -358,8 +397,24 @@ export function TemplateManagerModal() {
     setTypeParticipants([]);
     setTypeColorDraft(null);
     setTypeDeciderIsLead(false);
+    setTypeSubTab('roles');
+    setTypeExportTemplate(null);
+    setTypeExportAssets(null);
+    setTypeExportAssetError(null);
+    setTypeExportDirty(false);
     setIsNew(false);
   };
+
+  // round256 — any user edit inside the export sub-tab marks it dirty, so save
+  // persists the type's OWN template/assets (otherwise it stays on the system
+  // default). These wrap the plain setters passed to ExportTemplateTab.
+  const setTypeExportTemplateDirty = (updater) => { setTypeExportDirty(true); setTypeExportTemplate(updater); };
+  const setTypeExportAssetsDirty = (updater) => { setTypeExportDirty(true); setTypeExportAssets(updater); };
+  // Ask the host (SettingsModal) to widen the modal while the export sub-tab is
+  // open, so it gets the same room as the system export-template screen.
+  useEffect(() => {
+    onExportWide?.(view === 'edit' && kind === 'types' && typeSubTab === 'export');
+  }, [onExportWide, view, kind, typeSubTab]);
 
   // ---- topic draft mutations (keyed by stable _uid, never by index) ----
   const update = (fn) => setDraft((d) => fn(d));
@@ -387,11 +442,16 @@ export function TemplateManagerModal() {
   const removeTopic = (tuid) => update((d) => ({ ...d, topics: d.topics.filter((t) => t._uid !== tuid) }));
   const setTopicName = (tuid, v) =>
     update((d) => ({ ...d, topics: d.topics.map((t) => (t._uid === tuid ? { ...t, name: v } : t)) }));
-  const addPoint = (tuid) =>
+  const addPoint = (tuid) => {
+    // round295 — create the point with a known uid so the new row can grab focus
+    // (ENTER on the previous point flows straight into the next one).
+    const np = makePoint();
     update((d) => ({
       ...d,
-      topics: d.topics.map((t) => (t._uid === tuid ? { ...t, points: [...t.points, makePoint()] } : t)),
+      topics: d.topics.map((t) => (t._uid === tuid ? { ...t, points: [...t.points, np] } : t)),
     }));
+    setAutoFocusPointUid(np._uid);
+  };
   const removePoint = (tuid, puid) =>
     update((d) => ({
       ...d,
@@ -443,6 +503,23 @@ export function TemplateManagerModal() {
         if (isNew) await createParticipantTemplate(payload);
         else await updateParticipantTemplate(pDraft.id, payload);
       } else {
+        // round256 — the export tab always shows (default = system template). We
+        // persist the type's OWN template only when the user EDITED it here
+        // (typeExportDirty); otherwise keep whatever was stored (null ⇒ the type
+        // keeps following the system default, so future system changes propagate).
+        const existingType = typeTemplates.find((t) => t.discussionType === draft.discussionType);
+        if (typeExportDirty) {
+          // persist the per-type export ASSETS first (quota-checked). On an
+          // over-quota error, keep the editor open with the message.
+          try {
+            await saveTypeExportAssets(draft.discussionType, typeExportAssets);
+          } catch (err) {
+            logger.error('TemplateManagerModal', 'שמירת נכסי הייצוא של הסוג נכשלה', err);
+            setTypeExportAssetError(err?.message || 'שמירת נכסי הייצוא נכשלה');
+            setTypeSubTab('export'); // surface the error on the right tab
+            return; // the finally below clears `saving`
+          }
+        }
         // types: keyed by discussionType (name) — upsert replaces any existing entry.
         await upsertTypeTemplate({
           id: draft.id,
@@ -453,6 +530,9 @@ export function TemplateManagerModal() {
           participants: typeParticipants,
           // item 18 — per-type default decider (מחליט = מנהל הדיון)
           deciderIsLead: typeDeciderIsLead,
+          // round256 — edited-here ⇒ store the type's own template; else preserve
+          // the existing value (null ⇒ follow the system default).
+          exportTemplate: typeExportDirty ? typeExportTemplate : (existingType?.exportTemplate ?? null),
         });
         // Persist the chosen color for this type.
         if (typeColorDraft) await setTypeColor(draft.discussionType, typeColorDraft);
@@ -462,6 +542,35 @@ export function TemplateManagerModal() {
       setSaving(false);
     }
   };
+
+  // round295 — expose dirty-state + a save to the host (SettingsModal) so:
+  //  (1) the general Settings "שמור" also flushes an in-progress template draft
+  //      the user forgot to "שמור תבנית", and
+  //  (2) closing Settings (X) mid-edit can offer to save first.
+  // "Dirty" = we're inside the editor and its content DIFFERS from what it held
+  // when the editor opened (snapshot captured on view→edit). No change ⇒ not
+  // dirty ⇒ the host closes with no prompt (owner spec).
+  const editorSnapshotRef = useRef(null);
+  const serializeEditorState = () => {
+    if (kind === 'topics') return JSON.stringify(draft ? draftToTemplate(draft) : null);
+    if (kind === 'participants') return JSON.stringify(pDraft);
+    return JSON.stringify({
+      topics: draft ? draft.topics.map((t) => ({ name: t.name, points: t.points.map((p) => p.text) })) : null,
+      lead: typeLead, coordinator: typeCoordinator, participants: typeParticipants,
+      color: typeColorDraft, deciderIsLead: typeDeciderIsLead, exportDirty: typeExportDirty,
+    });
+  };
+  useEffect(() => {
+    editorSnapshotRef.current = view === 'edit' ? serializeEditorState() : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, kind]);
+  const isDirty = () =>
+    view === 'edit' && editorSnapshotRef.current != null && serializeEditorState() !== editorSnapshotRef.current;
+  useImperativeHandle(ref, () => ({
+    isDirty,
+    // Persist the current draft exactly as "שמור תבנית" would (guards on canSave).
+    saveDraft: async () => { if (canSave && !saving) await handleSave(); },
+  }));
 
   const handleDelete = async (id) => {
     if (kind === 'topics') await deleteTemplate(id);
@@ -528,7 +637,7 @@ export function TemplateManagerModal() {
     && !typeOptions.some((opt) => (opt.label || '').trim().toLowerCase() === trimmedTypeSearch.toLowerCase());
 
   return (
-    <div className={styles.panel} dir="ltr">
+    <div className={styles.panel} dir="rtl">
       {view === 'edit' && (
         <div className={styles.panelHeader}>
           <button type="button" className={styles.backBtn} onClick={backToList} aria-label="חזרה">
@@ -806,6 +915,8 @@ export function TemplateManagerModal() {
                       onRemovePoint={removePoint}
                       onSetPoint={setPoint}
                       onPointsDragEnd={onPointsDragEnd}
+                      autoFocusPointUid={autoFocusPointUid}
+                      onPointFocused={() => setAutoFocusPointUid(null)}
                     />
                   ))}
                 </SortableContext>
@@ -855,69 +966,110 @@ export function TemplateManagerModal() {
             </div>
           </>
         ) : (
-          /* types editor — the type name + its color circle live in the header
-             (name shown ONCE); here just the people (mapped columns only) + the
-             unified topics editor. */
+          /* round256 — types editor as 3 sub-tabs: בעלי תפקידים / אג'נדה / תבנית
+             ייצוא. The type name + color circle live in the header (shown once). */
           <>
-            <div className={styles.peopleRow}>
-              {leadMapped && (
-                <div className={styles.peopleCol}>
-                  <Text type="text2" className={styles.label}>{roleTitle('discussionLeadID', 'מוביל דיון')}</Text>
-                  <PersonPicker selected={typeLead} onChange={setTypeLead} bordered />
-                </div>
-              )}
-              {coordinatorMapped && (
-                <div className={styles.peopleCol}>
-                  <Text type="text2" className={styles.label}>{roleTitle('discussionCoordinatorID', 'מרכז דיון')}</Text>
-                  <PersonPicker selected={typeCoordinator} onChange={setTypeCoordinator} bordered />
-                </div>
-              )}
-              {participantsMapped && (
-                <div className={styles.peopleCol}>
-                  <Text type="text2" className={styles.label}>{roleTitle('participantsID', 'משתתפים')}</Text>
-                  <PersonPicker selected={typeParticipants} onChange={setTypeParticipants} bordered />
-                </div>
-              )}
+            <div className={`${styles.tabs} ${styles.subTabs}`} role="tablist">
+              <button
+                type="button" role="tab" aria-selected={typeSubTab === 'roles'}
+                className={`${styles.tab} ${typeSubTab === 'roles' ? styles.tabActive : ''}`}
+                onClick={() => setTypeSubTab('roles')}
+              >בעלי תפקידים</button>
+              <button
+                type="button" role="tab" aria-selected={typeSubTab === 'agenda'}
+                className={`${styles.tab} ${typeSubTab === 'agenda' ? styles.tabActive : ''}`}
+                onClick={() => setTypeSubTab('agenda')}
+              >אג'נדה</button>
+              <button
+                type="button" role="tab" aria-selected={typeSubTab === 'export'}
+                className={`${styles.tab} ${typeSubTab === 'export' ? styles.tabActive : ''}`}
+                onClick={() => setTypeSubTab('export')}
+              >תבנית ייצוא</button>
             </div>
 
-            {/* Item 18 — per-type default decider toggle. Prominent (owner
-                request 2026-07-14): RTL row between the role pickers and the
-                topics template, bold label + a bigger accent checkbox. */}
-            <label className={styles.deciderDefaultRow}>
-              <input
-                type="checkbox"
-                className={styles.deciderDefaultCheckbox}
-                checked={typeDeciderIsLead}
-                onChange={(e) => setTypeDeciderIsLead(e.target.checked)}
-              />
-              <span className={styles.deciderDefaultLabel}>בהחלטה חדשה, המחליט כברירת מחדל הוא מנהל הדיון</span>
-            </label>
+            {typeSubTab === 'roles' && (
+              <>
+                <div className={styles.peopleRow}>
+                  {leadMapped && (
+                    <div className={styles.peopleCol}>
+                      <Text type="text2" className={styles.label}>{roleTitle('discussionLeadID', 'מוביל דיון')}</Text>
+                      <PersonPicker selected={typeLead} onChange={setTypeLead} bordered />
+                    </div>
+                  )}
+                  {coordinatorMapped && (
+                    <div className={styles.peopleCol}>
+                      <Text type="text2" className={styles.label}>{roleTitle('discussionCoordinatorID', 'מרכז דיון')}</Text>
+                      <PersonPicker selected={typeCoordinator} onChange={setTypeCoordinator} bordered />
+                    </div>
+                  )}
+                  {participantsMapped && (
+                    <div className={styles.peopleCol}>
+                      <Text type="text2" className={styles.label}>{roleTitle('participantsID', 'משתתפים')}</Text>
+                      <PersonPicker selected={typeParticipants} onChange={setTypeParticipants} bordered />
+                    </div>
+                  )}
+                </div>
 
-            <Text type="text2" className={styles.sectionLabel}>נושאים קבועים</Text>
-            <div className={styles.topicsWrap}>
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onTopicsDragEnd}>
-                <SortableContext items={draft.topics.map((t) => t._uid)} strategy={verticalListSortingStrategy}>
-                  {draft.topics.map((topic) => (
-                    <SortableTopicCard
-                      key={topic._uid}
-                      topic={topic}
-                      sensors={sensors}
-                      canRemove={draft.topics.length > 1}
-                      onSetName={setTopicName}
-                      onRemove={removeTopic}
-                      onAddPoint={addPoint}
-                      onRemovePoint={removePoint}
-                      onSetPoint={setPoint}
-                      onPointsDragEnd={onPointsDragEnd}
-                    />
-                  ))}
-                </SortableContext>
-              </DndContext>
-            </div>
+                {/* Item 18 — per-type default decider toggle. */}
+                <label className={styles.deciderDefaultRow}>
+                  <input
+                    type="checkbox"
+                    className={styles.deciderDefaultCheckbox}
+                    checked={typeDeciderIsLead}
+                    onChange={(e) => setTypeDeciderIsLead(e.target.checked)}
+                  />
+                  <span className={styles.deciderDefaultLabel}>בהחלטה חדשה, המחליט כברירת מחדל הוא מנהל הדיון</span>
+                </label>
+              </>
+            )}
 
-            <Button kind="secondary" size="small" leftIcon={Plus} onClick={addTopic} className={styles.addTopicBtn}>
-              הוסף נושא
-            </Button>
+            {typeSubTab === 'agenda' && (
+              <>
+                <Text type="text2" className={styles.sectionLabel}>נושאים קבועים</Text>
+                <div className={styles.topicsWrap}>
+                  <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onTopicsDragEnd}>
+                    <SortableContext items={draft.topics.map((t) => t._uid)} strategy={verticalListSortingStrategy}>
+                      {draft.topics.map((topic) => (
+                        <SortableTopicCard
+                          key={topic._uid}
+                          topic={topic}
+                          sensors={sensors}
+                          canRemove={draft.topics.length > 1}
+                          onSetName={setTopicName}
+                          onRemove={removeTopic}
+                          onAddPoint={addPoint}
+                          onRemovePoint={removePoint}
+                          onSetPoint={setPoint}
+                          onPointsDragEnd={onPointsDragEnd}
+                          autoFocusPointUid={autoFocusPointUid}
+                          onPointFocused={() => setAutoFocusPointUid(null)}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
+                </div>
+                <Button kind="secondary" size="small" leftIcon={Plus} onClick={addTopic} className={styles.addTopicBtn}>
+                  הוסף נושא
+                </Button>
+              </>
+            )}
+
+            {/* round256 — the export tab ALWAYS shows (no checkbox). It seeds from
+                the system template by default; editing it here saves a template
+                specific to this type (overriding the system at export time). */}
+            {typeSubTab === 'export' && typeExportTemplate && (
+              <div className={styles.typeExportFull}>
+                <ExportTemplateTab
+                  template={typeExportTemplate}
+                  setTemplate={setTypeExportTemplateDirty}
+                  assets={typeExportAssets}
+                  setAssets={setTypeExportAssetsDirty}
+                  assetError={typeExportAssetError}
+                  previewModel={null}
+                  previewModelKey={null}
+                />
+              </div>
+            )}
           </>
         )}
       </div>
@@ -988,6 +1140,6 @@ export function TemplateManagerModal() {
       )}
     </div>
   );
-}
+});
 
 export default TemplateManagerModal;

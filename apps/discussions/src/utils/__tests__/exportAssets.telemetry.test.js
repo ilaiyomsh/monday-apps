@@ -30,7 +30,11 @@ describe('loadExportAssets — a storage-read failure is logged, not silently sw
     const out = await loadExportAssets({ instanceId: '42' });
     expect(out).toEqual(EMPTY);
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][1]).toMatch(/load export assets failed/i);
+    expect(warn.mock.calls[0][0]).toBe('exportAssets');
+    // Wording is the app's Hebrew operator message; what this locks is that the rejection
+    // is REPORTED (module + a non-empty message + the Error itself), never swallowed.
+    expect(warn.mock.calls[0][1]).toEqual(expect.stringMatching(/\S/));
+    expect(warn.mock.calls[0][2]).toBeInstanceOf(Error);
   });
 
   it('does NOT log on the happy path (a valid stored value)', async () => {

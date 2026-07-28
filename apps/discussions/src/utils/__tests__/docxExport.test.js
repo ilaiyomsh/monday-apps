@@ -214,6 +214,27 @@ describe('data-driven template (buildExportDoc)', () => {
     return strFromU8(unzipSync(new Uint8Array(await Packer.toBuffer(doc)))['word/document.xml']);
   };
 
+  it('round227 — pins the export font on EVERY run, incl. TABLE cells (was: tables fell back to Word\'s theme font)', async () => {
+    const template = {
+      font: 'brand', // Figtree (Latin) + Noto Sans Hebrew (complex-script)
+      sections: [
+        { key: 'topics', enabled: true, label: 'נושאים לדיון' },
+        { key: 'tasks', enabled: true, label: 'משימות' },
+      ],
+    };
+    const xml = await xmlOf(baseModel(), template);
+    // The document BODY (word/document.xml — not styles.xml) now carries the font
+    // on the runs themselves, so both the Latin (ascii/hAnsi) and Hebrew (cs)
+    // faces are pinned per run.
+    expect(xml).toContain('w:ascii="Figtree"');
+    expect(xml).toContain('w:cs="Noto Sans Hebrew"');
+    // The tasks TABLE region — the element that used to fall back to the theme
+    // font — carries the pinned font too.
+    const tbl = xml.slice(xml.indexOf('<w:tbl'));
+    expect(tbl).toContain('Figtree');
+    expect(tbl).toContain('Noto Sans Hebrew');
+  });
+
   it('omits a section that is disabled', async () => {
     const template = {
       sections: [
@@ -251,16 +272,19 @@ describe('data-driven template (buildExportDoc)', () => {
     expect(xml).not.toContain('משתתפים'); // disabled field absent
   });
 
-  it('renders a free-text section title and body', async () => {
+  // round203 — the freeText ("פתיחה") section was retired: a stale stored
+  // template that still carries it must render NOTHING for it.
+  it('ignores a retired freeText section left in a stored template', async () => {
     const template = {
       sections: [
-        { key: 'freeText', enabled: true, title: 'הערות', body: 'שורה א\nשורה ב' },
+        { key: 'freeText', enabled: true, title: 'הערות', body: 'שורה א' },
+        { key: 'summary', enabled: true },
       ],
     };
     const xml = await xmlOf(baseModel(), template);
-    expect(xml).toContain('הערות');
-    expect(xml).toContain('שורה א');
-    expect(xml).toContain('שורה ב');
+    expect(xml).not.toContain('הערות');
+    expect(xml).not.toContain('שורה א');
+    expect(xml).toContain('סיכום'); // the rest of the template still renders
   });
 
   it('tasks table has the 5 columns and NO "מדיון קודם" column (round191)', async () => {
@@ -287,6 +311,24 @@ describe('data-driven template (buildExportDoc)', () => {
     const template = { sections: [{ key: 'references', enabled: true, label: 'התייחסויות' }] };
     const xml = await xmlOf(baseModel(), template);
     expect(xml).toContain('אין התייחסויות.');
+  });
+
+  it('renders the background section through the HTML converter (round219)', async () => {
+    const model = buildDiscussionModel({
+      discussion: { name: 'ד' },
+      backgroundHtml: '<p>רקע-בדיקה-מיוחד</p><ul><li>הקשר-לבדיקה</li></ul>',
+    });
+    const template = { sections: [{ key: 'background', enabled: true, label: 'רקע' }] };
+    const xml = await xmlOf(model, template);
+    expect(xml).toContain('רקע');              // section heading
+    expect(xml).toContain('רקע-בדיקה-מיוחד');  // rich body survived
+    expect(xml).toContain('הקשר-לבדיקה');      // list item survived
+  });
+
+  it('renders "אין רקע." when the background box is empty (round219)', async () => {
+    const template = { sections: [{ key: 'background', enabled: true, label: 'רקע' }] };
+    const xml = await xmlOf(baseModel(), template);
+    expect(xml).toContain('אין רקע.');
   });
 
   it('renders a decisions table with only מס׳/החלטה/מחליט — no date/status columns (round193)', async () => {

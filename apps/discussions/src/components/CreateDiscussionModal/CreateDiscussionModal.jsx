@@ -9,6 +9,7 @@ import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import {
   ensurePeopleColumns,
   getColumnTitle,
+  isColumnMapped,
   subscribe as subscribePeopleColumns,
   getVersion as getPeopleColumnsVersion,
 } from '@generated/utils/mondayApi/peopleColumns.js';
@@ -18,6 +19,7 @@ import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
 import { createTopicsFromTemplate, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
+import { parseExternalParticipants, formatExternalParticipants } from '@generated/utils/externalParticipants.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
 import { PartyProgress } from '@generated/components/PartyProgress';
@@ -101,7 +103,7 @@ async function resolvePreviousDiscussion(discussionId, onResolved) {
 // empty date and the name selected for immediate editing.
 // `prefill` ({date:'YYYY-MM-DD', time:'HH:MM'}) seeds a PLAIN create — set when
 // the user clicks an empty hour slot in the calendar's week view.
-export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion = null, duplicateFrom = null, prefill = null, canManageSettings = false }) {
+export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCreate = null, onCreateError = null, editDiscussion = null, duplicateFrom = null, prefill = null, canManageSettings = false }) {
   const isEdit = !!editDiscussion;
   const isDuplicate = !isEdit && !!duplicateFrom;
   const { currentUser } = useMondayContext();
@@ -123,6 +125,10 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const [lead, setLead] = useState([]);
   const [coordinator, setCoordinator] = useState([]);
   const [participants, setParticipants] = useState([]);
+  // round211 — EXTERNAL participants: text-only names (not monday users), kept
+  // as a names array; persisted comma-separated to the mapped long_text column.
+  const [externalParticipants, setExternalParticipants] = useState([]);
+  const [externalDraft, setExternalDraft] = useState('');
 
   // People-column field labels come from the LIVE board column titles (not the
   // Settings-only schema titles), so e.g. מרכז דיון shows as "רשם דיון" when
@@ -177,6 +183,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const { options: typeOptions, loading: typeOptionsLoading } = useDropdownOptions('discussions', 'discussionTypeID');
   const titleRef = useRef(null);
   const timeMenuRef = useRef(null);
+  // If the root discussion was saved but template seeding failed, retain its id
+  // and the per-alias checkpoint so a retry resumes instead of duplicating the
+  // discussion or already-created topics/points.
+  const creationResumeRef = useRef(null);
+  const creationSessionRef = useRef(null);
 
   // Hide "דיון קודם" when the Previous-tasks tab won't use the link for this
   // discussion: always in DISCUSSION_TYPE mode, and — in AUTO mode — only while a
@@ -244,6 +255,20 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     loadDiscussions();
   }, [open, hidePreviousDiscussion]);
 
+  // Reset resumable creation state only when the logical modal session changes
+  // (closed/reopened or a different source discussion). Parent rerenders often
+  // replace prop objects with equivalent copies; resetting on object identity
+  // could otherwise lose a saved root id after a partial failure.
+  useEffect(() => {
+    const sessionKey = open
+      ? `${isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create')}:${editDiscussion?.id || duplicateFrom?.id || 'new'}`
+      : null;
+    if (creationSessionRef.current !== sessionKey) {
+      creationSessionRef.current = sessionKey;
+      creationResumeRef.current = null;
+    }
+  }, [open, isEdit, isDuplicate, editDiscussion?.id, duplicateFrom?.id]);
+
   // Seed the form when opening: prefill from editDiscussion (edit), from
   // duplicateFrom (duplicate), or clear (plain create).
   useEffect(() => {
@@ -294,6 +319,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         );
         setCoordinator(src?.discussionCoordinatorID || []);
         setParticipants(src?.participantsID || []);
+        setExternalParticipants(parseExternalParticipants(src?.externalParticipantsID));
         // discussionTypeID is now the dropdown label TEXT (or null/empty).
         setDiscussionType(src?.discussionTypeID || null);
         // The source discussion is the continuation's "previous discussion".
@@ -309,6 +335,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       setLead(full.discussionLeadID || []);
       setCoordinator(full.discussionCoordinatorID || []);
       setParticipants(full.participantsID || []);
+      setExternalParticipants(parseExternalParticipants(full.externalParticipantsID));
       setDiscussionType(full.discussionTypeID || null);
       setPreviousDiscussionId('none');
 
@@ -337,6 +364,12 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     });
     // The template may also carry a "מוביל דיון" — set it when present.
     if (Array.isArray(tpl.lead) && tpl.lead.length) setLead(tpl.lead);
+    // round295 — and a "מרכז דיון" (coordinator): it is stored on the template
+    // (sanitizeTypeTemplate/sanitizeParticipantTemplate) but was never applied
+    // here, so the coordinator defined in a type/participant template never
+    // reached the create-discussion form (owner-reported; lead + participants
+    // worked). Mirror the lead branch.
+    if (Array.isArray(tpl.coordinator) && tpl.coordinator.length) setCoordinator(tpl.coordinator);
     setIsParticipantTemplateMenuOpen(false);
   };
 
@@ -359,7 +392,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // manual topic-template pick so we don't double-create topics.
       setTemplateId('none');
       if (typeTpl.topics?.length) setTypeTopics(typeTpl.topics);
-      applyParticipantTemplate({ participants: typeTpl.participants, lead: typeTpl.lead });
+      applyParticipantTemplate({ participants: typeTpl.participants, lead: typeTpl.lead, coordinator: typeTpl.coordinator });
       return;
     }
 
@@ -422,8 +455,34 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const handleSubmit = async () => {
     // Name, date AND time are required — every discussion is scheduled at an hour.
     if (!name.trim() || !date || !time) return;
+    const submitStartedAt = Date.now();
+    let submitSucceeded = false;
+    // round300 — when the optimistic path hands off, the synchronous flow returns
+    // before the write resolves, so the finally's total would log a misleading
+    // ok=false. This flag makes the finally skip it; the background closure emits
+    // the REAL total (round299's health metric stays accurate).
+    let optimisticHandoff = false;
     try {
       setCreating(true);
+      const submissionKey = JSON.stringify({
+        mode: isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create'),
+        sourceId: isEdit ? editDiscussion?.id : duplicateFrom?.id,
+        name: name.trim(),
+        date,
+        time,
+        lead: lead.map((person) => String(person.id)),
+        coordinator: coordinator.map((person) => String(person.id)),
+        participants: participants.map((person) => String(person.id)),
+        externalParticipants,
+        discussionType,
+        previousDiscussionId,
+        templateId,
+        typeTopics,
+      });
+      let resume = creationResumeRef.current;
+      if (resume && resume.submissionKey !== submissionKey) {
+        throw new Error('הדיון כבר נוצר חלקית. כדי למנוע כפילות, יש לסגור את הטופס ולפתוח דיון חדש לפני שינוי הפרטים.');
+      }
       // Item 6 — real step progress: 1 step for the item save + one per
       // topic/point the picked template will create (refined live by
       // createTopicsFromTemplate's onProgress, which knows the sanitized total).
@@ -431,9 +490,21 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // round127 — duplicate: read the source topics BEFORE creating the item so
       // plannedSteps counts every clone step (the bar used to fake 100% after
       // the item save, seconds before the clone even started).
-      const duplicateTemplate = isDuplicate ? await readDiscussionTopicsAsTemplate(duplicateFrom.id) : null;
-      const plannedTopics = pickedTemplate?.topics
-        || (typeTopics?.length ? typeTopics : (duplicateTemplate?.topics || []));
+      const duplicateReadStartedAt = Date.now();
+      const duplicateTemplate = isDuplicate
+        ? (resume?.duplicateTemplate || await readDiscussionTopicsAsTemplate(duplicateFrom.id))
+        : null;
+      if (isDuplicate && !resume?.duplicateTemplate) {
+        logger.health?.('discussion_create_phase', {
+          step: 'duplicate_read',
+          duration_ms: Date.now() - duplicateReadStartedAt,
+        });
+      }
+      const primaryTopics = pickedTemplate?.topics || (typeTopics?.length ? typeTopics : []);
+      const plannedTopics = [
+        ...primaryTopics,
+        ...(duplicateTemplate?.topics || []),
+      ];
       const plannedSteps = 1 + plannedTopics.reduce((n, t) => n + 1 + (t.points?.length || 0), 0);
       setCreateProgress({ done: 0, total: plannedSteps });
       const onTemplateProgress = ({ done, total }) =>
@@ -450,6 +521,12 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       if (lead.length) payload.discussionLeadID = lead;
       if (coordinator.length) payload.discussionCoordinatorID = coordinator;
       if (participants.length) payload.participantsID = participants;
+      // round211 — external (text-only) participants. On EDIT always send (an
+      // empty string clears the column); on CREATE only when something was
+      // typed. Unmapped column → the SDK skips the alias, like the people cols.
+      if (externalParticipants.length || isEdit) {
+        payload.externalParticipantsID = formatExternalParticipants(externalParticipants);
+      }
       // "סוג" dropdown: only ever WRITE a label that ACTUALLY EXISTS on the
       // column. Options come from useDropdownOptions (the board's real labels),
       // so this blocks the inline "add new type" free-text affordance from
@@ -503,27 +580,127 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         },
       });
 
+      // round300 — OPTIMISTIC create (plain NEW discussion only; edit + duplicate
+      // keep the awaited flow below). Instead of blocking the card open on monday's
+      // full create_item round-trip (people + type columns, plus any retry backoff),
+      // open the discussion card INSTANTLY from the entered data and run the write
+      // in the BACKGROUND. The card header renders from the passed shape; the card's
+      // data hooks no-op on the null id, then fetch once the real id is patched in
+      // by onCreated. On a (rare) failure onCreateError reverts the card.
+      if (!isEdit && !isDuplicate && onOptimisticCreate) {
+        optimisticHandoff = true;
+        const optimisticShape = {
+          id: null,
+          name: name.trim(),
+          discussionDateID: date ? composeLocalDate(date, time) : null,
+          discussionLeadID: lead,
+          discussionCoordinatorID: coordinator,
+          participantsID: participants,
+          externalParticipantsID: formatExternalParticipants(externalParticipants),
+          ...(typeIsSubmittable ? { discussionTypeID: discussionType } : {}),
+        };
+        // Template inputs are captured here (submit-time) so the form reset below
+        // can't affect the background write. (People/date/type are already baked
+        // into `payload` and `optimisticShape` above.)
+        const bgTemplate = pickedTemplate, bgTypeTopics = typeTopics;
+        const creatorId = currentUser?.id != null ? String(currentUser.id) : null;
+        onOptimisticCreate(optimisticShape); // open the card + close the modal NOW
+        // Reset the form for next time (the modal is unmounting).
+        setName(''); setDate(''); setTime(''); setLead([]); setCoordinator([]);
+        setParticipants([]); setExternalParticipants([]); setExternalDraft('');
+        setDiscussionType(null); setTypeTopics(null); setPreviousDiscussionId('none');
+        setTemplateId('none'); setCreating(false); setCreateProgress(null);
+        (async () => {
+          const bgStartedAt = Date.now();
+          let bgOk = false;
+          try {
+            const created = await board.item().create(payload).execute();
+            const newId = created.id;
+            if (bgTemplate) {
+              await createTopicsFromTemplate(newId, bgTemplate, { creatorId });
+            } else if (bgTypeTopics?.length) {
+              await createTopicsFromTemplate(newId, { topics: bgTypeTopics }, { creatorId });
+            }
+            bgOk = true;
+            onCreated({ ...optimisticShape, id: newId }, { isEdit: false, isDuplicate: false });
+          } catch (err) {
+            if (!err?.__loggedId) logger.error('CreateDiscussionModal', 'שגיאה ביצירת הדיון (רקע)', err);
+            onCreateError?.();
+          } finally {
+            // The real total for the optimistic path — measured over the BACKGROUND
+            // write, tagged optimistic so it's distinguishable from the awaited flow.
+            logger.health?.('discussion_create_total', {
+              duration_ms: Date.now() - bgStartedAt,
+              ok: bgOk,
+              operation: 'create',
+              optimistic: true,
+            });
+          }
+        })();
+        return;
+      }
+
       // NO create_labels_if_missing here: a freshly-added "סוג" label was
       // already created on the column by handleAddType (addDropdownLabel) — and
       // on a MANAGED column the flag can't create labels anyway (it fails the
       // whole save with ColumnValueException; 2026-07-12 incident).
-      let savedId;
-      if (isEdit) {
-        await board.item(editDiscussion.id).update(payload).execute();
-        savedId = editDiscussion.id;
-      } else {
-        const created = await board.item().create(payload).execute();
-        savedId = created.id;
+      const rootSaveStartedAt = Date.now();
+      let savedId = resume?.savedId || (isEdit ? editDiscussion.id : null);
+      const resumedRoot = Boolean(resume?.rootSaved);
+      if (!resumedRoot) {
+        if (isEdit) {
+          await board.item(editDiscussion.id).update(payload).execute();
+          savedId = editDiscussion.id;
+        } else {
+          const created = await board.item().create(payload).execute();
+          savedId = created.id;
+        }
+        resume = {
+          ...(resume || {}),
+          submissionKey,
+          savedId: String(savedId),
+          duplicateTemplate,
+          rootSaved: true,
+          templateResumeState: resume?.templateResumeState || null,
+        };
+        creationResumeRef.current = resume;
       }
+      logger.health?.('discussion_create_phase', {
+        step: resumedRoot ? 'root_resume' : 'root_save',
+        duration_ms: Date.now() - rootSaveStartedAt,
+        operation: isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create'),
+      });
       setCreateProgress((p) => (p ? { ...p, done: 1 } : { done: 1, total: 1 }));
 
-      // Optionally seed topics + points. A manual topic-template pick takes
-      // precedence; otherwise fall back to topics auto-filled from the unified
-      // type template (typeTopics). (create: always; edit: applies onto the item.)
-      if (savedId && pickedTemplate) {
-        await createTopicsFromTemplate(savedId, pickedTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
-      } else if (savedId && typeTopics?.length) {
-        await createTopicsFromTemplate(savedId, { topics: typeTopics }, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
+      // Seed every planned topic in ONE resumable pipeline. The helper batches
+      // actual GraphQL mutations (not Promise.all over SDK calls, which monday's
+      // iframe bridge serializes). A checkpoint is retained after each batch.
+      if (savedId && plannedTopics.length) {
+        const seedStartedAt = Date.now();
+        let seedSucceeded = false;
+        try {
+          await createTopicsFromTemplate(savedId, { topics: plannedTopics }, {
+            onProgress: onTemplateProgress,
+            freshDiscussion: !isEdit,
+            resumeState: resume?.templateResumeState || null,
+            onCheckpoint: (nextState) => {
+              if (
+                creationResumeRef.current?.savedId === String(savedId)
+                && creationResumeRef.current?.submissionKey === submissionKey
+              ) {
+                creationResumeRef.current.templateResumeState = nextState;
+              }
+            },
+          });
+          seedSucceeded = true;
+        } finally {
+          logger.health?.('discussion_create_phase', {
+            step: 'template_seed',
+            duration_ms: Date.now() - seedStartedAt,
+            items: plannedSteps - 1,
+            ok: seedSucceeded,
+          });
+        }
       }
 
       // Duplicate: clone the source discussion's topics + points onto the new
@@ -532,16 +709,33 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // monday reads lag writes, and opening the card early is what showed an
       // empty discussion "filling in slowly".
       if (savedId && isDuplicate && duplicateTemplate?.topics?.length) {
-        await createTopicsFromTemplate(savedId, duplicateTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
+        const readinessStartedAt = Date.now();
+        const expectedTopicCount = plannedTopics.length;
+        const expectedPointCount = plannedTopics.reduce(
+          (count, topic) => count + (topic.points?.length || 0),
+          0
+        );
         for (let attempt = 0; attempt < 10; attempt += 1) {
           try {
             const readBack = await readDiscussionTopicsAsTemplate(savedId);
-            if ((readBack?.topics?.length || 0) >= duplicateTemplate.topics.length) break;
+            const readableTopics = readBack?.topics || [];
+            const readablePointCount = readableTopics.reduce(
+              (count, topic) => count + (topic.points?.length || 0),
+              0
+            );
+            if (
+              readableTopics.length >= expectedTopicCount
+              && readablePointCount >= expectedPointCount
+            ) break;
           } catch (err) {
             if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי השכפול נכשלה — ממשיך להמתין', err);
           }
           await new Promise((resolve) => { setTimeout(resolve, 1000); });
         }
+        logger.health?.('discussion_create_phase', {
+          step: 'duplicate_readiness',
+          duration_ms: Date.now() - readinessStartedAt,
+        });
       }
 
       // Item 6 — the fun part: full bar + a confetti burst before handing off
@@ -549,9 +743,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // celebration window — the discussion is already saved at this point.
       setCreateProgress((p) => (p ? { ...p, done: p.total } : { done: 1, total: 1 }));
       if (!isEdit) {
+        // round298 — the discussion is ALREADY saved here; drop the blocking
+        // celebration wait entirely so the card opens the instant the save
+        // resolves (owner: creation still felt slow). A brief confetti still
+        // flashes but never delays the hand-off.
         setCelebrate(true);
-        await new Promise((resolve) => { setTimeout(resolve, 1500); });
-        setCelebrate(false);
       }
 
       setName('');
@@ -560,10 +756,14 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       setLead([]);
       setCoordinator([]);
       setParticipants([]);
+      setExternalParticipants([]);
+      setExternalDraft('');
       setDiscussionType(null);
       setTypeTopics(null);
       setPreviousDiscussionId('none');
       setTemplateId('none');
+      submitSucceeded = true;
+      creationResumeRef.current = null;
       // Hand back the discussion shape so the caller can refresh the open card
       // (edit) or open the freshly created/duplicated one immediately (create /
       // duplicate — savedId is the new item's id). Second arg tells the caller
@@ -575,6 +775,7 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         discussionLeadID: lead,
         discussionCoordinatorID: coordinator,
         participantsID: participants,
+        externalParticipantsID: formatExternalParticipants(externalParticipants),
         // round127 — carry the just-saved link so the refreshed card doesn't
         // keep showing the pre-edit previous discussion (the write succeeded;
         // only the hand-back omitted it).
@@ -588,10 +789,18 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         discussionLeadID: lead,
         discussionCoordinatorID: coordinator,
         participantsID: participants,
+        externalParticipantsID: formatExternalParticipants(externalParticipants),
       }, { isEdit, isDuplicate });
     } catch (err) {
       logger.error('CreateDiscussionModal', isEdit ? 'שגיאה בעדכון הדיון' : 'שגיאה ביצירת הדיון', err);
     } finally {
+      if (!optimisticHandoff) {
+        logger.health?.('discussion_create_total', {
+          duration_ms: Date.now() - submitStartedAt,
+          ok: submitSucceeded,
+          operation: isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create'),
+        });
+      }
       setCreating(false);
       setCreateProgress(null);
       setCelebrate(false);
@@ -906,13 +1115,18 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                   {lead.length > 0 && <FieldClearButton onClear={() => setLead([])} label={`ניקוי ${leadLabel}`} />}
                 </div>
               </div>
-              <div className={styles.field}>
-                <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
-                <div className={styles.fieldWrap}>
-                  <PersonPicker selected={coordinator} onChange={setCoordinator} bordered single closeOnSelect boardKey="discussions" accountWide />
-                  {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
+              {/* round219 — the coordinator field appears iff the מרכז דיון
+                  column is MAPPED (isColumnMapped); unmapped → it drops from the
+                  form, mirroring the header + permissions matrix. */}
+              {isColumnMapped('discussions', 'discussionCoordinatorID') && (
+                <div className={styles.field}>
+                  <Text type="text2" className={styles.label}>{coordinatorLabel}</Text>
+                  <div className={styles.fieldWrap}>
+                    <PersonPicker selected={coordinator} onChange={setCoordinator} bordered single closeOnSelect boardKey="discussions" accountWide />
+                    {coordinator.length > 0 && <FieldClearButton onClear={() => setCoordinator([])} label={`ניקוי ${coordinatorLabel}`} />}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className={styles.field}>
                 <div className={styles.labelRow}>
                   <Text type="text2" className={styles.label}>{fieldLabels.participants}</Text>
@@ -963,6 +1177,67 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                 </div>
               </div>
             </div>
+
+            {/* round211 — משתתפים חיצוניים (text-only names, not monday users;
+                never assignable to tasks). Shown only when the long_text column
+                is mapped in Settings. Type a full name + Enter/הוסף → chip. */}
+            {Boolean(getColumns('discussions')?.externalParticipantsID?.id) && (
+              <div className={`${styles.row} ${styles.rowSingle}`}>
+                <div className={styles.field}>
+                  <Text type="text2" className={styles.label}>
+                    {/* round278 — always "משתתפים חיצוניים", matching DiscussionCard's
+                        hardcoded label (round238). The mapped monday column is titled
+                        "משתתפים", so deriving from its title showed the wrong (generic)
+                        name in the create/duplicate card. */}
+                    משתתפים חיצוניים
+                  </Text>
+                  <div className={styles.extPeopleBox}>
+                    {externalParticipants.map((n, i) => (
+                      <span key={`${n}-${i}`} className={styles.extPersonChip}>
+                        {n}
+                        <button
+                          type="button"
+                          className={styles.extPersonRemove}
+                          onClick={() => setExternalParticipants((list) => list.filter((_, j) => j !== i))}
+                          aria-label={`הסרת ${n}`}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                    <input
+                      className={styles.extPersonInput}
+                      value={externalDraft}
+                      placeholder={externalParticipants.length ? 'שם נוסף…' : 'שם מלא… (Enter להוספה)'}
+                      onChange={(e) => setExternalDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        // round296 — Enter here ADDS a chip; it must NOT bubble to the
+                        // modal-level onFormKeyDown (which would submit/create the
+                        // discussion). preventDefault alone doesn't stop bubbling, so a
+                        // single Enter both added a name AND created the discussion —
+                        // aborting further additions and dropping the just-typed name.
+                        // stopPropagation on EVERY Enter keeps this field submit-inert;
+                        // only clicking "צור דיון" creates. (owner-reported)
+                        if (e.key !== 'Enter' || e.shiftKey) return;
+                        e.stopPropagation();
+                        if (externalDraft.trim()) {
+                          e.preventDefault();
+                          setExternalParticipants((list) => [...list, externalDraft.trim()]);
+                          setExternalDraft('');
+                        }
+                      }}
+                      onBlur={() => {
+                        if (externalDraft.trim()) {
+                          setExternalParticipants((list) => [...list, externalDraft.trim()]);
+                          setExternalDraft('');
+                        }
+                      }}
+                      aria-label="הוספת משתתף חיצוני"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Row 4: דיון קודם (previous discussion). */}
             {!hidePreviousDiscussion && (

@@ -1,5 +1,5 @@
 import React, { useState, useId } from 'react';
-import { Avatar, AvatarGroup, Flex, Text, Counter, Dialog, DialogContentContainer } from '@vibe/core';
+import { Avatar, Flex, Text, Counter, Dialog, DialogContentContainer } from '@vibe/core';
 import { useUsers } from '@api/hooks/use-users';
 import styles from './PersonAvatar.module.css';
 
@@ -72,31 +72,46 @@ export function PersonAvatar({ person, size = 'default', showName = true }) {
 // Compact avatar group (header / PEOPLE-column style) with a click-to-expand
 // popover. The group is a single click target; the popover lists all people with
 // photo + name so the full roster is reachable even past the "+N" overflow.
+//
+// round263 (owner request) — a people column must NEVER wrap / double the row
+// height when there are more people than fit. We render our OWN overlapping,
+// no-wrap stack of up to `max` avatars + a "+N" overflow chip styled as an
+// avatar (e.g. 8 people ⇒ 2 avatars + a "+6" circle) instead of @vibe's
+// AvatarGroup, which wrapped to a second line in narrow cells. Clicking anywhere
+// on the stack still opens the full-roster popover (unchanged).
 function PersonListCompact({ people, byId, avatarSize, size, max }) {
   const [open, setOpen] = useState(false);
+  const shown = people.slice(0, max);
+  const overflow = people.length - shown.length;
 
   const group = (
-    <AvatarGroup size={avatarSize} max={max}>
-      {people.map((p) => {
+    <span className={styles.compactStack}>
+      {shown.map((p) => {
         const u = byId.get(String(p.id));
         const photo = u?.photo_thumb;
         const name = u?.name || p.name;
         return (
-          <Avatar
-            key={p.id}
-            size={avatarSize}
-            src={photo}
-            text={initialsOf(name)}
-            type={photo ? "img" : "text"}
-            ariaLabel={name}
-            // Overlapping AvatarGroup avatars can't be wrapped in a native-title
-            // span without breaking the stack, so keep the @vibe tooltip but pin
-            // it to the app popover z-index (10000) so it's never hidden (round 33).
-            tooltipProps={{ content: name, zIndex: 10000 }}
-          />
+          <span key={p.id} className={styles.stackItem} title={name}>
+            <Avatar
+              size={avatarSize}
+              src={photo}
+              text={initialsOf(name)}
+              type={photo ? "img" : "text"}
+              ariaLabel={name}
+            />
+          </span>
         );
       })}
-    </AvatarGroup>
+      {overflow > 0 && (
+        <span
+          className={`${styles.stackItem} ${styles.overflowChip} ${avatarSize === 'medium' ? styles.overflowChipMd : ''}`}
+          title={`ועוד ${overflow}`}
+          aria-label={`ועוד ${overflow} אנשים`}
+        >
+          +{overflow}
+        </span>
+      )}
+    </span>
   );
 
   return (
@@ -150,12 +165,14 @@ export function PersonList({ people = [], size = 'default', showNames = true, ma
     return <PersonListCompact people={people} byId={byId} avatarSize={avatarSize} size={size} max={max} />;
   }
 
-  // Named-row mode (TaskTableRow / OverviewTab).
+  // Named-row mode (TaskTableRow / OverviewTab). round263 — no `wrap`: names each
+  // ellipsis-clip (see .name) and the row stays single-line so a people cell never
+  // doubles its height; overflow past `max` collapses to a "+N" counter.
   const shown = people.slice(0, max);
   const remaining = people.length - max;
 
   return (
-    <Flex gap={8} align="center" wrap>
+    <Flex gap={8} align="center" className={styles.namedRow}>
       {shown.map((p) => (
         <PersonAvatar key={p.id} person={p} size={size} showName={showNames} />
       ))}

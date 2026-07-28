@@ -20,7 +20,7 @@ const OTHER_ACCOUNT_ID = '888';
 const ENV = {
   clientId: 'cid-1',
   clientSecret: 'cs-1',
-  allowedAccountIds: [],
+  allowedAccountIds: [ACCOUNT_ID],
   baseUrl: 'https://app.example',
 };
 
@@ -57,7 +57,7 @@ function makeHarness({ exchangeResponse, env } = {}) {
   const app = createApp({
     storage,
     api,
-    rateLimiter: { allow: () => true },
+    rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
     env: env ?? ENV,
     fetchImpl,
   });
@@ -180,6 +180,19 @@ describe('GET /oauth/start — sessionToken gate (v3)', () => {
   it("responds 403 with the oauthErrorPage and issues no state when the token's account is OUTSIDE a non-empty allowlist", async () => {
     const { app, issuedStateKeys } = makeHarness({
       env: { ...ENV, allowedAccountIds: [OTHER_ACCOUNT_ID] },
+    });
+
+    const res = await request(app).get('/oauth/start').query({ st: signSt({ accountId: 777 }) });
+
+    expect(res.status).toBe(403);
+    expect(res.text).toContain(OAUTH_ERROR_HEADING);
+    expect(res.headers.location).toBeUndefined();
+    expect(issuedStateKeys()).toHaveLength(0);
+  });
+
+  it('responds 403 and issues no state when allowedAccountIds is EMPTY (D15 default-deny)', async () => {
+    const { app, issuedStateKeys } = makeHarness({
+      env: { ...ENV, allowedAccountIds: [] },
     });
 
     const res = await request(app).get('/oauth/start').query({ st: signSt({ accountId: 777 }) });

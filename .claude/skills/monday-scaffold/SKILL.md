@@ -30,6 +30,9 @@ Generate production-ready Monday.com app skeletons tailored to your feature type
 - **Proven shared components** — PersonPicker, Popover (body portal), StatusChip, DateRangeDisplay — ported from working sibling apps, NOT rebuilt
 - **Local dev harness** — `monday-sdk-js` stub with realistic fixtures and failure toggles, so the app renders outside the monday iframe and vitest tests realistic shapes
 - **Git repository** — `git init` + `.gitignore`, unconditionally
+- **pnpm build-script policy** — a package-scoped `allowBuilds` entry for
+  esbuild; the monday CLI lifecycle scripts stay blocked because its published
+  `patch-package` postinstall is incompatible with pnpm's isolated layout
 - **Starter GraphQL queries** — generated fresh through the `monday-api` skill (never copied from a static file)
 - **error-guard-compliant from birth** — every generated app ships the standard
   error-catching infrastructure (see the `error-guard` skill): a single-choke-point
@@ -108,6 +111,7 @@ app-name/
 ├── .gitignore                # from templates/shared/gitignore.template
 ├── .error-guard              # error-guard marker → enables full-tree ship gate
 ├── package.json              # pnpm scripts + eslintConfig error-guard rule kit; {{DEV_PORT}} + {{APP_ID}} substituted
+├── pnpm-workspace.yaml       # allows only the scaffold's required dependency build scripts
 ├── vite.config.js            # dev-harness alias + vitest config + {{DEV_PORT}}
 ├── tailwind.config.js
 ├── postcss.config.js
@@ -193,6 +197,7 @@ Strip the `.template` suffix. Substitutions: `{{APP_NAME}}`, `{{FEATURE_TYPE}}`,
 `{{DEV_PORT}}`, `{{APP_ID}}`. Notes:
 
 - `templates/shared/gitignore.template` → `.gitignore`
+- `templates/shared/pnpm-workspace.yaml.template` → `pnpm-workspace.yaml`
 - `templates/shared/error-guard.marker.template` → `.error-guard` (root marker —
   enables the error-guard full-tree ship gate; commit it with the scaffold)
 - `templates/shared/dev-harness/*` → `src/dev-harness/` **verbatim** (these are
@@ -404,6 +409,10 @@ References bundled with this skill:
 - `references/rtl-css-checklist.md` — the four recurring CSS/RTL traps
   (fixed-under-transform, sticky-in-overflow, cross-module CSS-module classes,
   bidi quote escaping) + the verify-step walk.
+- `references/package-manager.md` — pnpm build-script approval required by a
+  fresh standalone scaffold.
+- `references/dev-harness.md` — Vite environment handling for selecting the
+  correct mock feature context.
 
 ## Usage Examples
 

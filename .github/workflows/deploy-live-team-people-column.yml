@@ -65,6 +65,29 @@ jobs:
           VITE_AXIOM_APP: team-people-column
         run: pnpm --filter "./apps/team-people-column" build
 
+      # Sourcemaps ('hidden' in vite.config.js) power stack symbolication but must
+      # NEVER reach the CDN — archive them keyed by commit SHA, then strip them
+      # from the deploy dir before code:push. Pull with:
+      #   .claude/skills/axiom-sre/scripts/symbolicate '<frame>' --app team-people-column --ver <x.y.z+sha>
+      - name: Archive sourcemaps as build artifact (for stack symbolication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-team-people-column-${{ github.sha }}
+          path: apps/team-people-column/dist/**/*.map
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Strip sourcemaps before deploy (never ship .map to the CDN)
+        run: |
+          set -euo pipefail
+          find apps/team-people-column/dist -name '*.map' -type f -delete
+          remaining="$(find apps/team-people-column/dist -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining .map files in deploy dir: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::sourcemaps still present in deploy dir — refusing to push (would leak source to the CDN)"
+            exit 1
+          fi
+
       - name: Install monday.com apps CLI
         run: npm install -g @mondaycom/apps-cli
 

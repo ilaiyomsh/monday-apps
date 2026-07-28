@@ -31,6 +31,10 @@
      the dashboard content below it sit high, near the mode switcher. */
   padding: 4px var(--spacing-medium, 16px);
   padding-inline-start: var(--content-gutter-start, 52px);
+  /* round244 (owner request) — the (embedded) "ערוך פריסה" button is pinned to
+     the header's end edge (margin-inline-start:auto on .dashTools); pull it
+     closer to the card corner, keeping just a small gap from the edge. */
+  padding-inline-end: var(--spacing-small, 8px);
 }
 .viewTitle {
   flex: none;
@@ -67,6 +71,12 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* round245 (owner bug) — the dashboard "shook" while narrowing: a toggling
+     vertical scrollbar changed the canvas width → recomputed widget heights →
+     toggled the scrollbar again (a ResizeObserver feedback loop). Reserving the
+     scrollbar gutter keeps the content width constant whether or not the bar is
+     shown, breaking the loop. */
+  scrollbar-gutter: stable;
   padding: 0 16px 24px;
   direction: ltr;
 }
@@ -269,9 +279,9 @@
   padding: 8px 12px; background: var(--bg-secondary, #f6f7fb);
   border: 1px solid var(--layout-border-color, #e6e9ef); border-radius: 8px;
   font: inherit; font-size: 13.5px; color: var(--primary-text-color, #323338);
-  cursor: pointer; text-align: right; width: 100%;
+  /* round244 — read-only rows (no Updates-card open), so no click affordance. */
+  cursor: default; text-align: right; width: 100%;
 }
-.drillItem:hover { background: #eef1f8; }
 .drillName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drillDate { color: var(--secondary-text-color, #676879); font-size: 12px; flex-shrink: 0; }
 

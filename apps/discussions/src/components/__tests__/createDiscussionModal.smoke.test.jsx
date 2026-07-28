@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // --- Mock the heavy data layer so the modal mounts in jsdom ---------------
@@ -25,7 +25,11 @@ vi.mock('@generated/contexts/SettingsContext.jsx', () => ({
   }),
 }));
 
-const templatesValue = vi.hoisted(() => ({ templates: [], participantTemplates: [] }));
+const templatesValue = vi.hoisted(() => ({
+  templates: [], participantTemplates: [], typeTemplates: [],
+  typeColor: () => null,
+  assignRandomTypeColor: vi.fn(),
+}));
 vi.mock('@generated/contexts/TemplatesContext.jsx', () => ({
   useTemplates: () => templatesValue,
 }));
@@ -40,6 +44,11 @@ vi.mock('@generated/hooks/useStatusOptions.js', () => ({
 
 // BoardSDK — the modal news up a board on open to load previous-discussion
 // options. Return an empty list so loadDiscussions resolves cleanly.
+const boardApi = vi.hoisted(() => ({
+  create: vi.fn(),
+  update: vi.fn(),
+}));
+
 vi.mock('@api/BoardSDK.js', () => {
   class Board {
     items() { return this; }
@@ -47,7 +56,7 @@ vi.mock('@api/BoardSDK.js', () => {
     orderBy() { return this; }
     withPagination() { return this; }
     async execute() { return { items: [], cursor: null }; }
-    item() { return { create: () => ({ execute: async () => ({ id: '99' }) }), update: () => ({ execute: async () => ({}) }) }; }
+    item() { return { create: () => ({ execute: boardApi.create }), update: () => ({ execute: boardApi.update }) }; }
     async itemById() { return null; }
   }
   return { דיונים1Board: Board };
@@ -65,10 +74,15 @@ vi.mock('@generated/utils/mondayApi/board-config-store.js', () => ({
   getBoardId: () => null,
 }));
 
-vi.mock('@generated/utils/templates.js', () => ({
+const templateApi = vi.hoisted(() => ({
   createTopicsFromTemplate: vi.fn(),
+  readDiscussionTopicsAsTemplate: vi.fn(),
+}));
+
+vi.mock('@generated/utils/templates.js', () => ({
+  createTopicsFromTemplate: templateApi.createTopicsFromTemplate,
   countPoints: () => 0,
-  readDiscussionTopicsAsTemplate: vi.fn(async () => ({ topics: [] })),
+  readDiscussionTopicsAsTemplate: templateApi.readDiscussionTopicsAsTemplate,
 }));
 
 // DatePickerPopover wraps the @vibe DatePicker in a Dialog that can't open in
@@ -124,6 +138,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   templatesValue.templates = [];
   templatesValue.participantTemplates = [];
+  templatesValue.typeTemplates = [];
+  boardApi.create.mockResolvedValue({ id: '99' });
+  boardApi.update.mockResolvedValue({});
+  templateApi.createTopicsFromTemplate.mockResolvedValue({ topics: 0, points: 0, topicIds: [] });
+  templateApi.readDiscussionTopicsAsTemplate.mockResolvedValue({ topics: [] });
 });
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -213,5 +232,84 @@ describe('CreateDiscussionModal', () => {
     // clearing the required date disables it again.
     fireEvent.click(screen.getByLabelText('ניקוי תאריך'));
     expect(submit.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('keeps the saved root and template checkpoint when source props get a new object identity', async () => {
+    const checkpoint = {
+      templateKey: 'checkpoint',
+      topicResults: [{ sourceIndex: 0, id: 'T1' }],
+      pointResults: [],
+      linkedTopicSourceIndexes: [],
+    };
+    templateApi.readDiscussionTopicsAsTemplate.mockResolvedValue({
+      topics: [{ name: 'נושא מקור', points: [] }],
+    });
+    templateApi.createTopicsFromTemplate
+      .mockImplementationOnce(async (_id, _template, options) => {
+        options.onCheckpoint(checkpoint);
+        throw new Error('seed failed');
+      })
+      .mockResolvedValueOnce({ topics: 1, points: 0, topicIds: ['T1'] });
+    const onCreated = vi.fn();
+    const onClose = vi.fn();
+    const source = { id: 'SOURCE_1', name: 'דיון מקור' };
+    const utils = await renderOpen({ duplicateFrom: source, onCreated, onClose });
+    const submit = screen.getByText('צור דיון').closest('button');
+
+    fireEvent.click(submit);
+    await waitFor(() => expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(
+      screen.getByText('צור דיון').closest('button').getAttribute('aria-disabled')
+    ).toBe('false'));
+    expect(boardApi.create).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      utils.rerender(
+        <CreateDiscussionModal
+          open
+          duplicateFrom={{ ...source }}
+          onClose={onClose}
+          onCreated={onCreated}
+        />
+      );
+    });
+    await flush();
+
+    fireEvent.click(screen.getByText('צור דיון').closest('button'));
+    await waitFor(() => expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(2));
+    expect(boardApi.create).toHaveBeenCalledTimes(1);
+    expect(templateApi.createTopicsFromTemplate.mock.calls[1][2].resumeState).toBe(checkpoint);
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1), { timeout: 2000 });
+  });
+
+  it('round300 — optimistic create: opens the card instantly (id-less), then patches the real id', async () => {
+    const onOptimisticCreate = vi.fn();
+    const onCreated = vi.fn();
+    await renderOpen({ onOptimisticCreate, onCreated });
+    const submit = screen.getByText('צור דיון').closest('button');
+    await act(async () => { fireEvent.click(submit); });
+    // The card is handed off IMMEDIATELY, before the create_item write resolves —
+    // with a shape that carries NO id yet (the header renders from it).
+    expect(onOptimisticCreate).toHaveBeenCalledTimes(1);
+    const shape = onOptimisticCreate.mock.calls[0][0];
+    expect(shape.id).toBeNull();
+    expect(typeof shape.name).toBe('string');
+    expect(shape.name.length).toBeGreaterThan(0);
+    // The background create was NOT awaited before hand-off.
+    await flush();
+    // …and once create_item resolves, the REAL id is patched in via onCreated.
+    expect(onCreated).toHaveBeenCalledTimes(1);
+    expect(onCreated.mock.calls[0][0].id).toBe('99');
+    expect(onCreated.mock.calls[0][1]).toMatchObject({ isEdit: false, isDuplicate: false });
+  });
+
+  it('round300 — without onOptimisticCreate it keeps the awaited path (id via onCreated only)', async () => {
+    const onCreated = vi.fn();
+    await renderOpen({ onCreated }); // no onOptimisticCreate
+    const submit = screen.getByText('צור דיון').closest('button');
+    await act(async () => { fireEvent.click(submit); });
+    await flush();
+    expect(onCreated).toHaveBeenCalledTimes(1);
+    expect(onCreated.mock.calls[0][0].id).toBe('99');
   });
 });

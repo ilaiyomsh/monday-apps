@@ -1,0 +1,14 @@
+/* SOURCE: generalized from apps/discussions PersonPicker popover styles.
+   Vibe tokens with fallbacks; the element itself is portaled to document.body. */
+
+.popover {
+  background: var(--primary-background-color, #fff);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-medium, 8px);
+  box-shadow: var(--box-shadow-medium, 0 6px 20px rgba(0, 0, 0, 0.2));
+  padding: 8px;
+  box-sizing: border-box;
+  overflow: auto;
+  max-height: min(430px, calc(100vh - 16px));
+}
+

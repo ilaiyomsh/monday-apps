@@ -473,6 +473,27 @@ describe('drift — vendored BROWSER sinks conform to the sink contract', () => 
         expect(serialized).not.toContain('12345678');
       });
 
+      it('mapRecordToEvent guarantees err_name on ERROR events (Error name → message → tag → unknown)', () => {
+        const { mapRecordToEvent } = surface.mod;
+        // a real Error keeps its own name — the fallback must not overwrite it
+        expect(mapRecordToEvent({ level: 'ERROR', module: 'svc', message: 'op_failed', error: new TypeError('x') }).err_name)
+          .toBe('TypeError');
+        // no Error object → the stable message event-id names it
+        expect(mapRecordToEvent({ level: 'ERROR', module: 'globalerrorhandler', message: 'Uncaught error' }).err_name)
+          .toBe('Uncaught error');
+        // empty message → the tag; blank tag AND blank message → 'unknown' (never whitespace)
+        expect(mapRecordToEvent({ level: 'ERROR', module: 'boot', message: '' }).err_name).toBe('boot');
+        expect(mapRecordToEvent({ level: 'ERROR', module: ' ', message: '   ' }).err_name).toBe('unknown');
+        // an Error whose OWN name is whitespace is as useless as a missing one — it must fall
+        // through to the message, not ship ' ' as the grouping key.
+        const blankNamed = Object.assign(new Error('x'), { name: '  ' });
+        expect(mapRecordToEvent({ level: 'ERROR', module: 'svc', message: 'op_failed', error: blankNamed }).err_name)
+          .toBe('op_failed');
+        // non-error kinds never gain the key
+        expect(mapRecordToEvent({ level: 'INFO', module: 'usage', message: 'view_open', domainKind: 'usage' }).err_name)
+          .toBeUndefined();
+      });
+
       it('mapRecordToEvent ships component_stack (scrubbed, cap 1000) ONLY from context.componentStack', () => {
         const { mapRecordToEvent } = surface.mod;
         // present + long + PII-laden → scrubbed, capped 1000, but NOT clipped to the 200 err_msg cap

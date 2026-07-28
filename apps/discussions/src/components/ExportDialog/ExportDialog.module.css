@@ -1,0 +1,121 @@
+/* round207 — per-discussion export dialog. Fullscreen box, same footprint as the
+   Settings export-template tab (SettingsModal .modalExport): the overlay is
+   viewport-fixed and the box takes everything minus 16px padding, so the live
+   Word preview gets maximum room. Class names deliberately `ex*`-prefixed
+   (non-scoped test strategy — avoid colliding with SettingsModal's .overlay/.modal). */
+.exOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  padding: 16px;
+  direction: rtl;
+}
+
+.exModal {
+  width: calc(100vw - 32px);
+  height: calc(100vh - 32px);
+  background: var(--primary-background-color, #fff);
+  border-radius: var(--border-radius-big, 12px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--box-shadow-medium, 0 10px 30px rgba(0, 0, 0, 0.2));
+}
+
+/* round297 — indeterminate loading bar shown at the very top of the dialog while
+   the .docx is being produced (from click on "הפק מסמך" until it's delivered). */
+.produceBar {
+  position: relative;
+  height: 3px;
+  width: 100%;
+  overflow: hidden;
+  background: var(--primary-background-hover-color, #e6e9ef);
+  flex-shrink: 0;
+}
+.produceBarFill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 40%;
+  border-radius: 3px;
+  background: var(--primary-color, #0073ea);
+  animation: produceBarSlide 1.1s ease-in-out infinite;
+}
+@keyframes produceBarSlide {
+  0% { inset-inline-start: -40%; }
+  100% { inset-inline-start: 100%; }
+}
+
+.exHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--ui-border-color, #c3c6d4);
+  flex-shrink: 0;
+}
+
+.exHeaderTitles {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.exHeaderSub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.exClose {
+  border: none;
+  background: transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--secondary-text-color, #676879);
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.exClose:hover {
+  background: var(--primary-background-hover-color, #f0f1f5);
+}
+
+.exContent {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 20px 8px;
+}
+
+/* Loading / error interstitials while the real discussion model is assembled. */
+.exStateBox {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.exStateBox :global(.loader-container) {
+  width: 44px;
+}
+
+.exFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end; /* RTL: packs the buttons to the BOTTOM-LEFT */
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--ui-border-color, #c3c6d4);
+  flex-shrink: 0;
+}

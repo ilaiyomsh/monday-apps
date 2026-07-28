@@ -4,6 +4,7 @@ import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscuss
 import { Button, Text, IconButton } from '@vibe/core';
 import { CloseSmall, Search } from '@vibe/icons';
 import { HighlightedText } from '@generated/components/HighlightedText';
+import { EmptyState } from '@generated/components/EmptyState';
 import { PersonAvatar } from '@generated/components/PersonAvatar';
 import { Calendar, Check, ChevronLeft, Copy, FileDown, Filter, Link2, List, Loader2, MoreHorizontal, Pencil, Plus, Settings, Trash2, X } from 'lucide-react';
 import { DiscussionCalendar } from '@generated/components/DiscussionCalendar';
@@ -13,6 +14,7 @@ import { discussionAccentColor } from '@generated/constants/discussionColors.js'
 import { useDropdownOptions } from '@generated/hooks/useDropdownOptions.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { usePermission, useIsSuperMember } from '@generated/hooks/usePermission.js';
+import { canExportDiscussion } from '../../utils/exportGate.js';
 import styles from './DiscussionList.module.css';
 
 /* List-row subtitle: short weekday + "DD/MM", plus " · HH:MM" when the date
@@ -454,13 +456,13 @@ export function DiscussionList({
     (item) => can('editDiscussionFields', { discussion: item }),
     [can]
   );
-  // DOCS-export is its own capability (default creator/lead/owner). Gate the row
-  // kebab / calendar export item per-discussion, mirroring canEditItem. While the
-  // feature is off it resolves via the legacy creator/lead/owner path → identical
-  // to before this gate existed (owners bypass).
+  // round207 (owner decision) — export is a FIXED rule, no longer the exportDocs
+  // matrix capability: only the discussion's creator, lead (מנהל) and
+  // coordinator (מרכז) — plus board owners — see the "ייצוא" action, which now
+  // opens the per-discussion export dialog.
   const canExportItem = useCallback(
-    (item) => can('exportDocs', { discussion: item }),
-    [can]
+    (item) => canExportDiscussion(item, { canManageSettings, currentUser }),
+    [canManageSettings, currentUser]
   );
   // System-tier caps (global, not item-bound). While the feature is off both
   // resolve allow-all → buttons always shown (identical to today). Owners bypass.
@@ -728,9 +730,7 @@ export function DiscussionList({
           // empty area (NO branded splash) while it settles — never the animation.
           <div className={styles.listLoading} aria-hidden="true" />
         ) : items.length === 0 ? (
-          <div className={styles.empty}>
-            <Text color={"secondary"}>לא נמצאו דיונים</Text>
-          </div>
+          <EmptyState>לא נמצאו דיונים</EmptyState>
         ) : (
           <div className={styles.list}>
             {items.map((item, idx) => {

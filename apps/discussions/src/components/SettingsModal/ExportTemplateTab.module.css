@@ -36,6 +36,29 @@
   overflow-y: auto;
   overflow-x: hidden;
   padding-inline-end: 6px;
+  /* round201 — the column sits in the RTL .layout, which parks the vertical bar
+     on the LEFT; force LTR on the scroll container so the bar hugs the RIGHT
+     edge of the column it scrolls, and re-establish RTL on every child (under
+     LTR the padding-inline-end above lands next to the bar, as before). */
+  direction: ltr;
+}
+.controls > * {
+  direction: rtl;
+}
+
+/* round201 — owner request: the components column's vertical bar is ALWAYS
+   visible, overriding the app-wide hover-gated default (index.css). */
+.controls::-webkit-scrollbar-thumb:vertical {
+  background: var(--ui-border-color, #c3c6d4);
+}
+.controls::-webkit-scrollbar-thumb:hover,
+.controls::-webkit-scrollbar-thumb:active {
+  background: #a8adbd;
+}
+@supports not selector(::-webkit-scrollbar) {
+  .controls {
+    scrollbar-color: var(--ui-border-color, #c3c6d4) transparent;
+  }
 }
 .previewCol {
   position: sticky;
@@ -115,20 +138,28 @@
 .sectionWrap {
   background: #fff;
 }
+/* round219 — compact rows so all export components fit on one screen. */
 .sectionRow {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 4px 10px;
   border: 1px solid var(--ui-border-color, #c3c6d4);
   border-radius: 8px;
+}
+/* round219 — the section list is its own tight-gap column (denser than the
+   .controls 14px gap) so all components fit one screen. */
+.sectionList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 .grip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 26px;
+  width: 20px;
+  height: 22px;
   border: none;
   background: transparent;
   color: #9699a6;
@@ -138,7 +169,7 @@
 .grip:active { cursor: grabbing; }
 .sectionName {
   flex: 1;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
   color: var(--primary-text-color, #323338);
 }

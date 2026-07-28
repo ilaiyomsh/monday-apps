@@ -482,3 +482,126 @@ A digest block requires `peopleColumnId` to be set (matching column).
   typed fragments Status/Date/People; people filtered to `kind: person`.
   **Pre-release gate:** sandbox probe (WZ- board) + `/monday-api check` — the
   cloud session that authored this had no token (see tests/fixtures/README.md).
+
+---
+
+# V5 Amendment — Gmail Dynamic Email (owner decisions, 2026-07-26)
+
+Design log: `docs/v5-gmail-dynamic-email.md`. The client's organization runs on
+**Google Workspace (Gmail)**, so Outlook **Actionable Messages / Adaptive Cards**
+— explored earlier — is off the table: it renders in Outlook only. Gmail's
+equivalent is **AMP for Email**, which Gmail calls **dynamic email**: a
+`text/x-amp-html` MIME part with real form controls that posts to our server
+from inside the message.
+
+V5 adds that part ALONGSIDE the V4 digest. Nothing is removed or replaced: the
+static `text/html` body with per-task links stays the universal fallback, and
+every client that does not render AMP (Outlook, Apple Mail, an old Gmail app, a
+user who never allow-listed the sender) gets exactly today's email. Graceful
+degradation is a locked property, not an accident.
+
+## Product behavior
+
+- The digest email becomes TWO representations of the same digest data:
+  - `text/x-amp-html` — one `<amp-form>` per section, a **checkbox per task**
+    and ONE submit button per section: tick several tasks, one click, done,
+    without leaving the message. This is what the owner asked for from the
+    start (in-email interactivity, no landing page).
+  - `text/html` — unchanged V4 body, one link-button per task.
+- The AMP part must be placed BEFORE the html part inside
+  `multipart/alternative` (some clients render only the last part).
+- Gmail strips the AMP part on reply/forward and may stop rendering it after
+  ~30 days; both fall back to the html part.
+
+## New endpoint (extends §7)
+
+`POST /amp/confirm` — the app's ONLY bulk mutation path. Ordered contract
+(security contract, `src/routes/amp.js` header is authoritative):
+
+1. **AMP CORS gate** (`src/helpers/amp-cors.js`) — FIRST, before any I/O.
+   Supports both documented variants: v2 `AMP-Email-Sender` →
+   `AMP-Email-Allow-Sender`, and v1 `Origin` + `?__amp_source_origin` →
+   `Access-Control-Allow-Origin` + `AMP-Access-Control-Allow-Source-Origin` +
+   `Access-Control-Expose-Headers`; v2 wins when both are offered.
+   **Default deny** (empty allowlist admits nobody) and the wildcard `*` is
+   deliberately unsupported. A rejected caller gets 403 with **NO CORS
+   headers** — the email client then discards the body — and never reaches
+   storage, so it cannot probe whether a secret is valid.
+2. parse+validate `a`, `k`, `btn`, `item[]` (each `/^\d{1,20}$/`,
+   1..`MAX_ITEMS`=50) → 400 `bad_request` / `no_items` / `too_many_items`.
+3. secret gate (constant-time, account-scoped) → 403 `invalid`.
+4. rate limit, bucket `${a}:${ip}` → 429.
+5. `performAction` per item — the SAME v2/v3 engine, so already-at-target
+   stays a silent success and nothing is written twice; duplicate ids collapse.
+
+Responses from step 2 on carry the CORS headers and are JSON (amp-form feeds
+them to `<template type="amp-mustache">`): `{ ok, updated, already, failed,
+message }` — counts and a Hebrew message ONLY, never item/board/account data.
+Authorized-but-nothing-updated answers **502** so the reader sees the error
+template instead of a green one. `OPTIONS /amp/confirm` answers the preflight
+under the same CORS gate.
+
+## Environment (extends §5)
+
+- `AMP_ALLOWED_SENDERS` — comma-separated sender addresses whose AMP forms may
+  call `/amp/confirm` (trimmed, lowercased, de-duplicated). **Empty or unset =
+  the endpoint admits nobody.** Holds the production sender address, plus
+  `amp@gmail.dev` while testing through the AMP playground.
+
+## Admin API (extends §9)
+
+- `GET /api/digest/preview` gains `amp` — the amp4email document for the same
+  recipient as `html` (both `null` when that recipient has nothing pending).
+  The admin panel copies it out for the AMP playground while the AMP sending
+  path is still manual.
+
+## Deferred (phase 2)
+
+- Sending the AMP MIME part: Resend's support for `text/x-amp-html` is
+  undocumented, so the production sender becomes a dedicated Google Workspace
+  mailbox via the Gmail API with the `gmail.send` scope only (send, never
+  read) — see the design log. Until then the AMP part is exercised manually.
+- Per-task status dropdown (`<select>` per row) instead of a checkbox — the
+  format supports it; the owner has seen a mock, no decision yet.
+
+---
+
+# V6 Amendment — AMP-only + per-message signed manifest (owner decisions, 2026-07-27)
+
+Design brief: `docs/v6-amp-only-decisions.md`. **Supersedes** the V5 additive
+model: the actionable `text/html` body and the entire `/confirm` route family
+are **removed**. Resend is retired; Gmail API send is the planned channel (T9).
+
+## Product behavior
+
+- Digest email = `multipart/alternative`: `text/plain` (non-actionable task list,
+  no links/credentials) + `text/x-amp-html` (Gmail dynamic email, the only
+  actionable part).
+- One **signature per message** over a manifest of authorized (task × button)
+  pairs. Wire fields: `a`, `p`, `m`, `s`, `sig` + per-task radio `item_<itemId>`.
+  No `k` anywhere in the message (D3/D10).
+- Slot = calendar date (YYYYMMDD) of the scheduled send in Asia/Jerusalem;
+  configured via `digest.sendHour` (integer 0–23, default 8). No grace window
+  for the previous slot (D5/D6).
+- D11: at execution, signed `recipientPersonId` must match item assignees
+  (`not_assignee` per item — not whole-request rejection).
+
+## Deleted (D2/D4)
+
+- `HEAD/GET/POST /confirm`, landing/success pages, JS auto-submit.
+- `GET /api/snippet`, `GET /api/email-template` (secret-unmasking paths).
+
+## Endpoint changes (extends §9)
+
+| Route | V6 change |
+|---|---|
+| `POST /amp/confirm` | **only** public write path; V6 verification order in `src/routes/amp.js` |
+| `POST /api/secret/rotate` | returns `{ ok: true }` only — secret never exposed |
+| `GET /api/digest/preview` | returns `{ plain, amp }` — drops `html` |
+| `PUT /api/config` | `digest.sendHour` validated 0–23, default 8 |
+
+## Deferred (post-V6)
+
+- T9–T12: Gmail multipart send, scheduler, operator summary, resend-today.
+- T15: D9 email redesign (multi-button table, one global submit) — awaiting owner briefing.
+
