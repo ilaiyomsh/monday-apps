@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.5.0
+
+- The required-fields form now follows monday's own item form: a LIST of rows, one
+  field per row, with the column's coloured icon and title in a label column beside a
+  wide control column. The 2-column grid from 3.4.0 is gone. Modal width is constant;
+  only the height follows the rows, still capped at 4 visible with the list scrolling
+  past that.
+- The hour of a date field is set INSIDE the date picker — a popover with "היום", a
+  clock toggle and a month grid — instead of a separate time input beside the day. It
+  stays optional: a date with no hour is a complete answer, and switching the clock
+  off CLEARS the hour rather than keeping a hidden value that would still be written.
+- The picker no longer sits on "שומר…" while the form is open. `openAppFeatureModal`
+  resolves only when the modal CLOSES, and awaiting it pinned the clicked pill for the
+  whole time — that was the stuck dialog visible behind the modal.
+- After a successful write the modal closes itself and asks monday to close the picker
+  dialog behind it, so nothing is left over on screen.
+
 ## 3.4.0
 
 - Required fields now support far more column types. `people`, `checkbox`,

@@ -11,8 +11,9 @@
 import React, { useEffect, useState } from 'react';
 import { AttentionBox } from '@vibe/core';
 import { isFieldValueEmpty, isSupportedFormColumnType } from '../../domain/columnFields';
-import { isFullRowControl, requiredFormGrid } from '../../utils/requiredFormModalSize';
+import { requiredFormLayout } from '../../utils/requiredFormModalSize';
 import FieldControl from './FieldControl';
+import FieldIcon from './FieldIcon';
 
 function RequiredFieldsForm({
   label,
@@ -45,10 +46,8 @@ function RequiredFieldsForm({
   });
 
   // Same geometry the modal was sized with — one source, so the form can never
-  // lay out wider or taller than the window it was given.
-  const grid = requiredFormGrid(
-    fields.map((field) => ({ type: columnsById.get(field.columnId)?.type })),
-  );
+  // lay out taller than the window it was given.
+  const layout = requiredFormLayout(fields);
 
   const emptyFieldIds = new Set(
     fields
@@ -92,42 +91,37 @@ function RequiredFieldsForm({
       )}
 
       {/*
-        Two-column grid, capped at 4 rows by the modal's computed height — past
-        that the grid scrolls instead of the modal growing off-screen. The two
-        controls that render two inputs of their own (date = day + hour,
-        timeline = from + to) span the full row so neither half-fits a cell.
+        One row per field, monday's own item-form shape: the column's icon and
+        title in a fixed label column, the control in a wide one. Past 4 rows the
+        LIST scrolls — the modal keeps the height it was opened with.
       */}
-      <div
-        className={`twyst-form-grid${grid.scrolls ? ' is-scrolling' : ''}`}
-        style={{ '--twyst-form-cols': grid.columns }}
-      >
+      <div className={`twyst-form-rows${layout.scrolls ? ' is-scrolling' : ''}`}>
         {fields.map((field) => {
           const column = columnsById.get(field.columnId);
           const controlId = `required-field-${field.columnId}`;
           const labelId = `${controlId}-label`;
           const isMissing = showErrors && emptyFieldIds.has(field.columnId);
-          const isWide = isFullRowControl(column?.type);
           return (
-            <div
-              className={`twyst-form-field${isWide ? ' is-wide' : ''}`}
-              key={field.columnId}
-            >
+            <div className="twyst-form-row" key={field.columnId}>
               <label className="twyst-field-title" id={labelId} htmlFor={controlId}>
-                {column?.title || field.columnId}
-                <b> *</b>
+                <FieldIcon columnType={column?.type} />
+                <span className="twyst-field-name">{column?.title || field.columnId}</span>
+                <b aria-hidden="true">*</b>
               </label>
-              <FieldControl
-                column={column}
-                value={values[field.columnId]}
-                disabled={busy}
-                controlId={controlId}
-                labelId={labelId}
-                onChange={(next) => setValues((current) => ({
-                  ...current,
-                  [field.columnId]: next,
-                }))}
-              />
-              {isMissing && <p className="twyst-field-error">שדה חובה — יש למלא לפני המעבר.</p>}
+              <div className="twyst-field-control">
+                <FieldControl
+                  column={column}
+                  value={values[field.columnId]}
+                  disabled={busy}
+                  controlId={controlId}
+                  labelId={labelId}
+                  onChange={(next) => setValues((current) => ({
+                    ...current,
+                    [field.columnId]: next,
+                  }))}
+                />
+                {isMissing && <p className="twyst-field-error">שדה חובה — יש למלא לפני המעבר.</p>}
+              </div>
             </div>
           );
         })}

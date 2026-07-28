@@ -46,45 +46,81 @@
 }
 
 /*
- * Required-fields grid. The column count comes from requiredFormModalSize's
- * requiredFormGrid() via the --twyst-form-cols custom property, so the layout and
- * the modal's pixel size are computed from ONE place. Row height, gap and padding
- * here MUST match that module's constants.
+ * Required-fields list. One row per field: a fixed label column (icon + title)
+ * beside a wide control column — monday's own item-form shape. The row height,
+ * gaps, paddings and column widths here MUST match requiredFormModalSize.js, which
+ * computes the modal's pixel size from the same numbers.
  */
-.twyst-form-grid {
+.twyst-form-rows {
   display: grid;
-  grid-template-columns: repeat(var(--twyst-form-cols, 1), minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
   align-content: start;
-}
-
-/* Past 4 rows the grid scrolls — the modal never grows past the computed height. */
-.twyst-form-grid.is-scrolling {
-  overflow-y: auto;
   min-height: 0;
 }
 
-/* date (day + hour) and timeline (from + to) hold two inputs — give them the row. */
-.twyst-form-field.is-wide {
-  grid-column: 1 / -1;
+/* Past 4 rows the list scrolls — the modal keeps its opened height. */
+.twyst-form-rows.is-scrolling {
+  overflow-y: auto;
 }
 
-/* One required field: title above its control (whatever FieldControl renders). */
-.twyst-form-field {
+.twyst-form-row {
   display: grid;
-  gap: 6px;
-  font-size: 13px;
+  grid-template-columns: 150px 1fr;
+  gap: 16px;
+  align-items: center;
+  min-height: 36px;
 }
 
 .twyst-field-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
   color: var(--primary-text-color, #323338);
+}
+
+.twyst-field-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .twyst-field-title b {
   color: var(--negative-color, #d83a52);
+  font-weight: 400;
 }
 
-/* date (day + hour) and timeline (from + to) each hold two inputs. */
+/* The column-type tile: a rounded square of the type's colour with a white glyph. */
+.twyst-field-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 22px;
+  block-size: 22px;
+  border-radius: 5px;
+  background: var(--ui-border-color, #d0d4e4);
+  color: #fff;
+}
+
+.twyst-field-icon svg {
+  inline-size: 14px;
+  block-size: 14px;
+  fill: currentColor;
+}
+
+.twyst-field-control {
+  min-width: 0;
+}
+
+.twyst-field-control input:not([type="checkbox"]),
+.twyst-field-control textarea {
+  inline-size: 100%;
+  box-sizing: border-box;
+}
+
+/* timeline: two dates inside the control column. */
 .twyst-field-row {
   display: flex;
   gap: 8px;
@@ -95,13 +131,176 @@
   min-width: 0;
 }
 
-/* A checkbox must not stretch to the field width — it reads as a broken input. */
+/* A checkbox must not stretch to the control width — it reads as a broken input. */
 .twyst-field-checkbox {
-  justify-self: start;
   inline-size: 18px;
   block-size: 18px;
   margin: 0;
   cursor: pointer;
+}
+
+/* ---------------------------------------------------------------- date field */
+
+.twyst-date-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  background: var(--primary-background-color, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.twyst-date-trigger.is-empty {
+  color: var(--secondary-text-color, #676879);
+}
+
+.twyst-date-trigger svg {
+  flex: 0 0 auto;
+  inline-size: 16px;
+  block-size: 16px;
+  fill: var(--secondary-text-color, #676879);
+}
+
+.twyst-date-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.twyst-datepicker {
+  display: grid;
+  gap: 8px;
+  inline-size: 268px;
+  padding: 12px;
+}
+
+.twyst-datepicker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.twyst-datepicker-today {
+  padding: 6px 14px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  background: var(--primary-background-color, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.twyst-datepicker-clock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 30px;
+  block-size: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.twyst-datepicker-clock svg {
+  inline-size: 18px;
+  block-size: 18px;
+  fill: var(--secondary-text-color, #676879);
+}
+
+/* On = the hour row is showing, so the button reads as a live toggle. */
+.twyst-datepicker-clock.is-on {
+  border-color: var(--primary-color, #0073ea);
+}
+
+.twyst-datepicker-clock.is-on svg {
+  fill: var(--primary-color, #0073ea);
+}
+
+.twyst-datepicker-input {
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.twyst-datepicker-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.twyst-datepicker-nav button {
+  inline-size: 26px;
+  block-size: 26px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.twyst-datepicker-nav button:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.twyst-datepicker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.twyst-datepicker-weekday {
+  padding-block: 4px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 11px;
+  text-align: center;
+}
+
+.twyst-datepicker-day {
+  block-size: 30px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.twyst-datepicker-day:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.twyst-datepicker-day.is-outside {
+  color: var(--disabled-text-color, #c5c7d0);
+}
+
+.twyst-datepicker-day.is-today {
+  font-weight: 700;
+}
+
+.twyst-datepicker-day.is-selected {
+  background: var(--primary-color, #0073ea);
+  color: #fff;
 }
 
 .twyst-chip-group {
@@ -173,10 +372,13 @@
   font-size: 12px;
 }
 
+/* Footer sits on a divider with the actions at the end, like monday's item form. */
 .twyst-form-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+  padding-top: 14px;
+  border-top: 1px solid var(--ui-border-color, #d0d4e4);
 }
 
 .twyst-form-actions button,

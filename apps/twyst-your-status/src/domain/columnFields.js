@@ -3,8 +3,14 @@
  * required field on a status transition. Adding a column type means adding a
  * record here; nothing else in the app enumerates column types.
  *
- * Each spec carries the four things a required field needs:
+ * Each spec carries what a required field needs:
  *   control   — which form control renders it (see components/OnClickDialog/FieldControl)
+ *   icon      — @vibe/icons component NAME for the field's label, and `iconTone`
+ *               its background. This mirrors monday's own item form, which labels
+ *               every row with the column's coloured icon. monday does not expose
+ *               column-type icons or their colours through the API, so both are our
+ *               approximation of its palette, resolved to components in FieldControl
+ *               (kept as strings here so this module imports no React).
  *   fragment  — the typed GraphQL fragment its READ needs, or null when the
  *               ColumnValue interface's own `text`/`value` suffice
  *   prefill   — column_value  → form value
@@ -70,6 +76,8 @@ const TEXTUAL_EMPTY = (value) => isBlankString(value);
 const FIELD_SPECS = {
   text: {
     control: 'text',
+    icon: 'Text',
+    iconTone: '#ffcb00',
     fragment: null,
     prefill: (cv) => asText(cv),
     serialize: (value) => String(value ?? ''),
@@ -78,6 +86,8 @@ const FIELD_SPECS = {
 
   long_text: {
     control: 'textarea',
+    icon: 'LongText',
+    iconTone: '#ffcb00',
     fragment: null,
     prefill: (cv) => fromStoredJson(cv, 'text'),
     serialize: (value) => ({ text: String(value ?? '') }),
@@ -86,6 +96,8 @@ const FIELD_SPECS = {
 
   numbers: {
     control: 'number',
+    icon: 'Numbers',
+    iconTone: '#66ccff',
     fragment: null,
     prefill: (cv) => asText(cv),
     serialize: (value) => (isBlankString(value) ? '' : String(value)),
@@ -94,6 +106,8 @@ const FIELD_SPECS = {
 
   email: {
     control: 'email',
+    icon: 'Email',
+    iconTone: '#0086c0',
     fragment: null,
     prefill: (cv) => fromStoredJson(cv, 'email'),
     serialize: (value) => {
@@ -105,6 +119,8 @@ const FIELD_SPECS = {
 
   phone: {
     control: 'phone',
+    icon: 'Mobile',
+    iconTone: '#0086c0',
     fragment: null,
     prefill: (cv) => fromStoredJson(cv, 'phone'),
     serialize: (value) => {
@@ -118,6 +134,8 @@ const FIELD_SPECS = {
 
   link: {
     control: 'link',
+    icon: 'Link',
+    iconTone: '#0086c0',
     fragment: null,
     prefill: (cv) => fromStoredJson(cv, 'url'),
     serialize: (value) => {
@@ -131,6 +149,8 @@ const FIELD_SPECS = {
   // monday stores the time part in UTC, so both directions convert.
   date: {
     control: 'date',
+    icon: 'Calendar',
+    iconTone: '#a25ddc',
     fragment: '... on DateValue { date time }',
     // READ is NOT converted: probe-verified (board 18424030023, API 2026-04)
     // that DateValue.date/time already arrive in the ACCOUNT timezone — writing
@@ -165,6 +185,8 @@ const FIELD_SPECS = {
   // writing labels made a typo either fail the mutation or invent a new label.
   dropdown: {
     control: 'dropdown',
+    icon: 'Dropdown',
+    iconTone: '#ff642e',
     fragment: '... on DropdownValue { values { id label } }',
     prefill: (cv) => entryList(cv?.values)
       .map((option) => trimmedString(option?.id))
@@ -176,6 +198,8 @@ const FIELD_SPECS = {
   // Form value: array of { id, kind } — kind is 'person' or 'team'.
   people: {
     control: 'people',
+    icon: 'Person',
+    iconTone: '#00a9ff',
     fragment: '... on PeopleValue { persons_and_teams { id kind } }',
     prefill: (cv) => entryList(cv?.persons_and_teams)
       .map((entry) => ({
@@ -194,6 +218,8 @@ const FIELD_SPECS = {
 
   checkbox: {
     control: 'checkbox',
+    icon: 'Checkbox',
+    iconTone: '#00c875',
     fragment: '... on CheckboxValue { checked }',
     prefill: (cv) => cv?.checked === true,
     // null is the ONLY shape that unchecks. Sending checked with a false string
@@ -208,6 +234,8 @@ const FIELD_SPECS = {
   // conversion (monday timeline columns carry no time part).
   timeline: {
     control: 'timeline',
+    icon: 'Timeline',
+    iconTone: '#a25ddc',
     fragment: '... on TimelineValue { from to }',
     // monday sends full ISO timestamps here (probe-verified:
     // "2026-07-01T00:00:00+00:00"), which a date input rejects — keep the day.
@@ -230,6 +258,8 @@ const FIELD_SPECS = {
   // unrated, so a required rating needs at least one star.
   rating: {
     control: 'rating',
+    icon: 'Favorite',
+    iconTone: '#fdab3d',
     fragment: '... on RatingValue { rating }',
     prefill: (cv) => (typeof cv?.rating === 'number' ? cv.rating : null),
     serialize: (value) => {
@@ -244,6 +274,8 @@ const FIELD_SPECS = {
   // check here is null/blank-based, never truthiness.
   status: {
     control: 'status',
+    icon: 'Status',
+    iconTone: '#e2445c',
     fragment: '... on StatusValue { index }',
     prefill: (cv) => (typeof cv?.index === 'number' ? String(cv.index) : ''),
     serialize: (value) => {

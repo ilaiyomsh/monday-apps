@@ -3,71 +3,49 @@
  *
  * The picker's own dialog is fixed at 200×250 by the Developer Center's Dialog
  * Design (see MANIFEST.md) and the SDK has NO runtime resize command — checked
- * against monday-sdk-js 0.5.9's execute types. So a form wider than a phone
- * column has to open as its own modal via `openAppFeatureModal`, which takes an
- * explicit pixel size. This module computes it.
+ * against monday-sdk-js 0.5.9's execute types. So the fill form opens as its own
+ * modal via `openAppFeatureModal`, which takes an explicit pixel size.
  *
- * Layout: a 2-column grid, at most FORM_MAX_ROWS rows tall; anything beyond
- * that scrolls inside the form rather than growing the modal.
- *
- * The two controls that render TWO inputs of their own — `date` (day + hour) and
- * `timeline` (from + to) — take the full row, so nothing ends up in a half-width
- * box it cannot fit. They therefore cost two grid cells.
+ * Layout follows monday's native item form: a LIST of rows, one field per row,
+ * each row a fixed label column (icon + title) beside a wide control column.
+ * Width is therefore constant — it is the layout, not the field count — and only
+ * the height follows the rows, capped at FORM_MAX_ROWS with the list scrolling
+ * past that.
  *
  * Every constant below mirrors OnClickDialog.css. Changing one without the other
  * makes the modal either clip the form or float in empty space.
  */
 
-import { fieldControlFor } from '../domain/columnFields.js';
-
-export const FORM_COLUMNS = 2;
 export const FORM_MAX_ROWS = 4;
 
-export const FIELD_COLUMN_WIDTH_PX = 240;
-export const FIELD_ROW_HEIGHT_PX = 78;
-export const FORM_GAP_PX = 16;
+export const LABEL_COLUMN_WIDTH_PX = 150;
+export const CONTROL_COLUMN_WIDTH_PX = 320;
+export const FIELD_ROW_HEIGHT_PX = 48;
+export const FORM_GAP_PX = 12;
+export const FORM_COLUMN_GAP_PX = 16;
 export const FORM_PADDING_PX = 20;
 export const FORM_HEADER_PX = 64;
 export const FORM_ACTIONS_PX = 64;
 
-/** Controls that render two inputs and therefore claim the whole row. */
-const FULL_ROW_CONTROLS = new Set(['date', 'timeline']);
-
-export function isFullRowControl(columnType) {
-  return FULL_ROW_CONTROLS.has(fieldControlFor(columnType));
-}
-
-function cellsFor(field) {
-  return isFullRowControl(field?.type) ? FORM_COLUMNS : 1;
-}
-
 /**
- * Grid geometry for a set of required fields.
+ * Row geometry for a set of required fields.
  *
  * @param {{type: string}[]} fields  the required columns, in display order
- * @returns {{columns: number, rows: number, cells: number, scrolls: boolean}}
- *   `cells` counts grid cells (a full-row field counts as FORM_COLUMNS);
- *   `scrolls` is true when the content is taller than the capped height.
+ * @returns {{rows: number, fields: number, scrolls: boolean}}
+ *   `rows` is how many are VISIBLE (capped); `fields` is how many exist;
+ *   `scrolls` is true when the list is longer than the capped height.
  */
-export function requiredFormGrid(fields) {
-  const list = Array.isArray(fields) ? fields : [];
-  const cells = list.reduce((total, field) => total + cellsFor(field), 0);
-
-  if (cells === 0) {
-    // No fields is not a real state for this modal, but a zero-height modal
-    // would be unrecoverable, so keep one row.
-    return {
-      columns: 1, rows: 1, cells: 0, scrolls: false,
-    };
+export function requiredFormLayout(fields) {
+  const count = Array.isArray(fields) ? fields.length : 0;
+  if (count === 0) {
+    // No fields is not a real state for this modal, but a zero-height modal would
+    // be unrecoverable, so keep one row.
+    return { rows: 1, fields: 0, scrolls: false };
   }
-
-  const columns = Math.min(cells, FORM_COLUMNS);
-  const neededRows = Math.ceil(cells / columns);
   return {
-    columns,
-    rows: Math.min(neededRows, FORM_MAX_ROWS),
-    cells,
-    scrolls: neededRows > FORM_MAX_ROWS,
+    rows: Math.min(count, FORM_MAX_ROWS),
+    fields: count,
+    scrolls: count > FORM_MAX_ROWS,
   };
 }
 
@@ -78,17 +56,18 @@ export function requiredFormGrid(fields) {
  * @returns {{width: string, height: string}}
  */
 export function requiredFormModalSize(fields) {
-  const { columns, rows } = requiredFormGrid(fields);
+  const { rows } = requiredFormLayout(fields);
 
-  const width = FORM_PADDING_PX * 2
-    + columns * FIELD_COLUMN_WIDTH_PX
-    + Math.max(0, columns - 1) * FORM_GAP_PX;
+  const width = (FORM_PADDING_PX * 2)
+    + LABEL_COLUMN_WIDTH_PX
+    + FORM_COLUMN_GAP_PX
+    + CONTROL_COLUMN_WIDTH_PX;
 
-  const height = FORM_PADDING_PX * 2
+  const height = (FORM_PADDING_PX * 2)
     + FORM_HEADER_PX
     + FORM_ACTIONS_PX
-    + rows * FIELD_ROW_HEIGHT_PX
-    + Math.max(0, rows - 1) * FORM_GAP_PX;
+    + (rows * FIELD_ROW_HEIGHT_PX)
+    + (Math.max(0, rows - 1) * FORM_GAP_PX);
 
   return { width: `${width}px`, height: `${height}px` };
 }

@@ -11,6 +11,7 @@ import React from 'react';
 import { dropdownOptionsFrom, fieldControlFor } from '../../domain/columnFields';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';
 import { PersonPicker } from '../shared/PersonPicker';
+import DateFieldControl from './DateFieldControl';
 
 // Control kinds that are a plain <input>, mapped to their HTML input type.
 const TEXT_INPUT_TYPES = {
@@ -57,23 +58,14 @@ function FieldControl({ column, value, onChange, disabled, controlId, labelId })
   }
 
   if (control === 'date') {
+    // The hour is set inside the picker, not as a second input beside the date.
     return (
-      <div className="twyst-field-row">
-        <input
-          id={controlId}
-          type="date"
-          value={value?.date ?? ''}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...value, date: event.target.value })}
-        />
-        <input
-          type="time"
-          aria-label="שעה"
-          value={value?.time ?? ''}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...value, time: event.target.value })}
-        />
-      </div>
+      <DateFieldControl
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        controlId={controlId}
+      />
     );
   }
 
