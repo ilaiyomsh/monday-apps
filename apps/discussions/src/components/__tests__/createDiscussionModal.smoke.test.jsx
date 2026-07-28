@@ -91,11 +91,13 @@ vi.mock('@generated/utils/mondayApi/board-config-store.js', () => ({
 
 const templateApi = vi.hoisted(() => ({
   createTopicsFromTemplate: vi.fn(),
+  linkTemplateTopics: vi.fn(),
   readDiscussionTopicsAsTemplate: vi.fn(),
 }));
 
 vi.mock('@generated/utils/templates.js', () => ({
   createTopicsFromTemplate: templateApi.createTopicsFromTemplate,
+  linkTemplateTopics: templateApi.linkTemplateTopics,
   countPoints: () => 0,
   readDiscussionTopicsAsTemplate: templateApi.readDiscussionTopicsAsTemplate,
 }));
@@ -169,6 +171,7 @@ beforeEach(() => {
   templateApi.readDiscussionTopicsAsTemplate.mockResolvedValue({
     topics: [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }],
   });
+  templateApi.linkTemplateTopics.mockResolvedValue(0);
 });
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -350,7 +353,7 @@ describe('CreateDiscussionModal', () => {
     expect(peoplePayload.discussionLeadID).toBeTruthy();
   });
 
-  it('round301 — a template stages the FIRST topic\'s points before the hand-off and the rest after', async () => {
+  it('round303 — the template never blocks the hand-off; the agenda builds in one background pass with linkLast', async () => {
     const TOPICS = [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }];
     templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: TOPICS }];
     // Sampled INSIDE the hand-off, so the ordering assertion is deterministic: with
@@ -370,62 +373,80 @@ describe('CreateDiscussionModal', () => {
     await act(async () => { fireEvent.click(submit); });
     await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
 
-    // STAGE 1 ran before the hand-off and created the TOPICS ONLY — an empty
-    // pointTopicIndexes list means "no points at all in this pass" (round302: half
-    // the work here, half in the card under the loading animation).
-    const stage1 = templateApi.createTopicsFromTemplate.mock.calls[0];
-    expect(stage1).toBeTruthy();
-    expect(stage1[1].topics).toHaveLength(2);
-    expect(stage1[2].pointTopicIndexes).toEqual([]);
-    expect(stage1[2].resumeState).toBeFalsy();
+    // round303 — NOTHING of the template blocks the hand-off: the modal closes
+    // after just the item save, so ZERO template passes had run at that moment.
+    expect(stagedCallsAtHandoff).toBe(0);
     // The card is told it is still being built, so ניהול דיון shows the loader.
     expect(onOptimisticCreate.mock.calls[0][0].__building).toBe(true);
-    // Exactly one staged pass had run when the card was handed off — the rest is deferred.
-    expect(stagedCallsAtHandoff).toBe(1);
 
-    // STAGE 2 runs after, RESUMING (so the topics stage 1 created are not remade)
-    // and with no point limit, and it bumps the card so the late points show up.
-    await waitFor(() => expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(2));
-    const stage2 = templateApi.createTopicsFromTemplate.mock.calls[1];
-    expect(stage2[2].resumeState).toBeTruthy();
-    expect(stage2[2].pointTopicIndexes).toBeUndefined();
+    // The whole agenda is built in the BACKGROUND, in one pass, and connected to
+    // the discussion only at the END (linkLast) — so the card's relation-based
+    // read pops it in complete on one fetch.
+    await waitFor(() => expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(1));
+    const bg = templateApi.createTopicsFromTemplate.mock.calls[0];
+    expect(bg[1].topics).toHaveLength(2);
+    expect(bg[2].linkLast).toBe(true);
+    expect(bg[2].pointTopicIndexes).toBeUndefined();
     await waitFor(() => expect(onStageAdvance).toHaveBeenCalled());
   });
 
-  it('round301 — a stage-1 template failure keeps the saved root, so retrying RESUMES instead of creating a second discussion', async () => {
+  it('round303 — a failed agenda build RETRIES from the checkpoint, then salvage-links created topics before reporting', async () => {
+    // linkLast means a mid-run failure leaves created topics INVISIBLE (unlinked).
+    // Contract: one resumed retry; if that fails too, whatever WAS created is
+    // linked to the discussion (salvage) so no real item is stranded — and only
+    // then does onStageError fire.
     const TOPICS = [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }];
     templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: TOPICS }];
     const checkpoint = {
       templateKey: 'k', topicResults: [{ sourceIndex: 0, id: 'T1' }],
       pointResults: [], linkedTopicSourceIndexes: [],
     };
-    // First pass: the root create succeeds, then the template work blows up. The
-    // resume state arrives ONLY on the thrown error — no onCheckpoint call — which
-    // is the case the catch block has to capture on its own.
-    templateApi.createTopicsFromTemplate.mockImplementationOnce(async () => {
-      const err = new Error('stage 1 template failed');
+    templateApi.createTopicsFromTemplate.mockImplementation(async () => {
+      const err = new Error('agenda build failed');
       err.templateResumeState = checkpoint;
       throw err;
     });
+    const onStageError = vi.fn();
+    await renderOpen({ onOptimisticCreate: vi.fn(), onCreated: vi.fn(), onStageError });
+    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
+    await act(async () => { fireEvent.click(screen.getByText('צור דיון').closest('button')); });
+
+    await waitFor(() => expect(onStageError).toHaveBeenCalled());
+    // Exactly two build attempts (original + one resumed retry)…
+    expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(2);
+    // …the retry resumed from the failure's checkpoint (nothing recreated)…
+    expect(templateApi.createTopicsFromTemplate.mock.calls[1][2].resumeState).toBe(checkpoint);
+    // …and the salvage link ran over that checkpoint before the error surfaced.
+    expect(templateApi.linkTemplateTopics).toHaveBeenCalledWith('99', checkpoint);
+  });
+
+  it('round303 — a SINGLE transient build failure recovers silently via the resumed retry', async () => {
+    // With the retry in place, one transient failure must NOT surface: the second
+    // attempt resumes from the checkpoint and finishes, the card completes as if
+    // nothing happened, and the discussion is never duplicated.
+    const TOPICS = [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }];
+    templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: TOPICS }];
+    templateApi.createTopicsFromTemplate.mockImplementationOnce(async () => {
+      throw new Error('transient background failure');
+    });
     const onOptimisticCreate = vi.fn();
-    await renderOpen({ onOptimisticCreate, onCreated: vi.fn(), onStageError: vi.fn() });
+    const onCreated = vi.fn();
+    const onStageError = vi.fn();
+    await renderOpen({ onOptimisticCreate, onCreated, onStageError });
     fireEvent.click(screen.getByText('בחר סוג דיון'));
     await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
     const submit = screen.getByText('צור דיון').closest('button');
-
     await act(async () => { fireEvent.click(submit); });
-    await waitFor(() => expect(
-      screen.getByText('צור דיון').closest('button').getAttribute('aria-disabled')
-    ).toBe('false'));
-    // Nothing was handed off — the modal is still open on the failure.
-    expect(onOptimisticCreate).not.toHaveBeenCalled();
-    expect(boardApi.create).toHaveBeenCalledTimes(1);
 
-    // Retry the SAME submission: no second root, and the template pass resumes.
-    await act(async () => { fireEvent.click(screen.getByText('צור דיון').closest('button')); });
+    // The card WAS handed off (the failure came later, in the background)…
     await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
+    // …the retry finished the agenda, so the flow COMPLETES rather than erroring…
+    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(2);
+    expect(onStageError).not.toHaveBeenCalled();
+    // …and one root item only — a background failure must never duplicate it.
     expect(boardApi.create).toHaveBeenCalledTimes(1);
-    expect(templateApi.createTopicsFromTemplate.mock.calls[1][2].resumeState).toBe(checkpoint);
   });
 
   it('round300 — without onOptimisticCreate it keeps the awaited path (id via onCreated only)', async () => {

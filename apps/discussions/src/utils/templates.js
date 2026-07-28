@@ -174,6 +174,34 @@ export function sanitizeTypeTemplate(template, id) {
  *
  * @returns {Promise<{topics:number, points:number}>} how many were created.
  */
+/*
+ * round303 — SALVAGE for a failed linkLast run. With linkLast the topics are
+ * created before they are connected, so a mid-run failure leaves them as real
+ * but INVISIBLE board items (the card reads through the relation). This links
+ * whatever the checkpoint says was created and not yet linked, so nothing that
+ * exists stays unreachable. Best-effort by design: the caller reports the
+ * failure either way; this only bounds the damage.
+ */
+export async function linkTemplateTopics(discussionId, resumeState) {
+  const boardId = getBoardId('topics');
+  const relation = (getColumns('topics') || {}).discussionLinkID;
+  if (!discussionId || !boardId || !relation?.id) return 0;
+  const linked = new Set((resumeState?.linkedTopicSourceIndexes || []).map(Number));
+  const topics = (resumeState?.topicResults || [])
+    .filter((t) => t?.id != null && !linked.has(Number(t.sourceIndex)))
+    .map((t) => ({ id: String(t.id), sourceIndex: Number(t.sourceIndex) }));
+  if (!topics.length) return 0;
+  let count = 0;
+  for (const batch of buildTopicRelationBatches({
+    boardId, discussionId, relationColumnId: relation.id, topics,
+  })) {
+    const data = await api(batch.query, batch.variables, 'linkTemplateTopics', { retry: false });
+    const parsed = parseAliasedMutationResult(batch, { data, errors: [] });
+    count += parsed.successful.length;
+  }
+  return count;
+}
+
 export async function createTopicsFromTemplate(discussionId, template, {
   onProgress,
   existingTopicIds = [],
@@ -185,6 +213,9 @@ export async function createTopicsFromTemplate(discussionId, template, {
   // pass's checkpoint creates the rest. Lets a fresh discussion open as soon as
   // its topics + the first topic's points exist, instead of after every point.
   pointTopicIndexes = null,
+  // round303 — connect the topics to the discussion LAST (after all points), so
+  // the card's relation-based read sees the agenda only once it is complete.
+  linkLast = false,
 } = {}) {
   const clean = sanitizeTemplate(template);
   if (!discussionId || !clean.topics.length) return { topics: 0, points: 0, topicIds: [] };
@@ -401,7 +432,8 @@ export async function createTopicsFromTemplate(discussionId, template, {
     }
   }
 
-  if (relation?.id) {
+  const linkTopicsToDiscussion = async () => {
+    if (!relation?.id) return;
     const linked = new Set(state.linkedTopicSourceIndexes);
     const unlinkedTopics = state.topicResults.filter((topic) => !linked.has(topic.sourceIndex));
     for (const batch of buildTopicRelationBatches({
@@ -421,7 +453,13 @@ export async function createTopicsFromTemplate(discussionId, template, {
         throw attachResumeState(err);
       }
     }
-  }
+  };
+
+  // round303 (owner idea) — `linkLast` builds the whole agenda OFF-CARD first
+  // (topics, then every point) and connects it to the discussion only at the END.
+  // The discussion's relation is the card's read path, so with linkLast the agenda
+  // pops in COMPLETE on one fetch instead of appearing as bare topics that fill in.
+  if (!linkLast) await linkTopicsToDiscussion();
 
   const completedPoints = new Set(
     state.pointResults.map((result) => `${result.topicSourceIndex}:${result.pointIndex}`)
@@ -450,6 +488,8 @@ export async function createTopicsFromTemplate(discussionId, template, {
       throw attachResumeState(protectAmbiguousCreate(err, batch, 'points'));
     }
   }
+
+  if (linkLast) await linkTopicsToDiscussion();
 
   const order = buildFreshTopicOrderPayload({
     topicResults: state.topicResults,

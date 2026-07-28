@@ -31,6 +31,7 @@ import { computeRibbonDropTarget } from './ribbonDrop.js';
 import {
   maxPos, readPos, writePos, computeEdges, computeThumb, posFromThumbDrag, stepFrom,
 } from './ribbonScroll.js';
+import { clampTopicName, displayTopicNameLines } from './topicName.js';
 import { assignTopicAccents, topicColorStartIndex } from './topicAccents.js';
 import { buildMentionRoster } from '@generated/utils/mention.js';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
@@ -1059,10 +1060,23 @@ export function TopicsTab({
   const handleAddTopic = (where) => {
     const w = where || addWhere;
     if (!newTopicText.trim()) { setAddWhere(null); setNewTopicText(''); return; }
+    // round303 (owner rule) — a topic name holds at most 6 words. Truncate rather
+    // than block (blur commits, so blocking would swallow the whole add), but say
+    // so, so no text is lost silently.
+    const { name: clampedName, clamped } = clampTopicName(newTopicText);
+    if (clamped) onNotify?.('שם נושא מוגבל ל-6 מילים ולשתי שורות — השם קוצר', 'error');
     pendingActivateWhereRef.current = w === 'start' ? 'start' : 'end';
-    addTopic(newTopicText.trim(), w === 'start' ? {} : { position: 'bottom' });
+    addTopic(clampedName, w === 'start' ? {} : { position: 'bottom' });
     setNewTopicText('');
     setAddWhere(null);
+  };
+  // Same 6-word rule on RENAME (both Enter and blur commit through here).
+  const commitTopicRename = (topic, rawValue) => {
+    const v = String(rawValue ?? '').trim();
+    if (!v || !renameTopic) return;
+    const { name: clampedName, clamped } = clampTopicName(v);
+    if (clamped) onNotify?.('שם נושא מוגבל ל-6 מילים ולשתי שורות — השם קוצר', 'error');
+    if (clampedName !== topic.name) renameTopic(topic.id, clampedName);
   };
   useEffect(() => {
     const w = pendingActivateWhereRef.current;
@@ -1527,20 +1541,24 @@ export function TopicsTab({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      const v = e.currentTarget.value.trim();
-                      if (v && v !== topic.name && renameTopic) renameTopic(topic.id, v);
+                      commitTopicRename(topic, e.currentTarget.value);
                       setRenamingTopicId(null);
                     }
                     if (e.key === 'Escape') { e.preventDefault(); setRenamingTopicId(null); }
                   }}
                   onBlur={(e) => {
-                    const v = e.currentTarget.value.trim();
-                    if (v && v !== topic.name && renameTopic) renameTopic(topic.id, v);
+                    commitTopicRename(topic, e.currentTarget.value);
                     setRenamingTopicId(null);
                   }}
                 />
               ) : (
-                <span className={styles.ribbonName}>{topic.name}</span>
+                // round303 — explicit line breaks per the owner's rule (≤3 words /
+                // ≤16 chars per line), instead of letting the browser wrap wherever.
+                <span className={styles.ribbonName}>
+                  {displayTopicNameLines(topic.name).map((line, li) => (
+                    <span key={li} className={styles.ribbonNameLine}>{line}</span>
+                  ))}
+                </span>
               )}
               {excluded && <EyeOff size={12} className={styles.ribbonEye} aria-label="נושא מוסתר" />}
             </div>
@@ -1551,41 +1569,11 @@ export function TopicsTab({
             topic (gapBeforeId null while dragging). */}
         {draggingTopicId && gapBeforeId == null && <span className={styles.ribbonDropBar} aria-hidden="true" />}
         </div>
-        {/* round302 — reachability for what the track hides. The fades appear ONLY
-            when there is something that way, so a short agenda stays clean; the
-            chevrons are round, unlike the puzzle-shaped "+" beside them. */}
-        <div
-          className={`${styles.ribbonEdge} ${styles.ribbonEdgeStart} ${ribbonScrollState.hasOverflow && !ribbonScrollState.atStart ? styles.ribbonEdgeOn : ''}`}
-          aria-hidden={ribbonScrollState.atStart}
-        >
-          <button
-            type="button"
-            className={styles.ribbonChev}
-            title="לנושאים הקודמים"
-            aria-label="לנושאים הקודמים"
-            tabIndex={ribbonScrollState.hasOverflow && !ribbonScrollState.atStart ? 0 : -1}
-            onClick={() => scrollRibbon('start')}
-          >
-            <DropdownChevronDown className={styles.ribbonChevIconStart} />
-          </button>
-        </div>
-        <div
-          className={`${styles.ribbonEdge} ${styles.ribbonEdgeEnd} ${ribbonScrollState.hasOverflow && !ribbonScrollState.atEnd ? styles.ribbonEdgeOn : ''}`}
-          aria-hidden={ribbonScrollState.atEnd}
-        >
-          <button
-            type="button"
-            className={styles.ribbonChev}
-            title="לנושאים הבאים"
-            aria-label="לנושאים הבאים"
-            tabIndex={ribbonScrollState.hasOverflow && !ribbonScrollState.atEnd ? 0 : -1}
-            onClick={() => scrollRibbon('end')}
-          >
-            <DropdownChevronDown className={styles.ribbonChevIconEnd} />
-          </button>
-        </div>
-        {/* The slim, draggable position indicator — on the strip's bottom rule, so
-            it adds no height and the 48px contract holds. */}
+        {/* round303 (owner request) — the edge fades + round chevrons are GONE: the
+            slim draggable bar below is the one scroll affordance. It is PRESENT
+            whenever the topics overflow the row, and absent when everything fits.
+            It sits on the strip's bottom rule, so it adds no height and the 48px
+            contract holds. */}
         <div
           ref={sbarRef}
           // Visibility is driven by hasOverflow, which is measured off the TRACK

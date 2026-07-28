@@ -31,6 +31,12 @@
 .buildingText {
   font-size: 13.5px;
   color: var(--secondary-text-color, #676879);
+  /* round303 — the trailing "…" must render at the sentence's END, which in
+     Hebrew is the LEFT. The surrounding pane resolved LTR, so the neutral
+     ellipsis was flipped to the right; plaintext re-resolves by the first
+     strong character (Hebrew ⇒ RTL) regardless of the container. */
+  direction: rtl;
+  unicode-bidi: plaintext;
 }
 .toolbar {
   display: flex;
@@ -460,21 +466,25 @@
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
   transform: translate(-50%, -50%);
 }
-/* round302 — a long topic name WRAPS to two lines inside the tile instead of being
-   cut to an ellipsis. line-height 1.12 × 2 lines ≈ 29px, which fits the 37px of
-   tile inside the 48px strip, so the strip's height does not move. A short name
-   still renders as one centered line. */
+/* round303 — the line breaks are computed (topicName.js: ≤3 words / ≤16 chars per
+   line), so each .ribbonNameLine is one NON-wrapping row; the 6-word name ceiling
+   keeps the whole name inside two rows. line-height 1.12 × 2 ≈ 29px fits the 37px
+   of tile inside the 48px strip, so the strip's height does not move. */
 .ribbonName {
   min-width: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   overflow: hidden;
-  white-space: normal;
-  overflow-wrap: anywhere;
   line-height: 1.12;
   max-height: 2.24em;
   text-align: center;
+}
+.ribbonNameLine {
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .ribbonEye { flex-shrink: 0; color: var(--secondary-text-color, #676879); }
 .ribbonRenameInput {
@@ -511,57 +521,11 @@
 }
 .ribbonAddEnd { order: 999; } /* leftmost — end-of-discussion "+" */
 
-/* ===== round302 — scroll affordances =======================================
-   All absolutely positioned INSIDE the 48px strip, so none of them adds height.
-   The "+" pieces keep the puzzle silhouette; the chevrons are ROUND, so the two
-   can never be mistaken for each other (the owner's explicit concern). */
-.ribbonEdge {
-  position: absolute;
-  inset-block: 5px;
-  width: 64px;
-  display: flex;
-  align-items: center;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.16s ease;
-  z-index: 3;
-}
-.ribbonEdgeStart {
-  /* toward the FIRST topic — the right side in RTL, just inside the start "+" */
-  inset-inline-end: 40px;
-  justify-content: flex-end;
-  padding-inline-end: 4px;
-  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--primary-background-color, #fff) 84%, transparent) 42%, var(--primary-background-color, #fff));
-}
-.ribbonEdgeEnd {
-  inset-inline-start: 40px;
-  justify-content: flex-start;
-  padding-inline-start: 4px;
-  background: linear-gradient(to left, transparent, color-mix(in srgb, var(--primary-background-color, #fff) 84%, transparent) 42%, var(--primary-background-color, #fff));
-}
-.ribbonEdgeOn { opacity: 1; }
-.ribbonChev {
-  pointer-events: auto;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid var(--ui-border-color, #d0d4e4);
-  background: var(--primary-background-color, #fff);
-  color: var(--secondary-text-color, #676879);
-  cursor: pointer;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.16);
-}
-.ribbonChev:hover {
-  color: #fff;
-  background: var(--primary-color, #0073ea);
-  border-color: var(--primary-color, #0073ea);
-}
-/* The slim drag bar sits ON the strip's bottom rule — visible and grabbable,
-   costing zero height. */
+/* ===== round303 — ONE scroll affordance ====================================
+   The edge fades + round chevrons were removed (owner request). The slim drag
+   bar below is the whole story: PRESENT whenever the topics overflow the row,
+   absent when everything (topics + both "+" pieces) fits. It sits ON the
+   strip's bottom rule, costing zero height, so the 48px contract holds. */
 .ribbonSbar {
   position: absolute;
   inset-block-end: 0;
@@ -583,10 +547,6 @@
   border-radius: 3px;
   background: var(--primary-color, #0073ea);
 }
-/* The shared chevron glyph points DOWN; rotate it into the two horizontal
-   directions (the strip is RTL, so "next" points left). */
-.ribbonChevIconStart { transform: rotate(-90deg); }
-.ribbonChevIconEnd { transform: rotate(90deg); }
 .ribbonAdd:hover { color: var(--primary-color, #0073ea); background: var(--primary-selected-color, #e6f1fd); }
 /* the inline add — looks like a TOPIC PIECE with an editable box already inside;
    Enter or clicking elsewhere (blur) commits. */

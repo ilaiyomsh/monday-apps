@@ -82,10 +82,22 @@ describe('TopicsTab — the ribbon scroll track (round302)', () => {
     expect(track.contains(endPlus)).toBe(false);
   });
 
-  it('exposes both scroll chevrons, distinct from the "+" pieces', () => {
+  it('round303 — the scroll chevrons are GONE; the drag bar is the one scroll affordance', () => {
     render(<TopicsTab discussion={{ id: 'D1' }} canEdit />);
-    expect(screen.getByLabelText('לנושאים הקודמים')).toBeTruthy();
-    expect(screen.getByLabelText('לנושאים הבאים')).toBeTruthy();
+    expect(screen.queryByLabelText('לנושאים הקודמים')).toBeNull();
+    expect(screen.queryByLabelText('לנושאים הבאים')).toBeNull();
+  });
+
+  it('round303 — a long topic name renders as computed lines (≤3 words / ≤16 chars each)', () => {
+    state.items = [{
+      id: 't1',
+      name: 'אחת שתיים שלוש ארבע חמש שש',
+      _subitems: [],
+      notForDiscussion: false,
+    }];
+    const { container } = render(<TopicsTab discussion={{ id: 'D1' }} canEdit />);
+    const lines = [...container.querySelectorAll('.ribbonNameLine')].map((el) => el.textContent);
+    expect(lines).toEqual(['אחת שתיים שלוש', 'ארבע חמש שש']);
   });
 
   it('shows the drag bar from OVERFLOW alone, never from the thumb it has to size', () => {
