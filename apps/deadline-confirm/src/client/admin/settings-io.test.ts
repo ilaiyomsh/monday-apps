@@ -32,6 +32,7 @@ const section = (over: Partial<DigestDraft['sections'][number]> = {}) => ({
   dateColumnId: 'date4',
   dateColumnTitle: 'תאריך התחלה',
   buttonId: 'b_start001',
+  buttonIds: ['b_start001'],
   includeStatusLabelIds: [3],
   ...over,
 });
@@ -42,6 +43,7 @@ const digest = (sections: DigestDraft['sections']): DigestDraft => ({
   usersPeopleColumnId: 'person',
   usersEmailColumnId: 'email_mm5d3357',
   subject: 'המשימות שלך — נדרש עדכון סטטוס',
+  sendHour: 8,
   sections,
 });
 
