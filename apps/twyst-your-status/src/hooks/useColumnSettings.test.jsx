@@ -15,6 +15,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
 import { harness } from '../dev-harness/monday-sdk-stub.js';
+import { migrateSettings } from '../domain/settingsSchema.js';
+import { cacheSet } from '../utils/swrCache.js';
 import useColumnSettings from './useColumnSettings.js';
 
 /** Hoisted so the vi.mock factory below can close over it. */
@@ -121,5 +123,92 @@ describe('useColumnSettings — the false-empty retry has ONE owner', () => {
     expect(getItemCalls).toHaveLength(2);
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBe(null);
+  });
+});
+
+/**
+ * The warm-cache path, which is the common one: the picker iframe is destroyed on
+ * every close, so a re-open re-mounts against a populated swrCache.
+ *
+ * Two things have to be arranged for it to be reachable at all:
+ *   1. swrCache disables itself when import.meta.env.MODE === 'test' (so app code
+ *      under test never sees a cache it did not set up). The hook never passes
+ *      `force`, so without stubbing MODE the hook ALWAYS starts cold and every
+ *      assertion below would pass vacuously against a cold read.
+ *   2. The seed goes through the real cacheSet, `force`d past that same guard, so
+ *      the entry carries a real envelope (ts/sig) and the TTL logic is exercised
+ *      rather than bypassed.
+ * The `loading === false` + seeded-settings assertion at the top of each test is a
+ * TRIPWIRE for (1): if a vitest upgrade breaks vi.stubEnv over import.meta.env,
+ * these degrade into cold-cache tests that still pass. It fails loudly instead.
+ */
+describe('useColumnSettings — a revalidation that confirms nothing must publish nothing', () => {
+  const CACHE_KEY = `settings:${BOARD_ID}:${COLUMN_ID}`;
+
+  /** Warm the cache the way a previous open would have left it. */
+  const seedWarm = (value) => {
+    vi.stubEnv('MODE', 'development');
+    cacheSet(CACHE_KEY, migrateSettings(value), { force: true });
+  };
+
+  /** One storage read has landed and its state update has flushed. */
+  const revalidated = async (reads) => {
+    await vi.waitFor(() => expect(getItemCalls).toHaveLength(reads));
+    await act(async () => {
+      await new Promise((resolve) => { setTimeout(resolve, 0); });
+    });
+  };
+
+  it('keeps the very same settings object when storage still holds what the cache holds', async () => {
+    seedWarm(validV1());
+    harness.seedStorage(STORAGE_KEY, validV1());
+
+    const { result } = renderHook(() => useColumnSettings(context));
+
+    // Tripwire + the point of the cache: painted, not loading, before any await.
+    expect(result.current.loading).toBe(false);
+    expect(result.current.settings).toEqual(validV1());
+
+    const painted = result.current.settings;
+    await revalidated(1);
+
+    // Identity, not equality. migrateSettings builds a fresh object on every read,
+    // so publishing it unconditionally churns the identity that OnClickDialog's
+    // fetch effect depends on — a second round trip, and a dialog that goes blank
+    // between the two because the boot overlay is already down.
+    expect(result.current.settings).toBe(painted);
+  });
+
+  it('still surfaces storage that genuinely changed since the cache was written', async () => {
+    // The cheap wrong fix for the test above is to skip the update whenever a cache
+    // existed. That silently pins the picker to stale rules; this fails on it.
+    seedWarm(validV1());
+    const edited = { ...validV1(), hiddenLabelIds: ['1', '3'] };
+    harness.seedStorage(STORAGE_KEY, edited);
+
+    const { result } = renderHook(() => useColumnSettings(context));
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.settings).toEqual(validV1());
+
+    await vi.waitFor(() => {
+      expect(result.current.settings).toEqual(edited);
+    });
+  });
+
+  it('keeps the same object across an explicit reload() that finds no change', async () => {
+    seedWarm(validV1());
+    harness.seedStorage(STORAGE_KEY, validV1());
+
+    const { result } = renderHook(() => useColumnSettings(context));
+    await revalidated(1);
+    const painted = result.current.settings;
+
+    await act(async () => {
+      result.current.reload();
+    });
+    await revalidated(2);
+
+    expect(result.current.settings).toBe(painted);
   });
 });
