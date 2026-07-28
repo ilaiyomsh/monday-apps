@@ -4,6 +4,7 @@ import { assertNoGraphQLErrors } from '../utils/mondayApi/assertGraphQL.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
 import {
   addManagedDropdownLabel,
+  renameManagedDropdownLabel,
   detectManagedDropdownColumnId,
 } from '../utils/mondayApi/managedColumns.js';
 import logger from '../utils/logger.js';
@@ -191,6 +192,135 @@ export async function addDropdownLabel({ boardKey, alias, title, managedColumnId
     (o) => (o.label ?? '').trim().toLowerCase() === name.toLowerCase()
   );
   return { id: added ? added.id : null, managedColumnId: resolvedManagedId };
+}
+
+/**
+ * round304 — RENAME an existing label of a dropdown column (by board key + alias
+ * + label id). The sibling of addDropdownLabel, with the SAME dual path: the
+ * account-level managed mutation when the column is a managed instance (hint, or
+ * self-healed by detection after monday rejects the board-level edit with the
+ * managed-structure error), otherwise the board-level update_dropdown_column with
+ * the FULL label set re-sent (a partial set DELETES the omitted labels) at the
+ * column's fresh revision.
+ *
+ * This is how a discussion TYPE — and therefore its template — is renamed. No item
+ * migration is needed: a dropdown item stores label IDs, so every existing
+ * discussion of that type shows the new name immediately.
+ *
+ * - Missing name / labelId / board / column ⇒ throws.
+ * - A name equal to the label's current text is a no-op ⇒ { unchanged: true }.
+ * - Another ACTIVE label already holding that name throws with code 'duplicate'
+ *   (silently merging two types is never the intent).
+ * - On success the module cache is refreshed from the API and subscribers
+ *   re-render, so open pickers show the new text.
+ *
+ * @param {{ boardKey: string, alias: string, labelId: string|number, title: string,
+ *           managedColumnId?: string|null }} args
+ * @returns {Promise<{ managedColumnId: string|null, unchanged?: boolean }>}
+ */
+export async function renameDropdownLabel({ boardKey, alias, labelId, title, managedColumnId = null }) {
+  const name = String(title || '').trim();
+  const boardId = getBoardId(boardKey) || null;
+  const colId = getColumns(boardKey)?.[alias]?.id || null;
+  if (!name || labelId == null || !boardId || !colId) {
+    throw new Error('renameDropdownLabel: missing name/labelId/board/column');
+  }
+
+  let resolvedManagedId = managedColumnId || getColumns(boardKey)?.[alias]?.managedColumnId || null;
+  let unchanged = false;
+
+  if (resolvedManagedId) {
+    const r = await renameManagedDropdownLabel({ managedColumnId: resolvedManagedId, labelId, title: name });
+    unchanged = r?.unchanged === true;
+  } else {
+    const { revision, labels } = await loadRawDropdown(boardId, colId);
+    const target = labels.find((l) => String(l.id) === String(labelId));
+    if (!target) throw new Error('renameDropdownLabel: label not found');
+    if ((target.label ?? '').trim() === name) return { managedColumnId: null, unchanged: true };
+    const clash = labels.find((l) => (
+      !l.is_deactivated
+      && String(l.id) !== String(labelId)
+      && (l.label ?? '').trim().toLowerCase() === name.toLowerCase()
+    ));
+    if (clash) {
+      const dupe = new Error(`סוג דיון בשם "${name}" כבר קיים`);
+      dupe.code = 'duplicate';
+      throw dupe;
+    }
+
+    // Full-set resend with ONLY the target's text replaced — its id is kept, which
+    // is what preserves every item's value.
+    const labelsInput = labels.map((l) => ({
+      id: l.id,
+      label: String(l.id) === String(labelId) ? name : (l.label ?? ''),
+      is_deactivated: l.is_deactivated === true,
+    }));
+
+    try {
+      const res = await api(
+        `mutation ($boardId: ID!, $columnId: String!, $revision: String!, $s: UpdateDropdownColumnSettingsInput!) {
+           update_dropdown_column(board_id: $boardId, id: $columnId, revision: $revision, settings: $s) { id }
+         }`,
+        { boardId: String(boardId), columnId: String(colId), revision: String(revision ?? ''), s: { labels: labelsInput } },
+        'renameDropdownLabel'
+      );
+      assertNoGraphQLErrors(res, { functionName: 'renameDropdownLabel' });
+    } catch (err) {
+      // Same self-heal as addDropdownLabel: this discriminator means the column is
+      // a MANAGED instance, so the edit belongs at the account level.
+      const isManagedStructure =
+        err?.errorCode === 'INVALID_ARGUMENT_EXCEPTION' &&
+        String(err?.message || '').includes('notices.column.settings.update.error.structure');
+      if (!isManagedStructure) throw err;
+      const uuid = await detectManagedDropdownColumnId(boardId, colId);
+      if (!uuid) throw err;
+      logger.warn('useDropdownOptions', 'dropdown column is managed — rename self-healed to the managed path', {
+        boardKey, alias, colId, managedColumnId: uuid,
+      });
+      const r = await renameManagedDropdownLabel({ managedColumnId: uuid, labelId, title: name });
+      resolvedManagedId = uuid;
+      unchanged = r?.unchanged === true;
+    }
+  }
+
+  const fresh = await load(boardId, colId);
+  cache.set(`${boardId}:${colId}`, fresh);
+  notify();
+  logger.info('useDropdownOptions', 'renamed dropdown label', {
+    boardKey, alias, labelId, name, managed: !!resolvedManagedId, unchanged,
+  });
+  return { managedColumnId: resolvedManagedId, unchanged };
+}
+
+/**
+ * round304 — rename a label identified by its TEXT rather than its id. Used for
+ * MIRRORED label sets: the tasks board's own "סוג דיון" dropdown (`taskTypeID`)
+ * carries the same texts as the discussions type column and is bridged to it BY
+ * TEXT (previous-tasks-by-type), so renaming a type must rename that label too or
+ * existing tasks fall out of the by-type view. Their label IDS are unrelated, so
+ * only the text can locate it.
+ *
+ * Returns `{ missing: true }` when no active label carries `fromTitle` — not an
+ * error: the mirror may legitimately not have that label (unmapped column, or the
+ * same MANAGED column, already renamed by the primary call).
+ *
+ * @param {{ boardKey: string, alias: string, fromTitle: string, title: string }} args
+ */
+export async function renameDropdownLabelByText({ boardKey, alias, fromTitle, title }) {
+  const from = String(fromTitle || '').trim();
+  const name = String(title || '').trim();
+  const boardId = getBoardId(boardKey) || null;
+  const colId = getColumns(boardKey)?.[alias]?.id || null;
+  if (!from || !name) throw new Error('renameDropdownLabelByText: missing fromTitle/title');
+  if (!boardId || !colId) return { missing: true };
+  const key = `${boardId}:${colId}`;
+  const current = cache.has(key) ? cache.get(key) : await load(boardId, colId);
+  cache.set(key, current);
+  const match = (current.options || []).find(
+    (o) => (o.label ?? '').trim().toLowerCase() === from.toLowerCase()
+  );
+  if (!match) return { missing: true };
+  return renameDropdownLabel({ boardKey, alias, labelId: match.id, title: name });
 }
 
 // Raw column read for the WRITE path: unlike load(), keeps deactivated labels

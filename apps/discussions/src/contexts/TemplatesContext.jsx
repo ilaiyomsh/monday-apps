@@ -2,7 +2,16 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { monday } from '../utils/mondayApi/monday-client.js';
 import { useMondayContext } from './MondayContext.jsx';
 import { sanitizeTemplate, sanitizeParticipantTemplate, sanitizeTypeTemplate } from '../utils/templates.js';
-import { loadTypeExportAssets as loadTypeExportAssetsAt, saveTypeExportAssets as saveTypeExportAssetsAt } from '../utils/exportAssets.js';
+import {
+  loadTypeExportAssets as loadTypeExportAssetsAt,
+  saveTypeExportAssets as saveTypeExportAssetsAt,
+  moveTypeExportAssets as moveTypeExportAssetsAt,
+} from '../utils/exportAssets.js';
+import {
+  renameTypeTemplates,
+  renameTypeInAssignments,
+  renameTypeColors,
+} from '../utils/typeRename.js';
 import { stableColorForKey, randomPaletteColor, colorNameToCss } from '../constants/mondayPalette.js';
 import logger from '../utils/logger.js';
 
@@ -185,8 +194,16 @@ export function TemplatesProvider({ children }) {
     load();
   }, [context, load]);
 
+  /*
+   * round304 — `strict`: also RETHROW a real-instance write failure. The default
+   * (log-only) is right for a single CRUD action — the user sees the toast and the
+   * screen still reflects what they did — but a multi-store migration (a type
+   * rename) must not report success when one of its writes was lost: the monday
+   * label has already changed, so a refresh would come back to data keyed by the
+   * old name. Local dev (no instance) keeps the quiet in-memory path either way.
+   */
   const persist = useCallback(
-    async (next) => {
+    async (next, { strict = false } = {}) => {
       commit(next);
       try {
         await monday.storage.setItem(instanceKey(context), JSON.stringify({ templates: next }));
@@ -197,6 +214,7 @@ export function TemplatesProvider({ children }) {
         // (WARN -> no toast), matching SettingsContext's tolerance.
         if (context?.instanceId || context?.boardId) {
           logger.error('TemplatesContext', 'שמירת התבנית נכשלה — ייתכן שהשינוי לא נשמר', err);
+          if (strict) throw err;
         } else {
           logger.warn('TemplatesContext', 'אחסון תבניות לא זמין (פיתוח מקומי) — נשמר בזיכרון בלבד', err);
         }
@@ -232,7 +250,7 @@ export function TemplatesProvider({ children }) {
   );
 
   const persistParticipants = useCallback(
-    async (next) => {
+    async (next, { strict = false } = {}) => {
       commitParticipants(next);
       try {
         await monday.storage.setItem(
@@ -242,6 +260,7 @@ export function TemplatesProvider({ children }) {
       } catch (err) {
         if (context?.instanceId || context?.boardId) {
           logger.error('TemplatesContext', 'שמירת תבנית המשתתפים נכשלה — ייתכן שהשינוי לא נשמר', err);
+          if (strict) throw err;
         } else {
           logger.warn('TemplatesContext', 'אחסון תבניות לא זמין (פיתוח מקומי) — נשמר בזיכרון בלבד', err);
         }
@@ -277,13 +296,14 @@ export function TemplatesProvider({ children }) {
   );
 
   const persistTypes = useCallback(
-    async (next) => {
+    async (next, { strict = false } = {}) => {
       commitTypes(next);
       try {
         await monday.storage.setItem(typeInstanceKey(context), JSON.stringify({ templates: next }));
       } catch (err) {
         if (context?.instanceId || context?.boardId) {
           logger.error('TemplatesContext', 'שמירת תבנית סוג הדיון נכשלה — ייתכן שהשינוי לא נשמר', err);
+          if (strict) throw err;
         } else {
           logger.warn('TemplatesContext', 'אחסון תבניות לא זמין (פיתוח מקומי) — נשמר בזיכרון בלבד', err);
         }
@@ -318,13 +338,14 @@ export function TemplatesProvider({ children }) {
   );
 
   const persistTypeColors = useCallback(
-    async (next) => {
+    async (next, { strict = false } = {}) => {
       commitTypeColors(next);
       try {
         await monday.storage.setItem(typeColorsInstanceKey(context), JSON.stringify({ colors: next }));
       } catch (err) {
         if (context?.instanceId || context?.boardId) {
           logger.error('TemplatesContext', 'שמירת צבע סוג הדיון נכשלה — ייתכן שהשינוי לא נשמר', err);
+          if (strict) throw err;
         } else {
           logger.warn('TemplatesContext', 'אחסון תבניות לא זמין (פיתוח מקומי) — נשמר בזיכרון בלבד', err);
         }
@@ -383,6 +404,56 @@ export function TemplatesProvider({ children }) {
     [context]
   );
 
+  /*
+   * round304 — a discussion type IS the name of its template, and that name is the
+   * KEY of four stored shapes. Renaming the monday dropdown label alone would
+   * orphan all of them (the renamed type would look template-less, colorless and
+   * without its export brand file), so the whole re-key happens here in one call:
+   * the type template, its color, the assignment on standalone topic/participant
+   * templates, and the export-assets storage key. The dropdown label itself is
+   * renamed by the CALLER first (renameDropdownLabel) — that write is the one that
+   * can fail on permissions, so nothing is re-keyed until it succeeded.
+   * Discussions need no migration: they store the label ID, not the text.
+   */
+  const renameDiscussionType = useCallback(
+    async (oldName, newName) => {
+      const from = String(oldName ?? '').trim();
+      const to = String(newName ?? '').trim();
+      if (!from || !to || from === to) return false;
+      try {
+        // STRICT writes (PR review): the caller has already renamed the monday
+        // label, so a write that only lands in memory is a silent data loss — the
+        // next refresh would show the renamed type with no template, color or
+        // assignments. Failing here lets the caller keep a recoverable error state.
+        // Every store is written unconditionally (not only the ones whose content
+        // changed), which is what makes a RETRY correct: the in-memory state is
+        // already migrated, so re-running simply re-flushes it to storage.
+        await persistTypes(renameTypeTemplates(typeTemplatesRef.current, from, to), { strict: true });
+        await persistTypeColors(renameTypeColors(typeColorsRef.current, from, to), { strict: true });
+        await persist(renameTypeInAssignments(templatesRef.current, from, to).list, { strict: true });
+        await persistParticipants(
+          renameTypeInAssignments(participantTemplatesRef.current, from, to).list, { strict: true }
+        );
+        // Best-effort (its own warn on failure): the export template's brand binaries
+        // live under a key that embeds the type name.
+        await moveTypeExportAssetsAt(context, from, to);
+      } catch (err) {
+        logger.error(
+          'TemplatesContext',
+          'שינוי שם סוג הדיון: השם עודכן ב-monday אך שמירת נתוני התבנית נכשלה',
+          err
+        );
+        const wrapped = new Error('שם הסוג עודכן ב-monday אך שמירת התבנית נכשלה — נסו שוב');
+        wrapped.cause = err;
+        wrapped.code = 'rename_store_failed';
+        throw wrapped;
+      }
+      logger.info('TemplatesContext', 'renamed discussion type', { from, to });
+      return true;
+    },
+    [context, persist, persistParticipants, persistTypes, persistTypeColors]
+  );
+
   return (
     <TemplatesContext.Provider
       value={{
@@ -405,6 +476,7 @@ export function TemplatesProvider({ children }) {
         assignRandomTypeColor,
         loadTypeExportAssets,
         saveTypeExportAssets,
+        renameDiscussionType,
       }}
     >
       {children}
@@ -437,6 +509,7 @@ export function useTemplates() {
       typeColorName: (name) => stableColorForKey(name),
       setTypeColor: async () => {},
       assignRandomTypeColor: async () => null,
+      renameDiscussionType: async () => false,
     };
   }
   return ctx;

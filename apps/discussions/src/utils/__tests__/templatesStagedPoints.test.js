@@ -140,4 +140,48 @@ describe('createTopicsFromTemplate — linkLast (round303)', () => {
     expect(kinds.indexOf('link')).toBeGreaterThan(-1);
     expect(kinds.indexOf('link')).toBeGreaterThan(kinds.lastIndexOf('points'));
   });
+
+  /*
+   * round304 (PR review) — a staged creation's FIRST pass creates the topics only
+   * and must connect NOTHING: the relation is the card's read path, so linking
+   * empty topics would expose a half-built agenda. `linkLast` cannot express this
+   * on its own — with no points to create, "at the end of the pass" is immediate.
+   */
+  it('with skipLink the topics-only pass creates topics and connects NOTHING', async () => {
+    columnsMock.value = { discussionLinkID: { id: 'rel1' } };
+    const res = await createTopicsFromTemplate('D1', TEMPLATE, {
+      freshDiscussion: true, linkLast: true, skipLink: true, pointTopicIndexes: [],
+    });
+    expect(res).toMatchObject({ topics: 3, points: 0 });
+    const kinds = callKinds().filter((k) => k !== 'other');
+    expect(kinds).toContain('topics');
+    expect(kinds).not.toContain('link');
+    expect(kinds).not.toContain('points');
+  });
+
+  it('skipLink also suppresses the legacy link-first order', async () => {
+    columnsMock.value = { discussionLinkID: { id: 'rel1' } };
+    await createTopicsFromTemplate('D1', TEMPLATE, { freshDiscussion: true, skipLink: true });
+    expect(callKinds()).not.toContain('link');
+  });
+
+  it('the SECOND pass (resumed, no skipLink) creates the points and then connects', async () => {
+    columnsMock.value = { discussionLinkID: { id: 'rel1' } };
+    let checkpoint = null;
+    await createTopicsFromTemplate('D1', TEMPLATE, {
+      freshDiscussion: true, linkLast: true, skipLink: true, pointTopicIndexes: [],
+      onCheckpoint: (cp) => { checkpoint = cp; },
+    });
+    expect(checkpoint.topicResults).toHaveLength(3);
+    expect(checkpoint.linkedTopicSourceIndexes).toEqual([]);
+    api.mockClear();
+    const res = await createTopicsFromTemplate('D1', TEMPLATE, {
+      freshDiscussion: true, linkLast: true, resumeState: checkpoint,
+    });
+    // No topic is created twice, every point lands, and the link closes the run.
+    expect(res).toMatchObject({ topics: 3, points: 5 });
+    const kinds = callKinds().filter((k) => k !== 'other');
+    expect(kinds).not.toContain('topics');
+    expect(kinds.indexOf('link')).toBeGreaterThan(kinds.lastIndexOf('points'));
+  });
 });

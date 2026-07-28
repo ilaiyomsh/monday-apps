@@ -216,6 +216,13 @@ export async function createTopicsFromTemplate(discussionId, template, {
   // round303 — connect the topics to the discussion LAST (after all points), so
   // the card's relation-based read sees the agenda only once it is complete.
   linkLast = false,
+  // round304 — do not connect AT ALL in this pass. A staged creation splits the
+  // build across two passes (topics awaited in the create card, points + link in
+  // the background); the first pass must leave the topics unconnected, or the
+  // relation — which IS the read path — would serve empty topics before their
+  // points exist. `linkLast` alone cannot express that: it defers the link to the
+  // end of the pass, and for a topics-only pass that end is immediate.
+  skipLink = false,
 } = {}) {
   const clean = sanitizeTemplate(template);
   if (!discussionId || !clean.topics.length) return { topics: 0, points: 0, topicIds: [] };
@@ -459,7 +466,7 @@ export async function createTopicsFromTemplate(discussionId, template, {
   // (topics, then every point) and connects it to the discussion only at the END.
   // The discussion's relation is the card's read path, so with linkLast the agenda
   // pops in COMPLETE on one fetch instead of appearing as bare topics that fill in.
-  if (!linkLast) await linkTopicsToDiscussion();
+  if (!linkLast && !skipLink) await linkTopicsToDiscussion();
 
   const completedPoints = new Set(
     state.pointResults.map((result) => `${result.topicSourceIndex}:${result.pointIndex}`)
@@ -489,7 +496,7 @@ export async function createTopicsFromTemplate(discussionId, template, {
     }
   }
 
-  if (linkLast) await linkTopicsToDiscussion();
+  if (linkLast && !skipLink) await linkTopicsToDiscussion();
 
   const order = buildFreshTopicOrderPayload({
     topicResults: state.topicResults,
