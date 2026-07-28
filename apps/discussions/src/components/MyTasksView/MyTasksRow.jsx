@@ -8,6 +8,8 @@ import { isValidStatus } from '@generated/constants/statusConfig';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
 import { openOrToggleItemCard } from '@generated/utils/itemCard.js';
 import { HighlightedText } from '@generated/components/HighlightedText';
+import { PersonPicker } from '@generated/components/PersonPicker';
+import { PersonList } from '@generated/components/PersonAvatar';
 import { getTaskDiscussion } from './grouping.js';
 import grid from './MyTasksTable.module.css';
 import row from '../TaskTableRow/TaskTableRow.module.css';
@@ -123,7 +125,7 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
 // round136 (perf audit stage 3) — memoized row + option maps hoisted to
 // MyTasksTable (ONE hook pair per table instead of two per row): a selection
 // toggle / keystroke / single-row edit no longer re-renders every row.
-export const MyTasksRow = React.memo(function MyTasksRow({ task, columns, statusOpts, priorityOpts, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, rowStyle, showDeadline = true, showPriority = true, showNotes = true, selectable = false, selected = false, onToggleSelect, searchTerm = '' }) {
+export const MyTasksRow = React.memo(function MyTasksRow({ task, columns, statusOpts, priorityOpts, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, onPartnersChange, rowStyle, showDeadline = true, showPriority = true, showNotes = true, showPartners = false, showAssignee = false, selectable = false, selected = false, onToggleSelect, searchTerm = '' }) {
   const { t } = useTranslation();
   // Inline rename (permission-gated: the pencil shows only when onRenameTask is
   // provided). Clicking the NAME itself still opens the item card — rename is a
@@ -212,6 +214,31 @@ export const MyTasksRow = React.memo(function MyTasksRow({ task, columns, status
         )}
       </div>
     ),
+    // round305 — אחראי (responsibilityID): READ-ONLY here. It is shown in the
+    // "בדיונים שהובלתי" scope so the lead can see WHO owns each task; reassigning
+    // אחריות stays in the discussion's own tasks table (editTaskAssignee).
+    assignee: showAssignee ? (
+      <div key="assignee" className={`${grid.taskCell} ${styles.peopleCell}`}>
+        <PersonList people={task.responsibilityID} size="sm" showNames max={2} />
+      </div>
+    ) : null,
+    // round305 — שותפים (partnersID): inline-editable when the permission gate
+    // passed (owners · discussion lead/creator/coordinator · task creator ·
+    // task responsible), read-only avatars otherwise.
+    partners: showPartners ? (
+      <div key="partners" className={`${grid.taskCell} ${styles.peopleCell}`} onClick={onPartnersChange ? stop : undefined}>
+        {onPartnersChange ? (
+          <PersonPicker
+            selected={task.partnersID || []}
+            onChange={(people) => onPartnersChange(task.id, people)}
+            boardKey="tasks"
+            accountWide
+          />
+        ) : (
+          <PersonList people={task.partnersID} size="sm" showNames max={2} />
+        )}
+      </div>
+    ) : null,
     // deadline — inline date picker when permitted (onDeadlineChange present),
     // read-only text otherwise; hidden when the deadline column isn't mapped.
     // Mirrors TaskTableRow's deadline cell (full-cell picker + hover clear-X).
@@ -302,7 +329,7 @@ export const MyTasksRow = React.memo(function MyTasksRow({ task, columns, status
 
   const orderedKeys = columns || [
     ...(selectable ? ['sel'] : []),
-    'name', 'deadline', 'priority', 'status', 'notes', 'discussion',
+    'name', 'assignee', 'partners', 'deadline', 'priority', 'status', 'notes', 'discussion',
   ];
 
   return (

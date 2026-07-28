@@ -273,3 +273,10 @@
 .notesCell {
   padding: 0;
 }
+
+/* round305 — the two people cells (אחראי / שותפים): centered like the other
+   non-name cells, and clipped so a long name list can never widen the track. */
+.peopleCell {
+  justify-content: center;
+  overflow: hidden;
+}

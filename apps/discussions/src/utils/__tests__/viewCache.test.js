@@ -181,3 +181,26 @@ describe('writeViewCache / readViewCache — Date fields survive the JSON round-
     expect(hit.cursor).toBe('CUR');
   });
 });
+
+/*
+ * round305 (PR review) — the cached row SHAPE changed (My Tasks rows gained
+ * partnersID + the two access columns), so entries written by the previous
+ * deploy must be rejected: seeding a v1 row would render an EMPTY שותפים cell,
+ * and an edit made from that state would replace the real partner list.
+ */
+describe('VIEW_CACHE_VERSION — old-shape entries are rejected', () => {
+  it('is past 1, so pre-round305 entries can never seed', () => {
+    expect(VIEW_CACHE_VERSION).toBeGreaterThan(1);
+  });
+
+  it('treats an entry written at version 1 as a MISS', () => {
+    const key = makeViewCacheKey('myTasks', { userId: '7', boardId: 'b1' });
+    window.localStorage.setItem(key, JSON.stringify({
+      version: 1,
+      ts: Date.now(),
+      items: [{ id: '1', name: 'משימה', responsibilityID: [] }], // no partnersID
+      cursor: null,
+    }));
+    expect(readViewCache(key)).toBeNull();
+  });
+});

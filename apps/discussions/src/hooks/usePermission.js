@@ -34,6 +34,7 @@ import {
   CAPABILITY_DEFAULTS,
   CAPABILITIES,
   PERMISSION_ROLE_SOURCES,
+  CAP_ITEM_SELF_ROLES,
   DEFAULT_PERMISSIONS,
   SYSTEM_ROLE_KEY,
 } from '@api/boards.config.js';
@@ -127,9 +128,18 @@ function itemReady(item, itemBoardKey) {
 // creator/responsible, decision creator/decider)? The item-tier analogue of
 // isCreatorOrLead — drives the fail-open self-edit path and the
 // 'creatorLeadOwner' default bucket for item-tier caps.
-function isItemSelfRole(item, itemBoardKey, myId) {
-  const aliases = PERMISSION_ROLE_SOURCES[itemBoardKey] || [];
-  return aliases.some((alias) => inPeople(item?.[alias], myId));
+//
+// round305 — a capability listed in CAP_ITEM_SELF_ROLES narrows the scan to the
+// roles its owner spec names (e.g. editTaskPartners must NOT reach the read-only
+// taskViewersID role), and may additionally accept the parent DISCUSSION's
+// lead/coordinator/creator, which a personal-view row carries under
+// `__discussionRoles` (there is no discussion object in that ctx).
+function isItemSelfRole(item, itemBoardKey, myId, capability = null) {
+  const rule = capability ? CAP_ITEM_SELF_ROLES[capability]?.[itemBoardKey] : null;
+  const aliases = rule?.selfRoles || PERMISSION_ROLE_SOURCES[itemBoardKey] || [];
+  if (aliases.some((alias) => inPeople(item?.[alias], myId))) return true;
+  if (rule?.parentDiscussionEditors && isCreatorOrLead(item?.__discussionRoles, myId)) return true;
+  return false;
 }
 
 // Is the user a discussion "editor" — its creator, lead (מנהל דיון), or
@@ -171,8 +181,9 @@ function resolveDefaultBucket(cap, { discussion, myId, itemBoardKey, item }) {
   if (bucket === 'creatorLeadOwner') {
     if (itemBoardKey) {
       // item tier (task/decision): the item's own role columns — task
-      // creator/responsible, decision creator/decider.
-      return isItemSelfRole(item, itemBoardKey, myId);
+      // creator/responsible, decision creator/decider (narrowed per capability
+      // by CAP_ITEM_SELF_ROLES; round305).
+      return isItemSelfRole(item, itemBoardKey, myId, cap);
     }
     return isCreatorOrLead(discussion, myId);
   }
@@ -252,7 +263,7 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
     // to the item's own role columns (task creator/responsible, decision
     // creator/decider) — mirrors those surfaces' self-edit behavior.
     if (noDiscussionItemCtx) {
-      return isItemSelfRole(item, itemBoardKey, myId);
+      return isItemSelfRole(item, itemBoardKey, myId, capability);
     }
     return isCreatorOrLead(discussion, myId);
   }
@@ -388,6 +399,20 @@ export function resolveCan(capability, ctx = {}, opts = {}) {
     itemBoardKey === 'tasks' &&
     capability !== 'deleteTask' &&
     isCreatorOrLead(discussion, myId)
+  ) {
+    return true;
+  }
+
+  // round305 — the same discussion-roles override for a capability that opted in
+  // (CAP_ITEM_SELF_ROLES[cap][board].parentDiscussionEditors) when the row is
+  // resolved WITHOUT its discussion in ctx: the personal "בדיונים שהובלתי" list
+  // carries the parent's lead/coordinator/creator on the row itself. The role scan
+  // above cannot reach it — a user holding none of the TASK's own people columns
+  // never enters the loop — so it is checked here, next to its sibling override.
+  if (
+    itemBoardKey &&
+    CAP_ITEM_SELF_ROLES[capability]?.[itemBoardKey]?.parentDiscussionEditors &&
+    isCreatorOrLead(item?.__discussionRoles, myId)
   ) {
     return true;
   }

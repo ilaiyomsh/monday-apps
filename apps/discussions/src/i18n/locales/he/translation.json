@@ -64,6 +64,8 @@
     "colPriority": "עדיפות",
     "colStatus": "סטאטוס",
     "colNotes": "הערות",
+    "colPartners": "שותפים",
+    "colAssignee": "אחראי",
     "notesPlaceholder": "הוסף הערה",
     "noDiscussion": "ללא דיון",
     "noStatus": "ללא סטאטוס",
