@@ -195,8 +195,9 @@ kit remains visibility-only until the standing lint debt is cleared.
 - **sync-calender server dataset.** Ships via the opts-injected server sink but its runtime
   `AXIOM_*` env still needs the user's `mapps code:env -i 11666315` change to land on
   `app-errors`.
-- **telemetry-dashboard — `APP_TELEMETRY_DASHBOARD_ID` secret not set.** Without it the app
-  does not deploy at all. Its server also needs runtime env (`mapps code:env`) for BOTH roles:
+- **telemetry-dashboard server env.** The `APP_TELEMETRY_DASHBOARD_ID` secret IS set — the app
+  deploys (verified 2026-07-28, draft deploy green on `0e0810a`). Its server still needs runtime
+  env (`mapps code:env`) for BOTH roles:
   ingest (`AXIOM_TOKEN`/`AXIOM_DATASET`/`AXIOM_APP_NAME`) to ship its own errors, and query
   (`AXIOM_QUERY_TOKEN` + `AXIOM_ORG_ID`) to READ app-errors — without the query token the
   dashboard shows seed/demo data only.

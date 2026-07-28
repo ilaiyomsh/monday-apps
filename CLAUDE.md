@@ -131,8 +131,8 @@ packages/shared                     EMPTY STUB — see below
   | axis-sync-calender | `apps/axis/sync-calender` | 11666315 | server, app root |
   | team-people-column | `apps/team-people-column` | 11689948 | client, `dist/` |
   | deadline-confirm | `apps/deadline-confirm` | 11704868 | server, app root |
-  | telemetry-dashboard | `apps/telemetry-dashboard` | pending — secret `APP_TELEMETRY_DASHBOARD_ID` not yet set (slug `telemetry-dashboard`) | server, app root |
-  | twyst-your-status | `apps/twyst-your-status` | pending — secret `APP_TWYST_YOUR_STATUS_ID` (slug `twyst-your-status`) | client, `dist/` |
+  | telemetry-dashboard | `apps/telemetry-dashboard` | secret `APP_TELEMETRY_DASHBOARD_ID` set — numeric ID lives in the secret, not mirrored here (slug `telemetry-dashboard`) | server, app root |
+  | twyst-your-status | `apps/twyst-your-status` | secret `APP_TWYST_YOUR_STATUS_ID` set — numeric ID lives in the secret, not mirrored here (slug `twyst-your-status`) | client, `dist/` |
 
 ## Quality gates
 
