@@ -72,6 +72,43 @@ html:has(.app-shell.is-modal) #root {
   overflow: hidden;
 }
 
+/*
+ * LoadingState's spinner — a CSS copy of @vibe/core's Loader (medium, 40px), the
+ * same hand transcription as the boot overlay in index.html. Importing Vibe's
+ * Loader instead pulled the whole Icon → react-inlinesvg chain into the picker's
+ * eager chunk, where no loader is ever rendered. Re-sync BOTH copies by hand if
+ * Vibe's Loader changes. prefers-reduced-motion is deliberately not honoured: a
+ * frozen spinner reads as a hung app.
+ */
+.twyst-loading-state svg {
+  width: 40px;
+  height: 40px;
+  color: var(--primary-text-color, #323338);
+  stroke: currentColor;
+  stroke-linecap: round;
+  animation: twystLoadingRotate 1s linear infinite;
+}
+
+.twyst-loading-state circle {
+  animation: twystLoadingDash 1s infinite;
+}
+
+.twyst-loading-state-message {
+  margin: 16px 0 0;
+  font-size: 14px;
+  color: var(--secondary-text-color, #676879);
+}
+
+@keyframes twystLoadingRotate {
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes twystLoadingDash {
+  0%   { stroke-dasharray: 1, 150;  stroke-dashoffset: 0; }
+  50%  { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+  100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
+}
+
 .placement-message {
   display: grid;
   min-block-size: 240px;

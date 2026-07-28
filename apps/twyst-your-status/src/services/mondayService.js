@@ -113,16 +113,15 @@ const mondayService = {
     });
   },
 
+  // ONE read, deliberately. The false-empty retry lives in useColumnSettings, its
+  // only caller — having it here TOO meant an unconfigured column paid two stacked
+  // 350ms waits and four reads to learn the same thing. See the comment on
+  // RETRY_DELAY_MS in that hook, and getColumnConfig in apps/team-people-column,
+  // which twyst was copied from and which never grew this second retry.
   async getColumnConfig(boardId, columnId) {
     const key = columnConfigKey(boardId, columnId);
-    let response = await monday.storage.getItem(key);
+    const response = await monday.storage.getItem(key);
     assertStorageReadOk(response, key);
-
-    if (response.data?.value == null) {
-      await wait(STORAGE_RETRY_DELAY_MS);
-      response = await monday.storage.getItem(key);
-      assertStorageReadOk(response, key);
-    }
 
     return parseStoredValue(response.data?.value, key, 'column-config');
   },

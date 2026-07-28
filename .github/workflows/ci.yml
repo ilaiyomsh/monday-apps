@@ -72,6 +72,14 @@ jobs:
       - name: Error-wiring audit
         run: node scripts/error-wiring-audit.mjs
 
+      # Forbidden-import guard: nothing on a surface's EAGER (non-lazy) module graph may
+      # import a heavy UI kit. Deliberately an invariant, not a byte budget — a threshold
+      # measures a symptom, needs the build to evaluate, and only ever ratchets upward.
+      # Static imports only, and it stops at import() by design (that is how a heavy
+      # dependency is supposed to be reached). Runs before the build; costs milliseconds.
+      - name: Eager-import audit
+        run: node scripts/lib/eager-graph.mjs
+
       - name: Type-check (skips packages with no type-check script)
         run: pnpm -r --if-present run type-check
 
