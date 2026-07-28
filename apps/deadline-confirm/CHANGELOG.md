@@ -2,6 +2,34 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.9.4 — 2026-07-28 — fix: a legacy config could not be saved at all + settings export/import
+
+- **Production incident.** Saving from the admin panel failed with
+  `PUT /api/config → 400 invalid_config`, so the operator could not change
+  anything — and the digest kept running on the old stored config, which is why
+  the preview showed no recipients and no tasks even though matching tasks
+  existed on the board.
+- **Cause: two of our own decisions collided.** 0.7.1 made reading a pre-0.6.0
+  config non-throwing by defaulting a missing `section.dateColumnTitle` to `''`.
+  The server, however, requires that field to be a **non-empty** string
+  (`validateConfig`, pinned by `tests/admin-api-digest.test.js`). So a legacy
+  config was loadable but permanently unsavable.
+  It was invisible from the UI: `digestIsComplete` does not check the title, and
+  the date dropdown renders its label from `dateColumnId`, so the screen showed
+  a filled-in date column while the stored field was empty.
+- **Fix on the client, not the server.** The title is derivable from the
+  selected column, so `backfillDateColumnTitles` derives it at the save
+  boundary, falling back to `'תאריך'` when the column cannot be resolved (the
+  renderers already use that same fallback). Relaxing the server was rejected —
+  it would mean weakening a locked test and admitting header-less sections into
+  storage.
+- **New: export / import settings as JSON** (owner request). The export carries
+  BOTH the stored config and the on-screen draft — when a save is rejected, the
+  difference between the two is the diagnosis. It contains configuration only:
+  no link secret, no OAuth token (neither ever reaches the client). Import loads
+  into the draft and does **not** save, so the operator reviews first.
+- Tests: red → green + 3/3 mutations killed on `settings-io`. Suite 540 green.
+
 ## 0.9.3 — 2026-07-27 — fix: drop «ללא שינוי»; preview AMP uses live slot
 
 - Status menu shows only the cluster's action buttons (no gray «ללא שינוי»).
