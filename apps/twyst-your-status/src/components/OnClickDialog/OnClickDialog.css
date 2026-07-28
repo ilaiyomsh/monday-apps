@@ -9,7 +9,20 @@
 
 .twyst-form {
   display: grid;
+  /* header / grid / actions — the grid row is the only one that flexes, so a
+     scrolling field list never pushes the actions out of the modal. */
+  grid-template-rows: auto 1fr auto;
   gap: 12px;
+  min-height: 0;
+}
+
+/* The fill form owns the whole modal iframe when opened on /required-fields. */
+.twyst-required-fields-modal {
+  display: grid;
+  box-sizing: border-box;
+  min-height: 100vh;
+  padding: 20px;
+  color: var(--primary-text-color, #323338);
 }
 
 .twyst-form label {
@@ -22,6 +35,142 @@
   border: 1px solid var(--ui-border-color, #d0d4e4);
   border-radius: 6px;
   padding: 8px 10px;
+}
+
+.twyst-form textarea {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+  resize: vertical;
+}
+
+/*
+ * Required-fields grid. The column count comes from requiredFormModalSize's
+ * requiredFormGrid() via the --twyst-form-cols custom property, so the layout and
+ * the modal's pixel size are computed from ONE place. Row height, gap and padding
+ * here MUST match that module's constants.
+ */
+.twyst-form-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--twyst-form-cols, 1), minmax(0, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+
+/* Past 4 rows the grid scrolls — the modal never grows past the computed height. */
+.twyst-form-grid.is-scrolling {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* date (day + hour) and timeline (from + to) hold two inputs — give them the row. */
+.twyst-form-field.is-wide {
+  grid-column: 1 / -1;
+}
+
+/* One required field: title above its control (whatever FieldControl renders). */
+.twyst-form-field {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.twyst-field-title {
+  color: var(--primary-text-color, #323338);
+}
+
+.twyst-field-title b {
+  color: var(--negative-color, #d83a52);
+}
+
+/* date (day + hour) and timeline (from + to) each hold two inputs. */
+.twyst-field-row {
+  display: flex;
+  gap: 8px;
+}
+
+.twyst-field-row input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* A checkbox must not stretch to the field width — it reads as a broken input. */
+.twyst-field-checkbox {
+  justify-self: start;
+  inline-size: 18px;
+  block-size: 18px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.twyst-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.twyst-chip {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 999px;
+  background: var(--primary-background-color, #fff);
+  color: inherit;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.twyst-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.twyst-chip.is-on {
+  background: var(--primary-color, #0073ea);
+  border-color: var(--primary-color, #0073ea);
+  color: #fff;
+}
+
+/* A selected status chip carries its own label color (set inline), so the text
+   has to stay readable on any of monday's label hues. */
+.twyst-chip-status.is-on {
+  color: var(--text-color-on-primary, #fff);
+}
+
+.twyst-rating {
+  display: flex;
+  gap: 2px;
+}
+
+.twyst-star {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--ui-border-color, #d0d4e4);
+  cursor: pointer;
+}
+
+.twyst-star.is-on {
+  color: var(--warning-color, #fdab3d);
+}
+
+.twyst-star:disabled {
+  cursor: not-allowed;
+}
+
+.twyst-field-error {
+  margin: 0;
+  color: var(--negative-color, #d83a52);
+  font-size: 12px;
+}
+
+.twyst-field-note {
+  margin: 0;
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
 }
 
 .twyst-form-actions {
@@ -120,40 +269,10 @@
   opacity: 0.7;
 }
 
-/* Monday-style shimmer skeleton — same box as .status-option. */
-.status-option-skeleton {
-  position: relative;
-  overflow: hidden;
-  width: 100%;
-  flex: 0 0 auto;
-  height: 34px;
-  border-radius: var(--border-radius-small, 4px);
-  background-color: var(--ui-border-color, #e6e9ef);
-}
-
-.status-option-skeleton::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.55) 50%,
-    rgba(255, 255, 255, 0) 100%
-  );
-  animation: twystPickerSkeletonShimmer 1.4s ease-in-out infinite;
-}
-
-@keyframes twystPickerSkeletonShimmer {
-  100% { transform: translateX(100%); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .status-option-skeleton::after {
-    animation: none;
-  }
-}
+/* No loading state lives here. The picker's only loader is the boot overlay in
+   index.html — monday's own dialog spinner, continued without a restart. A
+   skeleton here was the visible jump: monday's spinner, then pills appearing.
+   See src/utils/bootLoader.js. */
 
 .status-picker-note,
 .status-picker-empty {

@@ -17,7 +17,10 @@ function copySpaFallbacks() {
     name: 'copy-spa-route-fallbacks',
     closeBundle() {
       const distIndex = join(rootDir, 'dist', 'index.html');
-      for (const route of ['picker', 'settings', 'settings-full']) {
+      // Every route App.resolveAppRoute knows needs a real index.html on the CDN —
+      // the static host does no rewriting, so a missing folder is a 404 and the
+      // surface opens blank. Keep this list in sync with resolveAppRoute.
+      for (const route of ['picker', 'settings', 'settings-full', 'required-fields']) {
         const targetDir = join(rootDir, 'dist', route);
         mkdirSync(targetDir, { recursive: true });
         copyFileSync(distIndex, join(targetDir, 'index.html'));

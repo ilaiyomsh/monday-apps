@@ -33,9 +33,11 @@ if (rawVariables) payload.variables = JSON.parse(rawVariables);
 process.stdout.write(`${config.accessToken}\n${JSON.stringify(payload)}\n`);
 ' "$MAPPSRC" "$QUERY" "$VARIABLES")
 
-mapfile -t OUTPUT_LINES <<< "$OUTPUT"
-TOKEN="${OUTPUT_LINES[0]}"
-PAYLOAD="${OUTPUT_LINES[1]}"
+# Split "token\npayload" with parameter expansion only — macOS ships bash 3.2,
+# which has no `mapfile` (it failed with "mapfile: command not found", making
+# every API call through this script a no-op on a stock mac).
+TOKEN="${OUTPUT%%$'\n'*}"
+PAYLOAD="${OUTPUT#*$'\n'}"
 
 curl -s -X POST \
   -H "Authorization: $TOKEN" \

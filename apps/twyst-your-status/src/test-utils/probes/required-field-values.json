@@ -1,0 +1,166 @@
+{
+  "_source": "Live probe via .claude/skills/mapps/mapps-api.sh against sandbox board 18424030023 (WZ-fieldtypes), item 12646786855, API 2026-04, captured 2026-07-28. Query selection = ALL_COLUMN_VALUE_FIELDS from src/domain/columnFields.js.",
+  "data": {
+    "items": [
+      {
+        "column_values": [
+          {
+            "id": "boolean_mm5pebe9",
+            "type": "checkbox",
+            "text": "v",
+            "value": "{\"checked\":true,\"changed_at\":\"2026-07-28T07:44:24.624Z\"}",
+            "column": {
+              "id": "boolean_mm5pebe9",
+              "title": "WZ checkbox",
+              "type": "checkbox",
+              "settings": {}
+            },
+            "checked": true
+          },
+          {
+            "id": "dropdown_mm5pcyj6",
+            "type": "dropdown",
+            "text": "Design",
+            "value": "{\"ids\":[1],\"changed_at\":\"2026-07-28T07:44:24.548Z\",\"override_all_ids\":\"true\"}",
+            "column": {
+              "id": "dropdown_mm5pcyj6",
+              "title": "WZ dropdown",
+              "type": "dropdown",
+              "settings": {
+                "labels": [
+                  {
+                    "id": 1,
+                    "label": "Design",
+                    "is_deactivated": false
+                  },
+                  {
+                    "id": 2,
+                    "label": "QA",
+                    "is_deactivated": false
+                  }
+                ]
+              }
+            },
+            "values": [
+              {
+                "id": "1",
+                "label": "Design"
+              }
+            ]
+          },
+          {
+            "id": "date_mm5p1a9t",
+            "type": "date",
+            "text": "2026-07-28 00:30",
+            "value": "{\"date\":\"2026-07-27\",\"time\":\"21:30:00\",\"changed_at\":\"2026-07-28T07:44:24.625Z\"}",
+            "column": {
+              "id": "date_mm5p1a9t",
+              "title": "WZ date",
+              "type": "date",
+              "settings": {}
+            },
+            "date": "2026-07-28",
+            "time": "00:30"
+          },
+          {
+            "id": "multiple_person_mm5p6w6g",
+            "type": "people",
+            "text": "עילי שלם",
+            "value": "{\"changed_at\":\"2026-07-28T07:44:24.624Z\",\"personsAndTeams\":[{\"id\":48274917,\"kind\":\"person\"}]}",
+            "column": {
+              "id": "multiple_person_mm5p6w6g",
+              "title": "WZ people",
+              "type": "people",
+              "settings": {}
+            },
+            "persons_and_teams": [
+              {
+                "id": "48274917",
+                "kind": "person"
+              }
+            ]
+          },
+          {
+            "id": "rating_mm5psm3v",
+            "type": "rating",
+            "text": "4",
+            "value": "{\"rating\":4,\"changed_at\":\"2026-07-28T07:44:24.549Z\"}",
+            "column": {
+              "id": "rating_mm5psm3v",
+              "title": "WZ rating",
+              "type": "rating",
+              "settings": {}
+            },
+            "rating": 4
+          },
+          {
+            "id": "color_mm5pm4nr",
+            "type": "status",
+            "text": "תקוע",
+            "value": "{\"index\":2,\"changed_at\":\"2026-07-28T07:44:24.626Z\"}",
+            "column": {
+              "id": "color_mm5pm4nr",
+              "title": "WZ status2",
+              "type": "status",
+              "settings": {
+                "labels": [
+                  {
+                    "id": 0,
+                    "color": 0,
+                    "label": "בעבודה",
+                    "index": 0,
+                    "is_done": false,
+                    "is_deactivated": false,
+                    "hex": "#fdab3d"
+                  },
+                  {
+                    "id": 1,
+                    "color": 1,
+                    "label": "בוצע",
+                    "index": 1,
+                    "is_done": false,
+                    "is_deactivated": false,
+                    "hex": "#00c875"
+                  },
+                  {
+                    "id": 2,
+                    "color": 2,
+                    "label": "תקוע",
+                    "index": 2,
+                    "is_done": false,
+                    "is_deactivated": false,
+                    "hex": "#df2f4a"
+                  },
+                  {
+                    "id": 3,
+                    "color": 3,
+                    "label": "לא רלוונטי",
+                    "index": 3,
+                    "is_done": false,
+                    "is_deactivated": false,
+                    "hex": "#007eb5"
+                  }
+                ]
+              }
+            },
+            "index": 2
+          },
+          {
+            "id": "timerange_mm5pjqn3",
+            "type": "timeline",
+            "text": "2026-07-01 - 2026-07-09",
+            "value": "{\"to\":\"2026-07-09\",\"from\":\"2026-07-01\",\"changed_at\":\"2026-07-28T07:44:24.550Z\"}",
+            "column": {
+              "id": "timerange_mm5pjqn3",
+              "title": "WZ timeline",
+              "type": "timeline",
+              "settings": {}
+            },
+            "from": "2026-07-01T00:00:00+00:00",
+            "to": "2026-07-09T00:00:00+00:00"
+          }
+        ]
+      }
+    ]
+  }
+}

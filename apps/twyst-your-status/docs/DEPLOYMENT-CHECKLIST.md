@@ -11,8 +11,14 @@ Configure on the draft version:
 2. Column settings (slim launcher) → `<CDN_ORIGIN>/settings`
 3. Full settings overlay → `<CDN_ORIGIN>/settings-full`
 
-The Vite build copies `index.html` into `dist/picker/`, `dist/settings/`, and
-`dist/settings-full/` so the static CDN can serve those paths without rewrite rules.
+`<CDN_ORIGIN>/required-fields` needs **no** Developer Center entry — the picker opens
+it at runtime through `openAppFeatureModal({ urlPath, urlParams, width, height })`.
+
+The Vite build copies `index.html` into `dist/picker/`, `dist/settings/`,
+`dist/settings-full/` and `dist/required-fields/` so the static CDN can serve those
+paths without rewrite rules. **Adding a route means adding it to `copySpaFallbacks`
+in `vite.config.js` as well as `App.resolveAppRoute`** — a missing folder is a 404
+and the surface opens blank.
 
 ## Version permissions (scopes)
 
@@ -27,7 +33,7 @@ Changing scopes can require existing installers to authorize the app again.
 
 - `pnpm --filter ./apps/twyst-your-status test`
 - `pnpm --filter ./apps/twyst-your-status lint`
-- `pnpm --filter ./apps/twyst-your-status build` → `dist/` (+ `dist/picker`, `dist/settings`, `dist/settings-full`)
+- `pnpm --filter ./apps/twyst-your-status build` → `dist/` (+ `dist/picker`, `dist/settings`, `dist/settings-full`, `dist/required-fields`)
 
 ## Deployment
 

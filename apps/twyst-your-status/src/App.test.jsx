@@ -17,9 +17,16 @@ describe('resolveAppRoute', () => {
     expect(resolveAppRoute('/apps/twyst/settings-full')).toBe('settings-full');
   });
 
+  it('routes /required-fields to the sized fill modal', () => {
+    expect(resolveAppRoute('/required-fields')).toBe('required-fields');
+    expect(resolveAppRoute('/required-fields/')).toBe('required-fields');
+    expect(resolveAppRoute('/apps/twyst/required-fields')).toBe('required-fields');
+  });
+
   it('rejects unknown paths', () => {
     expect(resolveAppRoute('/')).toBeNull();
     expect(resolveAppRoute('/board')).toBeNull();
     expect(resolveAppRoute('/picker-full')).toBeNull();
+    expect(resolveAppRoute('/required-fields-full')).toBeNull();
   });
 });

@@ -1,10 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AttentionBox } from '@vibe/core';
 import { buildAvailableLabels } from '../../domain/buildAvailableLabels';
-import {
-  buildMultiColumnWritePayload,
-  prefillFormValue,
-} from '../../domain/columnValueFormats';
 import { parsePeopleColumnAssignments } from '../../domain/peopleColumnGate';
 import {
   collectRequiredPeopleColumnIds,
@@ -12,84 +8,21 @@ import {
 } from '../../domain/settingsSchema';
 import { normalizeStatusLabels, serializeStatusMutationValue } from '../../domain/statusPolicy';
 import {
-  GET_ITEM_FORM_VALUES,
   GET_STATUS_COLUMN_CONTEXT,
-  UPDATE_MULTIPLE_COLUMN_VALUES,
+  GET_STATUS_COLUMN_SETTINGS,
   UPDATE_STATUS_COLUMN_VALUE,
 } from '../../services/graphqlQueries';
 import mondayService from '../../services/mondayService';
 import { loadUserTeamIds } from '../../services/teamsAccess';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
+import { dismissBootLoader } from '../../utils/bootLoader';
+import { requiredFormModalSize } from '../../utils/requiredFormModalSize';
 import ErrorState from '../shared/ErrorState';
-import StatusPickerSkeleton from './StatusPickerSkeleton';
 import './OnClickDialog.css';
 
-function inputTypeFor(columnType) {
-  if (columnType === 'numbers') return 'number';
-  if (columnType === 'date') return 'date';
-  if (columnType === 'email') return 'email';
-  return 'text';
-}
-
-function RequiredFieldsForm({
-  label,
-  fields,
-  columnsById,
-  initialValues,
-  busy,
-  onCancel,
-  onSubmit,
-}) {
-  const [values, setValues] = useState(initialValues);
-
-  useEffect(() => {
-    setValues(initialValues);
-  }, [initialValues]);
-
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    onSubmit(values);
-  };
-
-  return (
-    <form className="twyst-form" onSubmit={handleSubmit} aria-labelledby="required-fields-title">
-      <header>
-        <p className="status-guard-eyebrow">מעבר סטטוס</p>
-        <h2 id="required-fields-title">
-          השלמת פרטים לפני מעבר ל״
-          {label.label || 'ללא שם'}
-          ״
-        </h2>
-      </header>
-      {fields.map((field) => {
-        const column = columnsById.get(field.columnId);
-        return (
-          <label key={field.columnId}>
-            {column?.title || field.columnId}
-            <b> *</b>
-            <input
-              type={inputTypeFor(column?.type)}
-              required
-              value={values[field.columnId] ?? ''}
-              disabled={busy}
-              onChange={(event) => setValues({
-                ...values,
-                [field.columnId]: event.target.value,
-              })}
-            />
-          </label>
-        );
-      })}
-      <div className="twyst-form-actions">
-        <button type="button" onClick={onCancel} disabled={busy}>ביטול</button>
-        <button className="primary-action" type="submit" disabled={busy}>
-          {busy ? 'שומר…' : 'שמירה ומעבר'}
-        </button>
-      </div>
-    </form>
-  );
-}
+/** Route of the fill form, opened as its own sized modal. See App.resolveAppRoute. */
+const REQUIRED_FIELDS_PATH = '/required-fields';
 
 function OnClickDialog({ context }) {
   const { boardId, columnId, itemId, user } = context || {};
@@ -108,8 +41,6 @@ function OnClickDialog({ context }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [savingLabelId, setSavingLabelId] = useState(null);
-  const [formTarget, setFormTarget] = useState(null);
-  const [formValues, setFormValues] = useState({});
 
   // Null storage = no rules yet → everyone may pick every active label.
   const effectiveSettings = useMemo(
@@ -193,50 +124,39 @@ function OnClickDialog({ context }) {
     });
   };
 
-  const writeStatusAndFields = async (labelId, fields, values) => {
-    const payload = buildMultiColumnWritePayload({
-      statusColumnId: columnId,
-      statusLabelId: labelId,
-      formFields: fields,
-      formValues: values,
-      columnsById,
-    });
-    await mondayService.query(UPDATE_MULTIPLE_COLUMN_VALUES, {
-      boardId: String(boardId),
-      itemId: String(itemId),
-      columnValues: JSON.stringify(payload),
-    });
-  };
-
-  const openRequiredForm = async (label) => {
-    const rule = getLabelRule(effectiveSettings, label.id);
-    const fieldIds = rule.requiredColumnIds;
+  /**
+   * Hand the transition to the /required-fields modal.
+   *
+   * The fill form cannot live in THIS iframe: the Dialog Design size is fixed at
+   * 200×250 in the Developer Center and the SDK has no runtime resize. So the
+   * picker only measures the work — it reads the required columns' types to size
+   * the modal — and `openAppFeatureModal` opens the form at that size, passing the
+   * ids through `urlParams`.
+   */
+  const openRequiredFieldsModal = async (label, requiredColumnIds) => {
     try {
       setSavingLabelId(label.id);
       setError(null);
-      const data = await mondayService.query(GET_ITEM_FORM_VALUES, {
-        itemIds: [String(itemId)],
-        columnIds: fieldIds,
+      // Types only; the modal loads the values itself.
+      const data = await mondayService.query(GET_STATUS_COLUMN_SETTINGS, {
+        boardIds: [String(boardId)],
+        columnIds: requiredColumnIds,
       });
-      const values = data?.items?.[0]?.column_values ?? [];
-      const nextColumns = new Map(columnsById);
-      const initial = {};
-      values.forEach((value) => {
-        if (value.column) nextColumns.set(value.id, value.column);
-        initial[value.id] = prefillFormValue(value.column?.type ?? value.type, value);
-      });
-      fieldIds.forEach((id) => {
-        if (initial[id] === undefined) initial[id] = '';
-      });
-      setColumnsById(nextColumns);
-      setFormValues(initial);
-      setFormTarget({
-        label,
-        fields: fieldIds.map((columnIdValue) => ({ columnId: columnIdValue })),
+      const requiredColumns = data?.boards?.[0]?.columns ?? [];
+      await mondayService.openAppFeatureModal({
+        urlPath: REQUIRED_FIELDS_PATH,
+        urlParams: {
+          boardId: String(boardId),
+          columnId: String(columnId),
+          itemId: String(itemId),
+          labelId: String(label.id),
+        },
+        ...requiredFormModalSize(requiredColumns),
+        returnToPreviousModal: true,
       });
     } catch (err) {
-      logger.error('OnClickDialog', 'Failed to load required field values', err);
-      setError(err.message || 'לא הצלחנו לטעון את שדות החובה');
+      logger.error('OnClickDialog', 'Failed to open the required-fields modal', err);
+      setError(err.message || 'לא הצלחנו לפתוח את טופס שדות החובה');
     } finally {
       setSavingLabelId(null);
     }
@@ -256,7 +176,7 @@ function OnClickDialog({ context }) {
 
     const rule = getLabelRule(effectiveSettings, labelId);
     if (rule.requiredColumnIds.length > 0) {
-      await openRequiredForm(selectedLabel);
+      await openRequiredFieldsModal(selectedLabel, rule.requiredColumnIds);
       return;
     }
 
@@ -274,52 +194,29 @@ function OnClickDialog({ context }) {
     }
   };
 
-  const handleFormSubmit = async (values) => {
-    if (!formTarget) return;
-    try {
-      setSavingLabelId(formTarget.label.id);
-      setError(null);
-      await writeStatusAndFields(formTarget.label.id, formTarget.fields, values);
-      await mondayService.showNotice(`הסטטוס עודכן ל״${formTarget.label.label}״`);
-      await dismissPicker();
-    } catch (err) {
-      logger.error('OnClickDialog', 'Failed to save status with required fields', err);
-      setError(err.message || 'לא הצלחנו לשמור את המעבר');
-    } finally {
-      setSavingLabelId(null);
-    }
-  };
+  // Release monday's continued spinner (index.html) the moment this dialog has
+  // something real to show — content, or an error the user must see. App holds it
+  // through the context phase and hands it here; this is the last owner, so a
+  // dismissal that never fires means a dialog stuck behind a spinner.
+  const stillLoadingDialog = (settingsLoading || loading) && !settingsError;
+  useEffect(() => {
+    if (!stillLoadingDialog) dismissBootLoader();
+  }, [stillLoadingDialog]);
 
   if (settingsError) {
     return <ErrorState message="טעינת ההגדרות נכשלה. נסו שוב." onRetry={reloadSettings} />;
   }
 
   if (settingsLoading || loading) {
-    return <StatusPickerSkeleton />;
+    // The boot overlay from index.html is still covering the dialog — it has been
+    // spinning since monday handed the iframe over, and releasing it here just to
+    // draw our own loader is the jump we removed. Render nothing; the effect
+    // above takes the overlay down the moment there is real content.
+    return null;
   }
 
-  if (error && !formTarget) {
+  if (error) {
     return <ErrorState message={error} onRetry={loadDialogData} />;
-  }
-
-  if (formTarget) {
-    return (
-      <main className="status-guard-dialog" dir="rtl">
-        {error && <AttentionBox type="danger" text={error} />}
-        <RequiredFieldsForm
-          label={formTarget.label}
-          fields={formTarget.fields}
-          columnsById={columnsById}
-          initialValues={formValues}
-          busy={savingLabelId !== null}
-          onCancel={() => {
-            setFormTarget(null);
-            setError(null);
-          }}
-          onSubmit={handleFormSubmit}
-        />
-      </main>
-    );
   }
 
   const NEUTRAL = 'hsl(0 0% 77%)';
