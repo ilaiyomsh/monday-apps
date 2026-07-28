@@ -37,23 +37,44 @@ its own modal, sized per transition — see below.
 
 ## Required-fields modal size (`/required-fields`)
 
-Computed by `src/utils/requiredFormModalSize.js` from the fields the transition
-demands, and passed to `openAppFeatureModal` as pixel strings:
+The form follows monday's own item form: a LIST of rows, one field per row, each row
+the column's coloured icon and title in a fixed label column beside a wide control
+column. Not a grid.
 
-- **2-column grid**, at most **4 rows** tall; past that the grid scrolls inside the
-  modal rather than the modal growing off-screen.
-- A single field gets a 1-column modal, so it is not half empty.
-- `date` (day + hour) and `timeline` (from + to) render two inputs each, so they
-  **span the whole row** and cost two grid cells. Row counting is per grid CELL, not
-  per field.
-- The grid's column count reaches the CSS through the `--twyst-form-cols` custom
-  property, so layout and modal size come from one computation. **The pixel constants
-  in that module and the row/gap/padding values in `OnClickDialog.css` must match** —
-  drift shows up as a clipped form or dead space.
+Size is computed by `src/utils/requiredFormModalSize.js` and passed to
+`openAppFeatureModal` as pixel strings:
+
+- **Width is constant** (`520px`) — it is the label+control layout, not the field
+  count.
+- **Height follows the rows**: one row per field, at most **4 visible**; past that
+  the LIST scrolls and the modal keeps its opened height.
+- The row height, gaps, paddings and the two column widths in that module MUST match
+  `OnClickDialog.css`. Drift shows up as a clipped form or dead space.
+- Label icons come from the registry (`icon` + `iconTone` per type) and are resolved
+  to `@vibe/icons` components in `OnClickDialog/FieldIcon.jsx`. **monday exposes
+  neither its column icons nor their colours through the API** — the palette is our
+  approximation of its look.
 - The picker itself only measures: it reads the required columns' types (a light
   `GET_STATUS_COLUMN_SETTINGS` call), sizes the modal, and hands over
   `boardId`/`columnId`/`itemId`/`labelId` through the SDK's `urlParams`. The modal is
   a separate iframe and shares no memory with it — see `src/utils/modalHandoffParams.js`.
+
+### The date field
+
+The hour is set **inside** the date popover (`OnClickDialog/DateFieldControl.jsx`),
+never as a second input beside the day — and it stays **optional**, so a date with no
+hour is a complete answer. The clock button reveals the hour row; switching it off
+CLEARS the hour rather than hiding a value that would still be written. Calendar math
+is pure and tested in `src/domain/monthGrid.js` (weeks run Sunday→Saturday, and local
+getters are used throughout — `toISOString()` would return the UTC day and shift it).
+
+### Closing
+
+After a successful write the modal closes ITSELF, and first asks monday to close the
+picker dialog behind it (best-effort: a no-op if monday does not let a child modal
+close its parent). The picker deliberately does NOT await `openAppFeatureModal` — that
+promise resolves only when the modal closes, and awaiting it pinned the clicked pill
+on "שומר…" for the whole time the form was open.
 
 ## Boot loading state — one spinner, monday's
 

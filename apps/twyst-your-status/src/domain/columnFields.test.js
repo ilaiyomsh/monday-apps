@@ -51,6 +51,30 @@ describe('getFieldSpec', () => {
   it('returns null for an unregistered type', () => {
     expect(getFieldSpec('formula')).toBeNull();
   });
+
+  it('names the monday column icon each type is labelled with', () => {
+    // The form labels every row with the column's icon, the way monday's own item
+    // form does. Names resolve to @vibe/icons components in FieldControl.
+    expect(getFieldSpec('date').icon).toBe('Calendar');
+    expect(getFieldSpec('text').icon).toBe('Text');
+    expect(getFieldSpec('people').icon).toBe('Person');
+    expect(getFieldSpec('checkbox').icon).toBe('Checkbox');
+    expect(getFieldSpec('timeline').icon).toBe('Timeline');
+    expect(getFieldSpec('status').icon).toBe('Status');
+  });
+
+  it('gives every registered type both an icon and a tone, with no gaps', () => {
+    // A missing icon would render an unlabelled blank square, and a missing tone a
+    // transparent one — both silent, so pin the whole set.
+    [
+      'text', 'long_text', 'numbers', 'date', 'email', 'phone', 'link',
+      'dropdown', 'people', 'person', 'checkbox', 'timeline', 'rating', 'status',
+    ].forEach((type) => {
+      const spec = getFieldSpec(type);
+      expect(spec.icon, `${type} icon`).toMatch(/^[A-Z][A-Za-z]+$/);
+      expect(spec.iconTone, `${type} tone`).toMatch(/^#[0-9a-f]{6}$/i);
+    });
+  });
 });
 
 describe('columnValuesSelection', () => {

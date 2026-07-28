@@ -100,7 +100,20 @@ function RequiredFieldsModal({ context }) {
     load();
   }, [load]);
 
+  /**
+   * Close this modal, and take the picker dialog behind it down too.
+   *
+   * `closeDialog` targets the cell dialog that opened us. It runs FIRST and
+   * best-effort: if monday does not let a child modal close its parent it is a
+   * no-op, and we still close ourselves. Doing it the other way round would leave
+   * this iframe destroyed before the second call could run.
+   */
   const close = useCallback(async () => {
+    try {
+      await mondayService.closeDialog();
+    } catch (err) {
+      logger.warn('RequiredFieldsModal', 'Could not close the picker dialog behind the modal', err);
+    }
     try {
       await mondayService.closeAppFeatureModal();
     } catch (err) {

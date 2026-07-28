@@ -143,7 +143,11 @@ function OnClickDialog({ context }) {
         columnIds: requiredColumnIds,
       });
       const requiredColumns = data?.boards?.[0]?.columns ?? [];
-      await mondayService.openAppFeatureModal({
+      // NOT awaited: this promise resolves only when the modal CLOSES, so awaiting
+      // it pinned the pill on "שומר…" for the whole time the form was open (that is
+      // the stuck dialog behind the modal). Fire it, release the pill, and let the
+      // modal own the rest — including closing this dialog once it has written.
+      mondayService.openAppFeatureModal({
         urlPath: REQUIRED_FIELDS_PATH,
         urlParams: {
           boardId: String(boardId),
@@ -153,6 +157,9 @@ function OnClickDialog({ context }) {
         },
         ...requiredFormModalSize(requiredColumns),
         returnToPreviousModal: true,
+      }).catch((err) => {
+        logger.error('OnClickDialog', 'The required-fields modal failed to open', err);
+        setError('לא הצלחנו לפתוח את טופס שדות החובה');
       });
     } catch (err) {
       logger.error('OnClickDialog', 'Failed to open the required-fields modal', err);
