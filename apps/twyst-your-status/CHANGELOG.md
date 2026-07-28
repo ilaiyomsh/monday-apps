@@ -1,5 +1,55 @@
 # Changelog
 
+## 3.9.0
+
+Three owner-reported items from the live 3.8.0 app.
+
+- **A label created in settings can now be opened and configured in the same visit.**
+  The permissions accordion was rendered only for labels that already had a monday id
+  — `showPermissions={!label.isNew}` — because the settings are keyed BY that id and a
+  new label has none until `update_status_column` has run. So restricting a new label
+  took two visits (save, re-open, configure), and nothing on the card said why it had
+  an identity row and nothing else. The accordion is now there from the moment the
+  label is added: its rules are held under the draft's client key (`new:1`) and moved
+  onto the id monday assigns, in the same save.
+- The re-key never GUESSES. Candidates are what the post-mutation refresh has that the
+  pre-mutation labels did not (a set difference, so a pre-existing label can never be
+  claimed), matched on the two things we sent — the label text and the index. A draft
+  that matches neither stays unresolved, because attaching one status's permissions to
+  another is worse than losing them: the rules are then dropped by the prune and the
+  screen says so (`הלייבל נוצר, אך ההרשאות של הלייבל החדש לא נשמרו`) instead of closing
+  on configuration that went nowhere.
+- **Fixed a duplicate-label hazard the new flow would have made easy to hit.** After the
+  labels mutation, the label draft is re-seeded from the refresh. It was not, so any
+  save that failed AFTER the mutation (a storage error, the unsupported-column check)
+  left the new labels still marked `isNew` — and the retry created them a second time.
+  Pre-existing, reachable in 3.8.0 by hitting a validation error, now pinned by a test.
+- **The required-fields form is 25% wider (526 → 658px), and every added pixel went to
+  the column names.** The control column keeps its 320px — the fields themselves must
+  not change — so the label column went 150 → 282px, where a longer Hebrew column title
+  used to be ellipsised after roughly a dozen characters. The row grid takes that width
+  from the same constant the modal is sized with (passed down as a custom property)
+  rather than the stylesheet holding a second copy of the number: with a hard-coded
+  `150px` the modal would have opened wider with the labels still laid out narrow.
+- **The modal's X could not be moved to the left, and that is a platform limit, not a
+  decision.** monday draws the modal chrome itself; `openAppFeatureModal` takes only
+  `url`/`urlPath`/`urlParams`/`width`/`height` (monday-sdk-js 0.5.9), and the X lives in
+  monday's DOM outside our iframe. The only alternative — drawing our own X inside the
+  form — leaves monday's in place too, so on the owner's call nothing was added.
+  Recorded in the mapps skill's `references/known-issues.md`.
+- **Neither surface closes until the status has actually changed.** Awaiting the write
+  before closing has been the behaviour since 3.6.1; what is new is that "the request
+  came back" is no longer accepted as "the status changed". Both mutations now echo the
+  status column back (`StatusValue.index` carries the label id), and the echo is checked
+  before the picker or the form closes: a different label, or `change_column_value: null`
+  inside a 200 with no `errors`, keeps the surface open and shows the failure. The fill
+  form's save button also carries a spinner now — it stays open for the whole round trip,
+  and a disabled button with only its text changed reads as a click that did nothing.
+- An unreadable echo is deliberately NOT a failure. If an API version stops returning the
+  fragment, treating absence as a mismatch would put an error on every successful
+  transition in the app; the mutation returning without errors is monday's own answer and
+  it is kept (and logged).
+
 ## 3.8.0
 
 - **A warm picker open now costs ONE monday round trip instead of two, and no longer

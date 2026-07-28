@@ -28,3 +28,22 @@ the CLI help text claiming "Force push to live version" (incident-verified
   would silently push to the draft. Remedy when in doubt:
   `mapps app-version:list -i <APP_ID>` first, and push pinned with
   `-i <LIVE_VERSION_ID>`.
+
+## 2026-07-28 — `openAppFeatureModal` chrome is monday's; the close X cannot be moved
+
+**Ask:** move the required-fields modal's close X to the left, for an RTL
+Hebrew form (twyst-your-status).
+
+**Finding:** not possible from the app. `monday.execute('openAppFeatureModal',
+…)` accepts exactly `url` / `urlPath` / `urlParams` / `width` / `height`
+(monday-sdk-js 0.5.9 `types/client-execute.interface.ts`) — there is no option
+for the modal's chrome, and the X lives in monday's own DOM around the iframe,
+so CSS inside the app cannot reach it. The only thing an app can do is draw its
+OWN close control inside its iframe, which leaves monday's in place too (two
+X's). The width/height we ask for also include that chrome — hence
+`MODAL_CHROME_PX` headroom in twyst's `requiredFormModalSize.js`.
+
+**Consequence for RTL apps:** a full-screen-ish surface that wants its dismissal
+on the reading-start side has to own the whole chrome — i.e. draw its own header
+with its own X (as twyst's settings overlay does) and treat monday's frame X as
+a second, unavoidable exit.
