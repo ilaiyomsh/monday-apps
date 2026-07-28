@@ -14,6 +14,7 @@
   "app": {
     "error": {
       "title": "שגיאה בטעינת האפליקציה",
+      "toast": "משהו לא עבד — נסה שוב",
       "retry": "Try again",
       "network": {
         "title": "Something went wrong",
