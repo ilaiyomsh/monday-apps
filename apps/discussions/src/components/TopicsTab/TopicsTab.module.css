@@ -18,6 +18,20 @@
   flex-direction: column;
   gap: 8px;
 }
+/* round302 — the "still being built" state for a freshly created discussion: the
+   standard branded loader, centered, while the points finish landing. */
+.building {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 320px;
+}
+.buildingText {
+  font-size: 13.5px;
+  color: var(--secondary-text-color, #676879);
+}
 .toolbar {
   display: flex;
   align-items: center;
@@ -326,6 +340,10 @@
   gap: 1.5px;
   align-items: stretch;
   overflow: visible; /* the drag ghost + insertion gap need room */
+  /* round302 — anchors the scroll affordances (edge fades, chevrons, drag bar),
+     which are absolutely positioned so they cost the strip NO height: the 48px
+     contract with the triple box's formatting strip has to survive. */
+  position: relative;
   /* round252 — the ribbon must lay out RIGHT-TO-LEFT. The outer .wrap is dir="ltr"
      (it pins the physical column order: topics LEFT, panel RIGHT), and the ribbon
      inherited that LTR, so the flex main-axis ran left→right — items[0] landed on
@@ -339,14 +357,36 @@
      drop-math (computeRibbonDropTarget) auto-detects direction, so it follows. */
   direction: rtl;
 }
+/* round302 (approved mockup) — the tiles live in their own SCROLLABLE track,
+   between the two pinned "+" pieces. The native scrollbar is hidden; the slim
+   .ribbonSbar below is the visible, draggable indicator (a native bar would eat
+   height and break the 48px contract). */
+.ribbonTrack {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 1.5px;
+  direction: rtl;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+}
+.ribbonTrack::-webkit-scrollbar { height: 0; }
 .ribbonTile {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  flex: 1 1 0;
-  min-width: 34px;
+  /* round302 — GROW to fill when there is room (so a short agenda looks exactly
+     as before), but never SHRINK past a readable floor: past that the track
+     scrolls instead of crushing every name into an ellipsis. */
+  flex: 1 0 auto;
+  min-width: var(--ribbon-tile-min, 104px);
+  max-width: 260px;
   padding: 0 16px;
   font-size: 13px;
   font-family: var(--font-family);
@@ -420,11 +460,21 @@
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
   transform: translate(-50%, -50%);
 }
+/* round302 — a long topic name WRAPS to two lines inside the tile instead of being
+   cut to an ellipsis. line-height 1.12 × 2 lines ≈ 29px, which fits the 37px of
+   tile inside the 48px strip, so the strip's height does not move. A short name
+   still renders as one centered line. */
 .ribbonName {
   min-width: 0;
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.12;
+  max-height: 2.24em;
+  text-align: center;
 }
 .ribbonEye { flex-shrink: 0; color: var(--secondary-text-color, #676879); }
 .ribbonRenameInput {
@@ -460,6 +510,83 @@
   clip-path: polygon(100% 0, 8px 0, 0 50%, 8px 100%, 100% 100%, calc(100% - 8px) 50%);
 }
 .ribbonAddEnd { order: 999; } /* leftmost — end-of-discussion "+" */
+
+/* ===== round302 — scroll affordances =======================================
+   All absolutely positioned INSIDE the 48px strip, so none of them adds height.
+   The "+" pieces keep the puzzle silhouette; the chevrons are ROUND, so the two
+   can never be mistaken for each other (the owner's explicit concern). */
+.ribbonEdge {
+  position: absolute;
+  inset-block: 5px;
+  width: 64px;
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  z-index: 3;
+}
+.ribbonEdgeStart {
+  /* toward the FIRST topic — the right side in RTL, just inside the start "+" */
+  inset-inline-end: 40px;
+  justify-content: flex-end;
+  padding-inline-end: 4px;
+  background: linear-gradient(to right, transparent, color-mix(in srgb, var(--primary-background-color, #fff) 84%, transparent) 42%, var(--primary-background-color, #fff));
+}
+.ribbonEdgeEnd {
+  inset-inline-start: 40px;
+  justify-content: flex-start;
+  padding-inline-start: 4px;
+  background: linear-gradient(to left, transparent, color-mix(in srgb, var(--primary-background-color, #fff) 84%, transparent) 42%, var(--primary-background-color, #fff));
+}
+.ribbonEdgeOn { opacity: 1; }
+.ribbonChev {
+  pointer-events: auto;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  background: var(--primary-background-color, #fff);
+  color: var(--secondary-text-color, #676879);
+  cursor: pointer;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.16);
+}
+.ribbonChev:hover {
+  color: #fff;
+  background: var(--primary-color, #0073ea);
+  border-color: var(--primary-color, #0073ea);
+}
+/* The slim drag bar sits ON the strip's bottom rule — visible and grabbable,
+   costing zero height. */
+.ribbonSbar {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 40px;
+  height: 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--primary-text-color, #323338) 8%, transparent);
+  cursor: grab;
+  touch-action: none;
+  display: none;
+  z-index: 4;
+}
+.ribbonSbarOn { display: block; }
+.ribbonSbarDrag { cursor: grabbing; }
+.ribbonThumb {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--primary-color, #0073ea);
+}
+/* The shared chevron glyph points DOWN; rotate it into the two horizontal
+   directions (the strip is RTL, so "next" points left). */
+.ribbonChevIconStart { transform: rotate(-90deg); }
+.ribbonChevIconEnd { transform: rotate(90deg); }
 .ribbonAdd:hover { color: var(--primary-color, #0073ea); background: var(--primary-selected-color, #e6f1fd); }
 /* the inline add — looks like a TOPIC PIECE with an editable box already inside;
    Enter or clicking elsewhere (blur) commits. */

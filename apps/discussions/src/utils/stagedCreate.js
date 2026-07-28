@@ -20,24 +20,30 @@ export function bumpReloadStamp(discussion, stamp) {
 }
 
 /**
- * A later stage landed for `id`: re-read the board so the rows it created show up.
- * Returns the SAME object when it is about a different (or no) discussion, so the
- * caller's setState is a no-op and no needless refetch fires.
+ * A later stage landed for `id`: re-read the board so the rows it created show up,
+ * and drop `__building` — the agenda is complete, so the loading animation must
+ * give way to it. Returns the SAME object when it is about a different (or no)
+ * discussion, so the caller's setState is a no-op and no needless refetch fires.
  */
 export function applyStageAdvance(discussion, id, stamp) {
   if (!discussion) return discussion;
   if (id != null && String(discussion.id) !== String(id)) return discussion;
-  return bumpReloadStamp(discussion, stamp);
+  const next = { ...discussion, __reloadStamp: stamp };
+  delete next.__building;
+  return next;
 }
 
 /**
  * A background stage FAILED for `id`. The people were never written, so the
  * pending copy must go — and the card refetches to show what monday actually has.
+ * `__building` goes too: whatever is on the board is all there will be, and
+ * leaving the loader spinning forever would strand the user.
  */
 export function applyStageFailure(discussion, id, stamp) {
   if (!discussion) return discussion;
   if (id != null && String(discussion.id) !== String(id)) return discussion;
   const next = { ...discussion, __reloadStamp: stamp };
   delete next.__pendingPeople;
+  delete next.__building;
   return next;
 }

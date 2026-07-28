@@ -9,6 +9,7 @@ import { applyStageAdvance, applyStageFailure, bumpReloadStamp } from '../staged
 const CARD = () => ({
   id: '99',
   name: 'דיון אלפא',
+  __building: true,
   __pendingPeople: {
     discussionLeadID: [{ id: 'p1', name: 'איש' }],
     participantsID: [{ id: 'p2', name: 'אישה' }],
@@ -23,6 +24,11 @@ describe('applyStageFailure', () => {
     // everything else survives
     expect(next.id).toBe('99');
     expect(next.name).toBe('דיון אלפא');
+  });
+
+  it('drops __building too — a failed build must not leave the loader spinning forever', () => {
+    const next = applyStageFailure(CARD(), '99', 1234);
+    expect('__building' in next).toBe(false);
   });
 
   it('leaves a DIFFERENT discussion untouched (same object back, so no refetch)', () => {
@@ -49,6 +55,11 @@ describe('applyStageAdvance', () => {
     const next = applyStageAdvance(CARD(), '99', 777);
     expect(next.__reloadStamp).toBe(777);
     expect(next.__pendingPeople).toBeTruthy();
+  });
+
+  it('drops __building — the agenda is complete, so the loader must give way to it', () => {
+    const next = applyStageAdvance(CARD(), '99', 777);
+    expect('__building' in next).toBe(false);
   });
 
   it('leaves a DIFFERENT discussion untouched', () => {
