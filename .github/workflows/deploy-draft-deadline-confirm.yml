@@ -90,7 +90,7 @@ jobs:
         # --verbose: mapps swallows task errors (logger.debug only) — without it
         # a failed push exits 1 with no reason printed (incident 2026-07-14).
         run: >
-          mapps code:push --verbose
+          bash scripts/mapps-push-retry.sh --verbose
           -d apps/deadline-confirm/.
           -a "$APP_ID"
         env:

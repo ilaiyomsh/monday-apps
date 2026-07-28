@@ -114,18 +114,9 @@ jobs:
       # remote-server error.
       - name: "🚨 FORCE push to LIVE version (pinned id) 🚨"
         if: ${{ env.APP_ID != '' }}
-        run: |
-          set -uo pipefail
-          for attempt in 1 2; do
-            if mapps code:push --force \
-                 -d apps/telemetry-dashboard \
-                 -i "${{ steps.live.outputs.live_id }}"; then
-              exit 0
-            fi
-            echo "push attempt $attempt failed; retrying once in 15s (transient remote error)…"
-            sleep 15
-          done
-          echo "::error::code:push to live version ${{ steps.live.outputs.live_id }} failed after retry"
-          exit 1
+        run: >
+          bash scripts/mapps-push-retry.sh --force
+          -d apps/telemetry-dashboard
+          -i "${{ steps.live.outputs.live_id }}"
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}

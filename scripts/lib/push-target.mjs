@@ -23,6 +23,15 @@ const KEY_RE = /^([A-Za-z_][\w.-]*)\s*:(?:\s|$)/;
 const ITEM_RE = /^-\s+/;
 
 /**
+ * The push invocation, in either shipped form: the bare CLI, or the retry wrapper that runs
+ * it (scripts/mapps-push-retry.sh). Both carry the SAME -c/-d flags, which is all this
+ * reader needs. Recognising both matters because the lockfile audit derives its scope from
+ * this parse — if the wrapper were unrecognised the audit would report every workflow
+ * unreadable, which it treats as a failure rather than a silent pass.
+ */
+const PUSH_INVOCATION_RE = /mapps\s+code:push|mapps-push-retry\.sh/;
+
+/**
  * Find the `mapps code:push` invocation and read its client flag + pushed directory.
  *
  * The command lives in a `run:` scalar (folded `>` or literal `|`), so its flags may sit on
@@ -34,7 +43,7 @@ const ITEM_RE = /^-\s+/;
  */
 export function parsePushTarget(text) {
   const lines = text.split('\n');
-  const start = lines.findIndex((l) => !isComment(l) && l.includes('mapps code:push'));
+  const start = lines.findIndex((l) => !isComment(l) && PUSH_INVOCATION_RE.test(l));
   if (start === -1) return { found: false, isClient: false, dir: null, line: -1 };
 
   const commandIndent = indentOf(lines[start]);

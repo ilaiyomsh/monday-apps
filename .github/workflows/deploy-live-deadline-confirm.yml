@@ -109,22 +109,14 @@ jobs:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
           APP_ID: ${{ secrets.APP_DEADLINE_CONFIRM_ID }}
 
-      # Server app: no -c, ships the app root. Retry once on the transient
-      # "Unexpected error ... communicating with the remote server" (it failed
-      # the first live run 2026-07-15 with no retry).
+      # Server app: no -c, ships the app root. Retries live in the shared wrapper
+      # (scripts/mapps-push-retry.sh) — this step used to carry its own loop, added
+      # after the transient "Unexpected error ... communicating with the remote
+      # server" killed the first live run on 2026-07-15.
       - name: "🚨 FORCE push to LIVE version (pinned id) 🚨"
-        run: |
-          set -uo pipefail
-          for attempt in 1 2; do
-            if mapps code:push --force \
-                 -d apps/deadline-confirm/. \
-                 -i "${{ steps.live.outputs.live_id }}"; then
-              exit 0
-            fi
-            echo "push attempt $attempt failed; retrying once in 15s (transient remote error)…"
-            sleep 15
-          done
-          echo "::error::code:push to live version ${{ steps.live.outputs.live_id }} failed after retry"
-          exit 1
+        run: >
+          bash scripts/mapps-push-retry.sh --force
+          -d apps/deadline-confirm/.
+          -i "${{ steps.live.outputs.live_id }}"
         env:
           MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}

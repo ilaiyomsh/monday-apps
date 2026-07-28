@@ -87,8 +87,15 @@ def main():
     # this hook's sight. In the monorepo it is forbidden like any local push.
     # Matches execution forms only (direct path or via an interpreter), not
     # mere mentions like `grep ship.sh`.
+    #
+    # mapps-push-retry.sh is caught for the SAME reason: it is the CI retry wrapper around
+    # `mapps code:push`, so running it on a machine is a local deploy the `mapps code:push`
+    # pattern above cannot see. It is legitimate only inside a GitHub Actions runner. Any
+    # future wrapper around the push belongs in this alternation too — otherwise adding one
+    # silently re-opens the hole this guard exists to close.
     ship_invocation = re.search(
-        CMD_POS + r"(?:(?:bash|sh|zsh|source)\s+)?(?:\S*/)?ship\.sh\b", stripped
+        CMD_POS + r"(?:(?:bash|sh|zsh|source)\s+)?(?:\S*/)?(?:ship|mapps-push-retry)\.sh\b",
+        stripped,
     )
 
     # `npm/pnpm run deploy` is only a monday-code deploy if the project's

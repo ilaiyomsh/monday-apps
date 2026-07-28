@@ -114,7 +114,7 @@ jobs:
 
       - name: "🚨 FORCE push to LIVE version (pinned id) 🚨"
         run: >
-          mapps code:push -c --force
+          bash scripts/mapps-push-retry.sh -c --force
           -d apps/discussions/build
           -i "${{ steps.live.outputs.live_id }}"
         env:

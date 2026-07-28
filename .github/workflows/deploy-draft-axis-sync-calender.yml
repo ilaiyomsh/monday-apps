@@ -91,7 +91,7 @@ jobs:
       # server-side (monday-code) apps — the only difference between the two.
       - name: Push to latest DRAFT version
         run: >
-          mapps code:push 
+          bash scripts/mapps-push-retry.sh 
           -d apps/axis/sync-calender/.
           -a "$APP_ID"
         env:

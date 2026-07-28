@@ -87,7 +87,7 @@ jobs:
 
       - name: Push to latest DRAFT version
         run: >
-          mapps code:push -c
+          bash scripts/mapps-push-retry.sh -c
           -d apps/discussions/build
           -a "$APP_ID"
         env:

@@ -83,7 +83,11 @@ and adds the Codex-specific wiring. See "Codex sessions" below.
   server/SPA apps vendor a copy instead, so they are unaffected (drift-tested, not imported).
 - `workflow_dispatch` exists on draft workflows only (post-detach redeploys).
   A draft deploy that fails after merge is fixed FORWARD on a new feature branch.
-- **Never run `mapps code:push` from a machine — with or without ship.sh.**
+- **Never run `mapps code:push` from a machine — with or without ship.sh**, and not via
+  `scripts/mapps-push-retry.sh` either. That wrapper is the CI-only retry around the push
+  (bounded attempts + backoff, one implementation shared by every deploy workflow);
+  deploy-guard blocks running it locally for exactly the reason it blocks ship.sh — it wraps
+  the push out of the guard's sight. Any future wrapper must be added to that guard too.
   Inside this repo the pipeline supersedes the mapps ship path (ship.sh serves
   standalone apps outside the monorepo). The ONLY emergency lever (e.g. GitHub
   Actions down) is promoting an already-pushed draft via `mapps app:promote`

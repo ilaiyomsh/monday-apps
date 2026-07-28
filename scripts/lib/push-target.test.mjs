@@ -182,3 +182,33 @@ test('an unparsed workflow fails even when isClient happens to be false', () => 
   const d = classifyPushTarget({ found: false, isClient: true, dir: 'apps/x', line: -1 }, { dirExists: true, hasLockfile: true });
   assert.equal(d.action, 'fail');
 });
+
+// The push command is wrapped by scripts/mapps-push-retry.sh in the shipped workflows. The
+// lockfile audit derives its scope from this parse, so the wrapper MUST be recognised — an
+// unrecognised invocation makes every workflow read as unreadable, which the audit treats as
+// a failure. Both forms stay supported so the two can coexist during any transition.
+test('reads a push made through the retry wrapper (server)', () => {
+  const t = parsePushTarget(`
+      - name: Push to latest DRAFT version
+        run: >
+          bash scripts/mapps-push-retry.sh
+          -d apps/axis/sync-calender/.
+          -a "$APP_ID"
+`);
+  assert.equal(t.found, true);
+  assert.equal(t.isClient, false);
+  assert.equal(t.dir, 'apps/axis/sync-calender');
+});
+
+test('reads a client push made through the retry wrapper, with --force', () => {
+  const t = parsePushTarget(`
+      - name: FORCE push to LIVE
+        run: >
+          bash scripts/mapps-push-retry.sh -c --force
+          -d apps/discussions/build
+          -i "live-9"
+`);
+  assert.equal(t.found, true);
+  assert.equal(t.isClient, true);
+  assert.equal(t.dir, 'apps/discussions/build');
+});
