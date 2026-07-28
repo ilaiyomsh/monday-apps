@@ -270,6 +270,57 @@ const FIELD_SPECS = {
     isEmpty: (value) => value === null || value === undefined || value === '' || !(Number(value) > 0),
   },
 
+  /*
+   * Connected boards. Form value: an array of { id, name } — the name travels with
+   * the id so the bar can label a chosen item without a second read.
+   *
+   * Platform facts this encodes (all from the discussions app's proven relation code,
+   * apps/discussions/src/utils/mondayApi/monday-client.js):
+   *   - `text` and `value` are NULL for board_relation on API 2025-04+, so the typed
+   *     fields are the ONLY way to read it.
+   *   - The write key is `item_ids` with NUMBERS. `linkedPulseIds` is the old shape and
+   *     is not used anywhere.
+   *   - A write REPLACES the whole linked set — which is what this form wants, since
+   *     the control always submits the full selection the user sees.
+   *   - `{"item_ids":[null]}` (a `Number()` of a bad id) is the classic failure, and
+   *     monday answers ColumnValueException/itemsNotInConnectedBoards. The sanitizer
+   *     below drops non-finite ids.
+   *
+   * All four were re-verified live against the sandbox (WZ- scratch boards, API 2026-04):
+   * the write was accepted, and the read came back `text: null`, `value: null`,
+   * `linked_item_ids: ["…"]` as STRINGS beside `linked_items { id name }`.
+   *
+   * KNOWN LIMIT (monday-api references/board-relation.md Rule 4): only the FORWARD side of
+   * a connect-boards pair is writable — the auto-created reflection column on the far board
+   * rejects direct writes, and which side a column is on is NOT derivable from its settings
+   * (both sides expose only `boardIds`). An admin who marks a reflection column as required
+   * therefore gets monday's rejection at save time, surfaced by the modal's error box. There
+   * is no client-side check that could pre-empt it.
+   */
+  board_relation: {
+    control: 'boardRelation',
+    icon: 'Connect',
+    iconTone: '#037f4c',
+    fragment: '... on BoardRelationValue { linked_item_ids linked_items { id name } }',
+    prefill: (cv) => {
+      // linked_items carries names; linked_item_ids is the fallback when monday
+      // returns ids without the expanded items (an item the user cannot read).
+      const named = entryList(cv?.linked_items)
+        .map((item) => ({ id: trimmedString(item?.id), name: typeof item?.name === 'string' ? item.name : '' }))
+        .filter((item) => item.id !== '');
+      if (named.length > 0) return named;
+      return entryList(cv?.linked_item_ids)
+        .map((id) => ({ id: trimmedString(id), name: '' }))
+        .filter((item) => item.id !== '');
+    },
+    serialize: (value) => ({
+      item_ids: entryList(value)
+        .map((item) => Number(item?.id))
+        .filter((id) => Number.isFinite(id) && id !== 0),
+    }),
+    isEmpty: (value) => entryList(value).length === 0,
+  },
+
   // Form value: the label id as a string. Label id 0 is a REAL label, so every
   // check here is null/blank-based, never truthiness.
   status: {
@@ -326,6 +377,31 @@ export function dropdownOptionsFrom(settings) {
       label: typeof label?.label === 'string' ? label.label : '',
     }))
     .filter((option) => option.id !== '');
+}
+
+/**
+ * Board ids a connected-boards column points at, as strings.
+ *
+ * `settings.boardIds` is the key monday uses (probe-verified in the discussions app's
+ * provisioning code, which both reads and writes it); `allowedBoardIds` is accepted as
+ * the older alias seen on some columns.
+ */
+export function relationTargetBoardIds(settings) {
+  const parsed = parseColumnSettings(settings);
+  const ids = parsed?.boardIds ?? parsed?.allowedBoardIds;
+  if (!Array.isArray(ids)) return [];
+  return ids.map((id) => trimmedString(id)).filter((id) => id !== '');
+}
+
+/**
+ * Whether the column accepts MORE than one linked item.
+ *
+ * Defaults to false when the key is absent, and that direction is deliberate: writing
+ * two ids to a single-link column is a ColumnValueException, while offering one pick on
+ * a column that would have taken several is merely restrictive. Fail closed.
+ */
+export function relationAllowsMultiple(settings) {
+  return parseColumnSettings(settings)?.allowMultipleItems === true;
 }
 
 /* --------------------------------------------------------------- public API */
@@ -428,6 +504,19 @@ export function sanitizeColumnValue(value) {
       'ids',
       (id) => id,
       (id) => !isBlankString(id),
+    );
+  }
+
+  // board_relation. A NaN from Number(<bad id>) becomes `null` once stringified, and
+  // monday answers ColumnValueException/itemsNotInConnectedBoards for the whole
+  // mutation — so one unreadable linked item would otherwise block the transition.
+  // An intentionally empty array survives: it is how a relation is cleared.
+  if ('item_ids' in value) {
+    return sanitizeArrayField(
+      value,
+      'item_ids',
+      (id) => Number(id),
+      (id) => Number.isFinite(id) && id !== 0,
     );
   }
 

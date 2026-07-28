@@ -156,6 +156,37 @@ export const GET_REQUIRED_FIELDS_CONTEXT = `
   }
 `;
 
+/**
+ * Candidate items of the board(s) a connected-boards column points at.
+ *
+ * ONE page, no cursor follow-up: this feeds a picker inside a required-fields form, and
+ * a form that blocks a status transition must not sit through an unbounded crawl. The
+ * `cursor` is still selected so the control can TELL the user the list was truncated
+ * rather than quietly showing a prefix (see BoardRelationFieldControl).
+ *
+ * Search is client-side. monday cannot server-filter a relation's candidates by
+ * anything but item NAME, and `items_page(query_params:)` on a large board costs
+ * complexity we do not need for a list this size.
+ */
+export const GET_LINKED_BOARD_ITEMS = `
+  query GetLinkedBoardItems(
+    $boardIds: [ID!]
+    $limit: Int!
+  ) {
+    boards(ids: $boardIds) {
+      id
+      name
+      items_page(limit: $limit) {
+        cursor
+        items {
+          id
+          name
+        }
+      }
+    }
+  }
+`;
+
 export const UPDATE_STATUS_COLUMN_VALUE = `
   mutation UpdateStatusColumnValue(
     $boardId: ID!

@@ -10,21 +10,29 @@
  * each row a fixed label column (icon + title) beside a wide control column.
  * Width is therefore constant — it is the layout, not the field count — and only
  * the height follows the rows, capped at FORM_MAX_ROWS with the list scrolling
- * past that.
+ * past that. Only the LIST scrolls: the title and the actions are pinned by
+ * .twyst-form's `auto 1fr auto` grid inside a viewport-height, overflow-hidden
+ * modal, so a ninth field never pushes the submit button off screen.
  *
  * Every constant below mirrors OnClickDialog.css. Changing one without the other
  * makes the modal either clip the form or float in empty space.
  */
 
-export const FORM_MAX_ROWS = 4;
+export const FORM_MAX_ROWS = 8;
 
 export const LABEL_COLUMN_WIDTH_PX = 150;
 export const CONTROL_COLUMN_WIDTH_PX = 320;
-export const FIELD_ROW_HEIGHT_PX = 48;
+// 36px is the real row height (.twyst-form-row min-height, and the min-block-size of
+// every option bar); the extra 4 is breathing room for a control that renders a pixel
+// or two taller. It was 48, which showed up as visible dead space above the footer —
+// 12px per row, and at the 8-row cap that would have been a 96px hole.
+export const FIELD_ROW_HEIGHT_PX = 40;
 export const FORM_GAP_PX = 12;
 export const FORM_COLUMN_GAP_PX = 16;
 export const FORM_PADDING_PX = 20;
-export const FORM_HEADER_PX = 64;
+// One h2 (15px, 10px bottom margin) plus the form's own 12px grid gap. It was 64 when
+// the header also carried an eyebrow and a status-name heading.
+export const FORM_HEADER_PX = 40;
 export const FORM_ACTIONS_PX = 64;
 
 /**

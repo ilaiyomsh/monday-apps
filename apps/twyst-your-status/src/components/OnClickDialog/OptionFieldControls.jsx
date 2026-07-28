@@ -12,6 +12,21 @@ import { dropdownOptionsFrom } from '../../domain/columnFields';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';
 import { Popover } from '../shared/Popover';
 
+/**
+ * How tall the option menu ASKS to be.
+ *
+ * It has to be read against the window it opens in: the required-fields modal is an
+ * iframe sized to fit its form to the pixel (requiredFormModalSize.js — 184px for one
+ * field, 548px at the 8-field cap). A menu taller than that iframe cannot open beside
+ * its field at all: overlayPlacement clamps it to `viewport - 16`, flips it, and pins
+ * it 8px from the top, so it covers the trigger and every row. That is exactly what
+ * "the list opens somewhere else" was — geometry, not a placement bug.
+ *
+ * 220 leaves room for the bar plus the menu in every modal from two fields up, and
+ * still shows ~6 options before scrolling.
+ */
+const OPTION_POPOVER_HEIGHT_PX = 220;
+
 /** Single-select status field: the bar wears the chosen label's colour. */
 export function StatusFieldControl({
   column, value, onChange, disabled, controlId,
@@ -40,7 +55,9 @@ export function StatusFieldControl({
         disabled={disabled}
         onClick={() => !disabled && setOpen(true)}
       >
-        <span>{selected ? (selected.label || 'ללא שם') : 'בחרו סטטוס'}</span>
+        {/* An unnamed label renders as an empty bar in its own colour — the same thing
+            monday's cell shows. There is no "ללא שם" stand-in. */}
+        <span>{selected ? selected.label : 'בחרו סטטוס'}</span>
       </button>
 
       <Popover
@@ -50,7 +67,7 @@ export function StatusFieldControl({
         preferred="bottom-start"
         matchAnchorWidth
         width={260}
-        height={320}
+        height={OPTION_POPOVER_HEIGHT_PX}
       >
         <div className="twyst-option-list" role="listbox" aria-label="סטטוסים">
           {labels.map((label) => (
@@ -66,7 +83,7 @@ export function StatusFieldControl({
                 setOpen(false);
               }}
             >
-              {label.label || 'ללא שם'}
+              {label.label}
             </button>
           ))}
         </div>
@@ -113,7 +130,7 @@ export function DropdownFieldControl({
         preferred="bottom-start"
         matchAnchorWidth
         width={260}
-        height={320}
+        height={OPTION_POPOVER_HEIGHT_PX}
       >
         <div className="twyst-option-list" role="group" aria-label="תוויות">
           {options.map((option) => {

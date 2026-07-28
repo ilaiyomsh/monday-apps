@@ -191,7 +191,9 @@ function OnClickDialog({ context }) {
       setSavingLabelId(labelId);
       setError(null);
       await writeStatusOnly(labelId);
-      await mondayService.showNotice(`הסטטוס עודכן ל״${selectedLabel.label}״`);
+      // No label name in the notice: an unnamed label made it read `ל״״`, and the
+      // cell the user is looking at already shows which status was set.
+      await mondayService.showNotice('הסטטוס עודכן בהצלחה');
       await dismissPicker();
     } catch (err) {
       logger.error('OnClickDialog', 'Failed to update status value', err);
@@ -247,11 +249,17 @@ function OnClickDialog({ context }) {
                 type="button"
                 role="option"
                 aria-selected={false}
+                aria-busy={isSaving}
                 disabled={savingLabelId !== null || user?.isViewOnly}
                 style={{ background: label.color || NEUTRAL }}
                 onClick={() => handleSelectLabel(label.id)}
               >
-                {isSaving ? 'שומר…' : (label.label || 'ללא שם')}
+                {/* The pill KEEPS its own text while the write is in flight. Swapping it
+                    for "שומר…" hid which label was picked, and on the only pill that
+                    can be busy that text carried no information the spinner does not.
+                    The spinner is absolutely placed so the centred label never shifts. */}
+                {isSaving && <span className="status-option-spinner" aria-hidden="true" />}
+                {label.label}
               </button>
             );
           })}

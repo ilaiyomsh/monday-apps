@@ -10,6 +10,7 @@
 import React from 'react';
 import { fieldControlFor } from '../../domain/columnFields';
 import { PersonPicker } from '../shared/PersonPicker';
+import BoardRelationFieldControl from './BoardRelationFieldControl';
 import DateFieldControl from './DateFieldControl';
 import { DropdownFieldControl, StatusFieldControl } from './OptionFieldControls';
 
@@ -129,6 +130,18 @@ function FieldControl({ column, value, onChange, disabled, controlId, labelId })
   if (control === 'status') {
     return (
       <StatusFieldControl
+        column={column}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        controlId={controlId}
+      />
+    );
+  }
+
+  if (control === 'boardRelation') {
+    return (
+      <BoardRelationFieldControl
         column={column}
         value={value}
         onChange={onChange}

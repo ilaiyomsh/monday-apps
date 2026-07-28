@@ -60,8 +60,17 @@ export function Popover({
 
   // Position on open; keep following the anchor on scroll/resize (capture-phase
   // scroll listener catches scrolling containers, not just the window).
+  //
+  // Closing CLEARS the position. Keeping it meant the next open rendered one frame at
+  // the PREVIOUS open's coordinates — reposition() is an effect, so it only corrects
+  // after commit. That flash is a real "the menu opened somewhere else", and it is
+  // worst where the anchor moves between opens: rows in the required-fields form shift
+  // when a validation error or an error box mounts above them.
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open) {
+      setPos(null);
+      return undefined;
+    }
     reposition();
     window.addEventListener('resize', reposition);
     window.addEventListener('scroll', reposition, true);
@@ -101,7 +110,13 @@ export function Popover({
         top: pos.top,
         left: pos.left,
         minWidth: pos.minWidth,
-        maxWidth: width,
+        // A menu stretched to a wider anchor must not be capped back below it:
+        // minWidth would win anyway and the declared max was silently dead.
+        maxWidth: Math.max(width, pos.minWidth ?? 0),
+        // The `height` prop is what the placement math reserved room for, so it has to
+        // bound what actually renders too — otherwise the box is placed for 220px and
+        // drawn at the stylesheet's 430px, overflowing the window it was fitted into.
+        maxHeight: `min(${height}px, calc(100vh - 16px))`,
         zIndex: 10000,
       }}
     >

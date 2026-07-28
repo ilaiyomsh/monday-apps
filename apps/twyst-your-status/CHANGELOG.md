@@ -1,5 +1,51 @@
 # Changelog
 
+## 3.6.0
+
+- **Connected-board (`board_relation`) columns can now be required fields.** The control
+  reads the linked board off the column's own `settings.boardIds` and offers its items in
+  a searchable menu, single- or multi-select according to the column's
+  `allowMultipleItems`. An absent setting means single, deliberately: writing two ids to a
+  single-link column is a `ColumnValueException`, while offering one pick on a column that
+  would have taken several is merely restrictive. Candidates are one page of 500 fetched on
+  first open, not on form load — a relation field must not slow down the form that is
+  blocking the user's transition — and when that page is full the menu says so rather than
+  showing a silent prefix. The write format, the read fragment and the empty-clear path
+  were all verified live against the sandbox, not copied on faith.
+- The item **NAME** column is gone from the required-fields checklist in settings. It was
+  listed but greyed out, which amounted to offering to make an item's own title a required
+  field.
+- **The modal now grows to fit up to 8 fields** instead of 4, and past that only the field
+  LIST scrolls: the title stays at the top and the button stays at the bottom. Previously a
+  form taller than the window scrolled the page and took the header and footer with it.
+- Removed the dead space above the footer. The height budget reserved 48px for a row that
+  actually renders at 36 — 12 wasted pixels per field, which at the new 8-row cap would
+  have been a 96px hole.
+- **Clicking a status label no longer replaces its text with "שומר…"** — the pill keeps its
+  own label and shows a small spinner instead. The text swap hid the very thing the user
+  had just clicked.
+- The required-fields modal reuses the picker's loader: monday's black spinner, continued
+  from `index.html`, with no text. Being its own iframe it was already painting that
+  spinner and then throwing it away to draw a second, differently-styled loader with
+  "טוען שדות חובה…" underneath.
+- The submit button is a blue **"שמור"**. It was white because the only blue
+  `.primary-action` rule was scoped to `.status-guard-dialog`, and the fill form renders
+  under `.twyst-required-fields-modal` — so the rule never matched.
+- The form header is one title, "עמודות חובה". The "מעבר סטטוס" eyebrow and the
+  "השלמת פרטים לפני מעבר ל״X״" heading are gone, which also gave the row list 24px back.
+- Removed the cancel button and the red asterisks. The modal's X is the way out, and an
+  asterisk on every row of a form where every field is required carried no information.
+- A status label with no text renders with no text, everywhere — the "ללא שם" stand-in is
+  gone. The save notice is now just "הסטטוס עודכן בהצלחה"; it used to interpolate the label
+  name, which read as `ל״״` for an unnamed label.
+- **Fixed option menus opening detached from their field.** Three separate causes: the menu
+  asked for 320px of height inside an iframe as short as 216px, so it was clamped, flipped
+  and pinned to the top edge, covering the field it belonged to; the popover kept its last
+  position on close and painted one frame at the old coordinates on reopen; and its
+  rendered height came from the stylesheet (430px) rather than the height the placement
+  math had reserved. Also made the whole bar one click target — a click that landed on the
+  label text or the chevron was a click on a child of the button.
+
 ## 3.5.1
 
 - Fixed the field label breaking onto three lines. A leftover

@@ -46,18 +46,30 @@ Size is computed by `src/utils/requiredFormModalSize.js` and passed to
 
 - **Width is constant** (`520px`) — it is the label+control layout, not the field
   count.
-- **Height follows the rows**: one row per field, at most **4 visible**; past that
-  the LIST scrolls and the modal keeps its opened height.
+- **Height follows the rows**: one row per field, at most **8 visible** (`FORM_MAX_ROWS`,
+  raised from 4 in 3.6.0); past that the LIST scrolls and the modal keeps its opened
+  height. Only the list scrolls — `.twyst-form`'s `auto 1fr auto` grid inside a
+  `block-size: 100vh; overflow: hidden` modal pins the title and the actions, so a ninth
+  field cannot push the submit button off screen.
 - The row height, gaps, paddings and the two column widths in that module MUST match
-  `OnClickDialog.css`. Drift shows up as a clipped form or dead space.
+  `OnClickDialog.css`. Drift shows up as a clipped form or dead space. `FIELD_ROW_HEIGHT_PX`
+  is 40 against a real 36px row (4px of tolerance); it was 48, and those 12 spare pixels
+  per row were the visible dead space above the footer.
 - Label icons come from the registry (`icon` + `iconTone` per type) and are resolved
   to `@vibe/icons` components in `OnClickDialog/FieldIcon.jsx`. **monday exposes
   neither its column icons nor their colours through the API** — the palette is our
   approximation of its look.
-- The icon, the field name and the required marker sit on ONE line. Do not add a bare
-  `.twyst-form label` rule: one existed with `display: grid` and outranked
-  `.twyst-field-title`, stacking the three vertically, tripling row heights and
-  clipping the footer out of a correctly-sized modal (fixed in 3.5.1).
+- The icon and the field name sit on ONE line. Do not add a bare `.twyst-form label`
+  rule: one existed with `display: grid` and outranked `.twyst-field-title`, stacking the
+  contents vertically, tripling row heights and clipping the footer out of a
+  correctly-sized modal (fixed in 3.5.1). There is no required asterisk any more (3.6.0) —
+  every field in this form is required by definition.
+- **An option popover must fit the iframe it opens in.** The modal is sized to the form to
+  the pixel, so a menu taller than that window gets clamped to `viewport - 16`, flipped and
+  pinned 8px from the top — it covers the trigger and every row, which reads as "the list
+  opened somewhere else". `OPTION_POPOVER_HEIGHT_PX` (220) is what keeps status/dropdown
+  menus beside their field; `Popover` now also caps its RENDERED height to the `height` it
+  was placed for, instead of letting the stylesheet's 430px overflow the placement math.
 - **Every option-based control is a single field-height bar** that opens a popover —
   date, status and dropdown all share `.twyst-field-trigger`. Options are never
   rendered inline: a row of chips spills across the row and stops the field reading
@@ -96,12 +108,16 @@ second loader starts its animation from 0 and reads as a jump.
   `createRoot()` (which wipes its container).
 - It is a hand copy of `@vibe/core`'s `Loader`, `dark` variant, 40px. **Re-sync by
   hand if Vibe's Loader changes** — it is not imported.
-- Removal is the only operation: `src/utils/bootLoader.js`. App releases it on any
-  non-picker route or a context error; `OnClickDialog` releases it once settings
-  AND board data have arrived; the error boundary and a 15s timer in `index.jsx`
-  are backstops so a failure can never leave a dialog spinning forever.
-- The picker therefore renders **nothing** while loading. Do not reintroduce a
-  skeleton or a `<Loader>` there — that was the jump (removed in 3.3.0).
+- Removal is the only operation: `src/utils/bootLoader.js`. App releases it on any route
+  that does not own it, or on a context error; **`OnClickDialog` (the picker) and
+  `RequiredFieldsModal` both own it** — each releases it once its own data has arrived.
+  The required-fields modal is its own iframe, so it serves this same `index.html` and
+  gets the same spinner for free (3.6.0); it used to drop the overlay immediately and
+  draw a Vibe `Loader` with "טוען שדות חובה…" instead. The error boundary and a 15s timer
+  in `index.jsx` are backstops so a failure can never leave a dialog spinning forever.
+- Both surfaces therefore render **nothing** while loading. Do not reintroduce a
+  skeleton or a `<Loader>` there — that was the jump (removed in 3.3.0), and
+  `bootHandoff.test.jsx` fails on any `טוען`/`Loading` text reaching the picker.
 
 ## Product rules
 
@@ -128,9 +144,25 @@ second loader starts its animation from 0 and reads as a jump.
   else in the app enumerates column types, and the settings checklist enables every
   registered type automatically.
   Supported: `text`, `long_text`, `numbers`, `date` (with optional time), `email`,
-  `phone`, `link`, `dropdown`, `people`, `checkbox`, `timeline`, `rating`, `status`.
+  `phone`, `link`, `dropdown`, `people`, `checkbox`, `timeline`, `rating`, `status`,
+  `board_relation`.
   Types monday cannot write through `column_values` (`formula`, `mirror`, `file`,
   `auto_number`, `creation_log`, `button`, `progress`, …) stay unselectable by design.
+  monday's item **name** column is filtered out of the settings checklist entirely
+  (`ColumnSettings.formColumns`, 3.6.0) — it used to sit there greyed out, offering to
+  make the item's own title a required field.
+- **`board_relation` (connected boards)** reads the board(s) the column points at from
+  its own `settings.boardIds` and offers their items in a searchable menu. Single vs
+  multi follows the column's `allowMultipleItems`, and an ABSENT setting means single:
+  writing two ids to a single-link column is a `ColumnValueException`, while offering one
+  pick on a multi-link column is merely restrictive. Candidates are one `items_page` page
+  of 500, fetched lazily on FIRST OPEN (a relation field must not slow the form that is
+  blocking the transition) and filtered client-side — monday cannot server-filter a
+  relation's candidates by anything but item name. When the page is full the control says
+  so instead of showing a silent prefix. Only the FORWARD side of a relation pair is
+  writable and which side a column is on is not derivable from its settings, so a
+  reflection column marked required fails at save time with monday's own message
+  (`monday-api` references/board-relation.md Rule 4).
 - Required-field enforcement is **ours, not the browser's** — the `required` attribute
   cannot express "this checkbox must be checked" or "this picker must hold an entry",
   so emptiness is judged per type by the registry and pinned by

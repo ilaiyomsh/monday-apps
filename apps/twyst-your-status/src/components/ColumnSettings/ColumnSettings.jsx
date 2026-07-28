@@ -454,8 +454,17 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     setLabelsBaseline(draftLabels);
   }, [statusColumn]);
 
+  // The single upstream source for the required-fields checklist AND peopleColumns, so
+  // one predicate here removes a column from both.
+  //
+  // `name` is monday's item-title column. The board query returns it like any other, so
+  // it used to sit in the checklist greyed out (no FIELD_SPECS entry ⇒ unsupported) —
+  // an unselectable row offering to make the item's own name a required field. It is not
+  // a governable field, so it is not listed at all.
   const formColumns = useMemo(
-    () => (metadata?.columns ?? []).filter((column) => column.id !== columnId),
+    () => (metadata?.columns ?? []).filter(
+      (column) => column.id !== columnId && column.type !== 'name',
+    ),
     [metadata, columnId],
   );
 
