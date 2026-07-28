@@ -586,11 +586,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
       // topics until a minute later. Now the work is ordered by how much the user
       // needs it, per the owner's spec:
       //   Stage 1 (awaited — the card opens only after this): the root item with
-      //           the BASICS (name/date/type/previous/creator) + ALL topics + the
-      //           points of the FIRST topic. The card therefore opens with its
-      //           agenda already usable, and with the REAL monday id.
-      //   Stage 2 (background): the remaining topics' points, resumed from
-      //           stage 1's checkpoint so nothing is created twice.
+      //           the BASICS (name/date/type/previous/creator) + ALL topics, created
+      //           but not yet connected. round304 sizes this at ~40% of the wait.
+      //   Stage 2 (background): every point, then the connection of the topics to
+      //           the discussion (linkLast), resumed from stage 1's checkpoint so
+      //           nothing is created twice.
       //   Stage 3 (background, last): the people columns — lead, coordinator,
       //           participants, external participants.
       // Stage 2/3 completion bumps a reload stamp on the card so the late arrivals
@@ -650,14 +650,36 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
               step: 'staged_root_save', duration_ms: Date.now() - rootSavedAt,
             });
           }
-          // round303 (owner idea) — NOTHING else blocks the modal. The whole agenda
-          // (topics, then points) is built OFF-CARD in the background and connected
-          // to the discussion only at the END (linkLast below), so the card's
-          // relation-based read pops the agenda in COMPLETE on one fetch, instead
-          // of bare topics that fill in. The modal closes after just the item save.
+          // round304 (owner spec) — REBALANCE the wait. round303 awaited only the
+          // root item here, which the owner measured as ~15% of the wait in the
+          // card vs ~85% under the card's loader; the ask is ~40/60. So the awaited
+          // part now also creates every TOPIC (no points, no connection yet): that
+          // is the second of the agenda's round-trips, and it moves the split
+          // without giving up round303's win — the points and the connection
+          // (linkLast) still run in the background, so the agenda still pops in
+          // COMPLETE on one fetch instead of filling in topic by topic.
+          if (stageTemplate) {
+            const topicsAt = Date.now();
+            await createTopicsFromTemplate(newId, stageTemplate, {
+              freshDiscussion: true,
+              linkLast: true,
+              // Topics ONLY — every point is deferred to the background pass, which
+              // resumes from this pass's checkpoint so nothing is created twice.
+              pointTopicIndexes: [],
+              resumeState: stage1Checkpoint,
+              onCheckpoint: (cp) => { stage1Checkpoint = cp; rememberRoot(cp); },
+              // A real bar in the card for the part the user is actually waiting on.
+              onProgress: setCreateProgress,
+            });
+            logger.health?.('discussion_create_phase', {
+              step: 'staged_topics_awaited', duration_ms: Date.now() - topicsAt,
+            });
+          }
         } catch (err) {
-          // The root create failed: nothing was handed off, so surface it on the
-          // FORM (the modal is still open) exactly like the awaited path does.
+          // Either the root create or the awaited topic pass failed. Both are
+          // resumable (rememberRoot persisted the checkpoint) and nothing was handed
+          // off yet, so surface it on the FORM (the modal is still open) exactly like
+          // the awaited path does.
           rememberRoot(err?.templateResumeState || stage1Checkpoint);
           throw err;
         }
@@ -686,10 +708,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
           const bgStartedAt = Date.now();
           let bgOk = false;
           try {
-            // Stage 2 — the WHOLE agenda, built while the discussion card shows the
-            // standard loading animation: topics, then every point, and only then
-            // the connection to the discussion (linkLast). Because the link is the
-            // card's read path, the agenda appears complete in one shot.
+            // Stage 2 — the REST of the agenda, built while the discussion card
+            // shows the standard loading animation: every point (the topics already
+            // exist from the awaited pass and come back through the checkpoint), and
+            // only then the connection to the discussion (linkLast). Because the
+            // link is the card's read path, the agenda appears complete in one shot.
             if (stageTemplate) {
               const stage2At = Date.now();
               // With linkLast a mid-run failure leaves created topics INVISIBLE

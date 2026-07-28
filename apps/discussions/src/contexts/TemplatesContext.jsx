@@ -2,7 +2,16 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { monday } from '../utils/mondayApi/monday-client.js';
 import { useMondayContext } from './MondayContext.jsx';
 import { sanitizeTemplate, sanitizeParticipantTemplate, sanitizeTypeTemplate } from '../utils/templates.js';
-import { loadTypeExportAssets as loadTypeExportAssetsAt, saveTypeExportAssets as saveTypeExportAssetsAt } from '../utils/exportAssets.js';
+import {
+  loadTypeExportAssets as loadTypeExportAssetsAt,
+  saveTypeExportAssets as saveTypeExportAssetsAt,
+  moveTypeExportAssets as moveTypeExportAssetsAt,
+} from '../utils/exportAssets.js';
+import {
+  renameTypeTemplates,
+  renameTypeInAssignments,
+  renameTypeColors,
+} from '../utils/typeRename.js';
 import { stableColorForKey, randomPaletteColor, colorNameToCss } from '../constants/mondayPalette.js';
 import logger from '../utils/logger.js';
 
@@ -383,6 +392,37 @@ export function TemplatesProvider({ children }) {
     [context]
   );
 
+  /*
+   * round304 — a discussion type IS the name of its template, and that name is the
+   * KEY of four stored shapes. Renaming the monday dropdown label alone would
+   * orphan all of them (the renamed type would look template-less, colorless and
+   * without its export brand file), so the whole re-key happens here in one call:
+   * the type template, its color, the assignment on standalone topic/participant
+   * templates, and the export-assets storage key. The dropdown label itself is
+   * renamed by the CALLER first (renameDropdownLabel) — that write is the one that
+   * can fail on permissions, so nothing is re-keyed until it succeeded.
+   * Discussions need no migration: they store the label ID, not the text.
+   */
+  const renameDiscussionType = useCallback(
+    async (oldName, newName) => {
+      const from = String(oldName ?? '').trim();
+      const to = String(newName ?? '').trim();
+      if (!from || !to || from === to) return false;
+      await persistTypes(renameTypeTemplates(typeTemplatesRef.current, from, to));
+      await persistTypeColors(renameTypeColors(typeColorsRef.current, from, to));
+      const topics = renameTypeInAssignments(templatesRef.current, from, to);
+      if (topics.changed) await persist(topics.list);
+      const people = renameTypeInAssignments(participantTemplatesRef.current, from, to);
+      if (people.changed) await persistParticipants(people.list);
+      // Best-effort (its own warn on failure): the export template's brand binaries
+      // live under a key that embeds the type name.
+      await moveTypeExportAssetsAt(context, from, to);
+      logger.info('TemplatesContext', 'renamed discussion type', { from, to });
+      return true;
+    },
+    [context, persist, persistParticipants, persistTypes, persistTypeColors]
+  );
+
   return (
     <TemplatesContext.Provider
       value={{
@@ -405,6 +445,7 @@ export function TemplatesProvider({ children }) {
         assignRandomTypeColor,
         loadTypeExportAssets,
         saveTypeExportAssets,
+        renameDiscussionType,
       }}
     >
       {children}
@@ -437,6 +478,7 @@ export function useTemplates() {
       typeColorName: (name) => stableColorForKey(name),
       setTypeColor: async () => {},
       assignRandomTypeColor: async () => null,
+      renameDiscussionType: async () => false,
     };
   }
   return ctx;

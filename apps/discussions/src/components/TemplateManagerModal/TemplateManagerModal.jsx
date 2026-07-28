@@ -15,7 +15,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { countPoints } from '@generated/utils/templates.js';
-import { useDropdownOptions, addDropdownLabel } from '@generated/hooks/useDropdownOptions.js';
+import { useDropdownOptions, addDropdownLabel, renameDropdownLabel } from '@generated/hooks/useDropdownOptions.js';
+import { validateTypeRename } from '@generated/utils/typeRename.js';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { MONDAY_COLOR_NAMES, colorNameToCss } from '@generated/constants/mondayPalette.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
@@ -248,6 +249,7 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
     assignRandomTypeColor,
     loadTypeExportAssets,
     saveTypeExportAssets,
+    renameDiscussionType,
   } = useTemplates();
   // "סוג דיון" is a DROPDOWN column — its labels are the assignable types.
   const { options: typeOptions } = useDropdownOptions('discussions', 'discussionTypeID');
@@ -301,6 +303,11 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
   const [addingType, setAddingType] = useState(false); // add-type mutation in-flight
   const [addOpen, setAddOpen] = useState(false); // "סוג דיון חדש" popup open state
   const [addName, setAddName] = useState(''); // typed name inside the add-type popup
+  // round304 — rename the OPEN type template (its name IS the discussion type).
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameName, setRenameName] = useState('');
+  const [renameError, setRenameError] = useState(null);
+  const [renaming, setRenaming] = useState(false);
   const typeSearchRef = useRef(null); // ref for the "סוג דיון" search box input
   // Color popover (opened by the color circle in the type-editor header).
   const [colorOpen, setColorOpen] = useState(false);
@@ -508,7 +515,11 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
         // (typeExportDirty); otherwise keep whatever was stored (null ⇒ the type
         // keeps following the system default, so future system changes propagate).
         const existingType = typeTemplates.find((t) => t.discussionType === draft.discussionType);
-        if (typeExportDirty) {
+        // round304 — `typeExportAssets` is null until the async load lands, and
+        // writing that null would normalize to EMPTY and WIPE the type's stored
+        // logos / uploaded .docx (e.g. when the user edited only the config and
+        // saved before the load finished). Only write real, loaded assets.
+        if (typeExportDirty && typeExportAssets) {
           // persist the per-type export ASSETS first (quota-checked). On an
           // over-quota error, keep the editor open with the message.
           try {
@@ -596,10 +607,59 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
       await addDropdownLabel({ boardKey: 'discussions', alias: 'discussionTypeID', title: nm });
       await assignRandomTypeColor(nm);
       setTypeSearch('');
+      // round304 (owner spec) — creating the type is only the FIRST half of setting
+      // it up, so land the user straight in its editor (בעלי תפקידים / אג'נדה /
+      // תבנית ייצוא) instead of back on the list with a template-less type.
+      setAddOpen(false);
+      startEditType(nm);
     } catch (err) {
       logger.error('TemplateManagerModal', 'הוספת סוג דיון נכשלה', err);
     } finally {
       setAddingType(false);
+    }
+  };
+
+  /*
+   * round304 (owner spec) — rename the OPEN type template. Its name IS the "סוג
+   * דיון" label, so the rename is: validate → rename the monday label (the write
+   * that can actually fail) → re-key everything stored under the old name
+   * (template, color, assignments, export assets). Existing discussions follow
+   * automatically: a dropdown item stores the label ID, not its text.
+   */
+  const openRenameType = () => {
+    setRenameName(draft?.discussionType || '');
+    setRenameError(null);
+    setRenameOpen(true);
+  };
+  const handleRenameType = async () => {
+    const current = draft?.discussionType || '';
+    if (renaming) return;
+    const check = validateTypeRename({
+      oldName: current,
+      newName: renameName,
+      existingNames: typeOptions.map((o) => o.label),
+    });
+    if (!check.ok) { setRenameError(check.error); return; }
+    if (check.unchanged) { setRenameOpen(false); return; }
+    const labelId = typeOptions.find((o) => (o.label || '').trim() === current.trim())?.id;
+    if (labelId == null) {
+      setRenameError('הסוג לא נמצא בעמודת "סוג דיון" — רעננו ונסו שוב');
+      return;
+    }
+    setRenaming(true);
+    setRenameError(null);
+    try {
+      await renameDropdownLabel({
+        boardKey: 'discussions', alias: 'discussionTypeID', labelId, title: check.name,
+      });
+      await renameDiscussionType?.(current, check.name);
+      setDraft((d) => (d ? { ...d, discussionType: check.name } : d));
+      setRenameOpen(false);
+    } catch (err) {
+      logger.error('TemplateManagerModal', 'שינוי שם סוג הדיון נכשל', err);
+      setRenameError(err?.message || 'שינוי שם סוג הדיון נכשל');
+    } finally {
+      setRenaming(false);
     }
   };
 
@@ -688,6 +748,17 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
                 </div>,
                 document.body
               )}
+              {/* round304 — the missing rename affordance: the type template's name
+                  was only editable in monday's column settings until now. */}
+              <button
+                type="button"
+                className={styles.renameBtn}
+                onClick={openRenameType}
+                aria-label="שינוי שם התבנית"
+                title="שינוי שם התבנית"
+              >
+                <Pencil size={15} />
+              </button>
             </>
           )}
         </div>
@@ -1132,6 +1203,53 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
                 disabled={!addTrimmed || addExists || addingType}
               >
                 צור
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* round304 — "שינוי שם התבנית" popup (types editor). The name is the "סוג
+          דיון" label, so the change also re-labels every existing discussion of
+          this type — said plainly in the hint rather than left as a surprise. */}
+      {renameOpen && createPortal(
+        <div
+          className={styles.addOverlay}
+          onMouseDown={(e) => { if (e.target === e.currentTarget && !renaming) setRenameOpen(false); }}
+        >
+          <div className={styles.addCard} dir="rtl" role="dialog" aria-modal="true" aria-label="שינוי שם התבנית">
+            <h3 className={styles.addTitle}>שינוי שם התבנית</h3>
+            <input
+              type="text"
+              className={styles.addInput}
+              autoFocus
+              value={renameName}
+              placeholder="שם התבנית"
+              aria-label="שם התבנית"
+              onChange={(e) => { setRenameName(e.target.value); setRenameError(null); }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); handleRenameType(); }
+                else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (!renaming) setRenameOpen(false); }
+              }}
+            />
+            <div className={styles.addHint}>
+              <Text type="text2" color={renameError ? 'negative' : 'secondary'}>
+                {renameError || 'השם הוא גם שם סוג הדיון — השינוי יחול על כל הדיונים מסוג זה'}
+              </Text>
+            </div>
+            <div className={styles.addActions}>
+              <Button kind="tertiary" size="small" onClick={() => setRenameOpen(false)} disabled={renaming}>
+                ביטול
+              </Button>
+              <Button
+                kind="primary"
+                size="small"
+                onClick={handleRenameType}
+                loading={renaming}
+                disabled={!renameName.trim() || renaming}
+              >
+                שמור שם
               </Button>
             </div>
           </div>

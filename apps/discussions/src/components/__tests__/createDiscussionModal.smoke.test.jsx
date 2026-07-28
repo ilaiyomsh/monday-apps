@@ -353,9 +353,17 @@ describe('CreateDiscussionModal', () => {
     expect(peoplePayload.discussionLeadID).toBeTruthy();
   });
 
-  it('round303 — the template never blocks the hand-off; the agenda builds in one background pass with linkLast', async () => {
+  it('round304 — the awaited part creates the TOPICS (40%), the background the points + the link (60%)', async () => {
     const TOPICS = [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }];
     templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: TOPICS }];
+    const checkpoint = {
+      templateKey: 'k', topicResults: [{ sourceIndex: 0, id: 'T1' }, { sourceIndex: 1, id: 'T2' }],
+      pointResults: [], linkedTopicSourceIndexes: [],
+    };
+    templateApi.createTopicsFromTemplate.mockImplementation(async (_id, _template, options) => {
+      options?.onCheckpoint?.(checkpoint);
+      return { topics: 2, points: 0, topicIds: ['T1', 'T2'] };
+    });
     // Sampled INSIDE the hand-off, so the ordering assertion is deterministic: with
     // instantly-resolving mocks the deferred pass can otherwise land before a
     // waitFor() gets to look.
@@ -373,21 +381,51 @@ describe('CreateDiscussionModal', () => {
     await act(async () => { fireEvent.click(submit); });
     await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
 
-    // round303 — NOTHING of the template blocks the hand-off: the modal closes
-    // after just the item save, so ZERO template passes had run at that moment.
-    expect(stagedCallsAtHandoff).toBe(0);
+    // round304 (owner: ~40% in the card, ~60% under the loader) — EXACTLY ONE
+    // template pass had run when the card was handed off: the topics-only pass.
+    expect(stagedCallsAtHandoff).toBe(1);
+    const awaitedPass = templateApi.createTopicsFromTemplate.mock.calls[0];
+    expect(awaitedPass[1].topics).toHaveLength(2);
+    // No points in the awaited pass, and still no connection to the discussion.
+    expect(awaitedPass[2].pointTopicIndexes).toEqual([]);
+    expect(awaitedPass[2].linkLast).toBe(true);
+    // The card's own progress bar tracks that awaited work.
+    expect(typeof awaitedPass[2].onProgress).toBe('function');
     // The card is told it is still being built, so ניהול דיון shows the loader.
     expect(onOptimisticCreate.mock.calls[0][0].__building).toBe(true);
 
-    // The whole agenda is built in the BACKGROUND, in one pass, and connected to
-    // the discussion only at the END (linkLast) — so the card's relation-based
-    // read pops it in complete on one fetch.
-    await waitFor(() => expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(1));
-    const bg = templateApi.createTopicsFromTemplate.mock.calls[0];
-    expect(bg[1].topics).toHaveLength(2);
+    // The REST (every point, then the linkLast connection) runs in the background,
+    // resuming from the awaited pass's checkpoint so no topic is created twice.
+    await waitFor(() => expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(2));
+    const bg = templateApi.createTopicsFromTemplate.mock.calls[1];
+    expect(bg[2].resumeState).toBe(checkpoint);
     expect(bg[2].linkLast).toBe(true);
     expect(bg[2].pointTopicIndexes).toBeUndefined();
     await waitFor(() => expect(onStageAdvance).toHaveBeenCalled());
+  });
+
+  it('round304 — a failure in the AWAITED topic pass stays on the form and does not hand the card off', async () => {
+    // The awaited pass is resumable (the root item + created topics are remembered),
+    // so its failure belongs on the open form — exactly like the root create's.
+    const TOPICS = [{ name: 'נושא א', points: ['א1'] }];
+    templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: TOPICS }];
+    templateApi.createTopicsFromTemplate.mockImplementation(async () => {
+      throw new Error('topics pass failed');
+    });
+    const onOptimisticCreate = vi.fn();
+    await renderOpen({ onOptimisticCreate, onCreated: vi.fn() });
+    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
+    await act(async () => { fireEvent.click(screen.getByText('צור דיון').closest('button')); });
+    await flush();
+
+    expect(onOptimisticCreate).not.toHaveBeenCalled();
+    // …and the form is usable again for the resumed retry.
+    await waitFor(() => expect(
+      screen.getByText('צור דיון').closest('button').getAttribute('aria-disabled')
+    ).toBe('false'));
+    // The root item was created ONCE; a retry must not create a second one.
+    expect(boardApi.create).toHaveBeenCalledTimes(1);
   });
 
   it('round303 — a failed agenda build RETRIES from the checkpoint, then salvage-links created topics before reporting', async () => {
@@ -401,11 +439,19 @@ describe('CreateDiscussionModal', () => {
       templateKey: 'k', topicResults: [{ sourceIndex: 0, id: 'T1' }],
       pointResults: [], linkedTopicSourceIndexes: [],
     };
-    templateApi.createTopicsFromTemplate.mockImplementation(async () => {
-      const err = new Error('agenda build failed');
-      err.templateResumeState = checkpoint;
-      throw err;
-    });
+    // round304 — the FIRST pass is the awaited topics-only one and must succeed
+    // (otherwise the card is never handed off and there is no background tail to
+    // test); every later pass — the background build and its retry — fails.
+    templateApi.createTopicsFromTemplate
+      .mockImplementationOnce(async (_id, _template, options) => {
+        options?.onCheckpoint?.(checkpoint);
+        return { topics: 1, points: 0, topicIds: ['T1'] };
+      })
+      .mockImplementation(async () => {
+        const err = new Error('agenda build failed');
+        err.templateResumeState = checkpoint;
+        throw err;
+      });
     const onStageError = vi.fn();
     await renderOpen({ onOptimisticCreate: vi.fn(), onCreated: vi.fn(), onStageError });
     fireEvent.click(screen.getByText('בחר סוג דיון'));
@@ -413,10 +459,11 @@ describe('CreateDiscussionModal', () => {
     await act(async () => { fireEvent.click(screen.getByText('צור דיון').closest('button')); });
 
     await waitFor(() => expect(onStageError).toHaveBeenCalled());
-    // Exactly two build attempts (original + one resumed retry)…
-    expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(2);
+    // The awaited topics pass + exactly two background build attempts (original +
+    // one resumed retry)…
+    expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(3);
     // …the retry resumed from the failure's checkpoint (nothing recreated)…
-    expect(templateApi.createTopicsFromTemplate.mock.calls[1][2].resumeState).toBe(checkpoint);
+    expect(templateApi.createTopicsFromTemplate.mock.calls[2][2].resumeState).toBe(checkpoint);
     // …and the salvage link ran over that checkpoint before the error surfaced.
     expect(templateApi.linkTemplateTopics).toHaveBeenCalledWith('99', checkpoint);
   });
@@ -427,9 +474,19 @@ describe('CreateDiscussionModal', () => {
     // nothing happened, and the discussion is never duplicated.
     const TOPICS = [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }];
     templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: TOPICS }];
-    templateApi.createTopicsFromTemplate.mockImplementationOnce(async () => {
-      throw new Error('transient background failure');
-    });
+    const okPass = async (_id, _template, options) => {
+      options?.onCheckpoint?.({
+        templateKey: 'k', topicResults: [{ sourceIndex: 0, id: 'T1' }],
+        pointResults: [], linkedTopicSourceIndexes: [],
+      });
+      return { topics: 1, points: 0, topicIds: ['T1'] };
+    };
+    // round304 — pass 1 is the AWAITED topics pass (must succeed), pass 2 is the
+    // background build that fails transiently, pass 3 is its resumed retry.
+    templateApi.createTopicsFromTemplate
+      .mockImplementationOnce(okPass)
+      .mockImplementationOnce(async () => { throw new Error('transient background failure'); })
+      .mockImplementationOnce(okPass);
     const onOptimisticCreate = vi.fn();
     const onCreated = vi.fn();
     const onStageError = vi.fn();
@@ -443,7 +500,7 @@ describe('CreateDiscussionModal', () => {
     await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
     // …the retry finished the agenda, so the flow COMPLETES rather than erroring…
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
-    expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(2);
+    expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(3);
     expect(onStageError).not.toHaveBeenCalled();
     // …and one root item only — a background failure must never duplicate it.
     expect(boardApi.create).toHaveBeenCalledTimes(1);
