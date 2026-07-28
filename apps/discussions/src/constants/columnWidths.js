@@ -55,6 +55,8 @@ export const TASKS_COLUMN_WIDTHS = {
   name: { default: 320, min: 180, max: 760 },
   priority: { default: 170, min: 110, max: 320 },
   assignee: { default: 140, min: 100, max: 260 },
+  // round306 — שותפים, beside אחראי and slightly wider (it holds several people).
+  partners: { default: 170, min: 100, max: 320 },
   deadline: { default: 150, min: 100, max: 280 },
   status: { default: 170, min: 110, max: 320 },
   source: { default: 260, min: 160, max: 520 },

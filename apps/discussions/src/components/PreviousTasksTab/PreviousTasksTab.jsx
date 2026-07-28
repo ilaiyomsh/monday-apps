@@ -258,7 +258,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     typeFilter, typeMapsLoading,
   } = usePreviousTasksData(discussion, byType, { onResetSelection: () => setSelectedIds(new Set()), scope });
   const {
-    updateName, updateStatus, updatePriority, updateAssignee, updateDeadline,
+    updateName, updateStatus, updatePriority, updateAssignee, updatePartners, updateDeadline,
     updateStatusBatch, updateAssigneeBatch, updateDeadlineBatch,
   } = useMemo(() => createTaskUpdaters(setTasks), [setTasks]);
 
@@ -274,6 +274,8 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
     { key: 'name', label: 'שם', icon: 'text', locked: true },
     showPriority && { key: 'priority', label: 'עדיפות', icon: 'status' },
     { key: 'assignee', label: 'אחראי', icon: 'person' },
+    // round306 — hideable like the rest; shown only when the alias is mapped.
+    (getColumns('tasks') || {}).partnersID?.id && { key: 'partners', label: 'שותפים', icon: 'person' },
     { key: 'deadline', label: 'דד ליין', icon: 'date' },
     { key: 'status', label: 'סטאטוס', icon: 'status' },
     byType && { key: 'source', label: 'דיון מקור', icon: 'relation' },
@@ -379,6 +381,10 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   // Priority has no batch endpoint; apply to each selected target sequentially.
   const applyPriorityChange = useStableHandler(async (taskId, priority) => {
     for (const id of resolveTargetIds(taskId, 'editTaskPriority')) await updatePriority(id, priority);
+  });
+  // round306 — שותפים, bulk-aware over the allowed selection.
+  const applyPartnersChange = useStableHandler(async (taskId, people) => {
+    for (const id of resolveTargetIds(taskId, 'editTaskPartners')) await updatePartners(id, people);
   });
   const applyAssigneeChange = useStableHandler(async (taskId, people) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskAssignee');
@@ -1083,6 +1089,7 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
                   onStatusChange={applyStatusChange}
                   onPriorityChange={applyPriorityChange}
                   onAssigneeChange={applyAssigneeChange}
+                  onPartnersChange={applyPartnersChange}
                   onDeadlineChange={applyDeadlineChange}
                   onRenameTask={updateName}
                   selectable={canSelect} selectedIds={selectedIds} onToggleSelect={toggleSelect}

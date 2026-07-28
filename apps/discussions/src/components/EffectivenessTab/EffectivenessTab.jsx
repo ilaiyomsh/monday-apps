@@ -46,7 +46,7 @@ function ChartTooltipContent({ active, payload, label }) {
 // `data` is the shared useTasks() result, prefetched in DiscussionCard.
 export function EffectivenessTab({ data, canManageSettings = false, onNotify }) {
   const {
-    items, loading, updateTaskStatus, updateTaskPriority, updateTaskAssignee, updateTaskDeadline,
+    items, loading, updateTaskStatus, updateTaskPriority, updateTaskAssignee, updateTaskPartners, updateTaskDeadline,
     updateTasksStatusBatch, updateTasksAssigneeBatch, updateTasksDeadlineBatch, softDeleteTasks,
   } = data;
   const { options, labelById, doneId } = useStatusOptions();
@@ -183,6 +183,10 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
     const ids = resolveTargetIds(taskId);
     if (ids.length > 1 && updateTasksAssigneeBatch) return updateTasksAssigneeBatch(ids, people);
     for (const id of ids) await updateTaskAssignee(id, people);
+  };
+  // round306 — שותפים, same bulk-over-selection shape as the others.
+  const applyPartnersChange = async (taskId, people) => {
+    for (const id of resolveTargetIds(taskId)) await updateTaskPartners?.(id, people);
   };
   const applyDeadlineChange = async (taskId, date) => {
     const ids = resolveTargetIds(taskId);
@@ -356,6 +360,7 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
               onStatusChange={applyStatusChange}
               onPriorityChange={applyPriorityChange}
               onAssigneeChange={applyAssigneeChange}
+              onPartnersChange={applyPartnersChange}
               onDeadlineChange={applyDeadlineChange}
               selectable={true}
               selectedIds={selectedIds}

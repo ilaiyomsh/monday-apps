@@ -40,10 +40,9 @@ export function MyTasksTable({
   onRenameTask,
   // round305 — שותפים (partnersID) inline edit, gated per row by editTaskPartners.
   onPartnersChange,
-  // round305 — the אחראי (responsibility) column is rendered ONLY in the
-  // "בדיונים שהובלתי" scope, where the tasks are other people's (in the default
-  // scope every row is the current user's own, so the column says nothing).
-  showAssignee = false,
+  // round306 — אחראי inline edit (gated per row by editTaskAssignee), exactly
+  // like the discussion tasks table.
+  onAssigneeChange,
   // Per-task capability check (board-permissions matrix). `canTask(cap, task)`
   // gates each inline editor PER ROW — a false verdict withholds the handler so
   // the row renders that cell read-only. Defaults to allow-all.
@@ -76,9 +75,10 @@ export function MyTasksTable({
   const showDeadline = !!cols.deadlineID?.id;
   const showPriority = !!cols.priorityID?.id;
   const showNotes = !!cols.taskNotesID?.id;
-  // round305 — both people columns need their alias mapped to render at all.
+  // round306 — both people columns render in EVERY scope (owner request); each
+  // needs its alias mapped, and both are hideable via the toolbar like the rest.
   const showPartners = !!cols.partnersID?.id;
-  const showAssigneeCol = showAssignee && !!cols.responsibilityID?.id;
+  const showAssigneeCol = !!cols.responsibilityID?.id;
 
   // Visible columns in DEFAULT order, each carrying its width params.
   const baseDefs = [
@@ -234,6 +234,7 @@ export function MyTasksTable({
             showPartners={showPartners}
             showAssignee={showAssigneeCol}
             onPartnersChange={onPartnersChange && canTask('editTaskPartners', task) ? onPartnersChange : undefined}
+            onAssigneeChange={onAssigneeChange && canTask('editTaskAssignee', task) ? onAssigneeChange : undefined}
             onStatusChange={onStatusChange && canTask('editTaskStatus', task) ? onStatusChange : undefined}
             onPriorityChange={onPriorityChange && canTask('editTaskPriority', task) ? onPriorityChange : undefined}
             onNotesChange={onNotesChange}

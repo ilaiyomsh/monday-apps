@@ -53,6 +53,17 @@ export function createTaskUpdaters(setTasks) {
     try { await new משימות1Board().item(id).update({ responsibilityID: p.map(x => Number(x.id)) }).execute(); }
     catch (err) { logger.error('PreviousTasksTab', 'שגיאה בעדכון משימה', err); setTasks(prev); }
   };
+  // round306 — שותפים (partnersID): same optimistic shape as updateAssignee.
+  const updatePartners = async (id, p) => {
+    const next = Array.isArray(p) ? p : [];
+    let prev = [];
+    setTasks((current) => {
+      prev = current;
+      return current.map((t) => (t.id === id ? { ...t, partnersID: next } : t));
+    });
+    try { await new משימות1Board().item(id).update({ partnersID: next.map((x) => Number(x.id)) }).execute(); }
+    catch (err) { logger.error('PreviousTasksTab', 'שגיאה בעדכון שותפים', err); setTasks(prev); }
+  };
   const updateDeadline = async (id, d) => {
     let prev = [];
     setTasks((current) => {
@@ -142,7 +153,7 @@ export function createTaskUpdaters(setTasks) {
   };
 
   return {
-    updateName, updateStatus, updatePriority, updateAssignee, updateDeadline,
+    updateName, updateStatus, updatePriority, updateAssignee, updatePartners, updateDeadline,
     updateStatusBatch, updateAssigneeBatch, updateDeadlineBatch,
   };
 }
