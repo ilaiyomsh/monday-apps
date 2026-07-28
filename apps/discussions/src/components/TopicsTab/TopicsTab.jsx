@@ -1125,6 +1125,10 @@ export function TopicsTab({
     if (!track || typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(syncRibbonScroll);
     ro.observe(track);
+    // The bar too: it goes from display:none to visible once overflow appears, and
+    // only THEN does it have a width to size the thumb from — that resize is what
+    // triggers the second pass that fills the thumb in.
+    if (sbarRef.current) ro.observe(sbarRef.current);
     return () => ro.disconnect();
   }, [syncRibbonScroll, items]);
   const scrollRibbon = useCallback((dir) => {
@@ -1174,6 +1178,42 @@ export function TopicsTab({
     bar.addEventListener('pointercancel', onUp);
   }, [ribbonScrollState.thumb, syncRibbonScroll]);
 
+  // Edge auto-pan while a topic is being dragged. The loop reads the LATEST pointer
+  // x from a ref, so it keeps panning while the pointer is held still, and parks
+  // itself the moment the pointer leaves the edge zone or the drag ends.
+  const edgePanTargetRef = useRef(null);
+  const edgePanRafRef = useRef(0);
+  const stopEdgePan = useCallback(() => {
+    if (edgePanRafRef.current) cancelAnimationFrame(edgePanRafRef.current);
+    edgePanRafRef.current = 0;
+    edgePanTargetRef.current = null;
+  }, []);
+  const startEdgePan = useCallback(() => {
+    if (edgePanRafRef.current) return; // already running
+    const tick = () => {
+      const track = trackRef.current;
+      const x = edgePanTargetRef.current;
+      if (!track || x == null || maxPos(track) <= 2) { edgePanRafRef.current = 0; return; }
+      const r = track.getBoundingClientRect();
+      const NEAR = 52;
+      const SPEED = 12;
+      let delta = 0;
+      if (x < r.left + NEAR) delta = SPEED;        // toward the LAST topic (RTL: left)
+      else if (x > r.right - NEAR) delta = -SPEED; // back toward the FIRST topic
+      if (!delta) { edgePanRafRef.current = 0; return; }
+      const previous = track.style.scrollBehavior;
+      track.style.scrollBehavior = 'auto';
+      const landed = writePos(track, readPos(track) + delta);
+      track.style.scrollBehavior = previous;
+      syncRibbonScroll();
+      // Hit the end? Nothing left to pan toward, so stop burning frames.
+      const atLimit = delta > 0 ? landed >= maxPos(track) : landed <= 0;
+      edgePanRafRef.current = atLimit ? 0 : requestAnimationFrame(tick);
+    };
+    edgePanRafRef.current = requestAnimationFrame(tick);
+  }, [syncRibbonScroll]);
+  useEffect(() => stopEdgePan, [stopEdgePan]);
+
   const canDragRibbon = editTopicOrPoint;
   const ghostRef = useRef(null);
   const clearGhost = () => { if (ghostRef.current) { ghostRef.current.remove(); ghostRef.current = null; } };
@@ -1221,19 +1261,12 @@ export function TopicsTab({
       if (!armed) return;
       if (ghostRef.current) { ghostRef.current.style.left = ev.clientX + 'px'; ghostRef.current.style.top = ev.clientY + 'px'; }
       // round302 — with a scrolling ribbon, a topic must be draggable to a position
-      // that is currently off-screen: holding near an edge pans the strip under the
-      // cursor. Without this, reordering could only reach the visible window.
-      const track = trackRef.current;
-      if (track && maxPos(track) > 2) {
-        const r = track.getBoundingClientRect();
-        const NEAR = 48;
-        const previous = track.style.scrollBehavior;
-        track.style.scrollBehavior = 'auto';
-        if (ev.clientX < r.left + NEAR) writePos(track, readPos(track) + 14);
-        else if (ev.clientX > r.right - NEAR) writePos(track, readPos(track) - 14);
-        track.style.scrollBehavior = previous;
-        syncRibbonScroll();
-      }
+      // that is currently off-screen: HOLDING near an edge pans the strip under the
+      // cursor. It has to be its own rAF loop, not a per-pointermove nudge: a
+      // stationary pointer emits no more events, so a nudge-per-event would stop
+      // dead and force the user to wiggle the mouse to keep scrolling.
+      edgePanTargetRef.current = ev.clientX;
+      startEdgePan();
       // round239 fix — DIRECTION-AGNOSTIC drop target. The old loop overwrote
       // its result and always ended on the last (rightmost) tile, so only the
       // right-edge gap ever opened. Instead: measure every OTHER tile's centre,
@@ -1252,6 +1285,7 @@ export function TopicsTab({
       clearTimeout(timer);
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
+      stopEdgePan();
       if (armed) {
         clearGhost();
         setDraggingTopicId(null);
@@ -1554,7 +1588,12 @@ export function TopicsTab({
             it adds no height and the 48px contract holds. */}
         <div
           ref={sbarRef}
-          className={`${styles.ribbonSbar} ${ribbonScrollState.thumb ? styles.ribbonSbarOn : ''}`}
+          // Visibility is driven by hasOverflow, which is measured off the TRACK
+          // (always laid out) — NOT by `thumb`. Gating on the thumb deadlocked: a
+          // display:none bar reports clientWidth 0, so the thumb never computed,
+          // so the bar never displayed, so it never got a width. jsdom has no
+          // layout, which is why the unit tests could not see it.
+          className={`${styles.ribbonSbar} ${ribbonScrollState.hasOverflow ? styles.ribbonSbarOn : ''}`}
           onPointerDown={onSbarPointerDown}
           aria-hidden="true"
         >

@@ -725,22 +725,32 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
               const wantTopics = (stageTemplate.topics || []).length;
               const wantPoints = (stageTemplate.topics || [])
                 .reduce((n, t) => n + (t.points?.length || 0), 0);
+              let confirmed = false;
               for (let attempt = 0; attempt < 10; attempt += 1) {
                 try {
                   const readBack = await readDiscussionTopicsAsTemplate(newId);
                   const got = readBack?.topics || [];
                   const gotPoints = got.reduce((n, t) => n + (t.points?.length || 0), 0);
-                  if (got.length >= wantTopics && gotPoints >= wantPoints) break;
+                  if (got.length >= wantTopics && gotPoints >= wantPoints) { confirmed = true; break; }
                 } catch (err) {
                   if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי הדיון נכשלה — ממשיך להמתין', err);
                 }
                 await new Promise((resolve) => { setTimeout(resolve, 500); });
               }
               logger.health?.('discussion_create_phase', {
-                step: 'staged_readiness', duration_ms: Date.now() - readinessAt,
+                step: 'staged_readiness', duration_ms: Date.now() - readinessAt, ok: confirmed,
               });
               // Reveal the agenda without waiting for the people write.
               onStageAdvance?.({ id: newId, stage: 2 });
+              if (!confirmed) {
+                // The budget ran out before the board served the full agenda back.
+                // We still reveal (an endless loader would strand the user), but a
+                // single one-shot refetch could land on the same stale read, so
+                // schedule one more pass instead of leaving points missing until the
+                // user reopens the discussion.
+                logger.warn('CreateDiscussionModal', 'סדר היום עדיין לא נקרא במלואו מהלוח — מתוזמנת קריאה נוספת');
+                setTimeout(() => onStageAdvance?.({ id: newId, stage: 2, retry: true }), 4000);
+              }
             }
             // Stage 3 — people last.
             if (Object.keys(peoplePayload).length) {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // round302 — two structural guarantees of the agenda pane:
@@ -86,5 +86,30 @@ describe('TopicsTab — the ribbon scroll track (round302)', () => {
     render(<TopicsTab discussion={{ id: 'D1' }} canEdit />);
     expect(screen.getByLabelText('לנושאים הקודמים')).toBeTruthy();
     expect(screen.getByLabelText('לנושאים הבאים')).toBeTruthy();
+  });
+
+  it('shows the drag bar from OVERFLOW alone, never from the thumb it has to size', () => {
+    // Regression guard for a deadlock that shipped in review: the bar was
+    // display:none until a thumb existed, and the thumb was computed from the
+    // bar's clientWidth — which is 0 while hidden. So the thumb never computed,
+    // the bar never displayed, and the drag affordance could never appear. Its
+    // visibility must therefore depend only on the TRACK's overflow, which is
+    // measurable whether or not the bar is currently painted.
+    const { container } = render(<TopicsTab discussion={{ id: 'D1' }} canEdit />);
+    const bar = container.querySelector('.ribbonSbar');
+    expect(bar).toBeTruthy();
+    // jsdom reports every width as 0, so the track never overflows here and the
+    // bar is correctly hidden. The point of the assertion is the GATE: the class
+    // that reveals it must not be the thumb's.
+    expect(bar.className).not.toContain('ribbonSbarOn');
+
+    const track = container.querySelector('.ribbonTrack');
+    // Force a real overflow the way a browser would report one…
+    Object.defineProperty(track, 'clientWidth', { value: 300, configurable: true });
+    Object.defineProperty(track, 'scrollWidth', { value: 900, configurable: true });
+    // …and the bar must reveal itself on the next measurement pass, WITHOUT
+    // needing a thumb first.
+    fireEvent.scroll(track);
+    expect(container.querySelector('.ribbonSbar').className).toContain('ribbonSbarOn');
   });
 });
