@@ -56,7 +56,14 @@ vi.mock('@api/BoardSDK.js', () => {
     orderBy() { return this; }
     withPagination() { return this; }
     async execute() { return { items: [], cursor: null }; }
-    item() { return { create: () => ({ execute: boardApi.create }), update: () => ({ execute: boardApi.update }) }; }
+    // The payload is forwarded into the spy (round301 asserts WHICH columns land in
+    // the root create vs. the later people update).
+    item(id = null) {
+      return {
+        create: (payload) => ({ execute: () => boardApi.create(payload, id) }),
+        update: (payload) => ({ execute: () => boardApi.update(payload, id) }),
+      };
+    }
     async itemById() { return null; }
   }
   return { דיונים1Board: Board };
@@ -282,25 +289,67 @@ describe('CreateDiscussionModal', () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1), { timeout: 2000 });
   });
 
-  it('round300 — optimistic create: opens the card instantly (id-less), then patches the real id', async () => {
+  it('round301 — staged create: hands the card off with the REAL id once stage 1 is on the board', async () => {
     const onOptimisticCreate = vi.fn();
     const onCreated = vi.fn();
     await renderOpen({ onOptimisticCreate, onCreated });
     const submit = screen.getByText('צור דיון').closest('button');
     await act(async () => { fireEvent.click(submit); });
-    // The card is handed off IMMEDIATELY, before the create_item write resolves —
-    // with a shape that carries NO id yet (the header renders from it).
-    expect(onOptimisticCreate).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
+    // round301 replaced round300's id-less instant hand-off: the card now opens
+    // only after the root item exists, so it carries the real monday id (its data
+    // hooks can fetch immediately) — never a null id.
     const shape = onOptimisticCreate.mock.calls[0][0];
-    expect(shape.id).toBeNull();
-    expect(typeof shape.name).toBe('string');
+    expect(shape.id).toBe('99');
     expect(shape.name.length).toBeGreaterThan(0);
-    // The background create was NOT awaited before hand-off.
+    // The people the user picked ride along as PENDING until stage 3 writes them,
+    // so the card header does not blank them out mid-creation.
+    expect(shape.__pendingPeople).toBeTruthy();
     await flush();
-    // …and once create_item resolves, the REAL id is patched in via onCreated.
     expect(onCreated).toHaveBeenCalledTimes(1);
     expect(onCreated.mock.calls[0][0].id).toBe('99');
     expect(onCreated.mock.calls[0][1]).toMatchObject({ isEdit: false, isDuplicate: false });
+  });
+
+  it('round301 — the root create defers the PEOPLE columns to stage 3 (a follow-up update)', async () => {
+    const onOptimisticCreate = vi.fn();
+    await renderOpen({ onOptimisticCreate, onCreated: vi.fn() });
+    // Pick a lead so there is something for stage 3 to write.
+    fireEvent.click(screen.getAllByText(/add-person/)[0]);
+    const submit = screen.getByText('צור דיון').closest('button');
+    await act(async () => { fireEvent.click(submit); });
+    await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
+    await flush();
+    // Stage 1's create_item must NOT carry people — that is what stage 3 is for.
+    const rootPayload = boardApi.create.mock.calls[0]?.[0] ?? {};
+    expect(rootPayload.discussionLeadID).toBeUndefined();
+    expect(rootPayload.participantsID).toBeUndefined();
+    expect(rootPayload.name).toBeTruthy();
+    // …and the people arrive in a later update() on the created item.
+    await waitFor(() => expect(boardApi.update).toHaveBeenCalled());
+    const peoplePayload = boardApi.update.mock.calls.at(-1)[0];
+    expect(peoplePayload.discussionLeadID).toBeTruthy();
+  });
+
+  it('round301 — a template stages the FIRST topic\'s points before the hand-off and the rest after', async () => {
+    templatesValue.templates = [{
+      id: 'tpl1',
+      name: 'תבנית',
+      topics: [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }],
+    }];
+    templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: templatesValue.templates[0].topics }];
+    const onOptimisticCreate = vi.fn();
+    const onStageAdvance = vi.fn();
+    await renderOpen({ onOptimisticCreate, onCreated: vi.fn(), onStageAdvance });
+    const submit = screen.getByText('צור דיון').closest('button');
+    await act(async () => { fireEvent.click(submit); });
+    await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
+    // Whatever ran BEFORE the hand-off must be limited to the first topic's points.
+    const callsBeforeHandoff = templateApi.createTopicsFromTemplate.mock.calls.length;
+    if (callsBeforeHandoff) {
+      expect(templateApi.createTopicsFromTemplate.mock.calls[0][2].pointTopicIndexes).toEqual([0]);
+    }
+    await flush();
   });
 
   it('round300 — without onOptimisticCreate it keeps the awaited path (id via onCreated only)', async () => {
