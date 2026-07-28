@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AttentionBox } from '@vibe/core';
 import { buildAvailableLabels } from '../../domain/buildAvailableLabels';
 import { parsePeopleColumnAssignments } from '../../domain/peopleColumnGate';
 import {
@@ -352,8 +351,6 @@ function OnClickDialog({ context }) {
       {user?.isViewOnly && (
         <p className="status-picker-note">יש לך הרשאת צפייה בלבד ולכן לא ניתן לשנות את הסטטוס.</p>
       )}
-
-      {error && <AttentionBox type="danger" text={error} />}
     </main>
   );
 }
