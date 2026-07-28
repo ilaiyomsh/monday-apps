@@ -104,9 +104,17 @@
   padding-inline-end: 6px;
 }
 
+/*
+ * The label column's width is NOT a literal here. It arrives as
+ * `--twyst-label-column-width` from RequiredFieldsForm, which reads it from
+ * LABEL_COLUMN_WIDTH_PX — the same constant requiredFormModalSize computes the
+ * modal's width from. A number hard-coded here instead is how a wider modal ends up
+ * with the old narrow label column and 132px of dead space beside the controls. The
+ * fallback is the pre-3.9.0 width, for a row rendered outside the modal.
+ */
 .twyst-form-row {
   display: grid;
-  grid-template-columns: 150px 1fr;
+  grid-template-columns: var(--twyst-label-column-width, 150px) 1fr;
   gap: 16px;
   align-items: center;
   min-height: 36px;
@@ -535,6 +543,27 @@
 .twyst-form-actions .primary-action:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/*
+ * The submit button's in-flight spinner. The form is deliberately still open at this
+ * point — it closes only once the status write has come back — so the wait needs to
+ * be visible, not just spelled out in the button's text. Same shape and animation as
+ * the picker pill's spinner above; inline here rather than absolutely placed, because
+ * this button's label may move.
+ */
+.twyst-btn-spinner {
+  display: inline-block;
+  vertical-align: -2px;
+  margin-inline-end: 6px;
+  inline-size: 13px;
+  block-size: 13px;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  opacity: 0.9;
+  animation: twystPillSpin 0.7s linear infinite;
 }
 
 .status-guard-dialog h2 {

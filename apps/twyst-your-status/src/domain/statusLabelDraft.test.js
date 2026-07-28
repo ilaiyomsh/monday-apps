@@ -7,7 +7,9 @@ import {
   createLabelsDraft,
   hasPendingLabelEdits,
   pruneSettingsForActiveLabels,
+  remapDraftLabelKeys,
   reorderLabelsDraft,
+  resolveNewLabelIds,
 } from './statusLabelDraft.js';
 
 const LIVE = [
@@ -276,5 +278,190 @@ describe('pruneSettingsForActiveLabels', () => {
       hiddenLabelIds: [],
       labels: {},
     });
+  });
+});
+
+/*
+ * Permissions on a label that does not exist yet.
+ *
+ * A brand-new label has no monday id until `update_status_column` has run, and the
+ * settings are keyed BY that id — which is why the settings screen used to hide the
+ * permissions accordion on a new card entirely. These two functions are what let it
+ * be configured in the same visit: rules are held under the draft's `clientKey`
+ * ("new:1"), and once monday has answered they are moved to the real id.
+ *
+ * The move is the dangerous part, so the matching never GUESSES: an unmatched draft
+ * stays unresolved (its rules are then dropped by the prune) rather than having
+ * someone else's permissions attached to it.
+ */
+const liveBefore = [
+  { id: '0', index: 0, label: 'ממתין', isDeactivated: false },
+  { id: '1', index: 1, label: 'בוצע', isDeactivated: false },
+];
+
+const newDraft = (clientKey, label, index) => ({
+  clientKey, id: clientKey, label, index, isNew: true,
+});
+
+describe('resolveNewLabelIds', () => {
+  it('maps the new draft to the id monday assigned it', () => {
+    const map = resolveNewLabelIds({
+      draft: [...createLabelsDraft(liveBefore), newDraft('new:1', 'בבדיקה', 2)],
+      liveBefore,
+      refreshedLabels: [...liveBefore, { id: '7', index: 2, label: 'בבדיקה', isDeactivated: false }],
+    });
+    expect(map).toEqual({ 'new:1': '7' });
+  });
+
+  it('keeps two new labels apart when they were added in one save', () => {
+    const map = resolveNewLabelIds({
+      draft: [newDraft('new:1', 'בבדיקה', 2), newDraft('new:2', 'הוקפא', 3)],
+      liveBefore,
+      refreshedLabels: [
+        ...liveBefore,
+        { id: '7', index: 2, label: 'בבדיקה', isDeactivated: false },
+        { id: '8', index: 3, label: 'הוקפא', isDeactivated: false },
+      ],
+    });
+    expect(map).toEqual({ 'new:1': '7', 'new:2': '8' });
+  });
+
+  it('separates two new labels that share a NAME by their index', () => {
+    // monday allows duplicate label text, so name alone cannot be the key. Index is
+    // what we sent per label, so it is what breaks the tie. Getting this wrong hands
+    // one label the other's permissions.
+    const map = resolveNewLabelIds({
+      draft: [newDraft('new:1', 'כפול', 2), newDraft('new:2', 'כפול', 3)],
+      liveBefore,
+      refreshedLabels: [
+        ...liveBefore,
+        { id: '7', index: 2, label: 'כפול', isDeactivated: false },
+        { id: '8', index: 3, label: 'כפול', isDeactivated: false },
+      ],
+    });
+    expect(map).toEqual({ 'new:1': '7', 'new:2': '8' });
+  });
+
+  it('never claims a label that already existed before the save', () => {
+    // The candidate set is what is NEW, not what merely matches. A pre-existing
+    // label renamed to the new label's text must not be claimed.
+    const map = resolveNewLabelIds({
+      draft: [newDraft('new:1', 'ממתין', 5)],
+      liveBefore,
+      refreshedLabels: [
+        { id: '0', index: 0, label: 'ממתין', isDeactivated: false },
+        { id: '1', index: 1, label: 'בוצע', isDeactivated: false },
+      ],
+    });
+    expect(map).toEqual({});
+  });
+
+  it('ignores a deactivated new id', () => {
+    const map = resolveNewLabelIds({
+      draft: [newDraft('new:1', 'בבדיקה', 2)],
+      liveBefore,
+      refreshedLabels: [...liveBefore, { id: '7', index: 2, label: 'בבדיקה', isDeactivated: true }],
+    });
+    expect(map).toEqual({});
+  });
+
+  it('matches on the index alone when monday altered the text', () => {
+    const map = resolveNewLabelIds({
+      draft: [newDraft('new:1', '  בבדיקה  ', 2)],
+      liveBefore,
+      refreshedLabels: [...liveBefore, { id: '7', index: 2, label: 'בבדיקה', isDeactivated: false }],
+    });
+    expect(map).toEqual({ 'new:1': '7' });
+  });
+
+  it('matches on the text alone when monday altered the index', () => {
+    const map = resolveNewLabelIds({
+      draft: [newDraft('new:1', 'בבדיקה', 2)],
+      liveBefore,
+      refreshedLabels: [...liveBefore, { id: '7', index: 9, label: 'בבדיקה', isDeactivated: false }],
+    });
+    expect(map).toEqual({ 'new:1': '7' });
+  });
+
+  it('leaves a draft unresolved rather than guessing, when neither text nor index matches', () => {
+    // The whole point of not falling back to "zip them in order": a wrong guess
+    // attaches permissions to the wrong status, which is worse than losing them.
+    const map = resolveNewLabelIds({
+      draft: [newDraft('new:1', 'בבדיקה', 2)],
+      liveBefore,
+      refreshedLabels: [...liveBefore, { id: '7', index: 9, label: 'משהו אחר', isDeactivated: false }],
+    });
+    expect(map).toEqual({});
+  });
+
+  it('never gives one new id to two drafts', () => {
+    const map = resolveNewLabelIds({
+      draft: [newDraft('new:1', 'כפול', 2), newDraft('new:2', 'כפול', 2)],
+      liveBefore,
+      refreshedLabels: [...liveBefore, { id: '7', index: 2, label: 'כפול', isDeactivated: false }],
+    });
+    expect(Object.values(map)).toEqual(['7']);
+  });
+
+  it('returns nothing when the save added no label at all', () => {
+    expect(resolveNewLabelIds({
+      draft: createLabelsDraft(liveBefore),
+      liveBefore,
+      refreshedLabels: liveBefore,
+    })).toEqual({});
+    expect(resolveNewLabelIds({})).toEqual({});
+  });
+});
+
+describe('remapDraftLabelKeys', () => {
+  const draftSettings = {
+    version: 1,
+    hiddenLabelIds: ['0', 'new:1'],
+    labels: {
+      0: { allowedUserIds: ['1'], allowedTeamIds: [], requiredColumnIds: [] },
+      'new:1': { allowedUserIds: ['4'], allowedTeamIds: [], requiredColumnIds: ['text_1'] },
+    },
+  };
+
+  it('moves the new label rule onto the id monday assigned', () => {
+    expect(remapDraftLabelKeys(draftSettings, { 'new:1': '7' })).toEqual({
+      version: 1,
+      hiddenLabelIds: ['0', '7'],
+      labels: {
+        0: { allowedUserIds: ['1'], allowedTeamIds: [], requiredColumnIds: [] },
+        7: { allowedUserIds: ['4'], allowedTeamIds: [], requiredColumnIds: ['text_1'] },
+      },
+    });
+  });
+
+  it('leaves the settings untouched when nothing was remapped', () => {
+    expect(remapDraftLabelKeys(draftSettings, {})).toEqual(draftSettings);
+  });
+
+  it('lets the remapped rule win over a stale rule already under that id', () => {
+    // The id monday just handed out can be one a deactivated label used to hold, and
+    // storage may still carry its rule. The rule the user just configured wins.
+    const withStale = {
+      version: 1,
+      hiddenLabelIds: [],
+      labels: {
+        7: { allowedUserIds: ['999'], allowedTeamIds: [], requiredColumnIds: [] },
+        'new:1': { allowedUserIds: ['4'], allowedTeamIds: [], requiredColumnIds: [] },
+      },
+    };
+    expect(remapDraftLabelKeys(withStale, { 'new:1': '7' }).labels).toEqual({
+      7: { allowedUserIds: ['4'], allowedTeamIds: [], requiredColumnIds: [] },
+    });
+  });
+
+  it('does not list a hidden id twice after the remap', () => {
+    const bothHidden = { version: 1, hiddenLabelIds: ['7', 'new:1'], labels: {} };
+    expect(remapDraftLabelKeys(bothHidden, { 'new:1': '7' }).hiddenLabelIds).toEqual(['7']);
+  });
+
+  it('survives settings it cannot read', () => {
+    expect(remapDraftLabelKeys(null, { 'new:1': '7' })).toBeNull();
+    expect(remapDraftLabelKeys({ version: 1 }, { 'new:1': '7' }))
+      .toEqual({ version: 1, hiddenLabelIds: [], labels: {} });
   });
 });

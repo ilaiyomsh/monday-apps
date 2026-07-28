@@ -11,7 +11,9 @@ import {
   createLabelsDraft,
   hasPendingLabelEdits,
   pruneSettingsForActiveLabels,
+  remapDraftLabelKeys,
   reorderLabelsDraft,
+  resolveNewLabelIds,
 } from '../../domain/statusLabelDraft';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';
 import {
@@ -183,7 +185,6 @@ function LabelCard({
   peopleColumns,
   usedColors,
   saving,
-  showPermissions,
   isFirst,
   isLast,
   onRename,
@@ -280,105 +281,127 @@ function LabelCard({
         </div>
       </div>
 
-      {showPermissions && (
-        <div className="twyst-label-access">
-          <div className="twyst-label-access-bar">
-            <label className="twyst-check">
-              <input
-                type="checkbox"
-                checked={hidden}
-                disabled={saving}
-                onChange={() => onToggleHidden(label.id)}
-              />
-              <span>מוסתר בבורר</span>
-            </label>
-            <button
-              type="button"
-              className="twyst-text-btn twyst-accordion-toggle"
-              aria-expanded={open}
+      {/*
+        Rendered for a NEW label too, which is the point of 3.9.0. Its rules are held
+        under the draft's client key ("new:1") and moved onto the id monday assigns in
+        the same save — see handleSave. This section used to be hidden until the label
+        existed, so creating one and restricting it took two visits with nothing on the
+        card to say why the accordion was missing.
+      */}
+      <div className="twyst-label-access">
+        <div className="twyst-label-access-bar">
+          <label className="twyst-check">
+            <input
+              type="checkbox"
+              checked={hidden}
               disabled={saving}
-              onClick={() => setOpen((current) => !current)}
-            >
-              <span className={`twyst-accordion-chevron${open ? ' is-open' : ''}`} aria-hidden="true">▾</span>
-              {open ? 'הסתר הרשאות' : 'הרשאות'}
-              {!open && summaryBits.length > 0 ? ` · ${summaryBits.join(' · ')}` : ''}
-            </button>
-          </div>
-
-          {open && (
-            <div className="twyst-permissions">
-              <div className="twyst-field twyst-field-actors">
-                <span className="twyst-field-label">אנשים וצוותים מורשים</span>
-                <PersonPicker
-                  selected={selectedActors}
-                  users={users}
-                  teams={teamsAvailable ? teams : []}
-                  bordered
-                  onChange={(actors) => {
-                    const nextActors = actors || [];
-                    onChangeRule(label.id, {
-                      allowedUserIds: nextActors
-                        .filter((actor) => actor.kind !== 'team')
-                        .map((actor) => String(actor.id)),
-                      allowedTeamIds: nextActors
-                        .filter((actor) => actor.kind === 'team')
-                        .map((actor) => String(actor.id)),
-                    });
-                  }}
-                />
-              </div>
-
-              <div className="twyst-field twyst-field-people-gate">
-                <label className="twyst-field-label" htmlFor={`people-gate-${label.clientKey}`}>
-                  חייב להופיע בעמודת אנשים
-                </label>
-                <SelectDropdown
-                  id={`people-gate-${label.clientKey}`}
-                  value={gatePeopleColumnId}
-                  options={peopleGateOptions}
-                  disabled={saving || peopleColumns.length === 0}
-                  placeholder="ללא הגבלה"
-                  emptyText="אין עמודות אנשים בלוח"
-                  onChange={(nextValue) => onChangeRule(label.id, {
-                    requiredPeopleColumnIds: nextValue ? [nextValue] : [],
-                  })}
-                />
-              </div>
-
-              <div className="twyst-field twyst-field-required">
-                <button
-                  type="button"
-                  className="twyst-collapse-toggle"
-                  aria-expanded={requiredOpen}
-                  disabled={saving}
-                  onClick={() => setRequiredOpen((current) => !current)}
-                >
-                  <span className={`twyst-accordion-chevron${requiredOpen ? ' is-open' : ''}`} aria-hidden="true">▾</span>
-                  <span className="twyst-field-label">שדות חובה במעבר</span>
-                  {requiredCount > 0 && (
-                    <span className="twyst-collapse-count">{requiredCount}</span>
-                  )}
-                </button>
-                {requiredOpen && (
-                  <OptionChecklist
-                    options={columns.map((column) => ({
-                      id: column.id,
-                      label: column.title,
-                      disabled: !isSupportedFormColumnType(column.type),
-                    }))}
-                    values={rule.requiredColumnIds}
-                    disabled={saving}
-                    emptyText="אין עמודות זמינות"
-                    onChange={(next) => onChangeRule(label.id, { requiredColumnIds: next })}
-                  />
-                )}
-              </div>
-            </div>
-          )}
+              onChange={() => onToggleHidden(label.id)}
+            />
+            <span>מוסתר בבורר</span>
+          </label>
+          <button
+            type="button"
+            className="twyst-text-btn twyst-accordion-toggle"
+            aria-expanded={open}
+            disabled={saving}
+            onClick={() => setOpen((current) => !current)}
+          >
+            <span className={`twyst-accordion-chevron${open ? ' is-open' : ''}`} aria-hidden="true">▾</span>
+            {open ? 'הסתר הרשאות' : 'הרשאות'}
+            {!open && summaryBits.length > 0 ? ` · ${summaryBits.join(' · ')}` : ''}
+          </button>
         </div>
-      )}
+
+        {open && (
+          <div className="twyst-permissions">
+            <div className="twyst-field twyst-field-actors">
+              <span className="twyst-field-label">אנשים וצוותים מורשים</span>
+              <PersonPicker
+                selected={selectedActors}
+                users={users}
+                teams={teamsAvailable ? teams : []}
+                bordered
+                onChange={(actors) => {
+                  const nextActors = actors || [];
+                  onChangeRule(label.id, {
+                    allowedUserIds: nextActors
+                      .filter((actor) => actor.kind !== 'team')
+                      .map((actor) => String(actor.id)),
+                    allowedTeamIds: nextActors
+                      .filter((actor) => actor.kind === 'team')
+                      .map((actor) => String(actor.id)),
+                  });
+                }}
+              />
+            </div>
+
+            <div className="twyst-field twyst-field-people-gate">
+              <label className="twyst-field-label" htmlFor={`people-gate-${label.clientKey}`}>
+                חייב להופיע בעמודת אנשים
+              </label>
+              <SelectDropdown
+                id={`people-gate-${label.clientKey}`}
+                value={gatePeopleColumnId}
+                options={peopleGateOptions}
+                disabled={saving || peopleColumns.length === 0}
+                placeholder="ללא הגבלה"
+                emptyText="אין עמודות אנשים בלוח"
+                onChange={(nextValue) => onChangeRule(label.id, {
+                  requiredPeopleColumnIds: nextValue ? [nextValue] : [],
+                })}
+              />
+            </div>
+
+            <div className="twyst-field twyst-field-required">
+              <button
+                type="button"
+                className="twyst-collapse-toggle"
+                aria-expanded={requiredOpen}
+                disabled={saving}
+                onClick={() => setRequiredOpen((current) => !current)}
+              >
+                <span className={`twyst-accordion-chevron${requiredOpen ? ' is-open' : ''}`} aria-hidden="true">▾</span>
+                <span className="twyst-field-label">שדות חובה במעבר</span>
+                {requiredCount > 0 && (
+                  <span className="twyst-collapse-count">{requiredCount}</span>
+                )}
+              </button>
+              {requiredOpen && (
+                <OptionChecklist
+                  options={columns.map((column) => ({
+                    id: column.id,
+                    label: column.title,
+                    disabled: !isSupportedFormColumnType(column.type),
+                  }))}
+                  values={rule.requiredColumnIds}
+                  disabled={saving}
+                  emptyText="אין עמודות זמינות"
+                  onChange={(next) => onChangeRule(label.id, { requiredColumnIds: next })}
+                />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </article>
   );
+}
+
+/**
+ * Does this key carry anything the user configured? Asked only about a NEW label's
+ * client key, to tell "the remap lost real configuration" (worth a message) from
+ * "there was nothing under that key anyway" (nothing to report).
+ */
+function hasConfiguredRule(settings, key) {
+  const rule = settings?.labels?.[key];
+  const restricted = Boolean(rule) && [
+    rule.allowedUserIds,
+    rule.allowedTeamIds,
+    rule.requiredColumnIds,
+    rule.requiredPeopleColumnIds,
+  ].some((list) => Array.isArray(list) && list.length > 0);
+  const hidden = (settings?.hiddenLabelIds ?? []).map(String).includes(String(key));
+  return restricted || hidden;
 }
 
 function ColumnSettings({ context, variant = 'overlay' }) {
@@ -567,6 +590,10 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       let activeLabelIds = labelsDraft
         .filter((label) => !label.isNew)
         .map((label) => String(label.id));
+      // The settings object this save persists. It picks up the new labels' real ids
+      // below, once monday has assigned them.
+      let settingsDraft = draft;
+      let unresolvedNewLabels = [];
 
       if (hasPendingLabelEdits(labelsDraft, labelsBaseline)) {
         const revisionData = await mondayService.query(GET_STATUS_COLUMN_REVISION, {
@@ -596,9 +623,37 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         activeLabelIds = refreshedLabels
           .filter((label) => !label.isDeactivated)
           .map((label) => String(label.id));
+
+        /*
+         * A new label's id exists only from here on. Its rules were configured against
+         * the draft's client key ("new:1"), so they move to the assigned id now — this
+         * is what lets a label be created AND restricted in one visit.
+         */
+        const idByClientKey = resolveNewLabelIds({
+          draft: labelsDraft,
+          liveBefore: liveFresh,
+          refreshedLabels,
+        });
+        unresolvedNewLabels = labelsDraft.filter(
+          (label) => label.isNew
+            && !idByClientKey[label.clientKey]
+            && hasConfiguredRule(draft, label.clientKey),
+        );
+        settingsDraft = remapDraftLabelKeys(draft, idByClientKey);
+        setDraft(settingsDraft);
+
+        /*
+         * Re-seed the label draft from what monday now HAS. The labels mutation has
+         * already run, so without this a second save attempt — after a storage failure,
+         * or a validation error below — would send the same new labels as new again and
+         * the board would end up with duplicates.
+         */
+        const reseeded = createLabelsDraft(refreshedLabels);
+        setLabelsDraft(reseeded);
+        setLabelsBaseline(reseeded);
       }
 
-      const next = pruneSettingsForActiveLabels(draft, activeLabelIds);
+      const next = pruneSettingsForActiveLabels(settingsDraft, activeLabelIds);
       const { ok, problems } = validateSettings(next, metadata.columns);
       if (!ok) {
         logger.warn('ColumnSettings', 'Settings failed validation', { problems });
@@ -615,6 +670,24 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         return;
       }
       await mondayService.setColumnConfig(boardId, columnId, next);
+
+      /*
+       * The label was created but nothing in the refresh matched it, so its rules had
+       * no id to move to and the prune has just dropped them. Everything else IS saved;
+       * say what was lost and stay open rather than closing on configuration that went
+       * nowhere. The label draft was re-seeded above, so the card now carries the real
+       * id and a second attempt saves against it.
+       */
+      if (unresolvedNewLabels.length > 0) {
+        logger.error(
+          'ColumnSettings',
+          'Could not match a new label to an assigned id; its rules were dropped',
+          { clientKeys: unresolvedNewLabels.map((label) => label.clientKey) },
+        );
+        setSaveError('הלייבל נוצר, אך ההרשאות של הלייבל החדש לא נשמרו. פתחו אותו והגדירו שוב.');
+        return;
+      }
+
       mondayService.showNotice('ההגדרות נשמרו');
       await dismiss({ saved: true });
     } catch (err) {
@@ -690,7 +763,6 @@ function ColumnSettings({ context, variant = 'overlay' }) {
               peopleColumns={peopleColumns}
               usedColors={usedColors}
               saving={saving}
-              showPermissions={!label.isNew}
               isFirst={labelIndex === 0}
               isLast={labelIndex === labelsDraft.length - 1}
               onRename={renameLabel}

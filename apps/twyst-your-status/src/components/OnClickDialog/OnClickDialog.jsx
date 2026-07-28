@@ -6,6 +6,7 @@ import {
   getLabelRule,
 } from '../../domain/settingsSchema';
 import { normalizeStatusLabels, serializeStatusMutationValue } from '../../domain/statusPolicy';
+import { assertStatusWritten } from '../../domain/statusWriteResult';
 import {
   GET_STATUS_COLUMN_CONTEXT,
   GET_STATUS_COLUMN_SETTINGS,
@@ -174,13 +175,23 @@ function OnClickDialog({ context }) {
     [actor, currentValue, labels, effectiveSettings, peopleByColumnId],
   );
 
+  /**
+   * Write the status, and do not return until the response says it took.
+   *
+   * The mutation echoes the column back and `assertStatusWritten` throws on an echo
+   * that names a different label or on no item at all — both of which arrive inside
+   * a 200 with no `errors`, where a bare await reads as success. This is what the
+   * dialog's dismissal hangs off, so a write that silently did nothing keeps the
+   * picker open with an error instead of closing on the old status.
+   */
   const writeStatusOnly = async (labelId) => {
-    await mondayService.query(UPDATE_STATUS_COLUMN_VALUE, {
+    const data = await mondayService.query(UPDATE_STATUS_COLUMN_VALUE, {
       boardId: String(boardId),
       itemId: String(itemId),
       columnId,
       value: serializeStatusMutationValue(labelId),
     });
+    assertStatusWritten(data?.change_column_value, columnId, labelId);
   };
 
   /**
