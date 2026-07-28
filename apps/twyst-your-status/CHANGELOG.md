@@ -1,5 +1,32 @@
 # Changelog
 
+## 3.7.0
+
+- **The settings button is now for board owners only.** The slim shell behind the column's
+  settings placement asks who the actor is before it offers to configure anything; a
+  non-owner gets a one-line statement, `Only board owners can configure`, where the button
+  used to be. Same gate as axis-tracker's (`useBoardOwner`), applied to this app's settings
+  shell.
+- **Ownership includes the board's OWNING TEAMS, not just its user owners.** tracker
+  compares the actor against `boards { owners { id } }` alone; on a shared board the
+  ownership is often held by a team instead, and that check locks a genuine owner out. So
+  `team_owners` is resolved against the actor's own team membership too. It costs nothing in
+  the common case: a direct user owner is answered in ONE request, and the two team lookups
+  are only sent for an actor who is not already a user owner. No new scope — `boards:read`,
+  `users:read` and `teams:read` were all declared already.
+- **A check that could not run is not a denial.** Where tracker quietly resolves a failed
+  ownership query to "not an owner", a failure here says so in Hebrew and withholds the
+  button: reporting a network error as a permission verdict tells a real owner they have no
+  rights, and buries the actual fault while doing it. The one sanctioned narrowing is a
+  missing `teams:read`, which degrades to user owners only rather than failing — it is
+  already how this app treats that scope everywhere else.
+- The gate fails CLOSED in every other direction, which is deliberately the inverse of the
+  per-label rules next door: an empty `allowedUserIds` means "everyone may pick that
+  status", but a board with no owners at all hands the settings button to nobody.
+- While the check is in flight the shell keeps showing the SAME loading state its Suspense
+  fallback was already showing, so the wait is continuous instead of one spinner replaced
+  by another — and no button appears and then vanishes.
+
 ## 3.6.1
 
 - **The title and the save button no longer scroll with the fields.** 3.6.0 claimed to

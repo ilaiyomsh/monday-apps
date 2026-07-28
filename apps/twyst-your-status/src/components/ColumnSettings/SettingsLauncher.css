@@ -12,6 +12,16 @@
   width: 100%;
 }
 
+/* Stands in for the button, so it holds the same place in the column — a plain
+   statement, not an alarm: a viewer without owner rights has done nothing wrong. */
+.twyst-settings-launcher-denied {
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--secondary-text-color, #676879);
+}
+
 .twyst-settings-launcher .twyst-version {
   font-size: 11px;
   color: var(--secondary-text-color, #676879);
