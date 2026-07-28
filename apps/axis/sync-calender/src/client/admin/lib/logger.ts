@@ -83,7 +83,53 @@ const sinks = new Set<Sink>();
 const BUFFER_MAX = 50;
 const buffer: LogRecord[] = [];
 
+let loggedIdCounter = 0;
+
+/** A dedup target may carry a stamped log-once id (both non-enumerable). */
+interface DedupTarget {
+  __loggedId?: number;
+  correlationId?: number;
+}
+
+/**
+ * log-once: brand the thrown value itself, so one failure is ONE shipped record no matter
+ * how many layers log it (audit finding 7 — this logger did not do it, unlike every other
+ * logger in the monorepo). Two things depended on it: the sink drops only records flagged
+ * `duplicate: true`, so without the flag an Error caught and re-logged up the stack shipped
+ * twice; and `ev.corr` reads record.correlationId, so without the id every event in Axiom
+ * had an empty `corr` and nothing could be joined back to its originating failure.
+ *
+ * The stamp is non-enumerable so it never leaks into a JSON payload, and stamping a frozen
+ * or non-configurable object must never block the log — the record still carries the id.
+ */
+function stampLogOnce(record: LogRecord): void {
+  const err = record.error;
+  if (err === null || typeof err !== 'object') return;
+  const target = err as DedupTarget;
+
+  if (target.__loggedId !== undefined) {
+    record.duplicate = true;
+    record.correlationId = record.correlationId ?? target.correlationId ?? target.__loggedId;
+    return;
+  }
+
+  const id = target.correlationId ?? ++loggedIdCounter;
+  const brand = (key: string): void => {
+    try {
+      Object.defineProperty(err, key, { value: id, enumerable: false, configurable: true, writable: true });
+    } catch {
+      // Frozen / non-configurable object — the record below still carries the id, so the
+      // event is correlatable even though this instance cannot be branded for next time.
+    }
+  };
+  brand('__loggedId');
+  if (target.correlationId === undefined) brand('correlationId');
+  record.duplicate = false;
+  record.correlationId = id;
+}
+
 function emit(record: LogRecord): void {
+  stampLogOnce(record);
   buffer.push(record);
   while (buffer.length > BUFFER_MAX) buffer.shift();
   for (const sink of sinks) {
