@@ -333,17 +333,26 @@ export function createAxiomBrowserTransport(options: AxiomTransportOptions): Axi
   async function doFlush(reason: FlushReason): Promise<void> {
     if (disposed || queue.length === 0) return;
 
+    // Terminal flush override (fix 2, widened per audit finding 4): a page-hide /
+    // visibility-hidden flush is the LAST chance to ship before the tab is gone, so it
+    // outranks EVERY breaker state and any in-flight probe or drain. It cuts the whole
+    // queue and sends exactly one keepalive POST; at-most-once (the batch is cut from the
+    // queue and never re-queued) makes that safe, and a failed send is counted by
+    // droppedShipFailure.
+    //
+    // This override used to live INSIDE the `open` branch only. A tab hidden while the
+    // breaker was half-open fell through to the probe path and hit `if (probeInFlight)
+    // return`, losing the entire queue silently — neither shipped nor counted as dropped.
+    // Even with no probe in flight, that path cuts only ONE batch and abandoned the rest.
+    // Hoisting it here is also what lets the probe below assume a non-terminal reason.
+    if (reason === 'hidden') {
+      const { body, count } = cutBatchHidden();                 // at most ONE keepalive POST
+      if (count > 0) await ship(body, count, true);
+      return;
+    }
+
     // Circuit breaker (§3.2): open → no-op until the 60s window elapses, then half-open.
     if (breakerState === 'open') {
-      // Terminal flush override (fix 2): a page-hide/visibility-hidden flush is the LAST
-      // chance to ship before the tab is gone. Attempt exactly one keepalive send even while
-      // the breaker is open — at-most-once (the batch is cut from the queue and never
-      // re-queued) makes this safe, and a failed send is counted by droppedShipFailure.
-      if (reason === 'hidden') {
-        const { body, count } = cutBatchHidden();
-        if (count > 0) await ship(body, count, true);
-        return;
-      }
       if (Date.now() - openedAt < caps.breakerOpenMs) return;   // zero fetch while open
       breakerState = 'half-open';
     }
@@ -355,7 +364,7 @@ export function createAxiomBrowserTransport(options: AxiomTransportOptions): Axi
         const openMs = Date.now() - openedAt;
         const { body, count } = cutBatchFront();                // exactly ONE probe batch
         if (count === 0) return;
-        const ok = await ship(body, count, reason === 'hidden');
+        const ok = await ship(body, count, false);              // never terminal — handled above
         if (ok) {
           breakerState = 'closed';
           consecutiveFailures = 0;
@@ -371,15 +380,10 @@ export function createAxiomBrowserTransport(options: AxiomTransportOptions): Axi
       return;
     }
 
-    // closed — the terminal hidden flush must NOT be starved by an in-flight routine
-    // drain (review finding, change #121): cutBatchHidden() empties the queue
-    // synchronously, so running alongside the drain is safe — the drain loop
-    // re-checks queue.length after its await and exits cleanly.
-    if (reason === 'hidden') {
-      const { body, count } = cutBatchHidden();                 // at most ONE keepalive POST
-      if (count > 0) await ship(body, count, true);
-      return;
-    }
+    // closed — routine drain. The terminal hidden flush is handled at the top of doFlush
+    // (it must not be starved by an in-flight drain — review finding, change #121):
+    // cutBatchHidden() empties the queue synchronously, so running alongside the drain is
+    // safe, and the drain loop re-checks queue.length after its await and exits cleanly.
     if (inFlight) return;                                       // the running drain re-checks the queue
     inFlight = true;
     try {

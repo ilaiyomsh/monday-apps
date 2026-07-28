@@ -231,3 +231,110 @@ describe('fix3 (transport): stack + component_stack allowlist keys', () => {
     expect((e.component_stack as string).length).toBe(1000); // baseline: undefined
   });
 });
+
+// ============================================================================
+// Audit finding 4 — the terminal flush must outrank EVERY breaker state
+// ============================================================================
+// The fix2 override lived only inside the `breakerState === 'open'` branch. A tab hidden
+// while the breaker was HALF-OPEN fell through to the probe path, where
+// `if (probeInFlight) return` dropped the entire queue silently — not shipped, and not
+// counted in droppedShipFailure either. Even without a probe in flight, the half-open path
+// cuts only ONE batch, abandoning the rest of the queue as the tab dies.
+describe('audit finding 4: terminal flush outranks the half-open breaker', () => {
+  /**
+   * Drive the breaker open, then past its window so the next flush is half-open.
+   * BASE_TIME is a STRING, so it must be parsed before the arithmetic — adding to it
+   * concatenates, yielding an Invalid Date and a NaN clock that silently breaks the queue.
+   */
+  async function halfOpenBreaker(h: ReturnType<typeof harness>) {
+    await openBreaker(h);
+    vi.setSystemTime(new Date(new Date(BASE_TIME).getTime() + 61_000)); // past breakerOpenMs
+  }
+
+  it('F4a: a hidden flush while HALF-OPEN ships the queue instead of losing it', async () => {
+    const h = harness();
+    await halfOpenBreaker(h);
+    const before = h.calls.length;
+
+    h.t.enqueue(ev({ message: 'tail-1' }));
+    h.t.enqueue(ev({ message: 'tail-2' }));
+    h.doc.visibilityState = 'hidden';
+    h.doc.emit('visibilitychange'); // the real terminal-flush trigger
+    await tick();
+
+    const shipped = allEvents(h.calls.slice(before)).map((e) => e.message);
+    expect(shipped).toContain('tail-1');
+    expect(shipped).toContain('tail-2');
+  });
+
+  it('F4b: a hidden flush ships the WHOLE queue in one keepalive POST, not a single batch', async () => {
+    const h = harness();
+    // Breaker OPEN and still inside its window: every routine/size flush is a no-op, which
+    // is how a real queue grows past caps.batchMaxEvents (20) in the first place. That
+    // over-cap queue is the only state where "one batch" and "the whole queue" differ —
+    // at or below the cap the two are indistinguishable, which is how the single-batch
+    // bug stayed invisible.
+    await openBreaker(h);
+    const before = h.calls.length;
+
+    const QUEUED = 25;
+    for (let i = 0; i < QUEUED; i++) h.t.enqueue(ev({ message: `tail-${i}` }));
+    expect(h.calls).toHaveLength(before); // no POST while open — the queue really did accumulate
+    expect(h.t.stats().queued).toBe(QUEUED);
+
+    h.doc.visibilityState = 'hidden';
+    h.doc.emit('visibilitychange'); // the real terminal-flush trigger
+    await tick();
+
+    const sent = h.calls.slice(before);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].init.keepalive).toBe(true);
+    expect(allEvents(sent)).toHaveLength(QUEUED); // all 25, not just the first 20
+    expect(h.t.stats().queued).toBe(0);          // nothing left behind to die with the tab
+  });
+
+  it('F4c: a hidden flush is not starved by an in-flight probe — the queue still ships or is counted', async () => {
+    const h = harness();
+    await halfOpenBreaker(h);
+
+    // Start a probe and leave it pending: the next fetch never settles during this window.
+    let releaseProbe: (() => void) | undefined;
+    h.script.push(
+      new Promise((resolve) => {
+        releaseProbe = () => resolve({ ok: true, status: 204 });
+      }) as unknown as { ok: boolean; status: number }
+    );
+    h.t.enqueue(ev({ message: 'probe-payload' }));
+    h.t.flush('manual');
+    await tick(2); // probe dispatched, still in flight
+
+    const before = h.calls.length;
+    const droppedBefore = (h.t.stats() as unknown as { droppedShipFailure: number }).droppedShipFailure;
+
+    h.t.enqueue(ev({ message: 'tail-during-probe' }));
+    h.doc.visibilityState = 'hidden';
+    h.doc.emit('visibilitychange'); // the real terminal-flush trigger
+    await tick();
+
+    const shippedAfter = allEvents(h.calls.slice(before)).map((e) => e.message);
+    const droppedAfter = (h.t.stats() as unknown as { droppedShipFailure: number }).droppedShipFailure;
+
+    // Either it went out, or it is on the books as dropped. Vanishing is the bug.
+    expect(shippedAfter.includes('tail-during-probe') || droppedAfter > droppedBefore).toBe(true);
+    releaseProbe?.();
+    await tick();
+  });
+
+  it('F4d: a hidden flush while CLOSED still ships everything (no regression to fix2/#121)', async () => {
+    const h = harness();
+    for (let i = 0; i < 3; i++) h.t.enqueue(ev({ message: `c-${i}` }));
+    h.doc.visibilityState = 'hidden';
+    h.doc.emit('visibilitychange'); // the real terminal-flush trigger
+    await tick();
+
+    const sent = h.calls;
+    expect(sent).toHaveLength(1);
+    expect(sent[0].init.keepalive).toBe(true);
+    expect(allEvents(sent)).toHaveLength(3);
+  });
+});

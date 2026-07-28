@@ -201,6 +201,50 @@ const BROWSER_CHECKS: BrowserCheck[] = [
     },
   },
   {
+    // Audit finding 4: the fix2 override lived INSIDE the `open` branch, so a tab hidden
+    // while the breaker was HALF-OPEN fell through to the probe path and hit
+    // `if (probeInFlight) return`, losing the whole queue silently — neither shipped nor
+    // counted as dropped. The terminal flush must outrank every breaker state.
+    name: 'finding4: terminal (hidden) flush ships even with the breaker HALF-OPEN',
+    async run(create) {
+      const h = harness(create);
+      await openBreaker(h); // 3 fetches, breaker open
+      // Past breakerOpenMs, so the next non-terminal flush would go half-open.
+      vi.setSystemTime(new Date(Date.now() + 61_000)); // relative to this suite's fake clock
+      const before = h.calls.length;
+      h.t.enqueue(ev({ message: 'tail-1' }));
+      h.t.enqueue(ev({ message: 'tail-2' }));
+      h.doc.visibilityState = 'hidden';
+      h.doc.emit('visibilitychange');
+      await tick();
+      const shipped = bodies(h.calls.slice(before)).flat().map((e) => e.message);
+      expect(shipped).toContain('tail-1');
+      expect(shipped).toContain('tail-2');
+      expect(h.t.stats().queued).toBe(0); // nothing left behind to die with the tab
+    },
+  },
+  {
+    // The terminal flush cuts the WHOLE queue, not one batch. Only observable above
+    // caps.batchMaxEvents (20), and only reachable because an open breaker lets the queue
+    // accumulate — at or below the cap the two behaviours are indistinguishable.
+    name: 'finding4: terminal (hidden) flush ships the WHOLE over-cap queue, not one batch',
+    async run(create) {
+      const h = harness(create);
+      await openBreaker(h);
+      const before = h.calls.length;
+      const QUEUED = 25;
+      for (let i = 0; i < QUEUED; i++) h.t.enqueue(ev({ message: `tail-${i}` }));
+      expect(h.calls).toHaveLength(before); // open breaker → the queue really accumulated
+      h.doc.visibilityState = 'hidden';
+      h.doc.emit('visibilitychange');
+      await tick();
+      const sent = h.calls.slice(before);
+      expect(sent).toHaveLength(1);
+      expect(bodies(sent).flat()).toHaveLength(QUEUED); // all 25, not just the first 20
+      expect(h.t.stats().queued).toBe(0);
+    },
+  },
+  {
     name: 'fix3: stack (cap 1500) + component_stack (cap 1000) are allowlisted + capped',
     async run(create) {
       const h = harness(create);
