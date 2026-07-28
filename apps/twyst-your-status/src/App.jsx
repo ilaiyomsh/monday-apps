@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { useMondayContext } from './hooks/useMondayContext';
 import OnClickDialog from './components/OnClickDialog/OnClickDialog';
+import StatusPickerSkeleton from './components/OnClickDialog/StatusPickerSkeleton';
 import LoadingState from './components/shared/LoadingState';
 import ErrorState from './components/shared/ErrorState';
 
@@ -24,6 +25,15 @@ export function resolveAppRoute(pathname = window.location.pathname) {
 function App() {
   const { context, loading, error } = useMondayContext();
   const route = resolveAppRoute();
+
+  // Picker: shimmer pills from the first paint — no spinner flash in the cell dialog.
+  if (loading && route === 'picker') {
+    return (
+      <div className="app-shell is-picker light-app-theme" dir="rtl">
+        <StatusPickerSkeleton />
+      </div>
+    );
+  }
 
   if (loading) {
     return <LoadingState />;
