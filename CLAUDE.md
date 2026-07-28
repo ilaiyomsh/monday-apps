@@ -131,8 +131,8 @@ packages/shared                     EMPTY STUB — see below
   | axis-sync-calender | `apps/axis/sync-calender` | 11666315 | server, app root |
   | team-people-column | `apps/team-people-column` | 11689948 | client, `dist/` |
   | deadline-confirm | `apps/deadline-confirm` | 11704868 | server, app root |
-  | telemetry-dashboard | `apps/telemetry-dashboard` | pending — secret `APP_TELEMETRY_DASHBOARD_ID` not yet set (slug `telemetry-dashboard`) | server, app root |
-  | twyst-your-status | `apps/twyst-your-status` | pending — secret `APP_TWYST_YOUR_STATUS_ID` (slug `twyst-your-status`) | client, `dist/` |
+  | telemetry-dashboard | `apps/telemetry-dashboard` | secret `APP_TELEMETRY_DASHBOARD_ID` set — numeric ID lives in the secret, not mirrored here (slug `telemetry-dashboard`) | server, app root |
+  | twyst-your-status | `apps/twyst-your-status` | secret `APP_TWYST_YOUR_STATUS_ID` set — numeric ID lives in the secret, not mirrored here (slug `twyst-your-status`) | client, `dist/` |
 
 ## Quality gates
 
@@ -261,6 +261,12 @@ axis apps consume it via the `@axis/app-core` facade, and server apps + embedded
 vendor a copy that `packages/error-kit/test/drift.test.ts` keeps behaviorally in sync.
 Never a raw fetch. Shared dataset `app-errors`, discriminated by `app`. Wiring is enforced
 in CI by `scripts/error-wiring-audit.mjs` + the error-kit test suite (both blocking).
+
+**Axiom is not live until the owner activates it.** The wiring is complete and fail-soft, so a
+missing token silently means "nothing ships" rather than a broken build. What is still required —
+per surface, with the exact commands and what breaks without each — is tracked in
+**`docs/ERROR-AXIOM-STANDARD.md` → "Activation status"**. Agents never set these (see Secrets &
+env); read that section before concluding an app "isn't reporting errors".
 
 To **query/triage** `app-errors` (send an agent to check errors), use the `axiom-sre`
 skill — agent playbook with the live schema, conventions/gotchas (e.g. `err_name` is
