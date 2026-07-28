@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.9
+
+- Picker shows a monday-style shimmer skeleton (6 label-sized bars, no loading
+  copy) from the first paint while context/labels load.
+- Document Dialog Design size: width `200`, height `250` (fits 6 pills, no scroll).
+
 ## 3.2.8
 
 - Settings: teams join the people picker (no separate checklist); each label
