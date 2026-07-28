@@ -1,27 +1,26 @@
-// test-guard gate for the vendored global error handler: every global failure
+// test-guard gate for the vendored global error handler (telemetry-dashboard client).
+// Mirrors apps/deadline-confirm's copy of this suite — the vendored sources are
+// behaviorally identical, and packages/error-kit/test/drift.test.ts enforces that across
+// surfaces. Plain JS (not TS) because this app's vitest config collects test/**/*.test.js
+// only; vitest still transforms the imported .ts module.
+// every global failure
 // channel (uncaught error, unhandled rejection, capture-phase resource error)
 // must route into the injected logger; a chunk handler consumes matching errors;
 // installation is idempotent per window.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { setupGlobalErrorHandlers, setChunkErrorHandler } from './globalErrorHandler';
-
-interface Listener {
-  type: string;
-  fn: (e: unknown) => void;
-  capture: boolean;
-}
+import { setupGlobalErrorHandlers, setChunkErrorHandler } from '../src/client/utils/globalErrorHandler.ts';
 
 function fakeWin() {
-  const listeners: Listener[] = [];
+  const listeners = [];
   const win = {
     listeners,
-    __errorGuardHandlersInstalled: undefined as boolean | undefined,
-    addEventListener(type: string, fn: (e: unknown) => void, opts?: boolean | { capture?: boolean }) {
+    __errorGuardHandlersInstalled: undefined,
+    addEventListener(type, fn, opts) {
       const capture = typeof opts === 'boolean' ? opts : Boolean(opts && opts.capture);
       listeners.push({ type, fn, capture });
     },
-    dispatch(type: string, event: unknown, capture = false) {
+    dispatch(type, event, capture = false) {
       for (const l of listeners) if (l.type === type && l.capture === capture) l.fn(event);
     },
   };
@@ -121,25 +120,23 @@ describe('setupGlobalErrorHandlers — every reported error carries retrievable 
   it('normalizes a STRING rejection reason into an Error carrying the text', () => {
     const win = fakeWin();
     const logger = fakeLogger();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    setupGlobalErrorHandlers(logger as any, { win: win as any });
+    setupGlobalErrorHandlers(logger, { win });
 
     win.dispatch('unhandledrejection', { reason: 'token refresh failed' });
 
     const payload = logger.error.mock.calls[0][2];
     expect(payload).toBeInstanceOf(Error);
-    expect((payload as Error).message).toBe('token refresh failed');
+    expect(payload.message).toBe('token refresh failed');
   });
 
   it('serializes a non-Error OBJECT reason and keeps its name for grouping', () => {
     const win = fakeWin();
     const logger = fakeLogger();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    setupGlobalErrorHandlers(logger as any, { win: win as any });
+    setupGlobalErrorHandlers(logger, { win });
 
     win.dispatch('unhandledrejection', { reason: { name: 'QuotaExceededError', status: 507 } });
 
-    const payload = logger.error.mock.calls[0][2] as Error;
+    const payload = logger.error.mock.calls[0][2];
     expect(payload).toBeInstanceOf(Error);
     expect(payload.name).toBe('QuotaExceededError');
     expect(payload.message).toContain('507');
@@ -148,12 +145,11 @@ describe('setupGlobalErrorHandlers — every reported error carries retrievable 
   it('reads event.message when event.error is null (the cross-origin "Script error." case)', () => {
     const win = fakeWin();
     const logger = fakeLogger();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    setupGlobalErrorHandlers(logger as any, { win: win as any });
+    setupGlobalErrorHandlers(logger, { win });
 
     win.dispatch('error', { error: null, message: 'Script error.', target: win });
 
-    const payload = logger.error.mock.calls[0][2] as Error;
+    const payload = logger.error.mock.calls[0][2];
     expect(payload).toBeInstanceOf(Error);
     expect(payload.message).toBe('Script error.');
   });
@@ -161,8 +157,7 @@ describe('setupGlobalErrorHandlers — every reported error carries retrievable 
   it('passes a real Error through as the SAME instance (log-once brands the instance)', () => {
     const win = fakeWin();
     const logger = fakeLogger();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    setupGlobalErrorHandlers(logger as any, { win: win as any });
+    setupGlobalErrorHandlers(logger, { win });
     const original = new Error('genuine failure');
 
     win.dispatch('unhandledrejection', { reason: original });
@@ -173,16 +168,15 @@ describe('setupGlobalErrorHandlers — every reported error carries retrievable 
   it('survives a reason whose serialization throws, and records that it could not describe it', () => {
     const win = fakeWin();
     const logger = fakeLogger();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    setupGlobalErrorHandlers(logger as any, { win: win as any });
-    const circular: Record<string, unknown> = {};
+    setupGlobalErrorHandlers(logger, { win });
+    const circular = {};
     circular.self = circular;
     // A hostile toJSON is the case that must not take the handler down.
     Object.defineProperty(circular, 'toJSON', { value: () => { throw new Error('hostile'); } });
 
     win.dispatch('unhandledrejection', { reason: circular });
 
-    const payload = logger.error.mock.calls[0][2] as Error;
+    const payload = logger.error.mock.calls[0][2];
     expect(payload).toBeInstanceOf(Error);
     expect(payload.message.length).toBeGreaterThan(0);
     // never a silent catch — the describe failure leaves a WARN behind

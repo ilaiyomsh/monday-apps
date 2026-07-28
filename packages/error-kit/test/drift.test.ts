@@ -274,6 +274,53 @@ describe('drift — vendored BROWSER copies conform to the transport contract', 
         // and the unhandledrejection net is present
         expect(win.listenersFor('unhandledrejection').length).toBeGreaterThanOrEqual(1);
       });
+
+      // Audit finding 2: the sink reads err_name/err_msg/stack off record.error only when
+      // it is an object carrying those fields, so a non-Error rejection reason — and an
+      // `event.error` of null, which is what a cross-origin script failure delivers —
+      // produced a report with no retrievable content at all. Every copy must normalize.
+      it('globalErrorHandler normalizes a non-Error rejection reason into an Error', () => {
+        const win = fakeTarget();
+        const logger = { warn: vi.fn(), error: vi.fn() };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        surface.geh(logger as any, { win: win as any });
+
+        for (const l of win.listenersFor('unhandledrejection')) l.cb({ reason: 'token refresh failed' });
+
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        const payload = logger.error.mock.calls[0][2];
+        expect(payload).toBeInstanceOf(Error);
+        expect((payload as Error).message).toBe('token refresh failed');
+      });
+
+      it('globalErrorHandler reads event.message when event.error is null', () => {
+        const win = fakeTarget();
+        const logger = { warn: vi.fn(), error: vi.fn() };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        surface.geh(logger as any, { win: win as any });
+
+        // Bubble-phase listeners only — the capture listener owns resource failures.
+        for (const l of win.listenersFor('error')) {
+          if (!l.capture) l.cb({ error: null, message: 'Script error.', target: win });
+        }
+
+        expect(logger.error).toHaveBeenCalledTimes(1);
+        const payload = logger.error.mock.calls[0][2];
+        expect(payload).toBeInstanceOf(Error);
+        expect((payload as Error).message).toBe('Script error.');
+      });
+
+      it('globalErrorHandler passes a real Error through as the SAME instance (log-once identity)', () => {
+        const win = fakeTarget();
+        const logger = { warn: vi.fn(), error: vi.fn() };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        surface.geh(logger as any, { win: win as any });
+        const original = new Error('genuine failure');
+
+        for (const l of win.listenersFor('unhandledrejection')) l.cb({ reason: original });
+
+        expect(logger.error.mock.calls[0][2]).toBe(original);
+      });
     });
   }
 });

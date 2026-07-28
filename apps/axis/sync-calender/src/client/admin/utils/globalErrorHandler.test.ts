@@ -1,4 +1,7 @@
-// test-guard gate for the vendored global error handler: every global failure
+// test-guard gate for the vendored global error handler (sync-calender admin SPA). Mirrors
+// apps/deadline-confirm's copy of this suite — the vendored sources are behaviorally
+// identical, and packages/error-kit/test/drift.test.ts enforces that across surfaces.
+// every global failure
 // channel (uncaught error, unhandled rejection, capture-phase resource error)
 // must route into the injected logger; a chunk handler consumes matching errors;
 // installation is idempotent per window.

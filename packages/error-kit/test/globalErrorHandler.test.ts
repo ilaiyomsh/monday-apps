@@ -141,3 +141,120 @@ describe('setupGlobalErrorHandlers — routing', () => {
     expect(calls[1].module).toBe('UncaughtError');
   });
 });
+
+// Audit finding 2: a rejection whose reason is not an Error, and a window 'error' event
+// whose `event.error` is null (what cross-origin scripts produce), were logged with NO
+// retrievable content. mapRecordToEvent pulls err_name/err_msg/stack off `record.error`
+// only when it is an object with those fields, so a string reason shipped nothing and
+// err_name fell back to the generic logger message — a record that costs an Axiom write
+// and answers no question. `event.message` was declared in the event type and never read.
+describe('setupGlobalErrorHandlers — every reported error carries retrievable content', () => {
+  /** The payload the sink would read err_name/err_msg/stack from. */
+  const reported = (calls: Array<{ level: string; payload?: unknown }>) =>
+    calls.filter((c) => c.level === 'ERROR').map((c) => c.payload);
+
+  it('normalizes a STRING rejection reason into an Error carrying the text', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('unhandledrejection', { reason: 'token refresh failed' });
+
+    const [payload] = reported(calls);
+    expect(payload).toBeInstanceOf(Error);
+    expect((payload as Error).message).toBe('token refresh failed');
+  });
+
+  it('serializes a non-Error OBJECT rejection reason so its fields are queryable', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('unhandledrejection', { reason: { status: 502, detail: 'upstream gone' } });
+
+    const [payload] = reported(calls);
+    expect(payload).toBeInstanceOf(Error);
+    expect((payload as Error).message).toContain('502');
+    expect((payload as Error).message).toContain('upstream gone');
+  });
+
+  it('preserves a non-Error reason\'s `name` so err_name still groups meaningfully', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('unhandledrejection', { reason: { name: 'QuotaExceededError', message: 'over budget' } });
+
+    expect((reported(calls)[0] as Error).name).toBe('QuotaExceededError');
+  });
+
+  it('falls back to a stated message when the rejection has NO reason at all', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('unhandledrejection', { reason: undefined });
+
+    const payload = reported(calls)[0] as Error;
+    expect(payload).toBeInstanceOf(Error);
+    expect(payload.message.length).toBeGreaterThan(0);
+  });
+
+  it('reads event.message when event.error is null (the cross-origin "Script error." case)', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    // A cross-origin script failure: the browser withholds the Error and gives only a message.
+    emit('error', { error: null, message: 'Script error.', target: win }, 'bubble');
+
+    const payload = reported(calls)[0] as Error;
+    expect(payload).toBeInstanceOf(Error);
+    expect(payload.message).toBe('Script error.');
+  });
+
+  it('passes a real Error through UNCHANGED (same instance — log-once identity must survive)', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+    const original = new Error('genuine failure');
+
+    emit('unhandledrejection', { reason: original });
+
+    // Identity matters: the sink's log-once dedup brands the Error instance itself.
+    expect(reported(calls)[0]).toBe(original);
+  });
+
+  it('normalizes BEFORE the chunk check, so a string chunk-load reason is still detected', () => {
+    const { win, emit } = fakeWin();
+    const { logger } = fakeLogger();
+    const seen: unknown[] = [];
+    setupGlobalErrorHandlers(logger, {
+      win,
+      handleChunkError: (error) => {
+        seen.push(error);
+        return false;
+      },
+    });
+
+    emit('unhandledrejection', { reason: 'Failed to fetch dynamically imported module' });
+
+    // The detector matches on message text, which a bare string does not have.
+    expect(seen[0]).toBeInstanceOf(Error);
+    expect((seen[0] as Error).message).toBe('Failed to fetch dynamically imported module');
+  });
+
+  it('survives a reason whose serialization throws (circular / hostile toJSON)', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+    const circular: Record<string, unknown> = { name: 'CircularError' };
+    circular.self = circular;
+
+    emit('unhandledrejection', { reason: circular });
+
+    const payload = reported(calls)[0] as Error;
+    expect(payload).toBeInstanceOf(Error);
+    expect(payload.message.length).toBeGreaterThan(0);
+  });
+});
