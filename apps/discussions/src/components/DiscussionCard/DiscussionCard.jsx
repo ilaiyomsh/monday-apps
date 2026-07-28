@@ -226,11 +226,17 @@ export function DiscussionCard({
   // The list is lean (id/name/date); pull the rest of the discussion's columns
   // on click and merge them over the list item. `overrides` holds optimistic
   // inline edits (title / description) until the next select.
-  const details = useDiscussionDetails(discussion?.id);
+  // round301 — `__reloadStamp` refetches the SAME discussion when a background
+  // creation stage has just written more of it (staged create).
+  const details = useDiscussionDetails(discussion?.id, discussion?.__reloadStamp);
   const [overrides, setOverrides] = useState({});
   useEffect(() => { setOverrides({}); }, [discussion?.id]);
   const data = useMemo(
-    () => ({ ...discussion, ...(details || {}), ...overrides }),
+    // round301 — `__pendingPeople` are the roles/participants the staged create has
+    // NOT written yet. They must win over `details` (which correctly reports them
+    // as still empty), or the header would blank them out mid-creation and then
+    // pop them back once stage 3 lands.
+    () => ({ ...discussion, ...(details || {}), ...(discussion?.__pendingPeople || {}), ...overrides }),
     [discussion, details, overrides]
   );
 

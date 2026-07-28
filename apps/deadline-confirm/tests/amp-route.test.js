@@ -12,17 +12,19 @@
 //      carries NO CORS headers and touches NO storage.
 //   2. rate-limit bucket A: perIp.allow(<bare client ip>) — 429 BEFORE any
 //      storage read and BEFORE field validation.
-//   3. parse a/p/s/sig/m — regex + strict canonical manifest → 400 bad_request.
-//   4. load link_secret via storage.forAccount(a) — missing → 403 invalid.
+//   3. parse a/p/s/sig/m — regex → 400 bad_fields; non-canonical m → 400
+//      bad_manifest. Each failure carries a distinct `[E…]` Hebrew message.
+//   4. load link_secret via storage.forAccount(a) — missing → 403 no_config.
 //   5. slot check: s === currentSlot({ sendHour }) — NO grace for the previous
-//      slot; sendHour comes from config.digest.sendHour (default 8).
+//      slot; sendHour comes from config.digest.sendHour (default 8) → 403 bad_slot.
 //   6. signature over `${a}|${p}|${s}|${m}` — verified BEFORE selections are
-//      even parsed (an invalid sig masks a would-be-400 selections error).
+//      even parsed (a bad_sig masks a would-be-400 selections error).
 //   7. selections: item_<id>=<btnId> fields — every pair must be inside the
-//      verified manifest, all-or-nothing.
+//      verified manifest (else 403 manifest_violation), all-or-nothing.
 //   8. any 3-7 failure → ZERO monday API calls.
 //   9. rate-limit bucket B: perAccount.allow(`${a}:${ip}`) — only AFTER
-//      verification (an unauthenticated caller cannot drain an account bucket).
+//      verification → 429 rate_limited_account (distinct from bucket A's
+//      rate_limited; an unauthenticated caller cannot drain an account bucket).
 //  10. execution: one performAction per selection with expectedPersonId = p.
 //
 // Manifests and signatures are built with the REAL (pure, already-tested)
@@ -233,34 +235,36 @@ describe('slot fixtures (sanity)', () => {
 // ---------------------------------------------------------------------------
 
 describe('POST /amp/confirm — gate 1: the CORS sender gate runs before anything else', () => {
-  it('rejects an unlisted sender with 403, NO CORS headers, no storage read and no API call', async () => {
+  it('rejects an unlisted sender with 403 sender_not_allowed [E1b], NO CORS headers, no storage read and no API call', async () => {
     const { app, api, gets } = buildApp();
     const res = await postAmp(app, signedBody(), { sender: 'attacker@evil.example' });
 
     expect(res.status).toBe(403);
     expect(res.headers['amp-email-allow-sender']).toBeUndefined();
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
-    expect(res.body.error).toBeTruthy();
-    expect(res.body.message).toBeTruthy();
+    expect(res.body.error).toBe('sender_not_allowed');
+    expect(res.body.message).toMatch(/^\[E1b\]/);
     expect(gets()).toBe(0);
     expectNoApiCalls(api);
   });
 
-  it('rejects a request carrying neither CORS mechanism with error no_amp_headers and no storage read', async () => {
+  it('rejects a request carrying neither CORS mechanism with error no_amp_headers [E1d] and no storage read', async () => {
     const { app, gets } = buildApp();
     const res = await postAmp(app, signedBody(), { sender: null });
 
     expect(res.status).toBe(403);
     expect(res.body.error).toBe('no_amp_headers');
+    expect(res.body.message).toMatch(/^\[E1d\]/);
     expect(gets()).toBe(0);
   });
 
-  it('rejects EVERY sender while the allowlist is empty (default deny)', async () => {
+  it('rejects EVERY sender while the allowlist is empty (default deny) with not_configured [E1a]', async () => {
     const { app, gets } = buildApp({ env: { ...ENV, ampAllowedSenders: [] } });
     const res = await postAmp(app, signedBody());
 
     expect(res.status).toBe(403);
     expect(res.body.error).toBe('not_configured');
+    expect(res.body.message).toMatch(/^\[E1a\]/);
     expect(gets()).toBe(0);
   });
 
@@ -307,12 +311,13 @@ describe('OPTIONS /amp/confirm — preflight under the same sender gate', () => 
 // ---------------------------------------------------------------------------
 
 describe('POST /amp/confirm — gate 2: per-IP bucket A runs before storage and validation', () => {
-  it('answers 429 rate_limited with ZERO storage reads and ZERO API calls when bucket A is empty', async () => {
+  it('answers 429 rate_limited [E2] with ZERO storage reads and ZERO API calls when bucket A is empty', async () => {
     const { app, api, gets, perAccount } = buildApp({ perIpAllow: false });
     const res = await postAmp(app, signedBody());
 
     expect(res.status).toBe(429);
     expect(res.body.error).toBe('rate_limited');
+    expect(res.body.message).toMatch(/^\[E2\]/);
     expect(gets()).toBe(0);
     expectNoApiCalls(api);
     expect(perAccount.allow).not.toHaveBeenCalled();
@@ -336,63 +341,64 @@ describe('POST /amp/confirm — gate 2: per-IP bucket A runs before storage and 
 });
 
 // ---------------------------------------------------------------------------
-// Gate 3 — field parsing (a, p, s, sig, m) → 400 bad_request
+// Gate 3 — field parsing (a, p, s, sig, m) → 400 bad_fields / bad_manifest
 // ---------------------------------------------------------------------------
 
-describe('POST /amp/confirm — gate 3: field validation answers 400 bad_request with zero API calls', () => {
-  async function expectBadRequest(body) {
+describe('POST /amp/confirm — gate 3: field validation answers 400 with distinct codes and zero API calls', () => {
+  async function expectGate3(body, { error, tag }) {
     const { app, api } = buildApp();
     const res = await postAmp(app, body);
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('bad_request');
+    expect(res.body.error).toBe(error);
+    expect(res.body.message).toMatch(new RegExp(`^\\[${tag}\\]`));
     expectNoApiCalls(api);
     return res;
   }
 
-  it('rejects a missing sig', async () => {
+  it('rejects a missing sig with bad_fields [E3a]', async () => {
     const body = signedBody();
     delete body.sig;
-    await expectBadRequest(body);
+    await expectGate3(body, { error: 'bad_fields', tag: 'E3a' });
   });
 
-  it('rejects a missing manifest (m)', async () => {
+  it('rejects a missing manifest (m) with bad_fields [E3a]', async () => {
     const body = signedBody();
     delete body.m;
-    await expectBadRequest(body);
+    await expectGate3(body, { error: 'bad_fields', tag: 'E3a' });
   });
 
-  it('rejects a non-numeric account id (a)', async () => {
-    await expectBadRequest({ ...signedBody(), a: '77x' });
+  it('rejects a non-numeric account id (a) with bad_fields [E3a]', async () => {
+    await expectGate3({ ...signedBody(), a: '77x' }, { error: 'bad_fields', tag: 'E3a' });
   });
 
-  it('rejects a non-numeric person id (p)', async () => {
-    await expectBadRequest({ ...signedBody(), p: 'me' });
+  it('rejects a non-numeric person id (p) with bad_fields [E3a]', async () => {
+    await expectGate3({ ...signedBody(), p: 'me' }, { error: 'bad_fields', tag: 'E3a' });
   });
 
-  it('rejects a slot that is not exactly 8 digits', async () => {
-    await expectBadRequest({ ...signedBody(), s: '2026-07-28' });
+  it('rejects a slot that is not exactly 8 digits with bad_fields [E3a]', async () => {
+    await expectGate3({ ...signedBody(), s: '2026-07-28' }, { error: 'bad_fields', tag: 'E3a' });
   });
 
-  it('rejects a NON-CANONICAL manifest: items in descending order (even validly signed)', async () => {
+  it('rejects a NON-CANONICAL manifest (descending items) with bad_manifest [E3b]', async () => {
     const m = `${ITEM_ID_2}:${BTN_DONE.id};${ITEM_ID}:${BTN_DONE.id}`;
-    await expectBadRequest(signedBody({ manifest: m }));
+    await expectGate3(signedBody({ manifest: m }), { error: 'bad_manifest', tag: 'E3b' });
   });
 
-  it('rejects a manifest with a duplicate button id on one item', async () => {
+  it('rejects a manifest with a duplicate button id on one item with bad_manifest [E3b]', async () => {
     const m = `${ITEM_ID}:${BTN_DONE.id},${BTN_DONE.id}`;
-    await expectBadRequest(signedBody({ manifest: m }));
+    await expectGate3(signedBody({ manifest: m }), { error: 'bad_manifest', tag: 'E3b' });
   });
 
-  it('rejects a manifest containing spaces', async () => {
+  it('rejects a manifest containing spaces with bad_manifest [E3b]', async () => {
     const m = `${ITEM_ID}: ${BTN_DONE.id}`;
-    await expectBadRequest(signedBody({ manifest: m }));
+    await expectGate3(signedBody({ manifest: m }), { error: 'bad_manifest', tag: 'E3b' });
   });
 
-  it('rejects a manifest of 51 items even when the signature over it is valid', async () => {
+  it('rejects a manifest of 51 items with bad_manifest [E3b] even when the signature over it is valid', async () => {
     const ids = Array.from({ length: 51 }, (_, i) => String(10000001 + i));
     const m = ids.map((id) => `${id}:${BTN_DONE.id}`).join(';');
     const selections = Object.fromEntries(ids.map((id) => [`item_${id}`, BTN_DONE.id]));
-    await expectBadRequest(signedBody({ manifest: m, selections }));
+    await expectGate3(signedBody({ manifest: m, selections }), { error: 'bad_manifest', tag: 'E3b' });
   });
 });
 
@@ -401,12 +407,13 @@ describe('POST /amp/confirm — gate 3: field validation answers 400 bad_request
 // ---------------------------------------------------------------------------
 
 describe('POST /amp/confirm — gate 4: missing account link_secret', () => {
-  it('answers 403 invalid with zero API calls when the account has no stored link_secret', async () => {
+  it('answers 403 no_config [E4] with zero API calls when the account has no stored link_secret', async () => {
     const { app, api } = buildApp({ secret: null });
     const res = await postAmp(app, signedBody());
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('invalid');
+    expect(res.body.error).toBe('no_config');
+    expect(res.body.message).toMatch(/^\[E4\]/);
     expectNoApiCalls(api);
   });
 });
@@ -416,12 +423,13 @@ describe('POST /amp/confirm — gate 4: missing account link_secret', () => {
 // ---------------------------------------------------------------------------
 
 describe('POST /amp/confirm — gate 5: slot must equal currentSlot for the account sendHour', () => {
-  it("rejects YESTERDAY's slot with 403 invalid even when validly signed (no grace window)", async () => {
+  it("rejects YESTERDAY's slot with 403 bad_slot [E5] even when validly signed (no grace window)", async () => {
     const { app, api } = buildApp(); // digest null → sendHour 8, current slot = SLOT (today)
     const res = await postAmp(app, signedBody({ slot: PREV_SLOT }));
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('invalid');
+    expect(res.body.error).toBe('bad_slot');
+    expect(res.body.message).toMatch(/^\[E5\]/);
     expectNoApiCalls(api);
   });
 
@@ -432,7 +440,7 @@ describe('POST /amp/confirm — gate 5: slot must equal currentSlot for the acco
     expect(res.status).toBe(200);
   });
 
-  it("honors digest.sendHour 15: at 10:00 Jerusalem TODAY's slot is rejected 403 invalid", async () => {
+  it("honors digest.sendHour 15: at 10:00 Jerusalem TODAY's slot is rejected 403 bad_slot [E5]", async () => {
     // 2026-07-28T07:00:00Z = 10:00 Jerusalem, before the 15:00 send →
     // currentSlot is YESTERDAY (20260727); a "today" slot must not pass.
     const at10 = new Date('2026-07-28T07:00:00Z');
@@ -443,7 +451,8 @@ describe('POST /amp/confirm — gate 5: slot must equal currentSlot for the acco
     const res = await postAmp(app, signedBody({ slot: '20260728' }));
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('invalid');
+    expect(res.body.error).toBe('bad_slot');
+    expect(res.body.message).toMatch(/^\[E5\]/);
     expectNoApiCalls(api);
   });
 
@@ -466,7 +475,7 @@ describe('POST /amp/confirm — gate 5: slot must equal currentSlot for the acco
 // ---------------------------------------------------------------------------
 
 describe('POST /amp/confirm — gate 6: HMAC signature over a|p|s|m', () => {
-  it('rejects a manifest tampered AFTER signing (item appended) with 403 invalid and zero API calls', async () => {
+  it('rejects a manifest tampered AFTER signing (item appended) with 403 bad_sig [E6] and zero API calls', async () => {
     const { app, api } = buildApp();
     const signedM = buildManifest([{ itemId: ITEM_ID, btnId: BTN_DONE.id }]);
     const sig = signManifest({
@@ -484,33 +493,36 @@ describe('POST /amp/confirm — gate 6: HMAC signature over a|p|s|m', () => {
     const res = await postAmp(app, signedBody({ manifest: tamperedM, sig }));
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('invalid');
+    expect(res.body.error).toBe('bad_sig');
+    expect(res.body.message).toMatch(/^\[E6\]/);
     expectNoApiCalls(api);
   });
 
-  it('rejects a tampered person id (signed for one person, sent as another) with 403 invalid', async () => {
+  it('rejects a tampered person id (signed for one person, sent as another) with 403 bad_sig [E6]', async () => {
     const { app, api } = buildApp();
     const body = signedBody(); // signed for PERSON_ID
     const res = await postAmp(app, { ...body, p: '999999' });
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('invalid');
+    expect(res.body.error).toBe('bad_sig');
+    expect(res.body.message).toMatch(/^\[E6\]/);
     expectNoApiCalls(api);
   });
 
-  it("rejects a signature produced with ANOTHER account's secret with 403 invalid", async () => {
+  it("rejects a signature produced with ANOTHER account's secret with 403 bad_sig [E6]", async () => {
     const { app, api } = buildApp();
     const res = await postAmp(app, signedBody({ secret: OTHER_SECRET }));
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('invalid');
+    expect(res.body.error).toBe('bad_sig');
+    expect(res.body.message).toMatch(/^\[E6\]/);
     expectNoApiCalls(api);
   });
 
-  it('ORDER pin: an invalid sig masks a would-be-400 selections error — 403 invalid, not 400', async () => {
+  it('ORDER pin: a bad_sig masks a would-be-400 selections error — 403 bad_sig, not 400', async () => {
     // The duplicated item_ field with two DIFFERENT btn values is a 400
-    // bad_request under gate 7 — but the signature is checked FIRST, so the
-    // response must be 403 invalid and selections must never be parsed.
+    // conflict_item under gate 7 — but the signature is checked FIRST, so the
+    // response must be 403 bad_sig and selections must never be parsed.
     const { app, api, perAccount } = buildApp();
     const base = signedBody({ selections: {} });
     const raw = encodeForm([
@@ -525,7 +537,8 @@ describe('POST /amp/confirm — gate 6: HMAC signature over a|p|s|m', () => {
     const res = await postAmp(app, raw);
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('invalid');
+    expect(res.body.error).toBe('bad_sig');
+    expect(res.body.message).toMatch(/^\[E6\]/);
     expectNoApiCalls(api);
     expect(perAccount.allow).not.toHaveBeenCalled();
   });
@@ -536,21 +549,23 @@ describe('POST /amp/confirm — gate 6: HMAC signature over a|p|s|m', () => {
 // ---------------------------------------------------------------------------
 
 describe('POST /amp/confirm — gate 7: selections against the verified manifest', () => {
-  it('answers 400 no_items when the body carries zero item_ fields', async () => {
+  it('answers 400 no_items [E7a] when the body carries zero item_ fields', async () => {
     const { app, api } = buildApp();
     const res = await postAmp(app, signedBody({ selections: {} }));
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('no_items');
+    expect(res.body.message).toMatch(/^\[E7a\]/);
     expectNoApiCalls(api);
   });
 
-  it('skips empty select values (no-change) and answers 400 no_items when every item_ is empty', async () => {
+  it('skips empty select values (no-change) and answers 400 no_items [E7a] when every item_ is empty', async () => {
     const { app, api } = buildApp();
     const res = await postAmp(app, signedBody({ selections: { [`item_${ITEM_ID}`]: '' } }));
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('no_items');
+    expect(res.body.message).toMatch(/^\[E7a\]/);
     expectNoApiCalls(api);
   });
 
@@ -578,7 +593,7 @@ describe('POST /amp/confirm — gate 7: selections against the verified manifest
     );
   });
 
-  it('answers 400 too_many_items for more than 50 selections', async () => {
+  it('answers 400 too_many_items [E7c] for more than 50 selections', async () => {
     const { app, api } = buildApp();
     const selections = Object.fromEntries(
       Array.from({ length: 51 }, (_, i) => [`item_${60000001 + i}`, BTN_DONE.id])
@@ -587,10 +602,11 @@ describe('POST /amp/confirm — gate 7: selections against the verified manifest
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('too_many_items');
+    expect(res.body.message).toMatch(/^\[E7c\]/);
     expectNoApiCalls(api);
   });
 
-  it('answers 400 bad_request when the same item_ field carries two DIFFERENT btn values', async () => {
+  it('answers 400 conflict_item [E7b] when the same item_ field carries two DIFFERENT btn values', async () => {
     const { app, api } = buildApp();
     const base = signedBody({
       pairs: [
@@ -611,7 +627,8 @@ describe('POST /amp/confirm — gate 7: selections against the verified manifest
     const res = await postAmp(app, raw);
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('bad_request');
+    expect(res.body.error).toBe('conflict_item');
+    expect(res.body.message).toMatch(/^\[E7b\]/);
     expectNoApiCalls(api);
   });
 
@@ -635,24 +652,26 @@ describe('POST /amp/confirm — gate 7: selections against the verified manifest
     expect(api.changeStatus).toHaveBeenCalledTimes(1);
   });
 
-  it('rejects a selection whose itemId is NOT in the manifest with 403 invalid and ZERO API calls, even when its batch-mate is valid', async () => {
+  it('rejects a selection whose itemId is NOT in the manifest with 403 manifest_violation [E8] and ZERO API calls, even when its batch-mate is valid', async () => {
     const { app, api } = buildApp();
     const body = signedBody(); // manifest covers ITEM_ID only
     const res = await postAmp(app, { ...body, item_999999: BTN_DONE.id });
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('invalid');
+    expect(res.body.error).toBe('manifest_violation');
+    expect(res.body.message).toMatch(/^\[E8\]/);
     expectNoApiCalls(api); // all-or-nothing: the VALID selection is not executed either
   });
 
-  it('rejects a selection naming a btnId not offered for that item in the manifest with 403 invalid and zero API calls', async () => {
+  it('rejects a selection naming a btnId not offered for that item in the manifest with 403 manifest_violation [E8] and zero API calls', async () => {
     const { app, api } = buildApp();
     // Manifest offers only BTN_DONE for ITEM_ID; the selection picks BTN_WORK.
     const body = signedBody({ selections: { [`item_${ITEM_ID}`]: BTN_WORK.id } });
     const res = await postAmp(app, body);
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('invalid');
+    expect(res.body.error).toBe('manifest_violation');
+    expect(res.body.message).toMatch(/^\[E8\]/);
     expectNoApiCalls(api);
   });
 
@@ -689,12 +708,13 @@ describe('POST /amp/confirm — gate 9: per-account bucket B runs only after ver
     expect(perAccount.allow).not.toHaveBeenCalled();
   });
 
-  it('answers 429 rate_limited with zero API calls when bucket B is empty (after a VALID signature)', async () => {
+  it('answers 429 rate_limited_account [E9] with zero API calls when bucket B is empty (after a VALID signature)', async () => {
     const { app, api } = buildApp({ perAccountAllow: false });
     const res = await postAmp(app, signedBody());
 
     expect(res.status).toBe(429);
-    expect(res.body.error).toBe('rate_limited');
+    expect(res.body.error).toBe('rate_limited_account');
+    expect(res.body.message).toMatch(/^\[E9\]/);
     expectNoApiCalls(api);
   });
 });
@@ -784,11 +804,12 @@ describe('POST /amp/confirm — gate 10: execution and response', () => {
     expect(res.status).toBe(502);
     expect(res.body.ok).toBe(false);
     expect(res.body.failed).toBe(1);
+    expect(res.body.message).toMatch(/^\[E10\]/);
     expect(api.changeStatus).not.toHaveBeenCalled();
     expect(api.createUpdate).not.toHaveBeenCalled();
   });
 
-  it('answers 502 { ok:false, updated:0, failed:1 } when the only selection fails (item not found)', async () => {
+  it('answers 502 { ok:false, updated:0, failed:1, message:[E10] } when the only selection fails (item not found)', async () => {
     const { app } = buildApp({ itemStates: { [ITEM_ID]: notFoundItem() } });
     const res = await postAmp(app, signedBody());
 
@@ -797,7 +818,7 @@ describe('POST /amp/confirm — gate 10: execution and response', () => {
     expect(res.body.updated).toBe(0);
     expect(res.body.already).toBe(0);
     expect(res.body.failed).toBe(1);
-    expect(typeof res.body.message).toBe('string');
+    expect(res.body.message).toMatch(/^\[E10\]/);
   });
 
   it('a per-item STATE failure does not fail its batch-mates: one ok + one not_found → 200 { ok:false, updated:1, failed:1 }', async () => {

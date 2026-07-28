@@ -103,7 +103,7 @@ async function resolvePreviousDiscussion(discussionId, onResolved) {
 // empty date and the name selected for immediate editing.
 // `prefill` ({date:'YYYY-MM-DD', time:'HH:MM'}) seeds a PLAIN create — set when
 // the user clicks an empty hour slot in the calendar's week view.
-export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCreate = null, onCreateError = null, editDiscussion = null, duplicateFrom = null, prefill = null, canManageSettings = false }) {
+export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCreate = null, onStageAdvance = null, onStageError = null, editDiscussion = null, duplicateFrom = null, prefill = null, canManageSettings = false }) {
   const isEdit = !!editDiscussion;
   const isDuplicate = !isEdit && !!duplicateFrom;
   const { currentUser } = useMondayContext();
@@ -580,31 +580,131 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
         },
       });
 
-      // round300 — OPTIMISTIC create (plain NEW discussion only; edit + duplicate
-      // keep the awaited flow below). Instead of blocking the card open on monday's
-      // full create_item round-trip (people + type columns, plus any retry backoff),
-      // open the discussion card INSTANTLY from the entered data and run the write
-      // in the BACKGROUND. The card header renders from the passed shape; the card's
-      // data hooks no-op on the null id, then fetch once the real id is patched in
-      // by onCreated. On a (rare) failure onCreateError reverts the card.
+      // round301 — STAGED create (plain NEW discussion only; edit + duplicate keep
+      // the awaited flow below). round300 opened the card instantly but EMPTY: the
+      // whole write ran in the background, so a template discussion showed no
+      // topics until a minute later. Now the work is ordered by how much the user
+      // needs it, per the owner's spec:
+      //   Stage 1 (awaited — the card opens only after this): the root item with
+      //           the BASICS (name/date/type/previous/creator) + ALL topics + the
+      //           points of the FIRST topic. The card therefore opens with its
+      //           agenda already usable, and with the REAL monday id.
+      //   Stage 2 (background): the remaining topics' points, resumed from
+      //           stage 1's checkpoint so nothing is created twice.
+      //   Stage 3 (background, last): the people columns — lead, coordinator,
+      //           participants, external participants.
+      // Stage 2/3 completion bumps a reload stamp on the card so the late arrivals
+      // actually show up without a manual refresh.
       if (!isEdit && !isDuplicate && onOptimisticCreate) {
-        optimisticHandoff = true;
-        const optimisticShape = {
-          id: null,
-          name: name.trim(),
-          discussionDateID: date ? composeLocalDate(date, time) : null,
+        // Stage 3 payload — pulled OUT of the create so the root item lands fast.
+        // discussionCreatorID deliberately stays in stage 1: it is the permission
+        // anchor (canEdit reads creator), so it must exist the moment the card opens.
+        const rootPayload = { ...payload };
+        const peoplePayload = {};
+        for (const key of ['discussionLeadID', 'discussionCoordinatorID', 'participantsID', 'externalParticipantsID']) {
+          if (key in rootPayload) {
+            peoplePayload[key] = rootPayload[key];
+            delete rootPayload[key];
+          }
+        }
+        // The people the user picked are shown from this shape until stage 3 has
+        // actually written them (see DiscussionCard's __pendingPeople merge), so
+        // the header never blanks out while the write is still in flight.
+        const pendingPeople = {
           discussionLeadID: lead,
           discussionCoordinatorID: coordinator,
           participantsID: participants,
           externalParticipantsID: formatExternalParticipants(externalParticipants),
+        };
+        const optimisticShape = {
+          name: name.trim(),
+          discussionDateID: date ? composeLocalDate(date, time) : null,
+          ...pendingPeople,
           ...(typeIsSubmittable ? { discussionTypeID: discussionType } : {}),
         };
         // Template inputs are captured here (submit-time) so the form reset below
-        // can't affect the background write. (People/date/type are already baked
-        // into `payload` and `optimisticShape` above.)
-        const bgTemplate = pickedTemplate, bgTypeTopics = typeTopics;
-        const creatorId = currentUser?.id != null ? String(currentUser.id) : null;
-        onOptimisticCreate(optimisticShape); // open the card + close the modal NOW
+        // can't affect the staged writes.
+        const stageTemplate = pickedTemplate || (typeTopics?.length ? { topics: typeTopics } : null);
+        // A retry after a PARTIAL stage 1 must resume, never start over: the root
+        // item may already exist. Same contract the awaited path uses, and the
+        // submissionKey guard above already refuses a retry with edited details.
+        let newId = resume?.savedId || null;
+        let stage1Checkpoint = resume?.templateResumeState || null;
+        const rememberRoot = (checkpoint) => {
+          if (!newId) return;
+          creationResumeRef.current = {
+            ...(creationResumeRef.current || {}),
+            submissionKey,
+            savedId: String(newId),
+            rootSaved: true,
+            templateResumeState: checkpoint || null,
+          };
+        };
+        try {
+          if (!resume?.rootSaved) {
+            const rootSavedAt = Date.now();
+            const created = await board.item().create(rootPayload).execute();
+            newId = created.id;
+            // Persisted BEFORE the template work starts — a template failure below
+            // must not let a second submit create a duplicate discussion.
+            rememberRoot(null);
+            logger.health?.('discussion_create_phase', {
+              step: 'staged_root_save', duration_ms: Date.now() - rootSavedAt,
+            });
+          }
+          if (stageTemplate) {
+            const stage1At = Date.now();
+            await createTopicsFromTemplate(newId, stageTemplate, {
+              freshDiscussion: true,
+              // Only the FIRST topic's points block the card open.
+              pointTopicIndexes: [0],
+              resumeState: stage1Checkpoint,
+              onProgress: onTemplateProgress,
+              onCheckpoint: (cp) => { stage1Checkpoint = cp; rememberRoot(cp); },
+            });
+            logger.health?.('discussion_create_phase', {
+              step: 'staged_topics_first_points', duration_ms: Date.now() - stage1At,
+            });
+          }
+          // monday is read-after-write lagged: a resolved create_item/create_subitem
+          // does NOT guarantee the relation and subitems are readable yet. Handing
+          // off before they are lets the card's first fetch see an empty agenda —
+          // exactly the regression this round fixes. The duplicate path polls for
+          // the same reason; here the budget is deliberately SHORT (the point is a
+          // fast open) and we hand off regardless when it expires, because stage 2/3
+          // bump the card's reload stamp anyway.
+          if (stageTemplate) {
+            const readinessAt = Date.now();
+            const expectedTopics = (stageTemplate.topics || []).length;
+            const expectedPoints = (stageTemplate.topics?.[0]?.points || []).length;
+            for (let attempt = 0; attempt < 6; attempt += 1) {
+              try {
+                const readBack = await readDiscussionTopicsAsTemplate(newId);
+                const topicsRead = readBack?.topics || [];
+                const firstTopicPoints = topicsRead[0]?.points?.length || 0;
+                if (topicsRead.length >= expectedTopics && firstTopicPoints >= expectedPoints) break;
+              } catch (err) {
+                if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי השלב הראשון נכשלה — ממשיך להמתין', err);
+              }
+              await new Promise((resolve) => { setTimeout(resolve, 400); });
+            }
+            logger.health?.('discussion_create_phase', {
+              step: 'staged_stage1_readiness', duration_ms: Date.now() - readinessAt,
+            });
+          }
+        } catch (err) {
+          // Stage 1 failed: nothing was handed off, so surface it on the FORM (the
+          // modal is still open) exactly like the awaited path does — but KEEP the
+          // saved root + newest checkpoint so the retry resumes from here.
+          rememberRoot(err?.templateResumeState || stage1Checkpoint);
+          throw err;
+        }
+        // Stage 1 is on the board and about to be owned by the card — this form is
+        // done with it, so the resume slot must not leak into the next creation.
+        creationResumeRef.current = null;
+        // Hand off — the card opens now, with the real id and a usable agenda.
+        optimisticHandoff = true;
+        onOptimisticCreate({ ...optimisticShape, id: newId, __pendingPeople: pendingPeople });
         // Reset the form for next time (the modal is unmounting).
         setName(''); setDate(''); setTime(''); setLead([]); setCoordinator([]);
         setParticipants([]); setExternalParticipants([]); setExternalDraft('');
@@ -614,26 +714,46 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
           const bgStartedAt = Date.now();
           let bgOk = false;
           try {
-            const created = await board.item().create(payload).execute();
-            const newId = created.id;
-            if (bgTemplate) {
-              await createTopicsFromTemplate(newId, bgTemplate, { creatorId });
-            } else if (bgTypeTopics?.length) {
-              await createTopicsFromTemplate(newId, { topics: bgTypeTopics }, { creatorId });
+            // Stage 2 — the deferred points, resumed so the topics that stage 1
+            // already created are not recreated.
+            if (stageTemplate && stage1Checkpoint) {
+              const stage2At = Date.now();
+              await createTopicsFromTemplate(newId, stageTemplate, {
+                freshDiscussion: true,
+                resumeState: stage1Checkpoint,
+              });
+              logger.health?.('discussion_create_phase', {
+                step: 'staged_remaining_points', duration_ms: Date.now() - stage2At,
+              });
+              // Show them without waiting for stage 3.
+              onStageAdvance?.({ id: newId, stage: 2 });
+            }
+            // Stage 3 — people last.
+            if (Object.keys(peoplePayload).length) {
+              const stage3At = Date.now();
+              await board.item(newId).update(peoplePayload).execute();
+              logger.health?.('discussion_create_phase', {
+                step: 'staged_people', duration_ms: Date.now() - stage3At,
+              });
             }
             bgOk = true;
+            // Clears __pendingPeople and refetches, so the card now shows what
+            // monday actually stores.
             onCreated({ ...optimisticShape, id: newId }, { isEdit: false, isDuplicate: false });
           } catch (err) {
-            if (!err?.__loggedId) logger.error('CreateDiscussionModal', 'שגיאה ביצירת הדיון (רקע)', err);
-            onCreateError?.();
+            if (!err?.__loggedId) logger.error('CreateDiscussionModal', 'הדיון נוצר, אך השלמת הנושאים/המשתתפים ברקע נכשלה', err);
+            // The discussion EXISTS (stage 1 succeeded) — do not revert the card;
+            // only report, so the user can retry the missing parts in place.
+            onStageError?.({ id: newId });
           } finally {
-            // The real total for the optimistic path — measured over the BACKGROUND
-            // write, tagged optimistic so it's distinguishable from the awaited flow.
+            // Stage 2+3 total, measured over the BACKGROUND tail only and tagged so
+            // it stays distinguishable from the awaited flow's total.
             logger.health?.('discussion_create_total', {
               duration_ms: Date.now() - bgStartedAt,
               ok: bgOk,
               operation: 'create',
               optimistic: true,
+              staged_tail: true,
             });
           }
         })();

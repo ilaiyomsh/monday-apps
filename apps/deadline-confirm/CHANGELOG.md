@@ -2,6 +2,52 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.9.5 — 2026-07-28 — fix: distinct AMP errors + secret-rotate UX
+
+- Every `/amp/confirm` failure path now returns a **distinct** `error` code and a
+  Hebrew `message` tagged `[E1a]`…`[E10]` / `[E99]` (was collapsed into
+  `bad_request` / `invalid` / generic "הקישור אינו בתוקף").
+- Diagnose from the AMP pink error box or Network JSON: e.g. `bad_fields` [E3a],
+  `bad_manifest` [E3b], `bad_slot` [E5], `bad_sig` [E6], `conflict_item` [E7b],
+  `manifest_violation` [E8], `rate_limited_account` [E9].
+- No ids in messages (no verification oracle). Map: `MESSAGES` in `src/routes/amp.js`.
+- **Secret rotate:** `POST /api/secret/rotate` returns masked `secret` so the admin
+  UI no longer depends on a follow-up `GET /api/state` (which could 500 and show
+  both green success and "יצירת מפתח נכשלה"). Refresh failure is reported separately.
+- Admin `internal_error` responses include `[admin <path>]` for Network diagnosis;
+  SecureStorage failures are wrapped as `secure_storage_*_failed`.
+- Merged with the 0.9.3 `detail` channel rather than replacing it: every AMP
+  failure now carries BOTH its distinct `error` code + `[E…]` message and the
+  machine `detail` that renders in the email body.
+
+## 0.9.4 — 2026-07-28 — fix: a legacy config could not be saved at all + settings export/import
+
+- **Production incident.** Saving from the admin panel failed with
+  `PUT /api/config → 400 invalid_config`, so the operator could not change
+  anything — and the digest kept running on the old stored config, which is why
+  the preview showed no recipients and no tasks even though matching tasks
+  existed on the board.
+- **Cause: two of our own decisions collided.** 0.7.1 made reading a pre-0.6.0
+  config non-throwing by defaulting a missing `section.dateColumnTitle` to `''`.
+  The server, however, requires that field to be a **non-empty** string
+  (`validateConfig`, pinned by `tests/admin-api-digest.test.js`). So a legacy
+  config was loadable but permanently unsavable.
+  It was invisible from the UI: `digestIsComplete` does not check the title, and
+  the date dropdown renders its label from `dateColumnId`, so the screen showed
+  a filled-in date column while the stored field was empty.
+- **Fix on the client, not the server.** The title is derivable from the
+  selected column, so `backfillDateColumnTitles` derives it at the save
+  boundary, falling back to `'תאריך'` when the column cannot be resolved (the
+  renderers already use that same fallback). Relaxing the server was rejected —
+  it would mean weakening a locked test and admitting header-less sections into
+  storage.
+- **New: export / import settings as JSON** (owner request). The export carries
+  BOTH the stored config and the on-screen draft — when a save is rejected, the
+  difference between the two is the diagnosis. It contains configuration only:
+  no link secret, no OAuth token (neither ever reaches the client). Import loads
+  into the draft and does **not** save, so the operator reviews first.
+- Tests: red → green + 3/3 mutations killed on `settings-io`. Suite 540 green.
+
 ## 0.9.3 — 2026-07-27 — fix: drop «ללא שינוי»; preview AMP uses live slot
 
 - Status menu shows only the cluster's action buttons (no gray «ללא שינוי»).

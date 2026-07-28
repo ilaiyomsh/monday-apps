@@ -666,7 +666,12 @@ export function DecisionsTab({ data, discussionId = null, onNewDecision, onInlin
       <div className={styles.decBoard}>
         {items.length === 0 && !canCreateDecision ? (
           <EmptyState>אין החלטות עדיין</EmptyState>
-        ) : !isGrouped ? (
+        ) : !isGrouped || grouped.length === 0 ? (
+          // round301 — a GROUPED tab with nothing to group used to render nothing
+          // at all (no headers, no add row), so a first decision could only be
+          // created from the blue toolbar button. Fall back to the same empty
+          // skeleton table the ungrouped branch renders — TasksTab parity
+          // (it renders an empty TaskTable when grouped.length === 0).
           renderDecisionTable(filteredDecisions, true, `${groupBy}_all`)
         ) : (
           grouped.map((grp, gi) => (

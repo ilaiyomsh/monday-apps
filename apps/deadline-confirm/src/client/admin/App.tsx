@@ -8,11 +8,13 @@ import type { ActionButton, AppState, Board, BoardColumn, EmailTemplate } from '
 import { type ConfigDraft, type DigestDraft, draftFromConfig, draftToConfig } from './draft';
 import { apiFetch, ApiError, formatApiFailure } from './services/api';
 import { fetchBoards, fetchBoardColumns } from './services/monday';
+import { backfillDateColumnTitles } from './settings-io';
 import { ConnectionSection } from './components/ConnectionSection';
 import { BoardConfigSection } from './components/BoardConfigSection';
 import { ButtonsSection } from './components/ButtonsSection';
 import { TemplatesSection } from './components/TemplatesSection';
 import { SecretSection } from './components/SecretSection';
+import { SettingsIOSection } from './components/SettingsIOSection';
 import { DigestSection } from './components/DigestSection';
 import logger from './utils/logger';
 import { useViewTracking } from './utils/viewTracking';
@@ -132,7 +134,14 @@ export function App() {
   const onDigestChange = (patch: Partial<DigestDraft>) =>
     onDraftChange({ digest: { ...draft.digest, ...patch } });
 
-  const payload = draftToConfig(draft);
+  // A pre-0.6.0 config stores an empty section.dateColumnTitle (0.7.1 defaults
+  // the missing field to ''), which the server rejects as invalid_config while
+  // the panel looks complete. Derive it from the selected column at the save
+  // boundary so a legacy config can be saved at all.
+  const payload = draftToConfig({
+    ...draft,
+    digest: backfillDateColumnTitles(draft.digest, columns),
+  });
 
   const onSave = async () => {
     if (!payload) return;
@@ -160,12 +169,30 @@ export function App() {
   const onRotate = async () => {
     setRotating(true);
     setRotateSuccess(false);
+    setSaveStatus({ kind: 'idle' });
     try {
-      await apiFetch<{ ok: boolean }>('/api/secret/rotate', { method: 'POST' });
+      // Masked secret only (V6 write-only full secret) — update UI without relying
+      // on a follow-up GET /api/state that can 500 on SecureStorage after write.
+      const res = await apiFetch<{ ok: boolean; secret: string | null }>('/api/secret/rotate', {
+        method: 'POST',
+      });
       setRotateSuccess(true);
-      await loadState({ initDraft: false });
+      setState((s) => (s ? { ...s, secret: res.secret ?? s.secret } : s));
+      try {
+        await loadState({ initDraft: false });
+      } catch (refreshErr) {
+        logger.error('admin', 'secret_rotate_refresh_failed', refreshErr);
+        setSaveStatus({
+          kind: 'error',
+          message: 'המפתח הוחלף, אבל רענון המסך נכשל. רעננו את העמוד.',
+        });
+      }
     } catch (err) {
       logger.error('admin', 'secret_rotate_failed', err);
+      // The rotate itself failed here (a failed post-rotate REFRESH is caught
+      // above and reported separately) — clear the green banner so success and
+      // failure can never show together.
+      setRotateSuccess(false);
       setSaveStatus({
         kind: 'error',
         message: formatApiFailure(err, 'יצירת מפתח חדש נכשלה. נסו שוב.'),
@@ -240,6 +267,15 @@ export function App() {
                 rotateSuccess={rotateSuccess}
                 rotating={rotating}
                 onRotate={onRotate}
+              />
+              <SettingsIOSection
+                savedConfig={state.config}
+                draft={draft}
+                appVersion={__APP_VERSION__}
+                onImport={(imported) => {
+                  setDraft(imported);
+                  setDirty(true);
+                }}
               />
             </div>
           </TabPanel>
