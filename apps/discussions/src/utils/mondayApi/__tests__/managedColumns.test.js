@@ -17,7 +17,7 @@ const { api, state } = vi.hoisted(() => {
 });
 vi.mock('../monday-client.js', () => ({ api }));
 
-import { detectManagedColumnId, addManagedStatusLabel, toColorEnum, STATUS_COLOR_ENUMS, VIVID_COLOR_ENUMS, pickNewLabelColor } from '../managedColumns.js';
+import { detectManagedColumnId, addManagedStatusLabel, renameManagedDropdownLabel, toColorEnum, STATUS_COLOR_ENUMS, VIVID_COLOR_ENUMS, pickNewLabelColor } from '../managedColumns.js';
 
 beforeEach(() => {
   api.mockClear();
@@ -99,5 +99,59 @@ describe('addManagedStatusLabel', () => {
     const created = vars.s.labels.find((l) => l.label === 'משפטי');
     expect(created.id).toBeUndefined();
     vars.s.labels.forEach((l) => expect(STATUS_COLOR_ENUMS).toContain(l.color));
+  });
+});
+
+/*
+ * round304 — renaming a label on an account MANAGED dropdown column (how a
+ * discussion type, i.e. its template, is renamed when the "סוג דיון" column is a
+ * managed instance). The full label set must be re-sent with only the target's
+ * TEXT changed: its id is what every item's value points at, and omitting a label
+ * is a DELETE attempt.
+ */
+describe('renameManagedDropdownLabel', () => {
+  const column = (labels, revision = 5) => [{ id: 'u', revision, settings_json: { labels } }];
+  const LABELS = [
+    { id: 1, label: 'סבב', is_deactivated: false },
+    { id: 2, label: 'תכנון', is_deactivated: false },
+    { id: 9, label: 'ישן', is_deactivated: true },
+  ];
+
+  it('re-sends every label with the target renamed, keeping ids and flags, at the read revision', async () => {
+    state.managed = column(LABELS);
+    const r = await renameManagedDropdownLabel({ managedColumnId: 'u', labelId: 1, title: 'סבב שבועי' });
+    expect(r.ok).toBe(true);
+    const mut = api.mock.calls.find(([q]) => String(q).includes('update_dropdown_managed_column'));
+    expect(mut[1].rev).toBe(5);
+    expect(mut[1].s.labels).toEqual([
+      { id: 1, label: 'סבב שבועי', is_deactivated: false },
+      { id: 2, label: 'תכנון', is_deactivated: false },
+      { id: 9, label: 'ישן', is_deactivated: true },
+    ]);
+  });
+
+  it('does not mutate when the name is unchanged', async () => {
+    state.managed = column(LABELS);
+    const r = await renameManagedDropdownLabel({ managedColumnId: 'u', labelId: 2, title: ' תכנון ' });
+    expect(r).toEqual({ ok: true, unchanged: true });
+    expect(api.mock.calls.some(([q]) => String(q).includes('update_dropdown_managed_column'))).toBe(false);
+  });
+
+  it('refuses a name another ACTIVE label holds (never merge two types)', async () => {
+    state.managed = column(LABELS);
+    await expect(renameManagedDropdownLabel({ managedColumnId: 'u', labelId: 1, title: 'תכנון' }))
+      .rejects.toMatchObject({ code: 'duplicate' });
+    expect(api.mock.calls.some(([q]) => String(q).includes('update_dropdown_managed_column'))).toBe(false);
+  });
+
+  it('throws on missing args, a missing column, or an unknown label id', async () => {
+    state.managed = column(LABELS);
+    await expect(renameManagedDropdownLabel({ managedColumnId: 'u', labelId: 1, title: '  ' }))
+      .rejects.toThrow(/missing/);
+    await expect(renameManagedDropdownLabel({ managedColumnId: 'u', labelId: 404, title: 'חדש' }))
+      .rejects.toThrow(/label not found/);
+    state.managed = [];
+    await expect(renameManagedDropdownLabel({ managedColumnId: 'u', labelId: 1, title: 'חדש' }))
+      .rejects.toThrow(/managed column not found/);
   });
 });
