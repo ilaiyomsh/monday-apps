@@ -386,9 +386,11 @@ describe('CreateDiscussionModal', () => {
     expect(stagedCallsAtHandoff).toBe(1);
     const awaitedPass = templateApi.createTopicsFromTemplate.mock.calls[0];
     expect(awaitedPass[1].topics).toHaveLength(2);
-    // No points in the awaited pass, and still no connection to the discussion.
+    // No points in the awaited pass, and NOTHING connected to the discussion yet:
+    // the relation is the card's read path, so linking empty topics here would
+    // expose a half-built agenda (PR review).
     expect(awaitedPass[2].pointTopicIndexes).toEqual([]);
-    expect(awaitedPass[2].linkLast).toBe(true);
+    expect(awaitedPass[2].skipLink).toBe(true);
     // The card's own progress bar tracks that awaited work.
     expect(typeof awaitedPass[2].onProgress).toBe('function');
     // The card is told it is still being built, so ניהול דיון shows the loader.
@@ -400,6 +402,7 @@ describe('CreateDiscussionModal', () => {
     const bg = templateApi.createTopicsFromTemplate.mock.calls[1];
     expect(bg[2].resumeState).toBe(checkpoint);
     expect(bg[2].linkLast).toBe(true);
+    expect(bg[2].skipLink).toBeFalsy(); // the background pass OWNS the connection
     expect(bg[2].pointTopicIndexes).toBeUndefined();
     await waitFor(() => expect(onStageAdvance).toHaveBeenCalled());
   });

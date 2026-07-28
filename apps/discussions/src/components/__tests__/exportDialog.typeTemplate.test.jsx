@@ -23,6 +23,7 @@ const { docx, store, assets, templatesValue } = vi.hoisted(() => ({
     saveDiscussionExportTemplate: vi.fn(),
     loadDiscussionExportAssets: vi.fn(),
     saveDiscussionExportAssets: vi.fn(),
+    clearDiscussionExportOverrides: vi.fn(),
   },
   assets: { loadExportAssets: vi.fn() },
   templatesValue: { typeTemplates: [], loadTypeExportAssets: vi.fn() },
@@ -37,6 +38,7 @@ vi.mock('../../utils/discussionExportStore.js', () => ({
   saveDiscussionExportTemplate: (...a) => store.saveDiscussionExportTemplate(...a),
   loadDiscussionExportAssets: (...a) => store.loadDiscussionExportAssets(...a),
   saveDiscussionExportAssets: (...a) => store.saveDiscussionExportAssets(...a),
+  clearDiscussionExportOverrides: (...a) => store.clearDiscussionExportOverrides(...a),
 }));
 vi.mock('../../utils/exportAssets.js', () => ({
   loadExportAssets: (...a) => assets.loadExportAssets(...a),
@@ -102,6 +104,7 @@ beforeEach(() => {
   docx.deliverDiscussionDocx.mockResolvedValue({ uploadAttempted: false, uploaded: false });
   store.saveDiscussionExportTemplate.mockResolvedValue(undefined);
   store.saveDiscussionExportAssets.mockResolvedValue(undefined);
+  store.clearDiscussionExportOverrides.mockResolvedValue(true);
   assets.loadExportAssets.mockResolvedValue(EMPTY_ASSETS);
   templatesValue.typeTemplates = [{ discussionType: 'סבב', exportTemplate: TYPE_TPL }];
   templatesValue.loadTypeExportAssets = vi.fn().mockResolvedValue(DOCX_ASSETS);
@@ -184,7 +187,16 @@ describe('ExportDialog — the discussion TYPE\'s export template is the default
     await open({ ownTemplate: { ...INSTANCE_TPL, font: 'david' } });
     const reset = screen.getByText('חזרה לברירת המחדל').closest('button');
     fireEvent.click(reset);
-    await waitFor(() => expect(store.saveDiscussionExportTemplate).toHaveBeenCalledWith('55', null));
-    expect(store.saveDiscussionExportAssets).toHaveBeenCalledWith('55', null);
+    await waitFor(() => expect(store.clearDiscussionExportOverrides).toHaveBeenCalledWith('55'));
+  });
+
+  it('a FAILED reset is not announced as done and keeps the override (PR review)', async () => {
+    store.clearDiscussionExportOverrides.mockRejectedValue(new Error('storage unavailable'));
+    const { onNotify } = await open({ ownTemplate: { ...INSTANCE_TPL, font: 'david' } });
+    fireEvent.click(screen.getByText('חזרה לברירת המחדל').closest('button'));
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith(expect.stringMatching(/נכשל/), 'warning'));
+    // no success notice, and the escape hatch is still offered
+    expect(onNotify).not.toHaveBeenCalledWith(expect.stringMatching(/אופסה/));
+    expect(screen.getByText('חזרה לברירת המחדל')).toBeInTheDocument();
   });
 });

@@ -292,6 +292,37 @@ export async function renameDropdownLabel({ boardKey, alias, labelId, title, man
   return { managedColumnId: resolvedManagedId, unchanged };
 }
 
+/**
+ * round304 — rename a label identified by its TEXT rather than its id. Used for
+ * MIRRORED label sets: the tasks board's own "סוג דיון" dropdown (`taskTypeID`)
+ * carries the same texts as the discussions type column and is bridged to it BY
+ * TEXT (previous-tasks-by-type), so renaming a type must rename that label too or
+ * existing tasks fall out of the by-type view. Their label IDS are unrelated, so
+ * only the text can locate it.
+ *
+ * Returns `{ missing: true }` when no active label carries `fromTitle` — not an
+ * error: the mirror may legitimately not have that label (unmapped column, or the
+ * same MANAGED column, already renamed by the primary call).
+ *
+ * @param {{ boardKey: string, alias: string, fromTitle: string, title: string }} args
+ */
+export async function renameDropdownLabelByText({ boardKey, alias, fromTitle, title }) {
+  const from = String(fromTitle || '').trim();
+  const name = String(title || '').trim();
+  const boardId = getBoardId(boardKey) || null;
+  const colId = getColumns(boardKey)?.[alias]?.id || null;
+  if (!from || !name) throw new Error('renameDropdownLabelByText: missing fromTitle/title');
+  if (!boardId || !colId) return { missing: true };
+  const key = `${boardId}:${colId}`;
+  const current = cache.has(key) ? cache.get(key) : await load(boardId, colId);
+  cache.set(key, current);
+  const match = (current.options || []).find(
+    (o) => (o.label ?? '').trim().toLowerCase() === from.toLowerCase()
+  );
+  if (!match) return { missing: true };
+  return renameDropdownLabel({ boardKey, alias, labelId: match.id, title: name });
+}
+
 // Raw column read for the WRITE path: unlike load(), keeps deactivated labels
 // (they must be re-sent on update) and fetches the column's string revision.
 async function loadRawDropdown(boardId, colId) {

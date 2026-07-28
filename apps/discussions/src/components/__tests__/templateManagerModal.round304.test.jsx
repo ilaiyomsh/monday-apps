@@ -20,10 +20,11 @@ vi.mock('@generated/contexts/SettingsContext.jsx', () => ({
   useSettings: () => mockUseSettings(),
 }));
 
-const { typeOptions, addDropdownLabel, renameDropdownLabel } = vi.hoisted(() => ({
+const { typeOptions, addDropdownLabel, renameDropdownLabel, renameDropdownLabelByText } = vi.hoisted(() => ({
   typeOptions: { current: [{ id: 1, label: 'סוג A' }, { id: 2, label: 'סוג B' }] },
   addDropdownLabel: vi.fn().mockResolvedValue({ id: 3, managedColumnId: null }),
   renameDropdownLabel: vi.fn().mockResolvedValue({ managedColumnId: null, unchanged: false }),
+  renameDropdownLabelByText: vi.fn().mockResolvedValue({ missing: true }),
 }));
 vi.mock('@generated/hooks/useDropdownOptions.js', () => ({
   useDropdownOptions: () => ({
@@ -33,6 +34,7 @@ vi.mock('@generated/hooks/useDropdownOptions.js', () => ({
   }),
   addDropdownLabel: (...a) => addDropdownLabel(...a),
   renameDropdownLabel: (...a) => renameDropdownLabel(...a),
+  renameDropdownLabelByText: (...a) => renameDropdownLabelByText(...a),
 }));
 
 vi.mock('@generated/utils/mondayApi/board-config-store.js', () => ({
@@ -89,6 +91,7 @@ beforeEach(() => {
   typeOptions.current = [{ id: 1, label: 'סוג A' }, { id: 2, label: 'סוג B' }];
   addDropdownLabel.mockResolvedValue({ id: 3, managedColumnId: null });
   renameDropdownLabel.mockResolvedValue({ managedColumnId: null, unchanged: false });
+  renameDropdownLabelByText.mockResolvedValue({ missing: true });
 });
 
 describe('creating a type opens its template editor (round304 §1)', () => {
@@ -174,6 +177,56 @@ describe('renaming a type template (round304 §2)', () => {
     expect(await screen.findByText(/אין הרשאה/)).toBeInTheDocument();
     // still on the OLD name
     expect(screen.getByRole('heading', { name: 'סוג A' })).toBeInTheDocument();
+  });
+
+  /*
+   * PR-review fixes for the rename: the tasks board mirrors these labels BY TEXT
+   * (previous-tasks-by-type), and the stored-data migration is a SECOND write that
+   * can fail after the label already changed.
+   */
+  it('also renames the mirrored label on the TASKS board (previous-tasks-by-type keeps working)', async () => {
+    renameDropdownLabelByText.mockResolvedValue({ managedColumnId: null, unchanged: false });
+    setup();
+    openEditorOnA();
+    fireEvent.change(screen.getByLabelText('שם התבנית'), { target: { value: 'ישיבת הנהלה' } });
+    fireEvent.click(screen.getByRole('button', { name: 'שמור שם' }));
+    await waitFor(() => expect(renameDropdownLabelByText).toHaveBeenCalledTimes(1));
+    expect(renameDropdownLabelByText.mock.calls[0][0]).toMatchObject({
+      boardKey: 'tasks', alias: 'taskTypeID', fromTitle: 'סוג A', title: 'ישיבת הנהלה',
+    });
+  });
+
+  it('a failing tasks-board mirror does not abort the rename (best-effort, warned)', async () => {
+    renameDropdownLabelByText.mockRejectedValue(new Error('no permission on tasks board'));
+    const f = setup();
+    openEditorOnA();
+    fireEvent.change(screen.getByLabelText('שם התבנית'), { target: { value: 'ישיבת הנהלה' } });
+    fireEvent.click(screen.getByRole('button', { name: 'שמור שם' }));
+    await waitFor(() => expect(f.renameDiscussionType).toHaveBeenCalledWith('סוג A', 'ישיבת הנהלה'));
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'ישיבת הנהלה' })).toBeInTheDocument());
+  });
+
+  it('a FAILED data migration keeps an error + the new name, and "שמור שם" retries ONLY the migration', async () => {
+    const migrate = vi.fn()
+      .mockRejectedValueOnce(new Error('שם הסוג עודכן ב-monday אך שמירת התבנית נכשלה — נסו שוב'))
+      .mockResolvedValueOnce(true);
+    setup({ extra: { renameDiscussionType: migrate } });
+    openEditorOnA();
+    fireEvent.change(screen.getByLabelText('שם התבנית'), { target: { value: 'ישיבת הנהלה' } });
+    fireEvent.click(screen.getByRole('button', { name: 'שמור שם' }));
+
+    // The popup stays open with the failure, and the editor adopts the new name —
+    // the monday label is the source of truth and it HAS changed.
+    expect(await screen.findByText(/שמירת התבנית נכשלה/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'ישיבת הנהלה' })).toBeInTheDocument();
+
+    // Retry: only the migration runs again — renaming the label a second time would
+    // look up a name that no longer exists and be refused as a duplicate.
+    // (findByRole: the save button carries no accessible name while it spins.)
+    fireEvent.click(await screen.findByRole('button', { name: 'שמור שם' }));
+    await waitFor(() => expect(migrate).toHaveBeenCalledTimes(2));
+    expect(renameDropdownLabel).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByLabelText('שם התבנית')).toBeNull());
   });
 
   it('an unchanged name just closes the popup without writing', async () => {

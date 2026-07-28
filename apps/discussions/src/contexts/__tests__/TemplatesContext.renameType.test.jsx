@@ -101,6 +101,38 @@ describe('TemplatesContext.renameDiscussionType', () => {
     expect(storage.deleteItem).not.toHaveBeenCalled();
   });
 
+  /*
+   * PR review — the persist helpers normally swallow a storage failure (log + keep
+   * the in-memory change). For a rename that is data loss: the monday label has
+   * already changed, so a refresh comes back to data keyed by the old name. The
+   * migration must therefore REJECT, and a retry must be able to finish the job.
+   */
+  it('REJECTS when a storage write fails, instead of reporting a successful rename', async () => {
+    storage.setItem.mockRejectedValue(new Error('storage unavailable'));
+    await act(async () => {
+      await expect(ctx.renameDiscussionType('סבב', 'סבב שבועי'))
+        .rejects.toMatchObject({ code: 'rename_store_failed' });
+    });
+  });
+
+  it('a RETRY after such a failure re-flushes every store (the in-memory state is already migrated)', async () => {
+    storage.setItem.mockRejectedValueOnce(new Error('storage unavailable'));
+    await act(async () => {
+      await expect(ctx.renameDiscussionType('סבב', 'סבב שבועי')).rejects.toBeTruthy();
+    });
+    storage.setItem.mockResolvedValue({ success: true });
+    storage.setItem.mockClear();
+    await act(async () => { await ctx.renameDiscussionType('סבב', 'סבב שבועי'); });
+    // All four stores are written again — including the assignment stores, whose
+    // content no longer "changes" on the retry but whose STORAGE is still stale.
+    for (const key of [KEYS.types, KEYS.colors, KEYS.topics, KEYS.people]) {
+      expect(writeFor(key), key).toBeTruthy();
+    }
+    expect(JSON.parse(writeFor(KEYS.types)[1]).templates.map((t) => t.discussionType))
+      .toEqual(['סבב שבועי', 'תכנון']);
+    expect(JSON.parse(writeFor(KEYS.topics)[1]).templates[0].discussionType).toBe('סבב שבועי');
+  });
+
   it('does not touch templates of OTHER types (a rename is never a bulk edit)', async () => {
     await act(async () => { await ctx.renameDiscussionType('סבב', 'סבב שבועי'); });
     const types = JSON.parse(writeFor(KEYS.types)[1]).templates;

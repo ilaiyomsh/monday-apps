@@ -10,6 +10,7 @@ import {
   saveDiscussionExportTemplate,
   loadDiscussionExportAssets,
   saveDiscussionExportAssets,
+  clearDiscussionExportOverrides,
 } from '../../utils/discussionExportStore.js';
 import {
   resolveExportTemplate,
@@ -151,14 +152,16 @@ export function ExportDialog({ discussion, settings, context, onClose, onNotify 
     if (resetting || producing) return;
     setResetting(true);
     try {
-      await saveDiscussionExportTemplate(discussionId, null);
-      await saveDiscussionExportAssets(discussionId, null);
+      // Throws when a delete fails (unlike the save helpers, which swallow) — so a
+      // failed reset is never announced as done and the override flag stays on.
+      await clearDiscussionExportOverrides(discussionId);
       setHasOwnOverride(false);
       setModelState(null); // show the loader while the tiers are re-read
       setLoadKey((k) => k + 1);
       onNotify?.('תבנית הייצוא של הדיון אופסה לברירת המחדל של סוג הדיון');
     } catch (err) {
       if (!err?.__loggedId) logger.error('ExportDialog', 'איפוס תבנית הייצוא של הדיון נכשל', err);
+      onNotify?.('איפוס תבנית הייצוא נכשל — נסו שוב', 'warning');
     } finally {
       setResetting(false);
     }

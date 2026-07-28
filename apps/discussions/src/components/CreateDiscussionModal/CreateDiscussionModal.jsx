@@ -662,10 +662,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
             const topicsAt = Date.now();
             await createTopicsFromTemplate(newId, stageTemplate, {
               freshDiscussion: true,
-              linkLast: true,
               // Topics ONLY — every point is deferred to the background pass, which
               // resumes from this pass's checkpoint so nothing is created twice.
               pointTopicIndexes: [],
+              // …and NOTHING is connected here (PR-review fix): the relation is the
+              // card's read path, so linking now would serve empty topics before
+              // their points exist. The background pass owns the connection.
+              skipLink: true,
               resumeState: stage1Checkpoint,
               onCheckpoint: (cp) => { stage1Checkpoint = cp; rememberRoot(cp); },
               // A real bar in the card for the part the user is actually waiting on.

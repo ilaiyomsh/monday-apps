@@ -15,7 +15,12 @@ import { CSS } from '@dnd-kit/utilities';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { countPoints } from '@generated/utils/templates.js';
-import { useDropdownOptions, addDropdownLabel, renameDropdownLabel } from '@generated/hooks/useDropdownOptions.js';
+import {
+  useDropdownOptions,
+  addDropdownLabel,
+  renameDropdownLabel,
+  renameDropdownLabelByText,
+} from '@generated/hooks/useDropdownOptions.js';
 import { validateTypeRename } from '@generated/utils/typeRename.js';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { MONDAY_COLOR_NAMES, colorNameToCss } from '@generated/constants/mondayPalette.js';
@@ -308,6 +313,9 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
   const [renameName, setRenameName] = useState('');
   const [renameError, setRenameError] = useState(null);
   const [renaming, setRenaming] = useState(false);
+  // { from, to } while the monday label is renamed but the stored-data migration
+  // still owes a retry (see handleRenameType). Cleared on success / leaving the editor.
+  const renamePendingRef = useRef(null);
   const typeSearchRef = useRef(null); // ref for the "סוג דיון" search box input
   // Color popover (opened by the color circle in the type-editor header).
   const [colorOpen, setColorOpen] = useState(false);
@@ -368,6 +376,7 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
   // Open the unified editor for a discussion TYPE (kind==='types'). `typeName` is
   // the dropdown label; the existing type template (if any) seeds topics + people.
   const startEditType = (typeName) => {
+    renamePendingRef.current = null;
     const existing = typeTemplates.find((t) => t.discussionType === typeName);
     const topics = existing?.topics?.length ? existing.topics : [{ name: '', points: [] }];
     setDraft({
@@ -396,6 +405,7 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
     setView('edit');
   };
   const backToList = () => {
+    renamePendingRef.current = null; // a pending rename-migration belongs to this editor only
     setView('list');
     setDraft(null);
     setPDraft(null);
@@ -632,8 +642,28 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
     setRenameOpen(true);
   };
   const handleRenameType = async () => {
-    const current = draft?.discussionType || '';
     if (renaming) return;
+    // PR-review fix: the label rename and the stored-data migration are two writes.
+    // When the label landed but the migration failed, `renamePendingRef` holds the
+    // pair so "שמור שם" retries ONLY the migration — re-running the label rename
+    // would now look up a name that no longer exists and refuse as a duplicate.
+    const pending = renamePendingRef.current;
+    if (pending) {
+      setRenaming(true);
+      setRenameError(null);
+      try {
+        await renameDiscussionType?.(pending.from, pending.to);
+        renamePendingRef.current = null;
+        setRenameOpen(false);
+      } catch (err) {
+        logger.error('TemplateManagerModal', 'השלמת שינוי שם סוג הדיון נכשלה', err);
+        setRenameError(err?.message || 'שמירת נתוני התבנית נכשלה — נסו שוב');
+      } finally {
+        setRenaming(false);
+      }
+      return;
+    }
+    const current = draft?.discussionType || '';
     const check = validateTypeRename({
       oldName: current,
       newName: renameName,
@@ -652,12 +682,41 @@ export const TemplateManagerModal = forwardRef(function TemplateManagerModal({ o
       await renameDropdownLabel({
         boardKey: 'discussions', alias: 'discussionTypeID', labelId, title: check.name,
       });
+    } catch (err) {
+      // Nothing migrated yet — the old name is still the truth everywhere.
+      logger.error('TemplateManagerModal', 'שינוי שם סוג הדיון נכשל', err);
+      setRenameError(err?.message || 'שינוי שם סוג הדיון נכשל');
+      setRenaming(false);
+      return;
+    }
+    // The TASKS board carries its own "סוג דיון" dropdown whose labels mirror these
+    // BY TEXT (previous-tasks-by-type bridges the two independent columns), so it
+    // must follow the rename or existing tasks drop out of that view. Best-effort:
+    // the primary rename already succeeded, and when both columns are the same
+    // MANAGED column this is a no-op (the label already carries the new text).
+    try {
+      await renameDropdownLabelByText({
+        boardKey: 'tasks', alias: 'taskTypeID', fromTitle: current, title: check.name,
+      });
+    } catch (err) {
+      logger.warn(
+        'TemplateManagerModal',
+        'שינוי שם הסוג בעמודת "סוג דיון" של לוח המשימות נכשל — משימות קיימות עשויות לא להופיע בתצוגת "משימות קודמות לפי סוג"',
+        err
+      );
+    }
+    try {
       await renameDiscussionType?.(current, check.name);
       setDraft((d) => (d ? { ...d, discussionType: check.name } : d));
       setRenameOpen(false);
     } catch (err) {
-      logger.error('TemplateManagerModal', 'שינוי שם סוג הדיון נכשל', err);
-      setRenameError(err?.message || 'שינוי שם סוג הדיון נכשל');
+      // The label IS renamed — adopt the new name in the editor (monday is the
+      // source of truth) and remember the migration so the retry above finishes it.
+      renamePendingRef.current = { from: current, to: check.name };
+      setDraft((d) => (d ? { ...d, discussionType: check.name } : d));
+      setRenameName(check.name);
+      logger.error('TemplateManagerModal', 'שינוי שם סוג הדיון: מיגרציית הנתונים נכשלה', err);
+      setRenameError(err?.message || 'שמירת נתוני התבנית נכשלה — נסו שוב');
     } finally {
       setRenaming(false);
     }

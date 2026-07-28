@@ -53,7 +53,7 @@ const { api, state } = vi.hoisted(() => {
 vi.mock('../../utils/mondayApi/monday-client.js', () => ({ api }));
 
 import { setActiveConfig } from '../../utils/mondayApi/board-config-store.js';
-import { renameDropdownLabel, getVersion } from '../useDropdownOptions.js';
+import { renameDropdownLabel, renameDropdownLabelByText, getVersion } from '../useDropdownOptions.js';
 
 const mapColumn = (extra = {}) => setActiveConfig({
   boards: { discussions: { id: 'b1' } },
@@ -152,5 +152,43 @@ describe('renameDropdownLabel — managed column', () => {
       boardKey: 'discussions', alias: 'discussionTypeID', labelId: 1, title: 'סבב שבועי',
     })).rejects.toThrow('boom');
     expect(api.mock.calls.some(([q]) => q.includes('update_dropdown_managed_column'))).toBe(false);
+  });
+});
+
+/*
+ * round304 (PR review) — the TASKS board carries its own "סוג דיון" dropdown whose
+ * labels MIRROR the discussion types by TEXT (previous-tasks-by-type bridges the
+ * two independent columns), so a type rename has to rename that label too. Its
+ * label ids are unrelated, so only the text can find it.
+ */
+describe('renameDropdownLabelByText', () => {
+  it('resolves the label by its current TEXT and renames it', async () => {
+    const res = await renameDropdownLabelByText({
+      boardKey: 'discussions', alias: 'discussionTypeID', fromTitle: ' סבב ', title: 'סבב שבועי',
+    });
+    const call = api.mock.calls.find(([q]) => q.includes('update_dropdown_column'));
+    expect(call[1].s.labels.find((l) => String(l.id) === '1').label).toBe('סבב שבועי');
+    expect(res.unchanged).toBe(false);
+  });
+
+  it('reports missing (NOT an error) when no label carries that text — an unmapped or already-renamed mirror', async () => {
+    const res = await renameDropdownLabelByText({
+      boardKey: 'discussions', alias: 'discussionTypeID', fromTitle: 'לא-קיים', title: 'חדש',
+    });
+    expect(res).toEqual({ missing: true });
+    expect(api.mock.calls.some(([q]) => q.includes('update_dropdown_column'))).toBe(false);
+  });
+
+  it('reports missing for an unmapped board/column instead of throwing', async () => {
+    setActiveConfig({ boards: {}, columns: { discussions: {} } });
+    await expect(renameDropdownLabelByText({
+      boardKey: 'discussions', alias: 'discussionTypeID', fromTitle: 'סבב', title: 'חדש',
+    })).resolves.toEqual({ missing: true });
+  });
+
+  it('throws when either name is blank', async () => {
+    await expect(renameDropdownLabelByText({
+      boardKey: 'discussions', alias: 'discussionTypeID', fromTitle: '  ', title: 'חדש',
+    })).rejects.toThrow(/missing/);
   });
 });
