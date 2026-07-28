@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- IMPLEMENTED in renderDigestAmp (deadline-confirm 0.9.2). Playground paste sample.
+<!-- IMPLEMENTED in renderDigestAmp (deadline-confirm 0.9.3). Playground paste sample.
      Label choice = amp-bind dropdown (closed colored trigger → popup options).
      Native <select> popup cannot be styled; always-open radios are not a dropdown. -->
 <html amp4email lang="he" dir="rtl">
@@ -135,20 +135,21 @@ font-size: 14px;
 font-weight: bold;
 }
 .ok { margin: 10px 0 2px; padding: 9px 12px; border-radius: 8px; background: #E6F7EF; color: #00754A; font-size: 13px; }
-.err { margin: 10px 0 2px; padding: 9px 12px; border-radius: 8px; background: #FDECEE; color: #B4222F; font-size: 13px; }
+.err { margin: 10px 0 2px; padding: 9px 12px; border-radius: 8px; background: #FDECEE; color: #B4222F; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+.err-detail { display: block; margin-top: 6px; font-size: 11px; opacity: 0.9; font-family: ui-monospace, Menlo, Consolas, monospace; }
 .foot { font-size: 12px; color: #9699A6; line-height: 1.6; border-top: 1px solid #E6E9EF; padding-top: 12px; margin-top: 10px; }
 </style>
 </head>
 <body>
 <amp-state id="dd"><script type="application/json">
-{"o":"","v9001":"","l9001":"טרם החל","c9001":"bg_c4c4c4","ol9001":"טרם החל","oc9001":"bg_c4c4c4","v9003":"","l9003":"בעבודה","c9003":"bg_fdab3d","ol9003":"בעבודה","oc9003":"bg_fdab3d"}
+{"o":"","v9001":"","l9001":"טרם החל","c9001":"bg_c4c4c4","v9003":"","l9003":"בעבודה","c9003":"bg_fdab3d"}
 </script></amp-state>
 <div class="dd-overlay" hidden [hidden]="dd.o == ''" role="button" tabindex="0"
      on="tap:AMP.setState({dd:{o:''}})"></div>
 <div class="wrap">
 <p class="hi">&#8207;שלום עילי שלם,</p>
 <p class="lead">&#8207;לחצו על תגית הסטטוס לבחירה מהתפריט הנפתח, ואז על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
-<p class="note">&#8207;תצוגת playground · מקבץ = טבלה · דרופדאון amp-bind (סגור → נפתח) · אישור אחד</p>
+<p class="note">&#8207;תצוגת playground (דמו בלבד) · מקבץ = טבלה · דרופדאון amp-bind · שליחה מכאן תיכשל — אין חתימה אמיתית</p>
 
 <form method="post"
 action-xhr="https://example.com/amp/confirm"
@@ -182,8 +183,6 @@ enctype="application/x-www-form-urlencoded">
         on="tap:AMP.setState({dd:{o:'', v9001:'btn_working', l9001:'בעבודה', c9001:'bg_fdab3d'}})">&#8207;בעבודה</button>
 <button type="button" class="dd-opt" style="background:#e2445c"
         on="tap:AMP.setState({dd:{o:'', v9001:'btn_stuck', l9001:'תקוע', c9001:'bg_e2445c'}})">&#8207;תקוע</button>
-<button type="button" class="dd-opt" style="background:#c4c4c4"
-        on="tap:AMP.setState({dd:{o:'', v9001:'', l9001: dd.ol9001, c9001: dd.oc9001}})">&#8207;ללא שינוי</button>
 </div>
 </div>
 <input type="hidden" name="item_9001" value="" [value]="dd.v9001">
@@ -204,8 +203,6 @@ enctype="application/x-www-form-urlencoded">
         on="tap:AMP.setState({dd:{o:'', v9003:'btn_working', l9003:'בעבודה', c9003:'bg_fdab3d'}})">&#8207;בעבודה</button>
 <button type="button" class="dd-opt" style="background:#e2445c"
         on="tap:AMP.setState({dd:{o:'', v9003:'btn_stuck', l9003:'תקוע', c9003:'bg_e2445c'}})">&#8207;תקוע</button>
-<button type="button" class="dd-opt" style="background:#c4c4c4"
-        on="tap:AMP.setState({dd:{o:'', v9003:'', l9003: dd.ol9003, c9003: dd.oc9003}})">&#8207;ללא שינוי</button>
 </div>
 </div>
 <input type="hidden" name="item_9003" value="" [value]="dd.v9003">
@@ -237,8 +234,6 @@ enctype="application/x-www-form-urlencoded">
         on="tap:AMP.setState({dd:{o:'', v9001:'btn_done', l9001:'בוצע', c9001:'bg_00c875'}})">&#8207;בוצע</button>
 <button type="button" class="dd-opt" style="background:#c4c4c4"
         on="tap:AMP.setState({dd:{o:'', v9001:'btn_na', l9001:'לא רלוונטי', c9001:'bg_c4c4c4'}})">&#8207;לא רלוונטי</button>
-<button type="button" class="dd-opt" style="background:#c4c4c4"
-        on="tap:AMP.setState({dd:{o:'', v9001:'', l9001: dd.ol9001, c9001: dd.oc9001}})">&#8207;ללא שינוי</button>
 </div>
 </div>
 </td>
@@ -256,8 +251,6 @@ enctype="application/x-www-form-urlencoded">
 <div class="dd-menu" hidden [hidden]="dd.o != '9003'">
 <button type="button" class="dd-opt" style="background:#00c875"
         on="tap:AMP.setState({dd:{o:'', v9003:'btn_done', l9003:'בוצע', c9003:'bg_00c875'}})">&#8207;בוצע</button>
-<button type="button" class="dd-opt" style="background:#c4c4c4"
-        on="tap:AMP.setState({dd:{o:'', v9003:'', l9003: dd.ol9003, c9003: dd.oc9003}})">&#8207;ללא שינוי</button>
 </div>
 </div>
 </td>
@@ -272,11 +265,11 @@ enctype="application/x-www-form-urlencoded">
 <template type="amp-mustache"><div class="ok">{{message}}</div></template>
 </div>
 <div submit-error>
-<template type="amp-mustache"><div class="err">{{message}}</div></template>
+<template type="amp-mustache"><div class="err">{{message}}{{#detail}}<span class="err-detail">{{detail}}</span>{{/detail}}</div></template>
 </div>
 </form>
 
-<p class="foot">&#8207;מייל אוטומטי · משימות על "ללא שינוי" לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל</p>
+<p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה בתפריט לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · playground זה דמו בלבד (a/p/m לא אמיתיים) — אישור אמיתי רק ממייל/תצוגה מקדימה חתומה</p>
 </div>
 </body>
 </html>

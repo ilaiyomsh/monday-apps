@@ -1,10 +1,28 @@
 # Changelog
 
-## 3.2.6
+## 3.2.9
 
 - Picker shows a monday-style shimmer skeleton (6 label-sized bars, no loading
   copy) from the first paint while context/labels load.
 - Document Dialog Design size: width `200`, height `250` (fits 6 pills, no scroll).
+
+## 3.2.8
+
+- Settings: teams join the people picker (no separate checklist); each label
+  accordion starts closed; required-columns list collapsed by default; people-
+  column gate uses a custom dropdown matching the settings chrome.
+
+## 3.2.7
+
+- Settings UI redesign (Vercel-style clarity): soft canvas, compact label rows,
+  capped field widths, checkbox lists instead of stretched multi-selects,
+  collapsible permissions, and ↑/↓ reorder.
+
+## 3.2.6
+
+- Per-label people-column gate: pick a People column; only actors who appear on
+  that column (as a person or via a team listed there) may select the label.
+  Combines with user/team allowlists as AND.
 
 ## 3.2.5
 

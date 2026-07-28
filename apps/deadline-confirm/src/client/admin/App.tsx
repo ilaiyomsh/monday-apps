@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button, Loader, Tab, TabList, TabPanel, TabPanels, TabsContext } from '@vibe/core';
 import type { ActionButton, AppState, Board, BoardColumn, EmailTemplate } from './types';
 import { type ConfigDraft, type DigestDraft, draftFromConfig, draftToConfig } from './draft';
-import { apiFetch, ApiError } from './services/api';
+import { apiFetch, ApiError, formatApiFailure } from './services/api';
 import { fetchBoards, fetchBoardColumns } from './services/monday';
 import { ConnectionSection } from './components/ConnectionSection';
 import { BoardConfigSection } from './components/BoardConfigSection';
@@ -56,7 +56,12 @@ export function App() {
         setBoards(await fetchBoards());
       } catch (err) {
         logger.error('admin', 'boot_failed', err);
-        setBootError('טעינת ההגדרות נכשלה. ודאו שאתם פותחים את המסך מתוך monday ונסו לרענן.');
+        setBootError(
+          formatApiFailure(
+            err,
+            'טעינת ההגדרות נכשלה. ודאו שאתם פותחים את המסך מתוך monday ונסו לרענן.'
+          )
+        );
       }
     })();
   }, [loadState]);
@@ -147,7 +152,7 @@ export function App() {
       const message =
         err instanceof ApiError && err.field
           ? `השמירה נכשלה — שדה לא תקין: ${err.field}`
-          : 'השמירה נכשלה. נסו שוב.';
+          : formatApiFailure(err, 'השמירה נכשלה. נסו שוב.');
       setSaveStatus({ kind: 'error', message });
     }
   };
@@ -161,7 +166,10 @@ export function App() {
       await loadState({ initDraft: false });
     } catch (err) {
       logger.error('admin', 'secret_rotate_failed', err);
-      setSaveStatus({ kind: 'error', message: 'יצירת מפתח חדש נכשלה. נסו שוב.' });
+      setSaveStatus({
+        kind: 'error',
+        message: formatApiFailure(err, 'יצירת מפתח חדש נכשלה. נסו שוב.'),
+      });
     } finally {
       setRotating(false);
     }
@@ -173,7 +181,7 @@ export function App() {
       await loadState({ initDraft: false });
     } catch (err) {
       logger.error('admin', 'state_refresh_failed', err);
-      setBootError('רענון הסטטוס נכשל. נסו שוב.');
+      setBootError(formatApiFailure(err, 'רענון הסטטוס נכשל. נסו שוב.'));
     } finally {
       setRefreshing(false);
     }

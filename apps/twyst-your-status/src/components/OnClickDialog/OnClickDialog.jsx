@@ -5,7 +5,11 @@ import {
   buildMultiColumnWritePayload,
   prefillFormValue,
 } from '../../domain/columnValueFormats';
-import { getLabelRule } from '../../domain/settingsSchema';
+import { parsePeopleColumnAssignments } from '../../domain/peopleColumnGate';
+import {
+  collectRequiredPeopleColumnIds,
+  getLabelRule,
+} from '../../domain/settingsSchema';
 import { normalizeStatusLabels, serializeStatusMutationValue } from '../../domain/statusPolicy';
 import {
   GET_ITEM_FORM_VALUES,
@@ -98,6 +102,7 @@ function OnClickDialog({ context }) {
 
   const [labels, setLabels] = useState([]);
   const [currentValue, setCurrentValue] = useState(null);
+  const [peopleByColumnId, setPeopleByColumnId] = useState({});
   const [actor, setActor] = useState({ userId: String(user?.id ?? ''), teamIds: [] });
   const [columnsById, setColumnsById] = useState(new Map());
   const [loading, setLoading] = useState(true);
@@ -106,29 +111,47 @@ function OnClickDialog({ context }) {
   const [formTarget, setFormTarget] = useState(null);
   const [formValues, setFormValues] = useState({});
 
+  // Null storage = no rules yet → everyone may pick every active label.
+  const effectiveSettings = useMemo(
+    () => settings ?? { version: 1, hiddenLabelIds: [], labels: {} },
+    [settings],
+  );
+
   const loadDialogData = useCallback(async () => {
     if (!boardId || !columnId || !itemId) return;
+    // Wait for settings so we know which people columns to fetch for gates.
+    if (settingsLoading) return;
     try {
       setLoading(true);
       setError(null);
+      const gateColumnIds = collectRequiredPeopleColumnIds(effectiveSettings);
+      const columnIds = [...new Set([columnId, ...gateColumnIds])];
       const [data, teamsResult] = await Promise.all([
         mondayService.query(GET_STATUS_COLUMN_CONTEXT, {
           boardIds: [String(boardId)],
           itemIds: [String(itemId)],
-          columnIds: [columnId],
+          columnIds,
         }),
         loadUserTeamIds(user?.id),
       ]);
 
-      const column = data?.boards?.[0]?.columns?.[0];
+      const column = data?.boards?.[0]?.columns?.find((candidate) => candidate.id === columnId)
+        ?? data?.boards?.[0]?.columns?.[0];
       if (!column || column.type !== 'status') {
         throw new Error('העמודה שנפתחה אינה עמודת Status פעילה');
       }
 
       const item = data?.items?.[0];
       const statusValue = item?.column_values?.find((value) => value.id === columnId) ?? null;
+      const nextPeople = {};
+      (item?.column_values ?? []).forEach((value) => {
+        if (value?.type === 'people' || value?.column?.type === 'people') {
+          nextPeople[value.id] = parsePeopleColumnAssignments(value);
+        }
+      });
       setLabels(normalizeStatusLabels(column.settings));
       setCurrentValue(statusValue);
+      setPeopleByColumnId(nextPeople);
       setActor({
         userId: String(user?.id ?? ''),
         teamIds: teamsResult.teamIds,
@@ -144,14 +167,11 @@ function OnClickDialog({ context }) {
     } finally {
       setLoading(false);
     }
-  }, [boardId, columnId, itemId, user?.id]);
+  }, [boardId, columnId, itemId, user?.id, settingsLoading, effectiveSettings]);
 
   useEffect(() => {
     loadDialogData();
   }, [loadDialogData]);
-
-  // Null storage = no rules yet → everyone may pick every active label.
-  const effectiveSettings = settings ?? { version: 1, hiddenLabelIds: [], labels: {} };
 
   const pickerModel = useMemo(
     () => buildAvailableLabels({
@@ -159,8 +179,9 @@ function OnClickDialog({ context }) {
       settings: effectiveSettings,
       actor,
       currentValue,
+      peopleByColumnId,
     }),
-    [actor, currentValue, labels, effectiveSettings],
+    [actor, currentValue, labels, effectiveSettings, peopleByColumnId],
   );
 
   const writeStatusOnly = async (labelId) => {

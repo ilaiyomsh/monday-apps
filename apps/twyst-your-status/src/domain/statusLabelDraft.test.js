@@ -7,6 +7,7 @@ import {
   createLabelsDraft,
   hasPendingLabelEdits,
   pruneSettingsForActiveLabels,
+  reorderLabelsDraft,
 } from './statusLabelDraft.js';
 
 const LIVE = [
@@ -62,7 +63,7 @@ describe('createLabelsDraft', () => {
 });
 
 describe('hasPendingLabelEdits', () => {
-  it('detects rename, recolor, add, remove, and reports false for identical drafts', () => {
+  it('detects rename, recolor, add, remove, reorder, and reports false for identical drafts', () => {
     const baseline = createLabelsDraft(LIVE);
     expect(hasPendingLabelEdits(baseline, baseline)).toBe(false);
     expect(hasPendingLabelEdits(
@@ -75,6 +76,31 @@ describe('hasPendingLabelEdits', () => {
     )).toBe(true);
     expect(hasPendingLabelEdits([baseline[0]], baseline)).toBe(true);
     expect(hasPendingLabelEdits([...baseline, createBlankLabelDraft(baseline)], baseline)).toBe(true);
+    expect(hasPendingLabelEdits(reorderLabelsDraft(baseline, '0', 1), baseline)).toBe(true);
+  });
+});
+
+describe('reorderLabelsDraft', () => {
+  it('moves a label by delta and renormalizes index to 0..n-1', () => {
+    const draft = createLabelsDraft(LIVE);
+    expect(reorderLabelsDraft(draft, '0', 1).map((label) => ({
+      clientKey: label.clientKey,
+      index: label.index,
+    }))).toEqual([
+      { clientKey: '1', index: 0 },
+      { clientKey: '0', index: 1 },
+    ]);
+  });
+
+  it('is a no-op at the edges and renormalizes stale indexes', () => {
+    const draft = createLabelsDraft(LIVE).map((label, i) => ({ ...label, index: (i + 1) * 10 }));
+    expect(reorderLabelsDraft(draft, '0', -1).map((label) => ({
+      clientKey: label.clientKey,
+      index: label.index,
+    }))).toEqual([
+      { clientKey: '0', index: 0 },
+      { clientKey: '1', index: 1 },
+    ]);
   });
 });
 
@@ -234,7 +260,12 @@ describe('pruneSettingsForActiveLabels', () => {
       version: 1,
       hiddenLabelIds: ['0'],
       labels: {
-        0: { allowedUserIds: ['1'], allowedTeamIds: [], requiredColumnIds: [] },
+        0: {
+          allowedUserIds: ['1'],
+          allowedTeamIds: [],
+          requiredColumnIds: [],
+          requiredPeopleColumnIds: [],
+        },
       },
     });
   });

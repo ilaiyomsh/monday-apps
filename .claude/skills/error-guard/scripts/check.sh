@@ -165,9 +165,10 @@ CONFIG="$TMPDIR_EG/eslintrc.json"
 # The hook checks BOTH client and server files with one config, so the
 # catch-must-log selector here is the union of the two kits' allowances:
 # logger.* / throw / showErrorWithDetails (client) / next(err) (server —
-# forwarding to the terminal error middleware, which logs). The per-app ESLint
-# kit stays the precise anchor (client kit does NOT allow next()).
-UNION_SELECTOR="CatchClause > BlockStatement:not(:has(CallExpression[callee.object.name='logger'])):not(:has(ThrowStatement)):not(:has(CallExpression[callee.name='showErrorWithDetails'])):not(:has(CallExpression[callee.name='next']))"
+# forwarding to the terminal error middleware, which logs) / logError(...)
+# (deadline-confirm server named-import convention — known-issues 2026-07-19).
+# The per-app ESLint kit stays the precise anchor (client kit does NOT allow next()).
+UNION_SELECTOR="CatchClause > BlockStatement:not(:has(CallExpression[callee.object.name='logger'])):not(:has(ThrowStatement)):not(:has(CallExpression[callee.name='showErrorWithDetails'])):not(:has(CallExpression[callee.name='next'])):not(:has(CallExpression[callee.name='logError']))"
 
 jq \
   --arg parser "$PARSER_PATH" \
