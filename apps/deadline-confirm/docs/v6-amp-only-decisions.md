@@ -66,8 +66,10 @@ endpoints that returned the secret unmasked, and static pasted HTML cannot carry
 a signature that changes daily. The per-button-per-task UX they produced is also
 being replaced by D9.
 
-`POST /api/secret/rotate` keeps rotating the secret but **stops returning it** —
-nothing needs to display it any more. Rotation remains the emergency kill switch:
+`POST /api/secret/rotate` keeps rotating the secret but **never returns the
+full value** — response is `{ ok: true, secret: '****xxxx' }` (masked only,
+same form as `GET /api/state`) so the admin UI can update without a follow-up
+SecureStorage read. Rotation remains the emergency kill switch:
 it invalidates every outstanding signature at once, because all of them are
 derived from the base secret.
 
@@ -340,7 +342,7 @@ operator's morning email.
 | `GET /oauth/google/callback` | single-use expiring nonce | stores sender token | **new (D13)** |
 | `GET /api/state` | sessionToken (header) | no | secret stays masked |
 | `PUT /api/config` | sessionToken | yes | may gain button config (D9, later) |
-| `POST /api/secret/rotate` | sessionToken | yes | **stops returning the secret** |
+| `POST /api/secret/rotate` | sessionToken | yes | returns masked `secret` only — full secret never exposed |
 | `GET /api/digest/preview` | sessionToken | no | drops `html`, keeps `amp` |
 | `POST /api/digest/send` | sessionToken | yes | manual trigger retained |
 | `GET /health` | none | no | unchanged |
@@ -449,9 +451,12 @@ scheduler failure, not widening the window.
    manifest**; reject on no selections, an unknown item, or a button not offered
    for that item.
 8. **All-or-nothing for integrity failures.** Any failure in 3–7 rejects the whole
-   request with the generic invalid message and performs no mutation. This is not
-   cosmetic: the response returns counts, so partial execution at this stage would
-   turn those counts into a verification oracle.
+   request and performs no mutation. This is not cosmetic: the response returns
+   counts, so partial execution at this stage would turn those counts into a
+   verification oracle. Each gate returns a **distinct** `error` code + Hebrew
+   `message` tagged `[E…]` (see `MESSAGES` in `src/routes/amp.js`) so operators
+   can diagnose from the AMP error box / Network tab without collapsing
+   everything into a generic "invalid".
 9. **Rate limit, bucket B** — the existing `accountId:ip` bucket.
 10. `performAction` per selection, passing that selection's own `btnId`, plus the
     D11 assignee check.
@@ -462,8 +467,8 @@ Steps 3–8 must complete before any monday API call.
 
 | Class | Examples | Handling |
 |---|---|---|
-| **Integrity** (before execution) | bad signature, expired slot, item or button absent from the manifest, malformed manifest | **reject the entire request**, generic message, no mutation |
-| **State** (during execution) | D11 assignee mismatch, already at target, item not found, API error | **per item**, reported in the response counts |
+| **Integrity** (before execution) | bad signature (`bad_sig` [E6]), expired slot (`bad_slot` [E5]), item or button absent from the manifest (`manifest_violation` [E8]), malformed fields/manifest (`bad_fields` [E3a] / `bad_manifest` [E3b]), missing config (`no_config` [E4]) | **reject the entire request**, distinct diagnostic message, no mutation |
+| **State** (during execution) | D11 assignee mismatch, already at target, item not found, API error | **per item**, reported in the response counts; all-failed → `none_updated` [E10] |
 
 Collapsing state failures into all-or-nothing would mean one reassigned task
 silently kills a batch of nine good ones. It does not reopen the oracle: reaching
@@ -632,7 +637,8 @@ the only authorization.
       change — must be called out in the PR description.
 - [x] T11 — operator summary email (D8).
 - [x] T12 — resend-today action, reusing the current slot (D6, D8).
-- [x] T13 — `POST /api/secret/rotate` stops returning the secret; admin UI stops
+- [x] T13 — `POST /api/secret/rotate` returns masked secret only; admin UI never
+      shows/copies the full value.
       displaying it.
 - [x] T14 — `GET /api/digest/preview` drops `html`, keeps `amp`.
 

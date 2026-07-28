@@ -28,14 +28,32 @@ export function createSecureStorageBackend() {
   const secureStorage = new SecureStorage();
   return {
     async get(key) {
-      const value = await secureStorage.get(key);
-      return unwrapPrimitive(value) ?? null;
+      try {
+        const value = await secureStorage.get(key);
+        return unwrapPrimitive(value) ?? null;
+      } catch (err) {
+        const wrapped = new Error(`secure_storage_get_failed: ${String(err?.message ?? err)}`);
+        wrapped.cause = err;
+        throw wrapped;
+      }
     },
     async set(key, value) {
-      await secureStorage.set(key, value);
+      try {
+        await secureStorage.set(key, value);
+      } catch (err) {
+        const wrapped = new Error(`secure_storage_set_failed: ${String(err?.message ?? err)}`);
+        wrapped.cause = err;
+        throw wrapped;
+      }
     },
     async delete(key) {
-      await secureStorage.delete(key);
+      try {
+        await secureStorage.delete(key);
+      } catch (err) {
+        const wrapped = new Error(`secure_storage_delete_failed: ${String(err?.message ?? err)}`);
+        wrapped.cause = err;
+        throw wrapped;
+      }
     },
   };
 }

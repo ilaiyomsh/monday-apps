@@ -70,7 +70,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
         field?: string;
         detail?: { name?: string; message?: string; stack?: string | null };
       };
-      // Prefer human message when the server sent one (500 internal_error + detail).
+      // Prefer the server's human message when there is one — it carries the
+      // Hebrew diagnostic with its `[admin …]` / `[E…]` tag — prefixed by the
+      // stable `error` code; fall back to the code alone.
       if (typeof body.message === 'string' && body.message.length > 0) {
         message = body.error ? `${body.error}: ${body.message}` : body.message;
       } else if (body.error) {
