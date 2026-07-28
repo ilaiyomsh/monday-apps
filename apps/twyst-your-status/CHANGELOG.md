@@ -1,5 +1,40 @@
 # Changelog
 
+## 3.7.1
+
+- **The required-fields form's title and submit button are now actually fixed, at any
+  number of required columns.** 3.6.0 claimed this and 3.6.1 claimed to have fixed the
+  claim; both were looking in the wrong place. Everything inside
+  `.twyst-required-fields-modal` was already correct — the `minmax(0, 1fr)` row, the
+  `overflow: hidden`, the field list as the only scrolling box. The box that was
+  scrolling sat two levels ABOVE it: `.app-shell` adds `padding: 20px` and, on this
+  route, nothing in the chain (`html`, `body`, `#root`, the shell) had a height or
+  `overflow: hidden`. So the modal filled the viewport with `100dvh`, the shell's
+  padding pushed 40px past it, and `body` — which carries only `min-height` — grew
+  rather than clipping. The DOCUMENT scrolled, taking the header and the button along,
+  and `overflow: hidden` on the modal could do nothing about a scroll happening
+  outside it.
+- The tell was that the overflow measured a **constant 40px at every field count** —
+  1, 3, 8 and 14 required columns all overflowed by exactly the shell's two 20px
+  paddings. A content-driven overflow would have grown with the rows. Measured in a
+  real browser at the exact pixel size the app asks monday for, not reasoned about:
+  with 8 fields the document scrolled 40px while the field list did not scroll at all,
+  and the submit button sat flush on the viewport's bottom edge with its own padding
+  below the fold.
+- The required-fields route now carries an `is-modal` shell modifier, and that class
+  gets the same treatment the picker has always had: no shell padding, and
+  `height: 100%` + `overflow: hidden` on `html`, `body`, `#root` and the shell.
+  `requiredFormModalSize` budgets exactly ONE padding box (`FORM_PADDING_PX`) and the
+  modal is the element that owns it, so the shell must contribute none.
+- `.twyst-required-fields-modal` is sized `block-size: 100%` instead of `100dvh`.
+  A viewport unit measures the iframe and silently ignores every ancestor between,
+  which is what let the shell's padding be added on top of a box already as tall as
+  the window. It also degrades better: with no definite parent height a percentage
+  falls back to content height, where a viewport unit overflows.
+- After the fix the document scrolls **0px** at 1, 3, 8 and 14 fields; the button
+  keeps its 20px of padding, the header sits at one padding box rather than two, and
+  past the 8-row cap the field LIST scrolls while the document still does not.
+
 ## 3.7.0
 
 - **The settings button is now for board owners only.** The slim shell behind the column's

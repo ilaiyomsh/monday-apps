@@ -49,6 +49,22 @@ Size is computed by `src/utils/requiredFormModalSize.js` and passed to
 - **Height follows the rows**: one row per field, at most **8 visible** (`FORM_MAX_ROWS`,
   raised from 4 in 3.6.0); past that the LIST scrolls and the modal keeps its opened
   height.
+- **The ancestors decide whether ANY of this works.** The route must render the
+  `is-modal` shell modifier (`App.shellModifier`), because `index.css` hangs the whole
+  constraint off it: no `.app-shell` padding, and `height: 100%` + `overflow: hidden` on
+  `html`, `body`, `#root` and the shell. Without it the modal was `100dvh` inside a shell
+  adding `padding: 20px`, so the DOCUMENT scrolled 40px and carried the title and the
+  submit button with it — while the field list, the only box meant to scroll, did not.
+  `overflow: hidden` on the modal is powerless against a scroll happening above it, which
+  is why 3.6.0 and 3.6.1 both "fixed" this and did not. **The diagnostic that identifies
+  it:** the overflow is a CONSTANT 40px at 1, 3, 8 and 14 fields — two 20px paddings, not
+  content. Anything content-driven grows with the row count. Measure in a real browser at
+  `requiredFormModalSize`'s own pixel size and read `documentElement.scrollHeight -
+  clientHeight`; it must be 0, and `.twyst-form-rows` must be the box that scrolls.
+- **Sized `block-size: 100%`, never a viewport unit.** `100dvh` measures the iframe and
+  ignores every ancestor in between, which is exactly how the shell's padding got added on
+  top of a box already as tall as the window. `requiredFormModalSize` budgets ONE padding
+  box (`FORM_PADDING_PX`) and this element owns it — no ancestor may add another.
 - **What actually pins the title and the actions is `grid-template-rows: minmax(0, 1fr)`
   on `.twyst-required-fields-modal`** — do not let that become an implicit `auto` row.
   An `auto` row is sized by its CONTENT, and `align-content: stretch` only distributes

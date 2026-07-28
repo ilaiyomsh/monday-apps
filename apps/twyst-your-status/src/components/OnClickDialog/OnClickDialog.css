@@ -44,8 +44,19 @@
    */
   grid-template-rows: minmax(0, 1fr);
   box-sizing: border-box;
-  block-size: 100vh;
-  block-size: 100dvh; /* dvh where supported; the vh above is the fallback */
+  /*
+   * 100% of the shell, NOT 100dvh.
+   *
+   * Viewport units measure the iframe and ignore everything between it and this
+   * element, so `100dvh` made the modal exactly as tall as the window and then sat
+   * inside `.app-shell`'s 20px padding — 40px of guaranteed document overflow at
+   * every field count, which is the scroll this modal kept coming back with. The
+   * shell is height-constrained and unpadded for this route (see `is-modal` in
+   * index.css), so 100% is the same number without the ancestors' geometry silently
+   * added on top. It also degrades better: with no definite parent height a
+   * percentage falls back to content height, where a viewport unit would overflow.
+   */
+  block-size: 100%;
   overflow: hidden;
   padding: 20px;
   color: var(--primary-text-color, #323338);
