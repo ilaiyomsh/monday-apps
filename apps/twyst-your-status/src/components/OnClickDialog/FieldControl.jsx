@@ -8,10 +8,10 @@
  * control that does not exist yet, one branch here.
  */
 import React from 'react';
-import { dropdownOptionsFrom, fieldControlFor } from '../../domain/columnFields';
-import { normalizeStatusLabels } from '../../domain/statusPolicy';
+import { fieldControlFor } from '../../domain/columnFields';
 import { PersonPicker } from '../shared/PersonPicker';
 import DateFieldControl from './DateFieldControl';
+import { DropdownFieldControl, StatusFieldControl } from './OptionFieldControls';
 
 // Control kinds that are a plain <input>, mapped to their HTML input type.
 const TEXT_INPUT_TYPES = {
@@ -115,59 +115,26 @@ function FieldControl({ column, value, onChange, disabled, controlId, labelId })
   }
 
   if (control === 'dropdown') {
-    const options = dropdownOptionsFrom(column?.settings);
-    const selected = Array.isArray(value) ? value : [];
-    if (options.length === 0) {
-      return <p className="twyst-field-note">אין תוויות זמינות בעמודה הזו.</p>;
-    }
     return (
-      <div className="twyst-chip-group" role="group" aria-labelledby={labelId}>
-        {options.map((option) => {
-          const isOn = selected.includes(option.id);
-          return (
-            <button
-              key={option.id}
-              type="button"
-              className={`twyst-chip${isOn ? ' is-on' : ''}`}
-              aria-pressed={isOn}
-              disabled={disabled}
-              onClick={() => onChange(
-                isOn ? selected.filter((id) => id !== option.id) : [...selected, option.id],
-              )}
-            >
-              {option.label || option.id}
-            </button>
-          );
-        })}
-      </div>
+      <DropdownFieldControl
+        column={column}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        controlId={controlId}
+      />
     );
   }
 
   if (control === 'status') {
-    const labels = normalizeStatusLabels(column?.settings).filter((label) => !label.isDeactivated);
-    if (labels.length === 0) {
-      return <p className="twyst-field-note">אין סטטוסים זמינים בעמודה הזו.</p>;
-    }
     return (
-      <div className="twyst-chip-group" role="radiogroup" aria-labelledby={labelId}>
-        {labels.map((label) => {
-          const isOn = String(value) === label.id;
-          return (
-            <button
-              key={label.id}
-              type="button"
-              role="radio"
-              aria-checked={isOn}
-              className={`twyst-chip twyst-chip-status${isOn ? ' is-on' : ''}`}
-              style={isOn ? { background: label.color, borderColor: label.color } : undefined}
-              disabled={disabled}
-              onClick={() => onChange(label.id)}
-            >
-              {label.label || 'ללא שם'}
-            </button>
-          );
-        })}
-      </div>
+      <StatusFieldControl
+        column={column}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        controlId={controlId}
+      />
     );
   }
 
