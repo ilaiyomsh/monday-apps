@@ -462,9 +462,22 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     (taskId, people) => updatePeopleColumn('partnersID', 'partners')(taskId, people),
     [updatePeopleColumn]
   );
+  // round306 (PR review) — reassigning אחריות can move the task OUT of the active
+  // scope: the 'mine' page is server-filtered to "responsible = me", and the
+  // 'others' scope is explicitly "led tasks I am NOT responsible for". Updating the
+  // column in place would leave the row visible (and editable) in a scope it no
+  // longer belongs to until the next refetch, so the row is dropped here.
   const updateTaskAssignee = useCallback(
-    (taskId, people) => updatePeopleColumn('responsibilityID', 'assignee')(taskId, people),
-    [updatePeopleColumn]
+    async (taskId, people) => {
+      await updatePeopleColumn('responsibilityID', 'assignee')(taskId, people);
+      const next = Array.isArray(people) ? people : [];
+      const holdsMe = !!userId && next.some((p) => String(p?.id) === String(userId));
+      const leftScope = (scope === 'mine' && !holdsMe) || (scope === 'others' && holdsMe);
+      if (leftScope) {
+        setItems((current) => current.filter((t) => String(t.id) !== String(taskId)));
+      }
+    },
+    [updatePeopleColumn, scope, userId]
   );
 
   // Deferred bulk delete with an undo window (mirrors useTasks.softDeleteTasks):

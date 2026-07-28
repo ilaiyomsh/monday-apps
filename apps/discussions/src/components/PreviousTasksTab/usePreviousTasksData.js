@@ -183,7 +183,10 @@ export function usePreviousTasksData(discussion, byType, { onResetSelection, sco
       const discussionsColumns = getColumns('discussions');
       const tasksBoardLinkId = discussionsColumns?.tasksBoardLinkID?.id;
       const taskColumns = getColumns('tasks') || {};
-      const RENDERED = ['responsibilityID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID']; // assignee, deadline, status, priority (read-only), discussion links
+      // round306 — partnersID rides along: the tab now RENDERS + edits שותפים, and a
+      // picker seeded from an unfetched column would look empty and overwrite the
+      // real people list on the next pick.
+      const RENDERED = ['responsibilityID', 'partnersID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID']; // assignee, partners, deadline, status, priority (read-only), discussion links
       const taskCols = RENDERED.map((alias) => taskColumns?.[alias]?.id).filter(Boolean);
       const taskCv = cvSelection(RENDERED.map((alias) => taskColumns?.[alias]?.type));
 
@@ -244,7 +247,7 @@ export function usePreviousTasksData(discussion, byType, { onResetSelection, sco
         setTasksLoading(true);
         const result = await new משימות1Board().items()
           .where({ taskTypeID: taskTypeId })
-          .withColumns(['responsibilityID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID', 'taskTypeID'])
+          .withColumns(['responsibilityID', 'partnersID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID', 'taskTypeID'])
           .withPagination({ limit: 200 })
           .execute();
         if (!cancelled) setTasks(result.items || []);
@@ -274,7 +277,7 @@ export function usePreviousTasksData(discussion, byType, { onResetSelection, sco
       const discussionsColumns = getColumns('discussions');
       const tasksBoardLinkId = discussionsColumns?.tasksBoardLinkID?.id;
       const taskColumns = getColumns('tasks') || {};
-      const RENDERED = ['responsibilityID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID'];
+      const RENDERED = ['responsibilityID', 'partnersID', 'deadlineID', 'statusID', 'priorityID', 'discussionLinkID'];
       const taskCols = RENDERED.map((alias) => taskColumns?.[alias]?.id).filter(Boolean);
       const taskCv = cvSelection(RENDERED.map((alias) => taskColumns?.[alias]?.type));
       if (!tasksBoardLinkId) { setTasks([]); return; }
