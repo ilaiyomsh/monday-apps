@@ -1,0 +1,615 @@
+/* Required-fields form (kept separate from the monday-native status menu). */
+.status-guard-dialog {
+  display: grid;
+  gap: 20px;
+  inline-size: min(100%, 460px);
+  margin-inline: auto;
+  color: var(--primary-text-color, #323338);
+}
+
+.twyst-form {
+  display: grid;
+  /* header / grid / actions — the grid row is the only one that flexes, so a
+     scrolling field list never pushes the actions out of the modal. */
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  min-height: 0;
+}
+
+/*
+ * The fill form owns the whole modal iframe when opened on /required-fields.
+ *
+ * block-size (not min-height) plus overflow:hidden is what pins the title and the
+ * actions: with min-height a field list longer than the viewport grew the PAGE, and
+ * the iframe scrolled the header and footer out of view along with the rows. Now the
+ * iframe never scrolls and .twyst-form-rows is the only scrolling box.
+ */
+.twyst-required-fields-modal {
+  display: grid;
+  box-sizing: border-box;
+  block-size: 100vh;
+  overflow: hidden;
+  padding: 20px;
+  color: var(--primary-text-color, #323338);
+}
+
+/* NO bare `.twyst-form label` rule. It used to be `display: grid` from the version
+   where a <label> wrapped a title and its input, and it OUTRANKED
+   .twyst-field-title (0,1,1 vs 0,1,0) — so the icon, the name and the asterisk
+   stacked vertically, tripling every row's height and pushing the footer out of the
+   modal. Field labels are styled by .twyst-field-title alone. */
+
+.twyst-form input {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.twyst-form textarea {
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: inherit;
+  resize: vertical;
+}
+
+/*
+ * Required-fields list. One row per field: a fixed label column (icon + title)
+ * beside a wide control column — monday's own item-form shape. The row height,
+ * gaps, paddings and column widths here MUST match requiredFormModalSize.js, which
+ * computes the modal's pixel size from the same numbers.
+ */
+/* The ONLY scrolling box in the modal. Always scrollable, not just past the cap: even
+   inside the computed height a control that renders taller than expected (a validation
+   error under a field) has to scroll here rather than clip against the footer. */
+.twyst-form-rows {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* More fields than fit: keep the scrollbar off the controls. */
+.twyst-form-rows.is-scrolling {
+  padding-inline-end: 6px;
+}
+
+.twyst-form-row {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 16px;
+  align-items: center;
+  min-height: 36px;
+}
+
+.twyst-field-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--primary-text-color, #323338);
+}
+
+.twyst-field-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The column-type tile: a rounded square of the type's colour with a white glyph. */
+.twyst-field-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: 22px;
+  block-size: 22px;
+  border-radius: 5px;
+  background: var(--ui-border-color, #d0d4e4);
+  color: #fff;
+}
+
+.twyst-field-icon svg {
+  inline-size: 14px;
+  block-size: 14px;
+  fill: currentColor;
+}
+
+.twyst-field-control {
+  min-width: 0;
+}
+
+.twyst-field-control input:not([type="checkbox"]),
+.twyst-field-control textarea {
+  inline-size: 100%;
+  box-sizing: border-box;
+}
+
+/* timeline: two dates inside the control column. */
+.twyst-field-row {
+  display: flex;
+  gap: 8px;
+}
+
+.twyst-field-row input {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* A checkbox must not stretch to the control width — it reads as a broken input. */
+.twyst-field-checkbox {
+  inline-size: 18px;
+  block-size: 18px;
+  margin: 0;
+  cursor: pointer;
+}
+
+/* --------------------------------------------------- field-height option bars */
+
+/*
+ * Shared shape for every control that opens a popover — date, status, dropdown.
+ * They must all read as the SAME bar as a text input beside them, which is what
+ * monday's item form does and what a row of inline chips broke.
+ */
+.twyst-field-trigger,
+.twyst-date-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  inline-size: 100%;
+  min-block-size: 36px;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  background: var(--primary-background-color, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+
+/* pointer-events: none so the whole bar is one click target. Without it a click that
+   landed on the text span or the chevron was a click on a CHILD of the button, and at
+   the edges of the cell it read as "the dropdown does not open". */
+.twyst-field-trigger > span,
+.twyst-field-trigger > svg,
+.twyst-date-trigger > span,
+.twyst-date-trigger > svg {
+  pointer-events: none;
+}
+
+.twyst-field-trigger > span,
+.twyst-date-trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.twyst-field-trigger.is-empty,
+.twyst-date-trigger.is-empty {
+  color: var(--secondary-text-color, #676879);
+}
+
+.twyst-field-trigger:disabled,
+.twyst-date-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.twyst-field-trigger svg {
+  flex: 0 0 auto;
+  inline-size: 16px;
+  block-size: 16px;
+  fill: var(--secondary-text-color, #676879);
+}
+
+/* A chosen status paints the whole bar its label colour, like a monday cell. */
+.twyst-status-trigger {
+  justify-content: center;
+}
+
+.twyst-status-trigger.is-filled {
+  color: var(--text-color-on-primary, #fff);
+}
+
+/* 100%, not a fixed px cap: the popover is already clamped to the room the iframe has
+   (see OPTION_POPOVER_HEIGHT_PX), and a taller cap here would overflow it again. */
+.twyst-option-list {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  max-block-size: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+/* Search row of the connected-boards menu. Sticky so it stays reachable while the
+   candidate list scrolls under it. */
+.twyst-option-search {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 6px;
+  background: var(--primary-background-color, #fff);
+}
+
+.twyst-option-search svg {
+  flex: 0 0 auto;
+  inline-size: 14px;
+  block-size: 14px;
+  fill: var(--secondary-text-color, #676879);
+}
+
+.twyst-option-search input {
+  inline-size: 100%;
+  min-inline-size: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.twyst-option-pill {
+  block-size: 32px;
+  border: none;
+  border-radius: var(--border-radius-small, 4px);
+  color: var(--text-color-on-primary, #fff);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.twyst-option-pill:hover {
+  filter: brightness(0.95);
+}
+
+.twyst-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.twyst-option-row:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.twyst-option-check {
+  flex: 0 0 auto;
+  inline-size: 14px;
+  color: var(--primary-color, #0073ea);
+}
+
+/* ---------------------------------------------------------------- date field */
+
+.twyst-date-trigger svg {
+  flex: 0 0 auto;
+  inline-size: 16px;
+  block-size: 16px;
+  fill: var(--secondary-text-color, #676879);
+}
+
+.twyst-datepicker {
+  display: grid;
+  gap: 8px;
+  inline-size: 268px;
+  padding: 12px;
+}
+
+.twyst-datepicker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.twyst-datepicker-today {
+  padding: 6px 14px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  background: var(--primary-background-color, #fff);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.twyst-datepicker-clock {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 30px;
+  block-size: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.twyst-datepicker-clock svg {
+  inline-size: 18px;
+  block-size: 18px;
+  fill: var(--secondary-text-color, #676879);
+}
+
+/* On = the hour row is showing, so the button reads as a live toggle. */
+.twyst-datepicker-clock.is-on {
+  border-color: var(--primary-color, #0073ea);
+}
+
+.twyst-datepicker-clock.is-on svg {
+  fill: var(--primary-color, #0073ea);
+}
+
+.twyst-datepicker-input {
+  inline-size: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.twyst-datepicker-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.twyst-datepicker-nav button {
+  inline-size: 26px;
+  block-size: 26px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.twyst-datepicker-nav button:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.twyst-datepicker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.twyst-datepicker-weekday {
+  padding-block: 4px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 11px;
+  text-align: center;
+}
+
+.twyst-datepicker-day {
+  block-size: 30px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.twyst-datepicker-day:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.twyst-datepicker-day.is-outside {
+  color: var(--disabled-text-color, #c5c7d0);
+}
+
+.twyst-datepicker-day.is-today {
+  font-weight: 700;
+}
+
+.twyst-datepicker-day.is-selected {
+  background: var(--primary-color, #0073ea);
+  color: #fff;
+}
+
+.twyst-rating {
+  display: flex;
+  gap: 2px;
+}
+
+.twyst-star {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--ui-border-color, #d0d4e4);
+  cursor: pointer;
+}
+
+.twyst-star.is-on {
+  color: var(--warning-color, #fdab3d);
+}
+
+.twyst-star:disabled {
+  cursor: not-allowed;
+}
+
+.twyst-field-error {
+  margin: 0;
+  color: var(--negative-color, #d83a52);
+  font-size: 12px;
+}
+
+.twyst-field-note {
+  margin: 0;
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+}
+
+/* Footer sits on a divider with the actions at the end, like monday's item form. */
+.twyst-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 14px;
+  border-top: 1px solid var(--ui-border-color, #d0d4e4);
+}
+
+.twyst-form-actions button,
+.status-guard-dialog .primary-action {
+  border-radius: 6px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  background: var(--primary-background-color, #fff);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+/*
+ * The blue submit. The `.status-guard-dialog .primary-action` selector below used to
+ * be the ONLY blue rule, and the fill form renders under .twyst-required-fields-modal
+ * instead — so inside the modal it never matched and the submit came out white on
+ * white. `.twyst-form-actions .primary-action` (0,2,1) is what beats the shared
+ * `.twyst-form-actions button` base (0,1,1) above; a bare `.primary-action` (0,1,0)
+ * would lose to it and stay white.
+ */
+.twyst-form-actions .primary-action,
+.status-guard-dialog .primary-action {
+  background: var(--primary-color, #0073ea);
+  border-color: var(--primary-color, #0073ea);
+  color: #fff;
+}
+
+.twyst-form-actions .primary-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.status-guard-dialog h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+/*
+ * Status picker — match discussions TaskTableRow statusMenu / statusOption
+ * (monday-native: full-width colored pills, white centered text).
+ * Fills the Dialog Design iframe (Custom width/height from Dev Center).
+ */
+.status-picker-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  color: var(--primary-text-color, #323338);
+  font-family: var(--font-family, inherit);
+}
+
+.status-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  flex: 1 1 auto;
+  /* Tight inset for Dialog Design ~200px wide — labels still read as full-bleed. */
+  padding: 8px;
+  box-sizing: border-box;
+  background: var(--primary-background-color, #fff);
+  border-radius: 0;
+  overflow: auto;
+}
+
+.status-option {
+  position: relative; /* anchors the in-flight spinner */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--border-radius-small, 4px);
+  color: var(--text-color-on-primary, #fff);
+  font-weight: var(--font-weight-normal, 400);
+  font-size: 14px;
+  font-family: var(--font-family, inherit);
+  cursor: pointer;
+  transition: filter 0.1s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-option:hover:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+/*
+ * In-flight spinner on the clicked pill. It replaced a text swap to "שומר…", which
+ * hid the label the user had just picked. Absolutely placed so the centred label
+ * does not shift when it appears, and drawn in currentColor so it reads on every
+ * label colour without knowing which one it is.
+ */
+.status-option-spinner {
+  position: absolute;
+  inset-inline-start: 10px;
+  inline-size: 14px;
+  block-size: 14px;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  opacity: 0.9;
+  animation: twystPillSpin 0.7s linear infinite;
+}
+
+@keyframes twystPillSpin {
+  100% { transform: rotate(360deg); }
+}
+
+.status-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* No loading state lives here. The picker's only loader is the boot overlay in
+   index.html — monday's own dialog spinner, continued without a restart. A
+   skeleton here was the visible jump: monday's spinner, then pills appearing.
+   See src/utils/bootLoader.js. */
+
+.status-picker-note,
+.status-picker-empty {
+  margin: 0;
+  padding: 0 10px 8px;
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+  line-height: 1.4;
+}

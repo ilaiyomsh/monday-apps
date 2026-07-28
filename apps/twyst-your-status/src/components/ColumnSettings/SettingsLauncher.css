@@ -1,0 +1,18 @@
+.twyst-settings-launcher {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  max-width: 280px;
+  margin: 0 auto;
+  color: var(--primary-text-color, #323338);
+}
+
+.twyst-settings-launcher-cta {
+  width: 100%;
+}
+
+.twyst-settings-launcher .twyst-version {
+  font-size: 11px;
+  color: var(--secondary-text-color, #676879);
+}
