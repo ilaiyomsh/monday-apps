@@ -625,33 +625,83 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
         // Template inputs are captured here (submit-time) so the form reset below
         // can't affect the staged writes.
         const stageTemplate = pickedTemplate || (typeTopics?.length ? { topics: typeTopics } : null);
-        let newId = null;
-        let stage1Checkpoint = null;
+        // A retry after a PARTIAL stage 1 must resume, never start over: the root
+        // item may already exist. Same contract the awaited path uses, and the
+        // submissionKey guard above already refuses a retry with edited details.
+        let newId = resume?.savedId || null;
+        let stage1Checkpoint = resume?.templateResumeState || null;
+        const rememberRoot = (checkpoint) => {
+          if (!newId) return;
+          creationResumeRef.current = {
+            ...(creationResumeRef.current || {}),
+            submissionKey,
+            savedId: String(newId),
+            rootSaved: true,
+            templateResumeState: checkpoint || null,
+          };
+        };
         try {
-          const rootSavedAt = Date.now();
-          const created = await board.item().create(rootPayload).execute();
-          newId = created.id;
-          logger.health?.('discussion_create_phase', {
-            step: 'staged_root_save', duration_ms: Date.now() - rootSavedAt,
-          });
+          if (!resume?.rootSaved) {
+            const rootSavedAt = Date.now();
+            const created = await board.item().create(rootPayload).execute();
+            newId = created.id;
+            // Persisted BEFORE the template work starts — a template failure below
+            // must not let a second submit create a duplicate discussion.
+            rememberRoot(null);
+            logger.health?.('discussion_create_phase', {
+              step: 'staged_root_save', duration_ms: Date.now() - rootSavedAt,
+            });
+          }
           if (stageTemplate) {
             const stage1At = Date.now();
             await createTopicsFromTemplate(newId, stageTemplate, {
               freshDiscussion: true,
               // Only the FIRST topic's points block the card open.
               pointTopicIndexes: [0],
+              resumeState: stage1Checkpoint,
               onProgress: onTemplateProgress,
-              onCheckpoint: (cp) => { stage1Checkpoint = cp; },
+              onCheckpoint: (cp) => { stage1Checkpoint = cp; rememberRoot(cp); },
             });
             logger.health?.('discussion_create_phase', {
               step: 'staged_topics_first_points', duration_ms: Date.now() - stage1At,
             });
           }
+          // monday is read-after-write lagged: a resolved create_item/create_subitem
+          // does NOT guarantee the relation and subitems are readable yet. Handing
+          // off before they are lets the card's first fetch see an empty agenda —
+          // exactly the regression this round fixes. The duplicate path polls for
+          // the same reason; here the budget is deliberately SHORT (the point is a
+          // fast open) and we hand off regardless when it expires, because stage 2/3
+          // bump the card's reload stamp anyway.
+          if (stageTemplate) {
+            const readinessAt = Date.now();
+            const expectedTopics = (stageTemplate.topics || []).length;
+            const expectedPoints = (stageTemplate.topics?.[0]?.points || []).length;
+            for (let attempt = 0; attempt < 6; attempt += 1) {
+              try {
+                const readBack = await readDiscussionTopicsAsTemplate(newId);
+                const topicsRead = readBack?.topics || [];
+                const firstTopicPoints = topicsRead[0]?.points?.length || 0;
+                if (topicsRead.length >= expectedTopics && firstTopicPoints >= expectedPoints) break;
+              } catch (err) {
+                if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי השלב הראשון נכשלה — ממשיך להמתין', err);
+              }
+              await new Promise((resolve) => { setTimeout(resolve, 400); });
+            }
+            logger.health?.('discussion_create_phase', {
+              step: 'staged_stage1_readiness', duration_ms: Date.now() - readinessAt,
+            });
+          }
         } catch (err) {
           // Stage 1 failed: nothing was handed off, so surface it on the FORM (the
-          // modal is still open) exactly like the awaited path does.
+          // modal is still open) exactly like the awaited path does — but KEEP the
+          // saved root + newest checkpoint so the retry resumes from here.
+          rememberRoot(err?.templateResumeState || stage1Checkpoint);
           throw err;
         }
+        // Stage 1 is on the board and about to be owned by the card — this form is
+        // done with it, so the resume slot must not leak into the next creation.
+        creationResumeRef.current = null;
         // Hand off — the card opens now, with the real id and a usable agenda.
         optimisticHandoff = true;
         onOptimisticCreate({ ...optimisticShape, id: newId, __pendingPeople: pendingPeople });

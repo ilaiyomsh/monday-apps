@@ -42,6 +42,14 @@ vi.mock('@generated/hooks/useStatusOptions.js', () => ({
   useStatusOptions: () => ({ options: [], colorById: {} }),
 }));
 
+// The "סוג דיון" dropdown drives the TYPE template, which is the only way a
+// template reaches the staged create (the manual template picker was removed in
+// round147). One real label so the staging tests can actually pick a type.
+vi.mock('@generated/hooks/useDropdownOptions.js', () => ({
+  useDropdownOptions: () => ({ options: [{ id: 1, label: 'שבועי', index: 0 }], loading: false }),
+  addDropdownLabel: vi.fn(async () => true),
+}));
+
 // BoardSDK — the modal news up a board on open to load previous-discussion
 // options. Return an empty list so loadDiscussions resolves cleanly.
 const boardApi = vi.hoisted(() => ({
@@ -148,8 +156,19 @@ beforeEach(() => {
   templatesValue.typeTemplates = [];
   boardApi.create.mockResolvedValue({ id: '99' });
   boardApi.update.mockResolvedValue({});
-  templateApi.createTopicsFromTemplate.mockResolvedValue({ topics: 0, points: 0, topicIds: [] });
-  templateApi.readDiscussionTopicsAsTemplate.mockResolvedValue({ topics: [] });
+  // The real helper reports a checkpoint as it goes; stage 2 resumes from it, so the
+  // default mock must emit one or the staged tail would silently never run.
+  templateApi.createTopicsFromTemplate.mockImplementation(async (_id, _template, options) => {
+    options?.onCheckpoint?.({
+      templateKey: 'k', topicResults: [], pointResults: [], linkedTopicSourceIndexes: [],
+    });
+    return { topics: 0, points: 0, topicIds: [] };
+  });
+  // Stage 1's readiness poll reads the topics back before handing off; return them as
+  // readable so the poll exits on its first attempt instead of burning its budget.
+  templateApi.readDiscussionTopicsAsTemplate.mockResolvedValue({
+    topics: [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }],
+  });
 });
 
 afterEach(() => { vi.restoreAllMocks(); });
@@ -332,24 +351,77 @@ describe('CreateDiscussionModal', () => {
   });
 
   it('round301 — a template stages the FIRST topic\'s points before the hand-off and the rest after', async () => {
-    templatesValue.templates = [{
-      id: 'tpl1',
-      name: 'תבנית',
-      topics: [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }],
-    }];
-    templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: templatesValue.templates[0].topics }];
-    const onOptimisticCreate = vi.fn();
+    const TOPICS = [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }];
+    templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: TOPICS }];
+    // Sampled INSIDE the hand-off, so the ordering assertion is deterministic: with
+    // instantly-resolving mocks the deferred pass can otherwise land before a
+    // waitFor() gets to look.
+    let stagedCallsAtHandoff = null;
+    const onOptimisticCreate = vi.fn(() => {
+      stagedCallsAtHandoff = templateApi.createTopicsFromTemplate.mock.calls.length;
+    });
     const onStageAdvance = vi.fn();
     await renderOpen({ onOptimisticCreate, onCreated: vi.fn(), onStageAdvance });
+    // Actually PICK the type, so its template really is attached — without this the
+    // assertions below would vacuously pass with zero staged calls.
+    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
     const submit = screen.getByText('צור דיון').closest('button');
     await act(async () => { fireEvent.click(submit); });
     await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
-    // Whatever ran BEFORE the hand-off must be limited to the first topic's points.
-    const callsBeforeHandoff = templateApi.createTopicsFromTemplate.mock.calls.length;
-    if (callsBeforeHandoff) {
-      expect(templateApi.createTopicsFromTemplate.mock.calls[0][2].pointTopicIndexes).toEqual([0]);
-    }
-    await flush();
+
+    // STAGE 1 ran before the hand-off, limited to the first topic's points.
+    const stage1 = templateApi.createTopicsFromTemplate.mock.calls[0];
+    expect(stage1).toBeTruthy();
+    expect(stage1[1].topics).toHaveLength(2);
+    expect(stage1[2].pointTopicIndexes).toEqual([0]);
+    expect(stage1[2].resumeState).toBeFalsy();
+    // Exactly one staged pass had run when the card was handed off — the rest is deferred.
+    expect(stagedCallsAtHandoff).toBe(1);
+
+    // STAGE 2 runs after, RESUMING (so the topics stage 1 created are not remade)
+    // and with no point limit, and it bumps the card so the late points show up.
+    await waitFor(() => expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(2));
+    const stage2 = templateApi.createTopicsFromTemplate.mock.calls[1];
+    expect(stage2[2].resumeState).toBeTruthy();
+    expect(stage2[2].pointTopicIndexes).toBeUndefined();
+    await waitFor(() => expect(onStageAdvance).toHaveBeenCalled());
+  });
+
+  it('round301 — a stage-1 template failure keeps the saved root, so retrying RESUMES instead of creating a second discussion', async () => {
+    const TOPICS = [{ name: 'נושא א', points: ['א1'] }, { name: 'נושא ב', points: ['ב1'] }];
+    templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: TOPICS }];
+    const checkpoint = {
+      templateKey: 'k', topicResults: [{ sourceIndex: 0, id: 'T1' }],
+      pointResults: [], linkedTopicSourceIndexes: [],
+    };
+    // First pass: the root create succeeds, then the template work blows up. The
+    // resume state arrives ONLY on the thrown error — no onCheckpoint call — which
+    // is the case the catch block has to capture on its own.
+    templateApi.createTopicsFromTemplate.mockImplementationOnce(async () => {
+      const err = new Error('stage 1 template failed');
+      err.templateResumeState = checkpoint;
+      throw err;
+    });
+    const onOptimisticCreate = vi.fn();
+    await renderOpen({ onOptimisticCreate, onCreated: vi.fn(), onStageError: vi.fn() });
+    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
+    const submit = screen.getByText('צור דיון').closest('button');
+
+    await act(async () => { fireEvent.click(submit); });
+    await waitFor(() => expect(
+      screen.getByText('צור דיון').closest('button').getAttribute('aria-disabled')
+    ).toBe('false'));
+    // Nothing was handed off — the modal is still open on the failure.
+    expect(onOptimisticCreate).not.toHaveBeenCalled();
+    expect(boardApi.create).toHaveBeenCalledTimes(1);
+
+    // Retry the SAME submission: no second root, and the template pass resumes.
+    await act(async () => { fireEvent.click(screen.getByText('צור דיון').closest('button')); });
+    await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
+    expect(boardApi.create).toHaveBeenCalledTimes(1);
+    expect(templateApi.createTopicsFromTemplate.mock.calls[1][2].resumeState).toBe(checkpoint);
   });
 
   it('round300 — without onOptimisticCreate it keeps the awaited path (id via onCreated only)', async () => {

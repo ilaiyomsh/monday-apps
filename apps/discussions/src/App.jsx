@@ -27,6 +27,7 @@ import { prefetchDiscussions } from './hooks/useDiscussions.js';
 import { useUsageTracker } from './hooks/useUsageTracker.js';
 import logger from './utils/logger.js';
 import { installChromeNarrowWatcher } from './utils/chromeNarrow.js';
+import { applyStageAdvance, applyStageFailure } from './utils/stagedCreate.js';
 import { ToastContainer } from './components/Toast';
 import { ErrorDetailsModal } from './components/ErrorDetailsModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -758,13 +759,14 @@ export default function App() {
   // A later stage finished — bump the card's reload stamp so the newly created
   // rows appear without the user having to reopen the discussion.
   const handleStageAdvance = ({ id }) => {
-    setSelectedDiscussion((prev) => (
-      prev && String(prev.id) === String(id) ? { ...prev, __reloadStamp: Date.now() } : prev
-    ));
+    setSelectedDiscussion((prev) => applyStageAdvance(prev, id, Date.now()));
   };
   // Stage 2/3 failed. The discussion ITSELF exists (stage 1 succeeded), so the card
-  // stays open — we only tell the user which part did not finish.
-  const handleStageError = () => {
+  // stays open — we only tell the user which part did not finish. applyStageFailure
+  // drops the pending people: they were never written, and keeping them would leave
+  // the card showing roles that do not exist in monday.
+  const handleStageError = ({ id } = {}) => {
+    setSelectedDiscussion((prev) => applyStageFailure(prev, id, Date.now()));
     notify('הדיון נוצר, אך השלמת הנושאים או המשתתפים נכשלה — רעננו ובדקו', 'error');
   };
 
