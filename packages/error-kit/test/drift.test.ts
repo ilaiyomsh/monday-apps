@@ -588,6 +588,33 @@ describe('drift — vendored BROWSER sinks conform to the sink contract', () => 
         expect(serialized).not.toContain('12345678');
       });
 
+      // Audit finding 6: a copy that assigned `ev.err_name = err.name` without String()
+      // let a NON-STRING name through. The generic-name fallback right below it guards with
+      // `typeof ev.err_name === 'string'`, which then fails — so the stable logger message
+      // OVERWRITES the real discriminator. The transport's dedup key reads err_name the same
+      // guarded way, so distinct errors collapse under one key and after dedupMaxPerWindow
+      // (5) in 60s the rest are silently dropped. The pre-existing check above could not see
+      // this because it asserted String(mapped.err_name) — coercing in the test hid a
+      // missing coercion in the source.
+      it('mapRecordToEvent coerces a NON-STRING err.name instead of losing it to the generic message', () => {
+        const { mapRecordToEvent } = surface.mod;
+        // A thrown non-Error whose `name` is not a string (a numeric status, a clobbered name).
+        const err = { name: 500, message: 'upstream exploded', stack: 'at a (f.js:1:1)' };
+        const mapped = mapRecordToEvent({ level: 'ERROR', module: 'svc', message: 'op_failed', error: err });
+        expect(typeof mapped.err_name).toBe('string');
+        expect(mapped.err_name).toBe('500');   // the discriminator survives...
+        expect(mapped.err_name).not.toBe('op_failed'); // ...and is NOT replaced by the message
+      });
+
+      it('mapRecordToEvent keeps distinct non-string names distinct (one dedup key per error)', () => {
+        const { mapRecordToEvent } = surface.mod;
+        // Two different failures behind ONE stable logger message: if both collapse to
+        // 'op_failed' they share a dedup key and the second is throttled away.
+        const a = mapRecordToEvent({ level: 'ERROR', module: 'svc', message: 'op_failed', error: { name: 500, message: 'a' } });
+        const b = mapRecordToEvent({ level: 'ERROR', module: 'svc', message: 'op_failed', error: { name: 503, message: 'b' } });
+        expect(a.err_name).not.toBe(b.err_name);
+      });
+
       it('mapRecordToEvent guarantees err_name on ERROR events (Error name → message → tag → unknown)', () => {
         const { mapRecordToEvent } = surface.mod;
         // a real Error keeps its own name — the fallback must not overwrite it
