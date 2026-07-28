@@ -179,3 +179,30 @@ assume `null` uniformly (probe: deadline-confirm fixtures, WZ- board):
 So "no deadline" checks must treat `date === ""` as unset, and "no assignee" is
 `text === ""`. Also re-verified: `StatusValue.index` carries the label **id**
 (write `{"index": <labelId>}` round-trips to the same number).
+
+## date/timeline READ is NOT symmetric with WRITE (probe-verified 2026-07-28, API 2026-04)
+
+Round-tripped through a scratch sandbox board (`WZ-fieldtypes`, board 18424030023):
+
+- **`DateValue.date`/`.time` come back in the ACCOUNT timezone, while the WRITE is
+  interpreted as UTC.** Wrote `{"date":"2026-07-27","time":"21:30:00"}` → read back
+  `date: "2026-07-28", time: "00:30"` (Asia/Jerusalem, +3). So a read→display path must
+  NOT convert UTC→local again (that shifts the offset twice), while a write path MUST
+  convert local→UTC, taking BOTH parts from one `toISOString()`. `time` also loses its
+  seconds on read (`"00:30"`, not `"00:30:00"`).
+- **`TimelineValue.from`/`.to` come back as full ISO timestamps with an offset**
+  (`"2026-07-01T00:00:00+00:00"`), NOT `YYYY-MM-DD` — the write format. Slice to 10 chars
+  before feeding an `<input type="date">`, which rejects the timestamp form outright.
+
+Both bugs shipped past hand-built unit fixtures and were only caught by the live probe —
+this is the concrete case for test-guard's "real fixtures for monday-facing code" rule.
+
+## Option-type `settings` shapes (probe-verified 2026-07-28, API 2026-04)
+
+`Column.settings` is a JSON scalar (there is no `settings_str` on `Column` in 2026-04):
+
+- **status**: `{ labels: [{ id, index, label, color, hex, is_done, is_deactivated }] }`
+- **dropdown**: `{ labels: [{ id, label, is_deactivated }] }` — the key is `label`, NOT
+  `name`; a `create_column` `defaults` payload written with `name` is normalized to `label`.
+- **rating / timeline / people / checkbox / date**: `{}` — EMPTY. Notably a rating column
+  exposes no scale, so a consumer must default to 5 stars rather than read a maximum.

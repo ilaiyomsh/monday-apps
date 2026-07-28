@@ -8,17 +8,22 @@ import { dismissBootLoader } from './utils/bootLoader';
 // Settings surfaces open rarely; keep them off the picker's critical path.
 const SettingsLauncher = lazy(() => import('./components/ColumnSettings/SettingsLauncher'));
 const ColumnSettings = lazy(() => import('./components/ColumnSettings/ColumnSettings'));
+// Its own iframe, reached only after a label with required fields is picked.
+const RequiredFieldsModal = lazy(() => import('./components/OnClickDialog/RequiredFieldsModal'));
 
 /**
  * Resolve the active surface from the URL pathname.
  * Feature URLs in monday: …/picker (on-click Dialog Design, cell-attached),
- * …/settings (tiny shell), …/settings-full (settings overlay).
+ * …/settings (tiny shell), …/settings-full (settings overlay),
+ * …/required-fields (the fill form, opened as a sized modal from the picker —
+ * the picker's own dialog is fixed at 200×250 and cannot hold a grid).
  */
 export function resolveAppRoute(pathname = window.location.pathname) {
   const normalized = String(pathname || '').replace(/\/+$/, '') || '/';
   if (normalized.endsWith('/picker') || normalized === '/picker') return 'picker';
   if (normalized.endsWith('/settings-full') || normalized === '/settings-full') return 'settings-full';
   if (normalized.endsWith('/settings') || normalized === '/settings') return 'settings';
+  if (normalized.endsWith('/required-fields') || normalized === '/required-fields') return 'required-fields';
   return null;
 }
 
@@ -61,6 +66,11 @@ function App() {
       {route === 'settings-full' && (
         <Suspense fallback={<LoadingState message="טוען הגדרות…" />}>
           <ColumnSettings context={context} variant="overlay" />
+        </Suspense>
+      )}
+      {route === 'required-fields' && (
+        <Suspense fallback={<LoadingState message="טוען שדות חובה…" />}>
+          <RequiredFieldsModal context={context} />
         </Suspense>
       )}
       {route === null && (

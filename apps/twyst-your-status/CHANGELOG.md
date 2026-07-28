@@ -1,5 +1,35 @@
 # Changelog
 
+## 3.4.0
+
+- Required fields now support far more column types. `people`, `checkbox`,
+  `timeline`, `rating`, another `status` column, and `date` with an optional hour
+  can all be marked required, alongside the text/number/contact types that already
+  worked. `dropdown` was fixed: it used to write from a free-text box (a typo
+  failed the write or invented a label) and now offers the column's real labels.
+- Which types are allowed is decided in ONE place — `src/domain/columnFields.js`.
+  Each type carries its form control, typed GraphQL read fragment, read/write
+  conversion, and its own "still empty?" rule, so adding a type is one record and
+  the settings checklist picks it up automatically. Types monday cannot write
+  through `column_values` (formula, mirror, file, …) stay unselectable by design.
+- Required-field enforcement moved off the browser's `required` attribute, which
+  cannot express "this checkbox must be checked" or "this picker must hold an
+  entry". Emptiness is now judged per type: rating 0 and a half-entered timeline
+  count as empty, status label id `0` counts as filled, and the hour part of a date
+  is optional so skipping it never fails the transition.
+- The fill form opens as its own modal on `/required-fields`, sized from the fields
+  it shows: a 2-column grid, at most 4 rows, scrolling past that. `date` and
+  `timeline` span the full row because each renders two inputs. The picker's own
+  dialog is fixed at 200×250 by the Developer Center and the SDK has no runtime
+  resize, so the form could not stay there.
+- A single unusable value no longer fails the whole transition: the payload passes
+  through a sanitizer that omits the junk column, since monday rejects the entire
+  mutation on one bad column. A required column deleted from the board fails closed
+  — the transition is blocked with a message pointing at the settings.
+- Fixed two read bugs a live probe caught: monday returns `DateValue` in the
+  ACCOUNT timezone while the write is UTC (the app was converting twice), and
+  `TimelineValue` arrives as full ISO timestamps, not `YYYY-MM-DD`.
+
 ## 3.3.0
 
 - Picker boot is now a single continuous spinner. monday shows a black spinner in
