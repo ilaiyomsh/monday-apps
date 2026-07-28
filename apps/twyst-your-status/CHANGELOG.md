@@ -1,5 +1,58 @@
 # Changelog
 
+## 3.8.0
+
+- **A warm picker open now costs ONE monday round trip instead of two, and no longer
+  flashes.** The second round trip was not a redundant fetch someone forgot to remove —
+  it was `migrateSettings` building a fresh object on every storage read. The
+  stale-while-revalidate read that confirmed *nothing had changed* still handed down a
+  new object identity, `OnClickDialog` keys its board fetch on that object, so the whole
+  `Promise.all` ran again. And because the boot overlay is released the moment the first
+  result paints, the dialog went **blank for the length of the second round trip** before
+  repainting the exact same pills. That flash was shipped behaviour, on the most common
+  interaction in the app. The hook now compares content before publishing.
+- **The board request no longer waits for the storage read.** It was gated on
+  `if (settingsLoading) return`, so every open paid storage-then-network in series. It
+  never had to: the request asks for `[the status column, ...people columns named by a
+  gate]`, settings can only ever *widen* that set, and the settings hook seeds from its
+  local cache synchronously during the first render — so on a warm open the gate columns
+  are already known before the first `await`. The fetch is now keyed on the column set, so
+  widening it re-issues the request instead of silently asking for too little.
+- **An unconfigured column stopped sleeping for a second.** `monday.storage` transiently
+  answers `success:true` + `value:null` for a key that *is* populated, so a single null
+  read cannot be trusted — and both `mondayService` and `useColumnSettings` were retrying
+  it. Stacked, that cost **4 storage reads and 1050 ms** to conclude "nobody configured
+  this column", on every open, since an unconfigured column is never cached. The retry now
+  has one owner: **2 reads, 350 ms**. `apps/team-people-column`, which this app was copied
+  from, has always done it that way; twyst grew the second retry and kept the copied one.
+- **`@vibe/core` left the picker's critical chunk: 114.06 kB → 66.16 kB gzip (−42%)**
+  (raw 377.23 → 203.06 kB), re-parsed on every iframe boot. Three imports held the whole
+  `Button → Tooltip → Dialog → popper` and `Icon → react-inlinesvg` chain, for components
+  a successful open never renders — and one of them, an `AttentionBox` in `OnClickDialog`,
+  sat after an early `return` on the same condition and could never render at all. Vibe is
+  now its own chunk (47.66 kB gzip) fetched only by the lazy settings and required-fields
+  routes. Measured by sourcemap attribution on a real `vite build`, not estimated: zero
+  `@vibe/core` sources in the eager chunk.
+- Measured request counts on a real picker open, not reasoned about: **4 GraphQL calls → 1**
+  on a warm open, and **4 `storage.getItem` → 2** on an unconfigured column. The one
+  regression is the first open of a *gated* column on a cold cache — two requests instead
+  of one, same wall clock, because the gate columns are only known once storage answers.
+- Wrong theory this replaces: the latency was read as "too many separate requests, fix it
+  by prefetching on the board page and batching every item". There is nowhere to hang that
+  — this is a client-only `AppFeatureStatusColumn`, **no app code runs on the board page**,
+  and the `/picker` iframe is created on the cell click and destroyed on close. And one
+  round trip is the floor, not zero: the picker removes the item's *current* status from the
+  options, and the current value is not in the monday context, so painting from cache would
+  reorder the pill list under the cursor in a 200×250 dialog.
+- A theme fix that came along: `ErrorState`'s Tailwind `text-red-500` / `text-gray-700`
+  were fixed light-mode greys, so that screen was unreadable in monday's dark themes. Now
+  `--negative-color` / `--secondary-text-color`.
+- CI gained an **eager-import guard** (`scripts/lib/eager-graph.mjs`), deliberately an
+  invariant rather than a size budget — a byte threshold measures a symptom, needs the
+  build to evaluate, and only ever ratchets upward. It walks the static import graph from
+  the entry, stops at `import()` (that is how a heavy dependency is *supposed* to be
+  reached), and fails if a forbidden package is reachable eagerly.
+
 ## 3.7.1
 
 - **The required-fields form's title and submit button are now actually fixed, at any

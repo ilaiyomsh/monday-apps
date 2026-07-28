@@ -151,6 +151,35 @@ second loader starts its animation from 0 and reads as a jump.
   skeleton or a `<Loader>` there — that was the jump (removed in 3.3.0), and
   `bootHandoff.test.jsx` fails on any `טוען`/`Loading` text reaching the picker.
 
+### What the picker waits for (3.8.0)
+
+The picker's boot is three pieces of work, and only the first is sequential: App
+resolves the monday context, then `OnClickDialog` reads its column settings from
+storage **while** it fetches the board's labels and the item's values. The two run
+in **parallel**.
+
+- **Why that is safe:** the request's column set is `[columnId, …people columns
+  named by a gate]`, and settings can only ever **widen** it. `useColumnSettings`
+  seeds from `swrCache` synchronously during the first render, so on a warm open —
+  the common one, since the iframe is destroyed on every close — the gate columns
+  are already known before the first `await`. It was **not** safe to simply not
+  wait: the fix is that the fetch is keyed on `columnIdsKey`, so widening the set
+  re-issues the request rather than silently asking for too little.
+- **Settings still gate the PAINT, only not the fetch.** `buildAvailableLabels`
+  filters by `hiddenLabelIds` and the allowlists, and the people gate **fails
+  closed** — so painting on board data alone would show labels the user may not
+  pick and then take them away. Board data arriving first is now the normal case,
+  and it must paint nothing.
+- **Cost:** one round trip on a warm open (it was two — see 3.8.0 in CHANGELOG.md).
+  The one regression is the first open of a **gated** column on a cold cache: two
+  requests instead of one, same wall clock, because the gate columns are only known
+  once storage answers.
+- **A superseded run must write nothing** (`runIdRef` in `OnClickDialog`). The
+  narrow first run landing after the wider second one would overwrite the gate data
+  with a map missing that column — labels vanish, fail-closed — and pin the loaded
+  key to a stale value with no effect left to fire: a permanently blank dialog with
+  the overlay already down. Pinned by `pickerRequestPhases.test.jsx`.
+
 ## Who may configure — board owners only (3.7.0)
 
 The settings shell (`/settings`) offers its button only to a **board owner**; everyone else
