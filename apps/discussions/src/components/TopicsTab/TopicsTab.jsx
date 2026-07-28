@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton, Button, Dialog, DialogContentContainer, Text, Checkbox } from '@vibe/core';
 import { CloseSmall, DropdownChevronDown, Edit } from '@vibe/icons';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
+import { BrandLoader } from '@generated/components/BrandLoader';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
@@ -27,6 +28,9 @@ import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/component
 import { EmptyState } from '@generated/components/EmptyState';
 import { UpdatesTripleBox } from './UpdatesTripleBox.jsx';
 import { computeRibbonDropTarget } from './ribbonDrop.js';
+import {
+  maxPos, readPos, writePos, computeEdges, computeThumb, posFromThumbDrag, stepFrom,
+} from './ribbonScroll.js';
 import { assignTopicAccents, topicColorStartIndex } from './topicAccents.js';
 import { buildMentionRoster } from '@generated/utils/mention.js';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
@@ -1083,6 +1087,93 @@ export function TopicsTab({
   const ribbonTopics = visibleTopics;
   const ribbonElRef = useRef(null);
 
+  // round302 (approved mockup) — the tiles scroll inside their own track so a long
+  // agenda stays readable instead of crushing every name. Everything below is the
+  // reachability layer: edge fades + round chevrons, a slim drag bar, the wheel,
+  // the arrow keys, and auto-scroll while dragging a topic to reorder it.
+  const trackRef = useRef(null);
+  const sbarRef = useRef(null);
+  const [ribbonScrollState, setRibbonScrollState] = useState({
+    hasOverflow: false, atStart: true, atEnd: true, thumb: null,
+  });
+  const syncRibbonScroll = useCallback(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const max = maxPos(track);
+    const pos = readPos(track);
+    const edges = computeEdges(pos, max);
+    const thumb = computeThumb({
+      clientWidth: track.clientWidth,
+      scrollWidth: track.scrollWidth,
+      pos,
+      barWidth: sbarRef.current?.clientWidth || 0,
+    });
+    setRibbonScrollState((prev) => (
+      prev.hasOverflow === edges.hasOverflow
+        && prev.atStart === edges.atStart
+        && prev.atEnd === edges.atEnd
+        && prev.thumb?.width === thumb?.width
+        && prev.thumb?.offset === thumb?.offset
+        ? prev
+        : { ...edges, thumb }
+    ));
+  }, []);
+  // Re-measure whenever the topic set or the pane's width changes.
+  useEffect(() => {
+    syncRibbonScroll();
+    const track = trackRef.current;
+    if (!track || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(syncRibbonScroll);
+    ro.observe(track);
+    return () => ro.disconnect();
+  }, [syncRibbonScroll, items]);
+  const scrollRibbon = useCallback((dir) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const tileW = track.querySelector('[data-ribbon-topic]')?.offsetWidth || 0;
+    writePos(track, stepFrom(readPos(track), tileW, dir));
+    syncRibbonScroll();
+  }, [syncRibbonScroll]);
+  const onRibbonWheel = useCallback((e) => {
+    const track = trackRef.current;
+    if (!track || maxPos(track) <= 2) return;
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (!delta) return;
+    // A vertical wheel/trackpad gesture pans the strip — the expected feel for a
+    // horizontal rail. preventDefault stops the card behind it from scrolling too.
+    e.preventDefault();
+    const previous = track.style.scrollBehavior;
+    track.style.scrollBehavior = 'auto';
+    writePos(track, readPos(track) + delta);
+    track.style.scrollBehavior = previous;
+    syncRibbonScroll();
+  }, [syncRibbonScroll]);
+  const onSbarPointerDown = useCallback((e) => {
+    const track = trackRef.current;
+    const bar = sbarRef.current;
+    if (!track || !bar) return;
+    const max = maxPos(track);
+    if (max <= 2) return;
+    const thumbW = ribbonScrollState.thumb?.width || 0;
+    const drag = { startX: e.clientX, startPos: readPos(track), max, span: bar.clientWidth - thumbW };
+    bar.setPointerCapture?.(e.pointerId);
+    const previous = track.style.scrollBehavior;
+    track.style.scrollBehavior = 'auto';
+    const onMove = (ev) => {
+      writePos(track, posFromThumbDrag({ ...drag, x: ev.clientX }));
+      syncRibbonScroll();
+    };
+    const onUp = () => {
+      bar.removeEventListener('pointermove', onMove);
+      bar.removeEventListener('pointerup', onUp);
+      bar.removeEventListener('pointercancel', onUp);
+      track.style.scrollBehavior = previous;
+    };
+    bar.addEventListener('pointermove', onMove);
+    bar.addEventListener('pointerup', onUp);
+    bar.addEventListener('pointercancel', onUp);
+  }, [ribbonScrollState.thumb, syncRibbonScroll]);
+
   const canDragRibbon = editTopicOrPoint;
   const ghostRef = useRef(null);
   const clearGhost = () => { if (ghostRef.current) { ghostRef.current.remove(); ghostRef.current = null; } };
@@ -1129,6 +1220,20 @@ export function TopicsTab({
     const onMove = (ev) => {
       if (!armed) return;
       if (ghostRef.current) { ghostRef.current.style.left = ev.clientX + 'px'; ghostRef.current.style.top = ev.clientY + 'px'; }
+      // round302 — with a scrolling ribbon, a topic must be draggable to a position
+      // that is currently off-screen: holding near an edge pans the strip under the
+      // cursor. Without this, reordering could only reach the visible window.
+      const track = trackRef.current;
+      if (track && maxPos(track) > 2) {
+        const r = track.getBoundingClientRect();
+        const NEAR = 48;
+        const previous = track.style.scrollBehavior;
+        track.style.scrollBehavior = 'auto';
+        if (ev.clientX < r.left + NEAR) writePos(track, readPos(track) + 14);
+        else if (ev.clientX > r.right - NEAR) writePos(track, readPos(track) - 14);
+        track.style.scrollBehavior = previous;
+        syncRibbonScroll();
+      }
       // round239 fix — DIRECTION-AGNOSTIC drop target. The old loop overwrote
       // its result and always ended on the last (rightmost) tile, so only the
       // right-edge gap ever opened. Instead: measure every OTHER tile's centre,
@@ -1189,6 +1294,20 @@ export function TopicsTab({
     ? (point, anchor) => onCreateFromPoint('task', point, withAgendaBounds(anchor))
     : undefined;
   const onOpenPointItems = (kind, point) => setPopup({ kind, point });
+
+  // round302 — a freshly created discussion finishes building HERE: the create card
+  // hands over after its topics exist, and their points are still being written.
+  // Show the app's standard loading animation for that window rather than a
+  // half-filled agenda; `__building` is cleared by the stage that completes it
+  // (or by a failure, so this can never spin forever).
+  if (discussion?.__building) {
+    return (
+      <div className={styles.building}>
+        <BrandLoader />
+        <span className={styles.buildingText}>בונה את סדר היום…</span>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -1306,6 +1425,21 @@ export function TopicsTab({
             <Plus size={15} />
           </button>
         ))}
+        {/* round302 — the tiles scroll in here; the two "+" pieces stay PINNED
+            outside it, so they never scroll away and never move. */}
+        <div
+          className={styles.ribbonTrack}
+          ref={trackRef}
+          onScroll={syncRibbonScroll}
+          onWheel={onRibbonWheel}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') { e.preventDefault(); scrollRibbon('end'); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); scrollRibbon('start'); }
+          }}
+          tabIndex={ribbonScrollState.hasOverflow ? 0 : -1}
+          role="tablist"
+          aria-label="נושאי הדיון"
+        >
         {ribbonTopics.map((topic, i) => {
           const topicId = String(topic.id);
           const prioColor = topic.priority != null ? priorityOpts.colorById?.[topic.priority] : null;
@@ -1382,6 +1516,55 @@ export function TopicsTab({
         {/* round239 — dropping at the END shows the separator bar after the last
             topic (gapBeforeId null while dragging). */}
         {draggingTopicId && gapBeforeId == null && <span className={styles.ribbonDropBar} aria-hidden="true" />}
+        </div>
+        {/* round302 — reachability for what the track hides. The fades appear ONLY
+            when there is something that way, so a short agenda stays clean; the
+            chevrons are round, unlike the puzzle-shaped "+" beside them. */}
+        <div
+          className={`${styles.ribbonEdge} ${styles.ribbonEdgeStart} ${ribbonScrollState.hasOverflow && !ribbonScrollState.atStart ? styles.ribbonEdgeOn : ''}`}
+          aria-hidden={ribbonScrollState.atStart}
+        >
+          <button
+            type="button"
+            className={styles.ribbonChev}
+            title="לנושאים הקודמים"
+            aria-label="לנושאים הקודמים"
+            tabIndex={ribbonScrollState.hasOverflow && !ribbonScrollState.atStart ? 0 : -1}
+            onClick={() => scrollRibbon('start')}
+          >
+            <DropdownChevronDown className={styles.ribbonChevIconStart} />
+          </button>
+        </div>
+        <div
+          className={`${styles.ribbonEdge} ${styles.ribbonEdgeEnd} ${ribbonScrollState.hasOverflow && !ribbonScrollState.atEnd ? styles.ribbonEdgeOn : ''}`}
+          aria-hidden={ribbonScrollState.atEnd}
+        >
+          <button
+            type="button"
+            className={styles.ribbonChev}
+            title="לנושאים הבאים"
+            aria-label="לנושאים הבאים"
+            tabIndex={ribbonScrollState.hasOverflow && !ribbonScrollState.atEnd ? 0 : -1}
+            onClick={() => scrollRibbon('end')}
+          >
+            <DropdownChevronDown className={styles.ribbonChevIconEnd} />
+          </button>
+        </div>
+        {/* The slim, draggable position indicator — on the strip's bottom rule, so
+            it adds no height and the 48px contract holds. */}
+        <div
+          ref={sbarRef}
+          className={`${styles.ribbonSbar} ${ribbonScrollState.thumb ? styles.ribbonSbarOn : ''}`}
+          onPointerDown={onSbarPointerDown}
+          aria-hidden="true"
+        >
+          {ribbonScrollState.thumb && (
+            <div
+              className={styles.ribbonThumb}
+              style={{ width: `${ribbonScrollState.thumb.width}px`, insetInlineStart: `${ribbonScrollState.thumb.offset}px` }}
+            />
+          )}
+        </div>
         {/* round237 — the "+" at the END (leftmost): completes the puzzle at the
             end of the discussion; opens an inline editable box. round250 (owner
             request) — when there are NO topics yet, show only the single START

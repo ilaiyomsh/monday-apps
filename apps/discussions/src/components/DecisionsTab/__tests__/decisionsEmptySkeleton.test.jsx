@@ -56,7 +56,9 @@ describe('DecisionsTab — empty-state table skeleton (round301)', () => {
       <DecisionsTab data={emptyData()} discussionId="D1" onNewDecision={vi.fn()}
         onInlineCreate={vi.fn()} onNotify={vi.fn()} canCreateDecision />
     );
-    expect(screen.getByText('החלטה')).toBeInTheDocument();
+    // round302 — the first column's header is intentionally blank, so the
+    // skeleton is proven by the OTHER headers.
+    expect(screen.getByText('תאריך')).toBeInTheDocument();
     expect(screen.getByText('סטאטוס')).toBeInTheDocument();
     expect(screen.getByText('+ הוסף החלטה')).toBeInTheDocument();
   });
@@ -70,7 +72,9 @@ describe('DecisionsTab — empty-state table skeleton (round301)', () => {
       <DecisionsTab data={emptyData()} discussionId="D1" onNewDecision={vi.fn()}
         onInlineCreate={vi.fn()} onNotify={vi.fn()} canCreateDecision />
     );
-    expect(screen.getByText('החלטה')).toBeInTheDocument();
+    // round302 — the first column's header is intentionally blank, so the
+    // skeleton is proven by the OTHER headers.
+    expect(screen.getByText('תאריך')).toBeInTheDocument();
     expect(screen.getByText('+ הוסף החלטה')).toBeInTheDocument();
   });
 

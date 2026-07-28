@@ -370,12 +370,16 @@ describe('CreateDiscussionModal', () => {
     await act(async () => { fireEvent.click(submit); });
     await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
 
-    // STAGE 1 ran before the hand-off, limited to the first topic's points.
+    // STAGE 1 ran before the hand-off and created the TOPICS ONLY — an empty
+    // pointTopicIndexes list means "no points at all in this pass" (round302: half
+    // the work here, half in the card under the loading animation).
     const stage1 = templateApi.createTopicsFromTemplate.mock.calls[0];
     expect(stage1).toBeTruthy();
     expect(stage1[1].topics).toHaveLength(2);
-    expect(stage1[2].pointTopicIndexes).toEqual([0]);
+    expect(stage1[2].pointTopicIndexes).toEqual([]);
     expect(stage1[2].resumeState).toBeFalsy();
+    // The card is told it is still being built, so ניהול דיון shows the loader.
+    expect(onOptimisticCreate.mock.calls[0][0].__building).toBe(true);
     // Exactly one staged pass had run when the card was handed off — the rest is deferred.
     expect(stagedCallsAtHandoff).toBe(1);
 

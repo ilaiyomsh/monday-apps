@@ -654,42 +654,22 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
           }
           if (stageTemplate) {
             const stage1At = Date.now();
+            // round302 (owner request) — HALF the work happens here, in the still-open
+            // create card: the topics themselves, created and linked. Not a single
+            // point. The other half runs in the discussion card, under the app's
+            // standard loading animation. round301 also blocked on the first topic's
+            // points plus a readiness poll, and that was still too long a wait.
+            setCreateProgress({ done: 1, total: 1 + (stageTemplate.topics || []).length });
             await createTopicsFromTemplate(newId, stageTemplate, {
               freshDiscussion: true,
-              // Only the FIRST topic's points block the card open.
-              pointTopicIndexes: [0],
+              // An EMPTY list means "create every topic, but no points at all".
+              pointTopicIndexes: [],
               resumeState: stage1Checkpoint,
               onProgress: onTemplateProgress,
               onCheckpoint: (cp) => { stage1Checkpoint = cp; rememberRoot(cp); },
             });
             logger.health?.('discussion_create_phase', {
-              step: 'staged_topics_first_points', duration_ms: Date.now() - stage1At,
-            });
-          }
-          // monday is read-after-write lagged: a resolved create_item/create_subitem
-          // does NOT guarantee the relation and subitems are readable yet. Handing
-          // off before they are lets the card's first fetch see an empty agenda —
-          // exactly the regression this round fixes. The duplicate path polls for
-          // the same reason; here the budget is deliberately SHORT (the point is a
-          // fast open) and we hand off regardless when it expires, because stage 2/3
-          // bump the card's reload stamp anyway.
-          if (stageTemplate) {
-            const readinessAt = Date.now();
-            const expectedTopics = (stageTemplate.topics || []).length;
-            const expectedPoints = (stageTemplate.topics?.[0]?.points || []).length;
-            for (let attempt = 0; attempt < 6; attempt += 1) {
-              try {
-                const readBack = await readDiscussionTopicsAsTemplate(newId);
-                const topicsRead = readBack?.topics || [];
-                const firstTopicPoints = topicsRead[0]?.points?.length || 0;
-                if (topicsRead.length >= expectedTopics && firstTopicPoints >= expectedPoints) break;
-              } catch (err) {
-                if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי השלב הראשון נכשלה — ממשיך להמתין', err);
-              }
-              await new Promise((resolve) => { setTimeout(resolve, 400); });
-            }
-            logger.health?.('discussion_create_phase', {
-              step: 'staged_stage1_readiness', duration_ms: Date.now() - readinessAt,
+              step: 'staged_topics', duration_ms: Date.now() - stage1At,
             });
           }
         } catch (err) {
@@ -702,9 +682,19 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
         // Stage 1 is on the board and about to be owned by the card — this form is
         // done with it, so the resume slot must not leak into the next creation.
         creationResumeRef.current = null;
-        // Hand off — the card opens now, with the real id and a usable agenda.
+        // Hand off — the card opens now with the real id. `__building` tells it the
+        // rest is still on its way, so ניהול דיון runs the app's standard loading
+        // animation instead of showing a half-built agenda; it clears when the last
+        // stage lands (or fails).
         optimisticHandoff = true;
-        onOptimisticCreate({ ...optimisticShape, id: newId, __pendingPeople: pendingPeople });
+        onOptimisticCreate({
+          ...optimisticShape,
+          id: newId,
+          __pendingPeople: pendingPeople,
+          // Only TEMPLATE work gates the agenda view. The people write changes the
+          // header, not the agenda, so it must not hold the loader up.
+          __building: Boolean(stageTemplate),
+        });
         // Reset the form for next time (the modal is unmounting).
         setName(''); setDate(''); setTime(''); setLead([]); setCoordinator([]);
         setParticipants([]); setExternalParticipants([]); setExternalDraft('');
@@ -714,8 +704,9 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
           const bgStartedAt = Date.now();
           let bgOk = false;
           try {
-            // Stage 2 — the deferred points, resumed so the topics that stage 1
-            // already created are not recreated.
+            // Stage 2 — EVERY point, resumed so the topics stage 1 already created
+            // are not recreated. This is the half that runs inside the discussion
+            // card, while it shows the standard loading animation.
             if (stageTemplate && stage1Checkpoint) {
               const stage2At = Date.now();
               await createTopicsFromTemplate(newId, stageTemplate, {
@@ -723,9 +714,32 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
                 resumeState: stage1Checkpoint,
               });
               logger.health?.('discussion_create_phase', {
-                step: 'staged_remaining_points', duration_ms: Date.now() - stage2At,
+                step: 'staged_points', duration_ms: Date.now() - stage2At,
               });
-              // Show them without waiting for stage 3.
+              // monday is read-after-write lagged: a resolved create_item/create_subitem
+              // does not mean the relation and subitems are READABLE yet. Now that this
+              // wait costs the user nothing (the loader is already running) we hold the
+              // loader until the board really serves the agenda back, instead of
+              // dropping the user onto a half-empty one.
+              const readinessAt = Date.now();
+              const wantTopics = (stageTemplate.topics || []).length;
+              const wantPoints = (stageTemplate.topics || [])
+                .reduce((n, t) => n + (t.points?.length || 0), 0);
+              for (let attempt = 0; attempt < 10; attempt += 1) {
+                try {
+                  const readBack = await readDiscussionTopicsAsTemplate(newId);
+                  const got = readBack?.topics || [];
+                  const gotPoints = got.reduce((n, t) => n + (t.points?.length || 0), 0);
+                  if (got.length >= wantTopics && gotPoints >= wantPoints) break;
+                } catch (err) {
+                  if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי הדיון נכשלה — ממשיך להמתין', err);
+                }
+                await new Promise((resolve) => { setTimeout(resolve, 500); });
+              }
+              logger.health?.('discussion_create_phase', {
+                step: 'staged_readiness', duration_ms: Date.now() - readinessAt,
+              });
+              // Reveal the agenda without waiting for the people write.
               onStageAdvance?.({ id: newId, stage: 2 });
             }
             // Stage 3 — people last.
