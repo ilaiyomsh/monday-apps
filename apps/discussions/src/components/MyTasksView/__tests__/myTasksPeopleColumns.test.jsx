@@ -3,13 +3,14 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /*
- * round305 (owner request) — the personal tasks table gains two PEOPLE columns:
- *   · שותפים (partnersID) — in BOTH scopes, inline-editable when the permission
- *     gate passes (owners · discussion lead/creator/coordinator · task creator ·
- *     task responsible), read-only avatars otherwise;
- *   · אחראי (responsibilityID) — read-only, and ONLY in the "בדיונים שהובלתי"
- *     scope (in the default scope every row is the current user's own).
- * Both render only when their alias is mapped.
+ * round305 → round306 (owner request) — the personal tasks table carries the SAME
+ * two PEOPLE columns as the discussion tasks table:
+ *   · אחראי (responsibilityID)
+ *   · שותפים (partnersID)
+ * Both render in EVERY scope (round306 dropped round305's led-scope-only gate),
+ * both only when their alias is mapped, both inline-editable through the same
+ * PersonPicker the discussion table uses — gated per row by their own capability
+ * (editTaskAssignee / editTaskPartners) — and read-only avatars otherwise.
  */
 
 const { columnsMock } = vi.hoisted(() => ({
@@ -41,13 +42,14 @@ vi.mock('@api/monday-client.js', () => ({ monday: { execute: vi.fn() } }));
 vi.mock('@generated/components/DatePickerPopover', () => ({
   DatePickerPopover: () => <button type="button" data-testid="date-picker" />,
 }));
-// The picker is the EDIT affordance; the list is the read-only rendering.
+// The picker is the EDIT affordance; the list is the read-only rendering. Both are
+// the SAME components the discussion tasks table uses — that parity is the point.
 vi.mock('@generated/components/PersonPicker', () => ({
-  PersonPicker: ({ selected, onChange }) => (
+  PersonPicker: ({ selected, onChange, single }) => (
     <button
       type="button"
-      data-testid="person-picker"
-      onClick={() => onChange([{ id: 'u9', name: 'שותף חדש' }])}
+      data-testid={single ? 'person-picker-single' : 'person-picker'}
+      onClick={() => onChange([{ id: 'u9', name: 'נבחר חדש' }])}
     >
       {`picker:${(selected || []).map((p) => p.name).join(',')}`}
     </button>
@@ -71,9 +73,7 @@ const TASK = {
   partnersID: [{ id: 'u2', name: 'יוסי' }],
 };
 
-const renderTable = (props = {}) => render(
-  <MyTasksTable tasks={[TASK]} onPartnersChange={() => {}} {...props} />
-);
+const renderTable = (props = {}) => render(<MyTasksTable tasks={[TASK]} {...props} />);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -84,53 +84,61 @@ beforeEach(() => {
   };
 });
 
-describe('שותפים column', () => {
-  it('renders in the DEFAULT scope with its header', () => {
+describe('both people columns render in every scope (round306)', () => {
+  it('shows the אחראי and שותפים headers whenever their aliases are mapped', () => {
     renderTable();
+    expect(screen.getByText('אחראי')).toBeInTheDocument();
     expect(screen.getByText('שותפים')).toBeInTheDocument();
   });
 
-  it('is inline-editable when the gate allows editTaskPartners, and reports the picked people', () => {
+  it('drops each column when its alias is unmapped', () => {
+    columnsMock.value = { deadlineID: { id: 'date_x' } };
+    renderTable();
+    expect(screen.queryByText('אחראי')).toBeNull();
+    expect(screen.queryByText('שותפים')).toBeNull();
+  });
+});
+
+describe('שותפים — inline edit gated by editTaskPartners', () => {
+  it('renders the multi PersonPicker and reports the picked people', () => {
     const onPartnersChange = vi.fn();
     renderTable({ onPartnersChange, canTask: (cap) => cap === 'editTaskPartners' });
     const picker = screen.getByTestId('person-picker');
     expect(picker.textContent).toContain('יוסי');
     picker.click();
-    expect(onPartnersChange).toHaveBeenCalledWith('1', [{ id: 'u9', name: 'שותף חדש' }]);
+    expect(onPartnersChange).toHaveBeenCalledWith('1', [{ id: 'u9', name: 'נבחר חדש' }]);
   });
 
-  it('degrades to read-only when the gate DENIES editTaskPartners', () => {
+  it('degrades to read-only avatars when the gate DENIES', () => {
     renderTable({ onPartnersChange: () => {}, canTask: () => false });
     expect(screen.queryByTestId('person-picker')).toBeNull();
     expect(screen.getByText('יוסי')).toBeInTheDocument();
   });
-
-  it('is absent when the partnersID alias is not mapped', () => {
-    columnsMock.value = { deadlineID: { id: 'date_x' }, responsibilityID: { id: 'people_r' } };
-    renderTable();
-    expect(screen.queryByText('שותפים')).toBeNull();
-    expect(screen.queryByTestId('person-picker')).toBeNull();
-  });
 });
 
-describe('אחראי column — the "בדיונים שהובלתי" scope only', () => {
-  it('is HIDDEN in the default scope', () => {
-    renderTable();
-    expect(screen.queryByText('אחראי')).toBeNull();
+describe('אחראי — inline edit gated by editTaskAssignee, single-select like the discussion table', () => {
+  it('renders a SINGLE-select PersonPicker (one אחראי per task) and reports the pick', () => {
+    const onAssigneeChange = vi.fn();
+    renderTable({ onAssigneeChange, canTask: (cap) => cap === 'editTaskAssignee' });
+    const picker = screen.getByTestId('person-picker-single');
+    expect(picker.textContent).toContain('דנה');
+    picker.click();
+    expect(onAssigneeChange).toHaveBeenCalledWith('1', [{ id: 'u9', name: 'נבחר חדש' }]);
   });
 
-  it('shows read-only responsibility people when showAssignee is set', () => {
-    renderTable({ showAssignee: true });
-    expect(screen.getByText('אחראי')).toBeInTheDocument();
+  it('degrades to read-only avatars when the gate DENIES', () => {
+    renderTable({ onAssigneeChange: () => {}, canTask: () => false });
+    expect(screen.queryByTestId('person-picker-single')).toBeNull();
     expect(screen.getByText('דנה')).toBeInTheDocument();
-    // read-only: the אחראי cell never renders a picker (reassigning stays in the
-    // discussion's own tasks table).
-    expect(screen.getAllByTestId('person-list').some((el) => el.textContent === 'דנה')).toBe(true);
   });
 
-  it('stays hidden in the led scope when responsibilityID is unmapped', () => {
-    columnsMock.value = { deadlineID: { id: 'date_x' }, partnersID: { id: 'people_p' } };
-    renderTable({ showAssignee: true });
-    expect(screen.queryByText('אחראי')).toBeNull();
+  it('each column answers to its OWN capability (partners denied ⇏ assignee denied)', () => {
+    renderTable({
+      onAssigneeChange: () => {},
+      onPartnersChange: () => {},
+      canTask: (cap) => cap === 'editTaskAssignee',
+    });
+    expect(screen.getByTestId('person-picker-single')).toBeInTheDocument(); // אחראי editable
+    expect(screen.queryByTestId('person-picker')).toBeNull(); // שותפים read-only
   });
 });

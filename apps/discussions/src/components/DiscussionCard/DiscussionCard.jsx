@@ -1032,7 +1032,7 @@ export function DiscussionCard({
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
             {/* round135 — lazy chunk (see the lazy() declaration above). */}
             <Suspense fallback={null}>
-              <EffectivenessTab data={tasksData} canManageSettings={canManageSettings} onNotify={onNotify} />
+              <EffectivenessTab data={tasksData} canTask={canTask} canManageSettings={canManageSettings} onNotify={onNotify} />
             </Suspense>
           </div>
         )}

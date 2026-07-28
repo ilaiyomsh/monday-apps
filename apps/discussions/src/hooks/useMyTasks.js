@@ -441,23 +441,44 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     }
   }, []);
 
-  // round305 — optimistic inline שותפים edit (partnersID, a people column). The
-  // write shape mirrors the other people writes: formatValue('people') takes ids
-  // or [{id}], so the PersonPicker selection goes straight through.
-  const updateTaskPartners = useCallback(async (taskId, people) => {
+  // round305/306 — optimistic inline edit of a PEOPLE column (partnersID שותפים /
+  // responsibilityID אחראי). formatValue('people') accepts ids or [{id}], so the
+  // PersonPicker selection goes straight through; revert on failure.
+  const updatePeopleColumn = useCallback((alias, label) => async (taskId, people) => {
     const next = Array.isArray(people) ? people : [];
     const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
     dirtyIdsRef.current.add(String(taskId)); // protect this row from a seeded revalidate
     setItems((current) =>
-      current.map((t) => (String(t.id) === String(taskId) ? { ...t, partnersID: next } : t))
+      current.map((t) => (String(t.id) === String(taskId) ? { ...t, [alias]: next } : t))
     );
     try {
-      await new משימות1Board().item(taskId).update({ partnersID: next }).execute();
+      await new משימות1Board().item(taskId).update({ [alias]: next }).execute();
     } catch (err) {
-      logger.error('useMyTasks', 'Error updating task partners', err);
+      logger.error('useMyTasks', `Error updating task ${label}`, err);
       setItems(prev);
     }
   }, []);
+  const updateTaskPartners = useCallback(
+    (taskId, people) => updatePeopleColumn('partnersID', 'partners')(taskId, people),
+    [updatePeopleColumn]
+  );
+  // round306 (PR review) — reassigning אחריות can move the task OUT of the active
+  // scope: the 'mine' page is server-filtered to "responsible = me", and the
+  // 'others' scope is explicitly "led tasks I am NOT responsible for". Updating the
+  // column in place would leave the row visible (and editable) in a scope it no
+  // longer belongs to until the next refetch, so the row is dropped here.
+  const updateTaskAssignee = useCallback(
+    async (taskId, people) => {
+      await updatePeopleColumn('responsibilityID', 'assignee')(taskId, people);
+      const next = Array.isArray(people) ? people : [];
+      const holdsMe = !!userId && next.some((p) => String(p?.id) === String(userId));
+      const leftScope = (scope === 'mine' && !holdsMe) || (scope === 'others' && holdsMe);
+      if (leftScope) {
+        setItems((current) => current.filter((t) => String(t.id) !== String(taskId)));
+      }
+    },
+    [updatePeopleColumn, scope, userId]
+  );
 
   // Deferred bulk delete with an undo window (mirrors useTasks.softDeleteTasks):
   // rows vanish optimistically now, the real delete_item fires only after
@@ -573,6 +594,7 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     updateTaskDeadline,
     updateTaskName,
     updateTaskPartners,
+    updateTaskAssignee,
     softDeleteTasks,
     createTask,
     refresh,

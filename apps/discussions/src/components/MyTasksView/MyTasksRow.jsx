@@ -125,7 +125,7 @@ function StatusEditCell({ taskId, value, options, labelById, colorById, emptyLab
 // round136 (perf audit stage 3) — memoized row + option maps hoisted to
 // MyTasksTable (ONE hook pair per table instead of two per row): a selection
 // toggle / keystroke / single-row edit no longer re-renders every row.
-export const MyTasksRow = React.memo(function MyTasksRow({ task, columns, statusOpts, priorityOpts, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, onPartnersChange, rowStyle, showDeadline = true, showPriority = true, showNotes = true, showPartners = false, showAssignee = false, selectable = false, selected = false, onToggleSelect, searchTerm = '' }) {
+export const MyTasksRow = React.memo(function MyTasksRow({ task, columns, statusOpts, priorityOpts, onStatusChange, onPriorityChange, onNotesChange, onDeadlineChange, onRenameTask, onPartnersChange, onAssigneeChange, rowStyle, showDeadline = true, showPriority = true, showNotes = true, showPartners = false, showAssignee = false, selectable = false, selected = false, onToggleSelect, searchTerm = '' }) {
   const { t } = useTranslation();
   // Inline rename (permission-gated: the pencil shows only when onRenameTask is
   // provided). Clicking the NAME itself still opens the item card — rename is a
@@ -214,29 +214,43 @@ export const MyTasksRow = React.memo(function MyTasksRow({ task, columns, status
         )}
       </div>
     ),
-    // round305 — אחראי (responsibilityID): READ-ONLY here. It is shown in the
-    // "בדיונים שהובלתי" scope so the lead can see WHO owns each task; reassigning
-    // אחריות stays in the discussion's own tasks table (editTaskAssignee).
+    // round306 (owner request) — אחראי + שותפים render EXACTLY like the discussion
+    // tasks table's אחראי cell: the same `row.assigneeCell` wrapper, the same
+    // PersonPicker when editable (single for אחראי, multi for שותפים) and the same
+    // compact PersonList when the permission gate withheld the handler. Anything
+    // custom here would drift from that table, which is the reference look.
     assignee: showAssignee ? (
-      <div key="assignee" className={`${grid.taskCell} ${styles.peopleCell}`}>
-        <PersonList people={task.responsibilityID} size="sm" showNames max={2} />
+      <div key="assignee" className={grid.taskCell} onClick={onAssigneeChange ? stop : undefined}>
+        <div className={row.assigneeCell}>
+          {onAssigneeChange ? (
+            <PersonPicker
+              selected={task.responsibilityID || []}
+              onChange={(people) => onAssigneeChange(task.id, people)}
+              closeOnSelect
+              single
+              boardKey="tasks"
+              accountWide
+            />
+          ) : (
+            <PersonList people={task.responsibilityID} size="sm" showNames max={2} />
+          )}
+        </div>
       </div>
     ) : null,
-    // round305 — שותפים (partnersID): inline-editable when the permission gate
-    // passed (owners · discussion lead/creator/coordinator · task creator ·
-    // task responsible), read-only avatars otherwise.
     partners: showPartners ? (
-      <div key="partners" className={`${grid.taskCell} ${styles.peopleCell}`} onClick={onPartnersChange ? stop : undefined}>
-        {onPartnersChange ? (
-          <PersonPicker
-            selected={task.partnersID || []}
-            onChange={(people) => onPartnersChange(task.id, people)}
-            boardKey="tasks"
-            accountWide
-          />
-        ) : (
-          <PersonList people={task.partnersID} size="sm" showNames max={2} />
-        )}
+      <div key="partners" className={grid.taskCell} onClick={onPartnersChange ? stop : undefined}>
+        <div className={row.assigneeCell}>
+          {onPartnersChange ? (
+            <PersonPicker
+              selected={task.partnersID || []}
+              onChange={(people) => onPartnersChange(task.id, people)}
+              boardKey="tasks"
+              accountWide
+            />
+          ) : (
+            <PersonList people={task.partnersID} size="sm" showNames max={2} />
+          )}
+        </div>
       </div>
     ) : null,
     // deadline — inline date picker when permitted (onDeadlineChange present),
