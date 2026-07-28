@@ -5,7 +5,20 @@ import logger from '../utils/logger.js';
 import { migrateSettings } from '../domain/settingsSchema.js';
 import { cacheGet, cacheSet, cacheRemove } from '../utils/swrCache.js';
 
+// monday.storage transiently answers success:true + value:null for a key that
+// IS populated (the "false-empty" first-read race that shipped a blank
+// onboarding screen to configured instances). A single null read must not be
+// trusted as "unconfigured": read once, and if null, retry ONCE after this
+// delay before deciding.
+//
+// This is the ONLY retry on the path. mondayService.getColumnConfig used to hold
+// a second one, so an unconfigured column — which is every column nobody has
+// configured, and which is never cached — paid 4 reads and 1050ms of sleeping to
+// reach the same answer.
 const RETRY_DELAY_MS = 350;
+
+// Settings change rarely; a long TTL keeps re-opens instant. The background
+// revalidation still corrects a stale entry within one open.
 const SETTINGS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 const settingsCacheKey = (boardId, columnId) => `settings:${boardId}:${columnId}`;
