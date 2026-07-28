@@ -1,5 +1,38 @@
 # Changelog
 
+## 3.6.1
+
+- **The title and the save button no longer scroll with the fields.** 3.6.0 claimed to
+  pin them and did not: the form sat in the modal's single implicit grid row, which is
+  sized by its CONTENT, and `align-content: stretch` only hands out space that is left
+  over — never takes it away. So the moment the form wanted more height than the iframe
+  had, the row grew past the box and the whole form scrolled as one piece. Worse, the
+  `overflow: hidden` added in 3.6.0 then clipped the submit button instead, meaning it
+  could not be reached at all. The row is now `minmax(0, 1fr)`, so it shrinks to the
+  window it actually got and the field list is the only thing that scrolls.
+- The requested modal height carries a flat 24px of headroom. monday draws its own modal
+  chrome inside the box it hands us and a row can render a pixel over budget, so sizing
+  the form to fit exactly was a few pixels short in practice — and those few pixels were
+  what put the header and footer into the scroll in the first place. One flat allowance,
+  not per row, so it costs no visible dead space.
+- **Choosing a status with no required fields closes the picker as soon as the write
+  lands, with no toast.** The write is still awaited rather than fired and forgotten:
+  `closeDialog` tears the iframe down, and a request still in flight when that happens
+  is cancelled by the browser — the dialog would close on a status that was never
+  written, with nothing to say so. The spinner on the clicked pill covers the round trip.
+- **No success toast for a status change**, in the picker or after the required-fields
+  form. The cell already shows the result and the dialog closing is the confirmation.
+  Failures still speak.
+- **A single required column no longer opens a sliver.** The modal is never sized below
+  two rows (`FORM_MIN_ROWS`), so one field still opens as a form rather than as a title, a
+  box and a button squeezed together. The floor is a sizing concern only —
+  `requiredFormLayout` still reports the real row count, so the list renders one row and
+  the spare height falls below it.
+- The date picker's "היום" shortcut now closes the popover like a day click does — when
+  the hour toggle is off. It used to set the date and leave the popover open, so the same
+  action behaved two different ways. The typed date input deliberately still does not
+  close: it fires on every keystroke.
+
 ## 3.6.0
 
 - **Connected-board (`board_relation`) columns can now be required fields.** The control
