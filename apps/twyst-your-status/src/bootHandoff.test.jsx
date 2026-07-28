@@ -154,10 +154,7 @@ describe('boot overlay handoff', () => {
     await renderApp('/picker');
 
     await waitFor(() => expect(overlayIsUp()).toBe(false));
-    // getByText throws when the node is absent, so this is the assertion.
-    // (jest-dom's toBeInTheDocument is unavailable here — its matchers never
-    // register in this app, a pre-existing pnpm dual-vitest-instance gap.)
-    expect(screen.getByText(/boom/)).toBeTruthy();
+    expect(screen.getByText(/boom/)).toBeInTheDocument();
   });
 
   it('releases it immediately on non-picker routes — it is the picker\'s continuation only', async () => {
