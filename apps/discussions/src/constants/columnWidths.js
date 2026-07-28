@@ -22,6 +22,10 @@ export const MY_TASKS_COLUMN_WIDTHS = {
   priority: { default: 130, min: 90, max: 280 },
   status: { default: 160, min: 100, max: 320 },
   notes: { default: 200, min: 120, max: 640 },
+  // round305 — the two people columns of the personal table: שותפים (always, when
+  // mapped) and אחראי (the "בדיונים שהובלתי" scope only).
+  assignee: { default: 160, min: 110, max: 340 },
+  partners: { default: 180, min: 110, max: 380 },
   discussion: { default: 180, min: 140, max: 420 },
 };
 
@@ -39,6 +43,8 @@ export const MY_TASKS_MOBILE_WIDTHS = {
   priority: '110px',
   status: '140px',
   notes: '150px',
+  assignee: '130px',
+  partners: '140px',
   discussion: '150px',
 };
 

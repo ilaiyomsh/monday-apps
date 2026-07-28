@@ -504,6 +504,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     'taskCreatorID',
     'taskCreationDateID', // תאריך יצירה — auto-stamped with today at task creation (round115)
     'responsibilityID',
+    'partnersID', // שותפים — people; rendered + inline-editable in "המשימות שלי" (round305)
     'deadlineID',
     'statusID',
     'discussionLinkID',

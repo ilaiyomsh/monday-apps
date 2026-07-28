@@ -306,6 +306,12 @@ export const CAPABILITY_DEFAULTS = {
   editTaskPriority: 'creatorLeadOwner',
   editTaskDeadline: 'creatorLeadOwner',
   editTaskAssignee: 'creatorLeadOwner',
+  // round305 (owner spec) — שותפים is editable by owners, the DISCUSSION's
+  // lead/creator/coordinator, and the TASK's creator/responsible. The
+  // 'creatorLeadOwner' bucket says exactly that for a discussion ctx; for the
+  // personal (no-discussion) ctx the allowed item roles are narrowed by
+  // CAP_ITEM_SELF_ROLES below (viewers must NOT inherit it).
+  editTaskPartners: 'creatorLeadOwner',
   editTaskName: 'creatorLeadOwner',
   deleteTask: 'creatorLeadOwner',
   // ---- decision tier ----
@@ -362,6 +368,8 @@ export const CAPABILITIES = [
   { id: 'editTaskPriority', tier: 'task', group: 'taskFields', label: 'עריכת עדיפות' },
   { id: 'editTaskDeadline', tier: 'task', group: 'taskFields', label: 'עריכת דד ליין' },
   { id: 'editTaskAssignee', tier: 'task', group: 'taskFields', label: 'עריכת אחריות' },
+  // round305 — the שותפים people column (partnersID).
+  { id: 'editTaskPartners', tier: 'task', group: 'taskFields', label: 'עריכת שותפים' },
   { id: 'editTaskName', tier: 'task', group: 'taskFields', label: 'עריכת שם משימה' },
   { id: 'deleteTask', tier: 'task', group: 'taskFields', label: 'מחיקת משימה' },
   // ---- decision tier (one "שדות החלטה" card; delete is a row) ----
@@ -395,6 +403,32 @@ export const PERMISSION_ROLE_SOURCES = {
   // first-class role source (not just data) so a user listed in the decision's
   // affected people column is recognized as the "מושפעים" role by the resolver.
   decisions: ['decisionCreatorID', 'deciderID', 'affectedID'],
+};
+
+/*
+ * round305 — PER-CAPABILITY narrowing of the item-tier "self role" scan.
+ *
+ * An item-tier capability with no discussion in ctx (the personal My Tasks /
+ * My Decisions surfaces) normally resolves against EVERY role source of that
+ * board — which includes `taskViewersID`, the deliberately read-only role. For a
+ * capability whose owner spec names the allowed roles, list them here and the
+ * resolver scans only those.
+ *
+ * `parentDiscussionEditors: true` additionally accepts the parent DISCUSSION's
+ * lead/coordinator/creator, read from the roles the row carries under
+ * `__discussionRoles` (stamped by useMyTasks for the "בדיונים שהובלתי" scope,
+ * where there is no discussion object in ctx but the parent's roles are known).
+ */
+export const CAP_ITEM_SELF_ROLES = {
+  // owners + discussion lead/creator/coordinator + task creator + task responsible.
+  // taskEditorsID counts because item 19 fills it FROM the discussion's
+  // lead/coordinator/creator; taskViewersID is excluded — a viewer never edits.
+  editTaskPartners: {
+    tasks: {
+      selfRoles: ['taskCreatorID', 'responsibilityID', 'taskEditorsID'],
+      parentDiscussionEditors: true,
+    },
+  },
 };
 
 /*
@@ -504,6 +538,8 @@ export const DEFAULT_PERMISSION_SEED = {
       editTaskPriority: true,
       editTaskDeadline: true,
       editTaskAssignee: true,
+      // round305 — the owner's spec grants שותפים to the task creator.
+      editTaskPartners: true,
       editTaskName: true,
       deleteTask: true,
     },
@@ -515,6 +551,9 @@ export const DEFAULT_PERMISSION_SEED = {
       editTaskPriority: true,
       editTaskDeadline: false,
       editTaskAssignee: false,
+      // round305 — the owner's spec grants שותפים to the task's responsible,
+      // even though they may not reassign אחריות itself.
+      editTaskPartners: true,
       editTaskName: false,
       deleteTask: false,
     },
@@ -526,6 +565,9 @@ export const DEFAULT_PERMISSION_SEED = {
       editTaskPriority: true,
       editTaskDeadline: true,
       editTaskAssignee: true,
+      // round305 — editors are seeded FROM the discussion's lead/coordinator/
+      // creator (item 19), the exact roles the owner's spec grants.
+      editTaskPartners: true,
       editTaskName: true,
       deleteTask: true,
     },
@@ -539,6 +581,8 @@ export const DEFAULT_PERMISSION_SEED = {
       editTaskPriority: false,
       editTaskDeadline: false,
       editTaskAssignee: false,
+      // round305 — read-only means read-only, שותפים included.
+      editTaskPartners: false,
       editTaskName: false,
       deleteTask: false,
     },
@@ -648,6 +692,10 @@ export const COLUMN_SCHEMA = {
     // the app (any create path); owner maps it to a date column ("תאריך יצירה").
     taskCreationDateID: { type: 'date', title: 'תאריך יצירה' },
     responsibilityID: { type: 'people', title: 'אחריות' },
+    // round305 (owner request) — "שותפים": the task's collaborators, a SECOND
+    // people column beside אחריות. Rendered in the personal "המשימות שלי" table
+    // (both scopes); its edit gate is the editTaskPartners capability below.
+    partnersID: { type: 'people', title: 'שותפים' },
     deadlineID: { type: 'date', title: 'דד ליין' },
     statusID: { type: 'status', title: 'סטאטוס' },
     discussionLinkID: { type: 'board_relation', title: 'דיון' },
