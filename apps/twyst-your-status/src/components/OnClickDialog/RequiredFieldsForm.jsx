@@ -16,13 +16,11 @@ import FieldControl from './FieldControl';
 import FieldIcon from './FieldIcon';
 
 function RequiredFieldsForm({
-  label,
   fields,
   columnsById,
   initialValues,
   busy,
   error = null,
-  onCancel,
   onSubmit,
 }) {
   const [values, setValues] = useState(initialValues);
@@ -70,13 +68,11 @@ function RequiredFieldsForm({
 
   return (
     <form className="twyst-form" onSubmit={handleSubmit} aria-labelledby="required-fields-title">
+      {/* One title, no eyebrow and no label name. The heading used to interpolate the
+          target status, which made it the tallest thing in a modal sized to the pixel —
+          FORM_HEADER_PX in requiredFormModalSize.js follows this markup. */}
       <header>
-        <p className="status-guard-eyebrow">מעבר סטטוס</p>
-        <h2 id="required-fields-title">
-          השלמת פרטים לפני מעבר ל״
-          {label.label || 'ללא שם'}
-          ״
-        </h2>
+        <h2 id="required-fields-title">עמודות חובה</h2>
       </header>
 
       {error && <AttentionBox type="danger" text={error} />}
@@ -103,10 +99,11 @@ function RequiredFieldsForm({
           const isMissing = showErrors && emptyFieldIds.has(field.columnId);
           return (
             <div className="twyst-form-row" key={field.columnId}>
+              {/* No required marker: every field in this form is required by
+                  definition, so an asterisk on all of them carried no information. */}
               <label className="twyst-field-title" id={labelId} htmlFor={controlId}>
                 <FieldIcon columnType={column?.type} />
                 <span className="twyst-field-name">{column?.title || field.columnId}</span>
-                <b aria-hidden="true">*</b>
               </label>
               <div className="twyst-field-control">
                 <FieldControl
@@ -127,14 +124,15 @@ function RequiredFieldsForm({
         })}
       </div>
 
+      {/* No cancel button — the modal's own X is the way out, and a second dismissal
+          control in a form this small only competed with the submit. */}
       <div className="twyst-form-actions">
-        <button type="button" onClick={onCancel} disabled={busy}>ביטול</button>
         <button
           className="primary-action"
           type="submit"
           disabled={busy || unfillable.length > 0}
         >
-          {busy ? 'שומר…' : 'שמירה ומעבר'}
+          {busy ? 'שומר…' : 'שמור'}
         </button>
       </div>
     </form>

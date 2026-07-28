@@ -6,6 +6,8 @@ import {
   isFieldValueEmpty,
   isSupportedFormColumnType,
   prefillFieldValue,
+  relationAllowsMultiple,
+  relationTargetBoardIds,
   sanitizeColumnValue,
   sanitizeColumnValues,
   serializeFieldValue,
@@ -16,6 +18,7 @@ describe('isSupportedFormColumnType', () => {
     [
       'text', 'long_text', 'numbers', 'date', 'email', 'phone', 'link',
       'dropdown', 'people', 'checkbox', 'timeline', 'rating', 'status',
+      'board_relation',
     ].forEach((type) => {
       expect(isSupportedFormColumnType(type)).toBe(true);
     });
@@ -412,5 +415,113 @@ describe('sanitizeColumnValues', () => {
 
   it('returns an empty map for no input rather than throwing', () => {
     expect(sanitizeColumnValues(null)).toEqual({});
+  });
+});
+
+/*
+ * board_relation (connected boards).
+ *
+ * Every assertion here guards a documented monday failure mode, not a shape we chose:
+ * `text`/`value` are null on this type so the typed fields are the only readable
+ * source; the write key is `item_ids` with NUMBERS; and `{"item_ids":[null]}` — what
+ * `Number(<bad id>)` produces — fails the WHOLE mutation with
+ * ColumnValueException/itemsNotInConnectedBoards, taking the status transition with it.
+ */
+describe('board_relation', () => {
+  it('reads linked_items, keeping the name beside the id', () => {
+    expect(prefillFieldValue('board_relation', {
+      linked_item_ids: ['901', '902'],
+      linked_items: [{ id: 901, name: 'דיון ראשון' }, { id: 902, name: 'דיון שני' }],
+    })).toEqual([
+      { id: '901', name: 'דיון ראשון' },
+      { id: '902', name: 'דיון שני' },
+    ]);
+  });
+
+  it('falls back to linked_item_ids when monday returns ids without the items', () => {
+    // Happens when the linked item is on a board the viewer cannot read.
+    expect(prefillFieldValue('board_relation', {
+      linked_item_ids: ['901'],
+      linked_items: [],
+    })).toEqual([{ id: '901', name: '' }]);
+  });
+
+  it('seeds an unset cell with an empty selection, not a blank string', () => {
+    expect(prefillFieldValue('board_relation', null)).toEqual([]);
+  });
+
+  it('writes item_ids as numbers', () => {
+    expect(serializeFieldValue('board_relation', [{ id: '901' }, { id: 902 }]))
+      .toEqual({ item_ids: [901, 902] });
+  });
+
+  it('drops ids that would serialize to null and fail the whole mutation', () => {
+    expect(serializeFieldValue('board_relation', [
+      { id: '901' }, { id: 'not-an-id' }, { id: '' }, { id: 0 }, null,
+    ])).toEqual({ item_ids: [901] });
+  });
+
+  it('counts an empty selection as unfilled', () => {
+    expect(isFieldValueEmpty('board_relation', [])).toBe(true);
+    expect(isFieldValueEmpty('board_relation', undefined)).toBe(true);
+    expect(isFieldValueEmpty('board_relation', [{ id: '901', name: 'x' }])).toBe(false);
+  });
+
+  it('selects the typed fragment, since text and value are null on this type', () => {
+    expect(columnValuesSelection(['board_relation']))
+      .toContain('... on BoardRelationValue { linked_item_ids linked_items { id name } }');
+  });
+});
+
+describe('relationTargetBoardIds', () => {
+  it('reads boardIds as strings', () => {
+    expect(relationTargetBoardIds({ boardIds: [18423875018, '18423875019'] }))
+      .toEqual(['18423875018', '18423875019']);
+  });
+
+  it('accepts the allowedBoardIds alias', () => {
+    expect(relationTargetBoardIds({ allowedBoardIds: [123] })).toEqual(['123']);
+  });
+
+  it('parses settings that arrive as a JSON string', () => {
+    expect(relationTargetBoardIds('{"boardIds":[123]}')).toEqual(['123']);
+  });
+
+  it('returns nothing for a column pointing at no board', () => {
+    expect(relationTargetBoardIds({})).toEqual([]);
+    expect(relationTargetBoardIds(null)).toEqual([]);
+    expect(relationTargetBoardIds('not json')).toEqual([]);
+  });
+});
+
+describe('relationAllowsMultiple', () => {
+  it('is true only when the column says so explicitly', () => {
+    expect(relationAllowsMultiple({ allowMultipleItems: true })).toBe(true);
+  });
+
+  it('fails closed when the setting is absent or falsy', () => {
+    // Offering one pick on a multi-link column is restrictive; writing two ids to a
+    // single-link column is a ColumnValueException. So an unknown setting means single.
+    expect(relationAllowsMultiple({ allowMultipleItems: false })).toBe(false);
+    expect(relationAllowsMultiple({})).toBe(false);
+    expect(relationAllowsMultiple(null)).toBe(false);
+  });
+});
+
+describe('sanitizeColumnValue for item_ids', () => {
+  it('keeps a valid set as numbers', () => {
+    expect(sanitizeColumnValue({ item_ids: [901, '902'] })).toEqual({ item_ids: [901, 902] });
+  });
+
+  it('preserves an intentionally empty set — that is how a relation is cleared', () => {
+    expect(sanitizeColumnValue({ item_ids: [] })).toEqual({ item_ids: [] });
+  });
+
+  it('drops a single junk id rather than failing the transition', () => {
+    expect(sanitizeColumnValue({ item_ids: [901, NaN, null] })).toEqual({ item_ids: [901] });
+  });
+
+  it('omits the column when every id was junk, instead of clearing the cell', () => {
+    expect(sanitizeColumnValue({ item_ids: ['nope', undefined] })).toBeUndefined();
   });
 });

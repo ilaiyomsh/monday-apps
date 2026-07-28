@@ -11,6 +11,7 @@ import React from 'react';
 import {
   Calendar,
   Checkbox,
+  Connect,
   Dropdown,
   Email,
   Favorite,
@@ -28,6 +29,7 @@ import { getFieldSpec } from '../../domain/columnFields';
 const ICONS = {
   Calendar,
   Checkbox,
+  Connect,
   Dropdown,
   Email,
   Favorite,

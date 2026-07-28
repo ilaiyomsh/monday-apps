@@ -22,9 +22,9 @@ import {
 import mondayService from '../../services/mondayService';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
+import { dismissBootLoader } from '../../utils/bootLoader';
 import { readModalHandoffParams } from '../../utils/modalHandoffParams';
 import ErrorState from '../shared/ErrorState';
-import LoadingState from '../shared/LoadingState';
 import RequiredFieldsForm from './RequiredFieldsForm';
 import './OnClickDialog.css';
 
@@ -36,6 +36,7 @@ function RequiredFieldsModal({ context }) {
   const columnId = params.columnId ?? context?.columnId ?? null;
   const itemId = params.itemId ?? context?.itemId ?? null;
   const { labelId } = params;
+  const hasIds = Boolean(boardId && columnId && itemId) && labelId !== null;
 
   const {
     settings,
@@ -137,7 +138,7 @@ function RequiredFieldsModal({ context }) {
         itemId: String(itemId),
         columnValues: JSON.stringify(payload),
       });
-      await mondayService.showNotice(`הסטטוס עודכן ל״${label.label || 'ללא שם'}״`);
+      await mondayService.showNotice('הסטטוס עודכן בהצלחה');
       await close();
     } catch (err) {
       logger.error('RequiredFieldsModal', 'Failed to save the status transition', err);
@@ -152,7 +153,18 @@ function RequiredFieldsModal({ context }) {
     }
   };
 
-  if (!boardId || !columnId || !itemId || labelId === null) {
+  // This modal is its own iframe, so it serves the same index.html as the picker and
+  // paints the same boot overlay — monday's black spinner, continued. Release it the
+  // moment there is something real to show, exactly as OnClickDialog does. Missing ids
+  // and a settings failure both count as "something to show": an error must never sit
+  // behind a spinner, and `loading` stays true forever on the missing-ids path because
+  // load() returns before its finally block.
+  const stillLoading = hasIds && (settingsLoading || loading) && !settingsError;
+  useEffect(() => {
+    if (!stillLoading) dismissBootLoader();
+  }, [stillLoading]);
+
+  if (!hasIds) {
     return (
       <ErrorState message="הקישור לטופס חסר מזהים. סגרו ונסו לבחור את הסטטוס מחדש." />
     );
@@ -161,7 +173,9 @@ function RequiredFieldsModal({ context }) {
     return <ErrorState message="טעינת ההגדרות נכשלה. נסו שוב." onRetry={reloadSettings} />;
   }
   if (settingsLoading || loading) {
-    return <LoadingState message="טוען שדות חובה…" />;
+    // Nothing of our own: the boot overlay is still up, and drawing a second loader
+    // over it is the visible jump the overlay exists to remove.
+    return null;
   }
   if (error && !label) {
     return <ErrorState message={error} onRetry={load} />;
@@ -170,13 +184,11 @@ function RequiredFieldsModal({ context }) {
   return (
     <main className="twyst-required-fields-modal" dir="rtl">
       <RequiredFieldsForm
-        label={label}
         fields={fields}
         columnsById={columnsById}
         initialValues={formValues}
         busy={saving}
         error={error}
-        onCancel={close}
         onSubmit={handleSubmit}
       />
     </main>

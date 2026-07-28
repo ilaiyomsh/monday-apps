@@ -23,14 +23,18 @@ describe('requiredFormLayout', () => {
     expect(requiredFormLayout([field('date')])).toEqual({ rows: 1, fields: 1, scrolls: false });
   });
 
-  it('shows four rows at once without scrolling', () => {
-    expect(requiredFormLayout(Array.from({ length: 4 }, () => field('text'))))
-      .toEqual({ rows: 4, fields: 4, scrolls: false });
+  // Expressed against FORM_MAX_ROWS rather than a literal count: the cap moved from
+  // 4 to 8 once the modal was allowed to grow, and a test that spells the number out
+  // asserts the old product decision instead of the rule.
+  it('shows every field at once, up to the cap, without scrolling', () => {
+    expect(requiredFormLayout(Array.from({ length: FORM_MAX_ROWS }, () => field('text'))))
+      .toEqual({ rows: FORM_MAX_ROWS, fields: FORM_MAX_ROWS, scrolls: false });
   });
 
-  it('caps the visible rows at four and scrolls the fifth field', () => {
-    expect(requiredFormLayout(Array.from({ length: 5 }, () => field('text'))))
-      .toEqual({ rows: FORM_MAX_ROWS, fields: 5, scrolls: true });
+  it('caps the visible rows and scrolls the first field past the cap', () => {
+    const overCap = FORM_MAX_ROWS + 1;
+    expect(requiredFormLayout(Array.from({ length: overCap }, () => field('text'))))
+      .toEqual({ rows: FORM_MAX_ROWS, fields: overCap, scrolls: true });
   });
 
   it('keeps the cap no matter how many fields are required', () => {
@@ -70,10 +74,18 @@ describe('requiredFormModalSize', () => {
     expect(three - two).toBe(four - three);
   });
 
-  it('stops growing after four rows so the modal never outgrows the screen', () => {
-    const atCap = requiredFormModalSize(Array.from({ length: 4 }, () => field('text')));
+  it('stops growing at the cap so the modal never outgrows the screen', () => {
+    const atCap = requiredFormModalSize(
+      Array.from({ length: FORM_MAX_ROWS }, () => field('text')),
+    );
     const beyondCap = requiredFormModalSize(Array.from({ length: 40 }, () => field('text')));
     expect(beyondCap.height).toBe(atCap.height);
+    // And the row below the cap is genuinely shorter — otherwise "stops growing"
+    // would also pass on a modal that never grew at all.
+    const belowCap = requiredFormModalSize(
+      Array.from({ length: FORM_MAX_ROWS - 1 }, () => field('text')),
+    );
+    expect(parseInt(belowCap.height, 10)).toBeLessThan(parseInt(atCap.height, 10));
   });
 
   it('is wide enough for a label column beside a usable control', () => {

@@ -39,16 +39,14 @@ function renderForm({ types, values, onSubmit = vi.fn(), columnsOverride }) {
   const fields = types.map((type) => ({ columnId: probeColumn(type).id }));
   render(
     <RequiredFieldsForm
-      label={{ id: '2', label: 'תקוע' }}
       fields={fields}
       columnsById={columnsById}
       initialValues={values}
       busy={false}
-      onCancel={vi.fn()}
       onSubmit={onSubmit}
     />,
   );
-  return { onSubmit, submit: () => screen.getByRole('button', { name: 'שמירה ומעבר' }) };
+  return { onSubmit, submit: () => screen.getByRole('button', { name: 'שמור' }) };
 }
 
 /** The empty form value for a type, as the dialog seeds it for an unset cell. */

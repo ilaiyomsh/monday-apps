@@ -31,19 +31,21 @@ function App() {
   const { context, loading, error } = useMondayContext();
   const route = resolveAppRoute();
 
-  // The boot overlay (index.html) is monday's dialog spinner continued, so it is
-  // the picker's alone. Every other route drops it at once; the picker keeps it
-  // past THIS phase and hands it to OnClickDialog, which owns the release once it
-  // has data. An error releases it too — a failure must not sit behind a spinner.
-  const pickerStillBooting = route === 'picker' && !error;
+  // The boot overlay (index.html) is monday's dialog spinner continued. TWO routes
+  // keep it past THIS phase and hand it to the component that owns the release once
+  // it has data — the picker (OnClickDialog) and the required-fields modal, which is
+  // its own iframe and therefore serves this same index.html and paints the same
+  // spinner. Every other route drops it at once. An error releases it too: a failure
+  // must not sit behind a spinner.
+  const overlayHeldByRoute = (route === 'picker' || route === 'required-fields') && !error;
   useEffect(() => {
-    if (!pickerStillBooting) dismissBootLoader();
-  }, [pickerStillBooting]);
+    if (!overlayHeldByRoute) dismissBootLoader();
+  }, [overlayHeldByRoute]);
 
   if (loading) {
     // Under the overlay: render nothing rather than a second loader. A loader of
     // our own here is exactly the visible jump this replaced.
-    if (route === 'picker') return null;
+    if (overlayHeldByRoute) return null;
     return <LoadingState />;
   }
 
@@ -69,7 +71,9 @@ function App() {
         </Suspense>
       )}
       {route === 'required-fields' && (
-        <Suspense fallback={<LoadingState message="טוען שדות חובה…" />}>
+        // No fallback loader: the boot overlay is still up and RequiredFieldsModal
+        // takes it down once it has data.
+        <Suspense fallback={null}>
           <RequiredFieldsModal context={context} />
         </Suspense>
       )}

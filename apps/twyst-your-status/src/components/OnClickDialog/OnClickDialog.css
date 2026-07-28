@@ -16,11 +16,19 @@
   min-height: 0;
 }
 
-/* The fill form owns the whole modal iframe when opened on /required-fields. */
+/*
+ * The fill form owns the whole modal iframe when opened on /required-fields.
+ *
+ * block-size (not min-height) plus overflow:hidden is what pins the title and the
+ * actions: with min-height a field list longer than the viewport grew the PAGE, and
+ * the iframe scrolled the header and footer out of view along with the rows. Now the
+ * iframe never scrolls and .twyst-form-rows is the only scrolling box.
+ */
 .twyst-required-fields-modal {
   display: grid;
   box-sizing: border-box;
-  min-height: 100vh;
+  block-size: 100vh;
+  overflow: hidden;
   padding: 20px;
   color: var(--primary-text-color, #323338);
 }
@@ -51,16 +59,20 @@
  * gaps, paddings and column widths here MUST match requiredFormModalSize.js, which
  * computes the modal's pixel size from the same numbers.
  */
+/* The ONLY scrolling box in the modal. Always scrollable, not just past the cap: even
+   inside the computed height a control that renders taller than expected (a validation
+   error under a field) has to scroll here rather than clip against the footer. */
 .twyst-form-rows {
   display: grid;
   gap: 12px;
   align-content: start;
   min-height: 0;
+  overflow-y: auto;
 }
 
-/* Past 4 rows the list scrolls — the modal keeps its opened height. */
+/* More fields than fit: keep the scrollbar off the controls. */
 .twyst-form-rows.is-scrolling {
-  overflow-y: auto;
+  padding-inline-end: 6px;
 }
 
 .twyst-form-row {
@@ -84,11 +96,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.twyst-field-title b {
-  color: var(--negative-color, #d83a52);
-  font-weight: 400;
 }
 
 /* The column-type tile: a rounded square of the type's colour with a white glyph. */
@@ -166,6 +173,16 @@
   cursor: pointer;
 }
 
+/* pointer-events: none so the whole bar is one click target. Without it a click that
+   landed on the text span or the chevron was a click on a CHILD of the button, and at
+   the edges of the cell it read as "the dropdown does not open". */
+.twyst-field-trigger > span,
+.twyst-field-trigger > svg,
+.twyst-date-trigger > span,
+.twyst-date-trigger > svg {
+  pointer-events: none;
+}
+
 .twyst-field-trigger > span,
 .twyst-date-trigger > span {
   overflow: hidden;
@@ -200,12 +217,46 @@
   color: var(--text-color-on-primary, #fff);
 }
 
+/* 100%, not a fixed px cap: the popover is already clamped to the room the iframe has
+   (see OPTION_POPOVER_HEIGHT_PX), and a taller cap here would overflow it again. */
 .twyst-option-list {
   display: grid;
   gap: 4px;
   padding: 8px;
-  max-block-size: 300px;
+  max-block-size: 100%;
+  box-sizing: border-box;
   overflow-y: auto;
+}
+
+/* Search row of the connected-boards menu. Sticky so it stays reachable while the
+   candidate list scrolls under it. */
+.twyst-option-search {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 6px;
+  background: var(--primary-background-color, #fff);
+}
+
+.twyst-option-search svg {
+  flex: 0 0 auto;
+  inline-size: 14px;
+  block-size: 14px;
+  fill: var(--secondary-text-color, #676879);
+}
+
+.twyst-option-search input {
+  inline-size: 100%;
+  min-inline-size: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
 }
 
 .twyst-option-pill {
@@ -437,17 +488,24 @@
   cursor: pointer;
 }
 
+/*
+ * The blue submit. The `.status-guard-dialog .primary-action` selector below used to
+ * be the ONLY blue rule, and the fill form renders under .twyst-required-fields-modal
+ * instead — so inside the modal it never matched and the submit came out white on
+ * white. `.twyst-form-actions .primary-action` (0,2,1) is what beats the shared
+ * `.twyst-form-actions button` base (0,1,1) above; a bare `.primary-action` (0,1,0)
+ * would lose to it and stay white.
+ */
+.twyst-form-actions .primary-action,
 .status-guard-dialog .primary-action {
   background: var(--primary-color, #0073ea);
   border-color: var(--primary-color, #0073ea);
   color: #fff;
 }
 
-.status-guard-eyebrow {
-  margin: 0 0 4px;
-  color: var(--secondary-text-color, #676879);
-  font-size: 12px;
-  font-weight: 600;
+.twyst-form-actions .primary-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .status-guard-dialog h2 {
@@ -489,6 +547,7 @@
 }
 
 .status-option {
+  position: relative; /* anchors the in-flight spinner */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -511,6 +570,29 @@
 
 .status-option:hover:not(:disabled) {
   filter: brightness(0.95);
+}
+
+/*
+ * In-flight spinner on the clicked pill. It replaced a text swap to "שומר…", which
+ * hid the label the user had just picked. Absolutely placed so the centred label
+ * does not shift when it appears, and drawn in currentColor so it reads on every
+ * label colour without knowing which one it is.
+ */
+.status-option-spinner {
+  position: absolute;
+  inset-inline-start: 10px;
+  inline-size: 14px;
+  block-size: 14px;
+  box-sizing: border-box;
+  border: 2px solid currentColor;
+  border-inline-end-color: transparent;
+  border-radius: 50%;
+  opacity: 0.9;
+  animation: twystPillSpin 0.7s linear infinite;
+}
+
+@keyframes twystPillSpin {
+  100% { transform: rotate(360deg); }
 }
 
 .status-option:disabled {
