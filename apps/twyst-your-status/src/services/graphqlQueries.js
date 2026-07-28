@@ -221,6 +221,15 @@ export const GET_LINKED_BOARD_ITEMS = `
   }
 `;
 
+/**
+ * Write one status value — and echo the column back.
+ *
+ * The echo is not diagnostics: the picker CLOSES on this response and the closing is
+ * the user's only confirmation, so it must be able to tell "the status is now what
+ * was picked" from "a request came back". `change_column_value` returns `Item`, and
+ * `StatusValue.index` carries the label **id** (probe-verified round trip —
+ * monday-api references/column-formats.md). Checked by domain/statusWriteResult.js.
+ */
 export const UPDATE_STATUS_COLUMN_VALUE = `
   mutation UpdateStatusColumnValue(
     $boardId: ID!
@@ -235,15 +244,33 @@ export const UPDATE_STATUS_COLUMN_VALUE = `
       value: $value
     ) {
       id
+      column_values(ids: [$columnId]) {
+        id
+        text
+        value
+        ... on StatusValue {
+          index
+          label
+        }
+      }
     }
   }
 `;
 
+/**
+ * Write the form columns and the status together, and echo the STATUS column back —
+ * same reason as above: the fill form closes on this response.
+ *
+ * `$statusColumnId` is the gated column, which is also one of the keys inside
+ * `$columnValues`; it is passed separately because a GraphQL selection cannot reach
+ * into a JSON argument.
+ */
 export const UPDATE_MULTIPLE_COLUMN_VALUES = `
   mutation UpdateMultipleColumnValues(
     $boardId: ID!
     $itemId: ID!
     $columnValues: JSON!
+    $statusColumnId: String!
   ) {
     change_multiple_column_values(
       board_id: $boardId
@@ -251,6 +278,15 @@ export const UPDATE_MULTIPLE_COLUMN_VALUES = `
       column_values: $columnValues
     ) {
       id
+      column_values(ids: [$statusColumnId]) {
+        id
+        text
+        value
+        ... on StatusValue {
+          index
+          label
+        }
+      }
     }
   }
 `;

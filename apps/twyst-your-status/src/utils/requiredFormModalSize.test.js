@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CONTROL_COLUMN_WIDTH_PX,
   FIELD_ROW_HEIGHT_PX,
   FORM_ACTIONS_PX,
+  FORM_COLUMN_GAP_PX,
   FORM_GAP_PX,
   FORM_HEADER_PX,
   FORM_MAX_ROWS,
   FORM_MIN_ROWS,
   FORM_PADDING_PX,
+  LABEL_COLUMN_WIDTH_PX,
   requiredFormLayout,
   requiredFormModalSize,
 } from './requiredFormModalSize.js';
@@ -142,5 +145,50 @@ describe('requiredFormModalSize', () => {
     // timeline's two dates, which is what the 200px picker dialog could not do.
     expect(parseInt(requiredFormModalSize([field('people')]).width, 10))
       .toBeGreaterThanOrEqual(460);
+  });
+
+  /*
+   * The 3.9.0 widening (owner request): the modal is 25% wider, and every added
+   * pixel belongs to the column names — the field controls keep the width they had.
+   *
+   * Both halves are asserted because either alone passes on the wrong change: a
+   * width-only test passes when the growth is handed to the control column, and a
+   * column-only test passes when the modal was never widened.
+   */
+  const PRE_WIDENING_WIDTH_PX = 526;
+  const PRE_WIDENING_LABEL_PX = 150;
+  const PRE_WIDENING_CONTROL_PX = 320;
+
+  it('is exactly 25% wider than the pre-3.9.0 layout', () => {
+    expect(parseInt(requiredFormModalSize([field('text')]).width, 10))
+      .toBe(Math.round(PRE_WIDENING_WIDTH_PX * 1.25));
+  });
+
+  it('leaves the control column untouched and gives the whole widening to the labels', () => {
+    const width = parseInt(requiredFormModalSize([field('text')]).width, 10);
+    expect(CONTROL_COLUMN_WIDTH_PX).toBe(PRE_WIDENING_CONTROL_PX);
+    expect(LABEL_COLUMN_WIDTH_PX)
+      .toBe(PRE_WIDENING_LABEL_PX + (width - PRE_WIDENING_WIDTH_PX));
+  });
+
+  it('spends its whole width on one padding box and the two columns', () => {
+    // The row grid is laid out from these same constants (RequiredFieldsForm passes
+    // LABEL_COLUMN_WIDTH_PX down as a custom property), so a modal wider or narrower
+    // than their sum is either dead space or a clipped control column.
+    expect(
+      (FORM_PADDING_PX * 2)
+      + LABEL_COLUMN_WIDTH_PX
+      + FORM_COLUMN_GAP_PX
+      + CONTROL_COLUMN_WIDTH_PX,
+    ).toBe(parseInt(requiredFormModalSize([field('text')]).width, 10));
+  });
+
+  it('keeps the widened width at every field count', () => {
+    const wide = Math.round(PRE_WIDENING_WIDTH_PX * 1.25);
+    [1, FORM_MIN_ROWS, FORM_MAX_ROWS, 40].forEach((count) => {
+      expect(parseInt(requiredFormModalSize(
+        Array.from({ length: count }, () => field('text')),
+      ).width, 10), `${count} field(s)`).toBe(wide);
+    });
   });
 });

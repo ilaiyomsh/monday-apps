@@ -11,7 +11,7 @@
 import React, { useEffect, useState } from 'react';
 import { AttentionBox } from '@vibe/core';
 import { isFieldValueEmpty, isSupportedFormColumnType } from '../../domain/columnFields';
-import { requiredFormLayout } from '../../utils/requiredFormModalSize';
+import { LABEL_COLUMN_WIDTH_PX, requiredFormLayout } from '../../utils/requiredFormModalSize';
 import FieldControl from './FieldControl';
 import FieldIcon from './FieldIcon';
 
@@ -91,7 +91,13 @@ function RequiredFieldsForm({
         title in a fixed label column, the control in a wide one. Past 4 rows the
         LIST scrolls — the modal keeps the height it was opened with.
       */}
-      <div className={`twyst-form-rows${layout.scrolls ? ' is-scrolling' : ''}`}>
+      <div
+        className={`twyst-form-rows${layout.scrolls ? ' is-scrolling' : ''}`}
+        /* The label column's width comes from the module that SIZED the modal, not
+           from a second copy of the number in the stylesheet. The widening only
+           reaches the column names if these two agree — see LABEL_COLUMN_WIDTH_PX. */
+        style={{ '--twyst-label-column-width': `${LABEL_COLUMN_WIDTH_PX}px` }}
+      >
         {fields.map((field) => {
           const column = columnsById.get(field.columnId);
           const controlId = `required-field-${field.columnId}`;
@@ -130,8 +136,13 @@ function RequiredFieldsForm({
         <button
           className="primary-action"
           type="submit"
+          aria-busy={busy}
           disabled={busy || unfillable.length > 0}
         >
+          {/* The form stays open until the status write comes back, so the button
+              has to SHOW the wait: a disabled button with only its text changed
+              reads as a click that did nothing. */}
+          {busy && <span className="twyst-btn-spinner" aria-hidden="true" />}
           {busy ? 'שומר…' : 'שמור'}
         </button>
       </div>
