@@ -138,7 +138,8 @@ function RequiredFieldsModal({ context }) {
         itemId: String(itemId),
         columnValues: JSON.stringify(payload),
       });
-      await mondayService.showNotice('הסטטוס עודכן בהצלחה');
+      // No success notice for a status change: the cell shows the result, and the modal
+      // closing is itself the confirmation. Failures still speak — see the catch below.
       await close();
     } catch (err) {
       logger.error('RequiredFieldsModal', 'Failed to save the status transition', err);

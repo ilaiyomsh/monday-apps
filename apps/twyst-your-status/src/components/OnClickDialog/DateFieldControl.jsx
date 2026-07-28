@@ -51,6 +51,23 @@ function DateFieldControl({
 
   const setDate = (iso) => onChange({ ...value, date: iso });
 
+  /**
+   * Pick a day and, when no hour is being entered, close — choosing a day IS the whole
+   * answer for a date-only field. With the clock on the popover stays open, because the
+   * time input is the rest of the answer.
+   *
+   * Both day sources go through here: the month grid and the "היום" shortcut. The
+   * shortcut used to set the date and leave the popover sitting there, which made the
+   * same action behave two different ways.
+   *
+   * The typed <input type="date"> deliberately does NOT close: it fires on every
+   * keystroke, so closing on change would slam the popover shut mid-entry.
+   */
+  const commitDate = (iso) => {
+    setDate(iso);
+    if (!showTime) setOpen(false);
+  };
+
   const openPopover = () => {
     if (disabled) return;
     setView(monthOf(value));
@@ -85,7 +102,7 @@ function DateFieldControl({
             <button
               type="button"
               className="twyst-datepicker-today"
-              onClick={() => setDate(today)}
+              onClick={() => commitDate(today)}
             >
               היום
             </button>
@@ -162,12 +179,7 @@ function DateFieldControl({
                   cell.iso === selected ? 'is-selected' : '',
                   cell.iso === today ? 'is-today' : '',
                 ].filter(Boolean).join(' ')}
-                onClick={() => {
-                  setDate(cell.iso);
-                  // A day click is the answer for a date-only field; keep the
-                  // popover open while an hour is still being entered.
-                  if (!showTime) setOpen(false);
-                }}
+                onClick={() => commitDate(cell.iso)}
               >
                 {cell.day}
               </button>

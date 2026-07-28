@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FIELD_ROW_HEIGHT_PX,
+  FORM_ACTIONS_PX,
+  FORM_GAP_PX,
+  FORM_HEADER_PX,
   FORM_MAX_ROWS,
+  FORM_MIN_ROWS,
+  FORM_PADDING_PX,
   requiredFormLayout,
   requiredFormModalSize,
 } from './requiredFormModalSize.js';
@@ -86,6 +92,49 @@ describe('requiredFormModalSize', () => {
       Array.from({ length: FORM_MAX_ROWS - 1 }, () => field('text')),
     );
     expect(parseInt(belowCap.height, 10)).toBeLessThan(parseInt(atCap.height, 10));
+  });
+
+  it('never sizes below two rows, so one required column still opens as a form', () => {
+    // A single field sized to a single row is a sliver: title, one field, button — barely
+    // taller than the picker that opened it.
+    const one = requiredFormModalSize([field('text')]);
+    const two = requiredFormModalSize([field('text'), field('text')]);
+    expect(one.height).toBe(two.height);
+  });
+
+  it('keeps growing normally once past the floor', () => {
+    // The floor must not flatten real growth: three fields are taller than two.
+    const two = parseInt(requiredFormModalSize(Array.from({ length: 2 }, () => field('text'))).height, 10);
+    const three = parseInt(requiredFormModalSize(Array.from({ length: 3 }, () => field('text'))).height, 10);
+    expect(three).toBeGreaterThan(two);
+  });
+
+  it('reports the real row count even when the modal is sized to the floor', () => {
+    // The floor is a SIZING concern. The list still has one row, and claiming two would
+    // make the form render a phantom.
+    expect(requiredFormLayout([field('text')]).rows).toBe(1);
+  });
+
+  it('asks for MORE height than the form itself needs, so the common case never scrolls', () => {
+    // An exact fit is what put the title and the submit button into the scroll: monday
+    // draws its own modal chrome inside the box it hands us, and a row can render a
+    // pixel or two over its budget, so "exactly enough" was a few pixels short in
+    // practice. The CSS pins the header and footer regardless — this headroom is what
+    // keeps a form that FITS from scrolling at all. Remove MODAL_CHROME_PX from the
+    // height and this goes back to a dead heat.
+    // From FORM_MIN_ROWS up: at one row the sizing floor would mask a missing headroom.
+    [FORM_MIN_ROWS, 3, FORM_MAX_ROWS].forEach((rows) => {
+      const ownContent = (FORM_PADDING_PX * 2)
+        + FORM_HEADER_PX
+        + FORM_ACTIONS_PX
+        + (rows * FIELD_ROW_HEIGHT_PX)
+        + ((rows - 1) * FORM_GAP_PX);
+      const asked = parseInt(
+        requiredFormModalSize(Array.from({ length: rows }, () => field('text'))).height,
+        10,
+      );
+      expect(asked, `${rows} row(s)`).toBeGreaterThan(ownContent);
+    });
   });
 
   it('is wide enough for a label column beside a usable control', () => {
