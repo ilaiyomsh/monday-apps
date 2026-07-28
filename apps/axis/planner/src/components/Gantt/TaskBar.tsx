@@ -41,6 +41,7 @@ export const TaskBar: React.FC<TaskBarProps> = memo(({ task, isDimmed }) => {
     deleteAllocation,
     zoomLevel,
     holidaysByDate,
+    showToast,
   } = useGantt();
 
   // Get snap unit for current zoom level
@@ -187,11 +188,14 @@ export const TaskBar: React.FC<TaskBarProps> = memo(({ task, isDimmed }) => {
         const newDays = Math.max(1, countWorkingDays(newStart, newEnd, workDays, holidaysByDate));
         const newHoursPerDay = (task.totalHours || 0) / newDays;
 
-        updateTask(task.id, {
+        // updateTask rethrows on a failed save (after reverting the optimistic state), so this
+        // fire-and-forget call MUST catch — otherwise a failed resize is an unhandled rejection
+        // and the user is never told the new dates did not persist.
+        void updateTask(task.id, {
           startDate: format(newStart, "yyyy-MM-dd'T'HH:mm:ss"),
           endDate: format(newEnd, "yyyy-MM-dd'T'HH:mm:ss"),
           hoursPerDay: Math.round(newHoursPerDay * 10) / 10,
-        });
+        }).catch(() => showToast(t('ganttProvider.toast.saveFailed'), 'error'));
       }
 
       setResizeOffset(null);

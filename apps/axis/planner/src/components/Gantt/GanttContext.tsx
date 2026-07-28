@@ -132,7 +132,13 @@ export interface GanttContextType {
   saveSidebarWidth: (width: number) => void;
   
   // Task operations
-  updateTask: (taskId: TaskId, updates: Partial<Task>) => void;
+  /**
+   * Persists an allocation edit. REJECTS when the save fails (the optimistic state is
+   * reverted first) — the `void` return type this used to declare is what let the drag and
+   * resize call sites drop the promise, turning every failed save into an unhandled
+   * rejection with no user-visible signal. Every caller must await or .catch().
+   */
+  updateTask: (taskId: TaskId, updates: Partial<Task>) => Promise<void>;
   addAllocation: (task: Omit<Task, 'id'>) => Promise<void>;
   deleteAllocation: (id: TaskId) => void;
 

@@ -68,6 +68,7 @@ export const GanttChart: React.FC = () => {
     timelineEnd,
     pendingDelete,
     undoDelete,
+    showToast,
   } = useGantt();
 
   // Scroll so today's red marker lands at the absolute center of the viewport
@@ -180,14 +181,17 @@ export const GanttChart: React.FC = () => {
         }
       }
 
-      updateTask(active.id as string, {
+      // updateTask rethrows on a failed save (it reverts the optimistic state first), so this
+      // fire-and-forget call MUST catch — an unhandled rejection would leave the drag looking
+      // saved with nothing telling the user otherwise.
+      void updateTask(active.id as string, {
         startDate: formatDate(newStart),
         endDate: formatDate(newEnd),
-      });
+      }).catch(() => showToast(t('ganttProvider.toast.saveFailed'), 'error'));
     }
 
     setActiveTask(null);
-  }, [pixelsPerSnapUnit, snapDays, pixelsPerDay, updateTask, rawAllocations]);
+  }, [pixelsPerSnapUnit, snapDays, pixelsPerDay, updateTask, rawAllocations, showToast, t]);
 
   // Count active rows for display
   const activeRowCount = flattenedRows.length;

@@ -415,6 +415,24 @@ export const GanttProvider: React.FC<GanttProviderProps> = ({
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkModalData, setBulkModalData] = useState<{projectId: string; projectName: string} | null>(null);
 
+  // Remount counter for the modal ErrorBoundary (see the LazyBoundary mount site below).
+  const [modalBoundaryEpoch, setModalBoundaryEpoch] = useState(0);
+
+  /**
+   * A modal subtree threw during render. The boundary already shipped the error; this closes
+   * the modals so the persistent backdrop unmounts (it is a SIBLING of the boundary, so the
+   * fallback alone would leave the whole app dimmed under a click-blocking overlay with no
+   * way out), tells the user, and bumps the boundary epoch so the next open starts clean.
+   */
+  const onModalCrash = useCallback(() => {
+    setIsModalOpen(false);
+    setModalData(undefined);
+    setIsBulkModalOpen(false);
+    setBulkModalData(null);
+    setModalBoundaryEpoch(e => e + 1);
+    showToast(t('ganttProvider.toast.modalCrashed'), 'error');
+  }, [showToast, t]);
+
   // Initialize expanded groups when data loads or view mode changes
   // Note: company-load is collapsed by default (not added to initialExpanded)
   useEffect(() => {
@@ -992,7 +1010,12 @@ export const GanttProvider: React.FC<GanttProviderProps> = ({
       {(isModalOpen || (isBulkModalOpen && bulkModalData)) && (
         <div className="fixed inset-0 z-[99] bg-black/20" />
       )}
-      <LazyBoundary>
+      {/* `key` is the boundary's only reset path — @mapps/error-kit's ErrorBoundary never
+          clears hasError, so a crashed modal subtree stays swapped for the fallback until the
+          boundary is remounted. onModalCrash closes the modals (which unmounts the backdrop
+          above, so the app is not left dimmed and unclickable) and bumps the epoch, giving the
+          next open a fresh boundary. */}
+      <LazyBoundary key={modalBoundaryEpoch} onError={onModalCrash}>
         <AllocationModal
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}

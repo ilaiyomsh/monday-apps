@@ -71,12 +71,19 @@ export const ChunkErrorFallback: React.FC = () => (
  * Wraps a lazy()-loaded subtree in an ErrorBoundary (so a chunk-load failure shows
  * ChunkErrorFallback instead of crashing the whole app) AND a Suspense (loading fallback).
  * Use around every lazy() mount site.
+ *
+ * `onError` is passed through to the boundary. It matters when the boundary guards a subtree
+ * whose SIBLINGS are keyed off the same open/closed state (a modal + its backdrop): the
+ * boundary has no reset path of its own, so the mount site must be told a crash happened in
+ * order to tear that state down — otherwise the sibling stays rendered over a subtree that
+ * can never re-render. The mount site remains responsible for remounting (a changed `key`).
  */
-export const LazyBoundary: React.FC<{ children: ReactNode; suspenseFallback?: ReactNode }> = ({
-  children,
-  suspenseFallback = null,
-}) => (
-  <ErrorBoundary logger={errorKitLogger} fallback={<ChunkErrorFallback />}>
+export const LazyBoundary: React.FC<{
+  children: ReactNode;
+  suspenseFallback?: ReactNode;
+  onError?: (error: Error) => void;
+}> = ({ children, suspenseFallback = null, onError }) => (
+  <ErrorBoundary logger={errorKitLogger} fallback={<ChunkErrorFallback />} onError={onError}>
     <Suspense fallback={suspenseFallback}>{children}</Suspense>
   </ErrorBoundary>
 );
