@@ -16,9 +16,16 @@ const EXIT_DELAY_MS = 2000; // hard ceiling on flush time — never hang a dying
 
 /**
  * Race the remote-sink flush against a hard timeout, then exit exactly once.
+ *
+ * Returns a promise that settles once the exit call has been made (or the ceiling
+ * elapsed). In production `exit` is `process.exit`, which never returns — so the
+ * promise never settles and the process dies with the flush already done. Callers
+ * that must not continue running (safeBootInit) await it; the fire-and-forget
+ * handlers ignore it. It never rejects.
  * @param {number} code - process exit code
  * @param {{ flush?: () => Promise<unknown>, exit?: (code:number)=>void,
  *           timeoutMs?: number, setTimeoutFn?: typeof setTimeout }} [opts]
+ * @returns {Promise<void>}
  */
 export function flushAndExit(code, opts = {}) {
   const {
@@ -28,18 +35,34 @@ export function flushAndExit(code, opts = {}) {
     setTimeoutFn = setTimeout,
   } = opts;
   let done = false;
-  const finish = () => {
-    if (done) return;
-    done = true;
-    exit(code);
-  };
-  // Belt and suspenders: exit even if flush hangs past the ceiling.
-  const timer = setTimeoutFn(finish, timeoutMs);
-  timer?.unref?.();
-  Promise.resolve()
-    .then(() => (typeof flush === 'function' ? flush() : undefined))
-    .catch(() => {}) // a flush failure must not block the exit path
-    .then(finish, finish);
+  return new Promise((resolve) => {
+    const finish = () => {
+      if (done) return;
+      done = true;
+      try {
+        exit(code);
+      } catch (exitError) {
+        // Never an empty catch, and never a rejection: an exit hook that throws must
+        // still leave a trace and must not wedge a caller awaiting this promise.
+        try {
+          console.error('[boot] exit handler threw:', exitError?.message ?? exitError);
+        } catch {
+          // breadcrumb best-effort
+        }
+      }
+      resolve();
+    };
+    // Belt and suspenders: exit even if flush hangs past the ceiling.
+    const timer = setTimeoutFn(finish, timeoutMs);
+    timer?.unref?.();
+    // `.then(finish, finish)` IS the "a flush failure must not block the exit path" rule:
+    // both settlement paths land on finish. An earlier `.catch(() => {})` here made the
+    // onRejected handler dead code (the rejection was already absorbed), so a regression
+    // that dropped it was undetectable. One handler pair, both paths live, mutation-visible.
+    Promise.resolve()
+      .then(() => (typeof flush === 'function' ? flush() : undefined))
+      .then(finish, finish);
+  });
 }
 
 /**
@@ -56,7 +79,7 @@ export function makeCrashHandler(logger, opts = {}) {
     } catch {
       // logging must never block the exit path
     }
-    flushAndExit(1, opts);
+    void flushAndExit(1, opts); // fire-and-forget: never rejects, and the process is going down
   };
 }
 
@@ -77,7 +100,7 @@ export function makeServerErrorHandler(logger, opts = {}) {
     } catch {
       // logging must never block the exit path
     }
-    flushAndExit(1, opts);
+    void flushAndExit(1, opts); // fire-and-forget: never rejects, and the process is going down
   };
 }
 
@@ -106,16 +129,28 @@ export function readPackageVersion({ readFileSync, url, fallback = '0.0.0', onEr
 /**
  * Run a boot-time initializer that must succeed for the server to be viable
  * (e.g. `new SecureStorage()`). On throw: ship an ERROR, leave a console
- * breadcrumb, race the flush, exit(1), and re-throw so no further wiring runs
+ * breadcrumb, AWAIT the flush-and-exit, then re-throw so no further wiring runs
  * with a half-built dependency.
+ *
+ * ASYNC ON PURPOSE (audit finding 3). This guard runs before installProcessGuards,
+ * so a synchronous re-throw here is an uncaught top-level exception: Node dumps to
+ * stderr and exits immediately, and a flush merely *scheduled* beforehand never
+ * runs — losing exactly the boot failure this guard exists to capture. Awaiting
+ * flushAndExit means the ERROR has reached Axiom before anything can kill us. In
+ * production `process.exit` fires inside that await and the re-throw is never
+ * reached; under an injected `exit` seam (tests) it is, preserving the contract.
+ *
+ * Callers must `await` it — `const backend = await safeBootInit(...)` at ESM
+ * top level keeps the "no half-built wiring" guarantee, since a rejected
+ * top-level await aborts module evaluation.
  * @param {() => T} fn
  * @param {string} label - short description for the log message
  * @param {{ logError: Function }} logger
  * @param {object} [opts] - forwarded to flushAndExit
- * @returns {T}
+ * @returns {Promise<T>}
  * @template T
  */
-export function safeBootInit(fn, label, logger, opts = {}) {
+export async function safeBootInit(fn, label, logger, opts = {}) {
   try {
     return fn();
   } catch (err) {
@@ -130,7 +165,7 @@ export function safeBootInit(fn, label, logger, opts = {}) {
     } catch {
       // breadcrumb best-effort
     }
-    flushAndExit(1, opts);
+    await flushAndExit(1, opts); // never rejects; in prod it never resolves either
     throw e;
   }
 }

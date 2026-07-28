@@ -169,12 +169,26 @@ describe('readPackageVersion', () => {
 });
 
 describe('safeBootInit', () => {
-  it('returns the initializer result on success without touching logger or exit', () => {
+  /**
+   * Await `fn()` and report the outcome as DATA rather than letting it propagate.
+   * Deliberate: safeBootInit's contract is "the flush finishes, THEN it rejects", and a
+   * regression to a synchronous throw must surface as a failed assertion about ordering —
+   * not as a raw exception escaping the test, which proves nothing about behavior.
+   */
+  async function settle(fn) {
+    try {
+      return { outcome: 'resolved', value: await fn() };
+    } catch (err) {
+      return { outcome: 'rejected', message: err?.message };
+    }
+  }
+
+  it('returns the initializer result on success without touching logger or exit', async () => {
     const logger = fakeLogger();
     const exit = vi.fn();
     const backend = { marker: 'ok' };
-    const result = safeBootInit(() => backend, 'storage backend init', logger, { exit });
-    expect(result).toBe(backend);
+    const result = await settle(() => safeBootInit(() => backend, 'storage backend init', logger, { exit }));
+    expect(result).toEqual({ outcome: 'resolved', value: backend });
     expect(logger.logError).not.toHaveBeenCalled();
     expect(exit).not.toHaveBeenCalled();
   });
@@ -184,16 +198,58 @@ describe('safeBootInit', () => {
     const exit = vi.fn();
     const boom = new Error('secrets missing');
 
-    expect(() =>
+    const result = await settle(() =>
       safeBootInit(() => { throw boom; }, 'storage backend init', logger, {
         flush: () => Promise.resolve(),
         exit,
         setTimeoutFn: () => ({ unref: vi.fn() }),
       })
-    ).toThrow('secrets missing');
+    );
 
-    await tick();
+    expect(result).toEqual({ outcome: 'rejected', message: 'secrets missing' });
     expect(logger.logError).toHaveBeenCalledWith('server', 'boot failed: storage backend init', { error: boom });
     expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  // The bug this guards (audit finding 3): the old implementation scheduled the flush
+  // asynchronously and then threw SYNCHRONOUSLY. safeBootInit runs BEFORE
+  // installProcessGuards in index.js, so that throw is an uncaught top-level exception —
+  // Node dumps to stderr and exits immediately, and the pending flush never runs. The
+  // boot failure the guard exists to capture was exactly the one that never reached Axiom.
+  it('completes the remote flush BEFORE re-throwing (a boot failure can never be lost)', async () => {
+    const logger = fakeLogger();
+    const order = [];
+    const flush = vi.fn(() => { order.push('flush'); return Promise.resolve(); });
+    const exit = vi.fn(() => { order.push('exit'); });
+
+    const result = await settle(() =>
+      safeBootInit(() => { throw new Error('secrets missing'); }, 'storage backend init', logger, {
+        flush,
+        exit,
+        setTimeoutFn: () => ({ unref: vi.fn() }),
+      })
+    );
+
+    // Ordering IS the contract: the failure becomes observable only after flush+exit ran.
+    // A synchronous throw leaves this []; the flush would land after the process is gone.
+    expect(order).toEqual(['flush', 'exit']);
+    expect(result).toEqual({ outcome: 'rejected', message: 'secrets missing' });
+  });
+
+  it('re-throws even when the flush REJECTS — a broken sink must not turn a boot failure into a silent start', async () => {
+    const logger = fakeLogger();
+    const order = [];
+    const exit = vi.fn(() => { order.push('exit'); });
+
+    const result = await settle(() =>
+      safeBootInit(() => { throw new Error('secrets missing'); }, 'storage backend init', logger, {
+        flush: () => Promise.reject(new Error('sink down')),
+        exit,
+        setTimeoutFn: () => ({ unref: vi.fn() }),
+      })
+    );
+
+    expect(order).toEqual(['exit']);
+    expect(result).toEqual({ outcome: 'rejected', message: 'secrets missing' });
   });
 });

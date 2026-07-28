@@ -75,7 +75,9 @@ attachAxiomServerSink(logger, {
 // (e.g. misconfigured platform secrets) would otherwise kill the process before
 // app.listen or the Axiom sink can surface anything. safeBootInit ships the
 // failure, races the flush, exits 1, and re-throws (no half-built server).
-const backend = safeBootInit(
+// `await` is load-bearing: safeBootInit completes the Axiom flush before it rejects,
+// and a rejected top-level await aborts module evaluation (no half-built wiring).
+const backend = await safeBootInit(
   () => (env.useLocalStorage ? createMemoryBackend() : createSecureStorageBackend()),
   'storage backend init',
   logger,
