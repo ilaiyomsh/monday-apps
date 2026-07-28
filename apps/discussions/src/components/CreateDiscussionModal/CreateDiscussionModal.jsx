@@ -645,37 +645,19 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
             const rootSavedAt = Date.now();
             const created = await board.item().create(rootPayload).execute();
             newId = created.id;
-            // Persisted BEFORE the template work starts — a template failure below
-            // must not let a second submit create a duplicate discussion.
             rememberRoot(null);
             logger.health?.('discussion_create_phase', {
               step: 'staged_root_save', duration_ms: Date.now() - rootSavedAt,
             });
           }
-          if (stageTemplate) {
-            const stage1At = Date.now();
-            // round302 (owner request) — HALF the work happens here, in the still-open
-            // create card: the topics themselves, created and linked. Not a single
-            // point. The other half runs in the discussion card, under the app's
-            // standard loading animation. round301 also blocked on the first topic's
-            // points plus a readiness poll, and that was still too long a wait.
-            setCreateProgress({ done: 1, total: 1 + (stageTemplate.topics || []).length });
-            await createTopicsFromTemplate(newId, stageTemplate, {
-              freshDiscussion: true,
-              // An EMPTY list means "create every topic, but no points at all".
-              pointTopicIndexes: [],
-              resumeState: stage1Checkpoint,
-              onProgress: onTemplateProgress,
-              onCheckpoint: (cp) => { stage1Checkpoint = cp; rememberRoot(cp); },
-            });
-            logger.health?.('discussion_create_phase', {
-              step: 'staged_topics', duration_ms: Date.now() - stage1At,
-            });
-          }
+          // round303 (owner idea) — NOTHING else blocks the modal. The whole agenda
+          // (topics, then points) is built OFF-CARD in the background and connected
+          // to the discussion only at the END (linkLast below), so the card's
+          // relation-based read pops the agenda in COMPLETE on one fetch, instead
+          // of bare topics that fill in. The modal closes after just the item save.
         } catch (err) {
-          // Stage 1 failed: nothing was handed off, so surface it on the FORM (the
-          // modal is still open) exactly like the awaited path does — but KEEP the
-          // saved root + newest checkpoint so the retry resumes from here.
+          // The root create failed: nothing was handed off, so surface it on the
+          // FORM (the modal is still open) exactly like the awaited path does.
           rememberRoot(err?.templateResumeState || stage1Checkpoint);
           throw err;
         }
@@ -704,17 +686,20 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
           const bgStartedAt = Date.now();
           let bgOk = false;
           try {
-            // Stage 2 — EVERY point, resumed so the topics stage 1 already created
-            // are not recreated. This is the half that runs inside the discussion
-            // card, while it shows the standard loading animation.
-            if (stageTemplate && stage1Checkpoint) {
+            // Stage 2 — the WHOLE agenda, built while the discussion card shows the
+            // standard loading animation: topics, then every point, and only then
+            // the connection to the discussion (linkLast). Because the link is the
+            // card's read path, the agenda appears complete in one shot.
+            if (stageTemplate) {
               const stage2At = Date.now();
               await createTopicsFromTemplate(newId, stageTemplate, {
                 freshDiscussion: true,
+                linkLast: true,
                 resumeState: stage1Checkpoint,
+                onCheckpoint: (cp) => { stage1Checkpoint = cp; },
               });
               logger.health?.('discussion_create_phase', {
-                step: 'staged_points', duration_ms: Date.now() - stage2At,
+                step: 'staged_agenda_link_last', duration_ms: Date.now() - stage2At,
               });
               // monday is read-after-write lagged: a resolved create_item/create_subitem
               // does not mean the relation and subitems are READABLE yet. Now that this
