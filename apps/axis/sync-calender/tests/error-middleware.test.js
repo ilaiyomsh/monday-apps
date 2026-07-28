@@ -79,4 +79,99 @@ describe('createErrorMiddleware', () => {
     mw(new Error('late'), { method: 'GET', path: '/p' }, fakeRes({ headersSent: true }), vi.fn());
     expect(error).toHaveBeenCalledTimes(1);
   });
+
+  // A blanket 500 on a CLIENT error is an operational bug, not a cosmetic one: Google and
+  // Microsoft Graph mark a push subscription unhealthy on 5xx, so one truncated webhook
+  // body could take the subscription down. body-parser tags its own errors (400 malformed
+  // JSON, 413 over the size limit) and Express's finalhandler honoured that before this
+  // middleware existed — so the middleware must honour it too, in BOTH the response and
+  // the shipped record.
+  describe('status derivation', () => {
+    /** @returns {{ status: number, body: unknown, shipped: number }} */
+    function run(err) {
+      const error = vi.fn();
+      const mw = createErrorMiddleware({ error });
+      const res = fakeRes();
+      mw(err, { method: 'POST', path: '/webhook/microsoft' }, res, vi.fn());
+      return { status: res.statusCode, body: res.body, shipped: error.mock.calls[0][2].status };
+    }
+
+    it('honours err.status=400 from a malformed JSON body in the response and the record', () => {
+      const err = Object.assign(new SyntaxError('Unexpected end of JSON input'), { status: 400 });
+      expect(run(err)).toEqual({
+        status: 400,
+        body: { error: 'invalid_request' },
+        shipped: 400,
+      });
+    });
+
+    it('honours err.statusCode=413 when the payload exceeds the body-parser limit', () => {
+      const err = Object.assign(new Error('request entity too large'), { statusCode: 413 });
+      expect(run(err)).toEqual({
+        status: 413,
+        body: { error: 'invalid_request' },
+        shipped: 413,
+      });
+    });
+
+    it('honours 400, the low edge of the trusted client-error band', () => {
+      expect(run(Object.assign(new Error('e'), { status: 400 })).status).toBe(400);
+    });
+
+    it('honours 499, the high edge of the trusted client-error band', () => {
+      expect(run(Object.assign(new Error('e'), { status: 499 })).status).toBe(499);
+    });
+
+    it('rejects 399, just below the band, and answers 500 internal_error', () => {
+      expect(run(Object.assign(new Error('e'), { status: 399 }))).toEqual({
+        status: 500,
+        body: { error: 'internal_error' },
+        shipped: 500,
+      });
+    });
+
+    it('rejects 500, just above the band, and answers 500 internal_error', () => {
+      expect(run(Object.assign(new Error('e'), { status: 500 })).body).toEqual({ error: 'internal_error' });
+    });
+
+    it('does not let an upstream 502 masquerade as a client error', () => {
+      expect(run(Object.assign(new Error('bad gateway'), { status: 502 })).status).toBe(500);
+    });
+
+    it('prefers err.status over err.statusCode when both are present', () => {
+      // Both branches must be distinguishable, else this pins nothing (P6).
+      const err = Object.assign(new Error('e'), { status: 404, statusCode: 451 });
+      expect(run(err).status).toBe(404);
+    });
+
+    it('falls back to 500 when the claimed status is not a number', () => {
+      expect(run(Object.assign(new Error('e'), { status: 'teapot' })).status).toBe(500);
+    });
+
+    it('falls back to 500 for a fractional claimed status', () => {
+      expect(run(Object.assign(new Error('e'), { status: 404.5 })).status).toBe(500);
+    });
+
+    it('answers 500 for a plain Error that claims no status at all', () => {
+      expect(run(new Error('kaboom'))).toEqual({
+        status: 500,
+        body: { error: 'internal_error' },
+        shipped: 500,
+      });
+    });
+
+    it('answers 500 for a non-Error rejection carrying no status', () => {
+      expect(run('string failure').status).toBe(500);
+    });
+
+    it('delegates the ORIGINAL error to next when headers are sent, whatever its status', () => {
+      const mw = createErrorMiddleware({ error: vi.fn() });
+      const next = vi.fn();
+      const err = Object.assign(new SyntaxError('bad body'), { status: 400 });
+      const res = fakeRes({ headersSent: true });
+      mw(err, { method: 'POST', path: '/webhook/microsoft' }, res, next);
+      expect(next).toHaveBeenCalledWith(err);
+      expect(res.statusCode).toBeNull();
+    });
+  });
 });
