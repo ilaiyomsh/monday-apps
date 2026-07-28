@@ -54,6 +54,15 @@ Size is computed by `src/utils/requiredFormModalSize.js` and passed to
   to `@vibe/icons` components in `OnClickDialog/FieldIcon.jsx`. **monday exposes
   neither its column icons nor their colours through the API** — the palette is our
   approximation of its look.
+- The icon, the field name and the required marker sit on ONE line. Do not add a bare
+  `.twyst-form label` rule: one existed with `display: grid` and outranked
+  `.twyst-field-title`, stacking the three vertically, tripling row heights and
+  clipping the footer out of a correctly-sized modal (fixed in 3.5.1).
+- **Every option-based control is a single field-height bar** that opens a popover —
+  date, status and dropdown all share `.twyst-field-trigger`. Options are never
+  rendered inline: a row of chips spills across the row and stops the field reading
+  like the fields around it, and a column with many labels would blow the row height.
+  A chosen status paints its bar the label's colour, like a monday cell.
 - The picker itself only measures: it reads the required columns' types (a light
   `GET_STATUS_COLUMN_SETTINGS` call), sizes the modal, and hands over
   `boardId`/`columnId`/`itemId`/`labelId` through the SDK's `urlParams`. The modal is

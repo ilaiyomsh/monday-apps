@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.5.1
+
+- Fixed the field label breaking onto three lines. A leftover
+  `.twyst-form label { display: grid }` rule from the pre-3.4.0 form OUTRANKED
+  `.twyst-field-title` (0,1,1 vs 0,1,0), so the icon, the name and the asterisk
+  stacked vertically. That tripled every row's height, which in turn made the modal
+  scroll and clipped the footer buttons — the computed height was right, the rendered
+  rows were not. Icon, name and asterisk now sit on one line as intended.
+- Status and dropdown fields are a single field-height bar that opens its options in
+  a popover, instead of rendering every option as an inline chip. A row of chips
+  spilled across the row and made a status field look nothing like the fields above
+  it; a column with a dozen labels now costs the same one row as a text field. A
+  chosen status paints the bar its own label colour, like a monday cell.
+- Removed the dead chip CSS the inline options used.
+
 ## 3.5.0
 
 - The required-fields form now follows monday's own item form: a LIST of rows, one

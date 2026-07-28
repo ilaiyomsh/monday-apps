@@ -25,11 +25,11 @@
   color: var(--primary-text-color, #323338);
 }
 
-.twyst-form label {
-  display: grid;
-  gap: 6px;
-  font-size: 13px;
-}
+/* NO bare `.twyst-form label` rule. It used to be `display: grid` from the version
+   where a <label> wrapped a title and its input, and it OUTRANKED
+   .twyst-field-title (0,1,1 vs 0,1,0) — so the icon, the name and the asterisk
+   stacked vertically, tripling every row's height and pushing the footer out of the
+   modal. Field labels are styled by .twyst-field-title alone. */
 
 .twyst-form input {
   border: 1px solid var(--ui-border-color, #d0d4e4);
@@ -139,14 +139,21 @@
   cursor: pointer;
 }
 
-/* ---------------------------------------------------------------- date field */
+/* --------------------------------------------------- field-height option bars */
 
+/*
+ * Shared shape for every control that opens a popover — date, status, dropdown.
+ * They must all read as the SAME bar as a text input beside them, which is what
+ * monday's item form does and what a row of inline chips broke.
+ */
+.twyst-field-trigger,
 .twyst-date-trigger {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
   inline-size: 100%;
+  min-block-size: 36px;
   box-sizing: border-box;
   padding: 8px 10px;
   border: 1px solid var(--ui-border-color, #d0d4e4);
@@ -159,20 +166,94 @@
   cursor: pointer;
 }
 
+.twyst-field-trigger > span,
+.twyst-date-trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.twyst-field-trigger.is-empty,
 .twyst-date-trigger.is-empty {
   color: var(--secondary-text-color, #676879);
 }
 
-.twyst-date-trigger svg {
+.twyst-field-trigger:disabled,
+.twyst-date-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.twyst-field-trigger svg {
   flex: 0 0 auto;
   inline-size: 16px;
   block-size: 16px;
   fill: var(--secondary-text-color, #676879);
 }
 
-.twyst-date-trigger:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+/* A chosen status paints the whole bar its label colour, like a monday cell. */
+.twyst-status-trigger {
+  justify-content: center;
+}
+
+.twyst-status-trigger.is-filled {
+  color: var(--text-color-on-primary, #fff);
+}
+
+.twyst-option-list {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  max-block-size: 300px;
+  overflow-y: auto;
+}
+
+.twyst-option-pill {
+  block-size: 32px;
+  border: none;
+  border-radius: var(--border-radius-small, 4px);
+  color: var(--text-color-on-primary, #fff);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.twyst-option-pill:hover {
+  filter: brightness(0.95);
+}
+
+.twyst-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  cursor: pointer;
+}
+
+.twyst-option-row:hover {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.twyst-option-check {
+  flex: 0 0 auto;
+  inline-size: 14px;
+  color: var(--primary-color, #0073ea);
+}
+
+/* ---------------------------------------------------------------- date field */
+
+.twyst-date-trigger svg {
+  flex: 0 0 auto;
+  inline-size: 16px;
+  block-size: 16px;
+  fill: var(--secondary-text-color, #676879);
 }
 
 .twyst-datepicker {
@@ -301,40 +382,6 @@
 .twyst-datepicker-day.is-selected {
   background: var(--primary-color, #0073ea);
   color: #fff;
-}
-
-.twyst-chip-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.twyst-chip {
-  border: 1px solid var(--ui-border-color, #d0d4e4);
-  border-radius: 999px;
-  background: var(--primary-background-color, #fff);
-  color: inherit;
-  padding: 5px 12px;
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.twyst-chip:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-}
-
-.twyst-chip.is-on {
-  background: var(--primary-color, #0073ea);
-  border-color: var(--primary-color, #0073ea);
-  color: #fff;
-}
-
-/* A selected status chip carries its own label color (set inline), so the text
-   has to stay readable on any of monday's label hues. */
-.twyst-chip-status.is-on {
-  color: var(--text-color-on-primary, #fff);
 }
 
 .twyst-rating {
