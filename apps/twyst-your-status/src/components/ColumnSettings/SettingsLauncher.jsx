@@ -9,8 +9,8 @@ import './SettingsLauncher.css';
 const FULL_SETTINGS_PATH = '/settings-full';
 
 /**
- * Slim Column Settings shell — opens a nested overlay sized to the viewport
- * (monday openAppFeatureModal only accepts px strings).
+ * Slim Column Settings shell — opens a nested overlay sized from the physical
+ * screen (never this iframe's tiny window). monday only accepts px strings.
  */
 function SettingsLauncher() {
   const [opening, setOpening] = useState(false);
@@ -20,7 +20,8 @@ function SettingsLauncher() {
     try {
       setOpening(true);
       setError(null);
-      const size = settingsModalSize(window);
+      // Do NOT pass `window` — this shell's iframe is ~400px wide.
+      const size = settingsModalSize();
       await mondayService.openAppFeatureModal({
         urlPath: FULL_SETTINGS_PATH,
         ...size,

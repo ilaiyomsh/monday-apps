@@ -2,7 +2,7 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
-## 0.9.1 — 2026-07-27 — fix: distinct AMP errors + secret-rotate UX
+## 0.9.5 — 2026-07-28 — fix: distinct AMP errors + secret-rotate UX
 
 - Every `/amp/confirm` failure path now returns a **distinct** `error` code and a
   Hebrew `message` tagged `[E1a]`…`[E10]` / `[E99]` (was collapsed into
@@ -16,6 +16,41 @@
   both green success and "יצירת מפתח נכשלה"). Refresh failure is reported separately.
 - Admin `internal_error` responses include `[admin <path>]` for Network diagnosis;
   SecureStorage failures are wrapped as `secure_storage_*_failed`.
+- Merged with the 0.9.3 `detail` channel rather than replacing it: every AMP
+  failure now carries BOTH its distinct `error` code + `[E…]` message and the
+  machine `detail` that renders in the email body.
+
+## 0.9.3 — 2026-07-27 — fix: drop «ללא שינוי»; preview AMP uses live slot
+
+- Status menu shows only the cluster's action buttons (no gray «ללא שינוי»).
+- Unchanged tasks = leave the current-status trigger as-is (`item_<id>` stays empty).
+- Admin preview AMP is signed with the **live clock** (not a fixed 09:00), so a
+  copied document matches `/amp/confirm`'s current slot when tested immediately.
+- Admin hint: playground submit needs `amp@gmail.dev` on `AMP_ALLOWED_SENDERS`.
+- Admin `500 internal_error` now returns `message` + `detail` (name/message/stack);
+  the SPA shows them on boot/save and logs the stack to the browser console.
+- AMP submit-error shows machine `detail` in the **email body** (e.g. `bad_slot`,
+  `bad_sig`, `missing_or_invalid_fields`) under the Hebrew message.
+
+## 0.9.2 — 2026-07-27 — feat: AMP digest — amp-bind status dropdown (monday colors)
+
+- Per-row status choice is a real **dropdown**: closed colored trigger → tap opens
+  a popup of monday-colored options (`amp-bind` + `AMP.setState`).
+- Trigger shows the **current status** (text + color); choosing an option updates
+  the cell immediately via bind. Header: **סטטוס** (not «סטטוס חדש»).
+  «ללא שינוי» restores the original status display and clears the wire value.
+- Not native `<select>` (OS popup unstyleable) and not an always-open radio stack.
+- Wire: hidden `item_<id>` with `[value]` bound to state (`""` = no change).
+- Playground: `docs/amp-playground-cluster-tables.html`.
+
+## 0.9.1 — 2026-07-27 — feat: AMP digest — styled label dropdown (`<select>`)
+
+- Per-row status choice is a **styled** AMP-for-Email `<select class="label-dd">`
+  (monday-like closed control: ~200×34, blue border `#0073ea`, Figtree). The OS
+  popup panel itself cannot be restyled in Gmail/AMP.
+- Options = that cluster's action buttons; empty option **ללא שינוי** = no write.
+- Wire unchanged: `item_<id>=btnId`. Cluster tables + multi-button config kept.
+- Playground sample: `docs/amp-playground-cluster-tables.html`.
 
 ## 0.9.0 — 2026-07-27 — feat: AMP digest — one table per cluster + multi-button columns
 

@@ -253,8 +253,9 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     /** Recipient + resolved buttons — the shape both renderers consume. */
     const withButtons = (recipient) => decorateRecipientSections(recipient, buttonsById);
     const sendHour = config.digest?.sendHour ?? 8;
-    // Midday Jerusalem on the preview day — deterministic slot/sig in admin preview.
-    const previewNow = new Date(`${today}T09:00:00+03:00`);
+    // Sign with the LIVE clock so a copied AMP is immediately submittable in the
+    // AMP playground / Gmail (same slot the server will demand). Task filtering
+    // still uses `today` above — only the HMAC slot follows `now`.
     const renderArgs = { baseUrl: env.baseUrl, secret, accountId: req.session.accountId };
     const renderPlainFor = (recipient) => renderDigestPlain({ recipient: withButtons(recipient) });
     const renderAmpFor = (recipient) =>
@@ -262,7 +263,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         ...renderArgs,
         recipient: withButtons(recipient),
         sendHour,
-        now: previewNow,
+        now: now(),
       });
 
     return {
@@ -345,14 +346,23 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
       try {
         await handler(req, res);
       } catch (err) {
+        const name = err?.name ? String(err.name) : 'Error';
+        const message = err?.message != null ? String(err.message) : String(err);
+        const stack = typeof err?.stack === 'string' ? err.stack : undefined;
         logError('admin_api', 'handler failed', {
           path: req.path,
-          error: String(err?.message ?? err),
+          method: req.method,
+          error: message,
+          errName: name,
+          stack,
         });
+        // Authenticated admin only — surface the real failure so draft debugging
+        // does not stop at opaque `internal_error` (owner ask 2026-07-27).
         res.status(500).json({
           error: 'internal_error',
-          // Distinct path tag so the admin pink box / Network tab name the failing route.
-          message: `[admin ${req.path}] פעולה נכשלה בשרת. נסו שוב.`,
+          // Path-tagged so the admin pink box / Network tab name the failing route.
+          message: `[admin ${req.path}] ${message}`,
+          detail: { name, message, stack: stack ?? null },
         });
       }
     };

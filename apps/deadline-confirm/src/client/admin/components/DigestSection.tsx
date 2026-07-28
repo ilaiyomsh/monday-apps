@@ -260,7 +260,8 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
           <h2>מקבצי משימות</h2>
           <div className="dc-hint">
             כל מקבץ הוא טבלה במייל: עמודת תאריך שקובעת "באיחור" (תאריך שעבר — כולל היום),
-            תנאי סטטוס שקובע אילו משימות נכנסות, וכפתורי הפעולה שמופיעים כעמודות סימון בטבלה.
+            תנאי סטטוס שקובע אילו משימות נכנסות, ותפריט נפתח מעוצב (תגית צבע → אפשרויות)
+            לבחירת סטטוס חדש מהכפתורים שנבחרו כאן.
           </div>
           {digest.sections.map((section) => {
             const primaryButtonId = section.buttonIds[0] ?? section.buttonId;
@@ -348,7 +349,7 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     />
                     <div className="dc-hint">
                       רק משימות בסטטוסים שנבחרו יופיעו במקבץ — כך משימות שכבר טופלו (למשל "בוצע") לא ייכנסו.
-                      הכפתור הראשון קובע את עמודת הסטטוס לסינון; כל הכפתורים שנבחרו מופיעים כעמודות במייל.
+                      הכפתור הראשון קובע את עמודת הסטטוס לסינון; כל הכפתורים שנבחרו מופיעים בתפריט הנפתח במייל.
                     </div>
                   </div>
                 </div>
@@ -482,8 +483,12 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                       {ampCopied ? 'הועתק ✓' : 'העתק גרסת AMP (מייל דינמי בג׳ימייל)'}
                     </Button>
                     <div className="dc-hint">
-                      הגרסה הזאת מציגה תיבות סימון בתוך ג׳ימייל. להדבקה ב-playground.amp.dev (פורמט Email) ומשם
-                      Send to Gmail — הנמען צריך להוסיף את כתובת השולח תחת Dynamic email → Developer settings.
+                      להדבקה ב-playground.amp.dev (פורמט Email). שליחה מה־playground
+                      דורשת ש־<code>AMP_ALLOWED_SENDERS</code> יכלול את{' '}
+                      <code>amp@gmail.dev</code> — אחרת תראו Failed to fetch / בקשה
+                      לא תקינה. עדיף: Send to Gmail משם, ואז לאשר מתוך המייל עצמו
+                      (הנמען מוסיף את כתובת השולח תחת Dynamic email → Developer
+                      settings).
                     </div>
                   </div>
                 )}

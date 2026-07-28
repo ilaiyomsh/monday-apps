@@ -1,5 +1,34 @@
 # Changelog
 
+## 3.2.8
+
+- Settings: teams join the people picker (no separate checklist); each label
+  accordion starts closed; required-columns list collapsed by default; people-
+  column gate uses a custom dropdown matching the settings chrome.
+
+## 3.2.7
+
+- Settings UI redesign (Vercel-style clarity): soft canvas, compact label rows,
+  capped field widths, checkbox lists instead of stretched multi-selects,
+  collapsible permissions, and ↑/↓ reorder.
+
+## 3.2.6
+
+- Per-label people-column gate: pick a People column; only actors who appear on
+  that column (as a person or via a team listed there) may select the label.
+  Combines with user/team allowlists as AND.
+
+## 3.2.5
+
+- Settings overlay ignores the tiny column-settings iframe size (root cause of
+  the postcard modal). Uses the physical screen at ≥80%, floored at the
+  known-good `1100×820`.
+
+## 3.2.4
+
+- Settings overlay opens at ≥80% of the viewport (min 720×560, capped at 94%
+  on tiny screens) — no more postcard-sized `744px` dialog.
+
 ## 3.2.3
 
 - Revert status picker to the cell-attached Dialog Design (no centered

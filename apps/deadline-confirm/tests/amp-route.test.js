@@ -861,3 +861,41 @@ describe('POST /amp/confirm — gate 10: execution and response', () => {
     expect(JSON.stringify(res.body)).not.toContain(SECRET);
   });
 });
+
+// ---------------------------------------------------------------------------
+// AMP email body — failure `detail` is rendered via submit-error mustache
+// ---------------------------------------------------------------------------
+
+describe('POST /amp/confirm — failure detail for AMP email body', () => {
+  it('includes detail=missing_or_invalid_fields on a 400 bad_request (missing sig)', async () => {
+    const body = signedBody();
+    delete body.sig;
+    const { app } = buildApp();
+    const res = await postAmp(app, body);
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/[\u0590-\u05FF]/);
+    expect(res.body.detail).toBe('missing_or_invalid_fields');
+  });
+
+  it('includes detail with bad_slot got/expected/sendHour when the slot is stale', async () => {
+    const { app } = buildApp();
+    const res = await postAmp(app, signedBody({ slot: PREV_SLOT }));
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/[\u0590-\u05FF]/);
+    expect(res.body.detail).toBe(`bad_slot got=${PREV_SLOT} expected=${SLOT} sendHour=8`);
+  });
+
+  it('includes detail=bad_sig when the HMAC does not match', async () => {
+    const { app } = buildApp();
+    const res = await postAmp(app, signedBody({ secret: OTHER_SECRET }));
+    expect(res.status).toBe(403);
+    expect(res.body.detail).toBe('bad_sig');
+  });
+
+  it('includes detail=no_items when no item_ fields are selected', async () => {
+    const { app } = buildApp();
+    const res = await postAmp(app, signedBody({ selections: {} }));
+    expect(res.status).toBe(400);
+    expect(res.body.detail).toBe('no_items');
+  });
+});

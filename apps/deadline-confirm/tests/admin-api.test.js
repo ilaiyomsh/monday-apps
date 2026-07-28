@@ -474,10 +474,13 @@ describe('POST /api/secret/rotate', () => {
       .set('Authorization', authHeader());
 
     expect(res.status).toBe(500);
-    expect(res.body).toStrictEqual({
-      error: 'internal_error',
-      message: '[admin /api/secret/rotate] פעולה נכשלה בשרת. נסו שוב.',
-    });
+    // Merged contract (0.9.5): the path tag names the failing route AND the
+    // real failure is surfaced, instead of one replacing the other.
+    expect(res.body.error).toBe('internal_error');
+    expect(res.body.message).toBe('[admin /api/secret/rotate] secure_storage_set_failed: boom');
+    expect(res.body.detail.name).toBe('Error');
+    expect(res.body.detail.message).toBe('secure_storage_set_failed: boom');
+    expect(typeof res.body.detail.stack).toBe('string');
   });
 });
 
@@ -533,5 +536,37 @@ describe('per-session account scoping (v3 isolation)', () => {
       .get('/api/state')
       .set('Authorization', authHeader({ accountId: 888 }));
     expect(stateB.body.secret).toBeNull();
+  });
+});
+
+describe('GET /api/state guarded 500 detail', () => {
+  it('returns internal_error with message and detail.stack when storage.getConfig throws', async () => {
+    const boom = new Error('secure_storage_boom');
+    const storage = {
+      forAccount: () => ({
+        getConfig: async () => {
+          throw boom;
+        },
+        getLinkSecret: async () => null,
+        getOauthToken: async () => null,
+      }),
+    };
+    const app = createApp({
+      storage,
+      api: { fetchMe: vi.fn() },
+      rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
+      env: ENV,
+      fetchImpl: vi.fn(),
+    });
+
+    const res = await request(app).get('/api/state').set('Authorization', authHeader());
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('internal_error');
+    expect(res.body.message).toBe('[admin /api/state] secure_storage_boom');
+    expect(res.body.detail).toStrictEqual({
+      name: 'Error',
+      message: 'secure_storage_boom',
+      stack: boom.stack,
+    });
   });
 });

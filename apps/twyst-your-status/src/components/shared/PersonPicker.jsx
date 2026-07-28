@@ -1,5 +1,5 @@
 // SOURCE: ported from apps/discussions/src/components/PersonPicker/PersonPicker.jsx
-// ג€” the proven implementation two separate correction sessions pointed at as
+// — the proven implementation two separate correction sessions pointed at as
 // "the working one". Do NOT rebuild this from scratch or from Vibe Dialog/Combobox
 // (Dialog double-rendered its content; Combobox option clicks were dead).
 // Adaptations for the scaffold: the account roster is fetched here via
@@ -24,6 +24,10 @@ function initialsOf(name) {
 
 function photoOf(user) {
   return user?.photo_thumb ?? user?.photo_url?.thumb ?? null;
+}
+
+function entryKey(entry) {
+  return `${entry?.kind || 'person'}:${String(entry?.id)}`;
 }
 
 // Module-level roster cache: one users query per page load, shared by every
@@ -53,12 +57,13 @@ async function loadRoster() {
  * People picker styled after monday's native people-column picker: removable
  * chips for the current selection + a searchable list of account users with
  * avatars. Uses a plain clickable button list inside a popover portaled to
- * document.body ג€” so it escapes table overflow/sticky headers AND transform
+ * document.body — so it escapes table overflow/sticky headers AND transform
  * ancestors, and renders exactly once.
  *
- * Props: { selected: [{id, name, kind}], onChange, users?, bordered?,
+ * Props: { selected: [{id, name, kind}], onChange, users?, teams?, bordered?,
  * closeOnSelect?, single? }.
  * `users`: optionally pass a pre-fetched roster instead of the built-in fetch.
+ * `teams`: optional account teams — shown in the same list with kind:'team'.
  * `single`: cap the selection at one person (assignee fields). A second pick is
  * blocked with a notice; deselecting the existing person is still allowed.
  */
@@ -66,6 +71,7 @@ export function PersonPicker({
   selected = [],
   onChange,
   users = null,
+  teams = null,
   bordered = false,
   closeOnSelect = false,
   single = false,
@@ -86,7 +92,7 @@ export function PersonPicker({
       setFetchedUsers(list);
       setLoading(false);
     }).catch((err) => {
-      // loadRoster resolves [] on failure, so this is defensive only ג€”
+      // loadRoster resolves [] on failure, so this is defensive only —
       // but the chain must terminate in .catch (promise/catch-or-return).
       logger.error('PersonPicker', 'Roster load rejected', err);
       if (alive) setLoading(false);
@@ -94,13 +100,25 @@ export function PersonPicker({
     return () => { alive = false; };
   }, [users]);
 
-  const roster = users || fetchedUsers;
-  const byId = useMemo(() => {
+  const roster = useMemo(() => {
+    const people = (users || fetchedUsers).map((user) => ({
+      ...user,
+      kind: user.kind || 'person',
+    }));
+    const teamEntries = (teams || []).map((team) => ({
+      id: team.id,
+      name: team.name,
+      kind: 'team',
+    }));
+    return [...people, ...teamEntries];
+  }, [users, fetchedUsers, teams]);
+
+  const byKey = useMemo(() => {
     const m = new Map();
-    roster.forEach((u) => m.set(String(u.id), u));
+    roster.forEach((entry) => m.set(entryKey(entry), entry));
     return m;
   }, [roster]);
-  const getUser = (id) => byId.get(String(id));
+  const getEntry = (entry) => byKey.get(entryKey(entry));
 
   // Close on click-outside / Escape.
   useEffect(() => {
@@ -147,20 +165,26 @@ export function PersonPicker({
     };
   }, [open]);
 
-  const selectedIds = useMemo(() => (selected || []).map((p) => String(p.id)), [selected]);
+  const selectedKeys = useMemo(
+    () => new Set((selected || []).map((p) => entryKey(p))),
+    [selected],
+  );
 
-  const removeUser = (id) => {
-    onChange(selected.filter((p) => String(p.id) !== String(id)));
+  const removeEntry = (entry) => {
+    const key = entryKey(entry);
+    onChange(selected.filter((p) => entryKey(p) !== key));
   };
   const toggleUser = (user) => {
-    if (selectedIds.includes(String(user.id))) {
-      removeUser(user.id);
+    const kind = user.kind || 'person';
+    const key = entryKey({ id: user.id, kind });
+    if (selectedKeys.has(key)) {
+      removeEntry({ id: user.id, kind });
     } else if (single && selected.length >= 1) {
       // single-assignee mode: one person max. Block the extra pick (the popover
       // stays open so the user can deselect the current person first) and
       // surface a notice. monday.execute is a no-op outside the iframe / tests.
       try {
-        mondayService.showNotice('׳ ׳™׳×׳ ׳׳”׳§׳¦׳•׳× ׳׳—׳¨׳׳™ ׳׳—׳“ ׳‘׳׳‘׳“', 'error');
+        mondayService.showNotice('ניתן להקצות אחראי אחד בלבד', 'error');
       } catch (err) {
         // Outside the monday iframe (dev harness / tests) showNotice throws;
         // the notice is cosmetic there, but the failure still gets recorded.
@@ -168,7 +192,7 @@ export function PersonPicker({
       }
       return;
     } else {
-      onChange([...selected, { id: user.id, kind: 'person', name: user.name }]);
+      onChange([...selected, { id: user.id, kind, name: user.name }]);
     }
     if (closeOnSelect) {
       setOpen(false);
@@ -202,6 +226,9 @@ export function PersonPicker({
   const filtered = q
     ? roster.filter((u) => (u.name || '').toLowerCase().includes(q))
     : roster;
+  const hasTeams = (teams || []).length > 0;
+  const listHeading = hasTeams ? 'אנשים וצוותים' : 'אנשים מוצעים';
+  const emptyText = hasTeams ? 'לא נמצאו תוצאות' : 'לא נמצאו אנשים';
 
   return (
     <>
@@ -212,7 +239,7 @@ export function PersonPicker({
         onClick={toggleOpen}
       >
         {selected.length === 0 ? (
-          <span className={styles.placeholder} aria-label="׳׳ ׳”׳•׳§׳¦׳”">
+          <span className={styles.placeholder} aria-label="לא הוקצה">
             <Person size={16} />
           </span>
         ) : selected.length === 1 ? (
@@ -221,13 +248,14 @@ export function PersonPicker({
              carries stacking padding that would shift one avatar off-center. */
           (() => {
             const p = selected[0];
-            const u = getUser(p.id);
+            const u = getEntry(p);
+            const photo = p.kind === 'team' ? null : photoOf(u);
             return (
               <Avatar
                 size="small"
-                src={photoOf(u)}
+                src={photo}
                 text={initialsOf(p.name || u?.name)}
-                type={photoOf(u) ? 'img' : 'text'}
+                type={photo ? 'img' : 'text'}
                 ariaLabel={p.name}
               />
             );
@@ -235,14 +263,15 @@ export function PersonPicker({
         ) : (
           <AvatarGroup size="small" max={4}>
             {selected.map((p) => {
-              const u = getUser(p.id);
+              const u = getEntry(p);
+              const photo = p.kind === 'team' ? null : photoOf(u);
               return (
                 <Avatar
-                  key={p.id}
+                  key={entryKey(p)}
                   size="small"
-                  src={photoOf(u)}
+                  src={photo}
                   text={initialsOf(p.name || u?.name)}
-                  type={photoOf(u) ? 'img' : 'text'}
+                  type={photo ? 'img' : 'text'}
                   ariaLabel={p.name}
                 />
               );
@@ -261,18 +290,21 @@ export function PersonPicker({
             {selected.length > 0 && (
               <div className={styles.chips}>
                 {selected.map((p) => {
-                  const u = getUser(p.id);
-                  const photo = photoOf(u);
+                  const u = getEntry(p);
+                  const photo = p.kind === 'team' ? null : photoOf(u);
                   const name = p.name || u?.name || '';
                   return (
-                    <span key={p.id} className={styles.chip}>
+                    <span key={entryKey(p)} className={styles.chip}>
                       <Avatar size="small" src={photo} text={initialsOf(name)} type={photo ? 'img' : 'text'} ariaLabel={name} />
-                      <span className={styles.chipName}>{name}</span>
+                      <span className={styles.chipName}>
+                        {name}
+                        {p.kind === 'team' ? ' (צוות)' : ''}
+                      </span>
                       <button
                         type="button"
                         className={styles.chipRemove}
-                        onClick={() => removeUser(p.id)}
-                        aria-label={`׳”׳¡׳¨ ${name}`}
+                        onClick={() => removeEntry(p)}
+                        aria-label={`הסר ${name}`}
                       >
                         <CloseSmall size={12} />
                       </button>
@@ -287,25 +319,27 @@ export function PersonPicker({
               <input
                 type="text"
                 className={styles.search}
-                aria-label="׳—׳™׳₪׳•׳© ׳©׳"
+                aria-label="חיפוש שם"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 autoFocus
               />
             </div>
 
-            <div className={styles.heading}>׳׳ ׳©׳™׳ ׳׳•׳¦׳¢׳™׳</div>
+            <div className={styles.heading}>{listHeading}</div>
             <div className={styles.list}>
               {loading ? (
-                <div className={styles.empty}>׳˜׳•׳¢׳...</div>
+                <div className={styles.empty}>טוען...</div>
               ) : filtered.length === 0 ? (
-                <div className={styles.empty}>׳׳ ׳ ׳׳¦׳׳• ׳׳ ׳©׳™׳</div>
+                <div className={styles.empty}>{emptyText}</div>
               ) : (
                 filtered.map((user) => {
-                  const isSel = selectedIds.includes(String(user.id));
+                  const kind = user.kind || 'person';
+                  const isSel = selectedKeys.has(entryKey({ id: user.id, kind }));
+                  const photo = kind === 'team' ? null : photoOf(user);
                   return (
                     <button
-                      key={user.id}
+                      key={entryKey({ id: user.id, kind })}
                       type="button"
                       className={`${styles.row} ${isSel ? styles.rowSelected : ''}`}
                       onClick={() => toggleUser(user)}
@@ -313,12 +347,17 @@ export function PersonPicker({
                       <span className={styles.check}>{isSel && <Check size={16} />}</span>
                       <Avatar
                         size="small"
-                        src={photoOf(user)}
+                        src={photo}
                         text={initialsOf(user.name)}
-                        type={photoOf(user) ? 'img' : 'text'}
+                        type={photo ? 'img' : 'text'}
                         ariaLabel={user.name}
                       />
-                      <span className={styles.name}>{user.name}</span>
+                      <span className={styles.name}>
+                        {user.name}
+                        {kind === 'team' ? (
+                          <span className={styles.kindHint}> צוות</span>
+                        ) : null}
+                      </span>
                     </button>
                   );
                 })
@@ -333,4 +372,3 @@ export function PersonPicker({
 }
 
 export default PersonPicker;
-

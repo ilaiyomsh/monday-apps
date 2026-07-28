@@ -10,6 +10,7 @@
  *       allowedUserIds: string[],
  *       allowedTeamIds: string[],
  *       requiredColumnIds: string[],
+ *       requiredPeopleColumnIds: string[], // people columns the actor must appear in
  *     }
  *   }
  * }
@@ -61,6 +62,7 @@ export function emptyLabelRule() {
     allowedUserIds: [],
     allowedTeamIds: [],
     requiredColumnIds: [],
+    requiredPeopleColumnIds: [],
   };
 }
 
@@ -72,6 +74,7 @@ export function normalizeLabelRule(rawRule) {
     allowedUserIds: normalizeIdentifierList(rawRule.allowedUserIds),
     allowedTeamIds: normalizeIdentifierList(rawRule.allowedTeamIds),
     requiredColumnIds: normalizeIdentifierList(rawRule.requiredColumnIds),
+    requiredPeopleColumnIds: normalizeIdentifierList(rawRule.requiredPeopleColumnIds),
   };
 }
 
@@ -146,10 +149,20 @@ export function validateSettings(settings, columns) {
   const cols = Array.isArray(columns) ? columns : null;
   if (cols) {
     const columnIds = new Set(cols.map((column) => String(column.id)));
+    const peopleColumnIds = new Set(
+      cols.filter((column) => column.type === 'people').map((column) => String(column.id)),
+    );
     Object.values(s.labels).forEach((rule) => {
       rule.requiredColumnIds.forEach((columnId) => {
         if (!columnIds.has(columnId)) {
           problems.push(`REQUIRED_COLUMN_MISSING:${columnId}`);
+        }
+      });
+      rule.requiredPeopleColumnIds.forEach((columnId) => {
+        if (!columnIds.has(columnId)) {
+          problems.push(`REQUIRED_PEOPLE_COLUMN_MISSING:${columnId}`);
+        } else if (!peopleColumnIds.has(columnId)) {
+          problems.push(`REQUIRED_PEOPLE_COLUMN_NOT_PEOPLE:${columnId}`);
         }
       });
     });
@@ -164,4 +177,20 @@ export function getLabelRule(settings, labelId) {
   const key = normalizeLabelIdList([labelId])[0];
   if (!key) return emptyLabelRule();
   return migrated.labels[key] ?? emptyLabelRule();
+}
+
+/** Unique people-column ids referenced by any label rule (for picker fetches). */
+export function collectRequiredPeopleColumnIds(settings) {
+  const migrated = migrateSettings(settings);
+  if (!migrated) return [];
+  const seen = new Set();
+  const out = [];
+  Object.values(migrated.labels).forEach((rule) => {
+    rule.requiredPeopleColumnIds.forEach((columnId) => {
+      if (seen.has(columnId)) return;
+      seen.add(columnId);
+      out.push(columnId);
+    });
+  });
+  return out;
 }

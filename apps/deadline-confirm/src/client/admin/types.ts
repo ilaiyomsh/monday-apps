@@ -55,7 +55,8 @@ export interface DigestSectionConfig {
   /** Primary button — used for the status-column filter (includeStatusLabelIds). */
   buttonId: string;
   /**
-   * Action buttons shown as radio columns in this cluster's AMP table.
+   * Action buttons offered in this cluster's AMP label `<select>`.
+   * First id is also the primary button (status-column filter).
    * Must include buttonId. Absent/legacy configs are read as [buttonId].
    */
   buttonIds?: string[];
