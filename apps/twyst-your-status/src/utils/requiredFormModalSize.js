@@ -20,6 +20,19 @@
 
 export const FORM_MAX_ROWS = 8;
 
+/**
+ * Floor for SIZING only.
+ *
+ * One required column sized to exactly one row opens as a sliver — a title, a single
+ * field and a button, barely taller than the picker that launched it, which does not read
+ * as a form. The modal is therefore never sized below two rows.
+ *
+ * This is deliberately NOT applied in `requiredFormLayout`: that function describes the
+ * actual list, and a one-field form genuinely has one row. The extra height simply falls
+ * below the last field.
+ */
+export const FORM_MIN_ROWS = 2;
+
 export const LABEL_COLUMN_WIDTH_PX = 150;
 export const CONTROL_COLUMN_WIDTH_PX = 320;
 // 36px is the real row height (.twyst-form-row min-height, and the min-block-size of
@@ -34,6 +47,21 @@ export const FORM_PADDING_PX = 20;
 // the header also carried an eyebrow and a status-name heading.
 export const FORM_HEADER_PX = 40;
 export const FORM_ACTIONS_PX = 64;
+
+/**
+ * Headroom, because the height we ASK for is not the height we GET.
+ *
+ * monday draws its own modal chrome (the close button, its own padding) in the box it
+ * gives us, and rows can render a pixel or two over their budget. Sizing the form to
+ * fit the request EXACTLY meant a few pixels of overflow in practice, and those few
+ * pixels are what pushed the title and the submit button into the scroll.
+ *
+ * The CSS is what GUARANTEES the header and footer stay put (see the
+ * `grid-template-rows: minmax(0, 1fr)` note on .twyst-required-fields-modal) — this
+ * constant only keeps the common case from needing to scroll at all. It is one flat
+ * allowance, not per-row, so it costs nothing in visible dead space.
+ */
+export const MODAL_CHROME_PX = 24;
 
 /**
  * Row geometry for a set of required fields.
@@ -64,7 +92,9 @@ export function requiredFormLayout(fields) {
  * @returns {{width: string, height: string}}
  */
 export function requiredFormModalSize(fields) {
-  const { rows } = requiredFormLayout(fields);
+  const { rows: listRows } = requiredFormLayout(fields);
+  // Sized rows, not list rows — see FORM_MIN_ROWS.
+  const rows = Math.max(listRows, FORM_MIN_ROWS);
 
   const width = (FORM_PADDING_PX * 2)
     + LABEL_COLUMN_WIDTH_PX
@@ -75,7 +105,8 @@ export function requiredFormModalSize(fields) {
     + FORM_HEADER_PX
     + FORM_ACTIONS_PX
     + (rows * FIELD_ROW_HEIGHT_PX)
-    + (Math.max(0, rows - 1) * FORM_GAP_PX);
+    + (Math.max(0, rows - 1) * FORM_GAP_PX)
+    + MODAL_CHROME_PX;
 
   return { width: `${width}px`, height: `${height}px` };
 }

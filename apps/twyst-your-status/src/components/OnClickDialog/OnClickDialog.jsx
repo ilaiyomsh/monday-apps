@@ -187,13 +187,25 @@ function OnClickDialog({ context }) {
       return;
     }
 
+    /*
+     * No required fields: the pick IS the whole interaction, so the dialog closes the
+     * moment the write lands, with NO success notice — the cell behind it already shows
+     * the new status, and the dialog disappearing is the confirmation.
+     *
+     * The write is awaited rather than fired and forgotten, deliberately. `closeDialog`
+     * tears the iframe down, and a request still in flight when that happens is
+     * cancelled by the browser — the user would watch the dialog close on a status that
+     * was never written, with nothing to tell them. One round-trip of latency is covered
+     * by the spinner on the clicked pill; a silently dropped status change is not
+     * recoverable.
+     *
+     * A failure keeps the dialog open and shows the error in it, which is why the
+     * dismissal sits inside the try and not in a finally.
+     */
     try {
       setSavingLabelId(labelId);
       setError(null);
       await writeStatusOnly(labelId);
-      // No label name in the notice: an unnamed label made it read `ל״״`, and the
-      // cell the user is looking at already shows which status was set.
-      await mondayService.showNotice('הסטטוס עודכן בהצלחה');
       await dismissPicker();
     } catch (err) {
       logger.error('OnClickDialog', 'Failed to update status value', err);
