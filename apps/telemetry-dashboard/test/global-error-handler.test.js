@@ -68,10 +68,15 @@ describe('setupGlobalErrorHandlers', () => {
     win.dispatch('error', { target: { tagName: 'SCRIPT', src: 'https://cdn/x.js' } }, true);
 
     expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith('globalErrorHandler', 'Resource failed to load', {
-      url: 'https://cdn/x.js',
-      tag: 'SCRIPT',
-    });
+    // url + tag ride the Error's message, NOT a `{ url, tag }` object (audit finding 1):
+    // a plain object lands in record.data, which the sink never copies and the transport
+    // allowlist does not carry, so the failed URL could not reach the dataset.
+    const [mod, msg, payload] = logger.warn.mock.calls[0];
+    expect(mod).toBe('globalErrorHandler');
+    expect(msg).toBe('Resource failed to load');
+    expect(payload).toBeInstanceOf(Error);
+    expect(payload.message).toContain('https://cdn/x.js');
+    expect(payload.message).toContain('SCRIPT');
     expect(logger.error).not.toHaveBeenCalled();
   });
 

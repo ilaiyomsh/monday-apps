@@ -354,6 +354,30 @@ describe('drift — vendored BROWSER copies conform to the transport contract', 
         expect((payload as Error).message).toBe('Script error.');
       });
 
+      // Audit finding 1: the failed URL was passed as a `{ url, tag }` object, which lands
+      // in record.data — a field the sink deliberately never copies (privacy) and which is
+      // not on the transport allowlist either. So WHICH asset failed could not reach Axiom
+      // at all. It now rides err_msg, an allowlisted field that is scrubbed and capped.
+      it('globalErrorHandler reports a resource failure as an Error naming the URL and tag', () => {
+        const win = fakeTarget();
+        const logger = { warn: vi.fn(), error: vi.fn() };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        surface.geh(logger as any, { win: win as any });
+
+        // Resource failures reach the CAPTURE listener only (they do not bubble).
+        for (const l of win.listenersFor('error')) {
+          if (l.capture) {
+            l.cb({ target: { tagName: 'SCRIPT', src: 'https://cdn.example.com/app.js' }, preventDefault() {} });
+          }
+        }
+
+        expect(logger.warn).toHaveBeenCalledTimes(1);
+        const payload = logger.warn.mock.calls[0][2];
+        expect(payload).toBeInstanceOf(Error);
+        expect((payload as Error).message).toContain('https://cdn.example.com/app.js');
+        expect((payload as Error).message).toContain('SCRIPT');
+      });
+
       it('globalErrorHandler passes a real Error through as the SAME instance (log-once identity)', () => {
         const win = fakeTarget();
         const logger = { warn: vi.fn(), error: vi.fn() };

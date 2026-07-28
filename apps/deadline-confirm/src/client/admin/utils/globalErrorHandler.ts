@@ -152,17 +152,24 @@ export function setupGlobalErrorHandlers(
       if (tag !== 'SCRIPT' && tag !== 'LINK' && tag !== 'IMG') return;
 
       const url = target.src || target.href || '';
-      // Resource error events carry no `message`; the chunk detector matches on
-      // message text, so build a pseudo-error for it.
-      const pseudoError = new Error(`Failed to load resource: ${url}`);
+      // Resource error events carry no `message`; the chunk detector matches on message
+      // text, so build a pseudo-error for it. The tag is folded into the message so a
+      // failed stylesheet stays distinguishable from a failed script.
+      const pseudoError = new Error(`Failed to load resource: ${tag} ${url}`);
       if (tryHandleChunkError(pseudoError)) {
         e.preventDefault?.();
         return;
       }
 
-      // A NON-chunk resource failure (stylesheet / image / non-chunk script) must
-      // still be recorded — WARN, not ERROR, so a missing asset does not pop a toast.
-      logger.warn('globalErrorHandler', 'Resource failed to load', { url, tag });
+      // A NON-chunk resource failure (stylesheet / image / non-chunk script) must still be
+      // recorded — WARN, not ERROR, so a missing asset does not pop an error toast.
+      //
+      // The pseudo-error is the PAYLOAD, not a `{ url, tag }` object (audit finding 1):
+      // a plain object lands in record.data, which the sink deliberately never copies
+      // (privacy) and which is not on the transport allowlist either — so the one fact
+      // that makes this actionable, WHICH asset failed, could never reach Axiom. As an
+      // Error it rides `err_msg`, an allowlisted field that scrubMessage redacts and caps.
+      logger.warn('globalErrorHandler', 'Resource failed to load', pseudoError);
     },
     true,
   );

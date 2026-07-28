@@ -81,7 +81,12 @@ describe('setupGlobalErrorHandlers — routing', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].level).toBe('WARN');
     expect(calls[0].module).toBe('globalErrorHandler');
-    expect(calls[0].payload).toEqual({ url: 'https://cdn.example.com/logo.png', tag: 'IMG' });
+    // url + tag ride the Error's message, NOT a `{ url, tag }` object (audit finding 1):
+    // a plain object lands in record.data, which the sink never copies and the transport
+    // allowlist does not carry, so the failed URL could not reach the dataset.
+    expect(calls[0].payload).toBeInstanceOf(Error);
+    expect((calls[0].payload as Error).message).toContain('https://cdn.example.com/logo.png');
+    expect((calls[0].payload as Error).message).toContain('IMG');
   });
 
   it('ignores a capture-phase error whose target is the window itself (that is the bubble listener\'s job)', () => {
@@ -256,5 +261,54 @@ describe('setupGlobalErrorHandlers — every reported error carries retrievable 
     const payload = reported(calls)[0] as Error;
     expect(payload).toBeInstanceOf(Error);
     expect(payload.message.length).toBeGreaterThan(0);
+  });
+});
+
+// Audit finding 1: the failed resource URL was passed as the logger PAYLOAD position's
+// plain object ({ url, tag }), which lands in record.data — a field the sink deliberately
+// never copies (privacy) and which is not on the transport allowlist either. So the one
+// fact that makes a resource failure actionable, WHICH asset failed, could not reach Axiom
+// at all. The URL now rides err_msg, an allowlisted field that is scrubbed and capped.
+describe('setupGlobalErrorHandlers — a resource failure carries its URL where the sink can read it', () => {
+  const resourceEvent = (over: Record<string, unknown> = {}) => ({
+    target: { tagName: 'SCRIPT', src: 'https://cdn.example.com/assets/app.js', ...over },
+    preventDefault: () => {},
+  });
+
+  it('reports the failure as an Error whose message names the failed URL', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('error', resourceEvent(), 'capture');
+
+    const warn = calls.find((c) => c.level === 'WARN');
+    expect(warn).toBeDefined();
+    // The payload must be an Error: that is the ONLY position mapRecordToEvent reads
+    // err_msg from, so a plain object here cannot reach the dataset.
+    expect(warn!.payload).toBeInstanceOf(Error);
+    expect((warn!.payload as Error).message).toContain('https://cdn.example.com/assets/app.js');
+  });
+
+  it('names the failing element type too, so a stylesheet is distinguishable from a script', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('error', resourceEvent({ tagName: 'LINK', src: undefined, href: 'https://cdn.example.com/app.css' }), 'capture');
+
+    const warn = calls.find((c) => c.level === 'WARN')!;
+    expect((warn.payload as Error).message).toContain('LINK');
+    expect((warn.payload as Error).message).toContain('https://cdn.example.com/app.css');
+  });
+
+  it('still logs at WARN, not ERROR (a missing asset must not pop an error toast)', () => {
+    const { win, emit } = fakeWin();
+    const { logger, calls } = fakeLogger();
+    setupGlobalErrorHandlers(logger, { win });
+
+    emit('error', resourceEvent(), 'capture');
+
+    expect(calls.map((c) => c.level)).toEqual(['WARN']);
   });
 });
