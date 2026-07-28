@@ -28,6 +28,24 @@ Configure in Developer Center → feature → Dialog Design → Custom size:
 (`8+8` padding + `6×34` pills + `5×6` gaps). More than 6 labels scroll inside
 the menu. See `src/utils/pickerDialogSize.js`.
 
+## Boot loading state — one spinner, monday's
+
+monday paints its own spinner in the Dialog container while our iframe loads. The
+app must **continue** that spinner, never answer it with a loader of its own: a
+second loader starts its animation from 0 and reads as a jump.
+
+- The spinner is static markup + inline CSS in `index.html`, a sibling of `#root`
+  — so it paints on the first frame, before the bundle is fetched, and survives
+  `createRoot()` (which wipes its container).
+- It is a hand copy of `@vibe/core`'s `Loader`, `dark` variant, 40px. **Re-sync by
+  hand if Vibe's Loader changes** — it is not imported.
+- Removal is the only operation: `src/utils/bootLoader.js`. App releases it on any
+  non-picker route or a context error; `OnClickDialog` releases it once settings
+  AND board data have arrived; the error boundary and a 15s timer in `index.jsx`
+  are backstops so a failure can never leave a dialog spinning forever.
+- The picker therefore renders **nothing** while loading. Do not reintroduce a
+  skeleton or a `<Loader>` there — that was the jump (removed in 3.3.0).
+
 ## Product rules
 
 - Configuration is stored in global `monday.storage` under

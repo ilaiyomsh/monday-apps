@@ -25,6 +25,7 @@
 import React from 'react';
 import { ErrorBoundary, useErrorBoundary } from 'react-error-boundary';
 import logger from '../../utils/logger';
+import { dismissBootLoader } from '../../utils/bootLoader';
 
 /**
  * Chunk-load detection. A failed dynamic import / stale-deploy asset fetch is NOT
@@ -119,6 +120,11 @@ const DefaultFallback = ({ error, resetErrorBoundary }) => {
  */
 export const AppErrorBoundary = ({ children, scope = 'root', FallbackComponent, onReset }) => {
     const handleError = (error, info) => {
+        // The boot overlay is opaque and covers everything. If the tree crashed
+        // before whoever owns the overlay got to release it, the fallback screen
+        // below would render invisibly and the user would watch a spinner
+        // forever. Take it down first, then log.
+        dismissBootLoader();
         // Canonical render-throw record. Pass the component stack in context so a
         // remote sink can attribute the crash; do NOT also toast here ג€” the
         // fallback screen is the single user-facing surface for render throws.

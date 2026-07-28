@@ -28,6 +28,7 @@ import { attachAxiomSink } from './utils/axiomErrorSink';
 import logger from './utils/logger';
 import { VERSION_LABEL } from './utils/versionLabel';
 import { AppErrorBoundary } from './components/ErrorBoundary/AppErrorBoundary';
+import { dismissBootLoader } from './utils/bootLoader';
 import App from './App';
 import './index.css';
 
@@ -42,6 +43,21 @@ setupGlobalErrorHandlers();
 //     instanceId}) (useMondayContext is the natural place).
 attachAxiomSink();
 logger.health('client_started', { version: VERSION_LABEL });
+
+// 1c. Boot-overlay backstop. The overlay (index.html) is opaque and is normally
+//     taken down by App / OnClickDialog / the error boundary. This covers the
+//     paths none of them can reach — a module that throws before React mounts, a
+//     hook that never settles — so the worst case is a slow dialog, never a
+//     permanently spinning one. Cheap: one timer, cleared implicitly by removal.
+const BOOT_OVERLAY_MAX_MS = 15000;
+setTimeout(() => {
+  const stillUp = document.getElementById('twyst-boot-loader') !== null;
+  if (!stillUp) return;
+  logger.error('bootLoader', 'boot overlay still up after timeout — forcing dismissal', {
+    afterMs: BOOT_OVERLAY_MAX_MS,
+  });
+  dismissBootLoader();
+}, BOOT_OVERLAY_MAX_MS);
 
 // 2. React 18 createRoot takes no error options ג€” the boundary + global handlers
 //    are the entire safety net.

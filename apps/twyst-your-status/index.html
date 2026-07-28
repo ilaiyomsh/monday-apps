@@ -6,10 +6,71 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>twyst-your-status</title>
+    <!--
+      BOOT OVERLAY — a pixel copy of monday's own spinner, so the handoff from
+      monday's dialog loader to ours is invisible.
+
+      Everything below is INLINE on purpose. A <link>ed stylesheet or a React
+      component would only appear after a network round-trip and a bundle parse:
+      the user would see monday's spinner, then a blank frame, then a DIFFERENT
+      loader restarting its animation from 0. Inline CSS + static markup paint on
+      the document's FIRST frame, with no request of their own.
+
+      The SVG is @vibe/core's Loader verbatim (v3.88.3 —
+      components/loader/Loader.js + Loader.module.scss): viewBox 0 0 50 50, one
+      r=20 stroke-width=5 circle, 1s linear rotate plus the 1s dash keyframes.
+      The colour is Loader's `dark` variant, var(--primary-text-color) — the black
+      spinner monday shows. This is a COPY, not an import: if Vibe's Loader ever
+      changes, this block has to be re-synced by hand.
+
+      prefers-reduced-motion is deliberately NOT honoured: a frozen spinner reads
+      as a hung app, and monday's own loader keeps spinning regardless.
+    -->
+    <style>
+      #twyst-boot-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--primary-background-color, #ffffff);
+      }
+
+      #twyst-boot-loader svg {
+        width: 40px;
+        height: 40px;
+        color: var(--primary-text-color, #323338);
+        stroke: currentColor;
+        stroke-linecap: round;
+        animation: twystBootRotate 1s linear infinite;
+      }
+
+      #twyst-boot-loader circle {
+        animation: twystBootDash 1s infinite;
+      }
+
+      @keyframes twystBootRotate {
+        100% { transform: rotate(360deg); }
+      }
+
+      @keyframes twystBootDash {
+        0%   { stroke-dasharray: 1, 150;  stroke-dashoffset: 0; }
+        50%  { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+        100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <!-- Sibling of #root, never a child: createRoot() wipes its container on the
+         first render, which would destroy this node and restart the animation
+         mid-spin. src/utils/bootLoader.js is the only thing that removes it. -->
+    <div id="twyst-boot-loader" role="alert" title="טוען">
+      <svg viewBox="0 0 50 50" aria-hidden="true">
+        <circle cx="25" cy="25" r="20" fill="none" stroke-width="5"></circle>
+      </svg>
+    </div>
     <script type="module" src="/src/index.jsx"></script>
   </body>
 </html>
-

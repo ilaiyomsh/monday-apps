@@ -1,5 +1,20 @@
 # Changelog
 
+## 3.3.0
+
+- Picker boot is now a single continuous spinner. monday shows a black spinner in
+  the Dialog while the iframe loads; the app used to answer it with a shimmer
+  skeleton, so the user saw monday's spinner, then a blank frame, then bars —
+  a visible jump. The app now continues monday's spinner instead: a pixel copy of
+  `@vibe/core`'s `Loader` (`dark`, 40px), inline in `index.html` so it paints on
+  the first frame with no request of its own, and held as the SAME DOM node for
+  the whole boot so its rotation never restarts.
+- Held across every boot phase — monday context, column settings, board data —
+  and released only when the picker has real content, or an error to show.
+  Backstops: the error boundary and a 15s timer, so nothing can leave a dialog
+  spinning forever.
+- Removed the shimmer skeleton added in 3.2.9 (`StatusPickerSkeleton`) and its CSS.
+
 ## 3.2.9
 
 - Picker shows a monday-style shimmer skeleton (6 label-sized bars, no loading

@@ -21,8 +21,8 @@ import mondayService from '../../services/mondayService';
 import { loadUserTeamIds } from '../../services/teamsAccess';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
+import { dismissBootLoader } from '../../utils/bootLoader';
 import ErrorState from '../shared/ErrorState';
-import StatusPickerSkeleton from './StatusPickerSkeleton';
 import './OnClickDialog.css';
 
 function inputTypeFor(columnType) {
@@ -290,12 +290,25 @@ function OnClickDialog({ context }) {
     }
   };
 
+  // Release monday's continued spinner (index.html) the moment this dialog has
+  // something real to show — content, or an error the user must see. App holds it
+  // through the context phase and hands it here; this is the last owner, so a
+  // dismissal that never fires means a dialog stuck behind a spinner.
+  const stillLoadingDialog = (settingsLoading || loading) && !settingsError;
+  useEffect(() => {
+    if (!stillLoadingDialog) dismissBootLoader();
+  }, [stillLoadingDialog]);
+
   if (settingsError) {
     return <ErrorState message="טעינת ההגדרות נכשלה. נסו שוב." onRetry={reloadSettings} />;
   }
 
   if (settingsLoading || loading) {
-    return <StatusPickerSkeleton />;
+    // The boot overlay from index.html is still covering the dialog — it has been
+    // spinning since monday handed the iframe over, and releasing it here just to
+    // draw our own loader is the jump we removed. Render nothing; the effect
+    // above takes the overlay down the moment there is real content.
+    return null;
   }
 
   if (error && !formTarget) {

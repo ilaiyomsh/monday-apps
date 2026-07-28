@@ -1,9 +1,9 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { useMondayContext } from './hooks/useMondayContext';
 import OnClickDialog from './components/OnClickDialog/OnClickDialog';
-import StatusPickerSkeleton from './components/OnClickDialog/StatusPickerSkeleton';
 import LoadingState from './components/shared/LoadingState';
 import ErrorState from './components/shared/ErrorState';
+import { dismissBootLoader } from './utils/bootLoader';
 
 // Settings surfaces open rarely; keep them off the picker's critical path.
 const SettingsLauncher = lazy(() => import('./components/ColumnSettings/SettingsLauncher'));
@@ -26,16 +26,19 @@ function App() {
   const { context, loading, error } = useMondayContext();
   const route = resolveAppRoute();
 
-  // Picker: shimmer pills from the first paint — no spinner flash in the cell dialog.
-  if (loading && route === 'picker') {
-    return (
-      <div className="app-shell is-picker light-app-theme" dir="rtl">
-        <StatusPickerSkeleton />
-      </div>
-    );
-  }
+  // The boot overlay (index.html) is monday's dialog spinner continued, so it is
+  // the picker's alone. Every other route drops it at once; the picker keeps it
+  // past THIS phase and hands it to OnClickDialog, which owns the release once it
+  // has data. An error releases it too — a failure must not sit behind a spinner.
+  const pickerStillBooting = route === 'picker' && !error;
+  useEffect(() => {
+    if (!pickerStillBooting) dismissBootLoader();
+  }, [pickerStillBooting]);
 
   if (loading) {
+    // Under the overlay: render nothing rather than a second loader. A loader of
+    // our own here is exactly the visible jump this replaced.
+    if (route === 'picker') return null;
     return <LoadingState />;
   }
 
