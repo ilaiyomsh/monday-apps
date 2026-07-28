@@ -262,6 +262,12 @@ vendor a copy that `packages/error-kit/test/drift.test.ts` keeps behaviorally in
 Never a raw fetch. Shared dataset `app-errors`, discriminated by `app`. Wiring is enforced
 in CI by `scripts/error-wiring-audit.mjs` + the error-kit test suite (both blocking).
 
+**Axiom is not live until the owner activates it.** The wiring is complete and fail-soft, so a
+missing token silently means "nothing ships" rather than a broken build. What is still required —
+per surface, with the exact commands and what breaks without each — is tracked in
+**`docs/ERROR-AXIOM-STANDARD.md` → "Activation status"**. Agents never set these (see Secrets &
+env); read that section before concluding an app "isn't reporting errors".
+
 To **query/triage** `app-errors` (send an agent to check errors), use the `axiom-sre`
 skill — agent playbook with the live schema, conventions/gotchas (e.g. `err_name` is
 often empty; there is no `err_code` column), and ready-to-run APL queries:

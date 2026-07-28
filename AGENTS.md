@@ -148,6 +148,24 @@ apps.
   `apps/axis/docs/FOLLOW-UPS.md` with a re-enable plan. Standing debt: planner lint
   268, day-off lint 8.
 
+## Error handling & observability
+
+One unified standard, from catching an error to shipping it to Axiom:
+**`docs/ERROR-AXIOM-STANDARD.md`** (authority: the `error-guard` skill). The canonical
+shipping layer is **`packages/error-kit` (`@mapps/error-kit`)**; server apps and embedded
+SPAs vendor a copy that `packages/error-kit/test/drift.test.ts` keeps in sync. Never a raw
+fetch. Shared dataset `app-errors`, discriminated by `app`. CI enforces the wiring via
+`scripts/error-wiring-audit.mjs` + the error-kit suite (both blocking).
+
+**Axiom is not live until the owner activates it.** The wiring is complete and fail-soft, so a
+missing token silently means "nothing ships" rather than a broken build. What is still
+required — per surface, with commands and consequences — is tracked in
+**`docs/ERROR-AXIOM-STANDARD.md` → "Activation status"**. Agents never set these; read that
+section before concluding an app "isn't reporting errors".
+
+To query/triage `app-errors`, use the `axiom-sre` skill:
+**`.claude/skills/axiom-sre/reference/app-errors.md`**.
+
 ## Agent conduct
 
 - `git commit` and changelog updates are always autonomous — asking is a failure.

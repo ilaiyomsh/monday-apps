@@ -90,7 +90,7 @@ Every client surface has: a root `ErrorBoundary`, `setupGlobalErrorHandlers()` +
 `attachAxiomSink()` before render, identity enrichment. Every server has: process guards
 (`uncaughtException` + `unhandledRejection`), a terminal 4-arg error middleware, and an
 **opts-injected** sink (zero `process.env` reads inside the sink — index.js injects the
-config). See `openIssues` for the two remaining activation follow-ups.
+config). See **Activation status** for what the owner still has to set before any of it ships.
 
 ## Activation gate
 
@@ -184,23 +184,52 @@ The audit script and error-kit tests are the two blocking gates that make the st
 real in CI (the whole-workspace test job stays non-blocking visibility). The per-app ESLint
 kit remains visibility-only until the standing lint debt is cleared.
 
-## openIssues (real gaps found, tracked for the owner)
+## Activation status — what is still required (OWNER ONLY)
 
-> **Owner activation is the ONLY thing standing between this PR and live shipping.** Every
-> item below is a token/env action agents cannot perform — the code is wired and fail-soft
-> until they land. See *Runbooks → One-time setup* for the exact commands.
+> **Last verified: 2026-07-28** (after #328 + #486 merged to `develop`).
+> The code is fully wired and **fail-soft**: every item below is a token/env action agents
+> cannot perform, and until it lands the corresponding sink is *inert* — nothing breaks, nothing
+> ships. Exact commands: *Runbooks → One-time setup*. Verify with *Runbooks → Acceptance test*.
 
-- **`AXIOM_INGEST_TOKEN` GitHub secret — not yet set.** Until it exists every client build
-  bakes an empty token and the gate stays inert (fail-soft). Blocks ALL client surfaces.
-- **sync-calender server dataset.** Ships via the opts-injected server sink but its runtime
-  `AXIOM_*` env still needs the user's `mapps code:env -i 11666315` change to land on
-  `app-errors`.
-- **telemetry-dashboard server env.** The `APP_TELEMETRY_DASHBOARD_ID` secret IS set — the app
-  deploys (verified 2026-07-28, draft deploy green on `0e0810a`). Its server still needs runtime
-  env (`mapps code:env`) for BOTH roles:
-  ingest (`AXIOM_TOKEN`/`AXIOM_DATASET`/`AXIOM_APP_NAME`) to ship its own errors, and query
-  (`AXIOM_QUERY_TOKEN` + `AXIOM_ORG_ID`) to READ app-errors — without the query token the
-  dashboard shows seed/demo data only.
+### 1. All 9 client surfaces — one GitHub secret
+
+| Required | Where | Without it |
+|---|---|---|
+| `AXIOM_INGEST_TOKEN` | repo GitHub secret | every client build bakes an empty token; the `PROD && token` gate stays inert. Blocks **all** browser surfaces at once. |
+
+One secret covers every client build — each deploy workflow's Build step derives
+`VITE_AXIOM_TOKEN` from it.
+
+### 2. Server runtime env — per app, via `mapps code:env`
+
+Three server surfaces read `AXIOM_TOKEN` + `AXIOM_DATASET` + `AXIOM_APP_NAME` at runtime
+(monday-code never populates `process.env` from files — this must be platform env):
+
+| App | App ID | Status |
+|---|---|---|
+| axis-sync-calender | `11666315` | ❌ not set |
+| telemetry-dashboard | in secret `APP_TELEMETRY_DASHBOARD_ID` | ❌ not set |
+| deadline-confirm | `11704868` | ⚠️ **unverified** — check with `mapps code:env -i 11704868 -m list` |
+
+`AXIOM_DATASET` is always `app-errors`; `AXIOM_APP_NAME` is the app's slug (it becomes the
+`app` discriminator in the shared dataset).
+
+### 3. telemetry-dashboard only — the reader role
+
+The dashboard is the one surface that **reads** `app-errors` (11 APL queries against `_apl`).
+That needs a **query-scoped** token, distinct from every ingest token above:
+
+| Required | Without it |
+|---|---|
+| `AXIOM_QUERY_TOKEN` + `AXIOM_ORG_ID` (server env) | the dashboard falls back to seed/demo mode — no real data |
+
+Never in any bundle: server-only, both of them.
+
+### Not blockers (recorded so they are not re-investigated)
+
+- `APP_TELEMETRY_DASHBOARD_ID` and `APP_TWYST_YOUR_STATUS_ID` **are** set — both apps
+  draft-deployed green on `0e0810a` (2026-07-28). Earlier revisions of this doc and of
+  `CLAUDE.md` listed them as pending; that was stale.
 
 ### Resolved by this PR (kept for history)
 - **deadline-confirm admin SPA — client sink inert in prod.** ✅ Fixed — both
