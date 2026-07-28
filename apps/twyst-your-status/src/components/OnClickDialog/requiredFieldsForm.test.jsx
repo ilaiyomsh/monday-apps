@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import RequiredFieldsForm from './RequiredFieldsForm';
 import { prefillFieldValue } from '../../domain/columnFields';
+import { LABEL_COLUMN_WIDTH_PX } from '../../utils/requiredFormModalSize';
 import probe from '../../test-utils/probes/required-field-values.json';
 
 const PROBE_VALUES = probe.data.items[0].column_values;
@@ -31,7 +32,7 @@ function probeColumn(type) {
   return probeCell(type).column;
 }
 
-function renderForm({ types, values, onSubmit = vi.fn(), columnsOverride }) {
+function renderForm({ types, values, onSubmit = vi.fn(), columnsOverride, busy = false }) {
   const columnsById = new Map(
     (columnsOverride ?? types.map((type) => probeColumn(type)))
       .map((column) => [column.id, column]),
@@ -42,7 +43,7 @@ function renderForm({ types, values, onSubmit = vi.fn(), columnsOverride }) {
       fields={fields}
       columnsById={columnsById}
       initialValues={values}
-      busy={false}
+      busy={busy}
       onSubmit={onSubmit}
     />,
   );
@@ -223,5 +224,56 @@ describe('RequiredFieldsForm blocking', () => {
     });
 
     expect(screen.queryByText('שדה חובה — יש למלא לפני המעבר.')).not.toBeInTheDocument();
+  });
+});
+
+/*
+ * The form's own chrome, both halves owner-requested in 3.9.0.
+ *
+ * The row grid takes its label-column width from the SAME constant the modal was
+ * sized with, instead of the stylesheet repeating the number: the widening is
+ * meaningless if the column names still lay out at the old width inside a wider
+ * window (which is exactly what a hard-coded `150px` in the CSS would have done).
+ *
+ * And the save must be VISIBLY in flight, because the form does not close until the
+ * status write has come back — a disabled button with no spinner reads as a click
+ * that did nothing.
+ */
+describe('RequiredFieldsForm chrome', () => {
+  const filledCheckbox = () => {
+    const column = probeColumn('checkbox');
+    return { types: ['checkbox'], values: { [column.id]: true } };
+  };
+
+  it('lays the rows out at the label-column width the modal was sized with', () => {
+    renderForm(filledCheckbox());
+
+    expect(document.querySelector('.twyst-form-rows').style
+      .getPropertyValue('--twyst-label-column-width')).toBe(`${LABEL_COLUMN_WIDTH_PX}px`);
+  });
+
+  it('holds the form open with a spinner and a blocked button while saving', () => {
+    renderForm({ ...filledCheckbox(), busy: true });
+
+    const submit = screen.getByRole('button', { name: /שומר/ });
+    expect(submit).toBeDisabled();
+    expect(submit.querySelector('.twyst-btn-spinner')).not.toBeNull();
+  });
+
+  it('shows no spinner before a save starts', () => {
+    // The partner assertion: a spinner painted unconditionally would pass the test
+    // above while telling the user a write is in flight on an idle form.
+    const { submit } = renderForm(filledCheckbox());
+
+    expect(submit()).not.toBeDisabled();
+    expect(document.querySelector('.twyst-btn-spinner')).toBeNull();
+  });
+
+  it('cannot be submitted twice while the first save is in flight', () => {
+    const { onSubmit } = renderForm({ ...filledCheckbox(), busy: true });
+
+    fireEvent.click(screen.getByRole('button', { name: /שומר/ }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });
