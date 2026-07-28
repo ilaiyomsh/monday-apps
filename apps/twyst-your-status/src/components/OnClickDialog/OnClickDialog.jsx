@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AttentionBox } from '@vibe/core';
 import { buildAvailableLabels } from '../../domain/buildAvailableLabels';
 import { parsePeopleColumnAssignments } from '../../domain/peopleColumnGate';
@@ -38,9 +38,15 @@ function OnClickDialog({ context }) {
   const [peopleByColumnId, setPeopleByColumnId] = useState({});
   const [actor, setActor] = useState({ userId: String(user?.id ?? ''), teamIds: [] });
   const [columnsById, setColumnsById] = useState(new Map());
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [savingLabelId, setSavingLabelId] = useState(null);
+  // Which fetch inputs the state currently in hand was loaded for, and a counter
+  // the retry bumps. `null` means nothing has landed yet. See dataPending below.
+  const [loadedKey, setLoadedKey] = useState(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  // Guards against a superseded run — one started before the settings widened the
+  // column set — landing last. See the comment where it is checked.
+  const runIdRef = useRef(0);
 
   // Null storage = no rules yet → everyone may pick every active label.
   const effectiveSettings = useMemo(
@@ -48,15 +54,45 @@ function OnClickDialog({ context }) {
     [settings],
   );
 
+  /*
+   * The columns this open needs, collapsed into a stable string so a settings
+   * object that churns its identity cannot re-trigger a fetch (the house idiom —
+   * cf. filterKey in apps/discussions/src/hooks/useMyTasks.js).
+   *
+   * This is what lets the board request go out WITHOUT waiting for storage.
+   * useColumnSettings seeds from swrCache synchronously during the first render,
+   * so on a warm open the gate columns are already known here, before any await.
+   * And settings can only ever WIDEN this set — they add people columns for
+   * gates, never remove the status column — so the worst case is one extra
+   * request on a cold open of a gated column, not a wrong request.
+   */
+  const columnIdsKey = useMemo(
+    () => JSON.stringify(
+      [...new Set([columnId, ...collectRequiredPeopleColumnIds(effectiveSettings)])].sort(),
+    ),
+    [columnId, effectiveSettings],
+  );
+
+  const fetchKey = `${reloadToken}|${columnIdsKey}`;
+
+  /*
+   * Both operands are RENDER values, which is the whole point. The old `loading`
+   * boolean was set inside the async run, so on the commit where the fetch inputs
+   * changed it still read false — and the overlay-dismissal effect runs after the
+   * fetch effect in that same commit, off the render-time value. It would drop
+   * monday's spinner for one frame, just before starting the refetch it was about
+   * to start. Derived this way, "the inputs changed but nothing has loaded for
+   * them yet" is not a state that can be misreported.
+   */
+  const dataPending = loadedKey !== fetchKey;
+
   const loadDialogData = useCallback(async () => {
     if (!boardId || !columnId || !itemId) return;
-    // Wait for settings so we know which people columns to fetch for gates.
-    if (settingsLoading) return;
+    const myRun = ++runIdRef.current;
+    // Parsed back from the key so the request and the key can never disagree.
+    const columnIds = JSON.parse(columnIdsKey);
     try {
-      setLoading(true);
       setError(null);
-      const gateColumnIds = collectRequiredPeopleColumnIds(effectiveSettings);
-      const columnIds = [...new Set([columnId, ...gateColumnIds])];
       const [data, teamsResult] = await Promise.all([
         mondayService.query(GET_STATUS_COLUMN_CONTEXT, {
           boardIds: [String(boardId)],
@@ -65,6 +101,16 @@ function OnClickDialog({ context }) {
         }),
         loadUserTeamIds(user?.id),
       ]);
+
+      /*
+       * A run started before the settings widened the column set must write
+       * NOTHING. Landing last, it would overwrite peopleByColumnId with a map
+       * missing the gate column — and the gate fails closed, so the labels behind
+       * it silently vanish — and it would pin loadedKey to its own stale key, with
+       * no effect left to fire. That is a permanently blank dialog with the boot
+       * overlay already down, not a slow one.
+       */
+      if (myRun !== runIdRef.current) return;
 
       const column = data?.boards?.[0]?.columns?.find((candidate) => candidate.id === columnId)
         ?? data?.boards?.[0]?.columns?.[0];
@@ -92,17 +138,31 @@ function OnClickDialog({ context }) {
           .filter((value) => value.column)
           .map((value) => [value.id, value.column]),
       ));
+      setLoadedKey(fetchKey);
     } catch (err) {
+      if (myRun !== runIdRef.current) {
+        // Superseded: the live run owns the state, including the error state. Still
+        // recorded — a failure that only ever happens on the run we discard is
+        // exactly the kind of thing that is otherwise invisible.
+        logger.warn('OnClickDialog', 'A superseded status-picker load failed', err);
+        return;
+      }
       logger.error('OnClickDialog', 'Failed to load status picker data', err);
       setError(err.message || 'לא הצלחנו לטעון את הסטטוסים');
-    } finally {
-      setLoading(false);
+      // An error ENDS the wait. Without this the guard below would hold `null`
+      // forever with the overlay already released — a blank dialog, no error.
+      setLoadedKey(fetchKey);
     }
-  }, [boardId, columnId, itemId, user?.id, settingsLoading, effectiveSettings]);
+  }, [boardId, columnId, itemId, user?.id, columnIdsKey, fetchKey]);
 
   useEffect(() => {
     loadDialogData();
   }, [loadDialogData]);
+
+  // A retry re-enters through the key, not by calling the loader directly: bumping
+  // the token makes dataPending true for the render that starts the retry, so the
+  // stale `labels=[]` cannot paint "אין כרגע סטטוסים זמינים" underneath it.
+  const retryDialogData = useCallback(() => setReloadToken((token) => token + 1), []);
 
   const pickerModel = useMemo(
     () => buildAvailableLabels({
@@ -219,7 +279,7 @@ function OnClickDialog({ context }) {
   // something real to show — content, or an error the user must see. App holds it
   // through the context phase and hands it here; this is the last owner, so a
   // dismissal that never fires means a dialog stuck behind a spinner.
-  const stillLoadingDialog = (settingsLoading || loading) && !settingsError;
+  const stillLoadingDialog = (settingsLoading || dataPending) && !settingsError;
   useEffect(() => {
     if (!stillLoadingDialog) dismissBootLoader();
   }, [stillLoadingDialog]);
@@ -228,7 +288,16 @@ function OnClickDialog({ context }) {
     return <ErrorState message="טעינת ההגדרות נכשלה. נסו שוב." onRetry={reloadSettings} />;
   }
 
-  if (settingsLoading || loading) {
+  /*
+   * The settings still gate the PAINT, even though they no longer gate the fetch.
+   * buildAvailableLabels filters by hiddenLabelIds and the allowlists, and the
+   * people gate fails closed, so painting before the settings are in would show
+   * labels this user may not pick and then take them away.
+   *
+   * Pending is checked before `error` on purpose: a stale error must never paint
+   * while its own replacement is already in flight.
+   */
+  if (settingsLoading || dataPending) {
     // The boot overlay from index.html is still covering the dialog — it has been
     // spinning since monday handed the iframe over, and releasing it here just to
     // draw our own loader is the jump we removed. Render nothing; the effect
@@ -237,7 +306,7 @@ function OnClickDialog({ context }) {
   }
 
   if (error) {
-    return <ErrorState message={error} onRetry={loadDialogData} />;
+    return <ErrorState message={error} onRetry={retryDialogData} />;
   }
 
   const NEUTRAL = 'hsl(0 0% 77%)';
