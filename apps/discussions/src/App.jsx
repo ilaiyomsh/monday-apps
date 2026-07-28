@@ -738,6 +738,26 @@ export default function App() {
     }
   };
 
+  // round300 — OPTIMISTIC create: open the new discussion's card INSTANTLY from the
+  // entered data (no id yet) and close the modal, while the create_item runs in the
+  // background (see CreateDiscussionModal). The card header renders from this shape;
+  // its data hooks stay idle on the null id until handleSaved patches the real id in.
+  const handleOptimisticCreate = (optimisticShape) => {
+    setShowCreate(false);
+    setEditDiscussion(null);
+    setDuplicateFrom(null);
+    setCreatePrefill(null);
+    setSelectedDiscussion(optimisticShape); // id: null → header shows, tabs idle
+    setShowList(false);
+  };
+  // The background create failed — drop the half-open optimistic card and return to
+  // the list with an error notice so the user can recreate.
+  const handleCreateError = () => {
+    setSelectedDiscussion(null);
+    setShowList(true);
+    notify('יצירת הדיון נכשלה — נסו שוב', 'error');
+  };
+
   const handleCopyDiscussionLink = async (discussionId, tab) => {
     if (!discussionId || !tab) return false;
     try {
@@ -1051,6 +1071,8 @@ export default function App() {
         prefill={createPrefill}
         onClose={() => { setShowCreate(false); setEditDiscussion(null); setDuplicateFrom(null); setCreatePrefill(null); }}
         onCreated={handleSaved}
+        onOptimisticCreate={handleOptimisticCreate}
+        onCreateError={handleCreateError}
         canManageSettings={canManageSettings}
       />
 

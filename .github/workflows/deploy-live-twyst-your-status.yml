@@ -1,0 +1,107 @@
+name: Deploy LIVE - twyst-your-status
+
+# Spec section 7.2: merges into main auto-deploy to the app's LATEST LIVE
+# version via --force. This rebuilds from main and pushes straight to
+# production — there is no promote-the-tested-draft step.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/twyst-your-status/**"
+      - "packages/shared/**"
+
+jobs:
+  deploy-live:
+    name: "🚨 FORCE DEPLOY twyst-your-status TO LIVE 🚨"
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-live-twyst-your-status
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build twyst-your-status
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
+          VITE_IS_RELEASE: "true"
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: twyst-your-status
+        run: pnpm --filter "./apps/twyst-your-status" build
+
+      - name: Archive sourcemaps as build artifact (for stack symbolication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-twyst-your-status-live-${{ github.sha }}
+          path: apps/twyst-your-status/dist/**/*.map
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Strip sourcemaps before deploy (never ship .map to the CDN)
+        run: |
+          set -euo pipefail
+          find apps/twyst-your-status/dist -name '*.map' -type f -delete
+          remaining="$(find apps/twyst-your-status/dist -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining .map files in deploy dir: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::sourcemaps still present in deploy dir — refusing to push (would leak source to the CDN)"
+            exit 1
+          fi
+
+      - name: Install monday.com apps CLI
+        run: npm install -g @mondaycom/apps-cli
+
+      - name: Authenticate mapps CLI (non-interactive)
+        run: mapps init -t "$MONDAY_TOKEN"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
+
+      - name: Resolve LIVE version id (pin the target)
+        id: live
+        run: |
+          set -euo pipefail
+          LIVE_ID="$(mapps app-version:list -i "$APP_ID" 2>/dev/null \
+            | awk -F'│' '$7 ~ /live/ { gsub(/[^0-9]/, "", $3); print $3; exit }')"
+          if [ -z "$LIVE_ID" ]; then
+            echo "::error::app $APP_ID has no LIVE version — first go-live is a deliberate promote (pipeline-model.md §4b); this workflow only refreshes an existing live version."
+            exit 1
+          fi
+          echo "Resolved LIVE version id: $LIVE_ID"
+          echo "live_id=$LIVE_ID" >> "$GITHUB_OUTPUT"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
+          APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}
+
+      - name: "🚨 FORCE push to LIVE version (pinned id) 🚨"
+        run: |
+          set -uo pipefail
+          for attempt in 1 2; do
+            if mapps code:push --force -c \
+                 -d apps/twyst-your-status/dist \
+                 -i "${{ steps.live.outputs.live_id }}"; then
+              exit 0
+            fi
+            echo "push attempt $attempt failed; retrying once in 15s (transient remote error)…"
+            sleep 15
+          done
+          echo "::error::code:push to live version ${{ steps.live.outputs.live_id }} failed after retry"
+          exit 1
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}

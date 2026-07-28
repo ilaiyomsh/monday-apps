@@ -1,9 +1,9 @@
 // monday sessionToken verification for /api/* (spec §9): JWT signed with the
 // app's Client Secret, identity under payload.dat { account_id, user_id }
-// (reference: sync-calender session-token.js). v3 multi-tenant: the account
-// gate is an OPTIONAL allowlist — empty list admits every account (isolation
-// is structural, via per-account storage namespacing); a non-empty list
-// refuses accounts outside it.
+// (reference: sync-calender session-token.js). V6 D15: allowedAccountIds is
+// the tenant roster — empty = default-deny (nobody admitted), matching
+// AMP_ALLOWED_SENDERS. Isolation remains structural via per-account storage
+// namespacing; the list is also the scheduler/send roster.
 
 import jwt from 'jsonwebtoken';
 
@@ -32,8 +32,9 @@ export function verifySessionToken(rawToken, clientSecret) {
 /**
  * Create the Express middleware guarding every admin route.
  * 401 { error: 'invalid_session_token' } for missing/invalid tokens;
- * 403 { error: 'forbidden_account' } when a non-empty allowlist excludes the
- * token's account; success → req.session = { accountId, userId } (strings).
+ * 403 { error: 'forbidden_account' } when the account is not on the roster
+ * (including when the roster is empty — D15 default-deny);
+ * success → req.session = { accountId, userId } (strings).
  * @param {{ clientSecret: string, allowedAccountIds: string[] }} opts
  * @returns {import('express').RequestHandler}
  */
@@ -45,7 +46,7 @@ export function createSessionTokenMiddleware({ clientSecret, allowedAccountIds }
       res.status(401).json({ error: 'invalid_session_token' });
       return;
     }
-    if (allowedAccountIds.length > 0 && !allowedAccountIds.includes(session.accountId)) {
+    if (!allowedAccountIds.includes(session.accountId)) {
       res.status(403).json({ error: 'forbidden_account' });
       return;
     }

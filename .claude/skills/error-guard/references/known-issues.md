@@ -26,6 +26,16 @@ is allowed ONLY for shapes listed here, with a comment naming the entry.
 
 ## Defect log
 
+### 2026-07-27 — audit.sh failed on Windows Git Bash (FIXED)
+- **Trigger:** auditing a fresh column-view scaffold from a Git worktree.
+  `resolve_module` passed an MSYS `/c/...` path inside JavaScript, so
+  `eslint-plugin-promise` was reported missing even though it was installed;
+  the script then crashed because `jq` was not installed.
+- **Fix at source:** module resolution now runs with the app as Node's working
+  directory, and all JSON config/report processing uses Node.js instead of
+  `jq`. This keeps the audit self-contained on Windows and Unix.
+- **Consumer checked:** `twyst-your-status` standalone scaffold.
+
 ### 2026-07-14 — check.sh false positive on foreign inline eslint-disable (FIXED)
 - **Trigger:** editing `DatePickerPopover.jsx`, which carries an
   `eslint-disable-next-line react-hooks/exhaustive-deps` comment, tripped the
@@ -102,15 +112,11 @@ is allowed ONLY for shapes listed here, with a comment naming the entry.
   `check.sh`/`audit.sh` as not yet existing while using them as the acceptance gate.
 - **Fix:** wording removed from SKILL.md + retrofit-runbook.md same session.
 
-## Hook union selector misses the server `logError` convention (2026-07-19)
+## Hook union selector misses the server `logError` convention (2026-07-19) — FIXED 2026-07-27
 
-`scripts/check.sh`'s UNION_SELECTOR accepts only `logger.*` member calls,
+`scripts/check.sh`'s UNION_SELECTOR previously accepted only `logger.*` member calls,
 `throw`, `showErrorWithDetails`, or `next(err)` inside a catch. deadline-confirm's
 server convention is the named import `logError(tag, msg, ctx)` from
 `helpers/logger.js` — semantically the same funnel — so the PostToolUse hook
-flags EVERY such catch (including long-committed code like
-`confirm-service.js`), while the app's own ESLint kit passes clean. Until the
-selector adds `:not(:has(CallExpression[callee.name='logError']))` (and the
-sibling `logAttempt`/`logInfo` names where appropriate), treat hook findings
-on `logError(...)`-handled catches in this app as false positives — verify
-with `npx eslint <file>` before "fixing".
+flagged EVERY such catch as a false positive. **Fix:** selector now also allows
+`CallExpression[callee.name='logError']`.

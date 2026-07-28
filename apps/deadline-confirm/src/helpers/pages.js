@@ -1,13 +1,9 @@
-// The three static /confirm response pages (spec §7) + the OAuth result
-// pages (§8). Hard requirements: <html dir="rtl" lang="he">, inline CSS only,
-// no external assets, mobile-friendly. The /confirm pages contain ZERO
-// item/account-derived data — the only dynamic value is the config-derived
-// target label on the success page (locked decision §3.6).
+// OAuth result pages (spec §8). Hard requirements: <html dir="rtl" lang="he">,
+// inline CSS only, no external assets, mobile-friendly.
 //
-// JS policy (v4 phase 1 amendment, owner decision 2026-07-19): the SUCCESS
-// page carries ONE inline script — window.close() after 2s, with a visible
-// fallback line — so the email click round-trip ends by itself. The invalid
-// and bad-request pages stay JS-free: a human should read them.
+// V6 (docs/v6-amp-only-decisions.md T2): the /confirm route family is deleted,
+// and with it the three /confirm result pages and the JS auto-POST landing
+// page. These OAuth pages are the file's ONLY remaining exports.
 
 import { escapeHtml } from './html.js';
 
@@ -26,103 +22,6 @@ function renderPage({ title, heading, body, footer = '', script = '' }) {
 ${footer}
 </div>
 ${script}
-</body>
-</html>`;
-}
-
-/**
- * Success page (§7.1, HTTP 200).
- * @param {string} toLabel - HTML-escaped here (config-derived, never trusted raw)
- * @returns {string} full HTML document
- */
-export function successPage(toLabel) {
-  return renderPage({
-    title: 'המשימה עודכנה',
-    heading: 'המשימה עודכנה ✓',
-    body: `הסטטוס שונה ל"${escapeHtml(toLabel)}".`,
-    footer:
-      '<p id="close-note" style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#9aa0a8;">החלון נסגר בעוד רגע…</p>',
-    // Auto-close (v4 phase 1): most browsers allow closing a tab that was
-    // opened from an external app (the email client). Where refused, the
-    // visible note flips to a manual-close hint.
-    script: `<script>
-setTimeout(function () {
-  window.close();
-  setTimeout(function () {
-    var n = document.getElementById('close-note');
-    if (n) n.textContent = 'אפשר לסגור את החלון ולחזור למייל';
-  }, 350);
-}, 2000);
-</script>`,
-  });
-}
-
-/**
- * Generic invalid page (§7.2, HTTP 200) — uniform for bad k, not found,
- * wrong board, wrong status, already done, expired, missing config, API error.
- * @returns {string} full HTML document
- */
-export function invalidPage() {
-  return renderPage({
-    title: 'הקישור אינו בתוקף',
-    heading: 'הקישור אינו בתוקף',
-    body: 'ייתכן שהמשימה כבר טופלה או שהקישור הוחלף. אפשר לבדוק את הסטטוס ישירות בלוח.',
-  });
-}
-
-/**
- * Bad request page (§7.3, HTTP 400).
- * @returns {string} full HTML document
- */
-export function badRequestPage() {
-  return renderPage({
-    title: 'בקשה שגויה',
-    heading: 'בקשה שגויה',
-    body: 'הקישור שהגיע אינו תקין.',
-  });
-}
-
-/**
- * v2 — mail-scanner protection landing page (owner decision 2026-07-15).
- * Served on GET /confirm AFTER the secret gate + rate limit; performs the
- * action via an immediate JS auto-submitted POST so link-following email
- * scanners (which don't execute JS) never change statuses.
- *
- * Requirements:
- * - <html dir="rtl" lang="he">, inline CSS, mobile-friendly
- * - a <form method="post" action="/confirm"> with HIDDEN inputs itemId, k,
- *   btn — every value HTML-ATTRIBUTE-escaped
- * - an inline <script> that submits the form immediately on load
- * - a <noscript> fallback INSIDE the form showing a real submit button
- *   (text: המשך לאישור) — one extra click for JS-less humans, nothing for
- *   scanners
- * - visible interim text: מאשר את המשימה…
- *
- * @param {{ itemId: string, k: string, btn: string }} params
- * @returns {string} full HTML document
- */
-export function confirmLandingPage({ itemId, k, btn, a }) {
-  return `<!doctype html>
-<html dir="rtl" lang="he">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>מאשר את המשימה…</title>
-</head>
-<body style="margin:0;padding:24px;background:#f6f7fb;font-family:Arial,Helvetica,sans-serif;">
-<div style="max-width:420px;margin:48px auto;background:#ffffff;border-radius:12px;padding:32px 24px;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,0.08);">
-<h1 style="margin:0 0 16px;font-size:22px;color:#323338;">מאשר את המשימה…</h1>
-<form id="confirm-form" method="post" action="/confirm">
-<input type="hidden" name="itemId" value="${escapeHtml(itemId)}">
-<input type="hidden" name="a" value="${escapeHtml(a)}">
-<input type="hidden" name="k" value="${escapeHtml(k)}">
-<input type="hidden" name="btn" value="${escapeHtml(btn)}">
-<noscript>
-<button type="submit" style="display:inline-block;padding:12px 32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;background-color:#00854d;border:none;border-radius:8px;cursor:pointer;">המשך לאישור</button>
-</noscript>
-</form>
-<script>document.getElementById('confirm-form').submit();</script>
-</div>
 </body>
 </html>`;
 }

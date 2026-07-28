@@ -1,5 +1,27 @@
 # mapps — known issues / quirks (skill's own tooling)
 
+## 2026-07-27 — Windows config location differs from the Unix wrapper default
+
+**Symptom:** `mapps.cmd` commands were authenticated and succeeded on Windows,
+while `mapps-api.sh` reported `.mappsrc not found` because it checked only
+`$HOME/.config/mapps/.mappsrc`.
+
+**Fix (same session, at source):** the wrapper now falls back to
+`$LOCALAPPDATA/mapps/.mappsrc` when the Unix path is absent. The token file is
+still read only inside the wrapper and is never printed by diagnostics. The
+payload builder now uses Node.js instead of the Windows `python3` app-execution
+alias, which can exist on `PATH` while being non-executable.
+
+## 2026-07-27 — Specific-version manifest export still requires the app id
+
+**Symptom:** `mapps manifest:export -i <VERSION_ID>` failed with `App id is
+required`, despite the older command table implying that the version id alone
+was sufficient.
+
+**Fix (same session, at source):** use
+`mapps manifest:export -a <APP_ID> -i <VERSION_ID> -p <PATH>` and keep both
+identifiers in the CLI reference.
+
 ## 2026-07-14 — deploy-guard hook blocked `mapps code:push --help` (false positive)
 
 **Symptom:** the PreToolUse deploy-guard blocked a pure help query

@@ -100,7 +100,7 @@ sibling_eslint_dir() {
 }
 resolve_module() {
   local base="$1" mod="$2"
-  node -e "try{process.stdout.write(require.resolve('$mod',{paths:['$base']}))}catch(e){}" 2>/dev/null || true
+  (cd "$base" && node -e 'try{process.stdout.write(require.resolve(process.argv[1]))}catch(e){}' "$mod") 2>/dev/null || true
 }
 
 echo "--- HIGH: rule violations (enforced kit) ---"
@@ -147,19 +147,27 @@ else
       # Union catch-must-log selector (client + server allowances) — same rationale
       # as check.sh: one config covers both worlds; per-app kits stay precise.
       UNION_SELECTOR="CatchClause > BlockStatement:not(:has(CallExpression[callee.object.name='logger'])):not(:has(ThrowStatement)):not(:has(CallExpression[callee.name='showErrorWithDetails'])):not(:has(CallExpression[callee.name='next']))"
-      jq \
-        --arg parser "$PARSER_PATH" \
-        --arg unionsel "$UNION_SELECTOR" \
-        --argjson haspromise "$HAS_PROMISE" \
-        '{
-           root: true,
-           parserOptions: { ecmaVersion: "latest", sourceType: "module", ecmaFeatures: { jsx: true } },
-           plugins: (if $haspromise then ["promise"] else [] end),
-           rules: ((.rules | if $haspromise then . else del(."promise/catch-or-return") end)
-                   | ."no-restricted-syntax"[1].selector = $unionsel)
-         }
-         + (if $parser != "" then { parser: $parser } else {} end)' \
-        "$TEMPLATE" > "$CONFIG"
+      node - "$TEMPLATE" "$CONFIG" "$PARSER_PATH" "$UNION_SELECTOR" "$HAS_PROMISE" <<'NODE'
+const fs = require('fs');
+const [templatePath, configPath, parserPath, unionSelector, hasPromiseRaw] = process.argv.slice(2);
+const template = JSON.parse(fs.readFileSync(templatePath, 'utf8'));
+const hasPromise = hasPromiseRaw === 'true';
+const rules = { ...template.rules };
+if (!hasPromise) delete rules['promise/catch-or-return'];
+rules['no-restricted-syntax'] = rules['no-restricted-syntax'].map((entry, index) => (
+  index === 1 && entry && typeof entry === 'object'
+    ? { ...entry, selector: unionSelector }
+    : entry
+));
+const config = {
+  root: true,
+  parserOptions: { ecmaVersion: 'latest', sourceType: 'module', ecmaFeatures: { jsx: true } },
+  plugins: hasPromise ? ['promise'] : [],
+  rules,
+};
+if (parserPath) config.parser = parserPath;
+fs.writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+NODE
 
       OUT="$TMPDIR_EG/out.json"
       # ESLINT_USE_FLAT_CONFIG=false — force eslintrc mode so this rule kit works on
@@ -173,20 +181,18 @@ else
         --resolve-plugins-relative-to "$RESOLVE_DIR" \
         --format json "${LINT_FILES[@]}" > "$OUT" 2>"$TMPDIR_EG/err.txt" || true
 
-      if ! jq -e . "$OUT" >/dev/null 2>&1; then
+      if ! node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$OUT" >/dev/null 2>&1; then
         note "ESLint produced no parseable output — rule section skipped (fail open)"
         [ -s "$TMPDIR_EG/err.txt" ] && note "$(head -3 "$TMPDIR_EG/err.txt")"
         echo "(skipped: ESLint error)"
       else
-        RULE_VIOLATIONS="$(jq '[.[].messages[] | select(.ruleId != null)] | length' "$OUT")"
+        RULE_VIOLATIONS="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); console.log(r.flatMap(x=>x.messages).filter(x=>x.ruleId!=null).length)' "$OUT")"
         if [ "$RULE_VIOLATIONS" -gt 0 ]; then
-          jq -r '.[] | .filePath as $f | .messages[]
-                   | select(.ruleId != null)
-                   | "\($f):\(.line):\(.column)  [\(.ruleId)]  \(.message)"' "$OUT"
+          node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); for(const f of r){for(const m of f.messages){if(m.ruleId!=null) console.log(`${f.filePath}:${m.line}:${m.column}  [${m.ruleId}]  ${m.message}`)}}' "$OUT"
           echo
           # per-rule tally
           echo "rule tally:"
-          jq -r '[.[].messages[] | select(.ruleId != null) | .ruleId] | group_by(.) | .[] | "  \(length)  \(.[0])"' "$OUT"
+          node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")); const c={}; for(const m of r.flatMap(x=>x.messages)){if(m.ruleId!=null)c[m.ruleId]=(c[m.ruleId]||0)+1} for(const k of Object.keys(c).sort()) console.log(`  ${c[k]}  ${k}`)' "$OUT"
         else
           echo "(none)"
         fi

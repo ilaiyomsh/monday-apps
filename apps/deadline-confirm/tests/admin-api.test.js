@@ -2,11 +2,12 @@
 // module header). The REAL Express pipeline runs via createApp; auth uses REAL
 // JWTs signed with the app client secret; the backend is inspected directly
 // for persisted values. Response bodies the contract fixes are asserted with
-// deep-equality (every field). v2 covers the multi-button config (server-side
-// b_/t_ id generation), GET /api/snippet?btn= and GET /api/email-template?tpl=.
+// deep-equality (every field).
 // v3 multi-tenant: every handler operates on the SESSION's account scope
-// (storage.forAccount(req.session.accountId), backend keys `${accountId}:…`),
-// and rendered hrefs carry a=<the session's accountId>.
+// (storage.forAccount(req.session.accountId), backend keys `${accountId}:…`).
+// V6: GET /api/snippet and GET /api/email-template are DELETED (D4) and the
+// `templates` config field died with them (a legacy client still sending it
+// is silently ignored).
 
 import { describe, it, expect, vi } from 'vitest';
 import request from 'supertest';
@@ -31,7 +32,6 @@ const scoped = (key, accountId = ACCOUNT_ID) => `${accountId}:${key}`;
 
 const BASE64URL_43 = /^[A-Za-z0-9_-]{43}$/;
 const BUTTON_ID = /^b_[A-Za-z0-9_-]{4,16}$/;
-const TEMPLATE_ID = /^t_[A-Za-z0-9_-]{4,16}$/;
 
 function authHeader({ accountId = 777, userId = 1 } = {}) {
   return jwt.sign({ dat: { account_id: accountId, user_id: userId } }, 'cs-1');
@@ -44,7 +44,7 @@ function makeHarness({ seed = {}, env = ENV } = {}) {
   const app = createApp({
     storage,
     api,
-    rateLimiter: { allow: () => true },
+    rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
     env,
     fetchImpl: vi.fn(),
   });
@@ -52,7 +52,7 @@ function makeHarness({ seed = {}, env = ENV } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// v2 config builders — every call returns fresh objects (no shared mutation).
+// config builders — every call returns fresh objects (no shared mutation).
 // ---------------------------------------------------------------------------
 
 function omit(obj, key) {
@@ -76,54 +76,23 @@ function validButton(overrides = {}) {
   };
 }
 
-function validTextBlock(overrides = {}) {
-  return {
-    type: 'text',
-    text: 'נא לאשר את המשימה',
-    direction: 'rtl',
-    font: 'Arial',
-    fontSize: 16,
-    align: 'right',
-    ...overrides,
-  };
-}
-
-function validButtonsBlock(overrides = {}) {
-  return { type: 'buttons', buttonIds: ['b_done0001'], ...overrides };
-}
-
-function validTemplate(overrides = {}) {
-  return {
-    id: 't_remind001',
-    name: 'תזכורת דדליין',
-    blocks: [validTextBlock(), validButtonsBlock()],
-    ...overrides,
-  };
-}
-
 function validConfig(overrides = {}) {
   return {
     boardId: '123',
     peopleColumnId: 'people_y',
     buttons: [validButton()],
-    templates: [validTemplate()],
     ...overrides,
   };
 }
 
-// Seedable stored config for the snippet / email-template routes.
-const STORED_CONFIG = validConfig();
-
 // ---------------------------------------------------------------------------
-// Auth sweep — 5 routes (spec §15.10)
+// Auth sweep (spec §15.10)
 // ---------------------------------------------------------------------------
 
 const ROUTES = [
   { method: 'get', path: '/api/state' },
   { method: 'put', path: '/api/config' },
   { method: 'post', path: '/api/secret/rotate' },
-  { method: 'get', path: '/api/snippet' },
-  { method: 'get', path: '/api/email-template' },
 ];
 
 describe('admin API auth (spec §15.10)', () => {
@@ -152,6 +121,24 @@ describe('admin API auth (spec §15.10)', () => {
       expect(res.body).toStrictEqual({ error: 'forbidden_account' });
     }
   );
+});
+
+// ---------------------------------------------------------------------------
+// V6 route deletion (D2/D4) — the retired surfaces must be GONE
+// ---------------------------------------------------------------------------
+
+describe('V6 deleted routes answer 404', () => {
+  it.each([
+    ['get', '/confirm?itemId=1&a=777&k=x&btn=b_x'],
+    ['post', '/confirm'],
+    ['head', '/confirm'],
+    ['get', '/api/snippet?btn=b_done0001'],
+    ['get', '/api/email-template?tpl=t_x'],
+  ])('%s %s no longer exists', async (method, path) => {
+    const { app } = makeHarness();
+    const res = await request(app)[method](path).set('Authorization', authHeader());
+    expect(res.status).toBe(404);
+  });
 });
 
 describe('GET /api/state', () => {
@@ -217,11 +204,11 @@ describe('GET /api/state', () => {
 });
 
 // ---------------------------------------------------------------------------
-// PUT /api/config — v2 contract (admin-api.js module header)
+// PUT /api/config — contract (admin-api.js module header)
 // ---------------------------------------------------------------------------
 
-describe('PUT /api/config (v2 shape, v3 scoping)', () => {
-  it("accepts a full v2 config, generates b_/t_ ids for id-less entries, echoes the normalized config, and persists it identically under the SESSION account's key (targetIndex 0 stays 0)", async () => {
+describe('PUT /api/config (v6 shape, v3 scoping)', () => {
+  it("accepts a full config, generates b_ ids for id-less entries, echoes the normalized config, and persists it identically under the SESSION account's key (targetIndex 0 stays 0)", async () => {
     const { app, backend } = makeHarness();
 
     const res = await request(app)
@@ -246,23 +233,6 @@ describe('PUT /api/config (v2 shape, v3 scoping)', () => {
             targetIndex: 3,
             targetLabel: 'נדחה',
             style: { color: '#e2445c', size: 'sm' }, // icon omitted → defaults to ''
-          },
-        ],
-        templates: [
-          {
-            // no id — the SERVER must generate one
-            name: 'תזכורת דדליין',
-            blocks: [
-              {
-                type: 'text',
-                text: 'נא לאשר את המשימה',
-                direction: 'rtl',
-                font: 'Arial',
-                fontSize: 16,
-                align: 'right',
-              },
-              { type: 'buttons', buttonIds: ['b_done0001'] },
-            ],
           },
         ],
       });
@@ -291,23 +261,6 @@ describe('PUT /api/config (v2 shape, v3 scoping)', () => {
             style: { color: '#e2445c', icon: '', size: 'sm' },
           },
         ],
-        templates: [
-          {
-            id: expect.stringMatching(TEMPLATE_ID),
-            name: 'תזכורת דדליין',
-            blocks: [
-              {
-                type: 'text',
-                text: 'נא לאשר את המשימה',
-                direction: 'rtl',
-                font: 'Arial',
-                fontSize: 16,
-                align: 'right',
-              },
-              { type: 'buttons', buttonIds: ['b_done0001'] },
-            ],
-          },
-        ],
         // v4: a config sent without a digest block normalizes to digest: null
         // (the digest contract itself is pinned in admin-api-digest.test.js).
         digest: null,
@@ -323,6 +276,24 @@ describe('PUT /api/config (v2 shape, v3 scoping)', () => {
     expect(await backend.get('config')).toBeNull();
   });
 
+  it('silently ignores a legacy `templates` field: 200, and the normalized config carries NO templates key', async () => {
+    const { app, backend } = makeHarness();
+
+    const res = await request(app)
+      .put('/api/config')
+      .set('Authorization', authHeader())
+      .send(
+        validConfig({
+          templates: [{ id: 't_remind001', name: 'ישן', blocks: [{ type: 'buttons', buttonIds: ['b_done0001'] }] }],
+        })
+      );
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.config).not.toHaveProperty('templates');
+    expect(await backend.get(scoped('config'))).not.toHaveProperty('templates');
+  });
+
   const INVALID_CASES = [
     {
       name: 'boardId that is not all digits',
@@ -336,12 +307,12 @@ describe('PUT /api/config (v2 shape, v3 scoping)', () => {
     },
     {
       name: 'missing buttons array',
-      body: omit(validConfig({ templates: [] }), 'buttons'),
+      body: omit(validConfig(), 'buttons'),
       field: 'buttons',
     },
     {
       name: 'empty buttons array',
-      body: validConfig({ buttons: [], templates: [] }),
+      body: validConfig({ buttons: [] }),
       field: 'buttons',
     },
     {
@@ -350,7 +321,6 @@ describe('PUT /api/config (v2 shape, v3 scoping)', () => {
         buttons: Array.from({ length: 21 }, (_, i) =>
           validButton({ id: `b_x${String(i).padStart(4, '0')}` })
         ),
-        templates: [],
       }),
       field: 'buttons',
     },
@@ -418,112 +388,13 @@ describe('PUT /api/config (v2 shape, v3 scoping)', () => {
       name: 'two buttons sharing the same id',
       body: validConfig({
         buttons: [validButton(), validButton({ name: 'אחר' })],
-        templates: [],
       }),
       field: 'buttons',
     },
     {
       name: 'button with a provided id "bad-id" that breaks the b_ pattern',
-      body: validConfig({ buttons: [validButton({ id: 'bad-id' })], templates: [] }),
+      body: validConfig({ buttons: [validButton({ id: 'bad-id' })] }),
       field: 'id',
-    },
-    {
-      name: 'templates array with 11 entries (max 10)',
-      body: validConfig({
-        templates: Array.from({ length: 11 }, (_, i) =>
-          validTemplate({ id: `t_x${String(i).padStart(4, '0')}` })
-        ),
-      }),
-      field: 'templates',
-    },
-    {
-      name: 'template with an empty name',
-      body: validConfig({ templates: [validTemplate({ name: '' })] }),
-      field: 'name',
-    },
-    {
-      name: 'template with an empty blocks array',
-      body: validConfig({ templates: [validTemplate({ blocks: [] })] }),
-      field: 'blocks',
-    },
-    {
-      name: 'template with 31 blocks (max 30)',
-      body: validConfig({
-        templates: [
-          validTemplate({ blocks: Array.from({ length: 31 }, () => validTextBlock()) }),
-        ],
-      }),
-      field: 'blocks',
-    },
-    {
-      name: 'text block with empty text',
-      body: validConfig({ templates: [validTemplate({ blocks: [validTextBlock({ text: '' })] })] }),
-      field: 'text',
-    },
-    {
-      name: 'text block with 5001-char text (max 5000)',
-      body: validConfig({
-        templates: [validTemplate({ blocks: [validTextBlock({ text: 'א'.repeat(5001) })] })],
-      }),
-      field: 'text',
-    },
-    {
-      name: 'text block direction "up" (not rtl|ltr)',
-      body: validConfig({
-        templates: [validTemplate({ blocks: [validTextBlock({ direction: 'up' })] })],
-      }),
-      field: 'direction',
-    },
-    {
-      name: 'text block font "Comic Sans MS" (not in ALLOWED_FONTS)',
-      body: validConfig({
-        templates: [validTemplate({ blocks: [validTextBlock({ font: 'Comic Sans MS' })] })],
-      }),
-      field: 'font',
-    },
-    {
-      name: 'text block fontSize 9 (below 10)',
-      body: validConfig({
-        templates: [validTemplate({ blocks: [validTextBlock({ fontSize: 9 })] })],
-      }),
-      field: 'fontSize',
-    },
-    {
-      name: 'text block fontSize 33 (above 32)',
-      body: validConfig({
-        templates: [validTemplate({ blocks: [validTextBlock({ fontSize: 33 })] })],
-      }),
-      field: 'fontSize',
-    },
-    {
-      name: 'text block fontSize 16.5 (not an integer)',
-      body: validConfig({
-        templates: [validTemplate({ blocks: [validTextBlock({ fontSize: 16.5 })] })],
-      }),
-      field: 'fontSize',
-    },
-    {
-      name: 'text block align "justify" (not right|center|left)',
-      body: validConfig({
-        templates: [validTemplate({ blocks: [validTextBlock({ align: 'justify' })] })],
-      }),
-      field: 'align',
-    },
-    {
-      name: 'buttons block with an empty buttonIds array',
-      body: validConfig({
-        templates: [validTemplate({ blocks: [validButtonsBlock({ buttonIds: [] })] })],
-      }),
-      field: 'buttonIds',
-    },
-    {
-      name: 'buttons block referencing an id absent from buttons',
-      body: validConfig({
-        templates: [
-          validTemplate({ blocks: [validButtonsBlock({ buttonIds: ['b_nosuch999'] })] }),
-        ],
-      }),
-      field: 'buttonIds',
     },
   ];
 
@@ -545,7 +416,7 @@ describe('PUT /api/config (v2 shape, v3 scoping)', () => {
 });
 
 describe('POST /api/secret/rotate', () => {
-  it("returns a 43-char base64url secret in full exactly once and persists it under the SESSION account's link_secret key", async () => {
+  it("persists a 43-char base64url secret under the SESSION account's link_secret key but returns only { ok: true } (V6: secret is write-only)", async () => {
     const { app, backend } = makeHarness();
 
     const res = await request(app)
@@ -553,144 +424,28 @@ describe('POST /api/secret/rotate', () => {
       .set('Authorization', authHeader());
 
     expect(res.status).toBe(200);
-    expect(res.body).toStrictEqual({ secret: expect.stringMatching(BASE64URL_43) });
-    expect(await backend.get(scoped('link_secret'))).toBe(res.body.secret);
+    expect(res.body).toStrictEqual({ ok: true });
+    const stored = await backend.get(scoped('link_secret'));
+    expect(stored).toMatch(BASE64URL_43);
     expect(await backend.get('link_secret')).toBeNull();
   });
 
   it('returns a DIFFERENT secret on a second rotation and overwrites the stored one (spec §15.6)', async () => {
     const { app, backend } = makeHarness();
 
-    const first = await request(app)
+    await request(app)
       .post('/api/secret/rotate')
       .set('Authorization', authHeader());
+    const firstStored = await backend.get(scoped('link_secret'));
     const second = await request(app)
       .post('/api/secret/rotate')
       .set('Authorization', authHeader());
 
     expect(second.status).toBe(200);
-    expect(second.body.secret).toMatch(BASE64URL_43);
-    expect(second.body.secret).not.toBe(first.body.secret);
-    expect(await backend.get(scoped('link_secret'))).toBe(second.body.secret);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// GET /api/snippet?btn=<id> — v2
-// ---------------------------------------------------------------------------
-
-describe('GET /api/snippet (v2 shape, v3 a= param)', () => {
-  const SECRET = 'SEC_abc12345_zzzz';
-
-  it('responds 400 when the btn query param is missing, even with secret and config stored', async () => {
-    const { app } = makeHarness({
-      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
-    });
-
-    const res = await request(app).get('/api/snippet').set('Authorization', authHeader());
-
-    expect(res.status).toBe(400);
-  });
-
-  it('responds 404 for a btn id that does not exist in the stored config', async () => {
-    const { app } = makeHarness({
-      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
-    });
-
-    const res = await request(app)
-      .get('/api/snippet?btn=b_nosuch999')
-      .set('Authorization', authHeader());
-
-    expect(res.status).toBe(404);
-  });
-
-  it("responds 409 no_secret when the SESSION account has no link secret, even for a known button", async () => {
-    const { app } = makeHarness({ seed: { [scoped('config')]: STORED_CONFIG } });
-
-    const res = await request(app)
-      .get('/api/snippet?btn=b_done0001')
-      .set('Authorization', authHeader());
-
-    expect(res.status).toBe(409);
-    expect(res.body).toStrictEqual({ error: 'no_secret' });
-  });
-
-  it("renders the button snippet whose confirm URL carries a=<the session's accountId> in the pinned order (itemId, a, k, btn) plus the button name", async () => {
-    const { app } = makeHarness({
-      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
-    });
-
-    const res = await request(app)
-      .get('/api/snippet?btn=b_done0001')
-      .set('Authorization', authHeader());
-
-    expect(res.status).toBe(200);
-    expect(res.body).toStrictEqual({ snippet: expect.any(String) });
-    expect(res.body.snippet).toContain(
-      `https://app.example/confirm?itemId={ITEM_ID}&amp;a=${ACCOUNT_ID}&amp;k=${SECRET}&amp;btn=b_done0001`
-    );
-    expect(res.body.snippet).toContain('סמן כבוצע');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// GET /api/email-template?tpl=<id> — v2
-// ---------------------------------------------------------------------------
-
-describe('GET /api/email-template (v2 shape, v3 a= param)', () => {
-  const SECRET = 'SEC_abc12345_zzzz';
-
-  it('responds 400 when the tpl query param is missing, even with secret and config stored', async () => {
-    const { app } = makeHarness({
-      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
-    });
-
-    const res = await request(app)
-      .get('/api/email-template')
-      .set('Authorization', authHeader());
-
-    expect(res.status).toBe(400);
-  });
-
-  it('responds 404 for a tpl id that does not exist in the stored config', async () => {
-    const { app } = makeHarness({
-      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
-    });
-
-    const res = await request(app)
-      .get('/api/email-template?tpl=t_nosuch999')
-      .set('Authorization', authHeader());
-
-    expect(res.status).toBe(404);
-  });
-
-  it("responds 409 no_secret when the SESSION account has no link secret, even for a known template", async () => {
-    const { app } = makeHarness({ seed: { [scoped('config')]: STORED_CONFIG } });
-
-    const res = await request(app)
-      .get('/api/email-template?tpl=t_remind001')
-      .set('Authorization', authHeader());
-
-    expect(res.status).toBe(409);
-    expect(res.body).toStrictEqual({ error: 'no_secret' });
-  });
-
-  it("renders the full email HTML whose button href carries a=<the session's accountId>, plus the text block content and the literal {ITEM_ID}", async () => {
-    const { app } = makeHarness({
-      seed: { [scoped('link_secret')]: SECRET, [scoped('config')]: STORED_CONFIG },
-    });
-
-    const res = await request(app)
-      .get('/api/email-template?tpl=t_remind001')
-      .set('Authorization', authHeader());
-
-    expect(res.status).toBe(200);
-    expect(res.body).toStrictEqual({ html: expect.any(String) });
-    expect(res.body.html).toContain('נא לאשר את המשימה');
-    expect(res.body.html).toContain(
-      `https://app.example/confirm?itemId={ITEM_ID}&amp;a=${ACCOUNT_ID}&amp;k=${SECRET}&amp;btn=b_done0001`
-    );
-    expect(res.body.html).toContain('{ITEM_ID}');
+    expect(second.body).toStrictEqual({ ok: true });
+    const secondStored = await backend.get(scoped('link_secret'));
+    expect(secondStored).toMatch(BASE64URL_43);
+    expect(secondStored).not.toBe(firstStored);
   });
 });
 
@@ -734,8 +489,10 @@ describe('per-session account scoping (v3 isolation)', () => {
       .post('/api/secret/rotate')
       .set('Authorization', authHeader({ accountId: 777 }));
     expect(rotate.status).toBe(200);
+    expect(rotate.body).toStrictEqual({ ok: true });
 
-    expect(await backend.get(scoped('link_secret', ACCOUNT_ID))).toBe(rotate.body.secret);
+    const storedSecret = await backend.get(scoped('link_secret', ACCOUNT_ID));
+    expect(storedSecret).toMatch(BASE64URL_43);
     expect(await backend.get(scoped('link_secret', OTHER_ACCOUNT_ID))).toBeNull();
 
     const stateB = await request(app)
@@ -743,24 +500,36 @@ describe('per-session account scoping (v3 isolation)', () => {
       .set('Authorization', authHeader({ accountId: 888 }));
     expect(stateB.body.secret).toBeNull();
   });
+});
 
-  it("account 888's session renders ITS OWN a= in the snippet href, from ITS OWN stored secret/config", async () => {
-    const SECRET_B = 'SEC_of_888_only_x';
-    const { app } = makeHarness({
-      env: TWO_ACCOUNT_ENV,
-      seed: {
-        [scoped('link_secret', OTHER_ACCOUNT_ID)]: SECRET_B,
-        [scoped('config', OTHER_ACCOUNT_ID)]: STORED_CONFIG,
-      },
+describe('GET /api/state guarded 500 detail', () => {
+  it('returns internal_error with message and detail.stack when storage.getConfig throws', async () => {
+    const boom = new Error('secure_storage_boom');
+    const storage = {
+      forAccount: () => ({
+        getConfig: async () => {
+          throw boom;
+        },
+        getLinkSecret: async () => null,
+        getOauthToken: async () => null,
+      }),
+    };
+    const app = createApp({
+      storage,
+      api: { fetchMe: vi.fn() },
+      rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
+      env: ENV,
+      fetchImpl: vi.fn(),
     });
 
-    const res = await request(app)
-      .get('/api/snippet?btn=b_done0001')
-      .set('Authorization', authHeader({ accountId: 888 }));
-
-    expect(res.status).toBe(200);
-    expect(res.body.snippet).toContain(
-      `https://app.example/confirm?itemId={ITEM_ID}&amp;a=${OTHER_ACCOUNT_ID}&amp;k=${SECRET_B}&amp;btn=b_done0001`
-    );
+    const res = await request(app).get('/api/state').set('Authorization', authHeader());
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('internal_error');
+    expect(res.body.message).toBe('secure_storage_boom');
+    expect(res.body.detail).toStrictEqual({
+      name: 'Error',
+      message: 'secure_storage_boom',
+      stack: boom.stack,
+    });
   });
 });

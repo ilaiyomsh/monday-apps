@@ -2,7 +2,7 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
-## 0.7.4 — 2026-07-27 — fix: a legacy config could not be saved at all + settings export/import
+## 0.9.4 — 2026-07-28 — fix: a legacy config could not be saved at all + settings export/import
 
 - **Production incident.** Saving from the admin panel failed with
   `PUT /api/config → 400 invalid_config`, so the operator could not change
@@ -29,6 +29,117 @@
   no link secret, no OAuth token (neither ever reaches the client). Import loads
   into the draft and does **not** save, so the operator reviews first.
 - Tests: red → green + 3/3 mutations killed on `settings-io`. Suite 540 green.
+
+## 0.9.3 — 2026-07-27 — fix: drop «ללא שינוי»; preview AMP uses live slot
+
+- Status menu shows only the cluster's action buttons (no gray «ללא שינוי»).
+- Unchanged tasks = leave the current-status trigger as-is (`item_<id>` stays empty).
+- Admin preview AMP is signed with the **live clock** (not a fixed 09:00), so a
+  copied document matches `/amp/confirm`'s current slot when tested immediately.
+- Admin hint: playground submit needs `amp@gmail.dev` on `AMP_ALLOWED_SENDERS`.
+- Admin `500 internal_error` now returns `message` + `detail` (name/message/stack);
+  the SPA shows them on boot/save and logs the stack to the browser console.
+- AMP submit-error shows machine `detail` in the **email body** (e.g. `bad_slot`,
+  `bad_sig`, `missing_or_invalid_fields`) under the Hebrew message.
+
+## 0.9.2 — 2026-07-27 — feat: AMP digest — amp-bind status dropdown (monday colors)
+
+- Per-row status choice is a real **dropdown**: closed colored trigger → tap opens
+  a popup of monday-colored options (`amp-bind` + `AMP.setState`).
+- Trigger shows the **current status** (text + color); choosing an option updates
+  the cell immediately via bind. Header: **סטטוס** (not «סטטוס חדש»).
+  «ללא שינוי» restores the original status display and clears the wire value.
+- Not native `<select>` (OS popup unstyleable) and not an always-open radio stack.
+- Wire: hidden `item_<id>` with `[value]` bound to state (`""` = no change).
+- Playground: `docs/amp-playground-cluster-tables.html`.
+
+## 0.9.1 — 2026-07-27 — feat: AMP digest — styled label dropdown (`<select>`)
+
+- Per-row status choice is a **styled** AMP-for-Email `<select class="label-dd">`
+  (monday-like closed control: ~200×34, blue border `#0073ea`, Figtree). The OS
+  popup panel itself cannot be restyled in Gmail/AMP.
+- Options = that cluster's action buttons; empty option **ללא שינוי** = no write.
+- Wire unchanged: `item_<id>=btnId`. Cluster tables + multi-button config kept.
+- Playground sample: `docs/amp-playground-cluster-tables.html`.
+
+## 0.9.0 — 2026-07-27 — feat: AMP digest — one table per cluster + multi-button columns
+
+- **Layout:** one AMP table per populated מקבץ (cluster title + that cluster's
+  date column only). No mega-table / LabelPicker chrome.
+- **Multi-button:** each cluster may define `buttonIds[]` (admin multi-select);
+  each button is a colored radio column. Primary `buttonId` (= first) still
+  drives the status-column filter. Legacy configs with only `buttonId` work.
+- **Wire unchanged:** one form, `item_<id>=btnId` radios, one **אשר את המסומנות**.
+- Playground sample: `docs/amp-playground-cluster-tables.html`.
+
+## 0.8.5 — 2026-07-27 — chore: redeploy draft after transient mapps failure
+
+- Re-push of 0.8.4 AMP status-picker styling after monday `code:push` polling
+  failed mid-deploy (`Unexpected error occurred while communicating with the
+  remote server`). No product code change.
+
+## 0.8.4 — 2026-07-27 — style: AMP status picker matches monday status-picker-wrapper-v2
+
+- Picker column styled like monday's native status picker: **200px** wide,
+  **10px** padding, thin blue border + soft shadow.
+- Option labels: **34px** tall, **14px** / `font-weight: normal`, Figtree/Roboto
+  stack (parity with discussions `statusOption` / monday wrapper ~200×313).
+- Checked option outline uses monday blue `#0073ea`. AMP-safe (no `position`).
+
+## 0.8.3 — 2026-07-27 — feat: digest AMP — LabelPicker-style status + all date columns
+
+- **AMP digest UI:** monday-like board table; current status as `statusFill`;
+  new status via inlined LabelPicker-style colored options (visual port of
+  discussions `LabelPickerCell` / TaskTable — AMP cannot host React Dialog).
+- **Dates:** every date column from digest settings appears as its own table
+  column (`recipient.dateColumns` + `task.dates`).
+- **Confirm:** empty `item_*` values are skipped (no-change), so a mixed
+  selection still applies only the chosen statuses.
+- One global **אשר את המסומנות** submits all chosen statuses.
+
+## 0.8.2 — 2026-07-27 — feat: V6 T15/D9 — one table, one approve button
+
+- **T15 / D9:** AMP digest is a single table with one radio column per status
+  button and **one** global submit (`אשר את המסומנות`). No per-section forms.
+- Tasks that appear under several digest sections get a union of those buttons
+  on one row. Wire format (`a/p/m/s/sig` + `item_<id>`) unchanged.
+
+## 0.8.1 — 2026-07-27 — feat: V6 T6c/T10–T12 (scheduler, D16, deny-all roster)
+
+Continues V6 from `docs/v6-amp-only-decisions.md`. **Gmail OAuth / send funnel
+(T9/T9b/T9c) deferred** until the Google Cloud app is provisioned — the
+`emailSender` seam stays empty in production.
+
+- **D16 / T6c:** one message per users-board row (no email dedup); multi-person
+  rows skipped as `multi_person`.
+- **D15 / T10b:** empty `ALLOWED_ACCOUNT_IDS` is default-deny (admin + OAuth +
+  scheduler); boot error log when empty. **Breaking config change** — set the
+  roster on the platform before this version goes live.
+- **T10:** `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`) iterates
+  the roster, runs tenants whose `sendHour` matches Asia/Jerusalem hour.
+- **T11:** operator summary email after a scheduled run (`OPERATOR_EMAIL` env);
+  counts/addresses/slot only.
+- **T12:** `POST /api/digest/resend-today` — all recipients, current slot.
+- **MIME helper:** `multipart/alternative` plain + `text/x-amp-html` (ready for T9).
+- Manual/scheduled send path uses plain+AMP MIME via `runDigestForAccount` (no
+  legacy HTML `/confirm` body).
+
+## 0.8.0 — 2026-07-27 — feat: V6 AMP-only + per-message signed manifest
+
+**Breaking product change.** See `docs/v6-amp-only-decisions.md`.
+
+- **Deleted:** `/confirm` route family, snippet/email-template endpoints, Resend
+  sender path, actionable HTML in digest preview.
+- **Added:** `manifest-signature` module (build/parse/sign/verify/currentSlot);
+  V6 wire format on `POST /amp/confirm` (`a/p/m/s/sig` + `item_<id>` radios);
+  D11 runtime assignee check; two-bucket rate limit on AMP path.
+- **Digest:** single `personId` per recipient; `text/plain` renderer; AMP renderer
+  with one signature per message; preview returns `{ plain, amp }`.
+- **Admin API:** rotate returns `{ ok: true }` only; `digest.sendHour` (0–23,
+  default 8) in config validation.
+- **SPA:** secret rotation without display; digest preview plain+AMP; sendHour field;
+  legacy templates section (no HTML copy).
+- Tests: 548 green; spotchecks on admin-api and draft sendHour.
 
 ## 0.7.3 — 2026-07-27 — fix: board pickers were empty (wrong discriminator field)
 
