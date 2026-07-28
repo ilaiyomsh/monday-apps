@@ -62,7 +62,7 @@ function App() {
       {route === 'picker' && <OnClickDialog context={context} />}
       {route === 'settings' && (
         <Suspense fallback={<LoadingState message="טוען…" />}>
-          <SettingsLauncher />
+          <SettingsLauncher context={context} />
         </Suspense>
       )}
       {route === 'settings-full' && (

@@ -94,6 +94,40 @@ export const GET_BOARD_SETTINGS_METADATA = `
   }
 `;
 
+/**
+ * Board user owners — who may open the settings overlay.
+ *
+ * `owners` needs boards:read + users:read only, so it is asked ALONE: monday rejects a
+ * whole query when one field is out of scope, and folding `team_owners` (teams:read) in
+ * here would mean a missing scope locks every owner out instead of just the team-owned
+ * ones. `owner` is deprecated (it returned the creator) — `owners` is the real list.
+ */
+export const GET_BOARD_OWNER_IDS = `
+  query GetBoardOwnerIds($boardIds: [ID!]) {
+    boards(ids: $boardIds) {
+      id
+      owners { id }
+    }
+  }
+`;
+
+/**
+ * Board TEAM owners. Requires teams:read, so it is a separate round trip that may be
+ * refused (see teamsAccess.loadBoardTeamOwnerIds) — and it is only sent when the actor
+ * turned out not to be a direct user owner.
+ *
+ * `team_owners` is paginated and defaults to 25. One page is taken: a board owned by
+ * more teams than this is not a shape that occurs.
+ */
+export const GET_BOARD_TEAM_OWNER_IDS = `
+  query GetBoardTeamOwnerIds($boardIds: [ID!], $limit: Int!) {
+    boards(ids: $boardIds) {
+      id
+      team_owners(limit: $limit) { id }
+    }
+  }
+`;
+
 /** Requires teams:read. Loaded separately so missing scope does not break settings. */
 export const GET_ACCOUNT_TEAMS = `
   query GetAccountTeams {

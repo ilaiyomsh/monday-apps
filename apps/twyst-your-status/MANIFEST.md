@@ -135,6 +135,37 @@ second loader starts its animation from 0 and reads as a jump.
   skeleton or a `<Loader>` there — that was the jump (removed in 3.3.0), and
   `bootHandoff.test.jsx` fails on any `טוען`/`Loading` text reaching the picker.
 
+## Who may configure — board owners only (3.7.0)
+
+The settings shell (`/settings`) offers its button only to a **board owner**; everyone else
+gets `Only board owners can configure` in its place. The decision is one pure function,
+`src/domain/boardOwnerAccess.js`, fed by `src/services/boardOwnerGate.js`.
+
+- **An owner is a user owner OR a member of an owning TEAM.** `boards { owners { id } }`
+  answers the first; monday also lets a board be owned by teams (`team_owners`), and a
+  board whose ownership is held by a team has no user owners at all — checking only
+  `owners`, as axis-tracker's `useBoardOwner` does, locks those owners out entirely.
+- **A direct user owner costs ONE request.** `team_owners` + the actor's own teams are
+  fetched only when the actor is not already a user owner, so the common case (an owner
+  opening their own board's settings) does not pay for the team path. Pinned by a test.
+- **`owners` is asked ALONE, without `team_owners`.** monday rejects a whole query when one
+  field is out of scope, so folding the teams:read field into that query would mean a
+  missing scope locks out EVERY owner rather than only the team-owned ones. `owner`
+  (singular) is deprecated and returned the creator — never use it here.
+- **No new scopes**: `boards:read`, `users:read` and `teams:read` were already required.
+  Without `teams:read` the gate degrades to user owners only (logged), exactly as the
+  team allowlists do.
+- **Fails closed, but a broken check is NOT a denial.** No owners at all ⇒ nobody gets the
+  button (deliberately the inverse of the per-label rules below, where an empty allowlist
+  means "everyone"). A failed request or a missing `boardId`/`userId` shows a Hebrew error
+  instead of the English owners-only line — a network fault reported as a permission
+  verdict tells a real owner they have no rights and hides the fault.
+- While the check runs the shell renders the SAME `LoadingState` its Suspense fallback
+  shows, so the two are one continuous wait. Do not let a button render before the answer
+  arrives: a button that appears and then vanishes is worse than a slightly longer wait.
+- The gate is on the LAUNCHER, so `/settings-full` has no path a non-owner can reach. It
+  is not a server-side guard — see Limits.
+
 ## Product rules
 
 - Configuration is stored in global `monday.storage` under
@@ -215,12 +246,19 @@ then reinstall / reauthorize existing installs:
 - `boards:read`
 - `boards:write`
 - `users:read`
-- `teams:read` — required for team allowlists and actor team membership
+- `teams:read` — required for team allowlists, actor team membership, and the board's
+  own TEAM owners (the settings gate above)
 
 Without `teams:read`, settings still loads (users-only) and shows a warning; team
-pickers stay disabled until the scope is granted.
+pickers stay disabled until the scope is granted, and the owner gate recognises user
+owners only — an owner who holds the board through a team would not see the button.
 
 ## Limits
 
 Protection applies only inside this app's picker. Direct board edits, API writes,
 and automations are not blocked (no server webhook/rollback).
+
+The owner gate is the same kind of protection: a client-side gate on a client-only app. It
+withholds the UI, it does not defend the storage key — anyone able to call monday's storage
+API with this app's context could still write the configuration. Making that impossible
+needs a server, which this app deliberately does not have.
