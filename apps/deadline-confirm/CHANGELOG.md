@@ -2,12 +2,25 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
-## 0.10.2 — 2026-07-29 — fix: a transient SecureStorage blip failed the admin screen
+## 0.10.2 — 2026-07-29 — fix: the admin screen failed on first open, and a successful save reported failure
 
-Saving settings on live reported `השמירה נכשלה` with
-`secure_storage_get_failed: An issue occurred while accessing secure storage`
-on `<account>:config` — a key that certainly existed. Two independent defects.
+Two symptoms, `secure_storage_get_failed: An issue occurred while accessing
+secure storage` on `<account>:config` — a key that certainly existed. Three
+independent defects.
 
+- **A cold-start authentication herd — the reason FIRST OPEN failed every time
+  while a refresh always worked.** The SDK authenticates lazily per instance
+  (`this.connectionData = await authenticate(this.connectionData)`), and
+  `index.js` builds one backend at module scope whose Vault token TTL is hours —
+  so only the very first request ever pays for authentication. But
+  `GET /api/state` fires FOUR reads through `Promise.all` (config, link secret,
+  oauth token, google sender), so on a cold container all four see
+  `connectionData === undefined` and each runs the full path — GCP identity
+  token, Vault GCP login, `lookup-self` — four concurrent authentications racing
+  to assign the same field. The backend now runs the FIRST operation alone and
+  queues everything else behind it; once one completes, the connection is warm
+  and the gate is gone for good. Warm reads stay fully concurrent — serializing
+  them would turn `/api/state` into four sequential round trips per request.
 - **No retry on the hop to SecureStorage.** That message is the apps-sdk's
   catch-all: `secureStorageFetch` wraps *every* transport failure in it — a
   Vault 5xx, an expired Vault token surfacing as 403, a socket reset, a

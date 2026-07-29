@@ -85,16 +85,60 @@ export function createSecureStorageBackend({ retries = DEFAULT_RETRIES, sleep = 
     throw new Error(`${failCode}: retry loop exhausted`);
   }
 
+  // COLD START. The SDK authenticates lazily per instance —
+  // `this.connectionData = await authenticate(this.connectionData)` — so on a
+  // cold container the four concurrent reads of GET /api/state each see
+  // `connectionData === undefined` and each runs the full auth path (GCP
+  // identity token → Vault GCP login → lookup-self), racing to assign the same
+  // field. Observed 2026-07-29: first open failed every time, a refresh always
+  // worked (the token TTL is hours, so only the first request ever pays).
+  //
+  // So the first operation runs ALONE and everything else waits behind it;
+  // once one has completed, the connection is warm and the gate is gone for
+  // good. Serializing warm reads would turn /api/state into four sequential
+  // round trips on every request, which is why this is not a general mutex.
+  let primed = false;
+  /** @type {Promise<any> | null} in-flight priming attempt, if any */
+  let priming = null;
+
+  async function runPrimed(operation) {
+    for (;;) {
+      if (primed) return operation();
+      const inFlight = priming;
+      if (inFlight) {
+        // Its failure is the primer's to report, not ours — we just re-check.
+        await inFlight.catch(() => {});
+        continue;
+      }
+      priming = (async () => {
+        try {
+          const value = await operation();
+          primed = true;
+          return value;
+        } finally {
+          priming = null;
+        }
+      })();
+      return priming;
+    }
+  }
+
   return {
     async get(key) {
-      const value = await attempt('secure_storage_get_failed', key, () => secureStorage.get(key));
+      const value = await runPrimed(() =>
+        attempt('secure_storage_get_failed', key, () => secureStorage.get(key))
+      );
       return unwrapPrimitive(value) ?? null;
     },
     async set(key, value) {
-      await attempt('secure_storage_set_failed', key, () => secureStorage.set(key, value));
+      await runPrimed(() =>
+        attempt('secure_storage_set_failed', key, () => secureStorage.set(key, value))
+      );
     },
     async delete(key) {
-      await attempt('secure_storage_delete_failed', key, () => secureStorage.delete(key));
+      await runPrimed(() =>
+        attempt('secure_storage_delete_failed', key, () => secureStorage.delete(key))
+      );
     },
   };
 }
