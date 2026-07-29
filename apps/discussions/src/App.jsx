@@ -782,6 +782,13 @@ export default function App() {
   // the card showing roles that do not exist in monday.
   const handleStageError = ({ id } = {}) => {
     setSelectedDiscussion((prev) => applyStageFailure(prev, id, Date.now()));
+    // The list refreshes here too. "Stage failed" is not "nothing was written":
+    // the agenda and the people are separate writes, so the people can have landed
+    // while the agenda is what failed. The refresh started at the hand-off may well
+    // have finished BEFORE that later write, which left the list showing a discussion
+    // with no lead/coordinator — and the row's edit/export gates read those very
+    // fields. A re-read is never wrong here; the discussion exists either way.
+    setRefreshKey((k) => k + 1);
     notify('הדיון נוצר, אך השלמת הנושאים או המשתתפים נכשלה — רעננו ובדקו', 'error');
   };
 

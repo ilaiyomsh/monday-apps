@@ -56,8 +56,12 @@ export function applyStageComplete(discussion, id, stamp) {
 }
 
 /**
- * A background stage FAILED for `id`. The people were never written, so the
- * pending copy must go — and the card refetches to show what monday actually has.
+ * A background stage FAILED for `id`. The pending copy must go and the card
+ * refetches, so it shows what monday actually has. Note that "a stage failed" does
+ * NOT mean nothing was written — the agenda and the people are independent writes,
+ * so the people may well have landed while the agenda is what failed. That is
+ * exactly why the pending copy is dropped in favour of a re-read rather than being
+ * kept or trusted.
  * `__building` goes too: whatever is on the board is all there will be, and
  * leaving the loader spinning forever would strand the user.
  */
