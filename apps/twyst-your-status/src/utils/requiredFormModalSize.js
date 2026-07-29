@@ -33,7 +33,19 @@ export const FORM_MAX_ROWS = 8;
  */
 export const FORM_MIN_ROWS = 2;
 
-export const LABEL_COLUMN_WIDTH_PX = 150;
+/*
+ * The label column carries the ENTIRE 3.9.0 widening (owner request): the modal is
+ * 25% wider than the 526px it was (526 → 658), the control column keeps its 320px —
+ * the fields themselves must not change width — so all 132 added pixels go here,
+ * 150 → 282. A long column title used to be ellipsised at a width that fitted
+ * roughly a dozen Hebrew characters.
+ *
+ * `RequiredFieldsForm` passes this number down to the row grid as a custom property
+ * rather than the stylesheet hard-coding it a second time: the modal's width is
+ * computed from it below, and the two drifting apart is either dead space or a
+ * clipped control column.
+ */
+export const LABEL_COLUMN_WIDTH_PX = 282;
 export const CONTROL_COLUMN_WIDTH_PX = 320;
 // 36px is the real row height (.twyst-form-row min-height, and the min-block-size of
 // every option bar); the extra 4 is breathing room for a control that renders a pixel

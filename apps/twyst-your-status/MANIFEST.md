@@ -44,8 +44,19 @@ column. Not a grid.
 Size is computed by `src/utils/requiredFormModalSize.js` and passed to
 `openAppFeatureModal` as pixel strings:
 
-- **Width is constant** (`520px`) — it is the label+control layout, not the field
-  count.
+- **Width is constant** (`658px` since 3.9.0, was `526`) — it is the label+control
+  layout, not the field count. The 3.9.0 widening (+25%, owner request) went ENTIRELY to
+  the label column (`150 → 282`); `CONTROL_COLUMN_WIDTH_PX` stays 320 because the fields
+  themselves must not change width. `RequiredFieldsForm` passes `LABEL_COLUMN_WIDTH_PX`
+  to the row grid as the `--twyst-label-column-width` custom property, so the stylesheet
+  holds no second copy of the number — a hard-coded `150px` there would open a wider
+  modal with the labels still laid out narrow, which is the whole point of the change.
+- **The modal's close X belongs to monday and cannot be moved or hidden.**
+  `openAppFeatureModal` accepts only `url`/`urlPath`/`urlParams`/`width`/`height`
+  (monday-sdk-js 0.5.9), and the X is in monday's DOM around the iframe. An app can only
+  draw its OWN close control inside its iframe, which leaves monday's in place as well —
+  asked for in 3.9.0 (move it to the left, for RTL) and declined on that basis by the
+  owner. See `mapps/references/known-issues.md`.
 - **Height follows the rows**: one row per field, at most **8 visible** (`FORM_MAX_ROWS`,
   raised from 4 in 3.6.0); past that the LIST scrolls and the modal keeps its opened
   height.
@@ -232,10 +243,18 @@ gets `Only board owners can configure` in its place. The decision is one pure fu
   itself on a SUCCESSFUL save (the fill form and the settings screen both do).
 - **No success toast for a status change**, in the picker or after the fill form — the
   cell shows the result and the surface closing is the confirmation. Failures do notify.
-- Selecting a label with NO required fields closes the picker as soon as the write lands.
-  The write is awaited, not fired and forgotten: `closeDialog` tears the iframe down and
-  cancels a request still in flight, which would close the dialog on a status that was
-  never written. The pill's spinner covers the round trip.
+- **Neither surface closes until the status write is CONFIRMED** (3.9.0). The write is
+  awaited, not fired and forgotten — `closeDialog` tears the iframe down and cancels a
+  request still in flight, which would close the dialog on a status that was never
+  written — and the response is then checked: both mutations select the status column
+  back (`... on StatusValue { index label }`, where `index` is the label **id**), and
+  `domain/statusWriteResult.js` throws when the echo names a different label or when no
+  item came back at all. `change_column_value: null` inside a 200 with no `errors` is a
+  real shape that a bare `await` reads as success. The picker keeps its pill spinner and
+  the fill form keeps a spinner on its save button for the whole round trip.
+  **An UNREADABLE echo is deliberately accepted** (logged, not thrown): if an API version
+  stops returning the fragment, failing closed would put an error on every successful
+  transition in the app. Pinned by `OnClickDialog/statusWriteClose.test.jsx`.
 - Selecting a label with required fields always opens the fill form (even when
   filled) as a sized modal on `/required-fields`; submit writes the form columns and
   the status together via `change_multiple_column_values`, then closes the modal.
@@ -282,6 +301,22 @@ gets `Only board owners can configure` in its place. The decision is one pure fu
 - Unconfigured column (no storage value) ⇒ empty rules: **all active statuses are allowed**.
 - Settings can also edit the board status labels themselves (rename / recolor / add /
   deactivate) via `update_status_column`, in addition to per-label permissions.
+- **A label added in settings is configurable in the SAME visit** (3.9.0). It has no
+  monday id until `update_status_column` has run, so its rules are held under the draft's
+  client key (`new:1`) and re-keyed onto the assigned id inside the same save:
+  labels are written → the refresh reveals the ids → `resolveNewLabelIds` matches →
+  `remapDraftLabelKeys` moves the rules → prune → storage. Before this the permissions
+  accordion was hidden on a new card (`showPermissions={!label.isNew}`), which read as
+  broken rather than as "save first".
+  - The match is a set difference (ids the refresh has that the pre-mutation labels did
+    not) narrowed by label text and index — the two things the mutation sent. It does NOT
+    fall back to pairing leftovers in order: a wrong match gives one status another's
+    permissions. An unmatched draft's rules are dropped by the prune and the screen says
+    so, staying open.
+  - **After the labels mutation the label draft is re-seeded from the refresh.** Without
+    it, a save that fails LATER (storage, validation) leaves the new labels marked
+    `isNew`, and the retry creates them a second time. Pinned by
+    `ColumnSettings/newLabelPermissions.test.jsx`.
 
 ## Required scopes
 

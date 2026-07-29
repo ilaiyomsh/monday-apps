@@ -15,6 +15,7 @@ import { prefillFieldValue } from '../../domain/columnFields';
 import { buildMultiColumnWritePayload } from '../../domain/columnValueFormats';
 import { getLabelRule } from '../../domain/settingsSchema';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';
+import { assertStatusWritten } from '../../domain/statusWriteResult';
 import {
   GET_REQUIRED_FIELDS_CONTEXT,
   UPDATE_MULTIPLE_COLUMN_VALUES,
@@ -133,13 +134,23 @@ function RequiredFieldsModal({ context }) {
         formValues: values,
         columnsById,
       });
-      await mondayService.query(UPDATE_MULTIPLE_COLUMN_VALUES, {
+      const data = await mondayService.query(UPDATE_MULTIPLE_COLUMN_VALUES, {
         boardId: String(boardId),
         itemId: String(itemId),
         columnValues: JSON.stringify(payload),
+        statusColumnId: String(columnId),
       });
-      // No success notice for a status change: the cell shows the result, and the modal
-      // closing is itself the confirmation. Failures still speak — see the catch below.
+      /*
+       * The form closes on this line and NOT before, which is the whole ordering:
+       * click → the form stays open with a spinner → the write comes back → close.
+       * `assertStatusWritten` is what makes "came back" mean "the status changed" —
+       * the mutation echoes the status column, and an echo naming a different label
+       * (or no item at all) arrives inside a 200 with no `errors`.
+       *
+       * No success notice for a status change: the cell shows the result, and the
+       * modal closing is itself the confirmation. Failures speak — see the catch.
+       */
+      assertStatusWritten(data?.change_multiple_column_values, columnId, label.id);
       await close();
     } catch (err) {
       logger.error('RequiredFieldsModal', 'Failed to save the status transition', err);

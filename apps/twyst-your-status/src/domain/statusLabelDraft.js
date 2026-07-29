@@ -141,6 +141,99 @@ export function buildStatusLabelsUpdatePayload(draftActive, liveAll) {
 }
 
 /**
+ * Match each NEW draft label to the id monday assigned it by the save.
+ *
+ * A new label has no id until `update_status_column` has run, but its permission
+ * rules are keyed BY id — so the settings screen holds them under the draft's
+ * `clientKey` ("new:1") and this is how they find their real home afterwards.
+ *
+ * The candidate set is what the refresh has that the pre-mutation labels did not:
+ * a set difference, so a pre-existing label can never be claimed no matter how well
+ * it matches. Within that set, matching is by the two things WE sent — the label
+ * text and the index — and it deliberately stops there. Falling back to "zip the
+ * leftovers in order" would attach one status's permissions to another, which is
+ * worse than losing them: an unresolved draft simply keeps its `new:` key, and the
+ * prune drops it (`migrateSettings` only accepts numeric keys).
+ *
+ * @param {{
+ *   draft?: ReturnType<typeof createLabelsDraft>,
+ *   liveBefore?: Array<{id: string|number}>,
+ *   refreshedLabels?: Array<{id: string|number, index?: number, label?: string, isDeactivated?: boolean}>,
+ * }} input
+ * @returns {Record<string, string>} clientKey → the assigned label id
+ */
+export function resolveNewLabelIds({ draft, liveBefore, refreshedLabels } = {}) {
+  const newDrafts = (Array.isArray(draft) ? draft : [])
+    .filter((label) => label?.isNew && label.clientKey);
+  if (newDrafts.length === 0) return {};
+
+  const beforeIds = new Set(
+    (Array.isArray(liveBefore) ? liveBefore : []).map((label) => String(label?.id)),
+  );
+  const candidates = (Array.isArray(refreshedLabels) ? refreshedLabels : [])
+    .filter((label) => !label?.isDeactivated && !beforeIds.has(String(label?.id)));
+
+  const resolved = {};
+  const claimed = new Set();
+  const text = (value) => String(value ?? '').trim();
+
+  const matchPass = (predicate) => {
+    newDrafts.forEach((label) => {
+      if (resolved[label.clientKey]) return;
+      const hit = candidates.find(
+        (candidate) => !claimed.has(String(candidate.id)) && predicate(candidate, label),
+      );
+      if (!hit) return;
+      resolved[label.clientKey] = String(hit.id);
+      claimed.add(String(hit.id));
+    });
+  };
+
+  // Both, then either. The strictest pass runs first so a label that matches
+  // exactly cannot be consumed by a looser match on another draft.
+  matchPass((candidate, label) => text(candidate.label) === text(label.label)
+    && Number(candidate.index) === Number(label.index));
+  matchPass((candidate, label) => text(candidate.label) === text(label.label));
+  matchPass((candidate, label) => Number(candidate.index) === Number(label.index));
+
+  return resolved;
+}
+
+/**
+ * Re-key a settings DRAFT: rules and hidden ids held under a `new:` client key move
+ * to the real label id. Runs before `pruneSettingsForActiveLabels`, which is where
+ * anything still unresolved is dropped.
+ *
+ * Deliberately does not go through `migrateSettings` — that would strip the very
+ * `new:` keys this function exists to rename.
+ *
+ * @param {object|null} settings  the in-memory draft, client keys included
+ * @param {Record<string, string>} idByClientKey
+ */
+export function remapDraftLabelKeys(settings, idByClientKey) {
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return settings;
+  const map = (idByClientKey && typeof idByClientKey === 'object') ? idByClientKey : {};
+  const entries = Object.entries(settings.labels ?? {});
+
+  // Untouched keys first, remapped ones second, so a rule the user just configured
+  // wins over a stale rule already sitting under the id monday handed out.
+  const labels = {};
+  entries.forEach(([key, rule]) => {
+    if (!map[key]) labels[key] = rule;
+  });
+  entries.forEach(([key, rule]) => {
+    if (map[key]) labels[map[key]] = rule;
+  });
+
+  const hiddenLabelIds = [...new Set(
+    (Array.isArray(settings.hiddenLabelIds) ? settings.hiddenLabelIds : [])
+      .map((id) => map[String(id)] ?? String(id)),
+  )];
+
+  return { ...settings, hiddenLabelIds, labels };
+}
+
+/**
  * Drop permission rules / hidden ids for labels that no longer exist as active.
  * @param {object|null} settings
  * @param {string[]} activeLabelIds
