@@ -314,7 +314,8 @@ describe('CreateDiscussionModal', () => {
   it('round301 — staged create: hands the card off with the REAL id once stage 1 is on the board', async () => {
     const onOptimisticCreate = vi.fn();
     const onCreated = vi.fn();
-    await renderOpen({ onOptimisticCreate, onCreated });
+    const onStageComplete = vi.fn();
+    await renderOpen({ onOptimisticCreate, onCreated, onStageComplete });
     const submit = screen.getByText('צור דיון').closest('button');
     await act(async () => { fireEvent.click(submit); });
     await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
@@ -328,9 +329,11 @@ describe('CreateDiscussionModal', () => {
     // so the card header does not blank them out mid-creation.
     expect(shape.__pendingPeople).toBeTruthy();
     await flush();
-    expect(onCreated).toHaveBeenCalledTimes(1);
-    expect(onCreated.mock.calls[0][0].id).toBe('99');
-    expect(onCreated.mock.calls[0][1]).toMatchObject({ isEdit: false, isDuplicate: false });
+    // round306 (PR review) — the tail reports through the id-GUARDED stage channel.
+    // It used to call onCreated (the generic save handler), which closes whatever
+    // create/edit modal is open by then — seconds after this hand-off.
+    expect(onStageComplete).toHaveBeenCalledWith({ id: '99' });
+    expect(onCreated).not.toHaveBeenCalled();
   });
 
   it('round301 — the root create defers the PEOPLE columns to stage 3 (a follow-up update)', async () => {
@@ -491,9 +494,9 @@ describe('CreateDiscussionModal', () => {
       .mockImplementationOnce(async () => { throw new Error('transient background failure'); })
       .mockImplementationOnce(okPass);
     const onOptimisticCreate = vi.fn();
-    const onCreated = vi.fn();
+    const onStageComplete = vi.fn();
     const onStageError = vi.fn();
-    await renderOpen({ onOptimisticCreate, onCreated, onStageError });
+    await renderOpen({ onOptimisticCreate, onCreated: vi.fn(), onStageComplete, onStageError });
     fireEvent.click(screen.getByText('בחר סוג דיון'));
     await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
     const submit = screen.getByText('צור דיון').closest('button');
@@ -502,7 +505,7 @@ describe('CreateDiscussionModal', () => {
     // The card WAS handed off (the failure came later, in the background)…
     await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
     // …the retry finished the agenda, so the flow COMPLETES rather than erroring…
-    await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onStageComplete).toHaveBeenCalledTimes(1));
     expect(templateApi.createTopicsFromTemplate).toHaveBeenCalledTimes(3);
     expect(onStageError).not.toHaveBeenCalled();
     // …and one root item only — a background failure must never duplicate it.
@@ -517,5 +520,94 @@ describe('CreateDiscussionModal', () => {
     await flush();
     expect(onCreated).toHaveBeenCalledTimes(1);
     expect(onCreated.mock.calls[0][0].id).toBe('99');
+  });
+});
+
+/*
+ * round306 (PR review) — two independent properties of the BACKGROUND tail.
+ *
+ * The tail owns stage 2 (the rest of the agenda) and stage 3 (the people columns),
+ * which the root create deliberately leaves out. Those two writes are unrelated,
+ * and the tail lands SECONDS after the card was handed off — so:
+ *   · an agenda failure must not cancel the people write that never even ran, and
+ *   · completion must not reach for the generic save handler, which closes whatever
+ *     create/edit form the user has since opened.
+ */
+describe('CreateDiscussionModal — the staged background tail (round306 review)', () => {
+  const withType = async (props) => {
+    templatesValue.typeTemplates = [{ discussionType: 'שבועי', topics: [{ name: 'נושא א', points: ['א1'] }] }];
+    const utils = await renderOpen({ onCreated: vi.fn(), ...props });
+    fireEvent.click(screen.getByText('בחר סוג דיון'));
+    await act(async () => { fireEvent.click(screen.getByText('שבועי')); });
+    return utils;
+  };
+  // Pick a person so stage 3 has a payload to write at all.
+  const pickPerson = async () => {
+    const pickers = screen.getAllByText(/^add-person/);
+    await act(async () => { fireEvent.click(pickers[0]); });
+  };
+  const submit = async () => {
+    await act(async () => { fireEvent.click(screen.getByText('צור דיון').closest('button')); });
+  };
+  // Stage 1's awaited topics pass succeeds; every BACKGROUND attempt (build + its
+  // resumed retry) fails, which is the state these two tests are about.
+  const failBackgroundAgenda = () => {
+    const okPass = async (_id, _t, options) => {
+      options?.onCheckpoint?.({
+        templateKey: 'k', topicResults: [{ sourceIndex: 0, id: 'T1' }],
+        pointResults: [], linkedTopicSourceIndexes: [],
+      });
+      return { topics: 1, points: 0, topicIds: ['T1'] };
+    };
+    templateApi.createTopicsFromTemplate
+      .mockImplementationOnce(okPass)
+      .mockImplementation(async () => { throw new Error('agenda failed'); });
+  };
+
+  it('writes the PEOPLE columns even when the agenda fails twice', async () => {
+    // The AWAITED pass must succeed (otherwise the card is never handed off and
+    // there is no background tail to test); both BACKGROUND attempts then fail.
+    failBackgroundAgenda();
+    const onOptimisticCreate = vi.fn();
+    const onStageError = vi.fn();
+    await withType({ onOptimisticCreate, onStageError });
+    await pickPerson();
+    await submit();
+    await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
+
+    // The people update ran despite the agenda failure — this is the whole point:
+    // the root payload omits these columns, so skipping it lost them silently.
+    await waitFor(() => expect(boardApi.update).toHaveBeenCalled());
+    const peoplePayload = boardApi.update.mock.calls[0][0];
+    expect(Object.keys(peoplePayload).length).toBeGreaterThan(0);
+    // ...and the agenda failure is STILL reported, not traded away for it.
+    await waitFor(() => expect(onStageError).toHaveBeenCalledWith({ id: '99' }));
+  });
+
+  it('reports completion through the id-guarded stage channel, NOT the generic save handler', async () => {
+    const onOptimisticCreate = vi.fn();
+    const onStageComplete = vi.fn();
+    const onCreated = vi.fn();
+    await withType({ onOptimisticCreate, onStageComplete, onCreated });
+    await pickPerson();
+    await submit();
+    await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
+
+    await waitFor(() => expect(onStageComplete).toHaveBeenCalledWith({ id: '99' }));
+    // onCreated is what closes any open create/edit modal and re-selects this
+    // discussion; the tail must never call it (the user may have moved on).
+    expect(onCreated).not.toHaveBeenCalled();
+  });
+
+  it('does not report completion when the tail failed', async () => {
+    failBackgroundAgenda();
+    const onOptimisticCreate = vi.fn();
+    const onStageComplete = vi.fn();
+    const onStageError = vi.fn();
+    await withType({ onOptimisticCreate, onStageComplete, onStageError });
+    await submit();
+    await waitFor(() => expect(onOptimisticCreate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onStageError).toHaveBeenCalled());
+    expect(onStageComplete).not.toHaveBeenCalled();
   });
 });

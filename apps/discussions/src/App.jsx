@@ -27,7 +27,7 @@ import { prefetchDiscussions } from './hooks/useDiscussions.js';
 import { useUsageTracker } from './hooks/useUsageTracker.js';
 import logger from './utils/logger.js';
 import { installChromeNarrowWatcher } from './utils/chromeNarrow.js';
-import { applyStageAdvance, applyStageFailure } from './utils/stagedCreate.js';
+import { applyStageAdvance, applyStageComplete, applyStageFailure } from './utils/stagedCreate.js';
 import { ToastContainer } from './components/Toast';
 import { ErrorDetailsModal } from './components/ErrorDetailsModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -767,6 +767,15 @@ export default function App() {
   const handleStageAdvance = ({ id }) => {
     setSelectedDiscussion((prev) => applyStageAdvance(prev, id, Date.now()));
   };
+  // The LAST stage landed. Deliberately NOT handleSaved: that closes any open
+  // create/edit modal, hides the list and selects this discussion, and the tail can
+  // finish seconds after the handoff — long enough for the user to have started
+  // another discussion, whose unsaved input would be thrown away. applyStageComplete
+  // is id-guarded, so this only refreshes the card when it is still the open one.
+  const handleStageComplete = ({ id } = {}) => {
+    setSelectedDiscussion((prev) => applyStageComplete(prev, id, Date.now()));
+    setRefreshKey((k) => k + 1); // the list must show the finished discussion either way
+  };
   // Stage 2/3 failed. The discussion ITSELF exists (stage 1 succeeded), so the card
   // stays open — we only tell the user which part did not finish. applyStageFailure
   // drops the pending people: they were never written, and keeping them would leave
@@ -1091,6 +1100,7 @@ export default function App() {
         onCreated={handleSaved}
         onOptimisticCreate={handleOptimisticCreate}
         onStageAdvance={handleStageAdvance}
+        onStageComplete={handleStageComplete}
         onStageError={handleStageError}
         canManageSettings={canManageSettings}
       />
