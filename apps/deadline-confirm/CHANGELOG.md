@@ -2,6 +2,38 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.10.1 — 2026-07-29 — fix: Gmail refused the AMP part (INTERNAL_ERROR)
+
+The first real send worked — mail delivered, plain fallback rendered — but Gmail
+would not display the dynamic part, reporting `INTERNAL_ERROR`. Two defects in
+the outgoing message, both in `helpers/mime-alternative.js`:
+
+- **Bare LF line endings in the AMP part.** The rendered amp4email document
+  comes from a template literal, so its lines end in `\n`. The helper joined
+  headers and boundaries with CRLF but passed the body through untouched — and
+  RFC 5322 requires CRLF in a message body. The AMP part was therefore not
+  syntactically a valid body. The `text/plain` fallback survived it (short, and
+  clients are forgiving); Gmail's amp4email parser did not.
+- **`Content-Transfer-Encoding: 8bit` on Hebrew content**, which declares raw
+  octets above 127 and needs 8BITMIME support along the whole delivery path.
+
+**Both parts are now base64** (`Content-Transfer-Encoding: base64`, wrapped at 76
+characters per RFC 2045 §6.8). That is 7-bit safe, carries real CRLF, and — the
+property that actually matters — passes the AMP document's bytes through
+**unchanged**, since nothing downstream can rewrite a line ending inside a base64
+payload. What Gmail decodes is exactly what was rendered.
+
+Six regression assertions pin it: base64 declared and `8bit` absent, byte-for-byte
+round-trip of an LF-bearing Hebrew AMP document, no bare LF anywhere in the
+assembled body, the 76-character wrap, and no raw non-ASCII in the payload.
+
+**Also:** `GET /health` reported `version: "dev"` on every deployment.
+`getEnv()` never carried a version (the number is a package.json read, not an
+env var) and `index.js` never passed one to `createApp`. It now reports the real
+version — without it there was no way to tell from outside which version a
+container was running, which is precisely what was needed while verifying the
+0.10.0 live deploy.
+
 ## 0.10.0 — 2026-07-29 — feat: Gmail sending wired end-to-end (T9/T9b/T9c)
 
 Sending is live. The manual **"שליחה עכשיו"** button in the admin screen now runs
