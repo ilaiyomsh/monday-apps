@@ -14,6 +14,13 @@ export const KEYS = {
   OAUTH_TOKEN: 'oauth_token',
   OAUTH_IDENTITY: 'oauth_identity',
   OAUTH_STATE_PREFIX: 'oauth_state:',
+  // T9b: the tenant's Gmail sending identity. Owner decision 2026-07-29 —
+  // each ORGANIZATION runs its own Google OAuth client and sends from its own
+  // internal mailbox, so this record is account-scoped like everything else.
+  // (This supersedes D13, which specified an unprefixed app-global key for a
+  // single vendor-owned mailbox.) Sharing one record across tenants would mean
+  // the first tenant to connect owns everyone else's sending identity.
+  GOOGLE_SENDER: 'google_sender',
 };
 
 /**
@@ -91,6 +98,17 @@ export function createAppStorage({ backend, ttlMs = 60_000, stateMaxAgeMs = 600_
       },
       async setOauthIdentity(identity) {
         await backend.set(scopedKey(KEYS.OAUTH_IDENTITY), identity);
+      },
+
+      // Google sending identity — read/write THROUGH, never cached. The record
+      // carries the access token with its expiry, and gmail-sender.js decides
+      // to refresh from that timestamp; a 60s-stale read against a 60s refresh
+      // cushion could hand out a token that expires mid-send.
+      async getGoogleSender() {
+        return (await backend.get(scopedKey(KEYS.GOOGLE_SENDER))) ?? null;
+      },
+      async setGoogleSender(record) {
+        await backend.set(scopedKey(KEYS.GOOGLE_SENDER), record);
       },
     };
   }
