@@ -160,8 +160,12 @@ Two targets were planned. **Only one is live.**
 - **`base: './'` in `vite.config.js` is load-bearing.** Relative asset URLs resolve at
   any depth, which is what let the app move from `/` to `/docs-export/` with no rebuild
   and no code change. An absolute `/` breaks every asset outside the root.
-- The SPA `404.html` is written INSIDE `_site/docs-export/`, not at the site root: Pages
-  serves the nearest `404.html`, so a root copy would not catch a deep link here.
+- **There is no per-app `404.html`, on purpose.** Pages honours `404.html` only at the
+  SITE ROOT; it does not resolve a nearest-directory 404 the way Apache/nginx do —
+  verified live, an unknown path under `/docs-export/` returned GitHub's error page. The
+  root `404.html` is the site index instead. This app has no client-side router and is
+  always loaded at its directory root, so deep links are not a scenario here; an app that
+  needed them would have to solve this differently.
 - Needs the repository's Pages **Source = GitHub Actions**. That is a repo setting, not
   a file: with the legacy "Deploy from a branch" source, Pages builds the repo root as
   a Jekyll site and silently ignores this workflow's artifact.
