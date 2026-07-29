@@ -71,9 +71,20 @@ const patchFrom = (draft) =>
  * @param {Object|null} props.settings - the loaded blob (null before the first load)
  * @param {(partial: Object) => Promise<Object>} props.updateSettings
  * @param {boolean} [props.forced] - unconfigured instance: not dismissible
+ * @param {boolean} [props.ownershipUnverified] - the panel was opened WITHOUT proving
+ *   the viewer owns the board, because the ownership check could not be answered and
+ *   the instance is unconfigured (see the SettingsGate docblock). Renders an
+ *   explanation so an open gate is never silent — it usually means the app is missing
+ *   the `boards:read` scope, which will break the report itself next.
  * @param {() => void} [props.onClose]
  */
-export function SettingsPanel({ settings, updateSettings, forced = false, onClose }) {
+export function SettingsPanel({
+  settings,
+  updateSettings,
+  forced = false,
+  ownershipUnverified = false,
+  onClose,
+}) {
   const { context } = useMonday();
 
   // Seeded from the loaded blob and re-seeded whenever a NEW blob arrives (a save
@@ -139,6 +150,18 @@ export function SettingsPanel({ settings, updateSettings, forced = false, onClos
       />
 
       <ModalContent>
+        {ownershipUnverified ? (
+          <AttentionBox
+            type="warning"
+            title="לא הצלחנו לאמת שאתם בעלי הלוח"
+            className={styles.ownershipWarning}
+            data-testid="ownership-unverified"
+          >
+            פתחנו את ההגדרות בכל זאת, כי אחרת אי אפשר להגדיר את האפליקציה בכלל. הסיבה
+            הנפוצה היא שחסר לאפליקציה ההרשאה <code>boards:read</code> — בדקו אותה
+            ב-Developer Center, אחרת גם שליפת האייטמים תיכשל. הפרטים המדויקים בקונסול.
+          </AttentionBox>
+        ) : null}
         <div className={styles.sections}>
           <BoardPicker
             value={draft.boardId}

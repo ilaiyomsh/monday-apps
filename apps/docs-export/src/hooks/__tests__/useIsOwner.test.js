@@ -75,14 +75,14 @@ describe('before the context resolves', () => {
   it('stays loading and asks nobody while context is still null', () => {
     const { result } = mountWith(null);
 
-    expect(result.current).toEqual({ isOwner: false, isLoading: true });
+    expect(result.current).toEqual({ isOwner: false, isLoading: true, determined: false });
     expect(isBoardOwner).not.toHaveBeenCalled();
   });
 });
 
 describe('a real board_view context', () => {
   it('asks services/owners with the context board id and user id, verbatim', async () => {
-    isBoardOwner.mockResolvedValue(true);
+    isBoardOwner.mockResolvedValue({ isOwner: true, determined: true });
 
     const { result } = mountWith(contextFor(BOARD_ID, USER_ID));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -96,15 +96,16 @@ describe('a real board_view context', () => {
     isBoardOwner.mockReturnValue(gate.promise);
 
     const { result } = mountWith(contextFor(BOARD_ID, USER_ID));
-    expect(result.current).toEqual({ isOwner: false, isLoading: true });
+    expect(result.current).toEqual({ isOwner: false, isLoading: true, determined: false });
 
-    gate.resolve(true);
+    gate.resolve({ isOwner: true, determined: true });
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.isOwner).toBe(true);
+    expect(result.current.determined).toBe(true);
   });
 
   it('reports isOwner false for a user who is not an owner, without logging an error', async () => {
-    isBoardOwner.mockResolvedValue(false);
+    isBoardOwner.mockResolvedValue({ isOwner: false, determined: true });
 
     const { result } = mountWith(contextFor(BOARD_ID, USER_ID));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -115,7 +116,7 @@ describe('a real board_view context', () => {
   });
 
   it('does not re-query when the same context object re-renders', async () => {
-    isBoardOwner.mockResolvedValue(true);
+    isBoardOwner.mockResolvedValue({ isOwner: true, determined: true });
     const context = contextFor(BOARD_ID, USER_ID);
 
     const { result, rerender } = mountWith(context);
@@ -125,6 +126,63 @@ describe('a real board_view context', () => {
     await waitFor(() => expect(result.current.isOwner).toBe(true));
 
     expect(isBoardOwner).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the determined flag — the dead-end guard', () => {
+  // SettingsGate opens an UNCONFIGURED instance when ownership is undetermined, and
+  // refuses only a PROVEN non-owner. If the hook flattens the two, the board owner is
+  // shown "ask the board owner" with no way out. These pin the passthrough.
+
+  it('passes determined:true through for a proven non-owner', async () => {
+    isBoardOwner.mockResolvedValue({ isOwner: false, determined: true });
+
+    const { result } = mountWith(contextFor(BOARD_ID, USER_ID));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current).toEqual({ isOwner: false, isLoading: false, determined: true });
+  });
+
+  it('passes determined:false through when the service could not answer', async () => {
+    // e.g. the app is missing the boards:read scope — services/owners already logged it.
+    isBoardOwner.mockResolvedValue({ isOwner: false, determined: false });
+
+    const { result } = mountWith(contextFor(BOARD_ID, USER_ID));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current).toEqual({ isOwner: false, isLoading: false, determined: false });
+  });
+
+  it('never claims determined when the service itself rejects', async () => {
+    isBoardOwner.mockRejectedValue(new Error('module blew up'));
+
+    const { result } = mountWith(contextFor(BOARD_ID, USER_ID));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.determined).toBe(false);
+  });
+
+  it('never claims determined for a context it refused to ask about', async () => {
+    const { result } = mountWith({});
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.determined).toBe(false);
+  });
+
+  it('treats a malformed service answer as undetermined rather than trusting it', async () => {
+    // Defends the coercion in the hook: a bare boolean (the OLD contract) or undefined
+    // must not read as "determined owner" just because it is truthy/absent.
+    for (const bad of [true, false, undefined, null, {}]) {
+      isBoardOwner.mockReset();
+      isBoardOwner.mockResolvedValue(bad);
+      cleanup();
+
+      const { result } = mountWith(contextFor(BOARD_ID, USER_ID));
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      expect(result.current.determined).toBe(false);
+      expect(result.current.isOwner).toBe(false);
+    }
   });
 });
 
@@ -169,23 +227,26 @@ describe('a context that changes mid-flight', () => {
     isBoardOwner.mockImplementation((boardId) =>
       boardId === BOARD_ID ? slowFirst.promise : fastSecond.promise
     );
+    const answer = (isOwner) => ({ isOwner, determined: true });
 
     const { result, rerender } = mountWith(contextFor(BOARD_ID, USER_ID));
 
     useMonday.mockReturnValue({ context: contextFor(999, USER_ID), currentUser: { id: USER_ID }, isMobile: false });
     rerender();
-    fastSecond.resolve(false);
+    fastSecond.resolve(answer(false));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     // The abandoned board answers LAST, and says "owner" — the classic overwrite.
-    slowFirst.resolve(true);
+    slowFirst.resolve(answer(true));
     await waitFor(() => expect(isBoardOwner).toHaveBeenCalledTimes(2));
 
     expect(result.current.isOwner).toBe(false);
   });
 
   it('re-queries and updates when the user id changes', async () => {
-    isBoardOwner.mockImplementation((_boardId, userId) => Promise.resolve(userId === '22222222'));
+    isBoardOwner.mockImplementation((_boardId, userId) =>
+      Promise.resolve({ isOwner: userId === '22222222', determined: true })
+    );
 
     const { result, rerender } = mountWith(contextFor(BOARD_ID, USER_ID));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
@@ -206,7 +267,7 @@ describe('the dev harness', () => {
     // fixture — so the ONLY way the owner surface is reachable outside the iframe
     // is this build-time-flagged bypass.
     vi.stubEnv('VITE_MONDAY_MOCK', '1');
-    isBoardOwner.mockResolvedValue(false);
+    isBoardOwner.mockResolvedValue({ isOwner: false, determined: true });
 
     const { result } = mountWith(contextFor(BOARD_ID, USER_ID));
 
@@ -216,7 +277,7 @@ describe('the dev harness', () => {
   });
 
   it('does NOT bypass the check when the flag is absent', async () => {
-    isBoardOwner.mockResolvedValue(false);
+    isBoardOwner.mockResolvedValue({ isOwner: false, determined: true });
 
     const { result } = mountWith(contextFor(BOARD_ID, USER_ID));
     await waitFor(() => expect(result.current.isLoading).toBe(false));

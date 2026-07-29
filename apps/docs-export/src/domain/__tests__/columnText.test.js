@@ -144,12 +144,15 @@ describe('cvSelection', () => {
     expect(cvSelection(['person'])).toBe(cvSelection(['people']));
   });
 
-  it('selects display_value AND the structured mirrored_items for a mirror column', () => {
-    // display_value is what the CELL renders; mirrored_items is the only
-    // unambiguous way to recover the individual committee names.
-    expect(cvSelection(['mirror'])).toBe(
-      'id text ... on MirrorValue { display_value mirrored_items { linked_item { id name } mirrored_value { ... on TextValue { text } } } }'
-    );
+  it('selects display_value ONLY for a mirror column', () => {
+    // display_value is what the CELL renders and what domain/committees.js splits into
+    // names. `mirrored_items { … mirrored_value { … } }` was here and is deliberately
+    // gone: it cost ~+8 complexity per query and did not even work for the common case
+    // (a status/dropdown source is not a probe-confirmed member of the MirroredValue
+    // union, so it matched no fragment), which then drove a fallback that read the
+    // linked item's TITLE as the committee name. Do not re-add it without probing the
+    // union's membership first — see ../committees.js.
+    expect(cvSelection(['mirror'])).toBe('id text ... on MirrorValue { display_value }');
   });
 
   it('selects display_value for a formula column', () => {
@@ -180,10 +183,10 @@ describe('cvSelection', () => {
 
   it('keeps the fragments in first-appearance order of the requested types', () => {
     expect(cvSelection(['mirror', 'date'])).toBe(
-      `id text ... on MirrorValue { display_value mirrored_items { linked_item { id name } mirrored_value { ... on TextValue { text } } } } ... on DateValue { date time }`
+      `id text ... on MirrorValue { display_value } ... on DateValue { date time }`
     );
     expect(cvSelection(['date', 'mirror'])).toBe(
-      `id text ... on DateValue { date time } ... on MirrorValue { display_value mirrored_items { linked_item { id name } mirrored_value { ... on TextValue { text } } } }`
+      `id text ... on DateValue { date time } ... on MirrorValue { display_value }`
     );
   });
 

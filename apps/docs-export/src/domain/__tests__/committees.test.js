@@ -3,9 +3,18 @@ import { committeeNames, committeesFromItems, filterByCommittees } from '../comm
 
 // All mirror shapes below are VERBATIM captures from the live probe of
 // 2026-07-29 (API 2026-04), scratchpad/monday-probe-findings.md → FIXTURES.
-// The pair that matters most is MIRROR_AMBIGUOUS vs MIRROR_TWO_VALUES: their
-// display_value is byte-identical ("Gamma, Delta"), yet one is ONE committee and
-// the other is TWO. That is why display_value.split(', ') is banned.
+//
+// The module reads `display_value` and NOTHING else (owner's call, 2026-07-29), so
+// these fixtures keep their captured `mirrored_items` on purpose: they prove the
+// implementation ignores that structure even when it is present and says something
+// different. In particular MIRROR_WRONG_LINK_NAME is the regression guard for the
+// bug that shipped — `linked_item.name` being read as if it were the mirrored value,
+// which filled the committee picker with linked TASK titles instead of committees.
+//
+// The comma trade-off is deliberate and asserted below: MIRROR_AMBIGUOUS (ONE source
+// value containing ", ") and MIRROR_TWO_VALUES (two values) have a byte-identical
+// display_value, so both now yield TWO names. That is knowingly accepted — see the
+// docblock in ../committees.js for what buying the exact answer back would cost.
 
 const COL = 'wzmirror';
 
@@ -37,6 +46,16 @@ const MIRROR_TWO_VALUES = mirror('Gamma, Delta', [
   link('12660747990', 'WZ-S4', 'Gamma'),
   link('12660747991', 'WZ-S5', 'Delta'),
 ]);
+/**
+ * THE REGRESSION GUARD. A mirror whose source column is a status/dropdown returns no
+ * `mirrored_value.text` (only TextValue is a member of the MirroredValue union), while
+ * `linked_item.name` holds the linked ITEM'S TITLE. The first implementation read that
+ * title as the committee name and the picker offered task names — exactly what a user
+ * hit in production. display_value is the truth here.
+ */
+const MIRROR_WRONG_LINK_NAME = mirror('אדריכלות', [
+  link('12660747999', 'הכנת תוכנית מפורטת לפרויקט', undefined),
+]);
 
 const item = (id, cvForMirror) => ({ id, name: `item-${id}`, cv: { [COL]: cvForMirror } });
 
@@ -49,16 +68,19 @@ describe('committeeNames', () => {
     expect(committeeNames(item('1', MIRROR_MULTI), COL)).toEqual(['Alpha', 'Beta']);
   });
 
-  it('keeps ONE name when a single source value contains ", "', () => {
-    // The whole reason this module exists.
-    expect(committeeNames(item('1', MIRROR_AMBIGUOUS), COL)).toEqual(['Gamma, Delta']);
+  it('ACCEPTED TRADE-OFF: splits a single source value that contains ", " into two names', () => {
+    // Not a bug — a documented cost of reading display_value only. Pinned so that if
+    // someone "fixes" it they have to read the docblock and decide deliberately.
+    expect(committeeNames(item('1', MIRROR_AMBIGUOUS), COL)).toEqual(['Gamma', 'Delta']);
   });
 
-  it('distinguishes one comma-bearing value from two values with the same display_value', () => {
+  it('cannot distinguish one comma-bearing value from two — both give the same names', () => {
     const one = item('1', MIRROR_AMBIGUOUS);
     const two = item('2', MIRROR_TWO_VALUES);
     expect(one.cv[COL].display_value).toBe(two.cv[COL].display_value); // guards the fixtures
-    expect(committeeNames(one, COL)).toEqual(['Gamma, Delta']);
+    // Identical input text, identical output. Buying the exact answer back needs
+    // mirrored_items on every query PLUS a union-membership probe.
+    expect(committeeNames(one, COL)).toEqual(['Gamma', 'Delta']);
     expect(committeeNames(two, COL)).toEqual(['Gamma', 'Delta']);
   });
 
@@ -76,41 +98,39 @@ describe('committeeNames', () => {
     expect(committeeNames({ id: '1' }, COL)).toEqual([]);
   });
 
-  it('falls back to the linked item name when the mirrored value carries no text', () => {
-    // Happens when the mirrored source column is not a TextValue, so the
-    // union fragment matches nothing.
-    expect(committeeNames(item('1', mirror('WZ-S1', [link('1', 'ועדת הצפון', undefined)])), COL)).toEqual(
-      ['ועדת הצפון']
-    );
+  it('NEVER reads linked_item.name — the production bug this module shipped', () => {
+    // The mirror displays "אדריכלות"; the linked item is titled
+    // "הכנת תוכנית מפורטת לפרויקט". Reading the title produced a picker full of task
+    // names. Only display_value is the committee.
+    expect(committeeNames(item('1', MIRROR_WRONG_LINK_NAME), COL)).toEqual(['אדריכלות']);
   });
 
-  it('falls back to the linked item name when the mirrored value text is empty', () => {
-    expect(committeeNames(item('1', mirror('x', [link('1', 'ועדת הדרום', '')])), COL)).toEqual([
-      'ועדת הדרום',
-    ]);
+  it('ignores mirrored_items entirely, even when it disagrees with display_value', () => {
+    // Belt-and-braces on the same rule: no structured field may override the cell text.
+    const cv = mirror('ועדת הצפון', [link('1', 'שם אייטם אחר לגמרי', 'טקסט אחר לגמרי')]);
+    expect(committeeNames(item('1', cv), COL)).toEqual(['ועדת הצפון']);
+  });
+
+  it('is empty when display_value is empty, whatever mirrored_items holds', () => {
+    // The old code would have answered ['ועדת הדרום'] here, from the link title.
+    const cv = mirror('', [link('1', 'ועדת הדרום', '')]);
+    expect(committeeNames(item('1', cv), COL)).toEqual([]);
   });
 
   it('trims surrounding whitespace off every name', () => {
-    expect(committeeNames(item('1', mirror('a, b', [link('1', 'X', '  ועדה א  ')])), COL)).toEqual([
+    expect(committeeNames(item('1', mirror('  ועדה א  ', [])), COL)).toEqual(['ועדה א']);
+    expect(committeeNames(item('1', mirror('ועדה א ,  ועדה ב', [])), COL)).toEqual([
       'ועדה א',
+      'ועדה ב',
     ]);
-  });
-
-  it('drops entries that carry neither a mirrored text nor a linked item name', () => {
-    const cv = mirror('Alpha', [
-      { linked_board_id: 'b', linked_item: null, mirrored_value: null },
-      link('2', 'WZ-S2', 'Alpha'),
-    ]);
-    expect(committeeNames(item('1', cv), COL)).toEqual(['Alpha']);
   });
 
   it('de-duplicates a name repeated inside one item', () => {
-    const cv = mirror('Alpha, Alpha', [link('1', 'a', 'Alpha'), link('2', 'b', 'Alpha')]);
-    expect(committeeNames(item('1', cv), COL)).toEqual(['Alpha']);
+    expect(committeeNames(item('1', mirror('Alpha, Alpha', [])), COL)).toEqual(['Alpha']);
   });
 
-  it('splits display_value only when mirrored_items was not selected at all', () => {
-    // The lossy last resort: an "Alpha, Beta" here could really be one value.
+  it('reads display_value when mirrored_items was not selected at all', () => {
+    // The shape the query actually returns now: display_value and nothing else.
     const cv = { id: COL, type: 'mirror', text: null, value: null, display_value: 'Alpha, Beta' };
     expect(committeeNames(item('1', cv), COL)).toEqual(['Alpha', 'Beta']);
   });
@@ -130,9 +150,9 @@ describe('committeesFromItems', () => {
     const items = [
       item('1', MIRROR_MULTI), // Alpha, Beta
       item('2', MIRROR_SINGLE), // Alpha (already seen)
-      item('3', MIRROR_AMBIGUOUS), // Gamma, Delta (one name)
+      item('3', MIRROR_AMBIGUOUS), // "Gamma, Delta" -> two names, per the trade-off
     ];
-    expect(committeesFromItems(items, COL)).toEqual(['Alpha', 'Beta', 'Gamma, Delta']);
+    expect(committeesFromItems(items, COL)).toEqual(['Alpha', 'Beta', 'Gamma', 'Delta']);
   });
 
   it('does not sort the committees alphabetically', () => {
@@ -156,7 +176,7 @@ describe('filterByCommittees', () => {
   const items = [
     item('1', MIRROR_SINGLE), // Alpha
     item('2', MIRROR_MULTI), // Alpha, Beta
-    item('3', MIRROR_AMBIGUOUS), // "Gamma, Delta" as ONE committee
+    item('3', MIRROR_AMBIGUOUS), // display_value "Gamma, Delta" -> committees Gamma + Delta
     item('4', MIRROR_EMPTY), // no committee at all
   ];
 
@@ -172,14 +192,17 @@ describe('filterByCommittees', () => {
     expect(filterByCommittees(items, COL, ['Alpha', 'Beta']).map((i) => i.id)).toEqual(['1', '2']);
   });
 
-  it('does NOT match a fragment of a committee whose own name contains ", "', () => {
-    // Item 3's single committee is "Gamma, Delta"; "Gamma" is not that committee.
-    expect(filterByCommittees(items, COL, ['Gamma'])).toEqual([]);
-    expect(filterByCommittees(items, COL, ['Gamma, Delta']).map((i) => i.id)).toEqual(['3']);
+  it('matches on each half of a comma-bearing display_value, per the trade-off', () => {
+    // Item 3's display_value is "Gamma, Delta", which becomes two committees. Selecting
+    // either one matches it, and the un-split whole matches NOTHING — there is no
+    // committee by that name any more. Pinned so the consequence is visible, not implied.
+    expect(filterByCommittees(items, COL, ['Gamma']).map((i) => i.id)).toEqual(['3']);
+    expect(filterByCommittees(items, COL, ['Delta']).map((i) => i.id)).toEqual(['3']);
+    expect(filterByCommittees(items, COL, ['Gamma, Delta'])).toEqual([]);
   });
 
   it('drops items with no committee at all', () => {
-    expect(filterByCommittees(items, COL, ['Alpha', 'Beta', 'Gamma, Delta']).map((i) => i.id)).toEqual([
+    expect(filterByCommittees(items, COL, ['Alpha', 'Beta', 'Gamma']).map((i) => i.id)).toEqual([
       '1',
       '2',
       '3',
@@ -188,7 +211,7 @@ describe('filterByCommittees', () => {
 
   it('preserves the input order of the surviving items', () => {
     const reordered = [items[2], items[1], items[0]];
-    expect(filterByCommittees(reordered, COL, ['Alpha', 'Gamma, Delta']).map((i) => i.id)).toEqual([
+    expect(filterByCommittees(reordered, COL, ['Alpha', 'Gamma']).map((i) => i.id)).toEqual([
       '3',
       '2',
       '1',

@@ -36,8 +36,14 @@ import { isBoardOwner } from '../services/owners.js';
 import { useMonday } from '../contexts/MondayContext.jsx';
 import logger from '../utils/logger.js';
 
-const CLOSED = { isOwner: false, isLoading: false };
-const PENDING = { isOwner: false, isLoading: true };
+/**
+ * `determined` mirrors `services/owners`: it is `true` only when monday actually
+ * answered the ownership question. UNDETERMINED (`false`) is not the same as "not an
+ * owner" — see the module docblock in `services/owners.js`. `SettingsGate` is the one
+ * caller that acts on the difference, and only while the instance is unconfigured.
+ */
+const CLOSED = { isOwner: false, isLoading: false, determined: false };
+const PENDING = { isOwner: false, isLoading: true, determined: false };
 
 /**
  * `pnpm dev:mock` swaps the whole SDK for `src/dev-harness/monday-sdk-stub.js`,
@@ -72,7 +78,7 @@ export function useIsOwner() {
     }
 
     if (isDevHarness()) {
-      setState({ isOwner: true, isLoading: false });
+      setState({ isOwner: true, isLoading: false, determined: true });
       return undefined;
     }
 
@@ -89,9 +95,13 @@ export function useIsOwner() {
     setState(PENDING);
 
     isBoardOwner(boardId, userId)
-      .then((owner) => {
+      .then((answer) => {
         if (cancelled) return;
-        setState({ isOwner: Boolean(owner), isLoading: false });
+        setState({
+          isOwner: Boolean(answer?.isOwner),
+          determined: Boolean(answer?.determined),
+          isLoading: false,
+        });
       })
       .catch((err) => {
         // `services/owners` already fails closed internally, so reaching here means

@@ -34,13 +34,29 @@ function pushUnique(out, name) {
 }
 
 /**
- * The committee names on one item, in the order the mirror reports them.
+ * The committee names on one item, from `display_value` split on ", ".
  *
- * Preference per mirrored item: `mirrored_value.text` → `linked_item.name`.
- * Only when `mirrored_items` produced nothing at all do we fall back to
- * splitting `display_value` — that path CANNOT distinguish one comma-bearing
- * value from two values, so it is a data-loss risk we accept rather than
- * dropping the item out of the report entirely.
+ * ONE source, deliberately (owner's call, 2026-07-29). `display_value` is the text
+ * monday itself renders in the mirror cell, so it is always the mirrored VALUES and
+ * always matches what the user sees on the board.
+ *
+ * **What was here before, and why it is gone.** The first implementation preferred
+ * `mirrored_items[].mirrored_value.text` and fell back to `linked_item.name`. That
+ * shipped a real bug: `mirrored_value` is the `MirroredValue` UNION and only
+ * `TextValue` is a probe-confirmed member, so a mirror whose source column is a
+ * status/dropdown — very common, it renders as a chip — matched no fragment, and
+ * every name silently became the LINKED ITEM'S TITLE. The committee picker offered
+ * task names like "הכנת תוכנית מפורטת לפרויקט" where the committees
+ * "אדריכלות"/"תכנון עירוני" belonged. Never reintroduce `linked_item.name` as a
+ * name source; it is a different field with a plausible-looking wrong value.
+ *
+ * **The accepted trade-off.** A single committee name that itself contains ", " is
+ * byte-identical to two names and will split into two. That is knowingly accepted:
+ * the alternative needed `mirrored_items` on every query (~+8 complexity per 4 rows)
+ * plus a union-membership probe, to defend against a separator inside a committee
+ * name. If such a name ever appears, the fix is to widen the `mirrored_value`
+ * selection in domain/columnText.js — PROBE the union's members first (sandbox
+ * 16291824), because an inline fragment on a non-member invalidates the whole query.
  *
  * @param {{cv?: Record<string, object>}} item Item as returned by services/itemsQuery.
  * @param {string} mirrorColumnId `settings.columns.committee`.
@@ -50,23 +66,12 @@ export function committeeNames(item, mirrorColumnId) {
   const cv = item && item.cv ? item.cv[mirrorColumnId] : null;
   if (!cv) return [];
 
-  const names = [];
-  if (Array.isArray(cv.mirrored_items)) {
-    for (const mi of cv.mirrored_items) {
-      if (!mi) continue;
-      const fromValue = trimmed(mi.mirrored_value && mi.mirrored_value.text);
-      // linked_item.name covers a mirrored source column that is not a
-      // TextValue, where the union fragment matches nothing.
-      pushUnique(names, fromValue || trimmed(mi.linked_item && mi.linked_item.name));
-    }
-    if (names.length) return names;
-  }
-
-  // Last resort. Reached when mirrored_items was not selected, or when every
-  // entry was unusable — an item with a non-empty display_value must still be
-  // filterable, even at the cost of possibly over-splitting one name.
+  // MirrorValue.display_value is String! and never null — empty is '' (probe-verified
+  // 2026-07-29). `text` and `value` ARE null on a mirror, so neither is a substitute.
   const display = trimmed(cv.display_value);
   if (!display) return [];
+
+  const names = [];
   for (const part of display.split(DISPLAY_SEPARATOR)) pushUnique(names, trimmed(part));
   return names;
 }
