@@ -246,6 +246,111 @@ describe('a newly created label can be opened and configured before saving', () 
     expect(mockShowNotice).not.toHaveBeenCalled();
   });
 
+  /*
+   * The production failure of 3.9.0, from the board it happened on: adding a label
+   * came back INVALID_INPUT / "Indexes should be unique" from update_status_column.
+   *
+   * A label removed EARLIER stays in the column as a deactivated row, invisible in
+   * this screen but re-sent in the payload — and the new label took
+   * `max(active index) + 1`, which is exactly that row's index when the label removed
+   * last was the last in the list. The unit-level rule is pinned in
+   * domain/statusLabelDraft.test.js; this is the same failure through the save the
+   * user actually performs, asserted on the mutation document that goes out.
+   */
+  describe('a column that already has a removed label', () => {
+    const REMOVED_LABEL = {
+      id: 9,
+      color: 4,
+      label: 'הוסר קודם',
+      index: LIVE_LABELS.length,
+      is_done: false,
+      is_deactivated: true,
+      hex: '#784bd1',
+    };
+    const LIVE_WITH_REMOVED = [...LIVE_LABELS, REMOVED_LABEL];
+
+    /** The new label lands at the position after the actives; the removed row above. */
+    const AFTER_SAVE = [
+      ...LIVE_LABELS,
+      {
+        id: ASSIGNED_ID,
+        color: 3,
+        label: NEW_LABEL_NAME,
+        index: LIVE_LABELS.length,
+        is_done: false,
+        is_deactivated: false,
+        hex: '#a25ddc',
+      },
+      { ...REMOVED_LABEL, index: LIVE_LABELS.length + 1 },
+    ];
+
+    const installWithRemoved = () => {
+      let mutated = false;
+      mockQuery.mockImplementation((query) => {
+        if (query.includes('GetBoardSettingsMetadata')) {
+          return Promise.resolve({
+            boards: [{
+              id: BOARD_ID,
+              columns: [
+                { ...STATUS_COLUMN, settings: { labels: LIVE_WITH_REMOVED } },
+                TEXT_COLUMN,
+              ],
+            }],
+            users: [],
+          });
+        }
+        if (query.includes('AccountUsers')) return Promise.resolve({ users: [] });
+        if (query.includes('update_status_column')) {
+          mutated = true;
+          return Promise.resolve({ update_status_column: { id: STATUS_COLUMN_ID } });
+        }
+        if (query.includes('GetStatusColumnRevision')) {
+          return Promise.resolve(revisionResponse(mutated ? AFTER_SAVE : LIVE_WITH_REMOVED));
+        }
+        return Promise.resolve({});
+      });
+    };
+
+    const sentIndexes = () => {
+      const call = mockQuery.mock.calls.find(([query]) => query.includes('update_status_column'));
+      expect(call, 'the labels mutation must have been sent').toBeDefined();
+      return [...call[0].matchAll(/index:\s*(\d+)/g)].map((match) => Number(match[1]));
+    };
+
+    it('sends every label with a distinct index, so monday does not reject the save', async () => {
+      installWithRemoved();
+
+      const card = await addLabel();
+      fireEvent.click(within(card).getByRole('button', { name: /הרשאות/ }));
+
+      fireEvent.click(screen.getByRole('button', { name: 'שמור' }));
+      await waitFor(() => expect(mockSetColumnConfig).toHaveBeenCalledTimes(1));
+
+      const indexes = sentIndexes();
+      // 3 actives + the new one + the removed row, each on its own index.
+      expect(indexes).toEqual([0, 1, 2, 3, 4]);
+      expect(new Set(indexes).size).toBe(indexes.length);
+    });
+
+    it('still re-keys the new label onto its assigned id on such a column', async () => {
+      // The partner assertion: the fix renumbers what is SENT, so the draft has to be
+      // renumbered too or the index match silently degrades to text-only.
+      installWithRemoved();
+
+      const card = await addLabel();
+      fireEvent.click(within(card).getByRole('button', { name: /הרשאות/ }));
+      fireEvent.click(within(card).getByRole('button', { name: /שדות חובה במעבר/ }));
+      fireEvent.click(within(card).getByRole('checkbox', { name: TEXT_COLUMN.title }));
+
+      fireEvent.click(screen.getByRole('button', { name: 'שמור' }));
+      await waitFor(() => expect(mockSetColumnConfig).toHaveBeenCalledTimes(1));
+
+      expect(savedSettings().labels[String(ASSIGNED_ID)].requiredColumnIds)
+        .toEqual([TEXT_COLUMN.id]);
+      expect(screen.queryByText(/ההרשאות של הלייבל החדש לא נשמרו/)).not.toBeInTheDocument();
+    });
+  });
+
   it('does not re-create the label when a second save follows a failed one', async () => {
     // The labels mutation already ran, so the draft must be re-seeded from the
     // refresh: without that, the retry sends the same label as new AGAIN and the

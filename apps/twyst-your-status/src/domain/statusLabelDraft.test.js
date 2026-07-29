@@ -8,6 +8,7 @@ import {
   hasPendingLabelEdits,
   pruneSettingsForActiveLabels,
   remapDraftLabelKeys,
+  renumberDraftIndexes,
   reorderLabelsDraft,
   resolveNewLabelIds,
 } from './statusLabelDraft.js';
@@ -135,6 +136,12 @@ describe('buildStatusLabelsUpdatePayload', () => {
 
     // monday requires unique colors across the full payload (incl. deactivated).
     // Active keeps done_green; deactivated id:1 is remapped off the collision.
+    //
+    // The INDEXES asserted here changed in 3.9.1. This expectation used to read
+    // `index: 2` on both the new active label and deactivated id:2 — it pinned the
+    // payload that monday rejects with "Indexes should be unique" (INVALID_INPUT),
+    // reported from production. Indexes are now one unique space across the whole
+    // payload: actives 0..n-1 in display order, deactivated packed above them.
     expect(buildStatusLabelsUpdatePayload(draft, LIVE)).toEqual([
       {
         id: 0,
@@ -146,24 +153,142 @@ describe('buildStatusLabelsUpdatePayload', () => {
       {
         color: 'done_green',
         label: 'חדש',
-        index: 2,
+        index: 1,
         isDeactivated: false,
       },
       {
         id: 1,
         color: 'stuck_red',
         label: 'בוצע',
-        index: 1,
+        index: 2,
         isDeactivated: true,
       },
       {
         id: 2,
         color: 'american_gray',
         label: 'ארכיון',
-        index: 2,
+        index: 3,
         isDeactivated: true,
       },
     ]);
+  });
+
+  /*
+   * "Indexes should be unique" — the production failure of 3.9.0, reported on the
+   * first attempt to add a label (INVALID_INPUT from update_status_column).
+   *
+   * `update_status_column` replaces the FULL labels array, deactivated rows
+   * included, and monday requires every index in it to be unique. Two independent
+   * ways the old assignment broke that, both needing only a label that was removed
+   * at some point in the past:
+   *
+   *  1. A new label takes `max(active index) + 1`, which collides with a DEACTIVATED
+   *     label sitting above every active one — i.e. whenever the label removed last
+   *     was the last one in the list.
+   *  2. A reorder renumbers the actives to 0..n-1, which collides with a deactivated
+   *     label whose index falls inside that range — i.e. any removed MIDDLE label.
+   *
+   * Neither is reachable from the labels the settings screen shows: the deactivated
+   * rows are invisible in the UI and only appear in the payload. Both are pinned
+   * here against the actual index numbers, since "unique" alone would also pass on a
+   * payload that silently reshuffled the admin's order.
+   */
+  const indexesOf = (payload) => payload.map((label) => label.index);
+
+  it('sends no duplicate index when the label removed last sat above every active one', () => {
+    const live = [
+      { id: '0', index: 0, label: 'א', colorValue: 0, isDeactivated: false },
+      { id: '1', index: 1, label: 'ב', colorValue: 1, isDeactivated: false },
+      { id: '2', index: 2, label: 'הוסר', colorValue: 2, isDeactivated: true },
+      { id: '3', index: 3, label: 'הוסר2', colorValue: 3, isDeactivated: true },
+    ];
+    const draft = createLabelsDraft(live);
+    const withNew = [...draft, createBlankLabelDraft(draft)];
+
+    // Was [0, 1, 2, 2, 3] — the new label and deactivated id:2 both on 2.
+    expect(indexesOf(buildStatusLabelsUpdatePayload(withNew, live))).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it('sends no duplicate index after a reorder over a removed middle label', () => {
+    const live = [
+      { id: '0', index: 0, label: 'א', colorValue: 0, isDeactivated: false },
+      { id: '1', index: 1, label: 'הוסר', colorValue: 1, isDeactivated: true },
+      { id: '2', index: 2, label: 'ב', colorValue: 2, isDeactivated: false },
+      { id: '3', index: 3, label: 'ג', colorValue: 3, isDeactivated: false },
+    ];
+    const reordered = reorderLabelsDraft(createLabelsDraft(live), '3', -1);
+
+    // Was [0, 1, 2, 1] — the reordered actives collided with deactivated id:1.
+    expect(indexesOf(buildStatusLabelsUpdatePayload(reordered, live))).toEqual([0, 1, 2, 3]);
+  });
+
+  it('numbers the active labels 0..n-1 in the order the admin arranged', () => {
+    // The order is the product decision the indexes carry; uniqueness must not be
+    // bought by reshuffling it.
+    const live = [
+      { id: '0', index: 0, label: 'א', colorValue: 0, isDeactivated: false },
+      { id: '1', index: 1, label: 'ב', colorValue: 1, isDeactivated: false },
+      { id: '2', index: 2, label: 'ג', colorValue: 2, isDeactivated: false },
+    ];
+    const moved = reorderLabelsDraft(createLabelsDraft(live), '2', -2);
+    const payload = buildStatusLabelsUpdatePayload(moved, live);
+
+    expect(payload.map((label) => [label.label, label.index]))
+      .toEqual([['ג', 0], ['א', 1], ['ב', 2]]);
+  });
+
+  it('packs the deactivated labels above the actives, keeping their relative order', () => {
+    const live = [
+      { id: '0', index: 0, label: 'א', colorValue: 0, isDeactivated: false },
+      { id: '1', index: 1, label: 'ראשון-שהוסר', colorValue: 1, isDeactivated: true },
+      { id: '2', index: 2, label: 'שני-שהוסר', colorValue: 2, isDeactivated: true },
+    ];
+    const payload = buildStatusLabelsUpdatePayload(createLabelsDraft(live), live);
+
+    expect(payload.filter((label) => label.isDeactivated).map((label) => [label.id, label.index]))
+      .toEqual([[1, 1], [2, 2]]);
+  });
+});
+
+describe('renumberDraftIndexes', () => {
+  /*
+   * The caller needs the SAME numbers the payload will carry: resolveNewLabelIds
+   * matches a new label to its assigned id by text and index, so a draft still
+   * holding `max + 1` while monday stored the packed position would fall back to
+   * matching on text alone — and two new labels with the same name would then be
+   * unresolvable, costing the user the permissions they just configured.
+   */
+  it('renumbers to 0..n-1 in display order', () => {
+    const draft = [
+      { clientKey: 'a', index: 0 },
+      { clientKey: 'b', index: 3 },
+      { clientKey: 'c', index: 7 },
+    ];
+    expect(renumberDraftIndexes(draft)).toEqual([
+      { clientKey: 'a', index: 0 },
+      { clientKey: 'b', index: 1 },
+      { clientKey: 'c', index: 2 },
+    ]);
+  });
+
+  it('orders by index, not by array position', () => {
+    const draft = [
+      { clientKey: 'b', index: 5 },
+      { clientKey: 'a', index: 2 },
+    ];
+    expect(renumberDraftIndexes(draft).map((label) => label.clientKey)).toEqual(['a', 'b']);
+  });
+
+  it('keeps every other field, and copies rather than mutating', () => {
+    const draft = [{ clientKey: 'a', id: 'a', index: 9, label: 'א', isNew: true }];
+    const out = renumberDraftIndexes(draft);
+    expect(out[0]).toEqual({ clientKey: 'a', id: 'a', index: 0, label: 'א', isNew: true });
+    expect(draft[0].index).toBe(9);
+  });
+
+  it('survives a missing draft', () => {
+    expect(renumberDraftIndexes(null)).toEqual([]);
+    expect(renumberDraftIndexes(undefined)).toEqual([]);
   });
 
   it('remaps duplicate colors on active labels so the second keeps a free enum', () => {
