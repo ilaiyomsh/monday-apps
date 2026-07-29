@@ -1,0 +1,121 @@
+name: Pages - docs-export
+
+# GitHub Pages hosting for ONE app only: apps/docs-export.
+#
+# This repo's normal deploy target is the monday CDN (`mapps code:push`, see
+# deploy-{draft,live}-<app>.yml). This workflow is a SEPARATE, additional target
+# requested by the owner 2026-07-29: serve the docs-export bundle as a static
+# site so it can be opened in a browser without going through monday.
+#
+# SCOPE — deliberately narrow, and it must stay that way:
+#   * The path filter only fires on apps/docs-export/**.
+#   * The uploaded artifact is ONLY apps/docs-export/dist.
+#   * No other app in this monorepo is built or published here.
+#
+# A repository has exactly ONE Pages site, so this claims
+# https://ilaiyomsh.github.io/monday-apps/ for docs-export. `base: './'` in
+# apps/docs-export/vite.config.js is what makes the bundle work under that
+# sub-path — do not change it to an absolute '/'.
+#
+# Requires the repository's Pages "Source" to be set to GitHub Actions.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - develop
+    paths:
+      - "apps/docs-export/**"
+      - "packages/error-kit/**"
+      - ".github/workflows/pages-docs-export.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One Pages deployment at a time; never cancel a run mid-deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build docs-export
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build docs-export
+        # Version layer: stamp the exact commit into the bundle (__BUILD_SHA__).
+        env:
+          VITE_BUILD_SHA: ${{ github.sha }}
+          # Axiom activation gate (docs/ERROR-AXIOM-STANDARD.md): the ingest token is
+          # the only secret; dataset/app are literals. Fail-soft — with the secret
+          # unset the sink is inert and nothing ships, rather than the build breaking.
+          VITE_AXIOM_DATASET: app-errors
+          VITE_AXIOM_TOKEN: ${{ secrets.AXIOM_INGEST_TOKEN }}
+          VITE_AXIOM_APP: docs-export
+        run: pnpm --filter "./apps/docs-export" build
+
+      # Sourcemaps are 'hidden' in vite.config.js: they power stack symbolication
+      # but must NEVER be served. Archive them keyed by commit SHA, then strip them
+      # from the publish dir. Same contract as the monday CDN deploy workflows.
+      - name: Archive sourcemaps as build artifact (for stack symbolication)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sourcemaps-docs-export-${{ github.sha }}
+          path: apps/docs-export/dist/**/*.map
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Strip sourcemaps before publishing (never serve .map)
+        run: |
+          set -euo pipefail
+          find apps/docs-export/dist -name '*.map' -type f -delete
+          remaining="$(find apps/docs-export/dist -name '*.map' -type f | wc -l | tr -d ' ')"
+          echo "remaining .map files in publish dir: $remaining"
+          if [ "$remaining" != "0" ]; then
+            echo "::error::sourcemaps still present in publish dir — refusing to publish (would leak source)"
+            exit 1
+          fi
+
+      # SPA fallback: Pages serves 404.html for unknown paths. Copying index.html
+      # over it keeps a deep link working instead of showing GitHub's 404.
+      - name: Add SPA 404 fallback
+        run: cp apps/docs-export/dist/index.html apps/docs-export/dist/404.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload the docs-export bundle ONLY
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/docs-export/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
