@@ -1,16 +1,15 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  __resetNewLabelSeqForTests,
+  NEW_LABEL_NAME,
+  buildCreateLabelPayload,
   buildStatusLabelsUpdatePayload,
   buildUpdateStatusColumnMutation,
-  createBlankLabelDraft,
   createLabelsDraft,
+  findCreatedLabel,
   hasPendingLabelEdits,
   pruneSettingsForActiveLabels,
-  remapDraftLabelKeys,
   renumberDraftIndexes,
   reorderLabelsDraft,
-  resolveNewLabelIds,
 } from './statusLabelDraft.js';
 
 const LIVE = [
@@ -40,6 +39,21 @@ const LIVE = [
   },
 ];
 
+/**
+ * The transient row a create-payload carries: no monday id yet, so the payload omits
+ * `id` and monday derives one from the colour. Labels reach the draft with a real id
+ * (created on the click), so this shape only ever exists inside one mutation.
+ */
+const NEW_ROW = {
+  clientKey: 'new:1',
+  id: 'new:1',
+  index: 9,
+  label: NEW_LABEL_NAME,
+  color: '#9d50dd',
+  colorValue: 'purple',
+  isNew: true,
+};
+
 describe('createLabelsDraft', () => {
   it('keeps only active labels and normalizes colorValue to enum names', () => {
     expect(createLabelsDraft(LIVE)).toEqual([
@@ -50,6 +64,10 @@ describe('createLabelsDraft', () => {
         label: 'ממתין',
         color: '#fdab3d',
         colorValue: 'working_orange',
+        // Carried so a save can send them BACK: update_status_column replaces the
+        // labels array, so a field the payload omits is cleared, not preserved.
+        isDone: false,
+        description: undefined,
         isNew: false,
       },
       {
@@ -59,6 +77,8 @@ describe('createLabelsDraft', () => {
         label: 'בוצע',
         color: '#00c875',
         colorValue: 'done_green',
+        isDone: false,
+        description: undefined,
         isNew: false,
       },
     ]);
@@ -78,7 +98,7 @@ describe('hasPendingLabelEdits', () => {
       baseline,
     )).toBe(true);
     expect(hasPendingLabelEdits([baseline[0]], baseline)).toBe(true);
-    expect(hasPendingLabelEdits([...baseline, createBlankLabelDraft(baseline)], baseline)).toBe(true);
+    expect(hasPendingLabelEdits([...baseline, NEW_ROW], baseline)).toBe(true);
     expect(hasPendingLabelEdits(reorderLabelsDraft(baseline, '0', 1), baseline)).toBe(true);
   });
 });
@@ -108,10 +128,6 @@ describe('reorderLabelsDraft', () => {
 });
 
 describe('buildStatusLabelsUpdatePayload', () => {
-  beforeEach(() => {
-    __resetNewLabelSeqForTests();
-  });
-
   it('keeps existing ids, omits id for new labels, and deactivates removed live labels', () => {
     const draft = [
       {
@@ -121,6 +137,10 @@ describe('buildStatusLabelsUpdatePayload', () => {
         label: 'ממתין מחדש',
         color: '#fdab3d',
         colorValue: 'working_orange',
+        // Carried so a save can send them BACK: update_status_column replaces the
+        // labels array, so a field the payload omits is cleared, not preserved.
+        isDone: false,
+        description: undefined,
         isNew: false,
       },
       {
@@ -147,12 +167,16 @@ describe('buildStatusLabelsUpdatePayload', () => {
         id: 0,
         color: 'working_orange',
         label: 'ממתין מחדש',
+        isDone: false,
+        description: undefined,
         index: 0,
         isDeactivated: false,
       },
       {
         color: 'done_green',
         label: 'חדש',
+        isDone: false,
+        description: undefined,
         index: 1,
         isDeactivated: false,
       },
@@ -160,6 +184,8 @@ describe('buildStatusLabelsUpdatePayload', () => {
         id: 1,
         color: 'stuck_red',
         label: 'בוצע',
+        isDone: false,
+        description: undefined,
         index: 2,
         isDeactivated: true,
       },
@@ -167,6 +193,8 @@ describe('buildStatusLabelsUpdatePayload', () => {
         id: 2,
         color: 'american_gray',
         label: 'ארכיון',
+        isDone: false,
+        description: undefined,
         index: 3,
         isDeactivated: true,
       },
@@ -203,7 +231,7 @@ describe('buildStatusLabelsUpdatePayload', () => {
       { id: '3', index: 3, label: 'הוסר2', colorValue: 3, isDeactivated: true },
     ];
     const draft = createLabelsDraft(live);
-    const withNew = [...draft, createBlankLabelDraft(draft)];
+    const withNew = [...draft, { ...NEW_ROW, index: draft.length }];
 
     // Was [0, 1, 2, 2, 3] — the new label and deactivated id:2 both on 2.
     expect(indexesOf(buildStatusLabelsUpdatePayload(withNew, live))).toEqual([0, 1, 2, 3, 4]);
@@ -252,11 +280,10 @@ describe('buildStatusLabelsUpdatePayload', () => {
 
 describe('renumberDraftIndexes', () => {
   /*
-   * The caller needs the SAME numbers the payload will carry: resolveNewLabelIds
-   * matches a new label to its assigned id by text and index, so a draft still
-   * holding `max + 1` while monday stored the packed position would fall back to
-   * matching on text alone — and two new labels with the same name would then be
-   * unresolvable, costing the user the permissions they just configured.
+   * The draft has to hold the SAME numbers the payload will carry, because the payload
+   * sends positions: deactivated rows are packed above the actives so no two indexes
+   * collide, and a draft still holding a live column's sparse indexes would describe a
+   * different order from the one being written.
    */
   it('renumbers to 0..n-1 in display order', () => {
     const draft = [
@@ -300,6 +327,8 @@ describe('renumberDraftIndexes', () => {
         label: 'א',
         color: '#00c875',
         colorValue: 'done_green',
+        isDone: false,
+        description: undefined,
         isNew: false,
       },
       {
@@ -309,6 +338,8 @@ describe('renumberDraftIndexes', () => {
         label: 'ב',
         color: '#00c875',
         colorValue: 'done_green',
+        isDone: false,
+        description: undefined,
         isNew: false,
       },
     ];
@@ -322,6 +353,8 @@ describe('renumberDraftIndexes', () => {
         color: 'done_green',
         label: 'א',
         index: 0,
+        isDone: false,
+        description: undefined,
         isDeactivated: false,
       },
       {
@@ -329,6 +362,8 @@ describe('renumberDraftIndexes', () => {
         color: 'working_orange',
         label: 'ב',
         index: 1,
+        isDone: false,
+        description: undefined,
         isDeactivated: false,
       },
     ]);
@@ -348,6 +383,8 @@ describe('buildUpdateStatusColumnMutation', () => {
       {
         color: 'done_green',
         label: 'חדש',
+        isDone: false,
+        description: undefined,
         index: 1,
         isDeactivated: false,
       },
@@ -406,187 +443,68 @@ describe('pruneSettingsForActiveLabels', () => {
   });
 });
 
-/*
- * Permissions on a label that does not exist yet.
- *
- * A brand-new label has no monday id until `update_status_column` has run, and the
- * settings are keyed BY that id — which is why the settings screen used to hide the
- * permissions accordion on a new card entirely. These two functions are what let it
- * be configured in the same visit: rules are held under the draft's `clientKey`
- * ("new:1"), and once monday has answered they are moved to the real id.
- *
- * The move is the dangerous part, so the matching never GUESSES: an unmatched draft
- * stays unresolved (its rules are then dropped by the prune) rather than having
- * someone else's permissions attached to it.
- */
-const liveBefore = [
-  { id: '0', index: 0, label: 'ממתין', isDeactivated: false },
-  { id: '1', index: 1, label: 'בוצע', isDeactivated: false },
-];
+describe('buildCreateLabelPayload', () => {
+  it('resends every existing label — omitting one would DELETE it — and appends the new one', () => {
+    const payload = buildCreateLabelPayload(LIVE, { colorValue: 'dark_blue' });
 
-const newDraft = (clientKey, label, index) => ({
-  clientKey, id: clientKey, label, index, isNew: true,
-});
-
-describe('resolveNewLabelIds', () => {
-  it('maps the new draft to the id monday assigned it', () => {
-    const map = resolveNewLabelIds({
-      draft: [...createLabelsDraft(liveBefore), newDraft('new:1', 'בבדיקה', 2)],
-      liveBefore,
-      refreshedLabels: [...liveBefore, { id: '7', index: 2, label: 'בבדיקה', isDeactivated: false }],
-    });
-    expect(map).toEqual({ 'new:1': '7' });
+    // Both actives kept their ids; the deactivated row is still in the payload.
+    expect(payload.filter((label) => !label.isDeactivated).map((label) => label.id))
+      .toEqual([0, 1, undefined]);
+    expect(payload.find((label) => label.isDeactivated).id).toBe(2);
   });
 
-  it('keeps two new labels apart when they were added in one save', () => {
-    const map = resolveNewLabelIds({
-      draft: [newDraft('new:1', 'בבדיקה', 2), newDraft('new:2', 'הוקפא', 3)],
-      liveBefore,
-      refreshedLabels: [
-        ...liveBefore,
-        { id: '7', index: 2, label: 'בבדיקה', isDeactivated: false },
-        { id: '8', index: 3, label: 'הוקפא', isDeactivated: false },
-      ],
-    });
-    expect(map).toEqual({ 'new:1': '7', 'new:2': '8' });
+  it('sends the new label with NO id, so monday derives it from the colour', () => {
+    const payload = buildCreateLabelPayload(LIVE, { colorValue: 'dark_blue' });
+    const created = payload.find((label) => label.id === undefined);
+    expect(created.color).toBe('dark_blue');
+    expect(created.label).toBe(NEW_LABEL_NAME);
   });
 
-  it('separates two new labels that share a NAME by their index', () => {
-    // monday allows duplicate label text, so name alone cannot be the key. Index is
-    // what we sent per label, so it is what breaks the tie. Getting this wrong hands
-    // one label the other's permissions.
-    const map = resolveNewLabelIds({
-      draft: [newDraft('new:1', 'כפול', 2), newDraft('new:2', 'כפול', 3)],
-      liveBefore,
-      refreshedLabels: [
-        ...liveBefore,
-        { id: '7', index: 2, label: 'כפול', isDeactivated: false },
-        { id: '8', index: 3, label: 'כפול', isDeactivated: false },
-      ],
-    });
-    expect(map).toEqual({ 'new:1': '7', 'new:2': '8' });
+  it('gives every row a unique index, the deactivated one packed above the actives', () => {
+    const payload = buildCreateLabelPayload(LIVE, { colorValue: 'dark_blue' });
+    const indexes = payload.map((label) => label.index);
+    expect(indexes).toEqual([...new Set(indexes)]);
+    expect(payload.find((label) => label.isDeactivated).index)
+      .toBeGreaterThan(Math.max(...payload.filter((l) => !l.isDeactivated).map((l) => l.index)));
   });
 
-  it('never claims a label that already existed before the save', () => {
-    // The candidate set is what is NEW, not what merely matches. A pre-existing
-    // label renamed to the new label's text must not be claimed.
-    const map = resolveNewLabelIds({
-      draft: [newDraft('new:1', 'ממתין', 5)],
-      liveBefore,
-      refreshedLabels: [
-        { id: '0', index: 0, label: 'ממתין', isDeactivated: false },
-        { id: '1', index: 1, label: 'בוצע', isDeactivated: false },
-      ],
-    });
-    expect(map).toEqual({});
+  it('preserves is_done on the labels it resends', () => {
+    const live = [{
+      id: '1', index: 0, label: 'בוצע', colorValue: 1, isDone: true, isDeactivated: false,
+    }];
+    const payload = buildCreateLabelPayload(live, { colorValue: 'dark_blue' });
+    expect(payload.find((label) => label.id === 1).isDone).toBe(true);
   });
 
-  it('ignores a deactivated new id', () => {
-    const map = resolveNewLabelIds({
-      draft: [newDraft('new:1', 'בבדיקה', 2)],
-      liveBefore,
-      refreshedLabels: [...liveBefore, { id: '7', index: 2, label: 'בבדיקה', isDeactivated: true }],
-    });
-    expect(map).toEqual({});
-  });
-
-  it('matches on the index alone when monday altered the text', () => {
-    const map = resolveNewLabelIds({
-      draft: [newDraft('new:1', '  בבדיקה  ', 2)],
-      liveBefore,
-      refreshedLabels: [...liveBefore, { id: '7', index: 2, label: 'בבדיקה', isDeactivated: false }],
-    });
-    expect(map).toEqual({ 'new:1': '7' });
-  });
-
-  it('matches on the text alone when monday altered the index', () => {
-    const map = resolveNewLabelIds({
-      draft: [newDraft('new:1', 'בבדיקה', 2)],
-      liveBefore,
-      refreshedLabels: [...liveBefore, { id: '7', index: 9, label: 'בבדיקה', isDeactivated: false }],
-    });
-    expect(map).toEqual({ 'new:1': '7' });
-  });
-
-  it('leaves a draft unresolved rather than guessing, when neither text nor index matches', () => {
-    // The whole point of not falling back to "zip them in order": a wrong guess
-    // attaches permissions to the wrong status, which is worse than losing them.
-    const map = resolveNewLabelIds({
-      draft: [newDraft('new:1', 'בבדיקה', 2)],
-      liveBefore,
-      refreshedLabels: [...liveBefore, { id: '7', index: 9, label: 'משהו אחר', isDeactivated: false }],
-    });
-    expect(map).toEqual({});
-  });
-
-  it('never gives one new id to two drafts', () => {
-    const map = resolveNewLabelIds({
-      draft: [newDraft('new:1', 'כפול', 2), newDraft('new:2', 'כפול', 2)],
-      liveBefore,
-      refreshedLabels: [...liveBefore, { id: '7', index: 2, label: 'כפול', isDeactivated: false }],
-    });
-    expect(Object.values(map)).toEqual(['7']);
-  });
-
-  it('returns nothing when the save added no label at all', () => {
-    expect(resolveNewLabelIds({
-      draft: createLabelsDraft(liveBefore),
-      liveBefore,
-      refreshedLabels: liveBefore,
-    })).toEqual({});
-    expect(resolveNewLabelIds({})).toEqual({});
+  it('accepts an explicit name', () => {
+    const payload = buildCreateLabelPayload(LIVE, { colorValue: 'dark_blue', label: 'בבדיקה' });
+    expect(payload.find((label) => label.id === undefined).label).toBe('בבדיקה');
   });
 });
 
-describe('remapDraftLabelKeys', () => {
-  const draftSettings = {
-    version: 1,
-    hiddenLabelIds: ['0', 'new:1'],
-    labels: {
-      0: { allowedUserIds: ['1'], allowedTeamIds: [], requiredColumnIds: [] },
-      'new:1': { allowedUserIds: ['4'], allowedTeamIds: [], requiredColumnIds: ['text_1'] },
-    },
-  };
+describe('findCreatedLabel', () => {
+  const before = [{ id: '0' }, { id: '1' }];
 
-  it('moves the new label rule onto the id monday assigned', () => {
-    expect(remapDraftLabelKeys(draftSettings, { 'new:1': '7' })).toEqual({
-      version: 1,
-      hiddenLabelIds: ['0', '7'],
-      labels: {
-        0: { allowedUserIds: ['1'], allowedTeamIds: [], requiredColumnIds: [] },
-        7: { allowedUserIds: ['4'], allowedTeamIds: [], requiredColumnIds: ['text_1'] },
-      },
-    });
+  it('returns the label the refresh has that the pre-mutation read did not', () => {
+    const created = findCreatedLabel(before, [{ id: '0' }, { id: '1' }, { id: '3', label: 'חדש' }]);
+    expect(created.id).toBe('3');
   });
 
-  it('leaves the settings untouched when nothing was remapped', () => {
-    expect(remapDraftLabelKeys(draftSettings, {})).toEqual(draftSettings);
+  it('never returns a label that already existed, however well it matches', () => {
+    expect(findCreatedLabel(before, [{ id: '0', label: 'חדש' }, { id: '1' }])).toBeNull();
   });
 
-  it('lets the remapped rule win over a stale rule already under that id', () => {
-    // The id monday just handed out can be one a deactivated label used to hold, and
-    // storage may still carry its rule. The rule the user just configured wins.
-    const withStale = {
-      version: 1,
-      hiddenLabelIds: [],
-      labels: {
-        7: { allowedUserIds: ['999'], allowedTeamIds: [], requiredColumnIds: [] },
-        'new:1': { allowedUserIds: ['4'], allowedTeamIds: [], requiredColumnIds: [] },
-      },
-    };
-    expect(remapDraftLabelKeys(withStale, { 'new:1': '7' }).labels).toEqual({
-      7: { allowedUserIds: ['4'], allowedTeamIds: [], requiredColumnIds: [] },
-    });
+  it('ignores a deactivated row that happens to be new to us', () => {
+    expect(findCreatedLabel(before, [...before, { id: '3', isDeactivated: true }])).toBeNull();
   });
 
-  it('does not list a hidden id twice after the remap', () => {
-    const bothHidden = { version: 1, hiddenLabelIds: ['7', 'new:1'], labels: {} };
-    expect(remapDraftLabelKeys(bothHidden, { 'new:1': '7' }).hiddenLabelIds).toEqual(['7']);
+  it('refuses to guess when TWO labels are new — a concurrent editor', () => {
+    // Picking either would hand this admin's rename to somebody else's label.
+    expect(findCreatedLabel(before, [...before, { id: '3' }, { id: '4' }])).toBeNull();
   });
 
-  it('survives settings it cannot read', () => {
-    expect(remapDraftLabelKeys(null, { 'new:1': '7' })).toBeNull();
-    expect(remapDraftLabelKeys({ version: 1 }, { 'new:1': '7' }))
-      .toEqual({ version: 1, hiddenLabelIds: [], labels: {} });
+  it('returns null when the refresh shows nothing new', () => {
+    expect(findCreatedLabel(before, before)).toBeNull();
+    expect(findCreatedLabel()).toBeNull();
   });
 });
