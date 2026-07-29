@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { createAmpRouter } from './routes/amp.js';
 import { createOauthRouter } from './routes/oauth.js';
+import { createGoogleOauthRouter } from './routes/oauth-google.js';
 import { createAdminRouter } from './routes/admin-api.js';
 import { createSchedulerRouter } from './routes/scheduler.js';
 import { createSessionTokenMiddleware } from './middlewares/session-token.js';
@@ -41,6 +42,11 @@ export function createApp({ storage, api, rateLimiters, env, fetchImpl, todayIso
   app.use(createAmpRouter({ storage, api, rateLimiters, allowedSenders: env.ampAllowedSenders ?? [], now }));
 
   app.use(createOauthRouter({ storage, api, env, fetchImpl }));
+
+  // T9b: connect the tenant's Gmail sending mailbox. Same admit gate as the
+  // monday flow (sessionToken + tenant roster) — see routes/oauth-google.js for
+  // why the per-tenant sending identity retires D13's operator-only gate.
+  app.use(createGoogleOauthRouter({ storage, env, fetchImpl }));
 
   // T10/T11: monday-code scheduler — no session auth (platform cron signing).
   app.use(createSchedulerRouter({ storage, api, env, emailSender, todayIso, now }));

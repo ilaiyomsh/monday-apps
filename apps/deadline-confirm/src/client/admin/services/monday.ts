@@ -182,6 +182,20 @@ export async function fetchBoardColumns(boardId: string): Promise<BoardColumn[]>
     }));
 }
 
+/**
+ * T9b — connect the tenant's Gmail sending mailbox. New tab for the same reason
+ * as the monday flow: accounts.google.com refuses to be framed.
+ */
+export async function openGoogleOauthTab(): Promise<void> {
+  try {
+    const token = await getSessionToken();
+    window.open(`/oauth/google/start?st=${encodeURIComponent(token)}`, '_blank', 'noopener');
+  } catch (err) {
+    // Without a sessionToken there is no account context to connect.
+    logger.error('monday', 'google_oauth_open_failed', err);
+  }
+}
+
 export async function openOauthTab(): Promise<void> {
   // auth.monday.com may refuse to render inside the iframe (spec §8) — new tab.
   // v3: /oauth/start derives the connecting ACCOUNT from the sessionToken.

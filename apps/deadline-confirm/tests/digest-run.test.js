@@ -182,6 +182,10 @@ describe('runDigestForAccount', () => {
     ]);
     expect(send).toHaveBeenCalledTimes(1);
     const payload = send.mock.calls[0][0];
+    // T9: the Gmail sender resolves the tenant's own mailbox and OAuth client
+    // from this id. Omit it and every send has no sending identity to
+    // authenticate as, so nothing goes out.
+    expect(payload.accountId).toBe(ACCOUNT_ID);
     expect(payload.to).toBe('dana@example.com');
     expect(payload.subject).toBe('המשימות שלך — נדרש עדכון');
     expect(payload.plain).toContain('דנה כהן');

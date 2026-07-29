@@ -372,10 +372,11 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
     '/api/state',
     guarded(async (req, res) => {
       const scoped = storage.forAccount(req.session.accountId);
-      const [config, linkSecret, token] = await Promise.all([
+      const [config, linkSecret, token, googleSender] = await Promise.all([
         scoped.getConfig(),
         scoped.getLinkSecret(),
         scoped.getOauthToken(),
+        scoped.getGoogleSender(),
       ]);
 
       let oauth;
@@ -394,7 +395,25 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         }
       }
 
-      res.json({ config, secret: maskSecret(linkSecret), oauth, baseUrl: env.baseUrl });
+      // T9b Gmail sending identity. `senderAddress` is safe to show — it is
+      // the visible From of every message. Tokens are NEVER surfaced.
+      // `configured` reports whether the SERVER holds an OAuth client at all,
+      // so the UI can tell "nobody connected yet" apart from "credentials are
+      // missing on the platform" — two problems with different fixes.
+      const google = {
+        configured: Boolean(env.googleOauthClientId && env.googleOauthClientSecret),
+        status: !googleSender ? 'disconnected' : googleSender.disconnectedAt ? 'broken' : 'connected',
+        senderAddress: googleSender?.senderAddress ?? null,
+        // The AMP endpoint default-denies senders that are not on the
+        // allowlist, so a connected mailbox that is not listed sends mail whose
+        // buttons all fail with 403. Surface it rather than let it be debugged
+        // from the recipient's side.
+        senderAllowedForAmp: googleSender?.senderAddress
+          ? env.ampAllowedSenders.includes(googleSender.senderAddress)
+          : null,
+      };
+
+      res.json({ config, secret: maskSecret(linkSecret), oauth, google, baseUrl: env.baseUrl });
     })
   );
 

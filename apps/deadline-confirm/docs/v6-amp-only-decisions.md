@@ -179,6 +179,45 @@ no form at all. That blocks the naive forwarding case, but it is Gmail's
 behaviour, not ours, and it does not cover access to the original mailbox, a copy
 of the raw MIME, or a screenshot of the source.
 
+### D12/D13 — SUPERSEDED 2026-07-29 (owner decision)
+
+**Read this before D12 and D13 below.** Both assumed ONE dedicated Google
+Workspace mailbox owned by the vendor, serving every tenant, with the refresh
+token at an unprefixed app-global key and an operator-only gate on the connect
+flow. That is no longer the model.
+
+**The model now:** every ORGANIZATION runs its own Google Cloud OAuth client,
+inside its own Workspace, and sends from its own internal mailbox. Twyst was the
+first such organization (the internal rehearsal); the customer is the second, with
+an identical procedure — `docs/google-setup-guide.md`.
+
+**Why it changed.** Gmail will not render the AMP part unless DKIM passes AND the
+signing domain aligns with the `From` domain. Sending every tenant's mail from
+one vendor address makes the message external to the recipient's organization and
+breaks that alignment, so dynamic email — the entire product — would not work.
+A second, independent reason: an OAuth consent screen set to **Internal** avoids
+Google's verification process for the `gmail.send` scope, and Internal is only
+possible when the client lives in the consenting user's own Workspace.
+
+**What that changes in the code:**
+- Storage key is `${accountId}:google_sender`, account-scoped like everything
+  else in this app — NOT the app-global key D13 specified.
+- Client credentials resolve per tenant (from the record) with a fallback to the
+  app-level `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` env pair.
+- **D13's operator-only gate is retired.** It existed solely because connecting
+  rebound the ONE global sending identity. With a per-tenant identity a tenant
+  can only rebind its own, so the gate is the same as the monday flow's:
+  sessionToken + `ALLOWED_ACCOUNT_IDS`.
+- Scope is `gmail.send` plus `openid email`. D12 said "gmail.send only"; the OIDC
+  identity pair reads no mail and is what supplies the sender address for the
+  `From` header without an API call.
+- Accepted cost, replacing D12's: AMP sender registration with Google is per
+  address, so **each customer registers its own** (~a working week each), and each
+  needs its own Cloud project + consent screen.
+
+Everything else in D12/D13 stands — Gmail API as the only channel, Resend gone,
+SecureStorage for the refresh token, `invalid_grant` surfacing loudly.
+
 ### D12 — Gmail API is the only sending channel. Resend is retired.
 
 Mail is sent exclusively through the Gmail API, from **one dedicated Google
@@ -617,15 +656,15 @@ the only authorization.
       `multi_person` reason surfaced in the preview and the D8 summary.
 - [x] T7 — two-bucket rate limiter (§4).
 - [x] T8 — `text/plain` renderer (§5).
-- [ ] T9 — multipart/alternative assembly + the Gmail API send funnel
+- [x] T9 — multipart/alternative assembly + the Gmail API send funnel
       (`users.messages.send`, base64url raw MIME), replacing the Resend funnel
       as the single outbound path (D12). *(MIME assembly helper landed in 0.8.1;
       Gmail send deferred pending Google Cloud app.)*
-- [ ] T9b — Google OAuth for the sender mailbox: start/callback routes, token
+- [x] T9b — Google OAuth for the sender mailbox: start/callback routes, token
       exchange, `ensureGoogleAccessToken` with expiry cushion, app-global
       SecureStorage record, disconnected state on `invalid_grant` (D13). Port
       from `apps/axis/sync-calender`; do not reinvent. **Deferred — Google Cloud.**
-- [ ] T9c — operator-only gate on the Google OAuth routes and on the admin UI
+- [x] T9c — (RESCOPED, see D12/D13 supersession) tenant-roster gate on the Google OAuth routes and on the admin UI
       button (D13). Needs its own test: a valid sessionToken from a non-operator
       account must be refused. **Deferred — Google Cloud.**
 - [x] T10 — monday-code scheduler that runs the send at the configured hour and

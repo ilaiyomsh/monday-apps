@@ -152,6 +152,12 @@ describe('GET /api/state', () => {
       config: null,
       secret: null,
       oauth: { status: 'disconnected' },
+      google: {
+        configured: false,
+        status: 'disconnected',
+        senderAddress: null,
+        senderAllowedForAmp: null,
+      },
       baseUrl: 'https://app.example',
     });
     expect(api.fetchMe).not.toHaveBeenCalled();
@@ -167,6 +173,12 @@ describe('GET /api/state', () => {
       config: null,
       secret: '****1234',
       oauth: { status: 'disconnected' },
+      google: {
+        configured: false,
+        status: 'disconnected',
+        senderAddress: null,
+        senderAllowedForAmp: null,
+      },
       baseUrl: 'https://app.example',
     });
   });
@@ -182,6 +194,12 @@ describe('GET /api/state', () => {
       config: null,
       secret: null,
       oauth: { status: 'connected', name: 'דנה' },
+      google: {
+        configured: false,
+        status: 'disconnected',
+        senderAddress: null,
+        senderAllowedForAmp: null,
+      },
       baseUrl: 'https://app.example',
     });
     expect(api.fetchMe).toHaveBeenCalledWith({ token: 'tok-live' });
@@ -198,6 +216,12 @@ describe('GET /api/state', () => {
       config: null,
       secret: null,
       oauth: { status: 'broken' },
+      google: {
+        configured: false,
+        status: 'disconnected',
+        senderAddress: null,
+        senderAllowedForAmp: null,
+      },
       baseUrl: 'https://app.example',
     });
   });
@@ -508,6 +532,12 @@ describe('per-session account scoping (v3 isolation)', () => {
       config: null,
       secret: null,
       oauth: { status: 'disconnected' },
+      google: {
+        configured: false,
+        status: 'disconnected',
+        senderAddress: null,
+        senderAllowedForAmp: null,
+      },
       baseUrl: 'https://app.example',
     });
 
@@ -549,6 +579,7 @@ describe('GET /api/state guarded 500 detail', () => {
         },
         getLinkSecret: async () => null,
         getOauthToken: async () => null,
+        getGoogleSender: async () => null,
       }),
     };
     const app = createApp({
