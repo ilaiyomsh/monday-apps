@@ -10,6 +10,30 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.3.4 — 2026-07-29
+
+- round306 **תיקוני ביקורת שהתגלו אחרי השחרור ל-2.3.3** (שלושה ממצאים, כולם אומתו מול הקוד):
+  1. **שינוי אחראי שנכשל היה מעלים את השורה** (`useMyTasks`). הכתיבה האופטימיסטית
+     נתפסת ומוחזרת בשקט, אבל ההחלטה אם המשימה עוד שייכת לתחום הפעיל נגזרה ממה
+     ש**התבקש** ולא ממה ש**נכתב** — כך שכשלון כתיבה ב"משימות באחריותי" (או הוספת
+     עצמי ב"משימות של אחרים") היה מעלים שורה שבלוח עדיין שייכת לתחום. עכשיו העוזר
+     מדווח האם הכתיבה נחתה, וההתאמה לתחום קורית רק אחרי הצלחה.
+  2. **כשלון בבניית האג'נדה היה גורר איתו את המשתתפים** (`CreateDiscussionModal`).
+     יצירת פריט השורש משאירה בכוונה את עמודות ה-PEOPLE ל-stage 3, וה-throw של
+     האג'נדה יצא מה-try המשותף לפני שאותו שלב בכלל רץ — כלומר כל מנהל/מרכז/משתתף
+     שהמשתמש בחר נעלם בגלל כתיבה שמעולם לא נוסתה. שני השלבים עצמאיים, ולכן שגיאת
+     האג'נדה מוחזקת, המשתתפים נכתבים, ורק אז השגיאה מדווחת כמו קודם.
+  3. **סיום הזנב ברקע היה עלול לחטוף את המשתמש חזרה** (`CreateDiscussionModal` +
+     `App`). הסיום קרא ל-handler הכללי של שמירה, שסוגר כל חלון יצירה/עריכה פתוח,
+     מסתיר את הרשימה ובוחר את הדיון הזה — והזנב נוחת שניות אחרי המסירה (רק המתנת
+     ה-readiness של האג'נדה יכולה לרוץ ~5 שניות). מי שפתח בינתיים דיון חדש היה
+     נזרק ממנו ומאבד את מה שהקליד. נוסף `applyStageComplete` — ערוץ סיום **מוגן
+     לפי id**, בדיוק כמו שאר מעברי השלבים — שמרענן את הכרטיס רק אם הוא עדיין
+     הפתוח, ומנקה את שני שדות המצב האופטימיסטי (`__pendingPeople`, `__building`).
+     (מכוסה ב-6 מוטציות שנהרגו: ביטול ההתאמה-אחרי-הצלחה, דיווח כתיבה שנדחתה
+     כהצלחה, דילוג חוזר על stage 3, חזרה ל-handler הכללי, ביטול ההגנה לפי id,
+     והשארת `__pendingPeople` מיושן.)
+
 ## 2.3.3 — 2026-07-26
 
 - Development version after synchronizing the production RTL preview hotfix from PR #435 back into `develop`. The correction now lives in the tested preview-pagination DOM helper; no additional production behavior is introduced by this version bump.

@@ -103,7 +103,7 @@ async function resolvePreviousDiscussion(discussionId, onResolved) {
 // empty date and the name selected for immediate editing.
 // `prefill` ({date:'YYYY-MM-DD', time:'HH:MM'}) seeds a PLAIN create — set when
 // the user clicks an empty hour slot in the calendar's week view.
-export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCreate = null, onStageAdvance = null, onStageError = null, editDiscussion = null, duplicateFrom = null, prefill = null, canManageSettings = false }) {
+export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCreate = null, onStageAdvance = null, onStageComplete = null, onStageError = null, editDiscussion = null, duplicateFrom = null, prefill = null, canManageSettings = false }) {
   const isEdit = !!editDiscussion;
   const isDuplicate = !isEdit && !!duplicateFrom;
   const { currentUser } = useMondayContext();
@@ -710,84 +710,100 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
         (async () => {
           const bgStartedAt = Date.now();
           let bgOk = false;
+          // The agenda and the people columns are INDEPENDENT writes, and the root
+          // create deliberately omits the people ones (they are stage 3). So an
+          // agenda failure must not skip stage 3 — that silently dropped every
+          // person the user picked, for a write that was never even attempted
+          // (round306 PR review). The agenda error is held here and rethrown after
+          // stage 3 has had its turn, so reporting is unchanged.
+          let agendaErr = null;
           try {
-            // Stage 2 — the REST of the agenda, built while the discussion card
-            // shows the standard loading animation: every point (the topics already
-            // exist from the awaited pass and come back through the checkpoint), and
-            // only then the connection to the discussion (linkLast). Because the
-            // link is the card's read path, the agenda appears complete in one shot.
-            if (stageTemplate) {
-              const stage2At = Date.now();
-              // With linkLast a mid-run failure leaves created topics INVISIBLE
-              // (they exist but are not connected, and the card reads through the
-              // connection). So: one resumed retry — the checkpoint guarantees
-              // nothing is created twice — and if that fails too, a best-effort
-              // salvage link of whatever WAS created, so no real item is stranded
-              // unreachable. Only then does the failure surface.
-              const buildAgenda = () => createTopicsFromTemplate(newId, stageTemplate, {
-                freshDiscussion: true,
-                linkLast: true,
-                resumeState: stage1Checkpoint,
-                onCheckpoint: (cp) => { stage1Checkpoint = cp; },
-              });
-              try {
-                await buildAgenda();
-              } catch (firstErr) {
-                if (!firstErr?.__loggedId) logger.warn('CreateDiscussionModal', 'בניית האג׳נדה נכשלה — ניסיון חוזר מה-checkpoint', firstErr);
-                if (firstErr?.templateResumeState) stage1Checkpoint = firstErr.templateResumeState;
+            try {
+              // Stage 2 — the REST of the agenda, built while the discussion card
+              // shows the standard loading animation: every point (the topics already
+              // exist from the awaited pass and come back through the checkpoint), and
+              // only then the connection to the discussion (linkLast). Because the
+              // link is the card's read path, the agenda appears complete in one shot.
+              if (stageTemplate) {
+                const stage2At = Date.now();
+                // With linkLast a mid-run failure leaves created topics INVISIBLE
+                // (they exist but are not connected, and the card reads through the
+                // connection). So: one resumed retry — the checkpoint guarantees
+                // nothing is created twice — and if that fails too, a best-effort
+                // salvage link of whatever WAS created, so no real item is stranded
+                // unreachable. Only then does the failure surface.
+                const buildAgenda = () => createTopicsFromTemplate(newId, stageTemplate, {
+                  freshDiscussion: true,
+                  linkLast: true,
+                  resumeState: stage1Checkpoint,
+                  onCheckpoint: (cp) => { stage1Checkpoint = cp; },
+                });
                 try {
                   await buildAgenda();
-                } catch (secondErr) {
-                  if (secondErr?.templateResumeState) stage1Checkpoint = secondErr.templateResumeState;
+                } catch (firstErr) {
+                  if (!firstErr?.__loggedId) logger.warn('CreateDiscussionModal', 'בניית האג׳נדה נכשלה — ניסיון חוזר מה-checkpoint', firstErr);
+                  if (firstErr?.templateResumeState) stage1Checkpoint = firstErr.templateResumeState;
                   try {
-                    const salvaged = await linkTemplateTopics(newId, stage1Checkpoint);
-                    logger.warn('CreateDiscussionModal', `בניית האג׳נדה נכשלה פעמיים — ${salvaged} נושאים שנוצרו קושרו לדיון כדי שלא יאבדו`, secondErr);
-                  } catch (salvageErr) {
-                    if (!salvageErr?.__loggedId) logger.error('CreateDiscussionModal', 'גם קישור ההצלה של נושאי האג׳נדה נכשל', salvageErr);
+                    await buildAgenda();
+                  } catch (secondErr) {
+                    if (secondErr?.templateResumeState) stage1Checkpoint = secondErr.templateResumeState;
+                    try {
+                      const salvaged = await linkTemplateTopics(newId, stage1Checkpoint);
+                      logger.warn('CreateDiscussionModal', `בניית האג׳נדה נכשלה פעמיים — ${salvaged} נושאים שנוצרו קושרו לדיון כדי שלא יאבדו`, secondErr);
+                    } catch (salvageErr) {
+                      if (!salvageErr?.__loggedId) logger.error('CreateDiscussionModal', 'גם קישור ההצלה של נושאי האג׳נדה נכשל', salvageErr);
+                    }
+                    throw secondErr;
                   }
-                  throw secondErr;
+                }
+                logger.health?.('discussion_create_phase', {
+                  step: 'staged_agenda_link_last', duration_ms: Date.now() - stage2At,
+                });
+                // monday is read-after-write lagged: a resolved create_item/create_subitem
+                // does not mean the relation and subitems are READABLE yet. Now that this
+                // wait costs the user nothing (the loader is already running) we hold the
+                // loader until the board really serves the agenda back, instead of
+                // dropping the user onto a half-empty one.
+                const readinessAt = Date.now();
+                const wantTopics = (stageTemplate.topics || []).length;
+                const wantPoints = (stageTemplate.topics || [])
+                  .reduce((n, t) => n + (t.points?.length || 0), 0);
+                let confirmed = false;
+                for (let attempt = 0; attempt < 10; attempt += 1) {
+                  try {
+                    const readBack = await readDiscussionTopicsAsTemplate(newId);
+                    const got = readBack?.topics || [];
+                    const gotPoints = got.reduce((n, t) => n + (t.points?.length || 0), 0);
+                    if (got.length >= wantTopics && gotPoints >= wantPoints) { confirmed = true; break; }
+                  } catch (err) {
+                    if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי הדיון נכשלה — ממשיך להמתין', err);
+                  }
+                  await new Promise((resolve) => { setTimeout(resolve, 500); });
+                }
+                logger.health?.('discussion_create_phase', {
+                  step: 'staged_readiness', duration_ms: Date.now() - readinessAt, ok: confirmed,
+                });
+                // Reveal the agenda without waiting for the people write.
+                onStageAdvance?.({ id: newId, stage: 2 });
+                if (!confirmed) {
+                  // The budget ran out before the board served the full agenda back.
+                  // We still reveal (an endless loader would strand the user), but a
+                  // single one-shot refetch could land on the same stale read, so
+                  // schedule one more pass instead of leaving points missing until the
+                  // user reopens the discussion.
+                  logger.warn('CreateDiscussionModal', 'סדר היום עדיין לא נקרא במלואו מהלוח — מתוזמנת קריאה נוספת');
+                  setTimeout(() => onStageAdvance?.({ id: newId, stage: 2, retry: true }), 4000);
                 }
               }
-              logger.health?.('discussion_create_phase', {
-                step: 'staged_agenda_link_last', duration_ms: Date.now() - stage2At,
-              });
-              // monday is read-after-write lagged: a resolved create_item/create_subitem
-              // does not mean the relation and subitems are READABLE yet. Now that this
-              // wait costs the user nothing (the loader is already running) we hold the
-              // loader until the board really serves the agenda back, instead of
-              // dropping the user onto a half-empty one.
-              const readinessAt = Date.now();
-              const wantTopics = (stageTemplate.topics || []).length;
-              const wantPoints = (stageTemplate.topics || [])
-                .reduce((n, t) => n + (t.points?.length || 0), 0);
-              let confirmed = false;
-              for (let attempt = 0; attempt < 10; attempt += 1) {
-                try {
-                  const readBack = await readDiscussionTopicsAsTemplate(newId);
-                  const got = readBack?.topics || [];
-                  const gotPoints = got.reduce((n, t) => n + (t.points?.length || 0), 0);
-                  if (got.length >= wantTopics && gotPoints >= wantPoints) { confirmed = true; break; }
-                } catch (err) {
-                  if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי הדיון נכשלה — ממשיך להמתין', err);
-                }
-                await new Promise((resolve) => { setTimeout(resolve, 500); });
-              }
-              logger.health?.('discussion_create_phase', {
-                step: 'staged_readiness', duration_ms: Date.now() - readinessAt, ok: confirmed,
-              });
-              // Reveal the agenda without waiting for the people write.
-              onStageAdvance?.({ id: newId, stage: 2 });
-              if (!confirmed) {
-                // The budget ran out before the board served the full agenda back.
-                // We still reveal (an endless loader would strand the user), but a
-                // single one-shot refetch could land on the same stale read, so
-                // schedule one more pass instead of leaving points missing until the
-                // user reopens the discussion.
-                logger.warn('CreateDiscussionModal', 'סדר היום עדיין לא נקרא במלואו מהלוח — מתוזמנת קריאה נוספת');
-                setTimeout(() => onStageAdvance?.({ id: newId, stage: 2, retry: true }), 4000);
-              }
+            } catch (err) {
+              // HELD, not swallowed: stage 3 (people) is an INDEPENDENT write that has
+              // not been attempted yet, so it runs below and this error is rethrown after
+              // it — the failure is still reported, the people are no longer lost with it.
+              if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'בניית האג׳נדה נכשלה — ממשיך לכתיבת המשתתפים ואז מדווח', err);
+              agendaErr = err;
             }
-            // Stage 3 — people last.
+            // Stage 3 — people last. Runs even after an agenda failure: it is a
+            // separate write, and the root create left these columns out on purpose.
             if (Object.keys(peoplePayload).length) {
               const stage3At = Date.now();
               await board.item(newId).update(peoplePayload).execute();
@@ -795,10 +811,18 @@ export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCr
                 step: 'staged_people', duration_ms: Date.now() - stage3At,
               });
             }
+            // Now the held agenda failure surfaces — same reporting as before, but
+            // after the people made it to the board.
+            if (agendaErr) throw agendaErr;
             bgOk = true;
-            // Clears __pendingPeople and refetches, so the card now shows what
-            // monday actually stores.
-            onCreated({ ...optimisticShape, id: newId }, { isEdit: false, isDuplicate: false });
+            // Clears __pendingPeople and refetches, so the card now shows what monday
+            // actually stores. This is a STAGE completion, not a fresh save: it lands
+            // seconds after the handoff, by which time the user may have opened another
+            // create form or gone back to the list, and the generic save handler would
+            // close that modal (losing its unsaved input) and yank them back here. So
+            // it goes through the id-GUARDED stage channel, which no-ops unless this
+            // discussion is still the open one (round306 PR review).
+            onStageComplete?.({ id: newId });
           } catch (err) {
             if (!err?.__loggedId) logger.error('CreateDiscussionModal', 'הדיון נוצר, אך השלמת הנושאים/המשתתפים ברקע נכשלה', err);
             // The discussion EXISTS (stage 1 succeeded) — do not revert the card;
