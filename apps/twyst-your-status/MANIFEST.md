@@ -310,22 +310,41 @@ gets `Only board owners can configure` in its place. The decision is one pure fu
   `max(active index) + 1` (collides with a removed LAST label), and a reorder renumbered
   actives to 0..n-1 (collides with a removed MIDDLE label). Rewriting a deactivated row's
   index is safe — `index` is display order, while a cell references its label by **id**.
-- **A label added in settings is configurable in the SAME visit** (3.9.0). It has no
-  monday id until `update_status_column` has run, so its rules are held under the draft's
-  client key (`new:1`) and re-keyed onto the assigned id inside the same save:
-  labels are written → the refresh reveals the ids → `resolveNewLabelIds` matches →
-  `remapDraftLabelKeys` moves the rules → prune → storage. Before this the permissions
-  accordion was hidden on a new card (`showPermissions={!label.isNew}`), which read as
-  broken rather than as "save first".
-  - The match is a set difference (ids the refresh has that the pre-mutation labels did
-    not) narrowed by label text and index — the two things the mutation sent. It does NOT
-    fall back to pairing leftovers in order: a wrong match gives one status another's
-    permissions. An unmatched draft's rules are dropped by the prune and the screen says
-    so, staying open.
-  - **After the labels mutation the label draft is re-seeded from the refresh.** Without
-    it, a save that fails LATER (storage, validation) leaves the new labels marked
-    `isNew`, and the retry creates them a second time. Pinned by
-    `ColumnSettings/newLabelPermissions.test.jsx`.
+- **A new label's `id` IS its colour's numeric id, and a taken id rejects the mutation**
+  (3.10.0, probe-verified live). `update_status_column` derives a created label's id from
+  the `StatusColumnColors` value sent — `purple`(4) becomes id 4 — and refuses the whole
+  payload with `INVALID_ARGUMENT_EXCEPTION` / "request to change default status label
+  color" when that id already exists, deactivated rows included. So choosing a colour for
+  a new label is an identity decision, and two questions must both come out clean: is the
+  colour free, and is the colour's own id free as a label id. They differ, because
+  removing a label frees its COLOUR and keeps its ID — which is why a lowest-free-colour
+  picker reached for precisely the colliding colour and made "add label" fail on any
+  column that had ever had one removed. `pickColorForNewLabel` answers both.
+  - **`id 5` is monday's reserved slot for the default empty label.** A label created
+    there is forced grey `#c4c4c4` and can never be deleted ("Unable to delete a label
+    already in use", with no item referencing it). It is excluded from the picker.
+  - The coupling is creation-only: recolouring an EXISTING label away from its id is
+    accepted, so on a long-lived column `id` and colour need not agree.
+- **Labels are created on the "add label" CLICK, not on save** (3.10.0). Because monday
+  decides both the id and — sometimes — the colour, an optimistically rendered row showed
+  something the board disagreed with: purple in settings, grey on the board, orange on the
+  next visit (grey is the id-5 override; orange is the enum re-derived from the stored
+  colour index). The click now does the round trip behind a busy button and renders the
+  card from the response, and the swatch shows the hex monday STORED rather than one
+  re-derived from the enum. Consequence: the label exists from that moment, so Cancel no
+  longer un-creates it.
+  - This retired 3.9.0's client-key remap (`resolveNewLabelIds` / `remapDraftLabelKeys`)
+    entirely: a card carries a real monday id before its permissions accordion is ever
+    opened, so rules are keyed correctly from the first keystroke and there is no remap
+    left to fail. The requirement it protected — configure a new label without leaving the
+    screen — is still pinned by `ColumnSettings/newLabelPermissions.test.jsx`.
+- **`is_done` and `description` must be RESENT or they are cleared** (3.10.0). The labels
+  array is a full replace, so a payload omitting them wiped the column's `done_colors`
+  (observed going from `[1]` to `[]` on a live board) and every label description —
+  meaning renaming one label silently dropped the "Done" designation. Both now round trip
+  read → draft → payload → mutation.
+- **Omitting a label from the array DELETES it**, refused with "Unable to delete a label
+  already in use". Deactivated rows can be deleted this way; the reserved id 5 cannot.
 
 ## Required scopes
 

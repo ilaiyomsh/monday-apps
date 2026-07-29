@@ -1,5 +1,53 @@
 # Changelog
 
+## 3.10.0
+
+Owner-reported: a new label showed one colour in settings, a different one on the board,
+and a third on the next visit. Probing that on a live column turned up three defects
+behind it, all of the same family as 3.9.1 — invisible state on the column that the
+settings screen cannot show.
+
+- **A new label's `id` is derived by monday from its COLOUR, and a taken id rejects the
+  whole mutation.** `purple`(4) becomes label id 4; if id 4 already exists — including as
+  a deactivated row nobody can see — `update_status_column` fails with
+  `INVALID_ARGUMENT_EXCEPTION` / "request to change default status label color", a message
+  that names neither the colour nor the id. Verified live with five discriminating probes:
+  `blackish`(10) landing on id 10 rather than the next free id 6 is what settles it.
+- **That made "add a label" fail on any column where a label had ever been removed.**
+  Removing a label frees its COLOUR while its ID stays taken forever, so the old
+  lowest-free-colour picker reached for exactly the colour that would collide. On a default
+  column (ids 0,1,2) removing any label broke the next add, every time — and removing one
+  and adding one in the same visit failed too. Colour choice is now an identity decision:
+  `pickColorForNewLabel` requires the colour to be free AND its numeric id to be free as a
+  label id.
+- **`id 5` is monday's reserved slot for the default empty label** and is now excluded. A
+  label created there is forced grey `#c4c4c4` and can never be deleted afterwards
+  ("Unable to delete a label already in use", with no item referencing it). This is the
+  direct cause of the report: the picker landed on `explosive`(5), monday stored id 5 as
+  grey, and settings then re-derived the swatch from colour index 5 and drew it orange.
+- **Labels are created when the button is clicked, not when settings are saved.** monday
+  decides the id and can override the colour, so no locally invented row can be trusted:
+  the click now does the round trip behind a busy button and the card is rendered from the
+  response. The swatch shows the hex monday STORED rather than one re-derived from the
+  colour enum, which is the other half of the same bug. Note the behaviour change —
+  the label exists from the click, so Cancel no longer un-creates it.
+- **Every labels save was silently clearing the column's "Done" designation.** The payload
+  omitted `is_done` and `description`, and the labels array is a full replace, so anything
+  left out is cleared — `done_colors` was observed going from `[1]` to `[]` after renaming
+  an unrelated label. Both now round trip through read → draft → payload → mutation.
+- **3.9.0's client-key remap is gone.** With a real monday id present before the
+  permissions accordion is ever opened, `resolveNewLabelIds` and `remapDraftLabelKeys` had
+  nothing left to do — along with the error path for rules that could not be re-keyed. The
+  requirement they served, configuring a brand-new label without leaving the screen, is
+  unchanged and still pinned.
+- Also recorded while probing: omitting a label from the array is a DELETE (refused with
+  "Unable to delete a label already in use" — where "in use" is broader than any item's
+  current value), and deactivated rows CAN be deleted that way. See the `monday-api`
+  skill's `column-formats.md`.
+- Tests: 3 new suites (33 cases) covering the colour/id rule, the `is_done`/`description`
+  round trip and the create-on-click flow, each observed failing first; 10 mutation
+  spot-checks, all killed. The fixed path was then run end-to-end against a live column.
+
 ## 3.9.1
 
 - **Adding a label failed with `INVALID_INPUT` / "Indexes should be unique"** — reported
