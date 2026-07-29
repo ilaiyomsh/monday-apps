@@ -6,10 +6,12 @@ import {
   FORM_COLUMN_GAP_PX,
   FORM_GAP_PX,
   FORM_HEADER_PX,
+  FORM_HEADER_TOP_PX,
   FORM_MAX_ROWS,
   FORM_MIN_ROWS,
   FORM_PADDING_PX,
   LABEL_COLUMN_WIDTH_PX,
+  MODAL_CHROME_PX,
   requiredFormLayout,
   requiredFormModalSize,
 } from './requiredFormModalSize.js';
@@ -138,6 +140,49 @@ describe('requiredFormModalSize', () => {
       );
       expect(asked, `${rows} row(s)`).toBeGreaterThan(ownContent);
     });
+  });
+
+  /*
+   * Clearance under monday's close button (owner request).
+   *
+   * monday draws its own X in the box it hands us, and the title sat directly beneath
+   * it — the two read as one crowded row. The gap is OUR top margin, because the X
+   * belongs to monday's chrome and cannot be moved from here.
+   *
+   * It has to be in the sizing too, not just the stylesheet: the modal is sized to the
+   * pixel, so pushing the title down without buying the height moves the cost onto the
+   * field list, which is the one box allowed to scroll. That would answer a spacing
+   * request by making the form scroll.
+   */
+  it('leaves clearance between monday\'s close button and the title', () => {
+    expect(FORM_HEADER_TOP_PX).toBeGreaterThan(0);
+  });
+
+  it('buys the header clearance in the requested height instead of taking it from the rows', () => {
+    [FORM_MIN_ROWS, 3, FORM_MAX_ROWS].forEach((rows) => {
+      const expected = (FORM_PADDING_PX * 2)
+        + FORM_HEADER_TOP_PX
+        + FORM_HEADER_PX
+        + FORM_ACTIONS_PX
+        + (rows * FIELD_ROW_HEIGHT_PX)
+        + ((rows - 1) * FORM_GAP_PX)
+        + MODAL_CHROME_PX;
+      const asked = parseInt(
+        requiredFormModalSize(Array.from({ length: rows }, () => field('text'))).height,
+        10,
+      );
+      expect(asked, `${rows} row(s)`).toBe(expected);
+    });
+  });
+
+  it('spends the clearance on height alone, never on width', () => {
+    // A taller header must not widen the modal — the width is the two columns.
+    expect(
+      (FORM_PADDING_PX * 2)
+      + LABEL_COLUMN_WIDTH_PX
+      + FORM_COLUMN_GAP_PX
+      + CONTROL_COLUMN_WIDTH_PX,
+    ).toBe(parseInt(requiredFormModalSize([field('text')]).width, 10));
   });
 
   it('is wide enough for a label column beside a usable control', () => {
