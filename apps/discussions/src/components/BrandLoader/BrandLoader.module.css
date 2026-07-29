@@ -1,7 +1,7 @@
 /* "Meetings" loading splash on a WHITE background. Mark = the monday app icon:
-   a central "pizza" (disc cut into 8 slices) + 3 person figures whose shoulder
-   arcs curve around the disc. Colorized with the Twyst gradient; the 3 people
-   SLIDE clockwise to the next seat in a cool eased hop. The "Meetings" wordmark
+   a SOLID gradient disc + 3 person figures whose shoulder arcs curve around it.
+   Colorized with the Twyst gradient; the 3 people orbit the disc as one
+   continuous roulette throw (round307 — was 8 slices + a stepped hop). The "Meetings" wordmark
    colors flow as a left-to-right wave, over "Powered by twyst". */
 .brandLoader,
 .brandLoaderFull {
@@ -37,6 +37,18 @@
   animation: bl-fade 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* round307 — the instance's own logo (settings.preferences.logoUrl), ABOVE the
+   mark. Bounded on BOTH axes and object-fit:contain, so a tall square mark and a
+   wide wordmark both land without distorting or shoving the splash around. It
+   does NOT rotate: only the figures orbit. */
+.logo {
+  display: block;
+  max-width: 190px;
+  max-height: 56px;
+  object-fit: contain;
+  animation: bl-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 .mark {
   display: block;
   overflow: visible;
@@ -47,19 +59,21 @@
   transform-origin: center;
   animation: bl-breathe 2.6s ease-in-out infinite;
 }
+/* round307 — ROULETTE spin (owner-tuned on the mockup), replacing the old
+   `bl-hop`: that one was six 60° steps with a long dwell after each, which is
+   exactly what read as "jumpy". This is ONE continuous throw per cycle — fast
+   off the line, decelerating monotonically, never resting. The three numbers
+   (duration / sweep / easing) come in as custom properties from BrandLoader's
+   exported SPIN constant, so the tuning lives in one place.
+   The per-step `scale(1.06)` pulse is gone with the steps. */
 .people {
   transform-box: view-box;
   transform-origin: 50px 50px;
-  animation: bl-hop 3s cubic-bezier(0.55, 0, 0.2, 1) infinite;
+  animation: bl-roulette var(--bl-spin-cycle, 4200ms) var(--bl-spin-ease, ease-out) infinite;
 }
-@keyframes bl-hop {
-  0%, 18%   { transform: rotate(0deg) scale(1); }
-  26%       { transform: rotate(60deg) scale(1.06); }
-  33%, 51%  { transform: rotate(120deg) scale(1); }
-  59%       { transform: rotate(180deg) scale(1.06); }
-  66%, 84%  { transform: rotate(240deg) scale(1); }
-  92%       { transform: rotate(300deg) scale(1.06); }
-  100%      { transform: rotate(360deg) scale(1); }
+@keyframes bl-roulette {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(var(--bl-spin-sweep, 1200deg)); }
 }
 @keyframes bl-breathe {
   0%, 100% { transform: scale(1); opacity: 0.96; }
@@ -116,7 +130,7 @@
 @keyframes bl-fade { from { opacity: 0; } to { opacity: 1; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .pizza, .people, .wordmark, .poweredBy, .inner {
+  .pizza, .people, .wordmark, .poweredBy, .inner, .logo {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
   }
