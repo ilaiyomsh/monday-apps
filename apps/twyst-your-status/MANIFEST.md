@@ -301,6 +301,15 @@ gets `Only board owners can configure` in its place. The decision is one pure fu
 - Unconfigured column (no storage value) ⇒ empty rules: **all active statuses are allowed**.
 - Settings can also edit the board status labels themselves (rename / recolor / add /
   deactivate) via `update_status_column`, in addition to per-label permissions.
+- **`update_status_column` indexes are ONE unique space across the whole payload** (3.9.1).
+  The mutation replaces the full labels array, deactivated rows included, and monday
+  rejects it with `INVALID_INPUT` / "Indexes should be unique" on any duplicate. Actives
+  take 0..n-1 in display order; deactivated rows are packed above them. Two collisions were
+  live before this, both needing only a previously removed label — invisible in the settings
+  UI, so neither is reachable from what the screen shows: a new label took
+  `max(active index) + 1` (collides with a removed LAST label), and a reorder renumbered
+  actives to 0..n-1 (collides with a removed MIDDLE label). Rewriting a deactivated row's
+  index is safe — `index` is display order, while a cell references its label by **id**.
 - **A label added in settings is configurable in the SAME visit** (3.9.0). It has no
   monday id until `update_status_column` has run, so its rules are held under the draft's
   client key (`new:1`) and re-keyed onto the assigned id inside the same save:

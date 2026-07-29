@@ -88,6 +88,22 @@ export function hasPendingLabelEdits(draft, baseline) {
  * Build the full update_status_column labels payload (active + deactivated).
  * New labels omit `id`. Existing removed labels are marked is_deactivated.
  *
+ * **Indexes are one unique space across the WHOLE payload** — actives take 0..n-1 in
+ * display order, deactivated rows are packed above them. monday replaces the entire
+ * labels array and rejects it with `INVALID_INPUT` / "Indexes should be unique" if any
+ * two rows share an index, and the deactivated rows are invisible in the settings UI,
+ * so every collision here is one the screen cannot show. Two were reachable before
+ * 3.9.1, each needing only a label removed at some point in the past:
+ *
+ *  - a new label takes `max(active index) + 1`, colliding with a deactivated label
+ *    above every active one (the label removed last was the last in the list);
+ *  - a reorder renumbers the actives to 0..n-1, colliding with a deactivated label
+ *    inside that range (a removed MIDDLE label).
+ *
+ * Rewriting a deactivated row's index is safe: `index` is display order only, and a
+ * status CELL references its label by **id** (`{"index": <labelId>}` is the monday
+ * naming quirk — see statusPolicy.js and monday-api references/column-formats.md).
+ *
  * @param {ReturnType<typeof createLabelsDraft>} draftActive
  * @param {Array<{ id: string, index: number, label?: string, color?: string, colorValue?: string|number }>} liveAll
  * @returns {Array<{ id?: number, color: string, label: string, index: number, isDeactivated: boolean }>}
@@ -111,7 +127,10 @@ export function buildStatusLabelsUpdatePayload(draftActive, liveAll) {
         ...(isExisting ? { id: numericId } : {}),
         color: normalizeStatusColorEnum(label.colorValue ?? label.color),
         label: typeof label.label === 'string' ? label.label : '',
-        index: Number.isInteger(label.index) ? label.index : orderIndex,
+        // The POSITION, not the draft's own index: the draft's number can collide
+        // with a deactivated row's (see the note above), and position preserves the
+        // order the admin arranged, which is all `index` means here.
+        index: orderIndex,
         isDeactivated: false,
       };
     });
@@ -127,11 +146,15 @@ export function buildStatusLabelsUpdatePayload(draftActive, liveAll) {
       const numericId = Number(label.id);
       return Number.isInteger(numericId) && existingIds.has(numericId) && !activeIds.has(numericId);
     })
-    .map((label) => ({
+    .slice()
+    .sort((a, b) => Number(a.index) - Number(b.index))
+    .map((label, deactivatedIndex) => ({
       id: Number(label.id),
       color: normalizeStatusColorEnum(label.colorValue ?? label.color),
       label: typeof label.label === 'string' ? label.label : '',
-      index: label.index,
+      // Packed ABOVE the actives, so no deactivated row can ever share an index with
+      // a visible one. Their own relative order is kept for stability.
+      index: activePayload.length + deactivatedIndex,
       isDeactivated: true,
     }));
 
@@ -162,6 +185,28 @@ export function buildStatusLabelsUpdatePayload(draftActive, liveAll) {
  * }} input
  * @returns {Record<string, string>} clientKey → the assigned label id
  */
+/**
+ * Renumber a labels draft to 0..n-1 in display order.
+ *
+ * The caller runs this before saving so its draft carries the SAME indexes the
+ * payload will send (see buildStatusLabelsUpdatePayload) — `resolveNewLabelIds`
+ * matches a new label to its assigned id by text and index, and a draft still
+ * holding `max + 1` while monday stored the packed position would be left matching
+ * on text alone.
+ *
+ * Do NOT run it before `hasPendingLabelEdits`: on a column with a removed label the
+ * live indexes are non-contiguous, so renumbering first would read as an edit and
+ * fire a labels mutation on every save.
+ *
+ * @param {ReturnType<typeof createLabelsDraft>} draft
+ */
+export function renumberDraftIndexes(draft) {
+  return (Array.isArray(draft) ? draft : [])
+    .slice()
+    .sort((a, b) => Number(a?.index) - Number(b?.index))
+    .map((label, index) => ({ ...label, index }));
+}
+
 export function resolveNewLabelIds({ draft, liveBefore, refreshedLabels } = {}) {
   const newDrafts = (Array.isArray(draft) ? draft : [])
     .filter((label) => label?.isNew && label.clientKey);
