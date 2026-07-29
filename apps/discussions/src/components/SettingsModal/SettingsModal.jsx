@@ -750,7 +750,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
         <Flex justify="end" gap={8} className={styles.confirmActions}>
           <Button kind="tertiary" onClick={() => setShowCloseConfirm(false)}>המשך עריכה</Button>
           <Button kind="secondary" onClick={() => { setShowCloseConfirm(false); onClose?.(); }}>יציאה ללא שמירה</Button>
-          <Button kind="primary" loading={saving} onClick={saveAndClose}>שמירה ויציאה</Button>
+          <Button kind="primary" loading={saving} disabled={saving || logoBusy} onClick={saveAndClose}>שמירה ויציאה</Button>
         </Flex>
       </div>
     </div>,
@@ -1348,6 +1348,11 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       <Text type={"text2"}>לוגו</Text>
                     </div>
                     <div className={`${styles.prefControl} ${styles.prefControlFull}`}>
+                      {/* While a file is decoding, BOTH save buttons and the picker are
+                          disabled (PR review): saving mid-conversion would persist the
+                          pre-upload preferences and close the modal, so the logo that
+                          finished a moment later was silently dropped — and a second pick
+                          could resolve out of order and win over the first. */}
                       <div className={styles.logoRow}>
                         {preferences.logoUrl ? (
                           <img className={styles.logoPreview} src={preferences.logoUrl} alt="הלוגו הנוכחי" />
@@ -1358,6 +1363,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                           <input
                             type="file"
                             accept="image/*"
+                            disabled={logoBusy}
                             onChange={async (e) => {
                               const file = e.target.files && e.target.files[0];
                               e.target.value = ''; // let the same file be re-picked after a failure
@@ -1500,7 +1506,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               ייצוא JSON
             </Button>
             <Button kind={"tertiary"} onClick={attemptClose}>ביטול</Button>
-            <Button kind={"primary"} loading={saving} onClick={handleSave}>שמור</Button>
+            <Button kind={"primary"} loading={saving} disabled={saving || logoBusy} onClick={handleSave}>שמור</Button>
           </Flex>
           {/* round191 — version badge is OWNERS ONLY (owner request). This footer only
               renders in the full (owner) modal — non-owners get the templatesOnly early
