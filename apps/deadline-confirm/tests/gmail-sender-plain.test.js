@@ -6,8 +6,6 @@
 import { describe, it, expect } from 'vitest';
 import { createGmailSender } from '../src/services/gmail-sender.js';
 
-const SEND_URL = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
-
 function fakeStorage(initial = {}) {
   const records = new Map(Object.entries(initial));
   return {
