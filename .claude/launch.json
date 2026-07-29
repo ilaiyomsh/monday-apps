@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "docs-export-mock",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "./apps/docs-export", "dev:mock"],
+      "port": 8304
+    }
+  ]
+}

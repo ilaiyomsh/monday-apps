@@ -394,9 +394,18 @@ for (const s of SURFACES) {
 // ============================================================================
 // repo-wide heuristic scans
 // ============================================================================
+// NOTE: this list drives ONLY the repo-wide heuristics below (raw-axiom-fetch and
+// console-in-catch). It is SEPARATE from SURFACES above, and an app missing from here is
+// silently unscanned while the audit still reports PASS. Adding an app to SURFACES without
+// adding it here (or vice versa) is the recurring mistake — both lists need the entry.
 const APP_SRC_DIRS = ['apps/axis/tracker/src', 'apps/axis/day-off/src', 'apps/axis/planner/src',
   'apps/axis/services/app-core/src', 'apps/axis/sync-calender/src', 'apps/discussions/src',
-  'apps/team-people-column/src', 'apps/deadline-confirm/src', 'apps/telemetry-dashboard/src'];
+  'apps/team-people-column/src', 'apps/deadline-confirm/src', 'apps/telemetry-dashboard/src',
+  // docs-export is scanned here from day one. Its full SURFACES entry is deliberately
+  // deferred until its deploy workflows exist — a surface declares `workflow`, and a
+  // missing workflow file is a hard `fail`, so registering the surface before the
+  // pipeline onboarding would break this blocking gate.
+  'apps/docs-export/src'];
 
 const rawFetchHits = [];
 const consoleCatchHits = [];

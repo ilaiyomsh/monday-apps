@@ -230,6 +230,49 @@ Legacy `text`/`value` are null on relation-family columns. Read typed fragments:
 - A mirror can only aggregate through a `board_relation` **on the same board** — build the
   relation (with `allowCreateReflectionColumn: true`) before the mirror.
 
+### Verified live 2026-07-29 (API 2026-04, re-checked at 2026-07 — identical)
+
+- **Separator is comma + SPACE (`", "`)**, and it is AMBIGUOUS: a single mirrored value whose
+  own text contains `", "` (e.g. `"Gamma, Delta"`) is byte-identical to two values
+  `"Gamma"` + `"Delta"`. `display_value.split(', ')` is therefore not a safe parse.
+- `display_value` is `String!` → an **empty mirror is `""`, never `null`**. `text` and `value`
+  are `null` on `MirrorValue` at both 2026-04 and 2026-07.
+- The structured escape hatch (use it whenever you split values or join back to the source):
+  ```graphql
+  ... on MirrorValue {
+    display_value
+    mirrored_items {                     # [] when the relation is empty
+      linked_board_id
+      linked_item { id name }
+      mirrored_value { ... on TextValue { id text value } }   # union MirroredValue: one fragment per source column type
+    }
+  }
+  ```
+  Measured on a 4-row board: `display_value` alone = 104 complexity; adding
+  `mirrored_items { linked_item { id } mirrored_value { text } }` = 112. Cost scales with the
+  number of LINKS, not rows.
+- **A mirror can NEVER be filtered server-side.** Any `items_page(query_params:)` rule on a
+  mirror column — `any_of`, `contains_text`, even `is_empty`/`is_not_empty`, with or without
+  `compare_attribute` — fails with HTTP **200** carrying
+  `errors[].extensions.code = "InvalidColumnTypeException"`,
+  `error_data.actual_type = "lookup"` (monday's internal name for mirror; auto-generated
+  mirror column ids are `lookup_*`), `column_id: null`, message
+  *"This column type is not supported yet in the API"* — and `data.boards` comes back
+  `[null]`, so ONE mirror rule inside an otherwise-valid `and` group destroys the whole
+  result set. Identical at 2025-04 / 2026-04 / 2026-07. **Filter mirrors client-side.**
+- **Creating a mirror column: `get_column_type_schema(type: mirror)` advertises the WRONG
+  shape.** It nests everything under a `settings` key; sending that is rejected with
+  `INVALID_INPUT` / `"data/settings must NOT have additional properties"`. The working form
+  puts the keys at the TOP level of `defaults`, with `displayed_linked_columns` as an ARRAY
+  (the server stores it back as a map):
+  ```json
+  {"relation_column": {"<relation_col_id>": true},
+   "displayed_linked_columns": [{"board_id": "<source_board_id>", "column_ids": ["<src_col_id>"]}]}
+  ```
+  Passing `defaults` as a JSON **string** (legacy `displayed_column` map form) is accepted with
+  HTTP 200 but yields `settings_str: "{}"` — a silently blank, unconfigured mirror. Always read
+  `settings_str` back and assert it is non-empty.
+
 ## Board / column identity operations
 
 - Rename column keeping id: `change_column_title(board_id, column_id, title)`.
@@ -279,6 +322,31 @@ Round-tripped through a scratch sandbox board (`WZ-fieldtypes`, board 1842403002
 
 Both bugs shipped past hand-built unit fixtures and were only caught by the live probe —
 this is the concrete case for test-guard's "real fixtures for monday-facing code" rule.
+
+## `items_page` `query_params` filtering — date + people semantics (probe-verified 2026-07-29, API 2026-04)
+
+Probed on a scratch `WZ-report` board with rows at 2026-07-15, 2026-07-20 (×2), 2026-08-01.
+**The dominant failure mode is a silent empty page: every malformed rule below returns
+`items: []` with NO GraphQL error, so a filter bug is indistinguishable from "no data".**
+
+- **`date` + `between` is INCLUSIVE of both endpoints.** One specific day is
+  `compare_value: ["YYYY-MM-DD", "YYYY-MM-DD"]` (the same date twice) — that returns that
+  day's items. A range is `[start, end]` and returns rows on `start` and on `end`.
+- Silently-zero forms on a date column (all no-error): the one-element
+  `compare_value: ["YYYY-MM-DD"]` with `between`; a bare scalar `compare_value: "YYYY-MM-DD"`;
+  a reversed range `[end, start]`; a non-ISO format (`"20/07/2026"`); and `operator: any_of`
+  with a bare date. A 3+-element `between` array silently ignores the extras.
+- Alternative exact-day form that DOES work: `operator: any_of` with
+  `compare_value: ["EXACT", "YYYY-MM-DD"]`. `greater_than_or_equals` / `lower_than_or_equal`
+  are inclusive and take a one-element array.
+- **`people` requires the prefixed string `"person-<userId>"`.** A bare id — as a string
+  (`["48274917"]`) or as a JSON number (`[48274917]`) — matches nothing, silently. Teams
+  follow `"team-<teamId>"` by the same convention. `is_empty` (with `compare_value: [""]`)
+  correctly returns the unassigned rows.
+- **`operator: and` is a true conjunction and is the DEFAULT** when `query_params.operator`
+  is omitted; `or` yields the union. Verified with `[date between, people any_of]`.
+- Server-side filtering is supported on date / people / board_relation and **not at all on
+  mirror** (see "Mirror columns" above — hard `InvalidColumnTypeException` inside a 200).
 
 ## Option-type `settings` shapes (probe-verified 2026-07-28, API 2026-04)
 

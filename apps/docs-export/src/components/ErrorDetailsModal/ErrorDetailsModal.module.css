@@ -1,0 +1,32 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.event {
+  font-weight: 600;
+}
+
+.meta {
+  color: var(--secondary-text-color, #676879);
+  font-size: 12px;
+  direction: ltr;
+  text-align: start;
+}
+
+.pre {
+  margin: 0;
+  padding: 8px;
+  max-height: 320px;
+  overflow: auto;
+  background: var(--allgrey-background-color, #f6f7fb);
+  border-radius: var(--radius-sm, 4px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  /* Stack traces and JSON are LTR regardless of the surrounding RTL shell. */
+  direction: ltr;
+  text-align: start;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

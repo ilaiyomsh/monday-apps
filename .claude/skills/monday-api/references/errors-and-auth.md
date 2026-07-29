@@ -44,6 +44,7 @@ retry_in_seconds}`, top-level `extensions.request_id` and `extensions.warnings[]
 | `ColumnValueException` | 200 | Wrong column value format | ❌ fix format (column-formats.md) |
 | `CorrectedValueException` | 200 | Value type mismatch on column update | ❌ |
 | `InvalidColumnIdException` / `InvalidBoardIdException` / `InvalidUserIdException` | 200 | Bad/inaccessible id | ❌ |
+| `InvalidColumnTypeException` | 200 | `query_params` rule on a column type that cannot be filtered server-side — **mirror is the big one** (`error_data.actual_type: "lookup"`, `column_id: null`). Nulls the WHOLE board node (`data.boards: [null]`), so one bad rule in an `and` group kills every result. Verified 2026-07-29 at 2025-04/2026-04/2026-07 | ❌ filter that column client-side (column-formats.md → Mirror columns) |
 | `InvalidArgumentException` | 200 | Bad argument / pagination overrun / board missing | ❌ |
 | `InvalidVersionException` | 200 | Malformed API-Version header | ❌ (versioning.md) |
 | `ItemsLimitationException` | 200 | Board >10,000 items | ❌ |

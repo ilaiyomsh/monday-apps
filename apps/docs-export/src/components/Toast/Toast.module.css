@@ -1,0 +1,26 @@
+/* @vibe/core Toast positions ITSELF (position:fixed, top-center, with its own
+   enter/exit transform animation). This wrapper must therefore NOT use
+   `transform` (nor filter/perspective/will-change): a transformed ancestor
+   becomes the containing block for the toast's `position:fixed`, which traps it
+   off-screen — that is the "toast renders but is never seen" bug.
+   So: transform-free, full-viewport, click-through layer. */
+.container {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  pointer-events: none;
+}
+
+.container > * {
+  pointer-events: auto;
+}
+
+/* The message span keeps its own dir="rtl" + unicode-bidi: plaintext (set
+   inline) so Hebrew text with leading digits or a trailing ellipsis
+   ("3 אייטמים", "מפיק דוח…") keeps the correct reading order. */
+.body {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  direction: ltr;
+}

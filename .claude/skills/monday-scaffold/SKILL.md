@@ -409,6 +409,12 @@ References bundled with this skill:
 - `references/rtl-css-checklist.md` — the four recurring CSS/RTL traps
   (fixed-under-transform, sticky-in-overflow, cross-module CSS-module classes,
   bidi quote escaping) + the verify-step walk.
+- `references/template-drift.md` — non-RTL template defects (fixed + known gaps)
+  and the **reconciliation list for onboarding a scaffold into the `monday-apps`
+  monorepo** (React/Vibe/Vite pins, `sourcemap: 'hidden'`, `@mapps/error-kit`
+  instead of vendored copies, the nested `pnpm-workspace.yaml` trap, deploy
+  scripts that the deploy-guard hook blocks). Read this before scaffolding an
+  app that will live in the monorepo.
 - `references/package-manager.md` — pnpm build-script approval required by a
   fresh standalone scaffold.
 - `references/dev-harness.md` — Vite environment handling for selecting the
