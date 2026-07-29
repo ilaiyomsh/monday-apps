@@ -227,10 +227,25 @@ function GateLoading() {
  * Settings are owner-only, so a non-owner facing an unconfigured instance gets a
  * Hebrew explanation instead of the panel. The ownership answer is awaited before
  * choosing between the two, or the wrong surface flashes.
+ *
+ * ON AN UNCONFIGURED INSTANCE THE GATE OPENS WHEN OWNERSHIP IS UNDETERMINED.
+ * `useIsOwner` reports a tri-state (see `services/owners.js`), and here only a
+ * PROVEN non-owner (`determined && !isOwner`) is turned away. When the check could
+ * not be answered at all — most often the app missing the `boards:read` scope, but
+ * equally a nulled board or a network failure — we render the configuration panel
+ * anyway.
+ *
+ * That is deliberate, and it fixes a dead end that shipped: collapsing "not an
+ * owner" together with "could not tell" showed the board owner a screen telling them
+ * to ask the board owner, and configuring was the only exit, so the instance could
+ * never become usable. An unconfigured instance holds NOTHING to protect — no board
+ * id, no column mapping, no uploaded template — so refusing buys no security and
+ * costs the app entirely. Once `isConfigured` is true the gate is strict again and
+ * only a proven owner sees the settings affordance.
  */
 export function SettingsGate({ children }) {
   const { settings, isLoading, isConfigured, updateSettings } = useSettings();
-  const { isOwner, isLoading: isOwnerLoading } = useIsOwner();
+  const { isOwner, isLoading: isOwnerLoading, determined } = useIsOwner();
   const [isPanelOpen, setIsPanelOpen] = useState(false);
 
   if (isLoading) return <GateLoading />;
@@ -238,7 +253,8 @@ export function SettingsGate({ children }) {
   if (!isConfigured) {
     if (isOwnerLoading) return <GateLoading />;
 
-    if (!isOwner) {
+    // Only a PROVEN non-owner is refused. Undetermined falls through to the panel.
+    if (determined && !isOwner) {
       return (
         <Flex
           direction="column"
@@ -256,9 +272,17 @@ export function SettingsGate({ children }) {
       );
     }
 
-    // Owner + unusable settings: the panel is the ONLY thing that renders. It is
-    // not dismissible here — closing it would leave a surface that cannot work.
-    return <SettingsPanel forced settings={settings} updateSettings={updateSettings} />;
+    // Owner (or ownership undetermined) + unusable settings: the panel is the ONLY
+    // thing that renders. It is not dismissible here — closing it would leave a
+    // surface that cannot work.
+    return (
+      <SettingsPanel
+        forced
+        settings={settings}
+        updateSettings={updateSettings}
+        ownershipUnverified={!determined}
+      />
+    );
   }
 
   return (

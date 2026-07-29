@@ -82,12 +82,78 @@ const CONFIGURED = {
 };
 
 /**
- * The role dropdown for a Hebrew role label.
+ * The role dropdown's TRIGGER for a Hebrew role label.
  *
- * `{ selector: 'select' }` on purpose: several controls in this panel legitimately
- * mention the same role name, and this pins the query to the actual dropdown.
+ * `{ selector: 'button' }` on purpose: several controls in this panel legitimately
+ * mention the same role name, and this pins the query to the actual dropdown. It is a
+ * button rather than a `<select>` because the picker is now a body-portal Popover —
+ * see `openRole` below.
  */
-const roleSelect = (label) => screen.getByLabelText(label, { selector: 'select' });
+const roleSelect = (label) => screen.getByLabelText(label, { selector: 'button' });
+
+/**
+ * Open a role's menu and hand back its listbox.
+ *
+ * The picker is a body-portal Popover with a `role="listbox"` of `role="option"`
+ * buttons, not a native `<select>` — a native menu is drawn by the OS and cannot be
+ * themed, so it looked like a different application next to the Vibe inputs. These
+ * helpers exist so each test still reads as "pick this column for this role" rather
+ * than as popover mechanics.
+ */
+const openRole = async (user, label) => {
+  await user.click(roleSelect(label));
+  return screen.findByRole('listbox', { name: label });
+};
+
+/** Every option in a role's menu, as column ids, in render order. */
+const optionIds = (listbox) =>
+  [...listbox.querySelectorAll('[data-column-id]')].map((node) =>
+    node.getAttribute('data-column-id')
+  );
+
+/** The column id a role currently shows, the way a native select's `value` read. */
+const roleValue = (label) => roleSelect(label).getAttribute('data-value');
+
+/**
+ * Column ids listed under one named group heading of a role's OPEN menu.
+ * Returns null when the heading is absent — a lone group renders flat, with no
+ * headings at all, which is a meaningful state (see ColumnSelect.jsx).
+ */
+const groupedIds = (listbox, groupLabel) => {
+  const nodes = [...listbox.querySelectorAll('li')];
+  const start = nodes.findIndex(
+    (li) => li.getAttribute('role') === 'presentation' && li.textContent === groupLabel
+  );
+  if (start < 0) return null;
+  const ids = [];
+  for (const li of nodes.slice(start + 1)) {
+    const option = li.querySelector('[data-column-id]');
+    if (!option) break; // the next heading ends this group
+    ids.push(option.getAttribute('data-column-id'));
+  }
+  return ids;
+};
+
+/** How many group headings a role's open menu renders (0 = one flat list). */
+const headingCount = (listbox) =>
+  [...listbox.querySelectorAll('li[role="presentation"]')].filter(
+    (li) => !li.querySelector('[data-column-id]')
+  ).length;
+
+/**
+ * Pick a column by ID rather than by visible label: the label is "title (type)" and
+ * titles are owner-authored, so an id is the only hook a rename cannot break.
+ */
+const pickColumn = async (user, label, columnId) => {
+  const listbox = await openRole(user, label);
+  const option = listbox.querySelector(`[data-column-id="${columnId}"]`);
+  if (!option) {
+    throw new Error(
+      `option "${columnId}" is not offered for role "${label}" — offered: ${optionIds(listbox).join(', ')}`
+    );
+  }
+  await user.click(option);
+};
 
 /**
  * Vibe v4 renders a disabled Button with `aria-disabled` + `tabindex=-1` + a class,
@@ -135,47 +201,54 @@ describe('mounting', () => {
       expect(roleSelect(label)).toBeInTheDocument();
     }
     // Each dropdown offers every board column plus the empty choice.
-    expect(roleSelect('דיווח').querySelectorAll('option')).toHaveLength(
-      BOARD_META.columns.length + 1
-    );
+    const user = userEvent.setup();
+    const listbox = await openRole(user, 'דיווח');
+    expect(optionIds(listbox)).toHaveLength(BOARD_META.columns.length + 1);
   });
 
   it('groups each dropdown by the types that suit ITS OWN role', async () => {
+    const user = userEvent.setup();
     renderPanel();
     await waitFor(() => expect(screen.getByTestId('board-name')).toBeInTheDocument());
 
-    /** Option ids under a named optgroup of one role's dropdown. */
-    const grouped = (label, groupLabel) => {
-      const group = [...roleSelect(label).querySelectorAll('optgroup')].find(
-        (g) => g.getAttribute('label') === groupLabel
-      );
-      return group ? [...group.querySelectorAll('option')].map((o) => o.value) : null;
+    /** Open one role and read the ids under a named heading. Closes again after. */
+    const grouped = async (label, groupLabel) => {
+      const listbox = await openRole(user, label);
+      const ids = groupedIds(listbox, groupLabel);
+      await user.keyboard('{Escape}');
+      return ids;
     };
 
     // committee wants a mirror; report wants text/long_text; date wants a date.
-    expect(grouped('שם הועדה האזורית', 'עמודות מתאימות')).toEqual(['mirror_committee']);
+    expect(await grouped('שם הועדה האזורית', 'עמודות מתאימות')).toEqual(['mirror_committee']);
     // report accepts text AND long_text, so both suitable columns land first.
-    expect(grouped('דיווח', 'עמודות מתאימות')).toEqual(['text_action', 'long_text_report']);
-    expect(grouped('תאריך דיווח', 'עמודות מתאימות')).toEqual(['date_report']);
-    expect(grouped('עמודת האחראי', 'עמודות מתאימות')).toEqual(['people_owner']);
+    expect(await grouped('דיווח', 'עמודות מתאימות')).toEqual(['text_action', 'long_text_report']);
+    expect(await grouped('תאריך דיווח', 'עמודות מתאימות')).toEqual(['date_report']);
+    expect(await grouped('עמודת האחראי', 'עמודות מתאימות')).toEqual(['people_owner']);
     // Nothing is hidden — the unsuitable columns are still offered, just second.
-    expect(grouped('דיווח', 'עמודות נוספות')).toEqual([
+    expect(await grouped('דיווח', 'עמודות נוספות')).toEqual([
       'name',
       'mirror_committee',
       'date_report',
       'people_owner',
     ]);
-    // `action` accepts any type, so its dropdown is a single ungrouped list.
-    expect(roleSelect('פעולה').querySelectorAll('optgroup')).toHaveLength(0);
+
+    // `action` accepts any type, so its menu is a single flat list with NO headings —
+    // a heading reading "suitable columns" above literally everything would be noise.
+    const actionList = await openRole(user, 'פעולה');
+    expect(headingCount(actionList)).toBe(0);
   });
 
   it('shows each stored mapping as the selected option', async () => {
     renderPanel();
     await waitFor(() => expect(screen.getByTestId('board-name')).toBeInTheDocument());
 
-    expect(roleSelect('פעולה')).toHaveValue('text_action');
-    expect(roleSelect('שם הועדה האזורית')).toHaveValue('mirror_committee');
-    expect(roleSelect('עמודת האחראי')).toHaveValue('people_owner');
+    expect(roleValue('פעולה')).toBe('text_action');
+    expect(roleValue('שם הועדה האזורית')).toBe('mirror_committee');
+    expect(roleValue('עמודת האחראי')).toBe('people_owner');
+    // The TRIGGER has to show it too, not just carry it — an owner who cannot read the
+    // current mapping off the closed control would re-map it blind.
+    expect(roleSelect('פעולה')).toHaveTextContent('(text)');
   });
 
   it('renders the version label in the footer', () => {
@@ -280,7 +353,7 @@ describe('saving', () => {
 
     expectSaveBlocked(true);
 
-    await user.selectOptions(roleSelect('עמודת האחראי'), 'people_owner');
+    await pickColumn(user, 'עמודת האחראי', 'people_owner');
 
     expectSaveBlocked(false);
   });
@@ -320,7 +393,7 @@ describe('the type warning', () => {
     // The item-name column in the committee (mirror) role: allowed, but flagged.
     // Deliberately a column no other role uses — a reused column is a DIFFERENT
     // (hard) error from validateSettings and would mask the soft type warning.
-    await user.selectOptions(roleSelect('שם הועדה האזורית'), 'name');
+    await pickColumn(user, 'שם הועדה האזורית', 'name');
 
     expect(screen.getByTestId('warning-docs-export-role-committee')).toHaveTextContent(
       'היא מסוג name'
@@ -483,7 +556,7 @@ describe('the forced mode', () => {
 describe('a newer blob arriving while the panel is open', () => {
   it('re-seeds the draft instead of holding stale values', async () => {
     const { rerender } = renderPanel();
-    await waitFor(() => expect(roleSelect('פעולה')).toHaveValue('text_action'));
+    await waitFor(() => expect(roleValue('פעולה')).toBe('text_action'));
 
     // A different object — what a reload under a new instanceId produces.
     rerender(
@@ -493,7 +566,7 @@ describe('a newer blob arriving while the panel is open', () => {
       />
     );
 
-    await waitFor(() => expect(roleSelect('פעולה')).toHaveValue('name'));
+    await waitFor(() => expect(roleValue('פעולה')).toBe('name'));
   });
 
   it('re-seeds the header override TEXT FIELDS too, not just the dropdowns', async () => {

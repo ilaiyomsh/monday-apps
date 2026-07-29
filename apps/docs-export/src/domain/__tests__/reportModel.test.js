@@ -215,12 +215,16 @@ describe('buildReportModel — the table rows', () => {
     expect(build({ items, selectedCommittees: ['באר שבע'] }).table.rows).toHaveLength(1);
   });
 
-  it('does NOT match a committee that is merely a comma-separated part of one value', () => {
-    // display_value 'גליל, גולן' from ONE source value is the committee named
-    // "גליל, גולן" — selecting 'גליל' must not pull it in (probe finding 3).
+  it('treats each half of a comma-bearing display_value as its own committee', () => {
+    // The accepted trade-off of reading display_value only (owner's call 2026-07-29):
+    // 'גליל, גולן' becomes TWO committees, so either half selects the row and the
+    // un-split whole selects nothing. See domain/committees.js for what the exact
+    // answer would cost. Asserted end-to-end here, not just in the unit, because the
+    // report is where a mis-split would actually reach a reader.
     const items = [item('1', 'ביקור', ['גליל, גולן'], 'ד1', '2026-07-27')];
-    expect(build({ items, selectedCommittees: ['גליל'] }).table.rows).toEqual([]);
-    expect(build({ items, selectedCommittees: ['גליל, גולן'] }).table.rows).toHaveLength(1);
+    expect(build({ items, selectedCommittees: ['גליל'] }).table.rows).toHaveLength(1);
+    expect(build({ items, selectedCommittees: ['גולן'] }).table.rows).toHaveLength(1);
+    expect(build({ items, selectedCommittees: ['גליל, גולן'] }).table.rows).toEqual([]);
   });
 
   it('emits no rows for no items', () => {

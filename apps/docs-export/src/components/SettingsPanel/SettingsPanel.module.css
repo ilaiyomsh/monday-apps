@@ -65,13 +65,19 @@
 }
 
 /*
- * A NATIVE <select>, deliberately: Vibe's Dropdown/Combobox option clicks are dead
- * inside a monday board view (the sibling `discussions` app had to hand-roll a
- * portal picker for the same reason). A native select is rendered by the browser
- * itself, so it cannot be swallowed by the iframe's overlay handling, and it gets
- * RTL, keyboard and mobile behaviour for free. Styled to sit next to Vibe inputs.
+ * The column picker's TRIGGER. It is a <button>, not a <select>: a native select is
+ * drawn by the operating system, so it arrives in the OS's own chrome (a dark macOS
+ * popup with system checkmarks) and cannot be themed — next to the Vibe inputs in
+ * this same panel it read as a different application. The menu itself is a
+ * body-portal Popover, matching ReportView/CommitteeMultiPicker, so both pickers in
+ * the app share one visual language. See ColumnSelect.jsx for the full reasoning.
+ *
+ * Kept named `.select` so the class keeps describing its ROLE rather than its tag.
  */
 .select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   inline-size: 100%;
   min-block-size: 32px;
   padding-inline: 8px;
@@ -81,6 +87,12 @@
   color: var(--primary-text-color, #323338);
   font-family: inherit;
   font-size: var(--font-size-general-label, 14px);
+  text-align: start;
+  cursor: pointer;
+}
+
+.select:hover:not(:disabled) {
+  border-color: var(--primary-color, #0073ea);
 }
 
 .select:focus-visible {
@@ -91,6 +103,91 @@
 .select:disabled {
   background-color: var(--disabled-background-color, #f5f6f8);
   color: var(--disabled-text-color, #c3c6d4);
+  cursor: not-allowed;
+}
+
+/* Nothing chosen yet — muted, so a mapped role reads as different from an empty one
+ * at a glance rather than only on reading. */
+.select[data-placeholder='true'] .selectValue {
+  color: var(--secondary-text-color, #676879);
+}
+
+.selectValue {
+  flex: 1 1 auto;
+  /* A long column title must not push the caret out of the control. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectCaret {
+  flex: 0 0 auto;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--secondary-text-color, #676879);
+}
+
+/* ---- the portaled menu's CONTENTS. The panel frame (placement, shadow, z-index)
+ * belongs to components/shared/Popover.module.css, so the portal keeps one owner. ---- */
+
+.optionList {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-block-size: 300px;
+  overflow-y: auto;
+}
+
+.optionList:focus-visible {
+  /* The list itself takes DOM focus so it receives the arrow keys; a ring around the
+   * whole menu would be noise, and the active row is already marked. */
+  outline: none;
+}
+
+.optionHeading {
+  padding: 6px 8px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--secondary-text-color, #676879);
+}
+
+.option {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 14px;
+  inline-size: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  text-align: start;
+  color: var(--primary-text-color, #323338);
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+}
+
+/* Keyboard and mouse share ONE highlight, driven by data-active — so arrowing and
+ * hovering can never show two different "current" rows at the same time. */
+.option[data-active='true'] {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.option[aria-selected='true'] {
+  font-weight: 600;
+}
+
+.optionLabel {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.optionCheck {
+  flex: 0 0 auto;
+  color: var(--primary-color, #0073ea);
 }
 
 .boardRow {
@@ -196,4 +293,12 @@
 .modal *::before,
 .modal *::after {
   box-sizing: border-box;
+}
+
+/* The "we could not verify you own this board" notice, shown only when the gate
+ * opened an unconfigured instance without proving ownership. Sits above the sections
+ * with the same gutter they use, so it reads as part of the panel rather than as a
+ * floating alert. */
+.ownershipWarning {
+  margin-block-end: 16px;
 }

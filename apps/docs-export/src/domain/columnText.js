@@ -23,13 +23,21 @@
  * served by the interface field `text` alone (status, dropdown, text, long_text,
  * numbers …) — selecting nothing extra keeps the query's complexity down.
  *
- * `mirror` deliberately also pulls `mirrored_items`: `display_value` joins the
- * mirrored values with ", " and a single source value containing ", " is
- * byte-identical to two values, so the structured list is the ONLY unambiguous
- * source of the individual committee names (see domain/committees.js).
- * `mirrored_value` is the `MirroredValue` union; only `TextValue` is
- * probe-confirmed as a member, so non-text sources fall back to
- * `linked_item { name }` instead of risking an unverified union member.
+ * `mirror` selects `display_value` ONLY (owner's call, 2026-07-29).
+ *
+ * `mirrored_items { … mirrored_value { … } }` was here and has been removed. It cost
+ * ~+8 complexity on every query and, worse, it did not work for the common case:
+ * `mirrored_value` is the `MirroredValue` UNION with only `TextValue` probe-confirmed
+ * as a member, so a mirror over a status/dropdown source (it renders as a chip)
+ * matched no fragment and returned nothing — which then drove a fallback that read
+ * the LINKED ITEM'S TITLE as if it were the mirrored value. See
+ * domain/committees.js for the full account.
+ *
+ * `display_value` is what monday renders in the cell, so it always matches the board.
+ * The one accepted cost is that a committee name containing ", " cannot be told apart
+ * from two names when split. If that ever matters, re-add a `mirrored_value`
+ * selection — but PROBE the union's membership first (sandbox 16291824): an inline
+ * fragment on a non-member invalidates the entire query.
  */
 const TYPE_FRAGMENTS = {
   date: '... on DateValue { date time }',
@@ -38,8 +46,7 @@ const TYPE_FRAGMENTS = {
   // role list can be passed straight through without a translation step.
   person: '... on PeopleValue { persons_and_teams { id kind } text }',
   checkbox: '... on CheckboxValue { checked }',
-  mirror:
-    '... on MirrorValue { display_value mirrored_items { linked_item { id name } mirrored_value { ... on TextValue { text } } } }',
+  mirror: '... on MirrorValue { display_value }',
   formula: '... on FormulaValue { display_value }',
   board_relation: '... on BoardRelationValue { display_value linked_item_ids }',
   timeline: '... on TimelineValue { from to }',

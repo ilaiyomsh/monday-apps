@@ -52,8 +52,11 @@ vi.mock('../../utils/logger', () => ({
   default: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
 }));
 vi.mock('../../components/SettingsPanel', () => ({
-  SettingsPanel: ({ forced }) => (
-    <div data-testid="settings-panel">{forced ? 'forced' : 'optional'}</div>
+  SettingsPanel: ({ forced, ownershipUnverified }) => (
+    <div data-testid="settings-panel">
+      {forced ? 'forced' : 'optional'}
+      {ownershipUnverified ? ' unverified' : ''}
+    </div>
   ),
 }));
 
@@ -100,7 +103,7 @@ beforeEach(() => {
   seen = undefined;
   loadSettings.mockResolvedValue(null);
   saveSettings.mockImplementation(async (_context, partial) => partial);
-  useIsOwner.mockReturnValue({ isOwner: true, isLoading: false });
+  useIsOwner.mockReturnValue({ isOwner: true, isLoading: false, determined: true });
 });
 
 afterEach(() => {
@@ -387,10 +390,11 @@ describe('SettingsGate', () => {
     expect(screen.queryByTestId('app-body')).toBeNull();
   });
 
-  it('shows a Hebrew notice — never the panel — to a non-owner of an unconfigured instance', async () => {
+  it('shows a Hebrew notice — never the panel — to a PROVEN non-owner of an unconfigured instance', async () => {
     setContext({ instanceId: 55555555 });
     loadSettings.mockResolvedValue(null);
-    useIsOwner.mockReturnValue({ isOwner: false, isLoading: false });
+    // determined:true — monday answered, and the answer was "not an owner".
+    useIsOwner.mockReturnValue({ isOwner: false, isLoading: false, determined: true });
 
     renderGate();
 
@@ -399,10 +403,63 @@ describe('SettingsGate', () => {
     expect(screen.queryByTestId('app-body')).toBeNull();
   });
 
+  it('OPENS the panel for an unconfigured instance when ownership could not be determined', async () => {
+    // The dead-end fix. Previously "could not tell" collapsed into "not an owner", so
+    // the board owner saw a screen telling them to ask the board owner — and since
+    // configuring was the only exit, the instance could never become usable. An
+    // unconfigured instance holds nothing to protect (no board id, no column mapping,
+    // no template), so refusing buys no security and costs the whole app.
+    setContext({ instanceId: 55555555 });
+    loadSettings.mockResolvedValue(null);
+    useIsOwner.mockReturnValue({ isOwner: false, isLoading: false, determined: false });
+
+    renderGate();
+
+    await waitFor(() => expect(screen.getByTestId('settings-panel')).toBeInTheDocument());
+    expect(screen.getByTestId('settings-panel')).toHaveTextContent('forced');
+    expect(screen.queryByTestId('settings-not-configured')).toBeNull();
+  });
+
+  it('tells the user WHY the panel opened unverified, so an open gate is never silent', async () => {
+    setContext({ instanceId: 55555555 });
+    loadSettings.mockResolvedValue(null);
+    useIsOwner.mockReturnValue({ isOwner: false, isLoading: false, determined: false });
+
+    renderGate();
+
+    await waitFor(() => expect(screen.getByTestId('settings-panel')).toBeInTheDocument());
+    expect(screen.getByTestId('settings-panel')).toHaveTextContent('unverified');
+  });
+
+  it('does NOT flag a proven owner as unverified', async () => {
+    setContext({ instanceId: 55555555 });
+    loadSettings.mockResolvedValue(null);
+    useIsOwner.mockReturnValue({ isOwner: true, isLoading: false, determined: true });
+
+    renderGate();
+
+    await waitFor(() => expect(screen.getByTestId('settings-panel')).toBeInTheDocument());
+    expect(screen.getByTestId('settings-panel')).not.toHaveTextContent('unverified');
+  });
+
+  it('keeps a CONFIGURED instance strict — undetermined ownership gets no settings entry', async () => {
+    // The relaxation is scoped to the unconfigured case ONLY. Once real settings exist
+    // there IS something to protect, and an unproven viewer must not reach them.
+    setContext({ instanceId: 55555555 });
+    loadSettings.mockResolvedValue(CONFIGURED);
+    useIsOwner.mockReturnValue({ isOwner: false, isLoading: false, determined: false });
+
+    renderGate();
+
+    await waitFor(() => expect(screen.getByTestId('app-body')).toBeInTheDocument());
+    expect(screen.queryByTestId('open-settings')).toBeNull();
+    expect(screen.queryByTestId('settings-panel')).toBeNull();
+  });
+
   it('waits for the ownership answer before choosing panel or notice', async () => {
     setContext({ instanceId: 55555555 });
     loadSettings.mockResolvedValue(null);
-    useIsOwner.mockReturnValue({ isOwner: false, isLoading: true });
+    useIsOwner.mockReturnValue({ isOwner: false, isLoading: true, determined: false });
 
     renderGate();
 
@@ -434,7 +491,7 @@ describe('SettingsGate', () => {
   it('gives a non-owner no way into settings', async () => {
     setContext({ instanceId: 55555555 });
     loadSettings.mockResolvedValue(CONFIGURED);
-    useIsOwner.mockReturnValue({ isOwner: false, isLoading: false });
+    useIsOwner.mockReturnValue({ isOwner: false, isLoading: false, determined: true });
 
     renderGate();
 

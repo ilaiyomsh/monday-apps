@@ -10,6 +10,16 @@
   max-width: 720px;
   padding: var(--content-gutter, 16px);
   box-sizing: border-box;
+
+  /* Centre the capped column in the iframe. `margin-inline` (not `margin-left/right`)
+     so it stays centred under both dir=rtl and dir=ltr — without this the column has
+     no auto margin and collapses onto whichever edge is the block's start, leaving a
+     narrow form stranded against one side of a very wide board view. */
+  margin-inline: auto;
+
+  /* The CONTROLS stay start-aligned inside the column (the Flex sets align=start);
+     only the column itself is centred. Centre-aligning individual form rows would
+     make the labels and their fields drift apart from each other. */
 }
 
 .header {
