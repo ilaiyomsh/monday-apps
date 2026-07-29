@@ -12,6 +12,7 @@ import {
   hasPendingLabelEdits,
   pruneSettingsForActiveLabels,
   remapDraftLabelKeys,
+  renumberDraftIndexes,
   reorderLabelsDraft,
   resolveNewLabelIds,
 } from '../../domain/statusLabelDraft';
@@ -606,7 +607,16 @@ function ColumnSettings({ context, variant = 'overlay' }) {
           throw new Error('חסר revision לעמודת הסטטוס — לא ניתן לעדכן לייבלים');
         }
         const liveFresh = normalizeStatusLabels(liveColumn.settings);
-        const payload = buildStatusLabelsUpdatePayload(labelsDraft, liveFresh);
+        /*
+         * Renumber to 0..n-1 HERE, after the pending-edits check and before the
+         * payload: the payload sends positions (deactivated rows are packed above the
+         * actives so no two indexes collide), and resolveNewLabelIds below matches a
+         * new label by text and index — so the draft has to hold the same numbers.
+         * Doing it before `hasPendingLabelEdits` would read as an edit on any column
+         * with a removed label and fire this mutation on every save.
+         */
+        const orderedDraft = renumberDraftIndexes(labelsDraft);
+        const payload = buildStatusLabelsUpdatePayload(orderedDraft, liveFresh);
         const mutation = buildUpdateStatusColumnMutation(payload);
         await mondayService.query(mutation, {
           boardId: String(boardId),
@@ -630,11 +640,11 @@ function ColumnSettings({ context, variant = 'overlay' }) {
          * is what lets a label be created AND restricted in one visit.
          */
         const idByClientKey = resolveNewLabelIds({
-          draft: labelsDraft,
+          draft: orderedDraft,
           liveBefore: liveFresh,
           refreshedLabels,
         });
-        unresolvedNewLabels = labelsDraft.filter(
+        unresolvedNewLabels = orderedDraft.filter(
           (label) => label.isNew
             && !idByClientKey[label.clientKey]
             && hasConfiguredRule(draft, label.clientKey),
