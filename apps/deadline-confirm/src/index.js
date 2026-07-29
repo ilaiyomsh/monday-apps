@@ -110,7 +110,18 @@ if (!emailSender) {
   logWarn('server', 'Gmail sender not configured — digest sending is disabled', {});
 }
 
-const app = createApp({ storage, api, rateLimiters, env, emailSender });
+// `version` is stamped in here, not in getEnv(): the number lives in
+// package.json, which is a file read, not an env var. Without it /health
+// answered `"dev"` on every deployment — so there was no way to tell from the
+// outside which version a container was running, exactly when that mattered
+// most (verifying a live deploy had actually landed).
+const app = createApp({
+  storage,
+  api,
+  rateLimiters,
+  env: { ...env, version: APP_VERSION },
+  emailSender,
+});
 
 const server = app.listen(env.port, () => {
   logInfo('server', 'deadline-confirm listening', { port: env.port, localStorage: env.useLocalStorage });
