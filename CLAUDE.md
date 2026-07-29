@@ -100,6 +100,43 @@ and adds the Codex-specific wiring. See "Codex sessions" below.
   workspace globs shipped first, numeric App ID resolved and surfaced (a wrong
   ID silently deploys to another app).
 
+### GitHub Pages — a SECOND target, `docs-export` only
+
+`docs-export` also publishes to **GitHub Pages** via
+`.github/workflows/pages-docs-export.yml`. This is an additional target beside the
+monday CDN, not a replacement, and it is the ONLY app that uses it.
+
+- **URL: <https://ilaiyomsh.github.io/monday-apps/>.** A repository has exactly one
+  Pages site, so that URL belongs to `docs-export`. `base: './'` in its
+  `vite.config.js` is what makes the bundle resolve under the `/monday-apps/`
+  sub-path — **never change it to an absolute `/`**.
+- Triggers on push to `develop` under `apps/docs-export/**` (plus
+  `packages/error-kit/**`), publishes **only** `apps/docs-export/dist`, and has
+  `workflow_dispatch`. Keep the path filter narrow: nothing else in this monorepo
+  may be built or published by it.
+- Requires the repository's Pages **Source = GitHub Actions** (a repo setting, not a
+  file). With the legacy "Deploy from a branch" source it builds the repo root as
+  Jekyll and silently ignores this workflow's artifact.
+- Same sourcemap contract as the CDN workflows: `sourcemap: 'hidden'`, archived as a
+  90-day artifact keyed by commit SHA, then hard-deleted from the publish dir with a
+  check that FAILS the run if any `.map` survives. Serving a `.map` publishes source.
+- **What Pages does and does not give you.** It proves the bundle builds, loads and
+  degrades correctly, and it is a link you can send. It is **not** a usable instance:
+  outside monday there is no context, so no board, no user, no ownership — the app
+  correctly lands on its "not configured" surface and stops. Driving the app needs
+  either `dev:mock` locally or a real monday board view.
+- The repo is public, so the Pages build bakes `AXIOM_INGEST_TOKEN` into a publicly
+  readable bundle. Write-only and scoped to one dataset — the same exposure every CDN
+  client build already has — but now at a trivially discoverable URL.
+
+**`docs-export` is NOT on the monday CDN pipeline yet.** It has no
+`deploy-{draft,live}-docs-export.yml`, no `APP_DOCS_EXPORT_ID` secret, and no
+`SURFACES` entry in `scripts/error-wiring-audit.mjs` (its source IS scanned via
+`APP_SRC_DIRS`, but the structural boot-wiring and `VITE_AXIOM_*` checks are not
+enforced for it). So merging to `develop` updates Pages ONLY, and merging to `main`
+does nothing for it. Completing the onboarding is blocked on the owner creating the
+app in the Developer Center and supplying the numeric App ID.
+
 ## Structure & app IDs
 
 ```
@@ -107,6 +144,8 @@ apps/discussions                    flat app (client, build/)
 apps/team-people-column             flat app (client, dist/)
 apps/deadline-confirm               flat app (server, app root; admin SPA served from it)
 apps/telemetry-dashboard            flat app (server, app root; dashboard SPA served from it)
+apps/docs-export                    flat app (client, dist/) — NOT on the CDN pipeline;
+                                    publishes to GitHub Pages only (see Deploys)
 apps/axis/{planner,tracker,day-off,sync-calender}   nested system
 apps/axis/services/{app-core,monday-api}            axis shared runtime code
 apps/axis/docs/FOLLOW-UPS.md        onboarding-debt ledger
@@ -133,6 +172,15 @@ packages/shared                     EMPTY STUB — see below
   | deadline-confirm | `apps/deadline-confirm` | 11704868 | server, app root |
   | telemetry-dashboard | `apps/telemetry-dashboard` | secret `APP_TELEMETRY_DASHBOARD_ID` set — numeric ID lives in the secret, not mirrored here (slug `telemetry-dashboard`) | server, app root |
   | twyst-your-status | `apps/twyst-your-status` | secret `APP_TWYST_YOUR_STATUS_ID` set — numeric ID lives in the secret, not mirrored here (slug `twyst-your-status`) | client, `dist/` |
+  | docs-export | `apps/docs-export` | **none yet** — no App ID, no `APP_DOCS_EXPORT_ID` secret, no `deploy-{draft,live}` workflow. Ships to **GitHub Pages** only (slug `docs-export`) | client, `dist/` |
+
+- **`docs-export` local dev:** `pnpm --filter ./apps/docs-export dev:mock` on port
+  **8304** renders it OUTSIDE the monday iframe against `src/dev-harness/`, so it needs
+  no token and no App ID. Every app in this repo owns a distinct dev port so several can
+  run at once; 8304 was the first free one after 5173/5180/8301/8302/8303. Also declared
+  in `.claude/launch.json` for the in-app browser pane. Board-view app; RTL/Hebrew-first;
+  its own `apps/docs-export/CLAUDE.md` carries the app-internal rules (the five column
+  roles, the one-query-per-interaction rule, the RTL `.docx` recipe).
 
 ## Quality gates
 

@@ -109,12 +109,39 @@ app root) — **read the app's workflow file, never assume**. Shared-path fan-ou
 axis apps. Full detail — including the single emergency lever and the dev-live
 tunnel detach rule — is in `CLAUDE.md` and the `monday-cicd` skill.
 
+**GitHub Pages — a SECOND target, `docs-export` only.** `docs-export` publishes to
+<https://ilaiyomsh.github.io/monday-apps/> via
+`.github/workflows/pages-docs-export.yml`, on push to `develop` under
+`apps/docs-export/**`. It is additional to the monday CDN, not a replacement, and no
+other app uses it. A repo has exactly one Pages site, so that URL is this app's, and
+`base: './'` in its `vite.config.js` is what makes the bundle work under the
+`/monday-apps/` sub-path — **never make it an absolute `/`**. Keep the workflow's path
+filter narrow: it must publish only `apps/docs-export/dist`. It needs the repository's
+Pages **Source = GitHub Actions** (a repo setting); with the legacy "Deploy from a
+branch" source it builds the repo root as Jekyll and ignores the artifact. Sourcemaps
+follow the CDN contract: `hidden`, archived 90 days by commit SHA, then deleted from
+the publish dir with a check that fails the run if any `.map` survives.
+
+Pages proves the bundle builds, loads and degrades correctly — it is **not** a usable
+instance. Outside monday there is no context, so no board, no user, no ownership, and
+the app correctly stops on its "not configured" surface. Drive it with `dev:mock` or a
+real board view instead.
+
+**`docs-export` is NOT on the CDN pipeline yet:** no `deploy-{draft,live}-docs-export.yml`,
+no `APP_DOCS_EXPORT_ID` secret, and no `SURFACES` entry in
+`scripts/error-wiring-audit.mjs` (its source IS scanned via `APP_SRC_DIRS`, but the
+structural boot-wiring and `VITE_AXIOM_*` checks are not enforced for it). Merging to
+`develop` updates Pages only; merging to `main` does nothing for it. Blocked on the
+owner creating the app in the Developer Center and supplying the numeric App ID.
+
 ## Structure & app IDs
 
 ```
 apps/discussions                    flat app (client, build/)
 apps/team-people-column             flat app (client, dist/)
 apps/deadline-confirm               flat app (server, app root)
+apps/docs-export                    flat app (client, dist/) — GitHub Pages only,
+                                    NOT on the CDN pipeline (see Deploys)
 apps/axis/{planner,tracker,day-off,sync-calender}   nested system
 apps/axis/services/{app-core,monday-api}            axis shared runtime code
 packages/shared                     EMPTY STUB — do not add code there
@@ -131,6 +158,12 @@ packages/shared                     EMPTY STUB — do not add code there
 | deadline-confirm | `apps/deadline-confirm` | 11704868 | server, app root |
 | telemetry-dashboard | `apps/telemetry-dashboard` | secret `APP_TELEMETRY_DASHBOARD_ID` set — numeric ID lives in the secret, not mirrored here (slug `telemetry-dashboard`) | server, app root |
 | twyst-your-status | `apps/twyst-your-status` | secret `APP_TWYST_YOUR_STATUS_ID` set — numeric ID lives in the secret, not mirrored here (slug `twyst-your-status`) | client, `dist/` |
+| docs-export | `apps/docs-export` | **none yet** — no App ID, no secret, no deploy workflow; GitHub Pages only (slug `docs-export`) | client, `dist/` |
+
+`docs-export` local dev: `pnpm --filter ./apps/docs-export dev:mock` on port **8304**
+renders it OUTSIDE the monday iframe against `src/dev-harness/` — no token, no App ID
+needed. Every app owns a distinct dev port so several can run at once. Board-view app,
+RTL/Hebrew-first; `apps/docs-export/CLAUDE.md` holds the app-internal rules.
 
 Real shared runtime code is `@axis/app-core` (`apps/axis/services/app-core`).
 `packages/shared` is an empty stub no app imports — touching it redeploys all six

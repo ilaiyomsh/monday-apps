@@ -141,13 +141,55 @@ board_view context carries **no permissions** — so owner detection must query
 - Timeline values come back as full ISO timestamps, not `YYYY-MM-DD` (slice to 10), and
   `numbers` arrives as a string.
 
-## Hosting
+## Hosting — GitHub Pages today, the monday CDN later
 
-Two targets. The monday CDN via the pipeline (not yet onboarded — see the root
-`CLAUDE.md`), and **GitHub Pages** at `https://ilaiyomsh.github.io/monday-apps/` via
-`.github/workflows/pages-docs-export.yml`, which builds from `develop` and publishes
-**only** `apps/docs-export/dist`. A repo has one Pages site, so that URL belongs to
-this app.
+Two targets were planned. **Only one is live.**
+
+### GitHub Pages — live
+
+<https://ilaiyomsh.github.io/monday-apps/>, built by
+`.github/workflows/pages-docs-export.yml`.
+
+- Triggers on push to `develop` touching `apps/docs-export/**` or
+  `packages/error-kit/**`, plus `workflow_dispatch`. Publishes **only**
+  `apps/docs-export/dist`. Keep that filter narrow — nothing else in the monorepo may
+  be built or published by it.
+- A repository has exactly **one** Pages site, so that URL belongs to this app.
+  `base: './'` in `vite.config.js` is what makes the bundle resolve under the
+  `/monday-apps/` sub-path; an absolute `/` breaks every asset.
+- Needs the repository's Pages **Source = GitHub Actions**. That is a repo setting, not
+  a file: with the legacy "Deploy from a branch" source, Pages builds the repo root as
+  a Jekyll site and silently ignores this workflow's artifact.
+- Sourcemaps follow the CDN workflows' contract: `sourcemap: 'hidden'`, archived as a
+  90-day artifact keyed by commit SHA (for stack symbolication), then hard-deleted from
+  the publish dir with a check that FAILS the run if any `.map` survives — serving a
+  `.map` would publish the source.
+- `index.html` is copied to `404.html` so a deep link works instead of GitHub's 404.
+
+**What Pages is for, and what it is not.** It proves the bundle builds, loads and
+degrades correctly, and it is a link you can hand to someone. It is **not a usable
+instance**: outside monday there is no context, so no board, no user and no ownership,
+and the app correctly settles on its "not configured" surface and stops. To actually
+drive it, use `dev:mock` or a real board view. Do not read that screen as a Pages
+failure — the 4s `MondayContext` watchdog reaching it is the designed behaviour.
+
+The repo is public, so this build bakes `AXIOM_INGEST_TOKEN` into a publicly readable
+bundle. It is write-only and scoped to one dataset — the same exposure every CDN client
+build already carries — but now at an easily discoverable URL.
+
+### monday CDN — NOT wired
+
+No `deploy-{draft,live}-docs-export.yml`, no `APP_DOCS_EXPORT_ID` secret, and no
+`SURFACES` entry in `scripts/error-wiring-audit.mjs` (this app's source IS scanned via
+`APP_SRC_DIRS`, so raw-fetch and console-in-catch are enforced, but the structural
+boot-wiring order and the `VITE_AXIOM_*` bake checks are not). Consequence: **merging to
+`develop` updates Pages only, and merging to `main` does nothing for this app.**
+
+Completing it needs the owner to create the app in the Developer Center
+(`AppFeatureBoardView`, scopes `boards:read` + `me:read`) and supply the numeric App ID;
+then `monday-cicd`'s onboard flow. `boards:read` is not optional even before that — the
+ownership check and the item query both need it, and without it the settings gate opens
+"unverified" (see `services/owners.js`) and the report returns nothing.
 
 ## i18n
 
