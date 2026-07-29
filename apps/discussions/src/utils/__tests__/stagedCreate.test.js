@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyStageAdvance, applyStageFailure, bumpReloadStamp } from '../stagedCreate.js';
+import { applyStageAdvance, applyStageComplete, applyStageFailure, bumpReloadStamp } from '../stagedCreate.js';
 
 // round301 — the staged create's optimistic state rules. The failure case is the
 // one that matters: `__pendingPeople` outranks fetched details in DiscussionCard,
@@ -77,5 +77,35 @@ describe('bumpReloadStamp', () => {
   it('sets the stamp without touching anything else', () => {
     const next = bumpReloadStamp({ id: '1', name: 'x' }, 42);
     expect(next).toEqual({ id: '1', name: 'x', __reloadStamp: 42 });
+  });
+});
+
+/*
+ * round306 (PR review) — completion no longer goes through the generic save handler
+ * (which closes any open create/edit modal, hides the list and selects this
+ * discussion). The tail can land seconds after the handoff, so it must be
+ * id-guarded like every other stage transition, and it must clear BOTH pieces of
+ * optimistic state now that monday really holds them.
+ */
+describe('applyStageComplete', () => {
+  it('bumps the stamp and drops both __pendingPeople and __building', () => {
+    const next = applyStageComplete(CARD(), '99', 321);
+    expect(next.__reloadStamp).toBe(321);
+    expect('__pendingPeople' in next).toBe(false);
+    expect('__building' in next).toBe(false);
+    expect(next.name).toBe('דיון אלפא'); // nothing else is disturbed
+  });
+
+  it('leaves a DIFFERENT open discussion untouched (the user moved on)', () => {
+    const card = CARD();
+    expect(applyStageComplete(card, 'OTHER', 321)).toBe(card);
+  });
+
+  it('is a no-op when no discussion is open at all', () => {
+    expect(applyStageComplete(null, '99', 321)).toBe(null);
+  });
+
+  it('matches ids across string/number forms', () => {
+    expect(applyStageComplete({ id: 99 }, '99', 7).__reloadStamp).toBe(7);
   });
 });

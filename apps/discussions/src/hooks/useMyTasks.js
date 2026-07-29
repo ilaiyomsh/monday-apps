@@ -444,6 +444,12 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
   // round305/306 — optimistic inline edit of a PEOPLE column (partnersID שותפים /
   // responsibilityID אחראי). formatValue('people') accepts ids or [{id}], so the
   // PersonPicker selection goes straight through; revert on failure.
+  //
+  // RETURNS whether the write actually landed. The failure is handled here (logged
+  // + reverted, never rethrown, so a picker edit can't crash the view), but the
+  // caller still has to know: updateTaskAssignee decides row MEMBERSHIP from the
+  // new assignment, and deciding that from a write the server rejected would drop
+  // a row that still belongs in the scope (round306 PR review).
   const updatePeopleColumn = useCallback((alias, label) => async (taskId, people) => {
     const next = Array.isArray(people) ? people : [];
     const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
@@ -453,9 +459,11 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     );
     try {
       await new משימות1Board().item(taskId).update({ [alias]: next }).execute();
+      return true;
     } catch (err) {
       logger.error('useMyTasks', `Error updating task ${label}`, err);
       setItems(prev);
+      return false;
     }
   }, []);
   const updateTaskPartners = useCallback(
@@ -469,7 +477,11 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
   // longer belongs to until the next refetch, so the row is dropped here.
   const updateTaskAssignee = useCallback(
     async (taskId, people) => {
-      await updatePeopleColumn('responsibilityID', 'assignee')(taskId, people);
+      const written = await updatePeopleColumn('responsibilityID', 'assignee')(taskId, people);
+      // A REJECTED write leaves the old assignment on the board (and the helper has
+      // already reverted the row), so the task still belongs to this scope — judging
+      // membership by what was merely REQUESTED would make it vanish anyway.
+      if (!written) return;
       const next = Array.isArray(people) ? people : [];
       const holdsMe = !!userId && next.some((p) => String(p?.id) === String(userId));
       const leftScope = (scope === 'mine' && !holdsMe) || (scope === 'others' && holdsMe);
