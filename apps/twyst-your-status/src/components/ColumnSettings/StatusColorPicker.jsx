@@ -16,6 +16,7 @@ import './StatusColorPicker.css';
  */
 export default function StatusColorPicker({
   colorValue,
+  hex: storedHex,
   usedColorEnums = [],
   disabled = false,
   onChange,
@@ -72,7 +73,14 @@ export default function StatusColorPicker({
     }
   };
 
-  const hex = resolveStatusColorHex(colorValue) || '#c4c4c4';
+  /*
+   * The hex monday STORED wins over one re-derived from the colour enum. They can
+   * disagree: the platform overrides some colours server-side (a label in the reserved
+   * id-5 slot renders grey whatever enum was sent), and re-deriving showed the enum's
+   * own colour instead — the same label reading orange in settings and grey on the
+   * board. The enum is still the write value; this is display only.
+   */
+  const hex = storedHex || resolveStatusColorHex(colorValue) || '#c4c4c4';
 
   return (
     <>

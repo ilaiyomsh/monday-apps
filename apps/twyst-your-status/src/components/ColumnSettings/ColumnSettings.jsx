@@ -3,18 +3,17 @@ import { createPortal } from 'react-dom';
 import { AttentionBox, Button, Heading } from '@vibe/core';
 import { validateSettings } from '../../domain/settingsSchema';
 import { isSupportedFormColumnType } from '../../domain/columnFields';
-import { resolveStatusColorHex } from '../../domain/statusColors';
+import { pickColorForNewLabel, resolveStatusColorHex } from '../../domain/statusColors';
 import {
+  buildCreateLabelPayload,
   buildStatusLabelsUpdatePayload,
   buildUpdateStatusColumnMutation,
-  createBlankLabelDraft,
   createLabelsDraft,
+  findCreatedLabel,
   hasPendingLabelEdits,
   pruneSettingsForActiveLabels,
-  remapDraftLabelKeys,
   renumberDraftIndexes,
   reorderLabelsDraft,
-  resolveNewLabelIds,
 } from '../../domain/statusLabelDraft';
 import { normalizeStatusLabels } from '../../domain/statusPolicy';
 import {
@@ -238,6 +237,7 @@ function LabelCard({
       <div className="twyst-label-identity">
         <StatusColorPicker
           colorValue={label.colorValue}
+          hex={label.color}
           usedColorEnums={usedColors}
           disabled={saving}
           onChange={(next) => onRecolor(label.clientKey, next)}
@@ -388,23 +388,6 @@ function LabelCard({
   );
 }
 
-/**
- * Does this key carry anything the user configured? Asked only about a NEW label's
- * client key, to tell "the remap lost real configuration" (worth a message) from
- * "there was nothing under that key anyway" (nothing to report).
- */
-function hasConfiguredRule(settings, key) {
-  const rule = settings?.labels?.[key];
-  const restricted = Boolean(rule) && [
-    rule.allowedUserIds,
-    rule.allowedTeamIds,
-    rule.requiredColumnIds,
-    rule.requiredPeopleColumnIds,
-  ].some((list) => Array.isArray(list) && list.length > 0);
-  const hidden = (settings?.hiddenLabelIds ?? []).map(String).includes(String(key));
-  return restricted || hidden;
-}
-
 function ColumnSettings({ context, variant = 'overlay' }) {
   const isOverlay = variant === 'overlay';
   const boardId = context?.boardId;
@@ -423,6 +406,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
   const [metaLoading, setMetaLoading] = useState(true);
   const [metaError, setMetaError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [addingLabel, setAddingLabel] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
   const loadMetadata = useCallback(async () => {
@@ -557,8 +541,78 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     setLabelsDraft((current) => reorderLabelsDraft(current, clientKey, delta));
   };
 
-  const addLabel = () => {
-    setLabelsDraft((current) => [...current, createBlankLabelDraft(current)]);
+  /**
+   * Create the label NOW, not on save.
+   *
+   * monday derives a new label's id from its colour and may override the colour
+   * server-side, so an optimistically rendered row showed a colour the board did not
+   * agree with — purple here, grey on the board, orange on the next visit. The only
+   * colour worth showing is the one that came back, so the round trip happens on the
+   * click, behind a busy button, and the card is rendered from the response.
+   *
+   * A consequence worth knowing: the label exists on the column from this point, so
+   * Cancel no longer un-creates it (removing it is a separate edit, saved as usual).
+   */
+  const addLabel = async () => {
+    try {
+      setAddingLabel(true);
+      setSaveError(null);
+
+      const revisionData = await mondayService.query(GET_STATUS_COLUMN_REVISION, {
+        boardIds: [String(boardId)],
+        columnIds: [columnId],
+      });
+      const liveColumn = revisionData?.boards?.[0]?.columns?.[0];
+      const revision = liveColumn?.revision;
+      if (!revision) {
+        throw new Error('חסר revision לעמודת הסטטוס — לא ניתן להוסיף לייבל');
+      }
+      const liveAll = normalizeStatusLabels(liveColumn.settings);
+
+      /*
+       * The colour is an identity decision, not decoration: its numeric id becomes the
+       * label's id, and a colour whose id is already taken — by an active label, by an
+       * invisible deactivated one, or by the reserved empty-label slot — rejects the
+       * whole mutation. pickColorForNewLabel answers both questions at once.
+       */
+      const colorValue = pickColorForNewLabel(liveAll);
+      const payload = buildCreateLabelPayload(liveAll, { colorValue });
+      await mondayService.query(buildUpdateStatusColumnMutation(payload), {
+        boardId: String(boardId),
+        columnId,
+        revision: String(revision),
+      });
+
+      const refreshed = await mondayService.query(GET_STATUS_COLUMN_REVISION, {
+        boardIds: [String(boardId)],
+        columnIds: [columnId],
+      });
+      const refreshedLabels = normalizeStatusLabels(refreshed?.boards?.[0]?.columns?.[0]?.settings);
+      const created = findCreatedLabel(liveAll, refreshedLabels);
+      if (!created) {
+        throw new Error('הלייבל נוצר אך לא נמצא בקריאה החוזרת');
+      }
+
+      /*
+       * Appended to the draft rather than re-seeding it from the refresh: re-seeding
+       * would discard whatever the admin has already typed into the other cards. The
+       * baseline gets the same row, so the creation does not read as a pending edit and
+       * the next save does not resend it.
+       */
+      const [createdRow] = createLabelsDraft([created]);
+      setLabelsDraft((current) => [...current, { ...createdRow, index: current.length }]);
+      setLabelsBaseline((current) => [...current, { ...createdRow, index: current.length }]);
+    } catch (err) {
+      logger.error('ColumnSettings', 'Failed to create a status label', err);
+      const message = err?.message || '';
+      if (/default status label color|Colors should be unique/i.test(message)) {
+        setSaveError('לא נותר צבע פנוי שניתן להקצות לו לייבל חדש בעמודה הזו.');
+      } else {
+        setSaveError('הוספת הלייבל נכשלה. נסו שוב.');
+      }
+    } finally {
+      setAddingLabel(false);
+    }
   };
 
   const dismiss = async ({ saved = false } = {}) => {
@@ -588,13 +642,10 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         return;
       }
 
-      let activeLabelIds = labelsDraft
-        .filter((label) => !label.isNew)
-        .map((label) => String(label.id));
-      // The settings object this save persists. It picks up the new labels' real ids
-      // below, once monday has assigned them.
-      let settingsDraft = draft;
-      let unresolvedNewLabels = [];
+      // Every card on screen already carries a real monday id — labels are created on
+      // the "add label" click, not here — so the rules in `draft` are keyed correctly
+      // from the start and nothing needs remapping after the mutation.
+      let activeLabelIds = labelsDraft.map((label) => String(label.id));
 
       if (hasPendingLabelEdits(labelsDraft, labelsBaseline)) {
         const revisionData = await mondayService.query(GET_STATUS_COLUMN_REVISION, {
@@ -608,12 +659,10 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         }
         const liveFresh = normalizeStatusLabels(liveColumn.settings);
         /*
-         * Renumber to 0..n-1 HERE, after the pending-edits check and before the
-         * payload: the payload sends positions (deactivated rows are packed above the
-         * actives so no two indexes collide), and resolveNewLabelIds below matches a
-         * new label by text and index — so the draft has to hold the same numbers.
-         * Doing it before `hasPendingLabelEdits` would read as an edit on any column
-         * with a removed label and fire this mutation on every save.
+         * Renumber to 0..n-1 HERE, after the pending-edits check and before the payload:
+         * the payload sends positions, with deactivated rows packed above the actives so
+         * no two indexes collide. Doing it BEFORE `hasPendingLabelEdits` would read as an
+         * edit on any column with a removed label and fire this mutation on every save.
          */
         const orderedDraft = renumberDraftIndexes(labelsDraft);
         const payload = buildStatusLabelsUpdatePayload(orderedDraft, liveFresh);
@@ -635,35 +684,16 @@ function ColumnSettings({ context, variant = 'overlay' }) {
           .map((label) => String(label.id));
 
         /*
-         * A new label's id exists only from here on. Its rules were configured against
-         * the draft's client key ("new:1"), so they move to the assigned id now — this
-         * is what lets a label be created AND restricted in one visit.
-         */
-        const idByClientKey = resolveNewLabelIds({
-          draft: orderedDraft,
-          liveBefore: liveFresh,
-          refreshedLabels,
-        });
-        unresolvedNewLabels = orderedDraft.filter(
-          (label) => label.isNew
-            && !idByClientKey[label.clientKey]
-            && hasConfiguredRule(draft, label.clientKey),
-        );
-        settingsDraft = remapDraftLabelKeys(draft, idByClientKey);
-        setDraft(settingsDraft);
-
-        /*
-         * Re-seed the label draft from what monday now HAS. The labels mutation has
-         * already run, so without this a second save attempt — after a storage failure,
-         * or a validation error below — would send the same new labels as new again and
-         * the board would end up with duplicates.
+         * Re-seed the label draft from what monday now HAS, so a second save attempt —
+         * after a storage failure, or the validation error below — starts from the
+         * persisted state rather than replaying edits that already landed.
          */
         const reseeded = createLabelsDraft(refreshedLabels);
         setLabelsDraft(reseeded);
         setLabelsBaseline(reseeded);
       }
 
-      const next = pruneSettingsForActiveLabels(settingsDraft, activeLabelIds);
+      const next = pruneSettingsForActiveLabels(draft, activeLabelIds);
       const { ok, problems } = validateSettings(next, metadata.columns);
       if (!ok) {
         logger.warn('ColumnSettings', 'Settings failed validation', { problems });
@@ -680,23 +710,6 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         return;
       }
       await mondayService.setColumnConfig(boardId, columnId, next);
-
-      /*
-       * The label was created but nothing in the refresh matched it, so its rules had
-       * no id to move to and the prune has just dropped them. Everything else IS saved;
-       * say what was lost and stay open rather than closing on configuration that went
-       * nowhere. The label draft was re-seeded above, so the card now carries the real
-       * id and a second attempt saves against it.
-       */
-      if (unresolvedNewLabels.length > 0) {
-        logger.error(
-          'ColumnSettings',
-          'Could not match a new label to an assigned id; its rules were dropped',
-          { clientKeys: unresolvedNewLabels.map((label) => label.clientKey) },
-        );
-        setSaveError('הלייבל נוצר, אך ההרשאות של הלייבל החדש לא נשמרו. פתחו אותו והגדירו שוב.');
-        return;
-      }
 
       mondayService.showNotice('ההגדרות נשמרו');
       await dismiss({ saved: true });
@@ -751,7 +764,15 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         )}
 
         <div className="twyst-settings-toolbar">
-          <Button kind="secondary" size="small" disabled={saving} onClick={addLabel}>
+          {/* `loading` is the spinner ON the button: creating a label is a round trip
+              now, and the wait has to be visible where the click happened. */}
+          <Button
+            kind="secondary"
+            size="small"
+            loading={addingLabel}
+            disabled={saving || addingLabel}
+            onClick={addLabel}
+          >
             הוספת לייבל
           </Button>
         </div>
@@ -772,7 +793,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
               columns={formColumns}
               peopleColumns={peopleColumns}
               usedColors={usedColors}
-              saving={saving}
+              saving={saving || addingLabel}
               isFirst={labelIndex === 0}
               isLast={labelIndex === labelsDraft.length - 1}
               onRename={renameLabel}

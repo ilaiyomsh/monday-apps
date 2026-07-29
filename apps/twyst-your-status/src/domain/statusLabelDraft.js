@@ -8,7 +8,6 @@ import { migrateSettings } from './settingsSchema.js';
 import {
   ensureUniqueStatusColors,
   normalizeStatusColorEnum,
-  pickUnusedStatusColor,
   resolveStatusColorHex,
 } from './statusColors.js';
 import logger from '../utils/logger.js';
@@ -59,8 +58,13 @@ export function createLabelsDraft(liveLabels) {
         id: String(label.id),
         index: label.index,
         label: typeof label.label === 'string' ? label.label : '',
+        // monday's STORED hex, never one re-derived from the colour index: the platform
+        // overrides some colours server-side (the reserved id 5 renders grey whatever
+        // enum was sent), and the swatch has to show what the board shows.
         color: typeof label.color === 'string' ? label.color : (resolveStatusColorHex(colorValue) ?? '#c4c4c4'),
         colorValue,
+        isDone: label.isDone === true,
+        description: typeof label.description === 'string' ? label.description : undefined,
         isNew: false,
       };
     });
@@ -131,6 +135,11 @@ export function buildStatusLabelsUpdatePayload(draftActive, liveAll) {
         // with a deactivated row's (see the note above), and position preserves the
         // order the admin arranged, which is all `index` means here.
         index: orderIndex,
+        // Resent, not derived: a payload that omits these CLEARS them, so leaving them
+        // out silently dropped the column's "Done" designation and every label
+        // description on any save that touched labels.
+        isDone: label.isDone === true,
+        description: label.description,
         isDeactivated: false,
       };
     });
@@ -155,6 +164,8 @@ export function buildStatusLabelsUpdatePayload(draftActive, liveAll) {
       // Packed ABOVE the actives, so no deactivated row can ever share an index with
       // a visible one. Their own relative order is kept for stability.
       index: activePayload.length + deactivatedIndex,
+      isDone: label.isDone === true,
+      description: label.description,
       isDeactivated: true,
     }));
 
@@ -164,35 +175,11 @@ export function buildStatusLabelsUpdatePayload(draftActive, liveAll) {
 }
 
 /**
- * Match each NEW draft label to the id monday assigned it by the save.
- *
- * A new label has no id until `update_status_column` has run, but its permission
- * rules are keyed BY id — so the settings screen holds them under the draft's
- * `clientKey` ("new:1") and this is how they find their real home afterwards.
- *
- * The candidate set is what the refresh has that the pre-mutation labels did not:
- * a set difference, so a pre-existing label can never be claimed no matter how well
- * it matches. Within that set, matching is by the two things WE sent — the label
- * text and the index — and it deliberately stops there. Falling back to "zip the
- * leftovers in order" would attach one status's permissions to another, which is
- * worse than losing them: an unresolved draft simply keeps its `new:` key, and the
- * prune drops it (`migrateSettings` only accepts numeric keys).
- *
- * @param {{
- *   draft?: ReturnType<typeof createLabelsDraft>,
- *   liveBefore?: Array<{id: string|number}>,
- *   refreshedLabels?: Array<{id: string|number, index?: number, label?: string, isDeactivated?: boolean}>,
- * }} input
- * @returns {Record<string, string>} clientKey → the assigned label id
- */
-/**
  * Renumber a labels draft to 0..n-1 in display order.
  *
- * The caller runs this before saving so its draft carries the SAME indexes the
- * payload will send (see buildStatusLabelsUpdatePayload) — `resolveNewLabelIds`
- * matches a new label to its assigned id by text and index, and a draft still
- * holding `max + 1` while monday stored the packed position would be left matching
- * on text alone.
+ * Run before saving so the draft carries the SAME indexes the payload will send (see
+ * buildStatusLabelsUpdatePayload, which sends positions and packs deactivated rows
+ * above the actives).
  *
  * Do NOT run it before `hasPendingLabelEdits`: on a column with a removed label the
  * live indexes are non-contiguous, so renumbering first would read as an edit and
@@ -205,77 +192,6 @@ export function renumberDraftIndexes(draft) {
     .slice()
     .sort((a, b) => Number(a?.index) - Number(b?.index))
     .map((label, index) => ({ ...label, index }));
-}
-
-export function resolveNewLabelIds({ draft, liveBefore, refreshedLabels } = {}) {
-  const newDrafts = (Array.isArray(draft) ? draft : [])
-    .filter((label) => label?.isNew && label.clientKey);
-  if (newDrafts.length === 0) return {};
-
-  const beforeIds = new Set(
-    (Array.isArray(liveBefore) ? liveBefore : []).map((label) => String(label?.id)),
-  );
-  const candidates = (Array.isArray(refreshedLabels) ? refreshedLabels : [])
-    .filter((label) => !label?.isDeactivated && !beforeIds.has(String(label?.id)));
-
-  const resolved = {};
-  const claimed = new Set();
-  const text = (value) => String(value ?? '').trim();
-
-  const matchPass = (predicate) => {
-    newDrafts.forEach((label) => {
-      if (resolved[label.clientKey]) return;
-      const hit = candidates.find(
-        (candidate) => !claimed.has(String(candidate.id)) && predicate(candidate, label),
-      );
-      if (!hit) return;
-      resolved[label.clientKey] = String(hit.id);
-      claimed.add(String(hit.id));
-    });
-  };
-
-  // Both, then either. The strictest pass runs first so a label that matches
-  // exactly cannot be consumed by a looser match on another draft.
-  matchPass((candidate, label) => text(candidate.label) === text(label.label)
-    && Number(candidate.index) === Number(label.index));
-  matchPass((candidate, label) => text(candidate.label) === text(label.label));
-  matchPass((candidate, label) => Number(candidate.index) === Number(label.index));
-
-  return resolved;
-}
-
-/**
- * Re-key a settings DRAFT: rules and hidden ids held under a `new:` client key move
- * to the real label id. Runs before `pruneSettingsForActiveLabels`, which is where
- * anything still unresolved is dropped.
- *
- * Deliberately does not go through `migrateSettings` — that would strip the very
- * `new:` keys this function exists to rename.
- *
- * @param {object|null} settings  the in-memory draft, client keys included
- * @param {Record<string, string>} idByClientKey
- */
-export function remapDraftLabelKeys(settings, idByClientKey) {
-  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return settings;
-  const map = (idByClientKey && typeof idByClientKey === 'object') ? idByClientKey : {};
-  const entries = Object.entries(settings.labels ?? {});
-
-  // Untouched keys first, remapped ones second, so a rule the user just configured
-  // wins over a stale rule already sitting under the id monday handed out.
-  const labels = {};
-  entries.forEach(([key, rule]) => {
-    if (!map[key]) labels[key] = rule;
-  });
-  entries.forEach(([key, rule]) => {
-    if (map[key]) labels[map[key]] = rule;
-  });
-
-  const hiddenLabelIds = [...new Set(
-    (Array.isArray(settings.hiddenLabelIds) ? settings.hiddenLabelIds : [])
-      .map((id) => map[String(id)] ?? String(id)),
-  )];
-
-  return { ...settings, hiddenLabelIds, labels };
 }
 
 /**
@@ -313,6 +229,13 @@ export function buildUpdateStatusColumnMutation(labelsPayload) {
         `color: ${label.color}`,
         `label: ${JSON.stringify(label.label ?? '')}`,
         `index: ${label.index}`,
+        // Sent only when there is something to preserve: `is_done: false` and an absent
+        // description are already the default, and omitting them keeps the document
+        // (and its diffs) readable.
+        label.isDone === true ? 'is_done: true' : null,
+        typeof label.description === 'string' && label.description !== ''
+          ? `description: ${JSON.stringify(label.description)}`
+          : null,
         label.isDeactivated ? 'is_deactivated: true' : null,
       ].filter(Boolean);
       return `{ ${fields.join(', ')} }`;
@@ -328,28 +251,58 @@ export function buildUpdateStatusColumnMutation(labelsPayload) {
   }`;
 }
 
-export function createBlankLabelDraft(existingDraft) {
-  const list = Array.isArray(existingDraft) ? existingDraft : [];
-  const maxIndex = list.reduce((max, label) => Math.max(max, Number(label.index) || 0), -1);
-  const usedColors = list.map((label) => {
-    try {
-      return normalizeStatusColorEnum(label.colorValue ?? label.color);
-    } catch (err) {
-      logger.warn('statusLabelDraft', 'Skipping unrecognized draft color while picking a free one', err);
-      return null;
-    }
-  }).filter(Boolean);
-  const colorValue = pickUnusedStatusColor(usedColors);
+/** The name a label is created with; the admin renames it in place afterwards. */
+export const NEW_LABEL_NAME = 'לייבל חדש';
+
+/**
+ * Build the payload that CREATES one label, leaving every existing label as monday
+ * currently has it.
+ *
+ * Creation is its own mutation, fired when the admin clicks "add label" rather than
+ * deferred to save, because the colour the admin sees has to be the colour monday
+ * assigned: the platform derives the new label's **id** from the colour and can override
+ * the colour itself server-side, so an optimistic local row was showing something the
+ * board disagreed with (purple in settings, grey on the board, orange on re-entry).
+ *
+ * Every existing label is resent, deactivated rows included — omitting one is a DELETE.
+ *
+ * @param {ReturnType<typeof import('./statusPolicy.js').normalizeStatusLabels>} liveAll
+ * @param {{ label?: string, colorValue: string }} newLabel
+ */
+export function buildCreateLabelPayload(liveAll, { label, colorValue } = {}) {
+  const live = Array.isArray(liveAll) ? liveAll : [];
+  const activeDraft = createLabelsDraft(live);
   const clientKey = nextNewLabelClientId();
-  return {
+  const created = {
     clientKey,
     id: clientKey,
-    index: maxIndex + 1,
-    label: 'לייבל חדש',
-    color: resolveStatusColorHex(colorValue) ?? '#00c875',
+    index: activeDraft.length,
+    label: typeof label === 'string' && label !== '' ? label : NEW_LABEL_NAME,
+    color: resolveStatusColorHex(colorValue) ?? '#c4c4c4',
     colorValue,
+    isDone: false,
     isNew: true,
   };
+  return buildStatusLabelsUpdatePayload([...activeDraft, created], live);
+}
+
+/**
+ * Identify the label monday just created: a set difference on id, so a pre-existing
+ * label can never be mistaken for it however well it matches on text or position.
+ *
+ * @param {Array<{id: string|number}>} liveBefore
+ * @param {Array<{id: string|number, isDeactivated?: boolean}>} refreshedLabels
+ * @returns {object|null} the created label, or null if the refresh does not show one
+ */
+export function findCreatedLabel(liveBefore, refreshedLabels) {
+  const beforeIds = new Set(
+    (Array.isArray(liveBefore) ? liveBefore : []).map((label) => String(label?.id)),
+  );
+  const fresh = (Array.isArray(refreshedLabels) ? refreshedLabels : [])
+    .filter((label) => !label?.isDeactivated && !beforeIds.has(String(label?.id)));
+  // Exactly one, or we do not guess: two would mean a concurrent editor, and picking
+  // either would hand this admin's rename to somebody else's label.
+  return fresh.length === 1 ? fresh[0] : null;
 }
 
 /**
