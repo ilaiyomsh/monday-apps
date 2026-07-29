@@ -6,6 +6,24 @@ the live docs always win on disagreement. This page documents how to query them 
 Everything below was verified empirically on 2026-07-02 (live calls, timed, and one
 docs-vs-reality conflict resolved by a sandbox probe).
 
+## Cloud sessions cannot reach the docs at all (2026-07-29)
+
+Both routes are closed in a Claude-Code-on-the-web session, so the "live docs win"
+protocol below **cannot be exercised** there — say so instead of implying a check happened:
+
+- `ask_developer_docs` needs `MONDAY_TOKEN` (no `.mappsrc` in the ephemeral VM, and agents
+  must never use the token).
+- `developer.monday.com` is **denied by the environment's network policy** at the proxy
+  gateway — 403 to CONNECT, identically via `WebFetch` and via a real Chromium through the
+  proxy (`curl -sS "$HTTPS_PROXY/__agentproxy/status"` lists the refusal under
+  `recentRelayFailures`).
+
+What to do instead: verify against the checked-in SDL
+(`monday-api/schema-cache/schema-*.sdl`) for SHAPE, rely on recorded probes/incidents for
+BEHAVIOUR, label each claim with its source, and ask the user to paste the page when a
+docs-only fact is load-bearing. `https://developer.monday.com/api-reference/llms.txt` is the
+documented index of every doc page — a useful thing to hand the user to fetch.
+
 ## The tool
 
 ```bash

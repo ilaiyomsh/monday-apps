@@ -45,12 +45,11 @@ Write rules that apply to every column type:
 - **`index` must be unique across the WHOLE array — deactivated rows included.**
   Incident-verified 2026-07-29 (twyst-your-status 3.9.0, production): `INVALID_INPUT` /
   `errors: ["Indexes should be unique"]`. `color` carries the same rule
-  (`"Colors should be unique"`) — recorded from an earlier incident in this repo
-  (`ensureUniqueStatusColors` + the error matcher in twyst's `ColumnSettings`), not
-  re-verified on 2026-07-29. **Neither rule is in the SDL** — `UpdateStatusLabelInput`
-  only says `index: Int!` is REQUIRED on every row, deactivated ones included, which is
-  precisely why an invisible row can collide. It is a server-side validation you meet as a
-  runtime error. This is the trap that follows from the full-replace rule above: the
+  (`"Colors should be unique"`) — **docs-confirmed 2026-07-29**, and the docs give the
+  reason: see the colour↔id coupling below. **Neither uniqueness rule is in the SDL** —
+  `UpdateStatusLabelInput` only says `index: Int!` is REQUIRED on every row, deactivated
+  ones included, which is precisely why an invisible row can collide. They are server-side
+  validations you meet as runtime errors. This is the trap that follows from the
   deactivated rows are invisible in any settings UI, so a collision with one is unreachable
   from what the screen shows. Two shapes, each needing only a label removed at some point
   in the past:
@@ -63,7 +62,26 @@ Write rules that apply to every column type:
   order, deactivated packed above them. Rewriting a deactivated row's `index` is safe:
   `index` is display order, and a status CELL references its label by **id** (see the
   `{"index": <labelId>}` quirk below). Same class of bug as the managed-column
-  `labels_positions_v2` note at the end of this section.
+  `labels_positions_v2` note at the end of this section. The packing also stays in range
+  by construction: `index` is bounded **0–39** and a column holds at most **40** labels
+  (`get_column_type_schema(type: status)` → `maxItems: 40`, `index` min 0 / max 39), so
+  `0..(total-1)` always fits — and it is strictly tighter than the sparse indexes a
+  long-lived column accumulates.
+- **`label` is capped at 30 characters** (docs + `get_column_type_schema`). Guard it in the
+  UI; there is no truncation on the way in.
+- **A label's `id` IS its colour's numeric id, assigned at creation** — docs, verbatim:
+  "The numeric ID for a color also serves as the label ID when creating labels… This means
+  each color can only be used once per status column." That is what the colour-uniqueness
+  rule protects, and it independently explains the non-sequential ids real boards return
+  (`1`, `9`, `108` are `done_green`, `egg_yolk`, `aquamarine`). Consequences when ADDING a
+  label to an existing column:
+  - a colour dedupe pass is not cosmetic — it decides the new label's **identity**;
+  - pick a new label's colour from the ones unused by **every** label (deactivated
+    included), and avoid any colour whose numeric id equals an existing label `id` — a
+    long-lived column can have a row whose colour was changed after creation, so
+    "colour free" and "id free" are not the same question. Not yet probed: whether monday
+    errors or silently reuses the id in that case (a silent reuse would hand an old
+    label's identity, and any id-keyed app config, to the new one).
 - **Colors:** read-time `settings.labels[].color` is a NUMERIC index; write mutations want
   the enum NAME (`done_green`, `working_orange`, `stuck_red`, `dark_blue`, `purple`...). The
   index maps to `StatusColumnColors` introspection order — build the lookup by introspecting
