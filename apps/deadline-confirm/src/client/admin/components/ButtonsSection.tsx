@@ -8,6 +8,7 @@ import { BUTTON_COLOR_PRESETS, BUTTON_ICON_PRESETS } from '../types';
 import { newButton } from '../draft';
 import { ButtonPreview } from './ButtonPreview';
 import { apiFetch, ApiError } from '../services/api';
+import logger from '../utils/logger';
 
 interface Option {
   value: string;
@@ -45,7 +46,7 @@ export function ButtonsSection({ columns, columnsLoading, buttons, dirty, onChan
       await navigator.clipboard.writeText(res.snippet);
       setCopiedId(id);
     } catch (err) {
-      console.error('snippet copy failed', err);
+      logger.error('admin', 'snippet_copy_failed', err);
       setCopyError(
         err instanceof ApiError && err.status === 409
           ? 'צרו מפתח קישור לפני העתקת קוד'
@@ -212,7 +213,19 @@ export function ButtonsSection({ columns, columnsLoading, buttons, dirty, onChan
       })}
       {copyError && <div className="dc-error">{copyError}</div>}
       <div className="dc-row">
-        <Button size="small" onClick={() => onChange([...buttons, newButton()])}>
+        <Button
+          size="small"
+          onClick={() => {
+            // newButton() calls crypto.getRandomValues — guard the event handler so a
+            // throw here surfaces (log + toast) instead of escaping to the boundary.
+            try {
+              onChange([...buttons, newButton()]);
+            } catch (err) {
+              logger.error('admin', 'add_button_failed', err);
+              setCopyError('הוספת כפתור נכשלה. נסו שוב.');
+            }
+          }}
+        >
           + הוסף כפתור
         </Button>
       </div>

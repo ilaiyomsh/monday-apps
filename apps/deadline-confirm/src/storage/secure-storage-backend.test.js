@@ -78,4 +78,21 @@ describe('createSecureStorageBackend.set/delete passthrough', () => {
     await backend.delete('oauth_state:n');
     expect(sdkDelete).toHaveBeenCalledWith('oauth_state:n');
   });
+
+  it('wraps SDK set failures as secure_storage_set_failed (keeps cause)', async () => {
+    const cause = new Error('An issue occurred while accessing secure storage');
+    sdkSet.mockRejectedValue(cause);
+    const backend = createSecureStorageBackend();
+    await expect(backend.set('link_secret', 'sec-1')).rejects.toThrow(
+      /^secure_storage_set_failed: An issue occurred while accessing secure storage$/
+    );
+  });
+
+  it('wraps SDK get failures as secure_storage_get_failed', async () => {
+    sdkGet.mockRejectedValue(new Error('Provided input is invalid'));
+    const backend = createSecureStorageBackend();
+    await expect(backend.get('link_secret')).rejects.toThrow(
+      /^secure_storage_get_failed: Provided input is invalid$/
+    );
+  });
 });

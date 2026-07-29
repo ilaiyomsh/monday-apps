@@ -3,13 +3,36 @@ import { createRoot } from 'react-dom/client';
 import '@vibe/core/tokens';
 import './styles.css';
 import { App } from './App';
+import mondaySdk from 'monday-sdk-js';
 import logger from './utils/logger';
-import { attachAxiomSink } from './utils/axiomErrorSink';
+import { attachAxiomSink, setAxiomContext, isAxiomSinkActive } from './utils/axiomErrorSink';
+import { setupGlobalErrorHandlers } from './utils/globalErrorHandler';
 
 // Axiom logging v2: register the remote sink synchronously BEFORE createRoot().render —
 // the ring buffer at this instant holds only import-time records (no double-ship). Inert
 // (no-op) unless the VITE_AXIOM_* activation gate passed in a production build.
 attachAxiomSink();
+
+// Global error nets, installed BEFORE render AND before the #root check below, so an
+// uncaught error, an unhandled promise rejection, OR a missing #root element all ship to
+// Axiom instead of silently white-screening.
+setupGlobalErrorHandlers(logger);
+
+// Merge the monday account/user identity into every future Axiom envelope. Gated on the
+// live sink so telemetry never costs an API round-trip in dev/tunnel/tests.
+if (isAxiomSinkActive()) {
+  mondaySdk()
+    .get('context')
+    .then((res) => {
+      const data = (res as unknown as {
+        data?: { account_id?: string | number; user_id?: string | number };
+      }).data;
+      setAxiomContext({ accountId: data?.account_id, userId: data?.user_id });
+    })
+    .catch((err: unknown) => {
+      logger.error('admin', 'axiom_context_failed', err);
+    });
+}
 
 // Vibe tripwire (see sync-calender CLAUDE.md): components render unstyled
 // without a body app-theme class — set it synchronously before createRoot.
@@ -28,10 +51,12 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBounda
     return { error };
   }
 
-  componentDidCatch(error: Error): void {
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
     // Stable English event id as the message (ships as-is); the Error rides record.error
-    // (scrubbed to err_msg by the sink). React's componentStack stays console-only.
-    logger.error('admin', 'render_error', error);
+    // (scrubbed to err_msg by the sink). React's componentStack rides the context channel
+    // as record.context.componentStack so the sink ships it as component_stack (fix 3) —
+    // parity with sync-calender-admin's boundary.
+    logger.error('admin', 'render_error', error, { componentStack: info.componentStack ?? undefined });
   }
 
   render(): React.ReactNode {
@@ -48,6 +73,8 @@ class ErrorBoundary extends React.Component<React.PropsWithChildren, ErrorBounda
   }
 }
 
+// This throw now sits AFTER setupGlobalErrorHandlers, so a missing #root ships via the
+// global window 'error' handler instead of dying as an unreported white screen.
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('root element missing');
 

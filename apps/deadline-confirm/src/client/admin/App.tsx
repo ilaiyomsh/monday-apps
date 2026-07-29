@@ -6,13 +6,16 @@ import { useCallback, useEffect, useState } from 'react';
 import { Button, Loader, Tab, TabList, TabPanel, TabPanels, TabsContext } from '@vibe/core';
 import type { ActionButton, AppState, Board, BoardColumn, EmailTemplate } from './types';
 import { type ConfigDraft, type DigestDraft, draftFromConfig, draftToConfig } from './draft';
-import { apiFetch, ApiError } from './services/api';
+import { apiFetch, ApiError, formatApiFailure } from './services/api';
 import { fetchBoards, fetchBoardColumns } from './services/monday';
+import { backfillDateColumnTitles } from './settings-io';
 import { ConnectionSection } from './components/ConnectionSection';
+import { GoogleSenderSection } from './components/GoogleSenderSection';
 import { BoardConfigSection } from './components/BoardConfigSection';
 import { ButtonsSection } from './components/ButtonsSection';
 import { TemplatesSection } from './components/TemplatesSection';
 import { SecretSection } from './components/SecretSection';
+import { SettingsIOSection } from './components/SettingsIOSection';
 import { DigestSection } from './components/DigestSection';
 import logger from './utils/logger';
 import { useViewTracking } from './utils/viewTracking';
@@ -36,8 +39,8 @@ export function App() {
   const [dirty, setDirty] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ kind: 'idle' });
 
-  const [rotatedSecret, setRotatedSecret] = useState<string | null>(null);
   const [rotating, setRotating] = useState(false);
+  const [rotateSuccess, setRotateSuccess] = useState(false);
 
   const loadState = useCallback(async (opts: { initDraft: boolean }) => {
     const nextState = await apiFetch<AppState>('/api/state');
@@ -56,7 +59,12 @@ export function App() {
         setBoards(await fetchBoards());
       } catch (err) {
         logger.error('admin', 'boot_failed', err);
-        setBootError('טעינת ההגדרות נכשלה. ודאו שאתם פותחים את המסך מתוך monday ונסו לרענן.');
+        setBootError(
+          formatApiFailure(
+            err,
+            'טעינת ההגדרות נכשלה. ודאו שאתם פותחים את המסך מתוך monday ונסו לרענן.'
+          )
+        );
       }
     })();
   }, [loadState]);
@@ -68,25 +76,31 @@ export function App() {
       return;
     }
     let cancelled = false;
+    // Captured before the async body: the null-check above narrows `draft.boardId`
+    // synchronously, but the deferred closure would widen it back to string|null.
+    const boardId = draft.boardId;
     setColumnsLoading(true);
     setPickersError(null);
-    fetchBoardColumns(draft.boardId)
-      .then((cols) => {
+    // try/catch/finally rather than a .then chain: `promise/catch-or-return`
+    // wants the chain to TERMINATE in .catch(), and the trailing .finally()
+    // this needs would sit after it. Same semantics, one fewer lint exception.
+    void (async () => {
+      try {
+        const cols = await fetchBoardColumns(boardId);
         if (cancelled) return;
         setColumns(cols);
         const firstPeople = cols.find((c) => c.type === 'people');
         setDraft((d) =>
           d.peopleColumnId === null && firstPeople ? { ...d, peopleColumnId: firstPeople.id } : d
         );
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (cancelled) return;
         logger.error('admin', 'columns_load_failed', err);
         setPickersError('טעינת עמודות הלוח נכשלה. נסו לרענן.');
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setColumnsLoading(false);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -127,7 +141,14 @@ export function App() {
   const onDigestChange = (patch: Partial<DigestDraft>) =>
     onDraftChange({ digest: { ...draft.digest, ...patch } });
 
-  const payload = draftToConfig(draft);
+  // A pre-0.6.0 config stores an empty section.dateColumnTitle (0.7.1 defaults
+  // the missing field to ''), which the server rejects as invalid_config while
+  // the panel looks complete. Derive it from the selected column at the save
+  // boundary so a legacy config can be saved at all.
+  const payload = draftToConfig({
+    ...draft,
+    digest: backfillDateColumnTitles(draft.digest, columns),
+  });
 
   const onSave = async () => {
     if (!payload) return;
@@ -147,20 +168,42 @@ export function App() {
       const message =
         err instanceof ApiError && err.field
           ? `השמירה נכשלה — שדה לא תקין: ${err.field}`
-          : 'השמירה נכשלה. נסו שוב.';
+          : formatApiFailure(err, 'השמירה נכשלה. נסו שוב.');
       setSaveStatus({ kind: 'error', message });
     }
   };
 
   const onRotate = async () => {
     setRotating(true);
+    setRotateSuccess(false);
+    setSaveStatus({ kind: 'idle' });
     try {
-      const res = await apiFetch<{ secret: string }>('/api/secret/rotate', { method: 'POST' });
-      setRotatedSecret(res.secret);
-      await loadState({ initDraft: false });
+      // Masked secret only (V6 write-only full secret) — update UI without relying
+      // on a follow-up GET /api/state that can 500 on SecureStorage after write.
+      const res = await apiFetch<{ ok: boolean; secret: string | null }>('/api/secret/rotate', {
+        method: 'POST',
+      });
+      setRotateSuccess(true);
+      setState((s) => (s ? { ...s, secret: res.secret ?? s.secret } : s));
+      try {
+        await loadState({ initDraft: false });
+      } catch (refreshErr) {
+        logger.error('admin', 'secret_rotate_refresh_failed', refreshErr);
+        setSaveStatus({
+          kind: 'error',
+          message: 'המפתח הוחלף, אבל רענון המסך נכשל. רעננו את העמוד.',
+        });
+      }
     } catch (err) {
       logger.error('admin', 'secret_rotate_failed', err);
-      setSaveStatus({ kind: 'error', message: 'יצירת מפתח חדש נכשלה. נסו שוב.' });
+      // The rotate itself failed here (a failed post-rotate REFRESH is caught
+      // above and reported separately) — clear the green banner so success and
+      // failure can never show together.
+      setRotateSuccess(false);
+      setSaveStatus({
+        kind: 'error',
+        message: formatApiFailure(err, 'יצירת מפתח חדש נכשלה. נסו שוב.'),
+      });
     } finally {
       setRotating(false);
     }
@@ -172,7 +215,7 @@ export function App() {
       await loadState({ initDraft: false });
     } catch (err) {
       logger.error('admin', 'state_refresh_failed', err);
-      setBootError('רענון הסטטוס נכשל. נסו שוב.');
+      setBootError(formatApiFailure(err, 'רענון הסטטוס נכשל. נסו שוב.'));
     } finally {
       setRefreshing(false);
     }
@@ -206,6 +249,7 @@ export function App() {
           <TabPanel>
             <div className="dc-tab-panel">
               <ConnectionSection oauth={state.oauth} onRefresh={onRefresh} refreshing={refreshing} />
+              <GoogleSenderSection google={state.google} onRefresh={onRefresh} refreshing={refreshing} />
               <BoardConfigSection
                 boards={boards}
                 columns={columns}
@@ -224,14 +268,22 @@ export function App() {
               <TemplatesSection
                 templates={draft.templates}
                 buttons={draft.buttons}
-                dirty={dirty}
                 onChange={onTemplatesChange}
               />
               <SecretSection
                 maskedSecret={state.secret}
-                rotatedSecret={rotatedSecret}
+                rotateSuccess={rotateSuccess}
                 rotating={rotating}
                 onRotate={onRotate}
+              />
+              <SettingsIOSection
+                savedConfig={state.config}
+                draft={draft}
+                appVersion={__APP_VERSION__}
+                onImport={(imported) => {
+                  setDraft(imported);
+                  setDirty(true);
+                }}
               />
             </div>
           </TabPanel>

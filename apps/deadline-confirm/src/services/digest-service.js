@@ -1,7 +1,12 @@
 // Digest core (v4 phase 1, owner decisions 2026-07-19) — PURE functions.
 // Matching model: a dedicated USERS BOARD (people column + email column) maps
-// person ids -> recipient email; tasks come from the configured tasks board,
-// matched by person-id intersection with config.peopleColumnId.
+// ONE person id -> recipient email; tasks come from the configured tasks
+// board, matched by person-id membership on config.peopleColumnId.
+//
+// V6 D16 (2026-07-27): one message per users-board row. A recipient carries a
+// SINGLE personId (signed into the manifest; drives D11). Rows with ≠1 person
+// are skipped as `multi_person`. Email dedup is gone — two rows sharing an
+// address produce two independent messages.
 //
 // Pending semantics (per section, owner decision 2026-07-20):
 //   date set AND date <= today (a past date INCLUDES today) AND the task's
@@ -21,16 +26,90 @@ export function digestTaskColumnIds(config) {
   const ids = new Set([config.peopleColumnId]);
   for (const section of config.digest?.sections ?? []) {
     ids.add(section.dateColumnId);
-    const button = buttonsById.get(section.buttonId);
-    if (button) ids.add(button.statusColumnId);
+    const btnIds =
+      Array.isArray(section.buttonIds) && section.buttonIds.length > 0
+        ? section.buttonIds
+        : section.buttonId
+          ? [section.buttonId]
+          : [];
+    for (const bid of btnIds) {
+      const button = buttonsById.get(bid);
+      if (button) ids.add(button.statusColumnId);
+    }
   }
   ids.delete(null);
   ids.delete(undefined);
   return [...ids];
 }
 
+/**
+ * Button ids offered for a section (multi with singular fallback).
+ * @param {object} section
+ * @returns {string[]}
+ */
+export function sectionActionButtonIds(section) {
+  if (Array.isArray(section.buttonIds) && section.buttonIds.length > 0) {
+    return section.buttonIds.filter((id) => typeof id === 'string' && id.length > 0);
+  }
+  return section.buttonId ? [section.buttonId] : [];
+}
+
+/**
+ * Attach full ActionButton objects for AMP/plain renderers.
+ * @param {object} recipient
+ * @param {Map<string, object>} buttonsById
+ */
+export function decorateRecipientSections(recipient, buttonsById) {
+  return {
+    ...recipient,
+    sections: (recipient.sections ?? []).map((s) => {
+      const buttonIds = sectionActionButtonIds(s);
+      const buttons = buttonIds.map((id) => buttonsById.get(id)).filter(Boolean);
+      return {
+        ...s,
+        buttonIds,
+        button: buttons[0] ?? buttonsById.get(s.buttonId),
+        buttons,
+      };
+    }),
+  };
+}
+
 function col(item, columnId) {
   return item.columns?.[columnId] ?? { text: '', statusLabelId: null, date: null, personIds: [] };
+}
+
+/**
+ * Unique date columns from digest settings (first title wins per id).
+ * @param {object} digest
+ * @returns {Array<{ id: string, title: string }>}
+ */
+function collectDigestDateColumns(digest) {
+  /** @type {Array<{ id: string, title: string }>} */
+  const cols = [];
+  const seen = new Set();
+  for (const section of digest?.sections ?? []) {
+    const id = section.dateColumnId;
+    if (typeof id !== 'string' || id.length === 0 || seen.has(id)) continue;
+    seen.add(id);
+    cols.push({ id, title: section.dateColumnTitle ?? '' });
+  }
+  return cols;
+}
+
+/**
+ * Snapshot every digest date-column value on a task (null when unset).
+ * @param {object} task
+ * @param {Array<{ id: string }>} dateColumns
+ * @returns {Record<string, string|null>}
+ */
+function snapshotTaskDates(task, dateColumns) {
+  /** @type {Record<string, string|null>} */
+  const dates = {};
+  for (const dc of dateColumns) {
+    dates[dc.id] = col(task, dc.id).date;
+  }
+  return dates;
 }
 
 /**
@@ -44,10 +123,11 @@ function col(item, columnId) {
 export function buildDigest({ config, tasks, users, today }) {
   const { digest } = config;
   const buttonsById = new Map((config.buttons ?? []).map((b) => [b.id, b]));
+  const dateColumns = collectDigestDateColumns(digest);
 
-  // --- users board -> recipients (deduped by email, person ids united) -----
-  /** @type {Map<string, { email: string, name: string, personIds: string[] }>} */
-  const byEmail = new Map();
+  // --- users board -> recipients (D16: one row = one message) --------------
+  /** @type {Array<{ email: string, name: string, personId: string }>} */
+  const userRecipients = [];
   const skippedUsers = [];
   for (const row of users) {
     const personIds = col(row, digest.usersPeopleColumnId).personIds ?? [];
@@ -60,12 +140,11 @@ export function buildDigest({ config, tasks, users, today }) {
       skippedUsers.push({ itemId: row.id, name: row.name, reason: 'no_person' });
       continue;
     }
-    const existing = byEmail.get(email);
-    if (existing) {
-      for (const id of personIds) if (!existing.personIds.includes(id)) existing.personIds.push(id);
-    } else {
-      byEmail.set(email, { email, name: row.name, personIds: [...personIds] });
+    if (personIds.length > 1) {
+      skippedUsers.push({ itemId: row.id, name: row.name, reason: 'multi_person' });
+      continue;
     }
+    userRecipients.push({ email, name: row.name, personId: personIds[0] });
   }
 
   // --- classify every task once per section ---------------------------------
@@ -87,6 +166,7 @@ export function buildDigest({ config, tasks, users, today }) {
         itemId: task.id,
         name: task.name,
         date,
+        dates: snapshotTaskDates(task, dateColumns),
         statusText: col(task, button.statusColumnId).text ?? '',
         personIds: col(task, config.peopleColumnId).personIds ?? [],
       });
@@ -95,14 +175,15 @@ export function buildDigest({ config, tasks, users, today }) {
   }
 
   // --- assemble per-recipient digests ---------------------------------------
+  // R2 invariant (v6 §6): a recipient's digest contains ONLY tasks assigned
+  // to that recipient — R1/R2 and the attribution wording depend on it.
   const recipients = [];
-  for (const r of byEmail.values()) {
-    const personSet = new Set(r.personIds);
+  for (const r of userRecipients) {
     const sections = [];
     let taskCount = 0;
     for (const section of digest.sections) {
       const mine = (pendingBySection.get(section.id) ?? []).filter((t) =>
-        t.personIds.some((id) => personSet.has(id))
+        t.personIds.includes(r.personId)
       );
       if (mine.length === 0) continue;
       taskCount += mine.length;
@@ -111,11 +192,25 @@ export function buildDigest({ config, tasks, users, today }) {
         title: section.title,
         dateColumnTitle: section.dateColumnTitle ?? '',
         buttonId: section.buttonId,
-        tasks: mine.map(({ itemId, name, date, statusText }) => ({ itemId, name, date, statusText })),
+        buttonIds: sectionActionButtonIds(section),
+        tasks: mine.map(({ itemId, name, date, dates, statusText }) => ({
+          itemId,
+          name,
+          date,
+          dates,
+          statusText,
+        })),
       });
     }
     if (taskCount === 0) continue;
-    recipients.push({ email: r.email, name: r.name, personIds: r.personIds, taskCount, sections });
+    recipients.push({
+      email: r.email,
+      name: r.name,
+      personId: r.personId,
+      taskCount,
+      dateColumns,
+      sections,
+    });
   }
 
   return { recipients, skippedUsers };

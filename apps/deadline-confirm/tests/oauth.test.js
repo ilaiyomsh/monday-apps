@@ -20,7 +20,7 @@ const OTHER_ACCOUNT_ID = '888';
 const ENV = {
   clientId: 'cid-1',
   clientSecret: 'cs-1',
-  allowedAccountIds: [],
+  allowedAccountIds: [ACCOUNT_ID],
   baseUrl: 'https://app.example',
 };
 
@@ -57,7 +57,7 @@ function makeHarness({ exchangeResponse, env } = {}) {
   const app = createApp({
     storage,
     api,
-    rateLimiter: { allow: () => true },
+    rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
     env: env ?? ENV,
     fetchImpl,
   });
@@ -180,6 +180,19 @@ describe('GET /oauth/start — sessionToken gate (v3)', () => {
   it("responds 403 with the oauthErrorPage and issues no state when the token's account is OUTSIDE a non-empty allowlist", async () => {
     const { app, issuedStateKeys } = makeHarness({
       env: { ...ENV, allowedAccountIds: [OTHER_ACCOUNT_ID] },
+    });
+
+    const res = await request(app).get('/oauth/start').query({ st: signSt({ accountId: 777 }) });
+
+    expect(res.status).toBe(403);
+    expect(res.text).toContain(OAUTH_ERROR_HEADING);
+    expect(res.headers.location).toBeUndefined();
+    expect(issuedStateKeys()).toHaveLength(0);
+  });
+
+  it('responds 403 and issues no state when allowedAccountIds is EMPTY (D15 default-deny)', async () => {
+    const { app, issuedStateKeys } = makeHarness({
+      env: { ...ENV, allowedAccountIds: [] },
     });
 
     const res = await request(app).get('/oauth/start').query({ st: signSt({ accountId: 777 }) });
@@ -313,6 +326,42 @@ describe('GET /oauth/callback', () => {
 
     expect(res.status).toBe(502);
     expect(await backend.get(`${ACCOUNT_ID}:oauth_token`)).toBeNull();
+  });
+
+  it('WARNs (reason only, no body) but still responds 502 when reading the error body itself throws', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { app, storage } = makeHarness({
+      exchangeResponse: {
+        ok: false,
+        status: 500,
+        text: async () => {
+          throw new Error('stream broken');
+        },
+      },
+    });
+    await storage.issueOauthState('state-unreadable-body', ACCOUNT_ID);
+
+    const res = await request(app)
+      .get('/oauth/callback')
+      .query({ code: 'code-abc', state: 'state-unreadable-body' });
+
+    expect(res.status).toBe(502);
+
+    const warn = errSpy.mock.calls
+      .map((c) => c[0])
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .find((e) => e && e.level === 'warn' && e.message === 'token exchange error body unreadable');
+    expect(warn).toBeTruthy();
+    expect(warn.tag).toBe('oauth');
+    expect(warn.status).toBe(500);
+    expect(warn.reason).toBe('Error');
+    errSpy.mockRestore();
   });
 
   it('still completes the flow (done page + account-scoped token, no identity) when fetchMe rejects', async () => {

@@ -10,7 +10,6 @@ import { createApp } from '../src/app.js';
 import { createAppStorage } from '../src/services/storage.js';
 import { createMemoryBackend } from '../src/storage/memory-backend.js';
 import { MondayApiError } from '../src/services/monday-api.js';
-import { EmailSendError } from '../src/services/email-sender.js';
 
 const ACCOUNT_ID = '777';
 const TODAY = '2026-07-19';
@@ -68,7 +67,6 @@ function fullConfig(overrides = {}) {
     boardId: '111',
     peopleColumnId: 'people_t',
     buttons: buttons(),
-    templates: [],
     digest: digestBlock(),
     ...overrides,
   };
@@ -132,7 +130,7 @@ function makeHarness({ seed = {}, emailSender, getBoardItems } = {}) {
   const app = createApp({
     storage,
     api,
-    rateLimiter: { allow: () => true },
+    rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
     env: ENV,
     fetchImpl: vi.fn(),
     todayIso: TODAY,
@@ -169,10 +167,23 @@ describe('PUT /api/config with digest', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
+    expect(res.body.config.digest.sendHour).toBe(8);
     expect(res.body.config.digest.sections[0].id).toMatch(/^s_[A-Za-z0-9_-]{4,16}$/);
     expect(res.body.config.digest.sections[1].id).toBe('s_done0001');
     const stored = await backend.get(scoped('config'));
     expect(stored.digest).toEqual(res.body.config.digest);
+  });
+
+  it('sendHour is persisted when explicitly provided', async () => {
+    const { app, backend } = makeHarness();
+    const payload = fullConfig({ digest: digestBlock({ sendHour: 15 }) });
+    const res = await request(app)
+      .put('/api/config')
+      .set('Authorization', authHeader())
+      .send(payload);
+    expect(res.status).toBe(200);
+    expect(res.body.config.digest.sendHour).toBe(15);
+    expect((await backend.get(scoped('config'))).digest.sendHour).toBe(15);
   });
 
   it('config WITHOUT digest stays valid — digest normalized to null (nothing existing breaks)', async () => {
@@ -212,6 +223,9 @@ describe('PUT /api/config with digest', () => {
       { sections: [{ id: 's_x00001', title: 'א', dateColumnId: 'd', dateColumnTitle: 'ת', buttonId: 'b_start001', includeStatusLabelIds: ['x'] }] },
       'digest.sections',
     ],
+    ['sendHour out of range (24)', { sendHour: 24 }, 'digest.sendHour'],
+    ['sendHour not an integer', { sendHour: 8.5 }, 'digest.sendHour'],
+    ['sendHour negative', { sendHour: -1 }, 'digest.sendHour'],
   ])('invalid digest — %s → 400 naming the field', async (_name, patch, field) => {
     const { app } = makeHarness();
     const res = await request(app)
@@ -259,7 +273,7 @@ describe('GET /api/digest/preview', () => {
     expect(res.body).toEqual({ error: 'not_connected' });
   });
 
-  it('happy: recipient summaries + first recipient html with a REAL /confirm link; reads BOTH boards', async () => {
+  it('happy: recipient summaries + first recipient plain text (no credentials); reads BOTH boards', async () => {
     const { app, api } = seededHarness();
     const res = await request(app).get('/api/digest/preview').set('Authorization', authHeader());
 
@@ -270,21 +284,24 @@ describe('GET /api/digest/preview', () => {
     ]);
     expect(res.body.skippedUsers).toEqual([]);
     expect(res.body.truncated).toBe(false);
-    expect(res.body.html).toContain(
-      'https://app.example/confirm?itemId=9001&amp;a=777&amp;k=SECRET43&amp;btn=b_start001'
-    );
+    expect(res.body.plain).toContain('שלום דנה כהן');
+    expect(res.body.plain).toContain('גיבוש תכנית עבודה');
+    expect(res.body.plain).not.toContain('/confirm');
+    expect(res.body.plain).not.toContain('http');
+    expect(res.body).not.toHaveProperty('html');
     const calledBoards = api.getBoardItems.mock.calls.map(([p]) => p.boardId).sort();
     expect(calledBoards).toEqual(['111', '222']);
   });
 
-  it('?recipient=<email> returns THAT recipient’s html', async () => {
+  it('?recipient=<email> returns THAT recipient plain text', async () => {
     const { app } = seededHarness();
     const res = await request(app)
       .get('/api/digest/preview?recipient=yossi@example.com')
       .set('Authorization', authHeader());
     expect(res.status).toBe(200);
-    expect(res.body.html).toContain('btn=b_done0001');
-    expect(res.body.html).toContain('הגשת דוח');
+    expect(res.body.plain).toContain('יוסי לוי');
+    expect(res.body.plain).toContain('הגשת דוח');
+    expect(res.body.plain).not.toContain('/confirm');
   });
 
   it('monday API failure → 502 monday_api_failed (never a stack)', async () => {
@@ -302,14 +319,14 @@ describe('GET /api/digest/preview', () => {
 // ---------------------------------------------------------------------------
 
 describe('POST /api/digest/send', () => {
-  it('409 email_not_configured when no sender is wired (env without RESEND_API_KEY/DIGEST_FROM)', async () => {
+  it('409 email_not_configured when no sender is wired (V6: the Gmail-send seam is empty)', async () => {
     const { app } = seededHarness({ emailSender: undefined });
     const res = await request(app).post('/api/digest/send').set('Authorization', authHeader());
     expect(res.status).toBe(409);
     expect(res.body).toEqual({ error: 'email_not_configured' });
   });
 
-  it('happy: one send per recipient with the configured subject; per-recipient results', async () => {
+  it('happy: one send per recipient with MIME plain+amp (no html /confirm); per-recipient results', async () => {
     const send = vi.fn().mockResolvedValue({ id: 'em_1' });
     const { app } = seededHarness({ emailSender: { send } });
     const res = await request(app).post('/api/digest/send').set('Authorization', authHeader());
@@ -320,17 +337,22 @@ describe('POST /api/digest/send', () => {
       { email: 'dana@example.com', name: 'דנה כהן', taskCount: 1, ok: true },
       { email: 'yossi@example.com', name: 'יוסי לוי', taskCount: 1, ok: true },
     ]);
+    expect(typeof res.body.slot).toBe('string');
+    expect(res.body.slot).toMatch(/^\d{8}$/);
     expect(send).toHaveBeenCalledTimes(2);
     for (const [payload] of send.mock.calls) {
       expect(payload.subject).toBe('המשימות שלך — נדרש עדכון');
-      expect(payload.html).toContain('/confirm?itemId=');
+      expect(payload.plain).not.toContain('/confirm');
+      expect(payload.amp).toContain('amp4email');
+      expect(payload.mime.contentType).toMatch(/^multipart\/alternative/);
+      expect(payload).not.toHaveProperty('html');
     }
   });
 
   it('one failing recipient → its result carries ok:false + error; the OTHER recipient is still sent; overall ok:false', async () => {
     const send = vi
       .fn()
-      .mockRejectedValueOnce(new EmailSendError('Invalid `to`', { status: 422 }))
+      .mockRejectedValueOnce(new Error('Invalid `to`'))
       .mockResolvedValueOnce({ id: 'em_2' });
     const { app } = seededHarness({ emailSender: { send } });
     const res = await request(app).post('/api/digest/send').set('Authorization', authHeader());
@@ -357,5 +379,44 @@ describe('POST /api/digest/send', () => {
     expect(res.body.ok).toBe(true);
     expect(res.body.results).toEqual([]);
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/digest/resend-today (T12 / D8)
+// ---------------------------------------------------------------------------
+
+describe('POST /api/digest/resend-today', () => {
+  it('reuses the current slot and sends to all recipients (same pipeline as send)', async () => {
+    const send = vi.fn().mockResolvedValue({ id: 'em_1' });
+    const fixedNow = new Date('2026-07-19T10:00:00+03:00');
+    const backend = createMemoryBackend({
+      [scoped('config')]: fullConfig(),
+      [scoped('link_secret')]: 'SECRET43',
+      [scoped('oauth_token')]: 'tok-1',
+    });
+    const storage = createAppStorage({ backend });
+    const app = createApp({
+      storage,
+      api: { fetchMe: vi.fn(), getBoardItems: boardItemsDouble() },
+      rateLimiters: { perIp: { allow: () => true }, perAccount: { allow: () => true } },
+      env: ENV,
+      fetchImpl: vi.fn(),
+      todayIso: TODAY,
+      emailSender: { send },
+      now: () => fixedNow,
+    });
+    const res = await request(app).post('/api/digest/resend-today').set('Authorization', authHeader());
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.slot).toBe('20260719'); // sendHour default 8; 10:00 ≥ 8 → today
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('409 email_not_configured when no sender is wired', async () => {
+    const { app } = seededHarness({ emailSender: undefined });
+    const res = await request(app).post('/api/digest/resend-today').set('Authorization', authHeader());
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: 'email_not_configured' });
   });
 });

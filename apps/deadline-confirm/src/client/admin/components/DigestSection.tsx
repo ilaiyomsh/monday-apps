@@ -30,7 +30,7 @@ const GUARD_MESSAGES: Record<string, string> = {
   digest_not_configured: 'המייל המסכם עוד לא נשמר — הפעילו אותו, השלימו את השדות ולחצו "שמירת הגדרות".',
   no_secret: 'אין מפתח קישורים פעיל — צרו מפתח בלשונית ההגדרות.',
   not_connected: 'אין חיבור monday פעיל — התחברו מחדש בלשונית ההגדרות.',
-  email_not_configured: 'ערוץ השליחה לא מוגדר בשרת (RESEND_API_KEY / DIGEST_FROM חסרים בסביבת האפליקציה).',
+  email_not_configured: 'ערוץ השליחה לא מוגדר בשרת (Gmail API — חסרים credentials בסביבת האפליקציה).',
   monday_api_failed: 'קריאת הלוחות ממאנדיי נכשלה. נסו שוב.',
 };
 
@@ -53,6 +53,7 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [ampCopied, setAmpCopied] = useState(false);
+  const [plainCopied, setPlainCopied] = useState(false);
 
   const [sendPhase, setSendPhase] = useState<'idle' | 'confirm' | 'sending'>('idle');
   const [sendResult, setSendResult] = useState<DigestSendResponse | null>(null);
@@ -124,6 +125,17 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   };
 
   // V5: hand the amp4email part to the operator's clipboard (playground paste).
+  const copyPlain = async (plain: string) => {
+    setPlainCopied(false);
+    try {
+      await navigator.clipboard.writeText(plain);
+      setPlainCopied(true);
+    } catch (err) {
+      logger.error('admin', 'digest_plain_copy_failed', err);
+      setPreviewError('העתקה נכשלה — אפשר להעתיק ידנית מהתצוגה.');
+    }
+  };
+
   const copyAmp = async (amp: string) => {
     setAmpCopied(false);
     try {
@@ -225,6 +237,19 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                   onChange={(value: string) => onChange({ subject: value })}
                 />
               </div>
+              <div className="dc-field" style={{ maxWidth: 160 }}>
+                <label>שעת שליחה (0–23, ישראל)</label>
+                <TextField
+                  type="number"
+                  value={String(digest.sendHour)}
+                  onChange={(value: string) => {
+                    const parsed = Number(value);
+                    if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 23) {
+                      onChange({ sendHour: parsed });
+                    }
+                  }}
+                />
+              </div>
             </div>
           </>
         )}
@@ -235,13 +260,16 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
           <h2>מקבצי משימות</h2>
           <div className="dc-hint">
             כל מקבץ הוא טבלה במייל: עמודת תאריך שקובעת "באיחור" (תאריך שעבר — כולל היום),
-            תנאי סטטוס שקובע אילו משימות נכנסות, והכפתור שמופיע ליד כל משימה.
+            תנאי סטטוס שקובע אילו משימות נכנסות, ותפריט נפתח מעוצב (תגית צבע → אפשרויות)
+            לבחירת סטטוס חדש מהכפתורים שנבחרו כאן.
           </div>
           {digest.sections.map((section) => {
-            const statusOptions = statusLabelOptionsFor(section.buttonId);
+            const primaryButtonId = section.buttonIds[0] ?? section.buttonId;
+            const statusOptions = statusLabelOptionsFor(primaryButtonId);
             const selectedStatus = statusOptions.filter((o) =>
               section.includeStatusLabelIds.includes(Number(o.value))
             );
+            const selectedButtons = buttonOptions.filter((o) => section.buttonIds.includes(o.value));
             return (
               <div key={section.id} className="dc-card">
                 <div className="dc-row">
@@ -269,16 +297,25 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                       clearable={false}
                     />
                   </div>
-                  <div className="dc-field">
-                    <label>כפתור פעולה</label>
+                  <div className="dc-field" style={{ minWidth: 220 }}>
+                    <label>כפתורי פעולה (עמודות במייל)</label>
                     <Dropdown
-                      placeholder="בחרו כפתור"
+                      multi
+                      multiline
+                      placeholder="בחרו כפתור אחד או יותר"
                       options={buttonOptions}
-                      value={findOption(buttonOptions, section.buttonId)}
-                      onChange={(opt: Option | null) =>
-                        // switching the button changes the status column → reset the condition
-                        patchSection(section.id, { buttonId: opt?.value ?? null, includeStatusLabelIds: [] })
-                      }
+                      value={selectedButtons}
+                      onChange={(opts: Option[] | null) => {
+                        const buttonIds = (opts ?? []).map((o) => o.value);
+                        const nextPrimary = buttonIds[0] ?? null;
+                        const primaryChanged = nextPrimary !== primaryButtonId;
+                        patchSection(section.id, {
+                          buttonIds,
+                          buttonId: nextPrimary,
+                          // switching the primary button changes the status column → reset filter
+                          ...(primaryChanged ? { includeStatusLabelIds: [] } : {}),
+                        });
+                      }}
                       clearable={false}
                     />
                   </div>
@@ -293,14 +330,14 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                 </div>
                 <div className="dc-row">
                   <div className="dc-field" style={{ minWidth: 320, flex: 1 }}>
-                    <label>הצג רק משימות שהסטטוס שלהן (בעמודת הכפתור):</label>
+                    <label>הצג רק משימות שהסטטוס שלהן (בעמודת הכפתור הראשון):</label>
                     <Dropdown
                       multi
                       multiline
                       placeholder={
-                        !section.buttonId ? 'בחרו קודם כפתור פעולה' : 'בחרו סטטוסים שנכנסים למקבץ'
+                        !primaryButtonId ? 'בחרו קודם כפתור פעולה' : 'בחרו סטטוסים שנכנסים למקבץ'
                       }
-                      disabled={!section.buttonId}
+                      disabled={!primaryButtonId}
                       options={statusOptions}
                       value={selectedStatus}
                       onChange={(opts: Option[] | null) =>
@@ -312,6 +349,7 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     />
                     <div className="dc-hint">
                       רק משימות בסטטוסים שנבחרו יופיעו במקבץ — כך משימות שכבר טופלו (למשל "בוצע") לא ייכנסו.
+                      הכפתור הראשון קובע את עמודת הסטטוס לסינון; כל הכפתורים שנבחרו מופיעים בתפריט הנפתח במייל.
                     </div>
                   </div>
                 </div>
@@ -416,24 +454,41 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     clearable={false}
                   />
                 </div>
-                {preview.html && (
-                  <iframe
-                    title="תצוגה מקדימה של המייל"
-                    srcDoc={preview.html}
-                    sandbox=""
-                    style={{ width: '100%', height: 480, border: '1px solid var(--ui-border-color, #d0d4e4)', borderRadius: 8, background: '#fff' }}
-                  />
+                {preview.plain && (
+                  <div style={{ marginTop: 10 }}>
+                    <label>גרסת טקסט (text/plain)</label>
+                    <pre
+                      dir="rtl"
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        background: 'var(--ui-background-color, #f6f7fb)',
+                        padding: 12,
+                        borderRadius: 8,
+                        border: '1px solid var(--ui-border-color, #d0d4e4)',
+                        maxHeight: 240,
+                        overflow: 'auto',
+                        fontSize: 13,
+                      }}
+                    >
+                      {preview.plain}
+                    </pre>
+                    <Button kind="secondary" size="small" onClick={() => void copyPlain(preview.plain as string)}>
+                      {plainCopied ? 'הועתק ✓' : 'העתק גרסת טקסט'}
+                    </Button>
+                  </div>
                 )}
-                {/* V5: the Gmail dynamic-email part. Copied out for the AMP
-                    playground while the AMP sending path is still manual. */}
                 {preview.amp && (
                   <div style={{ marginTop: 10 }}>
                     <Button kind="secondary" size="small" onClick={() => void copyAmp(preview.amp as string)}>
                       {ampCopied ? 'הועתק ✓' : 'העתק גרסת AMP (מייל דינמי בג׳ימייל)'}
                     </Button>
                     <div className="dc-hint">
-                      הגרסה הזאת מציגה תיבות סימון בתוך ג׳ימייל. להדבקה ב-playground.amp.dev (פורמט Email) ומשם
-                      Send to Gmail — הנמען צריך להוסיף את כתובת השולח תחת Dynamic email → Developer settings.
+                      להדבקה ב-playground.amp.dev (פורמט Email). שליחה מה־playground
+                      דורשת ש־<code>AMP_ALLOWED_SENDERS</code> יכלול את{' '}
+                      <code>amp@gmail.dev</code> — אחרת תראו Failed to fetch / בקשה
+                      לא תקינה. עדיף: Send to Gmail משם, ואז לאשר מתוך המייל עצמו
+                      (הנמען מוסיף את כתובת השולח תחת Dynamic email → Developer
+                      settings).
                     </div>
                   </div>
                 )}
@@ -442,7 +497,19 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
             {preview.skippedUsers.length > 0 && (
               <div className="dc-hint">
                 דולגו {preview.skippedUsers.length} שורות בלוח המשתמשים:{' '}
-                {preview.skippedUsers.map((s) => `${s.name} (${s.reason === 'no_email' ? 'חסר אימייל' : 'חסר איש'})`).join(', ')}
+                {preview.skippedUsers
+                  .map((s) => {
+                    const reason =
+                      s.reason === 'no_email'
+                        ? 'חסר אימייל'
+                        : s.reason === 'no_person'
+                          ? 'חסר איש'
+                          : s.reason === 'multi_person'
+                            ? 'יותר מאיש אחד'
+                            : s.reason;
+                    return `${s.name} (${reason})`;
+                  })
+                  .join(', ')}
               </div>
             )}
           </div>

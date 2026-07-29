@@ -43,8 +43,12 @@ async function seamlessApi<T>(query: string, variables?: Record<string, unknown>
   try {
     res = (await monday.api(query, variables ? { variables } : undefined)) as GraphQLResponse<T>;
   } catch (err) {
-    // network/SDK throw (not a GraphQL error response) — record latency + rethrow
+    // network/SDK throw (not a GraphQL error response) — record latency, log at the
+    // funnel (stable event id; the Error rides record.error → scrubbed err_msg), rethrow.
+    // The logger dedups by Error instance, so a caller that re-logs this same error
+    // won't double-SHIP it.
     reportLatency(false);
+    logger.error('monday', 'seamless_api_failed', err);
     throw err;
   }
   // GraphQL soft errors arrive inside a resolved promise — throw at the funnel.
@@ -176,6 +180,20 @@ export async function fetchBoardColumns(boardId: string): Promise<BoardColumn[]>
       type: c.type as BoardColumn['type'],
       labels: c.type === 'status' ? parseStatusLabels(c.settings) : [],
     }));
+}
+
+/**
+ * T9b — connect the tenant's Gmail sending mailbox. New tab for the same reason
+ * as the monday flow: accounts.google.com refuses to be framed.
+ */
+export async function openGoogleOauthTab(): Promise<void> {
+  try {
+    const token = await getSessionToken();
+    window.open(`/oauth/google/start?st=${encodeURIComponent(token)}`, '_blank', 'noopener');
+  } catch (err) {
+    // Without a sessionToken there is no account context to connect.
+    logger.error('monday', 'google_oauth_open_failed', err);
+  }
 }
 
 export async function openOauthTab(): Promise<void> {

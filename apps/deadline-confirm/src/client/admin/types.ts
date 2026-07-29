@@ -52,7 +52,14 @@ export interface DigestSectionConfig {
   title: string;
   dateColumnId: string;
   dateColumnTitle: string; // the board column's title, captured at save → email <th>
+  /** Primary button — used for the status-column filter (includeStatusLabelIds). */
   buttonId: string;
+  /**
+   * Action buttons offered in this cluster's AMP label `<select>`.
+   * First id is also the primary button (status-column filter).
+   * Must include buttonId. Absent/legacy configs are read as [buttonId].
+   */
+  buttonIds?: string[];
   // A task enters the section only if its status (on the button's status
   // column) is one of these label ids. Empty = nothing matches. Label id 0
   // is valid — never truthy-check.
@@ -64,6 +71,8 @@ export interface DigestConfig {
   usersPeopleColumnId: string;
   usersEmailColumnId: string;
   subject: string;
+  /** Hour (0–23, Asia/Jerusalem) when the daily digest is scheduled. Default 8. */
+  sendHour?: number;
   sections: DigestSectionConfig[];
 }
 
@@ -84,15 +93,16 @@ export interface DigestRecipientSummary {
 export interface DigestSkippedUser {
   itemId: string;
   name: string;
-  reason: 'no_email' | 'no_person';
+  reason: 'no_email' | 'no_person' | 'multi_person';
 }
 
 export interface DigestPreviewResponse {
   recipients: DigestRecipientSummary[];
   skippedUsers: DigestSkippedUser[];
   truncated: boolean;
-  html: string | null;
-  /** V5: the amp4email (Gmail dynamic email) part of the same digest. */
+  /** V6: text/plain fallback part — no links, no credentials. */
+  plain: string | null;
+  /** V6: amp4email (Gmail dynamic email) part. */
   amp: string | null;
 }
 
@@ -110,10 +120,22 @@ export interface DigestSendResponse {
 
 export type OauthStatus = 'connected' | 'disconnected' | 'broken';
 
+/** T9b Gmail sending identity, as reported by GET /api/state. */
+export interface GoogleSenderState {
+  /** Does the SERVER hold an OAuth client pair at all (platform env)? */
+  configured: boolean;
+  status: OauthStatus;
+  /** The visible From address. Never a token. */
+  senderAddress: string | null;
+  /** null until connected. false = clicks in the sent mail will 403. */
+  senderAllowedForAmp: boolean | null;
+}
+
 export interface AppState {
   config: AppConfig | null;
   secret: string | null; // masked: ****XXXX
   oauth: { status: OauthStatus; name?: string };
+  google: GoogleSenderState;
   baseUrl: string;
 }
 
