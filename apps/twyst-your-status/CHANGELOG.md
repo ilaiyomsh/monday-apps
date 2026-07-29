@@ -1,5 +1,34 @@
 # Changelog
 
+## 3.9.1
+
+- **Adding a label failed with `INVALID_INPUT` / "Indexes should be unique"** — reported
+  from production on the first attempt to use 3.9.0's new-label flow. Not a fault in that
+  flow: `update_status_column` replaces the FULL labels array, deactivated rows included,
+  and the index assignment could hand the same number to two of them. The payload now
+  numbers the whole array as ONE unique space — active labels 0..n-1 in the order the
+  admin arranged, deactivated rows packed above them.
+- **It needed only a label that had been removed at some point in the past, and there were
+  two ways in.** A new label took `max(active index) + 1`, which is exactly the index of a
+  deactivated row sitting above every active one — i.e. whenever the label removed last was
+  the last in the list (the reported case: the payload went out as `[0, 1, 2, 2, 3]`). And
+  a reorder renumbered the actives to 0..n-1, colliding with a deactivated row inside that
+  range — any removed MIDDLE label (`[0, 1, 2, 1]`). The second path has been live since
+  labels became editable in settings; nothing exercised it until now.
+- Rewriting a deactivated row's index is safe, which is what makes the fix this cheap: the
+  `index` field is display order only, and a status CELL references its label by **id**
+  (`{"index": <labelId>}` is monday's naming quirk, not a position).
+- **The test suite was pinning the bug.** The `buildStatusLabelsUpdatePayload` expectation
+  asserted `index: 2` on both a new active label and a deactivated one — a payload monday
+  rejects. Corrected, and both collision paths now have their own test against the actual
+  index numbers (uniqueness alone would also pass on a payload that quietly reshuffled the
+  admin's order), plus an end-to-end pin through the settings save on a column that carries
+  a removed label.
+- The settings screen renumbers its draft with the same rule before saving, so the draft
+  holds the indexes that were actually sent — `resolveNewLabelIds` matches a new label to
+  its assigned id by text AND index, and a draft still holding `max + 1` would quietly
+  degrade that to a text-only match.
+
 ## 3.9.0
 
 Three owner-reported items from the live 3.8.0 app.
