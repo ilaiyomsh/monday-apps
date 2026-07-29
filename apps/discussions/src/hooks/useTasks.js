@@ -33,7 +33,9 @@ async function fetchTasksByDiscussion(discussionId) {
   // assignee, deadline, status + priority (a second status column, read-only;
   // rendered by TasksTab/EffectivenessTab only when mapped). Unmapped aliases
   // drop out via the Boolean filter below, so listing it here is always safe.
-  const RENDERED = ['responsibilityID', 'deadlineID', 'statusID', 'priorityID'];
+  // round306 — partnersID (שותפים) joins the rendered set: the tasks table shows
+  // it beside אחראי in every discussion view when the alias is mapped.
+  const RENDERED = ['responsibilityID', 'partnersID', 'deadlineID', 'statusID', 'priorityID'];
   // Permission role-source people columns (item 19/20). NOT rendered, but
   // resolveCan scans them per task — if they aren't fetched they deserialize to
   // [] and `itemReady` (an array IS "ready") lets the matrix falsely DENY a task
@@ -212,6 +214,22 @@ export function useTasks(discussionId, discussionTypeId = null) {
       const b = new משימות1Board();
       await b.item(taskId).update({ responsibilityID: people.map(p => Number(p.id)) }).execute();
     } catch (err) { logger.error('useTasks', 'Error updating task', err); setItems(prev); }
+  };
+
+  // round306 — שותפים (partnersID), same shape as updateTaskAssignee: optimistic,
+  // queued for a not-yet-real (optimistically created) row, revert on failure.
+  const updateTaskPartners = async (taskId, people) => {
+    let prev = [];
+    const next = Array.isArray(people) ? people : [];
+    setItems((current) => {
+      prev = current;
+      return current.map((i) => (i.id === taskId ? { ...i, partnersID: next } : i));
+    });
+    if (!isRealId(taskId)) { enqueueEdit(taskId, 'partnersID', next); return; }
+    try {
+      const b = new משימות1Board();
+      await b.item(taskId).update({ partnersID: next.map((p) => Number(p.id)) }).execute();
+    } catch (err) { logger.error('useTasks', 'Error updating task partners', err); setItems(prev); }
   };
 
   const updateTaskDeadline = async (taskId, date) => {
@@ -466,6 +484,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
         if ('statusID' in edits) jobs.push(f.updateTaskStatus(realId, edits.statusID));
         if ('priorityID' in edits) jobs.push(f.updateTaskPriority(realId, edits.priorityID));
         if ('responsibilityID' in edits) jobs.push(f.updateTaskAssignee(realId, edits.responsibilityID));
+        if ('partnersID' in edits) jobs.push(f.updateTaskPartners(realId, edits.partnersID));
         if ('deadlineID' in edits) jobs.push(f.updateTaskDeadline(realId, edits.deadlineID));
         await Promise.allSettled(jobs);
       }
@@ -537,6 +556,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
   // lazily at flush time, so no stale closures and no createTask identity churn).
   flushersRef.current = {
     updateTaskName, updateTaskStatus, updateTaskPriority, updateTaskAssignee, updateTaskDeadline,
+    updateTaskPartners,
   };
 
   return {
@@ -546,6 +566,7 @@ export function useTasks(discussionId, discussionTypeId = null) {
     updateTaskStatus,
     updateTaskPriority,
     updateTaskAssignee,
+    updateTaskPartners,
     updateTaskDeadline,
     updateTasksStatusBatch,
     updateTasksAssigneeBatch,

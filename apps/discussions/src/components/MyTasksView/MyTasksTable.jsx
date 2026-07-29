@@ -38,6 +38,11 @@ export function MyTasksTable({
   onNotesChange,
   onDeadlineChange,
   onRenameTask,
+  // round305 — שותפים (partnersID) inline edit, gated per row by editTaskPartners.
+  onPartnersChange,
+  // round306 — אחראי inline edit (gated per row by editTaskAssignee), exactly
+  // like the discussion tasks table.
+  onAssigneeChange,
   // Per-task capability check (board-permissions matrix). `canTask(cap, task)`
   // gates each inline editor PER ROW — a false verdict withholds the handler so
   // the row renders that cell read-only. Defaults to allow-all.
@@ -70,10 +75,16 @@ export function MyTasksTable({
   const showDeadline = !!cols.deadlineID?.id;
   const showPriority = !!cols.priorityID?.id;
   const showNotes = !!cols.taskNotesID?.id;
+  // round306 — both people columns render in EVERY scope (owner request); each
+  // needs its alias mapped, and both are hideable via the toolbar like the rest.
+  const showPartners = !!cols.partnersID?.id;
+  const showAssigneeCol = !!cols.responsibilityID?.id;
 
   // Visible columns in DEFAULT order, each carrying its width params.
   const baseDefs = [
     { key: 'name', ...W.name },
+    showAssigneeCol && { key: 'assignee', ...W.assignee },
+    showPartners && { key: 'partners', ...W.partners },
     showDeadline && { key: 'deadline', ...W.deadline },
     showPriority && { key: 'priority', ...W.priority },
     { key: 'status', ...W.status },
@@ -142,6 +153,8 @@ export function MyTasksTable({
     priority: t('myTasks.colPriority'),
     status: t('myTasks.colStatus'),
     notes: t('myTasks.colNotes'),
+    assignee: t('myTasks.colAssignee'),
+    partners: t('myTasks.colPartners'),
     discussion: t('myTasks.colDiscussion'),
   };
   // round140 — owner-only column display names (shared per-instance overrides).
@@ -218,6 +231,10 @@ export function MyTasksTable({
             showDeadline={showDeadline}
             showPriority={showPriority}
             showNotes={showNotes}
+            showPartners={showPartners}
+            showAssignee={showAssigneeCol}
+            onPartnersChange={onPartnersChange && canTask('editTaskPartners', task) ? onPartnersChange : undefined}
+            onAssigneeChange={onAssigneeChange && canTask('editTaskAssignee', task) ? onAssigneeChange : undefined}
             onStatusChange={onStatusChange && canTask('editTaskStatus', task) ? onStatusChange : undefined}
             onPriorityChange={onPriorityChange && canTask('editTaskPriority', task) ? onPriorityChange : undefined}
             onNotesChange={onNotesChange}

@@ -18,6 +18,26 @@
   flex-direction: column;
   gap: 8px;
 }
+/* round302 — the "still being built" state for a freshly created discussion: the
+   standard branded loader, centered, while the points finish landing. */
+.building {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 320px;
+}
+.buildingText {
+  font-size: 13.5px;
+  color: var(--secondary-text-color, #676879);
+  /* round303 — the trailing "…" must render at the sentence's END, which in
+     Hebrew is the LEFT. The surrounding pane resolved LTR, so the neutral
+     ellipsis was flipped to the right; plaintext re-resolves by the first
+     strong character (Hebrew ⇒ RTL) regardless of the container. */
+  direction: rtl;
+  unicode-bidi: plaintext;
+}
 .toolbar {
   display: flex;
   align-items: center;
@@ -326,6 +346,10 @@
   gap: 1.5px;
   align-items: stretch;
   overflow: visible; /* the drag ghost + insertion gap need room */
+  /* round302 — anchors the scroll affordances (edge fades, chevrons, drag bar),
+     which are absolutely positioned so they cost the strip NO height: the 48px
+     contract with the triple box's formatting strip has to survive. */
+  position: relative;
   /* round252 — the ribbon must lay out RIGHT-TO-LEFT. The outer .wrap is dir="ltr"
      (it pins the physical column order: topics LEFT, panel RIGHT), and the ribbon
      inherited that LTR, so the flex main-axis ran left→right — items[0] landed on
@@ -339,14 +363,36 @@
      drop-math (computeRibbonDropTarget) auto-detects direction, so it follows. */
   direction: rtl;
 }
+/* round302 (approved mockup) — the tiles live in their own SCROLLABLE track,
+   between the two pinned "+" pieces. The native scrollbar is hidden; the slim
+   .ribbonSbar below is the visible, draggable indicator (a native bar would eat
+   height and break the 48px contract). */
+.ribbonTrack {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 1.5px;
+  direction: rtl;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
+}
+.ribbonTrack::-webkit-scrollbar { height: 0; }
 .ribbonTile {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
-  flex: 1 1 0;
-  min-width: 34px;
+  /* round302 — GROW to fill when there is room (so a short agenda looks exactly
+     as before), but never SHRINK past a readable floor: past that the track
+     scrolls instead of crushing every name into an ellipsis. */
+  flex: 1 0 auto;
+  min-width: var(--ribbon-tile-min, 104px);
+  max-width: 260px;
   padding: 0 16px;
   font-size: 13px;
   font-family: var(--font-family);
@@ -420,9 +466,23 @@
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
   transform: translate(-50%, -50%);
 }
+/* round303 — the line breaks are computed (topicName.js: ≤3 words / ≤16 chars per
+   line), so each .ribbonNameLine is one NON-wrapping row; the 6-word name ceiling
+   keeps the whole name inside two rows. line-height 1.12 × 2 ≈ 29px fits the 37px
+   of tile inside the 48px strip, so the strip's height does not move. */
 .ribbonName {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  line-height: 1.12;
+  max-height: 2.24em;
+  text-align: center;
+}
+.ribbonNameLine {
   white-space: nowrap;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -460,6 +520,33 @@
   clip-path: polygon(100% 0, 8px 0, 0 50%, 8px 100%, 100% 100%, calc(100% - 8px) 50%);
 }
 .ribbonAddEnd { order: 999; } /* leftmost — end-of-discussion "+" */
+
+/* ===== round303 — ONE scroll affordance ====================================
+   The edge fades + round chevrons were removed (owner request). The slim drag
+   bar below is the whole story: PRESENT whenever the topics overflow the row,
+   absent when everything (topics + both "+" pieces) fits. It sits ON the
+   strip's bottom rule, costing zero height, so the 48px contract holds. */
+.ribbonSbar {
+  position: absolute;
+  inset-block-end: 0;
+  inset-inline: 40px;
+  height: 4px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--primary-text-color, #323338) 8%, transparent);
+  cursor: grab;
+  touch-action: none;
+  display: none;
+  z-index: 4;
+}
+.ribbonSbarOn { display: block; }
+.ribbonSbarDrag { cursor: grabbing; }
+.ribbonThumb {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--primary-color, #0073ea);
+}
 .ribbonAdd:hover { color: var(--primary-color, #0073ea); background: var(--primary-selected-color, #e6f1fd); }
 /* the inline add — looks like a TOPIC PIECE with an editable box already inside;
    Enter or clicking elsewhere (blur) commits. */

@@ -12,6 +12,7 @@ import { useColumnWidths } from '@generated/hooks/useColumnWidths.js';
 import { useRowOrder } from '@generated/hooks/useRowOrder.js';
 import { useViewport } from '@generated/hooks/useViewport.js';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
+import { getColumns } from '@api/board-config-store.js';
 import { ResizeHandle } from '@generated/components/ResizeHandle';
 import { ColumnHeaderDnd, SortableHeaderCell } from '@generated/components/SortableColumnHeader';
 import { TASKS_COLUMN_WIDTHS as W } from '@generated/constants/columnWidths.js';
@@ -19,12 +20,12 @@ import { useColumnRenameMenu } from '@generated/components/ColumnRenameMenu';
 import styles from './TaskTable.module.css';
 
 // Header titles per column key (name has none — it's the frozen first column).
-const TITLE = { name: '', assignee: 'אחראי', deadline: 'דד ליין', status: 'סטאטוס', priority: 'עדיפות', source: 'דיון מקור' };
+const TITLE = { name: '', assignee: 'אחראי', partners: 'שותפים', deadline: 'דד ליין', status: 'סטאטוס', priority: 'עדיפות', source: 'דיון מקור' };
 // Desktop column widths are draggable + persisted (per-instance) via
 // useColumnWidths under the SHARED 'tasks' tableId — one setting for TasksTab /
 // PreviousTasksTab / EffectivenessTab (defaults in constants/columnWidths.js).
 // Mobile keeps the compact fixed template with the shrinking --name-col.
-const MOBILE_TRACK = { sel: '36px', name: '50vw', assignee: '110px', deadline: '120px', status: '140px', priority: '140px', source: '225px' };
+const MOBILE_TRACK = { sel: '36px', name: '50vw', assignee: '110px', partners: '120px', deadline: '120px', status: '140px', priority: '140px', source: '225px' };
 
 export function TaskTable({
   tasks,
@@ -32,6 +33,8 @@ export function TaskTable({
   onStatusChange,
   onPriorityChange,
   onAssigneeChange,
+  // round306 — שותפים (partnersID) inline edit, gated per row by editTaskPartners.
+  onPartnersChange,
   onDeadlineChange,
   onOpenNewTask,
   // Inline add (native monday "add item"): when provided, the footer add-row
@@ -99,11 +102,17 @@ export function TaskTable({
   // Default LTR order: name · priority · assignee · deadline · status · source.
   // (Users can drag to reorder; this is just the starting order.) 'source' is the
   // הנחיות-קודמות-only "דיון מקור" column.
+  // round306 (owner request) — שותפים sits right after אחראי and behaves exactly
+  // like it (resize / drag-reorder / hide / rename). Rendered only when the
+  // partnersID alias is mapped, like every optional column.
+  const showPartners = !!(getColumns('tasks') || {}).partnersID?.id;
   const baseKeys = [
     ...(selectable ? ['sel'] : []),
     'name',
     ...(showPriority ? ['priority'] : []),
-    'assignee', 'deadline', 'status',
+    'assignee',
+    ...(showPartners ? ['partners'] : []),
+    'deadline', 'status',
     ...(showSourceDiscussion ? ['source'] : []),
   ];
   const pinned = selectable ? ['sel', 'name'] : ['name'];
@@ -218,6 +227,7 @@ export function TaskTable({
               onStatusChange={onStatusChange && canTask('editTaskStatus', task) ? onStatusChange : undefined}
               onPriorityChange={onPriorityChange && canTask('editTaskPriority', task) ? onPriorityChange : undefined}
               onAssigneeChange={onAssigneeChange && canTask('editTaskAssignee', task) ? onAssigneeChange : undefined}
+              onPartnersChange={onPartnersChange && canTask('editTaskPartners', task) ? onPartnersChange : undefined}
               onDeadlineChange={onDeadlineChange && canTask('editTaskDeadline', task) ? onDeadlineChange : undefined}
               onRenameTask={onRenameTask && canTask('editTaskName', task) ? onRenameTask : undefined}
               onDeleteTask={onDeleteTask}

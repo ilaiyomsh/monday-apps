@@ -63,6 +63,20 @@ export function loadDiscussionExportAssets(discussionId) {
   return loadJson(assetsKey(discussionId), 'assets', 'קריאת נכסי הייצוא של הדיון נכשלה — משתמשים בברירת המחדל');
 }
 
+/*
+ * round304 — CLEAR both per-discussion overrides, reporting failure to the caller.
+ * The save helpers above deliberately swallow a storage failure (a failed write
+ * must not break producing the document), but the "חזרה לברירת המחדל" action is
+ * only meaningful if it really happened: announcing success while the override
+ * survived would make the reset look broken on the next open. So this one THROWS.
+ */
+export async function clearDiscussionExportOverrides(discussionId) {
+  if (!discussionId) return false;
+  await withTimeout(monday.storage.deleteItem(templateKey(discussionId)));
+  await withTimeout(monday.storage.deleteItem(assetsKey(discussionId)));
+  return true;
+}
+
 /** Persist (or clear with null) the discussion's own export assets. */
 export async function saveDiscussionExportAssets(discussionId, assets) {
   if (!discussionId) return;

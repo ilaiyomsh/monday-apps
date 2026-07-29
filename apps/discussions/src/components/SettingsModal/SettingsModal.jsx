@@ -504,6 +504,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
     'taskCreatorID',
     'taskCreationDateID', // תאריך יצירה — auto-stamped with today at task creation (round115)
     'responsibilityID',
+    'partnersID', // שותפים — people; rendered + inline-editable in "המשימות שלי" (round305)
     'deadlineID',
     'statusID',
     'discussionLinkID',
@@ -1289,6 +1290,32 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                         />
                         <Text type={"text2"}>בכל הדיונים, ללא תלות בסוג</Text>
                       </label>
+                    </div>
+                  </div>
+                  {/* round296 — default width split of the ניהול-דיון row (agenda vs
+                      triple box). Stored as preferences.defaultLayoutRatio = agenda's
+                      share [0.25,0.75]. A per-discussion drag override is saved on that
+                      discussion only; a NEW discussion opens at this default. */}
+                  <div className={styles.prefRow}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>יחס ברירת המחדל בניהול דיון (אג'נדה / תיבה משולשת)</Text>
+                    </div>
+                    <div className={styles.prefControl}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, direction: 'rtl' }}>
+                        <input
+                          type="range"
+                          min={25}
+                          max={75}
+                          step={1}
+                          value={Math.round((preferences.defaultLayoutRatio ?? DEFAULT_PREFERENCES.defaultLayoutRatio) * 100)}
+                          onChange={(e) => setPreferences((p) => ({ ...p, defaultLayoutRatio: Number(e.target.value) / 100 }))}
+                          aria-label="יחס ברירת המחדל לאג'נדה"
+                          style={{ flex: 1, minWidth: 140 }}
+                        />
+                        <Text type={"text2"} style={{ whiteSpace: 'nowrap' }}>
+                          {`אג'נדה ${Math.round((preferences.defaultLayoutRatio ?? DEFAULT_PREFERENCES.defaultLayoutRatio) * 100)}% · תיבה משולשת ${100 - Math.round((preferences.defaultLayoutRatio ?? DEFAULT_PREFERENCES.defaultLayoutRatio) * 100)}%`}
+                        </Text>
+                      </div>
                     </div>
                   </div>
                   {/* round108 — brand logo shown at the top-right of every discussion

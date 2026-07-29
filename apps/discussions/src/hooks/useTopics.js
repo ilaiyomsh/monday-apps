@@ -66,7 +66,11 @@ function readLinkedIds(columnValues, columnId) {
   return (cv?.linked_item_ids || []).map(String);
 }
 
-export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}) {
+// `reloadKey` (round301) forces a refetch for the SAME discussion. The staged
+// create builds a template discussion in passes — all topics + the first topic's
+// points before the card opens, the remaining points after — so the card needs a
+// way to re-read the board when a later pass finishes.
+export function useTopics(discussionId, { onSuccess, onLoading, onDismiss, reloadKey = null } = {}) {
   const { currentUser } = useMondayContext();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -192,7 +196,9 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss } = {}
       // Only the latest request controls the shared loading flag.
       if (reqId === reqIdRef.current) setLoading(false);
     }
-  }, [discussionId]);
+    // reloadKey is intentionally a dependency: bumping it re-runs this fetch for
+    // the same discussion (staged create, round301).
+  }, [discussionId, reloadKey]);
 
   useEffect(() => {
     let cancelled = false;

@@ -131,6 +131,31 @@ export async function loadTypeExportAssets(context, typeName) {
 }
 
 /**
+ * round304 — MOVE a type's export assets when the type (= its template) is
+ * renamed: the storage key embeds the type NAME, so without this the renamed type
+ * would come up with no brand binaries. Best-effort by design — the rename itself
+ * must not fail over a storage hiccup — and a no-op when the old key holds nothing.
+ * @returns {Promise<boolean>} whether assets were actually moved.
+ */
+export async function moveTypeExportAssets(context, oldName, newName) {
+  const from = String(oldName || '').trim();
+  const to = String(newName || '').trim();
+  if (!from || !to || from === to) return false;
+  const existing = await loadTypeExportAssets(context, from);
+  if (estimateAssetsBytes(existing) === 0) return false;
+  try {
+    await saveTypeExportAssets(context, to, existing);
+    await withTimeout(monday.storage.deleteItem(typeKey(context, from)));
+    return true;
+  } catch (err) {
+    // The copy may have landed even if the delete didn't; either way the renamed
+    // type is the one being read from now on, so report and continue.
+    logger.warn('exportAssets', 'העברת נכסי הייצוא לשם הסוג החדש נכשלה', err);
+    return false;
+  }
+}
+
+/**
  * round254 — persist a discussion-TYPE's own export assets. Same 6MB budget as
  * the instance globals.
  * @throws {Error} with `code:'quota'` when over EXPORT_ASSETS_MAX_BYTES.

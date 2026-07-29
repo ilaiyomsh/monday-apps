@@ -30,3 +30,67 @@ export function typeExportTemplateFor(typeTemplates, typeName) {
   const match = typeTemplates.find((t) => t && t.discussionType === typeName);
   return match?.exportTemplate ?? null;
 }
+
+/*
+ * round304 — key-ORDER-insensitive comparison of two export-template configs.
+ * The tiers are stored at different times by different screens, so the same
+ * config can serialize with different key order; a plain JSON.stringify compare
+ * would call identical templates different and defeat the checks below.
+ */
+export function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort()
+      .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+/** True when two export-template configs carry the same content. */
+export function sameExportTemplate(a, b) {
+  if (a == null || b == null) return a == null && b == null;
+  return canonicalJson(a) === canonicalJson(b);
+}
+
+/*
+ * round304 — which own-template counts as a REAL per-discussion override.
+ *
+ * The export dialog used to persist the resolved template on EVERY "הפק מסמך",
+ * so merely producing a document once froze a copy of whatever default was in
+ * force at that moment — and that copy then shadowed the discussion type's
+ * export template forever (the owner's report: a type's export template, and
+ * especially its uploaded header/footer file, never reaching discussions of that
+ * type). An own copy that is byte-identical to the tier it was seeded from
+ * carries no customization, so it is treated as ABSENT and the type/instance
+ * tier wins again. All three arguments must be seeded/normalized the same way
+ * (run them through seedExportTemplate first) or the compare is meaningless.
+ */
+export function effectiveOwnTemplate(own, typeTpl, instance) {
+  if (own == null) return null;
+  if (sameExportTemplate(own, typeTpl)) return null;
+  if (sameExportTemplate(own, instance)) return null;
+  return own;
+}
+
+/**
+ * round304 — does an asset bundle carry anything at all? Part of the same
+ * precedence question: a type's ASSETS (its logos / uploaded header-footer .docx)
+ * are used for a discussion of that type whenever they exist, independently of
+ * whether the type also carries a template CONFIG — gating the file on the config
+ * is what left a type's uploaded background unused.
+ */
+export function hasAssetContent(assets) {
+  if (!assets || typeof assets !== 'object') return false;
+  return Boolean(assets.headerLogo || assets.footerLogo || assets.templateDocx);
+}
+
+/**
+ * round304 — persist a per-discussion override ONLY when the user actually
+ * changed the template inside the dialog (compared against what it was seeded
+ * with). Otherwise the discussion keeps following its type / the system default.
+ */
+export function shouldPersistOwnTemplate(seeded, current) {
+  if (current == null) return false;
+  return !sameExportTemplate(seeded, current);
+}

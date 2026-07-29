@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Skeleton, Button, Dialog, DialogContentContainer, Text, Checkbox } from '@vibe/core';
 import { CloseSmall, DropdownChevronDown, Edit } from '@vibe/icons';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
+import { BrandLoader } from '@generated/components/BrandLoader';
 import { getColumns } from '@generated/utils/mondayApi/board-config-store.js';
 import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { computeFloatingPosition } from '@generated/utils/overlayPlacement';
@@ -27,12 +28,17 @@ import { TopicPointRow, RowKebabMenu, CreatorAvatar } from '@generated/component
 import { EmptyState } from '@generated/components/EmptyState';
 import { UpdatesTripleBox } from './UpdatesTripleBox.jsx';
 import { computeRibbonDropTarget } from './ribbonDrop.js';
+import {
+  maxPos, readPos, writePos, computeEdges, computeThumb, posFromThumbDrag, stepFrom,
+} from './ribbonScroll.js';
+import { clampTopicName, displayTopicNameLines } from './topicName.js';
 import { assignTopicAccents, topicColorStartIndex } from './topicAccents.js';
 import { buildMentionRoster } from '@generated/utils/mention.js';
 import { ApplyTemplateMenu } from '@generated/components/ApplyTemplateMenu';
 import { PointItemsPopup } from '@generated/components/PointItemsPopup';
 import { getPointItemIds } from '@generated/utils/pointItems.js';
-import { loadLayout, saveLayout, DEFAULT_LAYOUT, ratioFromDrag, heightFromDrag } from '@generated/utils/discussionLayout.js';
+import { loadLayout, saveLayout, DEFAULT_LAYOUT, ratioFromDrag, heightFromDrag, clampRatio } from '@generated/utils/discussionLayout.js';
+import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import logger from '@generated/utils/logger.js';
 import styles from './TopicsTab.module.css';
 
@@ -589,7 +595,11 @@ export function TopicsTab({
     items, loading, addTopic, addPoint, retryCreate, togglePoint, refetch,
     togglePointNotForDiscussion, toggleTopicNotForDiscussion, updateTopicPriority,
     renameTopic, deleteTopic, softDeleteTopic, renamePoint, softDeletePoints, reorderTopics, reorderPoints,
-  } = useTopics(discussion.id, { onSuccess: onNotify, onLoading: onNotifyLoading, onDismiss: onDismissToast });
+  } = useTopics(discussion.id, {
+    onSuccess: onNotify, onLoading: onNotifyLoading, onDismiss: onDismissToast,
+    // round301 — refetch when a background creation stage adds more topics/points.
+    reloadKey: discussion.__reloadStamp,
+  });
   useEffect(() => { onLoadingChange?.(loading); }, [loading, onLoadingChange]);
 
   // round220 — the @-mention roster for the triple box: the discussion's people,
@@ -806,7 +816,14 @@ export function TopicsTab({
   // editLayout reveals the 6-dot grips + the resize divider on BOTH boxes at
   // once (owner request: one pencil arms both). Everyone READS the saved layout;
   // only an owner (canManageSettings) persists changes.
-  const [layout, setLayout] = useState(DEFAULT_LAYOUT);
+  // round296 — the per-instance DEFAULT split (agenda's share) an unsaved
+  // discussion opens at; a per-discussion drag override still wins (loadLayout).
+  const { settings } = useSettings();
+  const defaultLayoutRatio = settings?.preferences?.defaultLayoutRatio;
+  const [layout, setLayout] = useState(() => ({
+    ...DEFAULT_LAYOUT,
+    ratio: clampRatio(defaultLayoutRatio != null ? defaultLayoutRatio : DEFAULT_LAYOUT.ratio),
+  }));
   const [editLayout, setEditLayout] = useState(false);
   const layoutRef = useRef(layout);
   const splitRowRef = useRef(null);
@@ -816,11 +833,11 @@ export function TopicsTab({
   useEffect(() => { layoutRef.current = layout; }, [layout]);
   useEffect(() => {
     let alive = true;
-    loadLayout(discussion?.id)
+    loadLayout(discussion?.id, defaultLayoutRatio)
       .then((l) => { if (alive) setLayout(l); })
       .catch((err) => logger.warn('TopicsTab', 'טעינת פריסת הדיון נכשלה', err));
     return () => { alive = false; };
-  }, [discussion?.id]);
+  }, [discussion?.id, defaultLayoutRatio]);
   // A non-owner never edits; if the gate flips off mid-session, drop edit mode.
   useEffect(() => { if (!canManageSettings) setEditLayout(false); }, [canManageSettings]);
 
@@ -1043,10 +1060,23 @@ export function TopicsTab({
   const handleAddTopic = (where) => {
     const w = where || addWhere;
     if (!newTopicText.trim()) { setAddWhere(null); setNewTopicText(''); return; }
+    // round303 (owner rule) — a topic name holds at most 6 words. Truncate rather
+    // than block (blur commits, so blocking would swallow the whole add), but say
+    // so, so no text is lost silently.
+    const { name: clampedName, clamped } = clampTopicName(newTopicText);
+    if (clamped) onNotify?.('שם נושא מוגבל ל-6 מילים ולשתי שורות — השם קוצר', 'error');
     pendingActivateWhereRef.current = w === 'start' ? 'start' : 'end';
-    addTopic(newTopicText.trim(), w === 'start' ? {} : { position: 'bottom' });
+    addTopic(clampedName, w === 'start' ? {} : { position: 'bottom' });
     setNewTopicText('');
     setAddWhere(null);
+  };
+  // Same 6-word rule on RENAME (both Enter and blur commit through here).
+  const commitTopicRename = (topic, rawValue) => {
+    const v = String(rawValue ?? '').trim();
+    if (!v || !renameTopic) return;
+    const { name: clampedName, clamped } = clampTopicName(v);
+    if (clamped) onNotify?.('שם נושא מוגבל ל-6 מילים ולשתי שורות — השם קוצר', 'error');
+    if (clampedName !== topic.name) renameTopic(topic.id, clampedName);
   };
   useEffect(() => {
     const w = pendingActivateWhereRef.current;
@@ -1070,6 +1100,133 @@ export function TopicsTab({
   // ambiguous).
   const ribbonTopics = visibleTopics;
   const ribbonElRef = useRef(null);
+
+  // round302 (approved mockup) — the tiles scroll inside their own track so a long
+  // agenda stays readable instead of crushing every name. Everything below is the
+  // reachability layer: edge fades + round chevrons, a slim drag bar, the wheel,
+  // the arrow keys, and auto-scroll while dragging a topic to reorder it.
+  const trackRef = useRef(null);
+  const sbarRef = useRef(null);
+  const [ribbonScrollState, setRibbonScrollState] = useState({
+    hasOverflow: false, atStart: true, atEnd: true, thumb: null,
+  });
+  const syncRibbonScroll = useCallback(() => {
+    const track = trackRef.current;
+    if (!track) return;
+    const max = maxPos(track);
+    const pos = readPos(track);
+    const edges = computeEdges(pos, max);
+    const thumb = computeThumb({
+      clientWidth: track.clientWidth,
+      scrollWidth: track.scrollWidth,
+      pos,
+      barWidth: sbarRef.current?.clientWidth || 0,
+    });
+    setRibbonScrollState((prev) => (
+      prev.hasOverflow === edges.hasOverflow
+        && prev.atStart === edges.atStart
+        && prev.atEnd === edges.atEnd
+        && prev.thumb?.width === thumb?.width
+        && prev.thumb?.offset === thumb?.offset
+        ? prev
+        : { ...edges, thumb }
+    ));
+  }, []);
+  // Re-measure whenever the topic set or the pane's width changes.
+  useEffect(() => {
+    syncRibbonScroll();
+    const track = trackRef.current;
+    if (!track || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(syncRibbonScroll);
+    ro.observe(track);
+    // The bar too: it goes from display:none to visible once overflow appears, and
+    // only THEN does it have a width to size the thumb from — that resize is what
+    // triggers the second pass that fills the thumb in.
+    if (sbarRef.current) ro.observe(sbarRef.current);
+    return () => ro.disconnect();
+  }, [syncRibbonScroll, items]);
+  const scrollRibbon = useCallback((dir) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const tileW = track.querySelector('[data-ribbon-topic]')?.offsetWidth || 0;
+    writePos(track, stepFrom(readPos(track), tileW, dir));
+    syncRibbonScroll();
+  }, [syncRibbonScroll]);
+  const onRibbonWheel = useCallback((e) => {
+    const track = trackRef.current;
+    if (!track || maxPos(track) <= 2) return;
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    if (!delta) return;
+    // A vertical wheel/trackpad gesture pans the strip — the expected feel for a
+    // horizontal rail. preventDefault stops the card behind it from scrolling too.
+    e.preventDefault();
+    const previous = track.style.scrollBehavior;
+    track.style.scrollBehavior = 'auto';
+    writePos(track, readPos(track) + delta);
+    track.style.scrollBehavior = previous;
+    syncRibbonScroll();
+  }, [syncRibbonScroll]);
+  const onSbarPointerDown = useCallback((e) => {
+    const track = trackRef.current;
+    const bar = sbarRef.current;
+    if (!track || !bar) return;
+    const max = maxPos(track);
+    if (max <= 2) return;
+    const thumbW = ribbonScrollState.thumb?.width || 0;
+    const drag = { startX: e.clientX, startPos: readPos(track), max, span: bar.clientWidth - thumbW };
+    bar.setPointerCapture?.(e.pointerId);
+    const previous = track.style.scrollBehavior;
+    track.style.scrollBehavior = 'auto';
+    const onMove = (ev) => {
+      writePos(track, posFromThumbDrag({ ...drag, x: ev.clientX }));
+      syncRibbonScroll();
+    };
+    const onUp = () => {
+      bar.removeEventListener('pointermove', onMove);
+      bar.removeEventListener('pointerup', onUp);
+      bar.removeEventListener('pointercancel', onUp);
+      track.style.scrollBehavior = previous;
+    };
+    bar.addEventListener('pointermove', onMove);
+    bar.addEventListener('pointerup', onUp);
+    bar.addEventListener('pointercancel', onUp);
+  }, [ribbonScrollState.thumb, syncRibbonScroll]);
+
+  // Edge auto-pan while a topic is being dragged. The loop reads the LATEST pointer
+  // x from a ref, so it keeps panning while the pointer is held still, and parks
+  // itself the moment the pointer leaves the edge zone or the drag ends.
+  const edgePanTargetRef = useRef(null);
+  const edgePanRafRef = useRef(0);
+  const stopEdgePan = useCallback(() => {
+    if (edgePanRafRef.current) cancelAnimationFrame(edgePanRafRef.current);
+    edgePanRafRef.current = 0;
+    edgePanTargetRef.current = null;
+  }, []);
+  const startEdgePan = useCallback(() => {
+    if (edgePanRafRef.current) return; // already running
+    const tick = () => {
+      const track = trackRef.current;
+      const x = edgePanTargetRef.current;
+      if (!track || x == null || maxPos(track) <= 2) { edgePanRafRef.current = 0; return; }
+      const r = track.getBoundingClientRect();
+      const NEAR = 52;
+      const SPEED = 12;
+      let delta = 0;
+      if (x < r.left + NEAR) delta = SPEED;        // toward the LAST topic (RTL: left)
+      else if (x > r.right - NEAR) delta = -SPEED; // back toward the FIRST topic
+      if (!delta) { edgePanRafRef.current = 0; return; }
+      const previous = track.style.scrollBehavior;
+      track.style.scrollBehavior = 'auto';
+      const landed = writePos(track, readPos(track) + delta);
+      track.style.scrollBehavior = previous;
+      syncRibbonScroll();
+      // Hit the end? Nothing left to pan toward, so stop burning frames.
+      const atLimit = delta > 0 ? landed >= maxPos(track) : landed <= 0;
+      edgePanRafRef.current = atLimit ? 0 : requestAnimationFrame(tick);
+    };
+    edgePanRafRef.current = requestAnimationFrame(tick);
+  }, [syncRibbonScroll]);
+  useEffect(() => stopEdgePan, [stopEdgePan]);
 
   const canDragRibbon = editTopicOrPoint;
   const ghostRef = useRef(null);
@@ -1117,6 +1274,13 @@ export function TopicsTab({
     const onMove = (ev) => {
       if (!armed) return;
       if (ghostRef.current) { ghostRef.current.style.left = ev.clientX + 'px'; ghostRef.current.style.top = ev.clientY + 'px'; }
+      // round302 — with a scrolling ribbon, a topic must be draggable to a position
+      // that is currently off-screen: HOLDING near an edge pans the strip under the
+      // cursor. It has to be its own rAF loop, not a per-pointermove nudge: a
+      // stationary pointer emits no more events, so a nudge-per-event would stop
+      // dead and force the user to wiggle the mouse to keep scrolling.
+      edgePanTargetRef.current = ev.clientX;
+      startEdgePan();
       // round239 fix — DIRECTION-AGNOSTIC drop target. The old loop overwrote
       // its result and always ended on the last (rightmost) tile, so only the
       // right-edge gap ever opened. Instead: measure every OTHER tile's centre,
@@ -1135,6 +1299,7 @@ export function TopicsTab({
       clearTimeout(timer);
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onUp);
+      stopEdgePan();
       if (armed) {
         clearGhost();
         setDraggingTopicId(null);
@@ -1177,6 +1342,20 @@ export function TopicsTab({
     ? (point, anchor) => onCreateFromPoint('task', point, withAgendaBounds(anchor))
     : undefined;
   const onOpenPointItems = (kind, point) => setPopup({ kind, point });
+
+  // round302 — a freshly created discussion finishes building HERE: the create card
+  // hands over after its topics exist, and their points are still being written.
+  // Show the app's standard loading animation for that window rather than a
+  // half-filled agenda; `__building` is cleared by the stage that completes it
+  // (or by a failure, so this can never spin forever).
+  if (discussion?.__building) {
+    return (
+      <div className={styles.building}>
+        <BrandLoader />
+        <span className={styles.buildingText}>בונה את סדר היום…</span>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -1294,6 +1473,21 @@ export function TopicsTab({
             <Plus size={15} />
           </button>
         ))}
+        {/* round302 — the tiles scroll in here; the two "+" pieces stay PINNED
+            outside it, so they never scroll away and never move. */}
+        <div
+          className={styles.ribbonTrack}
+          ref={trackRef}
+          onScroll={syncRibbonScroll}
+          onWheel={onRibbonWheel}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') { e.preventDefault(); scrollRibbon('end'); }
+            if (e.key === 'ArrowRight') { e.preventDefault(); scrollRibbon('start'); }
+          }}
+          tabIndex={ribbonScrollState.hasOverflow ? 0 : -1}
+          role="tablist"
+          aria-label="נושאי הדיון"
+        >
         {ribbonTopics.map((topic, i) => {
           const topicId = String(topic.id);
           const prioColor = topic.priority != null ? priorityOpts.colorById?.[topic.priority] : null;
@@ -1347,20 +1541,24 @@ export function TopicsTab({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      const v = e.currentTarget.value.trim();
-                      if (v && v !== topic.name && renameTopic) renameTopic(topic.id, v);
+                      commitTopicRename(topic, e.currentTarget.value);
                       setRenamingTopicId(null);
                     }
                     if (e.key === 'Escape') { e.preventDefault(); setRenamingTopicId(null); }
                   }}
                   onBlur={(e) => {
-                    const v = e.currentTarget.value.trim();
-                    if (v && v !== topic.name && renameTopic) renameTopic(topic.id, v);
+                    commitTopicRename(topic, e.currentTarget.value);
                     setRenamingTopicId(null);
                   }}
                 />
               ) : (
-                <span className={styles.ribbonName}>{topic.name}</span>
+                // round303 — explicit line breaks per the owner's rule (≤3 words /
+                // ≤16 chars per line), instead of letting the browser wrap wherever.
+                <span className={styles.ribbonName}>
+                  {displayTopicNameLines(topic.name).map((line, li) => (
+                    <span key={li} className={styles.ribbonNameLine}>{line}</span>
+                  ))}
+                </span>
               )}
               {excluded && <EyeOff size={12} className={styles.ribbonEye} aria-label="נושא מוסתר" />}
             </div>
@@ -1370,6 +1568,30 @@ export function TopicsTab({
         {/* round239 — dropping at the END shows the separator bar after the last
             topic (gapBeforeId null while dragging). */}
         {draggingTopicId && gapBeforeId == null && <span className={styles.ribbonDropBar} aria-hidden="true" />}
+        </div>
+        {/* round303 (owner request) — the edge fades + round chevrons are GONE: the
+            slim draggable bar below is the one scroll affordance. It is PRESENT
+            whenever the topics overflow the row, and absent when everything fits.
+            It sits on the strip's bottom rule, so it adds no height and the 48px
+            contract holds. */}
+        <div
+          ref={sbarRef}
+          // Visibility is driven by hasOverflow, which is measured off the TRACK
+          // (always laid out) — NOT by `thumb`. Gating on the thumb deadlocked: a
+          // display:none bar reports clientWidth 0, so the thumb never computed,
+          // so the bar never displayed, so it never got a width. jsdom has no
+          // layout, which is why the unit tests could not see it.
+          className={`${styles.ribbonSbar} ${ribbonScrollState.hasOverflow ? styles.ribbonSbarOn : ''}`}
+          onPointerDown={onSbarPointerDown}
+          aria-hidden="true"
+        >
+          {ribbonScrollState.thumb && (
+            <div
+              className={styles.ribbonThumb}
+              style={{ width: `${ribbonScrollState.thumb.width}px`, insetInlineStart: `${ribbonScrollState.thumb.offset}px` }}
+            />
+          )}
+        </div>
         {/* round237 — the "+" at the END (leftmost): completes the puzzle at the
             end of the discussion; opens an inline editable box. round250 (owner
             request) — when there are NO topics yet, show only the single START

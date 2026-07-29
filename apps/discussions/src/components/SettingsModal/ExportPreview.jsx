@@ -18,12 +18,12 @@ import {
   paginateRenderedDocx,
   patchPageNumbers,
   waitForImages,
-  forceRtlRenderedBody,
   extractTemplateAnchors,
   reanchorFloatingDrawings,
   extractTemplateTabParagraphs,
   applyTemplateTabStops,
 } from './previewPagination.js';
+import { normalizeRenderedDocxRtl } from './exportPreviewRtl.js';
 import logger from '../../utils/logger';
 import styles from './ExportPreview.module.css';
 
@@ -282,9 +282,9 @@ export default function ExportPreview({ template, assets, model = null, modelKey
           // body content overlap the footer. Wait for real image geometry.
           await waitForImages(stage);
           if (cancelled || seq !== seqRef.current) return;
-          // docx-preview leaves bidi body alignment to inheritance. Apply the
-          // Word document's RTL baseline before measuring and paginating.
-          forceRtlRenderedBody(stage);
+          // Normalize the rendered BODY before measuring/paginating so the
+          // preview uses the same RTL flow and physical right edge as Word.
+          normalizeRenderedDocxRtl(stage);
           // round202 — put the template's floating header/footer art where the
           // file actually anchors it (page-frame absolute, real extent) and lay
           // out its tab-stop paragraphs RTL-correctly — the "not centered"
@@ -305,6 +305,10 @@ export default function ExportPreview({ template, assets, model = null, modelKey
         }
         if (cancelled || seq !== seqRef.current || !hostRef.current) return;
         hostRef.current.replaceChildren(...stage.childNodes);
+        // Re-assert on the final mounted tree as well. This makes the result
+        // deterministic even if inherited preview styles differ offscreen vs
+        // inside the LTR scroll frame.
+        normalizeRenderedDocxRtl(hostRef.current);
         lastSigRef.current = sig;
         setPageCount(pageTotal);
         setCurPage(1);

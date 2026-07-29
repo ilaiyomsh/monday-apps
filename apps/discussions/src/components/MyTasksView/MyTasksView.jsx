@@ -144,6 +144,10 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     taskCols.priorityID?.id && { key: 'priority', label: t('myTasks.colPriority'), icon: 'status' },
     { key: 'status', label: t('myTasks.colStatus'), icon: 'status' },
     taskCols.taskNotesID?.id && { key: 'notes', label: t('myTasks.colNotes'), icon: 'text' },
+    // round306 — both people columns are available in EVERY scope and hideable
+    // from here (owner request); each shows only when its alias is mapped.
+    taskCols.responsibilityID?.id && { key: 'assignee', label: t('myTasks.colAssignee'), icon: 'person' },
+    taskCols.partnersID?.id && { key: 'partners', label: t('myTasks.colPartners'), icon: 'person' },
     { key: 'discussion', label: t('myTasks.colDiscussion'), icon: 'relation' },
   ].filter(Boolean);
   const hideableKeys = columnList.filter((c) => !c.locked).map((c) => c.key);
@@ -201,6 +205,10 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const applyPriority = useStableHandler((taskId, value) => resolveTargetIds(taskId, 'editTaskPriority').forEach((id) => updateTaskPriority(id, value)));
   const applyDeadline = useStableHandler((taskId, date) => resolveTargetIds(taskId, 'editTaskDeadline').forEach((id) => updateTaskDeadline(id, date)));
   const applyNotes = useStableHandler((taskId, notes) => updateTaskNotes(taskId, notes));
+  // round305/306 — the two people columns: bulk-aware like status/priority/
+  // deadline (a multi-select edit applies to every selected row the user may edit).
+  const applyPartners = useStableHandler((taskId, people) => resolveTargetIds(taskId, 'editTaskPartners').forEach((id) => updateTaskPartners(id, people)));
+  const applyAssignee = useStableHandler((taskId, people) => resolveTargetIds(taskId, 'editTaskAssignee').forEach((id) => updateTaskAssignee(id, people)));
   const applyRename = useStableHandler((taskId, name) => updateTaskName(taskId, name));
   const deleteSelected = () => {
     const ids = [...selectedIds].filter((id) => allow('deleteTask', id));
@@ -227,6 +235,7 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
   const {
     items, loading, loadingMore, hasMore, error, loadMore,
     updateTaskStatus, updateTaskPriority, updateTaskNotes, updateTaskDeadline, updateTaskName,
+    updateTaskPartners, updateTaskAssignee,
     softDeleteTasks, createTask,
   } = useMyTasks({ currentUser, context, search: debouncedSearch, notDoneStatusIds, scope });
 
@@ -494,6 +503,8 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
     name: t('myTasks.colName'),
     discussion: t('myTasks.colDiscussion'),
     person: t('myTasks.colPerson'),
+    assignee: t('myTasks.colAssignee'),
+    partners: t('myTasks.colPartners'),
   };
   const field = (mobile, label, seg) => (mobile
     ? <div className={bs.bField} key={label}><div className={bs.bFieldLabel}>{label}</div>{seg}</div>
@@ -914,6 +925,8 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
                     onNotesChange={applyNotes}
                     onDeadlineChange={applyDeadline}
                     onRenameTask={applyRename}
+                    onPartnersChange={applyPartners}
+                    onAssigneeChange={applyAssignee}
                     selectable
                     selectedIds={selectedIds}
                     onToggleSelect={toggleSelect}

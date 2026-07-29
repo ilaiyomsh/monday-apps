@@ -33,6 +33,32 @@ export function computeLedDiscussionIds(discussions, userId) {
  * The task ids linked to the led discussions (tasksBoardLinkID board_relation,
  * parsed to { ids }), deduped, led-discussion order preserved.
  */
+/**
+ * round305 — taskId → the parent discussion's ROLE people (lead / coordinator /
+ * creator), for the led-discussion tasks only. The personal "בדיונים שהובלתי"
+ * rows carry no discussion object, but some capabilities (שותפים) are granted to
+ * the discussion's lead/coordinator/creator, so the resolver needs those people.
+ * First discussion wins for a task linked to more than one.
+ * @returns {Map<string, {discussionLeadID, discussionCoordinatorID, discussionCreatorID}>}
+ */
+export function mapLedTaskDiscussionRoles(discussions, ledIds) {
+  const led = new Set((ledIds || []).map(String));
+  const out = new Map();
+  (Array.isArray(discussions) ? discussions : []).forEach((d) => {
+    if (!led.has(String(d?.id))) return;
+    const roles = {
+      discussionLeadID: Array.isArray(d?.discussionLeadID) ? d.discussionLeadID : [],
+      discussionCoordinatorID: Array.isArray(d?.discussionCoordinatorID) ? d.discussionCoordinatorID : [],
+      discussionCreatorID: Array.isArray(d?.discussionCreatorID) ? d.discussionCreatorID : [],
+    };
+    (d?.tasksBoardLinkID?.ids || []).forEach((tid) => {
+      const key = String(tid);
+      if (!out.has(key)) out.set(key, roles);
+    });
+  });
+  return out;
+}
+
 export function collectLedTaskIds(discussions, ledIds) {
   const led = new Set((ledIds || []).map(String));
   const out = [];
