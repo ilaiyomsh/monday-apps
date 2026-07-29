@@ -208,10 +208,15 @@ describe('renderDigestAmp — cluster tables with amp-bind dropdown', () => {
     expect(doc).toContain("c9004:'bg_00854d'");
   });
 
-  it('hides menus by default and toggles via dd.o state', () => {
+  // The open/closed key is per CELL (`<clusterIndex>_<itemId>`), not per item:
+  // an item can appear in two clusters and keying by itemId alone opened both
+  // menus on one tap. Selection keys (v/l/c) stay per item deliberately.
+  it('hides menus by default and toggles via a per-CELL dd.o key', () => {
     const doc = render();
-    expect(doc).toContain('hidden [hidden]="dd.o != \'9001\'"');
-    expect(doc).toContain("dd.o == '9001' ? '' : '9001'");
+    expect(doc).toContain('hidden [hidden]="dd.o != \'0_9001\'"');
+    expect(doc).toContain("dd.o == '0_9001' ? '' : '0_9001'");
+    // 9001 sits in cluster 0 only here; the point is the key carries the cluster.
+    expect(doc).not.toContain("dd.o != '9001'");
     expect(doc).toContain('class="dd-overlay"');
   });
 
