@@ -15,6 +15,19 @@ export function accessRolesFor(preferences, accessAlias) {
   return DEFAULT_PREFERENCES.accessRoleSources?.[accessAlias] || [];
 }
 // Toggle one discussion role in an access column's source list, returning the
+// round307 — the logo lives on preferences.logoUrl, per instance. These two are the
+// pure transitions (the component wraps them in setPreferences), so the storage
+// shape is unit-testable without mounting this 1,500-line modal.
+// `withLogo` REJECTS a falsy data-URI rather than writing it: a failed decode must
+// leave the existing logo alone, not silently wipe it.
+export function withLogo(preferences, dataUrl) {
+  if (!dataUrl) return preferences;
+  return { ...preferences, logoUrl: dataUrl };
+}
+export function withoutLogo(preferences) {
+  return { ...preferences, logoUrl: null };
+}
+
 // NEXT preferences object (pure — the component wraps it in setPreferences).
 export function toggleAccessRoleSource(preferences, accessAlias, roleAlias) {
   const base = { ...DEFAULT_PREFERENCES.accessRoleSources, ...(preferences?.accessRoleSources || {}) };
@@ -25,6 +38,7 @@ export function toggleAccessRoleSource(preferences, accessAlias, roleAlias) {
 import { api } from '../../utils/mondayApi/monday-client.js';
 import { detectManagedColumnId } from '../../utils/mondayApi/managedColumns.js';
 import { loadExportAssets, saveExportAssets } from '../../utils/exportAssets.js';
+import { fileToLogoDataUrl, LOGO_MAX_PX } from '../../utils/imageLogo.js';
 import SearchablePicker from './SearchablePicker';
 import PermissionsTab from './PermissionsTab.jsx';
 import ExportTemplateTab from './ExportTemplateTab.jsx';
@@ -257,6 +271,10 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   const [selectedRoleKey, setSelectedRoleKey] = useState(null);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState(0); // 0 = מיפוי, 1 = העדפות, 2 = תבניות, 3 = תבנית ייצוא, 4 = הרשאות, 5 = מדדי שימוש
+  // round307 — logo upload row (העדפות): transient UI state only; the value itself
+  // lives on `preferences.logoUrl` and is persisted by the modal's שמור.
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoError, setLogoError] = useState(null);
   // round256 — the Templates tab (2) widens to the export size while its type
   // editor is on the "תבנית ייצוא" sub-tab (TemplateManagerModal reports this).
   // round280 — master–detail mapping UI: the selected board tab and the selected
@@ -732,7 +750,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
         <Flex justify="end" gap={8} className={styles.confirmActions}>
           <Button kind="tertiary" onClick={() => setShowCloseConfirm(false)}>המשך עריכה</Button>
           <Button kind="secondary" onClick={() => { setShowCloseConfirm(false); onClose?.(); }}>יציאה ללא שמירה</Button>
-          <Button kind="primary" loading={saving} onClick={saveAndClose}>שמירה ויציאה</Button>
+          <Button kind="primary" loading={saving} disabled={saving || logoBusy} onClick={saveAndClose}>שמירה ויציאה</Button>
         </Flex>
       </div>
     </div>,
@@ -1318,9 +1336,73 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       </div>
                     </div>
                   </div>
-                  {/* round108 — brand logo shown at the top-right of every discussion
-                      header. Owner-only (this whole modal is owner-gated). Stored as
-                      a downscaled data-URI on preferences.logoUrl; "שמור" persists it. */}
+                  {/* round307 — the instance's LOGO is back in העדפות (the round108 row
+                      was removed at some point; the storage field and the downscale
+                      helper stayed). Owner-only, like this whole modal. The file is
+                      downscaled to a small data-URI and stored on
+                      preferences.logoUrl — per instance, so every discussions view
+                      carries its own logo. Shown on the loading splash (above the
+                      mark) and on the dashboard. "שמור" persists it with the rest. */}
+                  <div className={`${styles.prefRow} ${styles.prefRowStack}`}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>לוגו</Text>
+                    </div>
+                    <div className={`${styles.prefControl} ${styles.prefControlFull}`}>
+                      {/* While a file is decoding, BOTH save buttons and the picker are
+                          disabled (PR review): saving mid-conversion would persist the
+                          pre-upload preferences and close the modal, so the logo that
+                          finished a moment later was silently dropped — and a second pick
+                          could resolve out of order and win over the first. */}
+                      <div className={styles.logoRow}>
+                        {preferences.logoUrl ? (
+                          <img className={styles.logoPreview} src={preferences.logoUrl} alt="הלוגו הנוכחי" />
+                        ) : (
+                          <span className={styles.logoEmpty}>אין לוגו</span>
+                        )}
+                        <label className={styles.logoUpload}>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={logoBusy}
+                            onChange={async (e) => {
+                              const file = e.target.files && e.target.files[0];
+                              e.target.value = ''; // let the same file be re-picked after a failure
+                              if (!file) return;
+                              setLogoBusy(true);
+                              try {
+                                const dataUrl = await fileToLogoDataUrl(file, { maxPx: LOGO_MAX_PX });
+                                setPreferences((p) => withLogo(p, dataUrl));
+                                setLogoError(null);
+                              } catch (err) {
+                                logger.error('SettingsModal', 'טעינת הלוגו נכשלה', err);
+                                setLogoError('לא הצלחנו לקרוא את הקובץ. נסו קובץ תמונה אחר (PNG/JPG/SVG).');
+                              } finally {
+                                setLogoBusy(false);
+                              }
+                            }}
+                          />
+                          {preferences.logoUrl ? 'החלפת לוגו' : 'העלאת לוגו'}
+                        </label>
+                        {preferences.logoUrl ? (
+                          <Button
+                            kind={"tertiary"}
+                            size={"small"}
+                            onClick={() => { setPreferences((p) => withoutLogo(p)); setLogoError(null); }}
+                          >
+                            הסרה
+                          </Button>
+                        ) : null}
+                        {logoBusy ? <Text type={"text2"}>מעבד…</Text> : null}
+                      </div>
+                      <Text type={"text2"} className={styles.logoHint}>
+                        מוצג במסך הטעינה (מעל הסמל) ובדשבורד. הקובץ מוקטן ונשמר בהגדרות של
+                        התצוגה הזו, כך שלכל תצוגת דיונים יכול להיות לוגו משלה.
+                      </Text>
+                      {logoError ? (
+                        <Text type={"text2"} className={styles.logoError}>{logoError}</Text>
+                      ) : null}
+                    </div>
+                  </div>
                   {/* round205 — per-component visibility (owner request; this
                       whole modal is owner-gated): which app surfaces exist for
                       EVERYONE on this instance. Default-on; unchecking stores an
@@ -1424,7 +1506,7 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
               ייצוא JSON
             </Button>
             <Button kind={"tertiary"} onClick={attemptClose}>ביטול</Button>
-            <Button kind={"primary"} loading={saving} onClick={handleSave}>שמור</Button>
+            <Button kind={"primary"} loading={saving} disabled={saving || logoBusy} onClick={handleSave}>שמור</Button>
           </Flex>
           {/* round191 — version badge is OWNERS ONLY (owner request). This footer only
               renders in the full (owner) modal — non-owners get the templatesOnly early

@@ -1004,3 +1004,63 @@
   .mapTypesCol { width: 100%; order: 0; flex-direction: row; flex-wrap: wrap; }
   .mapTypesCol .mapTy { width: auto; }
 }
+
+/* round307 — the logo upload row in העדפות. The preview sits on a checkerboard-free
+   light tile so a transparent PNG still reads, and it is bounded to the same box
+   the loading splash gives it, so what the owner sees here is what ships. */
+.logoRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.logoPreview {
+  max-width: 190px;
+  max-height: 56px;
+  object-fit: contain;
+  background: #ffffff;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.logoEmpty {
+  font-size: 13px;
+  color: var(--secondary-text-color, #676879);
+  border: 1px dashed var(--ui-border-color, #d0d4e4);
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+/* A styled <label> wrapping a hidden file input — the native control cannot be
+   restyled, and @vibe/core has no file-picker button. */
+.logoUpload {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--primary-color, #0073ea);
+  color: var(--primary-color, #0073ea);
+  background: transparent;
+}
+.logoUpload:hover { background: var(--primary-selected-color, #cce5ff); }
+.logoUpload:focus-within { outline: 2px solid var(--primary-color, #0073ea); outline-offset: 2px; }
+.logoUpload input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.logoHint {
+  display: block;
+  margin-top: 8px;
+  color: var(--secondary-text-color, #676879);
+}
+.logoError {
+  display: block;
+  margin-top: 6px;
+  color: var(--negative-color, #d83a52);
+}
