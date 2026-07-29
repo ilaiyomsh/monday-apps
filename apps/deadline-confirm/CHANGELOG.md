@@ -2,6 +2,195 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.10.0 — 2026-07-29 — feat: Gmail sending wired end-to-end (T9/T9b/T9c)
+
+Sending is live. The manual **"שליחה עכשיו"** button in the admin screen now runs
+the whole flow — recipients from the users board, per-recipient task
+classification, one signed AMP message each — and actually delivers. The
+scheduler is intentionally still out of scope; the button is its stand-in.
+
+- **Per-organization sending identity** (owner decision 2026-07-29, superseding
+  D12/D13): every tenant connects a Gmail mailbox in its **own** Workspace under
+  its **own** OAuth client. The record lives at `${accountId}:google_sender`, not
+  an app-global key. This is what keeps DKIM aligned with the `From` domain —
+  Gmail requires that alignment before it renders the AMP part at all, so a
+  single vendor address would have broken dynamic email for every customer.
+- **New:** `GET /oauth/google/start` + `/oauth/google/callback`. Admit gate is
+  sessionToken + `ALLOWED_ACCOUNT_IDS` (empty roster = default deny). The Google
+  state nonce lives in its own key namespace, so a monday-issued nonce cannot be
+  redeemed at the Google callback.
+- **New env:** `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`. Absent →
+  no sender is constructed and `/api/digest/send` answers 409 as before.
+- **Scopes:** `gmail.send` plus `openid email` (the sender address comes from the
+  `id_token`, costing no API call). No mail-read scope, ever.
+- **Token lifecycle:** one refresh per account per run, not per recipient.
+  `invalid_grant` — and only `invalid_grant` — marks the connection dead, so a
+  Google 5xx cannot silence a tenant. One forced-refresh retry on a 401.
+- **Message assembly:** the `multipart/alternative` body passes through
+  byte-for-byte (re-encoding would invalidate the AMP part); Hebrew subjects are
+  RFC2047-encoded; CRLF in a recipient or subject is refused, not sanitized.
+- **Admin:** new "שליחת מייל (Gmail)" section shows connect state and the sender
+  address, and warns when the connected sender is **not** on
+  `AMP_ALLOWED_SENDERS` — that combination sends mail whose every button 403s.
+- Setup for a new organization: `docs/google-setup-guide.md`.
+
+## 0.9.5 — 2026-07-28 — fix: distinct AMP errors + secret-rotate UX
+
+- Every `/amp/confirm` failure path now returns a **distinct** `error` code and a
+  Hebrew `message` tagged `[E1a]`…`[E10]` / `[E99]` (was collapsed into
+  `bad_request` / `invalid` / generic "הקישור אינו בתוקף").
+- Diagnose from the AMP pink error box or Network JSON: e.g. `bad_fields` [E3a],
+  `bad_manifest` [E3b], `bad_slot` [E5], `bad_sig` [E6], `conflict_item` [E7b],
+  `manifest_violation` [E8], `rate_limited_account` [E9].
+- No ids in messages (no verification oracle). Map: `MESSAGES` in `src/routes/amp.js`.
+- **Secret rotate:** `POST /api/secret/rotate` returns masked `secret` so the admin
+  UI no longer depends on a follow-up `GET /api/state` (which could 500 and show
+  both green success and "יצירת מפתח נכשלה"). Refresh failure is reported separately.
+- Admin `internal_error` responses include `[admin <path>]` for Network diagnosis;
+  SecureStorage failures are wrapped as `secure_storage_*_failed`.
+- Merged with the 0.9.3 `detail` channel rather than replacing it: every AMP
+  failure now carries BOTH its distinct `error` code + `[E…]` message and the
+  machine `detail` that renders in the email body.
+
+## 0.9.4 — 2026-07-28 — fix: a legacy config could not be saved at all + settings export/import
+
+- **Production incident.** Saving from the admin panel failed with
+  `PUT /api/config → 400 invalid_config`, so the operator could not change
+  anything — and the digest kept running on the old stored config, which is why
+  the preview showed no recipients and no tasks even though matching tasks
+  existed on the board.
+- **Cause: two of our own decisions collided.** 0.7.1 made reading a pre-0.6.0
+  config non-throwing by defaulting a missing `section.dateColumnTitle` to `''`.
+  The server, however, requires that field to be a **non-empty** string
+  (`validateConfig`, pinned by `tests/admin-api-digest.test.js`). So a legacy
+  config was loadable but permanently unsavable.
+  It was invisible from the UI: `digestIsComplete` does not check the title, and
+  the date dropdown renders its label from `dateColumnId`, so the screen showed
+  a filled-in date column while the stored field was empty.
+- **Fix on the client, not the server.** The title is derivable from the
+  selected column, so `backfillDateColumnTitles` derives it at the save
+  boundary, falling back to `'תאריך'` when the column cannot be resolved (the
+  renderers already use that same fallback). Relaxing the server was rejected —
+  it would mean weakening a locked test and admitting header-less sections into
+  storage.
+- **New: export / import settings as JSON** (owner request). The export carries
+  BOTH the stored config and the on-screen draft — when a save is rejected, the
+  difference between the two is the diagnosis. It contains configuration only:
+  no link secret, no OAuth token (neither ever reaches the client). Import loads
+  into the draft and does **not** save, so the operator reviews first.
+- Tests: red → green + 3/3 mutations killed on `settings-io`. Suite 540 green.
+
+## 0.9.3 — 2026-07-27 — fix: drop «ללא שינוי»; preview AMP uses live slot
+
+- Status menu shows only the cluster's action buttons (no gray «ללא שינוי»).
+- Unchanged tasks = leave the current-status trigger as-is (`item_<id>` stays empty).
+- Admin preview AMP is signed with the **live clock** (not a fixed 09:00), so a
+  copied document matches `/amp/confirm`'s current slot when tested immediately.
+- Admin hint: playground submit needs `amp@gmail.dev` on `AMP_ALLOWED_SENDERS`.
+- Admin `500 internal_error` now returns `message` + `detail` (name/message/stack);
+  the SPA shows them on boot/save and logs the stack to the browser console.
+- AMP submit-error shows machine `detail` in the **email body** (e.g. `bad_slot`,
+  `bad_sig`, `missing_or_invalid_fields`) under the Hebrew message.
+
+## 0.9.2 — 2026-07-27 — feat: AMP digest — amp-bind status dropdown (monday colors)
+
+- Per-row status choice is a real **dropdown**: closed colored trigger → tap opens
+  a popup of monday-colored options (`amp-bind` + `AMP.setState`).
+- Trigger shows the **current status** (text + color); choosing an option updates
+  the cell immediately via bind. Header: **סטטוס** (not «סטטוס חדש»).
+  «ללא שינוי» restores the original status display and clears the wire value.
+- Not native `<select>` (OS popup unstyleable) and not an always-open radio stack.
+- Wire: hidden `item_<id>` with `[value]` bound to state (`""` = no change).
+- Playground: `docs/amp-playground-cluster-tables.html`.
+
+## 0.9.1 — 2026-07-27 — feat: AMP digest — styled label dropdown (`<select>`)
+
+- Per-row status choice is a **styled** AMP-for-Email `<select class="label-dd">`
+  (monday-like closed control: ~200×34, blue border `#0073ea`, Figtree). The OS
+  popup panel itself cannot be restyled in Gmail/AMP.
+- Options = that cluster's action buttons; empty option **ללא שינוי** = no write.
+- Wire unchanged: `item_<id>=btnId`. Cluster tables + multi-button config kept.
+- Playground sample: `docs/amp-playground-cluster-tables.html`.
+
+## 0.9.0 — 2026-07-27 — feat: AMP digest — one table per cluster + multi-button columns
+
+- **Layout:** one AMP table per populated מקבץ (cluster title + that cluster's
+  date column only). No mega-table / LabelPicker chrome.
+- **Multi-button:** each cluster may define `buttonIds[]` (admin multi-select);
+  each button is a colored radio column. Primary `buttonId` (= first) still
+  drives the status-column filter. Legacy configs with only `buttonId` work.
+- **Wire unchanged:** one form, `item_<id>=btnId` radios, one **אשר את המסומנות**.
+- Playground sample: `docs/amp-playground-cluster-tables.html`.
+
+## 0.8.5 — 2026-07-27 — chore: redeploy draft after transient mapps failure
+
+- Re-push of 0.8.4 AMP status-picker styling after monday `code:push` polling
+  failed mid-deploy (`Unexpected error occurred while communicating with the
+  remote server`). No product code change.
+
+## 0.8.4 — 2026-07-27 — style: AMP status picker matches monday status-picker-wrapper-v2
+
+- Picker column styled like monday's native status picker: **200px** wide,
+  **10px** padding, thin blue border + soft shadow.
+- Option labels: **34px** tall, **14px** / `font-weight: normal`, Figtree/Roboto
+  stack (parity with discussions `statusOption` / monday wrapper ~200×313).
+- Checked option outline uses monday blue `#0073ea`. AMP-safe (no `position`).
+
+## 0.8.3 — 2026-07-27 — feat: digest AMP — LabelPicker-style status + all date columns
+
+- **AMP digest UI:** monday-like board table; current status as `statusFill`;
+  new status via inlined LabelPicker-style colored options (visual port of
+  discussions `LabelPickerCell` / TaskTable — AMP cannot host React Dialog).
+- **Dates:** every date column from digest settings appears as its own table
+  column (`recipient.dateColumns` + `task.dates`).
+- **Confirm:** empty `item_*` values are skipped (no-change), so a mixed
+  selection still applies only the chosen statuses.
+- One global **אשר את המסומנות** submits all chosen statuses.
+
+## 0.8.2 — 2026-07-27 — feat: V6 T15/D9 — one table, one approve button
+
+- **T15 / D9:** AMP digest is a single table with one radio column per status
+  button and **one** global submit (`אשר את המסומנות`). No per-section forms.
+- Tasks that appear under several digest sections get a union of those buttons
+  on one row. Wire format (`a/p/m/s/sig` + `item_<id>`) unchanged.
+
+## 0.8.1 — 2026-07-27 — feat: V6 T6c/T10–T12 (scheduler, D16, deny-all roster)
+
+Continues V6 from `docs/v6-amp-only-decisions.md`. **Gmail OAuth / send funnel
+(T9/T9b/T9c) deferred** until the Google Cloud app is provisioned — the
+`emailSender` seam stays empty in production.
+
+- **D16 / T6c:** one message per users-board row (no email dedup); multi-person
+  rows skipped as `multi_person`.
+- **D15 / T10b:** empty `ALLOWED_ACCOUNT_IDS` is default-deny (admin + OAuth +
+  scheduler); boot error log when empty. **Breaking config change** — set the
+  roster on the platform before this version goes live.
+- **T10:** `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`) iterates
+  the roster, runs tenants whose `sendHour` matches Asia/Jerusalem hour.
+- **T11:** operator summary email after a scheduled run (`OPERATOR_EMAIL` env);
+  counts/addresses/slot only.
+- **T12:** `POST /api/digest/resend-today` — all recipients, current slot.
+- **MIME helper:** `multipart/alternative` plain + `text/x-amp-html` (ready for T9).
+- Manual/scheduled send path uses plain+AMP MIME via `runDigestForAccount` (no
+  legacy HTML `/confirm` body).
+
+## 0.8.0 — 2026-07-27 — feat: V6 AMP-only + per-message signed manifest
+
+**Breaking product change.** See `docs/v6-amp-only-decisions.md`.
+
+- **Deleted:** `/confirm` route family, snippet/email-template endpoints, Resend
+  sender path, actionable HTML in digest preview.
+- **Added:** `manifest-signature` module (build/parse/sign/verify/currentSlot);
+  V6 wire format on `POST /amp/confirm` (`a/p/m/s/sig` + `item_<id>` radios);
+  D11 runtime assignee check; two-bucket rate limit on AMP path.
+- **Digest:** single `personId` per recipient; `text/plain` renderer; AMP renderer
+  with one signature per message; preview returns `{ plain, amp }`.
+- **Admin API:** rotate returns `{ ok: true }` only; `digest.sendHour` (0–23,
+  default 8) in config validation.
+- **SPA:** secret rotation without display; digest preview plain+AMP; sendHour field;
+  legacy templates section (no HTML copy).
+- Tests: 548 green; spotchecks on admin-api and draft sendHour.
+
 ## 0.7.3 — 2026-07-27 — fix: board pickers were empty (wrong discriminator field)
 
 - **Reported from the admin panel:** the users-board dropdown rendered

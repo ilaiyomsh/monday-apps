@@ -426,7 +426,7 @@ const logger = {
     });
   },
 
-  error: (module: string, message: string, error: unknown = null): void => {
+  error: (module: string, message: string, error: unknown = null, context: LogContext | null = null): void => {
     emit({
       kind: 'error',
       level: 'ERROR',
@@ -434,6 +434,9 @@ const logger = {
       message,
       error: error instanceof Error ? error : undefined,
       data: error instanceof Error ? undefined : error,
+      // The React ErrorBoundary passes { componentStack } here so the sink ships it as
+      // component_stack (fix 3) — the sink reads it ONLY from record.context.componentStack.
+      context: context ?? undefined,
       consoleEnabled: currentLevel <= LOG_LEVELS.ERROR,
     });
   },

@@ -92,3 +92,52 @@ describe('openOauthTab (v3 — account context via sessionToken)', () => {
     expect(errSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('seamlessApi — funnel logging on a network/SDK throw', () => {
+  afterEach(() => {
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it("logs logger.error('monday','seamless_api_failed', <Error>) and rethrows when monday.api rejects", async () => {
+    vi.resetModules();
+    vi.doMock('monday-sdk-js', () => ({
+      default: () => ({
+        get: vi.fn(async () => ({ data: 'tok' })),
+        api: vi.fn(async () => {
+          throw new Error('network down');
+        }),
+      }),
+    }));
+    const loggerMod = await import('../utils/logger');
+    const errSpy = vi.spyOn(loggerMod.default, 'error').mockImplementation(() => {});
+    const fresh = await import('./monday');
+
+    await expect(fresh.fetchBoards()).rejects.toThrow('network down');
+    expect(errSpy).toHaveBeenCalledTimes(1);
+    expect(errSpy.mock.calls[0][0]).toBe('monday');
+    expect(errSpy.mock.calls[0][1]).toBe('seamless_api_failed');
+    expect(errSpy.mock.calls[0][2]).toBeInstanceOf(Error);
+  });
+
+  it('does NOT log when monday.api resolves normally (fetchBoards happy path)', async () => {
+    vi.resetModules();
+    vi.doMock('monday-sdk-js', () => ({
+      default: () => ({
+        get: vi.fn(async () => ({ data: 'tok' })),
+        api: vi.fn(async () => ({
+          // isRealBoard gates on BOTH discriminators — `type` (develop's 5e27562, "board
+          // pickers were empty — wrong discriminator field") and object_type_unique_key.
+          // Omitting either filters the row out and the happy path asserts on [].
+          data: { boards: [{ id: '1', name: 'B', type: 'board', object_type_unique_key: 'board' }] },
+        })),
+      }),
+    }));
+    const loggerMod = await import('../utils/logger');
+    const errSpy = vi.spyOn(loggerMod.default, 'error').mockImplementation(() => {});
+    const fresh = await import('./monday');
+
+    await expect(fresh.fetchBoards()).resolves.toEqual([{ id: '1', name: 'B' }]);
+    expect(errSpy).not.toHaveBeenCalled();
+  });
+});

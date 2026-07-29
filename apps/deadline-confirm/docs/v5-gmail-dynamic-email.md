@@ -1,5 +1,10 @@
 # V5 design log — Gmail dynamic email (AMP for Email)
 
+> **Superseded by V6 (2026-07-27).** V6 removes the HTML fallback and `/confirm`
+> entirely — see `docs/v6-amp-only-decisions.md` and the V6 Amendment in
+> `docs/spec.md`. Sections below on "additive, never a replacement" and per-task
+> `/confirm` links describe the **pre-V6** model and are kept for history only.
+
 Owner session 2026-07-26. Records WHY, not just what; the spec (`docs/spec.md`,
 V5 Amendment) is the normative statement.
 

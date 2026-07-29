@@ -25,8 +25,9 @@ export function getEnv() {
   return {
     clientId: process.env.MONDAY_CLIENT_ID || '',
     clientSecret: process.env.MONDAY_CLIENT_SECRET || '',
-    // Empty list = every installing account is admitted (isolation is
-    // structural); non-empty = private-app allowlist.
+    // V6 D15: tenant roster for admin admit + scheduler/send. Empty =
+    // default-deny (nobody admitted, nobody sent to). Breaking change from
+    // the v3 "empty = any installing account" default.
     allowedAccountIds,
     baseUrl: (process.env.BASE_URL || '').replace(/\/+$/, ''),
     // Draft-testing only (OAuth settings are per app version): when set, the
@@ -34,13 +35,16 @@ export function getEnv() {
     oauthAppVersionId: process.env.MONDAY_APP_VERSION_ID || '',
     port: Number(process.env.PORT || 8080),
     useLocalStorage: process.env.USE_LOCAL_STORAGE === 'true',
-    // v4 digest (phase 1): Resend sender. Both optional — when either is
-    // missing the app runs without outbound email and /api/digest/send
-    // answers 409 email_not_configured.
-    resendApiKey: process.env.RESEND_API_KEY || '',
-    digestFrom: process.env.DIGEST_FROM || '',
     // V5 Gmail dynamic email: senders whose AMP forms may call /amp/confirm.
     // Empty = endpoint admits NOBODY (default deny, see helpers/amp-cors.js).
     ampAllowedSenders: parseSenderList(process.env.AMP_ALLOWED_SENDERS),
+    // D8 operator summary destination. Absent → summary is skipped (logged).
+    operatorEmail: (process.env.OPERATOR_EMAIL || '').trim().toLowerCase() || null,
+    // T9b Gmail sending. App-level FALLBACK credentials: each organization is
+    // expected to run its own OAuth client (owner decision 2026-07-29), and a
+    // tenant's own pair on its google_sender record wins over these. Absent
+    // both → no sender is constructed and /api/digest/send answers 409.
+    googleOauthClientId: (process.env.GOOGLE_OAUTH_CLIENT_ID || '').trim(),
+    googleOauthClientSecret: (process.env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim(),
   };
 }

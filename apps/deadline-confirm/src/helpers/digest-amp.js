@@ -1,28 +1,25 @@
-// amp4email digest renderer (V5 — Gmail dynamic email).
+// V6 amp4email digest renderer (docs/v6-amp-only-decisions.md §3, §5, D9).
 //
-// Produces the `text/x-amp-html` MIME part of the digest. Gmail (web, Android,
-// iOS) renders it as DYNAMIC EMAIL: the reader ticks the tasks they want and
-// submits one <amp-form> per section — the whole update happens inside the
-// message, no browser tab. Every other client ignores this part and reads the
-// static `text/html` part (helpers/digest-email.js), whose per-task links keep
-// working; the two are always generated from the same digest data.
+// Layout (owner 2026-07-27): ONE table per populated cluster (מקבץ).
+// Columns: name | that cluster's date | amp-bind dropdown (monday-colored
+// trigger + popup options). Native <select> popup cannot be styled; always-open
+// radio stacks are not a dropdown. Wire via hidden input [value] binding.
 //
-// Format constraints are hard requirements, not style (an invalid document is
-// silently dropped to the HTML fallback):
-//   - `<!doctype html>` + `<html amp4email>` + `<meta charset="utf-8">` first
-//     in <head> + the amp4email boilerplate <style>
-//   - scripts ONLY from cdn.ampproject.org (v0 + amp-form + amp-mustache)
-//   - POST via `action-xhr`; `action`/`target` are website-only attributes
-//   - server replies render through <template type="amp-mustache">
-//   - the whole part must stay under 200,000 bytes (style under 50,000)
-//
-// Security: the link secret travels in hidden inputs only — never in a URL
-// inside this part — and the endpoint it posts to is sender-gated
-// (helpers/amp-cors.js). Gmail strips the AMP part on reply/forward.
+// Wire format unchanged:
+//   hidden: a, p, m, s, sig
+//   selection: <input type="hidden" name="item_<itemId>" [value]=btnId> ("" = no change)
+// Same item across clusters shares one state key + one hidden field.
 
 import { escapeHtml } from './html.js';
+import { buildManifest, signManifest, currentSlot } from '../services/manifest-signature.js';
 
 const AMP_ENDPOINT_PATH = '/amp/confirm';
+const DEFAULT_SEND_HOUR = 8;
+const SUBMIT_LABEL = 'אשר את המסומנות';
+const SUBMIT_COLOR = '#0073ea';
+const NEUTRAL_STATUS = '#c4c4c4';
+const TRIGGER_EMPTY = '—';
+const STATUS_HEADER = 'סטטוס';
 
 /** YYYY-MM-DD → DD/MM/YYYY (unset → ''). */
 function formatDate(date) {
@@ -32,84 +29,402 @@ function formatDate(date) {
   return `${d}/${m}/${y}`;
 }
 
-const STYLES = `
-      body { margin:0; padding:14px 10px; background:#EEF0F4; font-family:Arial,Helvetica,sans-serif; color:#1F2430; }
-      .wrap { max-width:640px; margin:0 auto; background:#ffffff; border:1px solid #E4E7EC; border-radius:12px; padding:18px; }
-      .hi { font-size:19px; font-weight:bold; margin:0 0 6px; }
-      .lead { font-size:14px; color:#55606E; line-height:1.6; margin:0 0 16px; }
-      .grp { background:#F7F8FA; border:1px solid #E4E7EC; border-radius:10px; padding:12px 12px 8px; margin:0 0 16px; }
-      .grp h2 { font-size:15px; margin:0 0 10px; }
-      table { width:100%; border-collapse:collapse; background:#ffffff; }
-      th { font-size:12px; color:#55606E; font-weight:bold; text-align:right; padding:7px 8px; border:1px solid #E4E7EC; }
-      td { font-size:13px; padding:7px 8px; border:1px solid #E4E7EC; vertical-align:middle; }
-      .pick { text-align:center; width:34px; }
-      .meta { color:#55606E; font-size:12px; text-align:center; white-space:nowrap; }
-      label { display:block; }
-      .go { margin:12px 0 4px; }
-      .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; }
-      .ok { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#E6F7EF; color:#00754A; font-size:13px; }
-      .err { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#FDECEE; color:#B4222F; font-size:13px; }
-      .foot { font-size:12px; color:#8A919B; line-height:1.6; border-top:1px solid #E9EBEF; padding-top:12px; margin-top:4px; }
-`;
-
-function renderRow({ task, buttonId }) {
-  const boxId = escapeHtml(`it_${buttonId}_${task.itemId}`);
-  return `            <tr>
-              <td class="pick"><input type="checkbox" name="item" value="${escapeHtml(String(task.itemId))}" id="${boxId}"></td>
-              <td><label for="${boxId}">&#8207;${escapeHtml(task.name)}</label></td>
-              <td class="meta">${formatDate(task.date)}</td>
-              <td class="meta">${escapeHtml(task.statusText ?? '')}</td>
-            </tr>`;
+/**
+ * Escape a string for use inside a single-quoted amp-bind / setState literal.
+ * @param {string} raw
+ */
+function escapeBindStr(raw) {
+  return String(raw)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, ' ');
 }
 
-function renderSection({ section, baseUrl, secret, accountId }) {
-  const button = section.button ?? {};
-  const buttonId = section.buttonId ?? button.id ?? '';
-  const color = button.style?.color ?? '#00854d';
-  const icon = button.style?.icon ?? '';
-  const submitLabel = `${icon ? `${icon} ` : ''}${button.name ?? 'עדכן'} — אשר את המסומנות`;
-  const dateHeader = section.dateColumnTitle && section.dateColumnTitle.length > 0 ? section.dateColumnTitle : 'תאריך';
-  const rows = section.tasks.map((task) => renderRow({ task, buttonId })).join('\n');
+/**
+ * Action buttons offered for a section — multi-button (`buttons` / `buttonIds`)
+ * with legacy fallback to singular `button` / `buttonId`.
+ * @param {object} section
+ * @returns {Array<{ id: string, label: string, color: string }>}
+ */
+export function resolveSectionButtons(section) {
+  /** @type {Array<{ id: string, label: string, color: string }>} */
+  const out = [];
+  const seen = new Set();
 
-  return `      <div class="grp">
-        <h2>&#8207;${escapeHtml(section.title)}</h2>
-        <form method="post"
-              action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
-              enctype="application/x-www-form-urlencoded">
-          <input type="hidden" name="a" value="${escapeHtml(String(accountId))}">
-          <input type="hidden" name="k" value="${escapeHtml(secret)}">
-          <input type="hidden" name="btn" value="${escapeHtml(buttonId)}">
-          <table>
+  const pushButton = (raw) => {
+    if (!raw || typeof raw !== 'object') return;
+    const id = raw.id ?? '';
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    out.push({
+      id,
+      label: raw.targetLabel || raw.name || 'עדכן',
+      color: raw.style?.color || NEUTRAL_STATUS,
+    });
+  };
+
+  if (Array.isArray(section.buttons) && section.buttons.length > 0) {
+    for (const b of section.buttons) pushButton(b);
+    return out;
+  }
+
+  if (Array.isArray(section.buttonIds) && section.buttonIds.length > 0) {
+    const primary = section.button && section.button.id ? section.button : null;
+    for (const id of section.buttonIds) {
+      if (primary && primary.id === id) pushButton(primary);
+      else if (typeof id === 'string' && id.length > 0 && !seen.has(id)) {
+        seen.add(id);
+        out.push({ id, label: id, color: NEUTRAL_STATUS });
+      }
+    }
+    return out;
+  }
+
+  if (section.button) {
+    pushButton(section.button);
+    return out;
+  }
+
+  const id = section.buttonId ?? '';
+  if (id) out.push({ id, label: id, color: NEUTRAL_STATUS });
+  return out;
+}
+
+/**
+ * AMP4EMAIL forbids [style] on <button> — bind background via [class] instead.
+ * @param {string} hex
+ * @returns {string} e.g. bg_fdab3d
+ */
+function colorToClass(hex) {
+  const clean = String(hex || NEUTRAL_STATUS)
+    .trim()
+    .replace(/^#/, '')
+    .replace(/[^a-fA-F0-9]/g, '')
+    .toLowerCase();
+  return `bg_${clean || 'c4c4c4'}`;
+}
+
+/**
+ * @param {Iterable<string>} colors hex colors used in this message
+ * @returns {string} CSS rules for .dd-trig.bg_*
+ */
+function buildColorClassCss(colors) {
+  const seen = new Set();
+  const rules = [];
+  for (const raw of colors) {
+    const cls = colorToClass(raw);
+    if (seen.has(cls)) continue;
+    seen.add(cls);
+    const hexDigits = cls.slice(3); // after bg_
+    rules.push(`.dd-trig.${cls} { background:#${escapeHtml(hexDigits)}; }`);
+  }
+  return rules.join('\n      ');
+}
+
+/**
+ * All action buttons across populated sections (for status-color matching).
+ * @param {object} recipient
+ * @returns {Array<{ id: string, label: string, color: string }>}
+ */
+function allRecipientButtons(recipient) {
+  const out = [];
+  const seen = new Set();
+  for (const section of recipient.sections ?? []) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    for (const button of resolveSectionButtons(section)) {
+      if (seen.has(button.id)) continue;
+      seen.add(button.id);
+      out.push(button);
+    }
+  }
+  return out;
+}
+
+/**
+ * Best-effort color for the task's current status label: optional
+ * task.statusColor, else match a known action-button label, else gray.
+ * @param {string} statusText
+ * @param {Array<{ label: string, color: string }>} buttons
+ * @param {string} [statusColor]
+ */
+function resolveCurrentStatusColor(statusText, buttons, statusColor) {
+  if (statusColor && typeof statusColor === 'string' && statusColor.trim()) {
+    return statusColor.trim();
+  }
+  const needle = String(statusText || '').trim();
+  if (!needle) return NEUTRAL_STATUS;
+  const match = buttons.find((b) => b.label === needle);
+  return match?.color || NEUTRAL_STATUS;
+}
+
+/** Closed-trigger label = current status text (or em dash if unset). */
+function currentStatusLabel(task) {
+  const text = typeof task?.statusText === 'string' ? task.statusText.trim() : '';
+  return text || TRIGGER_EMPTY;
+}
+
+/**
+ * Collect button + current-status colors used in this message (+ neutral).
+ * @param {object} recipient
+ * @returns {string[]}
+ */
+function collectColors(recipient) {
+  const colors = new Set([NEUTRAL_STATUS]);
+  const palette = allRecipientButtons(recipient);
+  for (const button of palette) colors.add(button.color || NEUTRAL_STATUS);
+  for (const section of recipient.sections ?? []) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    for (const task of section.tasks) {
+      const label = currentStatusLabel(task);
+      colors.add(
+        resolveCurrentStatusColor(label === TRIGGER_EMPTY ? '' : label, palette, task.statusColor)
+      );
+    }
+  }
+  return [...colors];
+}
+
+/**
+ * Initial amp-state — seeded with each item's current status (first occurrence
+ * wins across clusters). c<id> is a CSS class name (AMP4EMAIL forbids [style]
+ * on button). v<id> starts empty (= no write until the reader picks an option).
+ * @param {object} recipient
+ */
+function buildDropdownState(recipient) {
+  /** @type {Record<string, string>} */
+  const state = { o: '' };
+  const palette = allRecipientButtons(recipient);
+  const seen = new Set();
+  for (const section of recipient.sections ?? []) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    for (const task of section.tasks) {
+      const id = String(task.itemId);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      const label = currentStatusLabel(task);
+      const color = resolveCurrentStatusColor(
+        label === TRIGGER_EMPTY ? '' : label,
+        palette,
+        task.statusColor
+      );
+      const cls = colorToClass(color);
+      state[`v${id}`] = '';
+      state[`l${id}`] = label;
+      state[`c${id}`] = cls;
+    }
+  }
+  return state;
+}
+
+const STYLES_BASE = `
+      body { margin:0; padding:14px 10px; background:#F5F6F8; font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif; color:#323338; }
+      .wrap { max-width:720px; margin:0 auto; background:#ffffff; border:1px solid #E6E9EF; border-radius:8px; padding:18px; }
+      .hi { font-size:18px; font-weight:bold; margin:0 0 6px; }
+      .lead { font-size:14px; color:#676879; line-height:1.6; margin:0 0 18px; }
+      .cluster { margin:0 0 22px; }
+      .cluster-title { font-size:15px; font-weight:bold; color:#323338; margin:0 0 8px; line-height:1.4; }
+      table.board { width:100%; border-collapse:collapse; background:#ffffff; border:1px solid #E6E9EF; }
+      th { font-size:12px; color:#676879; font-weight:500; text-align:center; padding:8px; border-bottom:1px solid #E6E9EF; border-inline-end:1px solid #D0D4E4; background:#FAFBFC; white-space:nowrap; }
+      th.name-h { text-align:right; }
+      th.status-h { min-width:200px; }
+      th:last-child { border-inline-end:none; }
+      td { font-size:14px; font-weight:normal; padding:0 8px; border-bottom:1px solid #E6E9EF; border-inline-end:1px solid #D0D4E4; vertical-align:middle; height:44px; text-align:center; }
+      td:last-child { border-inline-end:none; }
+      td.name { text-align:right; padding-inline-start:12px; white-space:nowrap; }
+      td.date { color:#676879; font-size:13px; white-space:nowrap; }
+      td.dd-cell { padding:8px; width:220px; vertical-align:middle; text-align:right; }
+      .dd-wrap { position:relative; display:inline-block; width:200px; max-width:100%; text-align:right; }
+      .dd-trig {
+        width:200px; max-width:100%; height:34px; box-sizing:border-box;
+        padding:0 12px; border:0; border-radius:4px; cursor:pointer;
+        font-size:14px; font-weight:bold; color:#ffffff; text-align:center;
+        font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
+        background:${NEUTRAL_STATUS};
+      }
+      .dd-menu {
+        position:absolute; top:100%; inset-inline-end:0; z-index:20;
+        width:200px; margin-top:4px; padding:8px; box-sizing:border-box;
+        background:#ffffff; border:1px solid #E6E9EF; border-radius:8px;
+        box-shadow:0 10px 25px rgba(0,0,0,0.15);
+      }
+      .dd-opt {
+        display:block; width:100%; box-sizing:border-box;
+        margin:0 0 4px; padding:0 12px; border:0; border-radius:4px; cursor:pointer;
+        height:34px; line-height:34px; font-size:14px; font-weight:bold; color:#ffffff; text-align:center;
+        font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
+      }
+      .dd-opt:last-child { margin-bottom:0; }
+      .dd-overlay {
+        position:fixed; top:0; right:0; bottom:0; left:0; z-index:10;
+        background:transparent;
+      }
+      .go { margin:8px 0 4px; }
+      .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; }
+      .ok { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#E6F7EF; color:#00754A; font-size:13px; }
+      .err { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#FDECEE; color:#B4222F; font-size:13px; white-space:pre-wrap; word-break:break-word; }
+      .err-detail { display:block; margin-top:6px; font-size:11px; opacity:0.9; font-family:ui-monospace,Menlo,Consolas,monospace; }
+      .foot { font-size:12px; color:#9699A6; line-height:1.6; border-top:1px solid #E6E9EF; padding-top:12px; margin-top:10px; }
+`;
+
+/**
+ * amp-bind dropdown: closed trigger shows CURRENT status; tap opens colored
+ * options. Selecting updates the cell via [text]/[class] and sets the wire
+ * value. Leaving the trigger untouched keeps v="" (= no write for that item).
+ * Trigger color via [class] (AMP4EMAIL forbids [style] on button).
+ * @param {string} fieldName escaped name="item_<id>"
+ * @param {Array<{ id: string, label: string, color: string }>} buttons section options
+ * @param {Array<{ id: string, label: string, color: string }>} palette all digest buttons (color match)
+ * @param {object} task
+ * @param {boolean} includeHidden emit the wire hidden input once per item
+ */
+function renderLabelDropdown(fieldName, buttons, palette, task, includeHidden) {
+  const id = String(task.itemId);
+  const idBind = escapeBindStr(id);
+  const vKey = `v${id}`;
+  const lKey = `l${id}`;
+  const cKey = `c${id}`;
+
+  const curLabel = currentStatusLabel(task);
+  const curColor = resolveCurrentStatusColor(
+    curLabel === TRIGGER_EMPTY ? '' : curLabel,
+    palette,
+    task.statusColor
+  );
+  const curCls = colorToClass(curColor);
+
+  const options = buttons
+    .map((button) => {
+      const color = button.color || NEUTRAL_STATUS;
+      const cls = colorToClass(color);
+      const label = button.label;
+      return `                <button type="button" class="dd-opt" style="background:${escapeHtml(color)}"
+                        on="tap:AMP.setState({dd:{o:'', ${vKey}:'${escapeBindStr(button.id)}', ${lKey}:'${escapeBindStr(label)}', ${cKey}:'${escapeBindStr(cls)}'}})">&#8207;${escapeHtml(label)}</button>`;
+    })
+    .join('\n');
+
+  const hidden = includeHidden
+    ? `\n              <input type="hidden" name="${fieldName}" value="" [value]="dd.${vKey}">`
+    : '';
+
+  return `              <td class="dd-cell">
+              <div class="dd-wrap">
+                <button type="button" class="dd-trig ${curCls}"
+                        [class]="'dd-trig ' + dd.${cKey}"
+                        on="tap:AMP.setState({dd:{o: dd.o == '${idBind}' ? '' : '${idBind}'}})">
+                  <span [text]="dd.${lKey}">&#8207;${escapeHtml(curLabel)}</span>
+                </button>
+                <div class="dd-menu" hidden [hidden]="dd.o != '${idBind}'">
+${options}
+                </div>
+              </div>${hidden}
+            </td>`;
+}
+
+/**
+ * @param {object} section
+ * @param {Set<string>} emittedHidden
+ * @param {Array<{ id: string, label: string, color: string }>} palette
+ */
+function renderClusterTable(section, emittedHidden, palette) {
+  const buttons = resolveSectionButtons(section);
+  if (buttons.length === 0) return '';
+
+  const dateHeader =
+    section.dateColumnTitle && String(section.dateColumnTitle).length > 0
+      ? String(section.dateColumnTitle)
+      : 'תאריך';
+
+  const rows = section.tasks
+    .map((task) => {
+      const itemId = String(task.itemId);
+      const fieldName = escapeHtml(`item_${itemId}`);
+      const includeHidden = !emittedHidden.has(itemId);
+      if (includeHidden) emittedHidden.add(itemId);
+      return `            <tr>
+              <td class="name">&#8207;${escapeHtml(task.name)}</td>
+              <td class="date">${formatDate(task.date) || '—'}</td>
+${renderLabelDropdown(fieldName, buttons, palette, task, includeHidden)}
+            </tr>`;
+    })
+    .join('\n');
+
+  return `        <div class="cluster">
+          <p class="cluster-title">&#8207;${escapeHtml(section.title)}</p>
+          <table class="board">
             <tr>
-              <th class="pick"></th>
-              <th>&#8207;שם הפעולה</th>
-              <th class="meta">${escapeHtml(dateHeader)}</th>
-              <th class="meta">&#8207;סטטוס</th>
+              <th class="name-h">&#8207;שם הפעולה</th>
+              <th>&#8207;${escapeHtml(dateHeader)}</th>
+              <th class="status-h">&#8207;${STATUS_HEADER}</th>
             </tr>
 ${rows}
           </table>
-          <div class="go"><input class="send" type="submit" style="background:${escapeHtml(color)}" value="${escapeHtml(submitLabel)}"></div>
-          <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
-          <div submit-error><template type="amp-mustache"><div class="err">{{message}}</div></template></div>
-        </form>
-      </div>`;
+        </div>`;
+}
+
+/**
+ * Build the signed-manifest bundle for the single form in one message.
+ * Every (itemId × section button) pair is authorized.
+ * @param {{ secret: string, accountId: string, personId: string, recipient: object, sendHour: number, now: Date }} p
+ */
+function buildSignedManifest({ secret, accountId, personId, recipient, sendHour, now }) {
+  /** @type {Array<{ itemId: string, btnId: string }>} */
+  const pairs = [];
+  for (const section of recipient.sections) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    const buttons = resolveSectionButtons(section);
+    for (const task of section.tasks) {
+      for (const button of buttons) {
+        pairs.push({ itemId: String(task.itemId), btnId: button.id });
+      }
+    }
+  }
+  const manifest = buildManifest(pairs);
+  const slot = currentSlot({ sendHour, now });
+  const signature = signManifest({
+    secret,
+    accountId: String(accountId),
+    personId: String(personId),
+    slot,
+    manifest,
+  });
+  return { manifest, slot, signature };
 }
 
 /**
  * Render the dynamic-email (amp4email) part of one recipient's digest.
  *
  * @param {object} p
- * @param {string} p.baseUrl - app base URL (the form posts to `${baseUrl}/amp/confirm`)
- * @param {string} p.secret - account link secret (hidden input, never a URL)
+ * @param {string} p.baseUrl
+ * @param {string} p.secret
  * @param {string} p.accountId
- * @param {{ name: string, sections: Array<{ title: string, buttonId: string, button?: object,
- *          dateColumnTitle?: string, tasks: Array<object> }> }} p.recipient
- * @returns {string} a complete amp4email document
+ * @param {{ name: string, personId: string, sections: Array<object> }} p.recipient
+ * @param {number} [p.sendHour=8]
+ * @param {Date} [p.now=new Date()]
+ * @returns {string}
  */
-export function renderDigestAmp({ baseUrl, secret, accountId, recipient }) {
-  const sections = recipient.sections
-    .filter((s) => s.tasks.length > 0)
-    .map((section) => renderSection({ section, baseUrl, secret, accountId }))
+export function renderDigestAmp({
+  baseUrl,
+  secret,
+  accountId,
+  recipient,
+  sendHour = DEFAULT_SEND_HOUR,
+  now = new Date(),
+}) {
+  const personId = recipient.personId;
+  if (typeof personId !== 'string' || personId.length === 0) {
+    throw new Error('renderDigestAmp: recipient.personId is required');
+  }
+
+  const signed = buildSignedManifest({ secret, accountId, personId, recipient, sendHour, now });
+  const ddState = buildDropdownState(recipient);
+  const palette = allRecipientButtons(recipient);
+  const colorCss = buildColorClassCss(collectColors(recipient));
+  const styles = `${STYLES_BASE}\n      ${colorCss}`;
+  const emittedHidden = new Set();
+  const clusters = (recipient.sections ?? [])
+    .filter((section) => section.tasks && section.tasks.length > 0)
+    .map((section) => renderClusterTable(section, emittedHidden, palette))
+    .filter((html) => html.length > 0)
     .join('\n');
 
   return `<!doctype html>
@@ -118,16 +433,32 @@ export function renderDigestAmp({ baseUrl, secret, accountId, recipient }) {
     <meta charset="utf-8">
     <script async src="https://cdn.ampproject.org/v0.js"></script>
     <script async custom-element="amp-form" src="https://cdn.ampproject.org/v0/amp-form-0.1.js"></script>
+    <script async custom-element="amp-bind" src="https://cdn.ampproject.org/v0/amp-bind-0.1.js"></script>
     <script async custom-template="amp-mustache" src="https://cdn.ampproject.org/v0/amp-mustache-0.2.js"></script>
     <style amp4email-boilerplate>body{visibility:hidden}</style>
-    <style amp-custom>${STYLES}    </style>
+    <style amp-custom>${styles}    </style>
   </head>
   <body dir="rtl">
+    <amp-state id="dd"><script type="application/json">${JSON.stringify(ddState)}</script></amp-state>
+    <div class="dd-overlay" hidden [hidden]="dd.o == ''" role="button" tabindex="0"
+         on="tap:AMP.setState({dd:{o:''}})"></div>
     <div class="wrap">
       <p class="hi">&#8207;שלום ${escapeHtml(recipient.name)},</p>
-      <p class="lead">&#8207;סמנו את המשימות שברצונכם לעדכן ולחצו על הכפתור שמתחת לכל קבוצה — העדכון נשמר בלוח מיד, בלי לצאת מהמייל.</p>
-${sections}
-      <p class="foot">&#8207;מייל אוטומטי · אם משימה כבר עודכנה, סימון חוזר לא ישנה דבר · אם תיבות הסימון אינן מוצגות אצלך, אפשר להשתמש בכפתורים שבגרסה הרגילה של המייל.</p>
+      <p class="lead">&#8207;לחצו על תגית הסטטוס לבחירה מהתפריט הנפתח, ואז על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
+      <form method="post"
+            action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
+            enctype="application/x-www-form-urlencoded">
+        <input type="hidden" name="a" value="${escapeHtml(String(accountId))}">
+        <input type="hidden" name="p" value="${escapeHtml(String(personId))}">
+        <input type="hidden" name="m" value="${escapeHtml(signed.manifest)}">
+        <input type="hidden" name="s" value="${escapeHtml(signed.slot)}">
+        <input type="hidden" name="sig" value="${escapeHtml(signed.signature)}">
+${clusters}
+        <div class="go"><input class="send" type="submit" style="background:${SUBMIT_COLOR}" value="${SUBMIT_LABEL}"></div>
+        <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
+        <div submit-error><template type="amp-mustache"><div class="err">{{message}}{{#detail}}<span class="err-detail">{{detail}}</span>{{/detail}}</div></template></div>
+      </form>
+      <p class="foot">&#8207;מייל אוטומטי · משימות בלי בחירה בתפריט לא משתנות · אותה משימה בשני מקבצים = בחירה אחת למייל · אם הטופס אינו מוצג, עדכנו ישירות ב‑monday.com.</p>
     </div>
   </body>
 </html>`;

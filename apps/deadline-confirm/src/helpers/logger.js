@@ -171,6 +171,22 @@ export function logError(tag, message, context = {}) {
 }
 
 /**
+ * Operational WARNING line to stderr: {"ts", "level":"warn", "tag", "message", ...context}.
+ * WARN ships to Axiom by default (unlike INFO) — used for security-relevant but
+ * non-fatal events (e.g. rejected/forged session tokens) so attack attempts have
+ * telemetry. Context must never include secrets, tokens, or their contents.
+ * @param {string} tag
+ * @param {string} message
+ * @param {object} [context]
+ */
+export function logWarn(tag, message, context = {}) {
+  console.error(
+    JSON.stringify({ ts: new Date().toISOString(), level: 'warn', tag, message, ...context })
+  );
+  emit({ level: 'WARN', tag, message, context });
+}
+
+/**
  * Operational info line to stdout: {"ts", "level":"info", "tag", "message", ...context}.
  * @param {string} tag
  * @param {string} message
@@ -218,7 +234,7 @@ export function health(signal, metrics) {
 // A logger-shaped default export so call sites can do `logger.track(...)`,
 // `logger.health(...)`, `logger.addSink(...)` — and attachAxiomServerSink(logger).
 const logger = {
-  logAttempt, logError, logInfo,
+  logAttempt, logError, logWarn, logInfo,
   track, health, encodeDims,
   emit, addSink, removeSink, setBeforeSend,
 };

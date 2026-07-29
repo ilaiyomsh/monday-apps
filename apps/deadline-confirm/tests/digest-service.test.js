@@ -135,26 +135,136 @@ describe('buildDigest — show-by-status classification', () => {
       {
         email: 'dana@example.com',
         name: 'דנה כהן',
-        personIds: ['501'],
+        personId: '501',
         taskCount: 2,
+        dateColumns: [
+          { id: 'date_start', title: 'תאריך התחלה' },
+          { id: 'date_due', title: 'תאריך סיום' },
+        ],
         sections: [
           {
             sectionId: 's_start001',
             title: 'משימות שנדרש להתחיל וטרם התחילו:',
             dateColumnTitle: 'תאריך התחלה',
             buttonId: 'b_start001',
-            tasks: [{ itemId: '9001', name: 'גיבוש תכנית עבודה', date: '2026-07-10', statusText: 'בעבודה' }],
+            buttonIds: ['b_start001'],
+            tasks: [
+              {
+                itemId: '9001',
+                name: 'גיבוש תכנית עבודה',
+                date: '2026-07-10',
+                dates: { date_start: '2026-07-10', date_due: null },
+                statusText: 'בעבודה',
+              },
+            ],
           },
           {
             sectionId: 's_done0001',
             title: 'משימות שנדרש לסיים וטרם בוצעו:',
             dateColumnTitle: 'תאריך סיום',
             buttonId: 'b_done0001',
-            tasks: [{ itemId: '9002', name: 'הגשת דוח רבעוני', date: '2026-07-01', statusText: 'בעבודה' }],
+            buttonIds: ['b_done0001'],
+            tasks: [
+              {
+                itemId: '9002',
+                name: 'הגשת דוח רבעוני',
+                date: '2026-07-01',
+                dates: { date_start: null, date_due: '2026-07-01' },
+                statusText: 'בעבודה',
+              },
+            ],
           },
         ],
       },
     ]);
+  });
+
+  it('emits section.buttonIds from config (multi-button) not only primary buttonId', () => {
+    const config = baseConfig();
+    config.digest.sections[0].buttonIds = ['b_start001', 'b_done0001'];
+    const result = buildDigest({
+      config,
+      users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+      tasks: [
+        taskRow('9001', 'גיבוש', {
+          persons: ['501'],
+          startDate: '2026-07-10',
+          statusA: 0,
+          statusAText: 'בעבודה',
+        }),
+      ],
+      today: TODAY,
+    });
+    expect(result.recipients[0].sections[0].buttonId).toBe('b_start001');
+    expect(result.recipients[0].sections[0].buttonIds).toEqual(['b_start001', 'b_done0001']);
+  });
+
+  it('attaches every digest date-column value on each task (not only the section filter date)', () => {
+    const result = buildDigest({
+      config: baseConfig(),
+      users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+      tasks: [
+        taskRow('9001', 'שתי תאריכים', {
+          persons: ['501'],
+          startDate: '2026-07-10',
+          dueDate: '2026-07-18',
+          statusA: 0,
+          statusAText: 'טרם',
+        }),
+      ],
+      today: TODAY,
+    });
+    expect(result.recipients[0].dateColumns).toEqual([
+      { id: 'date_start', title: 'תאריך התחלה' },
+      { id: 'date_due', title: 'תאריך סיום' },
+    ]);
+    expect(result.recipients[0].sections[0].tasks[0].dates).toEqual({
+      date_start: '2026-07-10',
+      date_due: '2026-07-18',
+    });
+  });
+
+  it('dedupes dateColumns by dateColumnId when two sections share the same date column', () => {
+    const config = baseConfig({
+      digest: {
+        usersBoardId: '222',
+        usersPeopleColumnId: 'people_u',
+        usersEmailColumnId: 'email_u',
+        subject: 'המשימות שלך',
+        sections: [
+          {
+            id: 's_a',
+            title: 'א',
+            dateColumnId: 'date_start',
+            dateColumnTitle: 'תאריך התחלה',
+            buttonId: 'b_start001',
+            includeStatusLabelIds: [0],
+          },
+          {
+            id: 's_b',
+            title: 'ב',
+            dateColumnId: 'date_start',
+            dateColumnTitle: 'תאריך התחלה (שנית)',
+            buttonId: 'b_done0001',
+            includeStatusLabelIds: [0],
+          },
+        ],
+      },
+    });
+    const result = buildDigest({
+      config,
+      users: [userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' })],
+      tasks: [
+        taskRow('9001', 'משימה', {
+          persons: ['501'],
+          startDate: '2026-07-10',
+          statusA: 0,
+          statusB: 0,
+        }),
+      ],
+      today: TODAY,
+    });
+    expect(result.recipients[0].dateColumns).toEqual([{ id: 'date_start', title: 'תאריך התחלה' }]);
   });
 
   it('THE BUG FIX: an overdue task already "בוצע" (status NOT in the include set) is excluded', () => {
@@ -272,12 +382,14 @@ describe('buildDigest — user matching', () => {
     ]);
   });
 
-  it('duplicate email rows merge into ONE recipient (person ids united)', () => {
+  // V6 D16: one message per users-board row. Same email on two rows → two
+  // messages (no dedup). A row with ≠1 person is skipped as multi_person.
+  it('D16a: two users-board rows sharing one email produce TWO messages with distinct personIds and task sets', () => {
     const result = buildDigest({
       config: baseConfig(),
       users: [
         userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' }),
-        userRow('u2', 'דנה (כפולה)', { persons: ['599'], email: 'dana@example.com' }),
+        userRow('u2', 'דנה (שורה שנייה)', { persons: ['599'], email: 'dana@example.com' }),
       ],
       tasks: [
         taskRow('9001', 'של 501', { persons: ['501'], startDate: '2026-07-10', statusA: 0 }),
@@ -285,8 +397,46 @@ describe('buildDigest — user matching', () => {
       ],
       today: TODAY,
     });
-    expect(result.recipients).toHaveLength(1);
-    expect(result.recipients[0].email).toBe('dana@example.com');
-    expect(result.recipients[0].sections[0].tasks.map((t) => t.itemId).sort()).toEqual(['9001', '9002']);
+    expect(result.skippedUsers).toEqual([]);
+    expect(result.recipients).toHaveLength(2);
+    expect(result.recipients.map((r) => r.personId).sort()).toEqual(['501', '599']);
+    expect(result.recipients.every((r) => r.email === 'dana@example.com')).toBe(true);
+    const byPerson = Object.fromEntries(result.recipients.map((r) => [r.personId, r]));
+    expect(byPerson['501'].sections[0].tasks.map((t) => t.itemId)).toEqual(['9001']);
+    expect(byPerson['599'].sections[0].tasks.map((t) => t.itemId)).toEqual(['9002']);
+  });
+
+  it('D16b: a user row with MORE than one person is SKIPPED (reason multi_person) — never guessed', () => {
+    const result = buildDigest({
+      config: baseConfig(),
+      users: [userRow('u1', 'שניים', { persons: ['501', '502'], email: 'two@example.com' })],
+      tasks: [taskRow('9001', 'מ', { persons: ['501'], startDate: '2026-07-10', statusA: 0 })],
+      today: TODAY,
+    });
+    expect(result.recipients).toEqual([]);
+    expect(result.skippedUsers).toEqual([
+      { itemId: 'u1', name: 'שניים', reason: 'multi_person' },
+    ]);
+  });
+
+  // R2 invariant (v6 §6): a recipient's digest contains ONLY tasks assigned
+  // to that recipient — the attribution wording and the accepted risks R1/R2
+  // both depend on it.
+  it("R2 invariant: each recipient's digest carries ONLY their own tasks, never a colleague's", () => {
+    const result = buildDigest({
+      config: baseConfig(),
+      users: [
+        userRow('u1', 'דנה', { persons: ['501'], email: 'dana@example.com' }),
+        userRow('u2', 'יוסי', { persons: ['502'], email: 'yossi@example.com' }),
+      ],
+      tasks: [
+        taskRow('9001', 'של דנה', { persons: ['501'], startDate: '2026-07-10', statusA: 0 }),
+        taskRow('9002', 'של יוסי', { persons: ['502'], startDate: '2026-07-10', statusA: 0 }),
+      ],
+      today: TODAY,
+    });
+    const byEmail = Object.fromEntries(result.recipients.map((r) => [r.email, r]));
+    expect(byEmail['dana@example.com'].sections[0].tasks.map((t) => t.itemId)).toEqual(['9001']);
+    expect(byEmail['yossi@example.com'].sections[0].tasks.map((t) => t.itemId)).toEqual(['9002']);
   });
 });

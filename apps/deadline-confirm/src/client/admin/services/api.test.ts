@@ -2,7 +2,7 @@
 // auth-header and error-mapping behavior.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { apiFetch, ApiError } from './api';
+import { apiFetch, ApiError, formatApiFailure } from './api';
 
 vi.mock('./monday', () => ({
   getSessionToken: () => Promise.resolve('session-tok-1'),
@@ -48,6 +48,26 @@ describe('apiFetch', () => {
     expect((err as ApiError).field).toBe('boardId');
   });
 
+  it('keeps the Hebrew diagnostic AND the stable error code when both are present', async () => {
+    stubFetch({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        error: 'internal_error',
+        message: '[admin /api/secret/rotate] פעולה נכשלה בשרת. נסו שוב.',
+      }),
+    });
+
+    const err = await apiFetch('/api/secret/rotate', { method: 'POST' }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    // Merged contract (0.9.5): the code prefixes the human message rather than
+    // being dropped, so a screenshot of the pink box still names the failure.
+    expect((err as ApiError).message).toBe(
+      'internal_error: [admin /api/secret/rotate] פעולה נכשלה בשרת. נסו שוב.'
+    );
+    expect((err as ApiError).status).toBe(500);
+  });
+
   it('falls back to a status-based message when the error body is not JSON', async () => {
     stubFetch({ ok: false, status: 502 });
 
@@ -56,5 +76,48 @@ describe('apiFetch', () => {
     expect((err as ApiError).message).toBe('request failed: 502');
     expect((err as ApiError).status).toBe(502);
     expect((err as ApiError).field).toBeUndefined();
+  });
+
+  it('maps a 500 internal_error body to ApiError message + detail (name/message/stack)', async () => {
+    stubFetch({
+      ok: false,
+      status: 500,
+      json: async () => ({
+        error: 'internal_error',
+        message: 'secure storage failed',
+        detail: {
+          name: 'Error',
+          message: 'secure storage failed',
+          stack: 'Error: secure storage failed\n    at getConfig (storage.js:1:1)',
+        },
+      }),
+    });
+
+    const err = await apiFetch('/api/state').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).message).toBe('internal_error: secure storage failed');
+    expect((err as ApiError).status).toBe(500);
+    expect((err as ApiError).detail).toStrictEqual({
+      name: 'Error',
+      message: 'secure storage failed',
+      stack: 'Error: secure storage failed\n    at getConfig (storage.js:1:1)',
+    });
+  });
+});
+
+describe('formatApiFailure', () => {
+  it('joins Hebrew fallback, ApiError message, and detail.stack for display', () => {
+    const err = new ApiError('internal_error: boom', 500, undefined, {
+      name: 'Error',
+      message: 'boom',
+      stack: 'Error: boom\n    at x',
+    });
+    expect(formatApiFailure(err, 'טעינה נכשלה')).toBe(
+      'טעינה נכשלה\n\ninternal_error: boom\n\nError: boom\n    at x'
+    );
+  });
+
+  it('returns only the fallback for a non-ApiError', () => {
+    expect(formatApiFailure(new Error('nope'), 'טעינה נכשלה')).toBe('טעינה נכשלה');
   });
 });

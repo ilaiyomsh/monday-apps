@@ -1,11 +1,11 @@
 // Unit tests for the sessionToken middleware factory (spec §9, §13, §15.10) —
-// v3 multi-tenant: the single ALLOWED_ACCOUNT_ID lockdown becomes an OPTIONAL
-// allowedAccountIds ARRAY (empty = every validly-signed account passes), and
-// the module exports verifySessionToken for non-middleware callers (oauth
-// start). Real JWTs signed with jsonwebtoken drive the REAL middleware — the
-// unit under test is never mocked; req/res/next are minimal recording fakes.
+// V6 D15: allowedAccountIds is the tenant roster — empty = default-deny
+// (nobody admitted). The module exports verifySessionToken for non-middleware
+// callers (oauth start). Real JWTs signed with jsonwebtoken drive the REAL
+// middleware — the unit under test is never mocked; req/res/next are minimal
+// recording fakes.
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import jwt from 'jsonwebtoken';
 import {
   createSessionTokenMiddleware,
@@ -141,14 +141,15 @@ describe('createSessionTokenMiddleware', () => {
       expect(res.statusCode).toBeNull();
     });
 
-    it('passes ANY validly-signed account when the allowlist is the EMPTY array', async () => {
+    it('refuses ANY validly-signed account with 403 when the allowlist is the EMPTY array (D15 default-deny)', async () => {
       const token = jwt.sign({ dat: { account_id: 999123, user_id: 5 } }, CLIENT_SECRET);
 
       const { req, res, next } = await run(token, []);
 
-      expect(next).toHaveBeenCalledTimes(1);
-      expect(req.session).toStrictEqual({ accountId: '999123', userId: '5' });
-      expect(res.statusCode).toBeNull();
+      expect(res.statusCode).toBe(403);
+      expect(res.body).toStrictEqual({ error: 'forbidden_account' });
+      expect(next).not.toHaveBeenCalled();
+      expect(req.session).toBeUndefined();
     });
 
     it('still responds 401 (never 403) to a badly-signed token when the allowlist is empty', async () => {
@@ -216,5 +217,61 @@ describe('verifySessionToken (v3 export)', () => {
   it('returns null when dat.user_id is missing', () => {
     const token = jwt.sign({ dat: { account_id: 777 } }, CLIENT_SECRET);
     expect(verifySessionToken(token, CLIENT_SECRET)).toBeNull();
+  });
+});
+
+describe('verifySessionToken — verification-failure telemetry (WARN, reason only, no token)', () => {
+  let errSpy;
+  beforeEach(() => {
+    errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** All console.error lines that parse as JSON WARN records. */
+  const warnRecords = () =>
+    errSpy.mock.calls
+      .map((c) => c[0])
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter((e) => e && e.level === 'warn');
+
+  it("logs exactly ONE WARN {tag:'auth', reason:'JsonWebTokenError'} and never the token for a wrong-secret token", () => {
+    const token = jwt.sign(VALID_PAYLOAD, OTHER_SECRET);
+
+    expect(verifySessionToken(token, CLIENT_SECRET)).toBeNull();
+
+    const warns = warnRecords();
+    expect(warns).toHaveLength(1);
+    expect(warns[0].tag).toBe('auth');
+    expect(warns[0].message).toBe('session token verification failed');
+    expect(warns[0].reason).toBe('JsonWebTokenError');
+    // the raw token must never appear anywhere in the logged output
+    for (const call of errSpy.mock.calls) {
+      expect(call.map(String).join(' ')).not.toContain(token);
+    }
+  });
+
+  it("reports reason 'TokenExpiredError' for an expired but correctly-signed token", () => {
+    const token = jwt.sign(VALID_PAYLOAD, CLIENT_SECRET, { expiresIn: -10 });
+    verifySessionToken(token, CLIENT_SECRET);
+    expect(warnRecords()[0].reason).toBe('TokenExpiredError');
+  });
+
+  it('does NOT log a WARN when the token is simply absent (empty string is not a verification failure)', () => {
+    expect(verifySessionToken('', CLIENT_SECRET)).toBeNull();
+    expect(warnRecords()).toHaveLength(0);
+  });
+
+  it('does NOT log a WARN for a validly-signed token that merely lacks the dat identity (verify succeeded)', () => {
+    const token = jwt.sign({ account_id: 777, user_id: 12 }, CLIENT_SECRET);
+    expect(verifySessionToken(token, CLIENT_SECRET)).toBeNull();
+    expect(warnRecords()).toHaveLength(0);
   });
 });
