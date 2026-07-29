@@ -2,6 +2,38 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.10.0 — 2026-07-29 — feat: Gmail sending wired end-to-end (T9/T9b/T9c)
+
+Sending is live. The manual **"שליחה עכשיו"** button in the admin screen now runs
+the whole flow — recipients from the users board, per-recipient task
+classification, one signed AMP message each — and actually delivers. The
+scheduler is intentionally still out of scope; the button is its stand-in.
+
+- **Per-organization sending identity** (owner decision 2026-07-29, superseding
+  D12/D13): every tenant connects a Gmail mailbox in its **own** Workspace under
+  its **own** OAuth client. The record lives at `${accountId}:google_sender`, not
+  an app-global key. This is what keeps DKIM aligned with the `From` domain —
+  Gmail requires that alignment before it renders the AMP part at all, so a
+  single vendor address would have broken dynamic email for every customer.
+- **New:** `GET /oauth/google/start` + `/oauth/google/callback`. Admit gate is
+  sessionToken + `ALLOWED_ACCOUNT_IDS` (empty roster = default deny). The Google
+  state nonce lives in its own key namespace, so a monday-issued nonce cannot be
+  redeemed at the Google callback.
+- **New env:** `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`. Absent →
+  no sender is constructed and `/api/digest/send` answers 409 as before.
+- **Scopes:** `gmail.send` plus `openid email` (the sender address comes from the
+  `id_token`, costing no API call). No mail-read scope, ever.
+- **Token lifecycle:** one refresh per account per run, not per recipient.
+  `invalid_grant` — and only `invalid_grant` — marks the connection dead, so a
+  Google 5xx cannot silence a tenant. One forced-refresh retry on a 401.
+- **Message assembly:** the `multipart/alternative` body passes through
+  byte-for-byte (re-encoding would invalidate the AMP part); Hebrew subjects are
+  RFC2047-encoded; CRLF in a recipient or subject is refused, not sanitized.
+- **Admin:** new "שליחת מייל (Gmail)" section shows connect state and the sender
+  address, and warns when the connected sender is **not** on
+  `AMP_ALLOWED_SENDERS` — that combination sends mail whose every button 403s.
+- Setup for a new organization: `docs/google-setup-guide.md`.
+
 ## 0.9.5 — 2026-07-28 — fix: distinct AMP errors + secret-rotate UX
 
 - Every `/amp/confirm` failure path now returns a **distinct** `error` code and a

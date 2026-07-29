@@ -128,6 +128,10 @@ export async function runDigestForAccount({
       });
       const mime = buildMultipartAlternative({ plain, amp });
       await emailSender.send({
+        // T9: the Gmail sender resolves the tenant's OWN mailbox and OAuth
+        // client from this id. Without it a send would have no sending identity
+        // to authenticate as.
+        accountId,
         to: recipient.email,
         subject: config.digest.subject,
         plain,

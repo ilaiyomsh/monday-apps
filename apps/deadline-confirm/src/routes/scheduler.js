@@ -79,6 +79,12 @@ export function createSchedulerRouter({ storage, api, env, emailSender, todayIso
         const plain = formatOperatorSummary({ slot, tenants: dueTenants });
         try {
           await emailSender.send({
+            // T9: the summary is cross-tenant but has to be sent AS somebody.
+            // It goes out through the first due tenant's own connected mailbox
+            // — the only sending identity this run is known to hold. If that
+            // tenant is not connected the send throws and is caught below;
+            // the digests themselves are unaffected.
+            accountId: dueTenants[0].accountId,
             to: env.operatorEmail,
             subject: `deadline-confirm digest summary — ${slot}`,
             plain,

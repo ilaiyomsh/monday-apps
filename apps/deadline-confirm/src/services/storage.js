@@ -21,6 +21,8 @@ export const KEYS = {
   // single vendor-owned mailbox.) Sharing one record across tenants would mean
   // the first tenant to connect owns everyone else's sending identity.
   GOOGLE_SENDER: 'google_sender',
+  // Separate namespace from OAUTH_STATE_PREFIX — see issueGoogleOauthState.
+  GOOGLE_OAUTH_STATE_PREFIX: 'google_oauth_state:',
 };
 
 /**
@@ -77,6 +79,15 @@ export function createAppStorage({ backend, ttlMs = 60_000, stateMaxAgeMs = 600_
     invalidateCache();
   }
 
+  /** Single-use, age-bounded state read shared by both OAuth flows. */
+  async function consumeState(key) {
+    const entry = (await backend.get(key)) ?? null;
+    if (!entry) return null;
+    await backend.delete(key); // single-use: gone regardless of age
+    if (now() - entry.createdAt >= stateMaxAgeMs) return null;
+    return { accountId: entry.accountId };
+  }
+
   /**
    * Account-scoped accessors — the only way to reach config/secret/token.
    * @param {string} accountId
@@ -121,12 +132,20 @@ export function createAppStorage({ backend, ttlMs = 60_000, stateMaxAgeMs = 600_
     },
 
     async consumeOauthState(nonce) {
-      const key = `${KEYS.OAUTH_STATE_PREFIX}${nonce}`;
-      const entry = (await backend.get(key)) ?? null;
-      if (!entry) return null;
-      await backend.delete(key); // single-use: gone regardless of age
-      if (now() - entry.createdAt >= stateMaxAgeMs) return null;
-      return { accountId: entry.accountId };
+      return consumeState(`${KEYS.OAUTH_STATE_PREFIX}${nonce}`);
+    },
+
+    // T9b: the Google connect flow gets its OWN key namespace rather than a
+    // discriminator field on the shared record. Flow separation then holds by
+    // construction — a monday-issued nonce simply does not exist under the
+    // Google prefix, so it can never be redeemed at the Google callback (and
+    // vice versa) no matter what an attacker replays.
+    async issueGoogleOauthState(nonce, accountId) {
+      await backend.set(`${KEYS.GOOGLE_OAUTH_STATE_PREFIX}${nonce}`, { createdAt: now(), accountId });
+    },
+
+    async consumeGoogleOauthState(nonce) {
+      return consumeState(`${KEYS.GOOGLE_OAUTH_STATE_PREFIX}${nonce}`);
     },
 
     invalidateCache,

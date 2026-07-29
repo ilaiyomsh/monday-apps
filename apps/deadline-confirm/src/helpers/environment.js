@@ -40,5 +40,11 @@ export function getEnv() {
     ampAllowedSenders: parseSenderList(process.env.AMP_ALLOWED_SENDERS),
     // D8 operator summary destination. Absent → summary is skipped (logged).
     operatorEmail: (process.env.OPERATOR_EMAIL || '').trim().toLowerCase() || null,
+    // T9b Gmail sending. App-level FALLBACK credentials: each organization is
+    // expected to run its own OAuth client (owner decision 2026-07-29), and a
+    // tenant's own pair on its google_sender record wins over these. Absent
+    // both → no sender is constructed and /api/digest/send answers 409.
+    googleOauthClientId: (process.env.GOOGLE_OAUTH_CLIENT_ID || '').trim(),
+    googleOauthClientSecret: (process.env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim(),
   };
 }

@@ -61,15 +61,21 @@ function encodeHeaderValue(value) {
  * @param {{ from: string, to: string, subject: string, mime: { contentType: string, body: string } }} p
  * @returns {string}
  */
-function buildRfc822({ from, to, subject, mime }) {
+function buildRfc822({ from, to, subject, mime, plain }) {
+  // No multipart → a plain-text-only message. The operator summary (D8) takes
+  // this path: it has no AMP part, so wrapping it in multipart/alternative
+  // would be a single-part multipart, which some clients render as an
+  // attachment.
+  const contentType = mime ? mime.contentType : 'text/plain; charset=UTF-8';
+  const body = mime ? mime.body : String(plain ?? '');
   const headers = [
     `From: ${from}`,
     `To: ${to}`,
     `Subject: ${encodeHeaderValue(subject)}`,
     'MIME-Version: 1.0',
-    `Content-Type: ${mime.contentType}`,
+    `Content-Type: ${contentType}`,
   ];
-  return `${headers.join('\r\n')}\r\n\r\n${mime.body}`;
+  return `${headers.join('\r\n')}\r\n\r\n${body}`;
 }
 
 /**
@@ -154,7 +160,7 @@ export function createGmailSender({ storage, clientId, clientSecret, fetchImpl =
   }
 
   return {
-    async send({ accountId, to, subject, mime }) {
+    async send({ accountId, to, subject, mime, plain }) {
       if (typeof to !== 'string' || to.length === 0 || HEADER_UNSAFE_RE.test(to)) {
         throw fail('invalid_recipient', 'recipient address is missing or contains a header break');
       }
@@ -167,7 +173,7 @@ export function createGmailSender({ storage, clientId, clientSecret, fetchImpl =
       const record = await loadRecord(scoped, accountId);
       let accessToken = await accessTokenFor({ scoped, accountId, record });
       const raw = Buffer.from(
-        buildRfc822({ from: record.senderAddress, to, subject: subjectText, mime }),
+        buildRfc822({ from: record.senderAddress, to, subject: subjectText, mime, plain }),
         'utf8'
       ).toString('base64url');
 

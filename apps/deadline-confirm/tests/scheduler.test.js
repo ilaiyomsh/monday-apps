@@ -144,6 +144,10 @@ describe('POST /(mndy-cronjob|scheduler)/digest-send', () => {
     expect(send).toHaveBeenCalledTimes(2);
     expect(send.mock.calls[0][0].to).toBe('dana@example.com');
     expect(send.mock.calls[1][0].to).toBe('ops@twyst.co.il');
+    // T9: the summary is cross-tenant but still has to be sent AS somebody — it
+    // goes out through the first due tenant's own connected mailbox. Without an
+    // accountId the Gmail sender has no sending identity to authenticate as.
+    expect(send.mock.calls[1][0].accountId).toBe(ACCOUNT_A);
     expect(send.mock.calls[1][0].subject).toMatch(/summary|סיכום|digest/i);
     expect(send.mock.calls[1][0].plain).toContain('slot:');
     expect(send.mock.calls[1][0].plain).toContain(`account ${ACCOUNT_A}`);

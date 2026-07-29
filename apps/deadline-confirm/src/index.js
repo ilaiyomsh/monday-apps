@@ -17,7 +17,8 @@ import { createRateLimiter } from './helpers/rate-limit.js';
 import { createSecureStorageBackend } from './storage/secure-storage-backend.js';
 import { createMemoryBackend } from './storage/memory-backend.js';
 import { getEnv } from './helpers/environment.js';
-import logger, { logInfo, health } from './helpers/logger.js';
+import { createGmailSender } from './services/gmail-sender.js';
+import logger, { logInfo, logWarn, health } from './helpers/logger.js';
 import { attachAxiomServerSink, flushAxiom } from './helpers/axiomServerSink.js';
 import {
   installProcessGuards,
@@ -92,11 +93,22 @@ const rateLimiters = {
   perAccount: createRateLimiter(),
 };
 
-// V6: Resend is removed. The digest sender seam stays empty until the
-// Gmail-API OAuth + send path lands (T9/T9b/T9c — deferred until the Google
-// Cloud app is provisioned). Until then POST /api/digest/send and the
-// scheduler skip with email_not_configured / skip reasons.
-const emailSender = undefined;
+// V6 T9: Gmail API is the only sending channel (Resend is gone). The sender is
+// constructed only when an OAuth client pair is present — with neither an
+// app-level pair nor (later) a per-tenant one there is nothing to authenticate
+// with, and leaving the seam empty is what makes POST /api/digest/send answer a
+// clean 409 email_not_configured instead of failing mid-flight.
+const emailSender =
+  env.googleOauthClientId && env.googleOauthClientSecret
+    ? createGmailSender({
+        storage,
+        clientId: env.googleOauthClientId,
+        clientSecret: env.googleOauthClientSecret,
+      })
+    : undefined;
+if (!emailSender) {
+  logWarn('server', 'Gmail sender not configured — digest sending is disabled', {});
+}
 
 const app = createApp({ storage, api, rateLimiters, env, emailSender });
 

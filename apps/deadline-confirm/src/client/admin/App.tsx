@@ -10,6 +10,7 @@ import { apiFetch, ApiError, formatApiFailure } from './services/api';
 import { fetchBoards, fetchBoardColumns } from './services/monday';
 import { backfillDateColumnTitles } from './settings-io';
 import { ConnectionSection } from './components/ConnectionSection';
+import { GoogleSenderSection } from './components/GoogleSenderSection';
 import { BoardConfigSection } from './components/BoardConfigSection';
 import { ButtonsSection } from './components/ButtonsSection';
 import { TemplatesSection } from './components/TemplatesSection';
@@ -75,25 +76,31 @@ export function App() {
       return;
     }
     let cancelled = false;
+    // Captured before the async body: the null-check above narrows `draft.boardId`
+    // synchronously, but the deferred closure would widen it back to string|null.
+    const boardId = draft.boardId;
     setColumnsLoading(true);
     setPickersError(null);
-    fetchBoardColumns(draft.boardId)
-      .then((cols) => {
+    // try/catch/finally rather than a .then chain: `promise/catch-or-return`
+    // wants the chain to TERMINATE in .catch(), and the trailing .finally()
+    // this needs would sit after it. Same semantics, one fewer lint exception.
+    void (async () => {
+      try {
+        const cols = await fetchBoardColumns(boardId);
         if (cancelled) return;
         setColumns(cols);
         const firstPeople = cols.find((c) => c.type === 'people');
         setDraft((d) =>
           d.peopleColumnId === null && firstPeople ? { ...d, peopleColumnId: firstPeople.id } : d
         );
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (cancelled) return;
         logger.error('admin', 'columns_load_failed', err);
         setPickersError('טעינת עמודות הלוח נכשלה. נסו לרענן.');
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setColumnsLoading(false);
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
@@ -242,6 +249,7 @@ export function App() {
           <TabPanel>
             <div className="dc-tab-panel">
               <ConnectionSection oauth={state.oauth} onRefresh={onRefresh} refreshing={refreshing} />
+              <GoogleSenderSection google={state.google} onRefresh={onRefresh} refreshing={refreshing} />
               <BoardConfigSection
                 boards={boards}
                 columns={columns}

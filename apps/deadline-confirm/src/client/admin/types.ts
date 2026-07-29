@@ -120,10 +120,22 @@ export interface DigestSendResponse {
 
 export type OauthStatus = 'connected' | 'disconnected' | 'broken';
 
+/** T9b Gmail sending identity, as reported by GET /api/state. */
+export interface GoogleSenderState {
+  /** Does the SERVER hold an OAuth client pair at all (platform env)? */
+  configured: boolean;
+  status: OauthStatus;
+  /** The visible From address. Never a token. */
+  senderAddress: string | null;
+  /** null until connected. false = clicks in the sent mail will 403. */
+  senderAllowedForAmp: boolean | null;
+}
+
 export interface AppState {
   config: AppConfig | null;
   secret: string | null; // masked: ****XXXX
   oauth: { status: OauthStatus; name?: string };
+  google: GoogleSenderState;
   baseUrl: string;
 }
 

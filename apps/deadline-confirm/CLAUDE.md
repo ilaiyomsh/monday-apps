@@ -30,6 +30,13 @@ SecureStorage keys. App ID **11704868**, dev-center slug
   `recipientPersonId` against item assignees at execution time only.
 - OAuth token of a LOW-PRIVILEGE user as the blast radius; in-memory rate limit
   (two buckets on `/amp/confirm`: per-IP + per-account).
+- **Sending identity is PER ORGANIZATION** (owner decision 2026-07-29 —
+  supersedes D12/D13's single vendor-owned mailbox + app-global storage key):
+  each tenant connects a Gmail mailbox in its own Workspace under its own OAuth
+  client, stored at `${accountId}:google_sender`. This is what keeps DKIM aligned
+  with the `From` domain, which Gmail requires before rendering the AMP part.
+  D13's operator-only gate on the connect flow is retired with it — a tenant can
+  only ever rebind its own sender.
 
 ## Module layout
 
@@ -40,6 +47,7 @@ src/
 ├── routes/
 │   ├── amp.js                # POST/OPTIONS /amp/confirm — V6 signed-manifest bulk confirm (ONLY write path)
 │   ├── oauth.js              # /oauth/start + /oauth/callback (§8)
+│   ├── oauth-google.js       # /oauth/google/start|callback — connect the tenant's Gmail mailbox (T9b/T9c)
 │   └── admin-api.js          # /api/state|config|secret/rotate + /api/digest/preview|send
 ├── middlewares/session-token.js  # JWT (client secret) + optional allowlist → 401/403
 ├── services/
@@ -48,7 +56,9 @@ src/
 │   ├── digest-service.js     # users-board matching + pending classification (single personId per recipient)
 │   ├── manifest-signature.js # build/parse/sign/verify manifest + currentSlot (pure, no I/O)
 │   ├── storage.js            # SecureStorage wrapper + 60s read cache + nonce lifecycle
-│   └── secret.js             # generate / constant-time compare / mask
+│   ├── secret.js             # generate / constant-time compare / mask
+│   ├── gmail-sender.js       # THE send funnel (emailSender seam): RFC822 + users.messages.send
+│   └── providers/google/oauth.js  # Google token transport (exchange / refresh / auth URL)
 ├── helpers/                  # pages (oauth only), rate-limit, digest-plain, digest-amp,
 │                             # digest-email (legacy send path until Gmail T9), amp-cors, logger, environment
 ├── storage/                  # secure-storage-backend (prod) / memory-backend (dev+tests)
@@ -89,9 +99,12 @@ Env (platform: `mapps code:env -i 11704868`; local: `.env`): `MONDAY_CLIENT_ID`,
 `MONDAY_CLIENT_SECRET`, **`ALLOWED_ACCOUNT_IDS` (required tenant roster —
 empty = default-deny: nobody admitted, nobody sent)**, `BASE_URL`, `PORT`,
 `USE_LOCAL_STORAGE` (dev/tests), `AMP_ALLOWED_SENDERS` (empty = nobody admitted
-to `/amp/confirm`), `OPERATOR_EMAIL` (optional; D8 summary destination). Gmail
-OAuth/send (T9/T9b/T9c) not wired yet — `/api/digest/send` answers 409
-`email_not_configured` and the scheduler skips with the same reason.
+to `/amp/confirm`), `OPERATOR_EMAIL` (optional; D8 summary destination),
+**`GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET`** (T9b; absent → no
+sender is constructed and `/api/digest/send` answers 409 `email_not_configured`).
+Gmail sending is WIRED as of 0.10.0 — a tenant must still connect a mailbox via
+`/oauth/google/start` before anything sends. Per-org setup:
+`docs/google-setup-guide.md`.
 
 Deploys ONLY via the pipeline (root CLAUDE.md): merge to `develop` → draft,
 merge to `main` → live. Server-type app: workflow pushes app root; CI runs
