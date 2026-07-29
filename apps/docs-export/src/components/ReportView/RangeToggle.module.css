@@ -1,0 +1,64 @@
+/*
+ * Segmented control. Everything directional uses LOGICAL properties
+ * (inline-start/end, border-inline-*) so the same rules produce a correct
+ * right-to-left control in Hebrew and a correct left-to-right one if a user's
+ * monday language is English — the app re-syncs `dir` from the live context
+ * (see contexts/MondayContext.jsx), so hard-coded left/right WOULD break.
+ */
+
+.wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.group {
+  display: inline-flex;
+  /* One shared border around the pair, dividers between — the classic segmented
+     look without a wrapper per button. */
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-small, 4px);
+  overflow: hidden;
+}
+
+.option {
+  appearance: none;
+  border: 0;
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: background-color 0.1s ease-in-out;
+}
+
+.option + .option {
+  border-inline-start: 1px solid var(--ui-border-color, #d0d4e4);
+}
+
+.option:hover:not(:disabled):not(.selected) {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.option:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.selected {
+  background: var(--primary-color, #0073ea);
+  color: var(--text-color-on-primary, #fff);
+}
+
+/* Keyboard focus must stay visible on the selected (filled) segment too, hence
+   an outline rather than a background change. */
+.option:focus-visible {
+  outline: 2px solid var(--primary-color, #0073ea);
+  outline-offset: -2px;
+}
+
+.rangeLabel {
+  white-space: nowrap;
+}

@@ -1,0 +1,114 @@
+/*
+ * The trigger + the portaled panel's contents. The panel's own frame (position,
+ * shadow, z-index) belongs to components/shared/Popover.module.css — this file
+ * only styles what goes INSIDE it, so the portal keeps one owner for placement.
+ *
+ * Logical properties throughout (see RangeToggle.module.css for why).
+ */
+
+.wrapper {
+  display: inline-flex;
+}
+
+.trigger {
+  appearance: none;
+  font: inherit;
+  font-size: 14px;
+  padding: 6px 16px;
+  min-width: 180px;
+  text-align: start;
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: var(--border-radius-small, 4px);
+  cursor: pointer;
+}
+
+.trigger:hover:not(:disabled) {
+  border-color: var(--primary-color, #0073ea);
+}
+
+.trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--primary-color, #0073ea);
+  outline-offset: 1px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.panelHeader {
+  display: flex;
+  gap: 8px;
+  padding-block-end: 8px;
+  border-block-end: 1px solid var(--ui-border-color, #d0d4e4);
+}
+
+.bulkAction {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 8px;
+  color: var(--link-color, #0073ea);
+  cursor: pointer;
+  border-radius: var(--border-radius-small, 4px);
+}
+
+.bulkAction:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f5f6f8);
+}
+
+.bulkAction:disabled {
+  color: var(--disabled-text-color, #c5c7d0);
+  cursor: not-allowed;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* The committee list is short by construction, but a reporter covering many
+     committees must still be able to reach the last one. */
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px;
+}
+
+.checkbox {
+  /* Explicit size: the default checkbox is tiny next to 14px Hebrew text. */
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+  cursor: pointer;
+  accent-color: var(--primary-color, #0073ea);
+}
+
+.label {
+  font-size: 14px;
+  color: var(--primary-text-color, #323338);
+  cursor: pointer;
+  /* The whole row is the hit target, not just the 16px box. */
+  flex: 1 1 auto;
+}
+
+.hint {
+  padding-block-start: 4px;
+  border-block-start: 1px solid var(--ui-border-color, #d0d4e4);
+}

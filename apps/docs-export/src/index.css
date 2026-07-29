@@ -1,0 +1,86 @@
+/* @import must precede all other statements (postcss requirement) */
+@import "@vibe/core/tokens";
+
+/* This app uses CSS Modules (matching apps/discussions), not Tailwind — the
+   tailwind.config.js / postcss.config.js the scaffold ships were removed
+   together with the @tailwind directives. See
+   .claude/skills/monday-scaffold/references/template-drift.md. */
+
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+
+  /* Report table + toolbar geometry, consumed by the CSS Modules. */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --toolbar-h: 40px;
+  --content-gutter: 16px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+/* Light theme */
+.light-app-theme {
+  background-color: var(--primary-background-color);
+  color: var(--primary-text-color);
+}
+
+/* Dark theme */
+.dark-app-theme {
+  background-color: var(--primary-background-color);
+  color: var(--primary-text-color);
+}
+
+/* ---------------------------------------------------------------------------
+ * RTL FIX — @vibe/core 4.2.5 Modal is mis-centered under dir="rtl"
+ *
+ * Vibe centers its Modal by emitting BOTH offsets on a `position: relative`
+ * box: `left: 50%` AND `right: -50%`, then correcting with
+ * `transform: translate(-50%, -50%)`.
+ *
+ * Per CSS 2.1 §9.4.3, when a relatively-positioned element specifies both
+ * `left` and `right` and they are not complementary, ONE IS IGNORED — and
+ * WHICH one depends on the writing direction: LTR honours `left`, **RTL
+ * honours `right`**. On top of that, an 840px block in an RTL flow already
+ * starts right-aligned (x = 1280 - 840 = 440) rather than at x = 0.
+ *
+ * Net effect measured live at a 1280px viewport: left 660 / right 1500 — the
+ * dialog hung 220px off the right edge of the screen and its close button was
+ * the only part reachable. In LTR the identical CSS centers correctly, which
+ * is why this never shows up in Vibe's own test matrix.
+ *
+ * The fix makes `left` authoritative again and takes the box out of flow so
+ * the RTL static position stops contributing:
+ *   position: fixed  → static (right-aligned) position no longer applies
+ *   right: auto      → removes the offset RTL would otherwise prefer
+ * Verified in-browser: left 220 / right 1060 at a 1280 viewport — exactly
+ * centered, fully inside the viewport.
+ *
+ * Substring selectors are deliberate: Vibe ships hashed CSS-module class
+ * names (`centerPop_d4855b946b`), so the hash CANNOT be relied on across
+ * @vibe/core upgrades — but the human-readable prefix is stable.
+ * Re-verify this block whenever @vibe/core is bumped; if Vibe fixes the
+ * upstream bug, this override stays harmless (it re-states the intended
+ * geometry rather than fighting it).
+ * ------------------------------------------------------------------------- */
+[class*='modal_'][class*='centerPop'] {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  right: auto;
+
+  /* Vibe's size classes are FIXED pixel widths (sizeLarge ≈ 840px), so a narrow
+   * board-view iframe overflows horizontally even once centering is correct —
+   * observed at a 280px pane: the 840px dialog spilled past both edges. Cap to
+   * the viewport and let the body scroll vertically instead. */
+  max-width: calc(100vw - 2 * var(--content-gutter));
+  max-height: calc(100vh - 2 * var(--content-gutter));
+  overflow-y: auto;
+}

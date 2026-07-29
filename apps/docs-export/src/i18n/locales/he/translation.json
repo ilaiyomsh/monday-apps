@@ -1,0 +1,37 @@
+{
+  "common": {
+    "retry": "נסו שוב",
+    "close": "סגירה",
+    "details": "פרטים",
+    "copy": "העתקה"
+  },
+  "toasts": {
+    "genericError": "אירעה שגיאה",
+    "noItems": "לא נמצאו אייטמים בטווח ובוועדות שנבחרו",
+    "generating": "מפיק דוח…",
+    "generated": "הדוח הופק והורד",
+    "settingsSaved": "ההגדרות נשמרו"
+  },
+  "errorBoundary": {
+    "chunkTitle": "טעינת רכיב נכשלה",
+    "chunkBody": "ייתכן שיצאה גרסה חדשה או שאין חיבור לרשת. רעננו את הדף כדי להמשיך.",
+    "chunkAction": "רעננו את הדף",
+    "crashTitle": "משהו השתבש",
+    "crashBody": "אירעה שגיאה בלתי צפויה. נסו שוב, ואם הבעיה חוזרת רעננו את הדף.",
+    "crashAction": "נסו שוב",
+    "details": "פרטים"
+  },
+  "errorDetailsModal": {
+    "title": "פרטי השגיאה",
+    "module": "מודול",
+    "event": "אירוע",
+    "time": "זמן",
+    "correlationId": "מזהה מתאם",
+    "noStack": "אין stack trace",
+    "copyAll": "העתקת הכול"
+  },
+  "network": {
+    "title": "אין חיבור",
+    "body": "לא הצלחנו להתחבר ל-monday. בדקו את החיבור ונסו שוב."
+  }
+}

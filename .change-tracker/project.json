@@ -1,0 +1,6 @@
+{
+  "app": "monday-apps",
+  "description": "מונורפו של כל אפליקציות monday client/server עם CI/CD אחוד",
+  "path": "/Users/ilaish/monday_app/monday-apps-git",
+  "autonomy": "full"
+}
