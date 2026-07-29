@@ -42,6 +42,28 @@ Write rules that apply to every column type:
   — needs the column's current `revision` (optimistic concurrency). Re-send the FULL labels
   array (including deactivated) — a partial send DROPS labels. New label omits `id`. You
   cannot delete a label that is an item's current value or the column default.
+- **`index` must be unique across the WHOLE array — deactivated rows included.**
+  Incident-verified 2026-07-29 (twyst-your-status 3.9.0, production): `INVALID_INPUT` /
+  `errors: ["Indexes should be unique"]`. `color` carries the same rule
+  (`"Colors should be unique"`) — recorded from an earlier incident in this repo
+  (`ensureUniqueStatusColors` + the error matcher in twyst's `ColumnSettings`), not
+  re-verified on 2026-07-29. **Neither rule is in the SDL** — `UpdateStatusLabelInput`
+  only says `index: Int!` is REQUIRED on every row, deactivated ones included, which is
+  precisely why an invisible row can collide. It is a server-side validation you meet as a
+  runtime error. This is the trap that follows from the full-replace rule above: the
+  deactivated rows are invisible in any settings UI, so a collision with one is unreachable
+  from what the screen shows. Two shapes, each needing only a label removed at some point
+  in the past:
+  - a new label given `max(active index) + 1` collides with a deactivated row above every
+    active one — i.e. the label removed last was the last in the list (observed payload:
+    `[0, 1, 2, 2, 3]`);
+  - renumbering the actives to `0..n-1` on a reorder collides with a deactivated row inside
+    that range — a removed MIDDLE label (`[0, 1, 2, 1]`).
+  **Fix pattern:** treat the payload as ONE index space — actives `0..n-1` in display
+  order, deactivated packed above them. Rewriting a deactivated row's `index` is safe:
+  `index` is display order, and a status CELL references its label by **id** (see the
+  `{"index": <labelId>}` quirk below). Same class of bug as the managed-column
+  `labels_positions_v2` note at the end of this section.
 - **Colors:** read-time `settings.labels[].color` is a NUMERIC index; write mutations want
   the enum NAME (`done_green`, `working_orange`, `stuck_red`, `dark_blue`, `purple`...). The
   index maps to `StatusColumnColors` introspection order — build the lookup by introspecting
