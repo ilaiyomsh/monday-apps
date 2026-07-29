@@ -147,16 +147,21 @@ Two targets were planned. **Only one is live.**
 
 ### GitHub Pages — live
 
-<https://ilaiyomsh.github.io/monday-apps/>, built by
+<https://ilaiyomsh.github.io/monday-apps/docs-export/>, built by
 `.github/workflows/pages-docs-export.yml`.
 
 - Triggers on push to `develop` touching `apps/docs-export/**` or
   `packages/error-kit/**`, plus `workflow_dispatch`. Publishes **only**
   `apps/docs-export/dist`. Keep that filter narrow — nothing else in the monorepo may
   be built or published by it.
-- A repository has exactly **one** Pages site, so that URL belongs to this app.
-  `base: './'` in `vite.config.js` is what makes the bundle resolve under the
-  `/monday-apps/` sub-path; an absolute `/` breaks every asset.
+- A repository gets exactly **one** Pages site, so the workflow stages the bundle into
+  `_site/docs-export/` rather than the site root — that keeps the single site able to
+  host more apps later, each at its own address. The root is a small static index.
+- **`base: './'` in `vite.config.js` is load-bearing.** Relative asset URLs resolve at
+  any depth, which is what let the app move from `/` to `/docs-export/` with no rebuild
+  and no code change. An absolute `/` breaks every asset outside the root.
+- The SPA `404.html` is written INSIDE `_site/docs-export/`, not at the site root: Pages
+  serves the nearest `404.html`, so a root copy would not catch a deep link here.
 - Needs the repository's Pages **Source = GitHub Actions**. That is a repo setting, not
   a file: with the legacy "Deploy from a branch" source, Pages builds the repo root as
   a Jekyll site and silently ignores this workflow's artifact.

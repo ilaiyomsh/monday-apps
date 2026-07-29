@@ -110,13 +110,15 @@ axis apps. Full detail — including the single emergency lever and the dev-live
 tunnel detach rule — is in `CLAUDE.md` and the `monday-cicd` skill.
 
 **GitHub Pages — a SECOND target, `docs-export` only.** `docs-export` publishes to
-<https://ilaiyomsh.github.io/monday-apps/> via
+<https://ilaiyomsh.github.io/monday-apps/docs-export/> via
 `.github/workflows/pages-docs-export.yml`, on push to `develop` under
 `apps/docs-export/**`. It is additional to the monday CDN, not a replacement, and no
-other app uses it. A repo has exactly one Pages site, so that URL is this app's, and
-`base: './'` in its `vite.config.js` is what makes the bundle work under the
-`/monday-apps/` sub-path — **never make it an absolute `/`**. Keep the workflow's path
-filter narrow: it must publish only `apps/docs-export/dist`. It needs the repository's
+other app uses it. A repo gets exactly ONE Pages site, so the workflow stages each app
+into its own subdirectory (`_site/<app>/`) rather than spending the whole site on one
+app; the root is a small static index. `base: './'` in its `vite.config.js` is what
+makes the bundle work at any depth — **never make it an absolute `/`**, which breaks
+every asset outside the root. The SPA `404.html` must sit INSIDE the app's directory
+(Pages serves the nearest one). Keep the path filter narrow: only this app's `dist`. It needs the repository's
 Pages **Source = GitHub Actions** (a repo setting); with the legacy "Deploy from a
 branch" source it builds the repo root as Jekyll and ignores the artifact. Sourcemaps
 follow the CDN contract: `hidden`, archived 90 days by commit SHA, then deleted from

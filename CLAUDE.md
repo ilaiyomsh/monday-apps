@@ -106,10 +106,15 @@ and adds the Codex-specific wiring. See "Codex sessions" below.
 `.github/workflows/pages-docs-export.yml`. This is an additional target beside the
 monday CDN, not a replacement, and it is the ONLY app that uses it.
 
-- **URL: <https://ilaiyomsh.github.io/monday-apps/>.** A repository has exactly one
-  Pages site, so that URL belongs to `docs-export`. `base: './'` in its
-  `vite.config.js` is what makes the bundle resolve under the `/monday-apps/`
-  sub-path — **never change it to an absolute `/`**.
+- **URL: <https://ilaiyomsh.github.io/monday-apps/docs-export/>.** A repository gets
+  exactly ONE Pages site, so the workflow stages each app into its own subdirectory
+  (`_site/<app>/`) instead of spending the whole site on one app. The site root is a
+  small static index listing the apps; add a line there when a second app joins.
+- **`base: './'` in `vite.config.js` is load-bearing.** Relative asset URLs resolve at
+  any depth, which is what let the app move from `/` to `/docs-export/` with no rebuild
+  and no app-code change. An absolute `/` breaks every asset outside the root.
+- The SPA `404.html` lives INSIDE each app's directory — Pages serves the nearest one,
+  so a copy at the site root would not catch a deep link under `/docs-export/`.
 - Triggers on push to `develop` under `apps/docs-export/**` (plus
   `packages/error-kit/**`), publishes **only** `apps/docs-export/dist`, and has
   `workflow_dispatch`. Keep the path filter narrow: nothing else in this monorepo
