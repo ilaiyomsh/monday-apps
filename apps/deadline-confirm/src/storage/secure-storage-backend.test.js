@@ -96,3 +96,141 @@ describe('createSecureStorageBackend.set/delete passthrough', () => {
     );
   });
 });
+
+// PRODUCTION INCIDENT 2026-07-29: the admin screen died on
+// `secure_storage_get_failed: An issue occurred while accessing secure storage`
+// while reading `<account>:config` — a key that certainly existed.
+//
+// That message is the apps-sdk's CATCH-ALL: secureStorageFetch wraps EVERY
+// transport failure in it — a Vault 5xx, a 403 from an expired Vault token, a
+// socket reset, a non-JSON body. Source-verified in
+// dist/esm/secure-storage/secure-storage.js. So it says nothing about the key
+// and everything about the hop, and a single blip on that hop took out a whole
+// admin request.
+//
+// Retry policy is therefore about the SHAPE of the error, not its text:
+//   - `status` >= 500 or absent  → transport/unknown, worth another attempt
+//   - `status` 400 / 404         → BadRequestError / NotFoundError from the SDK,
+//                                  deterministic; retrying only adds latency
+// (403 never reaches us: fetch-wrapper's ForbiddenError is caught inside
+// secureStorageFetch and re-thrown as InternalServerError, i.e. status 500.)
+
+/** An apps-sdk BaseError-shaped rejection: carries `status`. */
+function sdkError(message, status) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+const TRANSIENT = () => sdkError('An issue occurred while accessing secure storage', 500);
+
+describe('createSecureStorageBackend — transient failures are retried', () => {
+  /** Collects backoff delays instead of waiting them out. */
+  function fakeSleep() {
+    const waits = [];
+    return { waits, sleep: async (ms) => void waits.push(ms) };
+  }
+
+  it('survives a single transport blip on get instead of failing the request', async () => {
+    sdkGet.mockRejectedValueOnce(TRANSIENT()).mockResolvedValueOnce({ boardId: '1' });
+    const { sleep } = fakeSleep();
+    const backend = createSecureStorageBackend({ sleep });
+    await expect(backend.get('111:config')).resolves.toEqual({ boardId: '1' });
+    expect(sdkGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after the retry budget and reports the wrapped failure', async () => {
+    sdkGet.mockRejectedValue(TRANSIENT());
+    const { sleep } = fakeSleep();
+    const backend = createSecureStorageBackend({ retries: 2, sleep });
+    await expect(backend.get('111:config')).rejects.toThrow(
+      /^secure_storage_get_failed: An issue occurred while accessing secure storage$/
+    );
+    // retries=2 means 3 attempts total, not 2.
+    expect(sdkGet).toHaveBeenCalledTimes(3);
+  });
+
+  it('honours retries=0 — one attempt, no sleep', async () => {
+    sdkGet.mockRejectedValue(TRANSIENT());
+    const { waits, sleep } = fakeSleep();
+    const backend = createSecureStorageBackend({ retries: 0, sleep });
+    await expect(backend.get('k')).rejects.toThrow(/secure_storage_get_failed/);
+    expect(sdkGet).toHaveBeenCalledTimes(1);
+    expect(waits).toEqual([]);
+  });
+
+  it('backs off between attempts rather than hammering the hop', async () => {
+    sdkGet.mockRejectedValue(TRANSIENT());
+    const { waits, sleep } = fakeSleep();
+    const backend = createSecureStorageBackend({ retries: 2, sleep });
+    await expect(backend.get('k')).rejects.toThrow(/secure_storage_get_failed/);
+    // One wait per retry, and the second is longer than the first.
+    expect(waits).toHaveLength(2);
+    expect(waits[1]).toBeGreaterThan(waits[0]);
+  });
+
+  it('does not sleep at all when the first attempt succeeds', async () => {
+    sdkGet.mockResolvedValue({ a: 1 });
+    const { waits, sleep } = fakeSleep();
+    const backend = createSecureStorageBackend({ sleep });
+    await backend.get('k');
+    expect(waits).toEqual([]);
+  });
+
+  it('still unwraps the primitive wrapper on a retried read', async () => {
+    sdkGet.mockRejectedValueOnce(TRANSIENT()).mockResolvedValueOnce({ value: 'tok' });
+    const { sleep } = fakeSleep();
+    const backend = createSecureStorageBackend({ sleep });
+    await expect(backend.get('oauth_token')).resolves.toBe('tok');
+  });
+
+  it('still normalizes a retried miss to null', async () => {
+    sdkGet.mockRejectedValueOnce(TRANSIENT()).mockResolvedValueOnce(undefined);
+    const { sleep } = fakeSleep();
+    const backend = createSecureStorageBackend({ sleep });
+    await expect(backend.get('missing')).resolves.toBeNull();
+  });
+
+  it('retries a transient set — a lost config write is worse than a slow one', async () => {
+    sdkSet.mockRejectedValueOnce(TRANSIENT()).mockResolvedValueOnce(true);
+    const { sleep } = fakeSleep();
+    const backend = createSecureStorageBackend({ sleep });
+    await backend.set('111:config', { boardId: '1' });
+    expect(sdkSet).toHaveBeenCalledTimes(2);
+    // Every attempt carries the same payload — no half-written retry.
+    expect(sdkSet).toHaveBeenLastCalledWith('111:config', { boardId: '1' });
+  });
+
+  it('retries a transient delete', async () => {
+    sdkDelete.mockRejectedValueOnce(TRANSIENT()).mockResolvedValueOnce(true);
+    const { sleep } = fakeSleep();
+    const backend = createSecureStorageBackend({ sleep });
+    await backend.delete('oauth_state:n');
+    expect(sdkDelete).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('createSecureStorageBackend — deterministic failures are NOT retried', () => {
+  const noSleep = { sleep: async () => {} };
+
+  it('fails a 400 immediately — a malformed key will never start working', async () => {
+    sdkGet.mockRejectedValue(sdkError('Provided input is invalid', 400));
+    const backend = createSecureStorageBackend({ retries: 2, ...noSleep });
+    await expect(backend.get('k')).rejects.toThrow(/secure_storage_get_failed/);
+    expect(sdkGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails a 404 immediately', async () => {
+    sdkSet.mockRejectedValue(sdkError('not found', 404));
+    const backend = createSecureStorageBackend({ retries: 2, ...noSleep });
+    await expect(backend.set('k', 'v')).rejects.toThrow(/secure_storage_set_failed/);
+    expect(sdkSet).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries an error with no status — a bare socket failure is transient', async () => {
+    sdkGet.mockRejectedValue(new Error('ECONNRESET'));
+    const backend = createSecureStorageBackend({ retries: 1, ...noSleep });
+    await expect(backend.get('k')).rejects.toThrow(/secure_storage_get_failed: ECONNRESET/);
+    expect(sdkGet).toHaveBeenCalledTimes(2);
+  });
+});

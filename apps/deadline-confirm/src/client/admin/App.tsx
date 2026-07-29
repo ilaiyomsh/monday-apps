@@ -162,7 +162,6 @@ export function App() {
       setDraft(draftFromConfig(res.config));
       setDirty(false);
       setSaveStatus({ kind: 'saved' });
-      await loadState({ initDraft: false });
     } catch (err) {
       logger.error('admin', 'config_save_failed', err);
       const message =
@@ -170,6 +169,18 @@ export function App() {
           ? `השמירה נכשלה — שדה לא תקין: ${err.field}`
           : formatApiFailure(err, 'השמירה נכשלה. נסו שוב.');
       setSaveStatus({ kind: 'error', message });
+      return;
+    }
+    // The post-save refresh is a SEPARATE transaction — it only re-reads the
+    // oauth/google/secret blocks; the config itself was already re-synced from
+    // the PUT response above. Observed in production 2026-07-29: a transient
+    // SecureStorage failure in this refresh reported a save that HAD landed as
+    // "השמירה נכשלה", so the operator re-saved a config that was already
+    // stored. A stale side panel is the lesser wrong; log it and keep "saved".
+    try {
+      await loadState({ initDraft: false });
+    } catch (err) {
+      logger.error('admin', 'post_save_refresh_failed', err);
     }
   };
 
