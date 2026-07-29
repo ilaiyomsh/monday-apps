@@ -69,12 +69,23 @@ Write rules that apply to every column type:
   long-lived column accumulates.
 - **`label` is capped at 30 characters** (docs + `get_column_type_schema`). Guard it in the
   UI; there is no truncation on the way in.
-- **A label's `id` IS its colour's numeric id, assigned at creation** — docs, verbatim:
-  "The numeric ID for a color also serves as the label ID when creating labels… This means
-  each color can only be used once per status column." That is what the colour-uniqueness
-  rule protects, and it independently explains the non-sequential ids real boards return
-  (`1`, `9`, `108` are `done_green`, `egg_yolk`, `aquamarine`). Consequences when ADDING a
-  label to an existing column:
+- **monday DOCUMENTS that a label's `id` comes from its colour's numeric id at creation** —
+  verbatim: "The numeric ID for a color also serves as the label ID when creating labels…
+  This means each color can only be used once per status column." Note this is a THIRD
+  relation, orthogonal to the `id` vs `index` distinction below: `index` is display
+  position, `id` is the stable key, and the claim here is `id` ↔ the **colour enum's own
+  number** (0–19, 101–110, 151–160).
+  Corroborated: monday's own `update_status_column` example sends `{id: 7, color:
+  bright_blue}` and `bright_blue` is 7 — a sequential counter would have produced 3 or 4;
+  their `id`-vs-`index` example lists Done/Working/Stuck as ids 1/0/2 at positions 0/1/2,
+  exactly the permutation the coupling predicts; and there are exactly 40 colours against a
+  40-label cap.
+  **Not universal, and not verified for the UPDATE path.** Counter-example in the same docs:
+  "The default empty label uses ID 5", while the empty label renders grey `#c4c4c4` — not a
+  colour in the enum at all, let alone `explosive`(5). And "when creating labels" is what
+  the sentence says; adding a label to an existing column via `update_status_column` has not
+  been probed. Treat as a strong lead, not a contract. Consequences IF it holds when adding
+  a label to an existing column:
   - a colour dedupe pass is not cosmetic — it decides the new label's **identity**;
   - pick a new label's colour from the ones unused by **every** label (deactivated
     included), and avoid any colour whose numeric id equals an existing label `id` — a
