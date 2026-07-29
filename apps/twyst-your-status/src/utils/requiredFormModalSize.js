@@ -58,6 +58,22 @@ export const FORM_PADDING_PX = 20;
 // One h2 (15px, 10px bottom margin) plus the form's own 12px grid gap. It was 64 when
 // the header also carried an eyebrow and a status-name heading.
 export const FORM_HEADER_PX = 40;
+
+/**
+ * Clearance between monday's close button and our title (owner request).
+ *
+ * monday draws its own X inside the box it hands us, and the title sat directly under
+ * it, so the two read as one crowded row. The gap has to come from OUR side — the X is
+ * monday's chrome and there is no handle on it from here — so it is a top margin on the
+ * form's header, mirrored by `.twyst-required-fields-modal .twyst-form > header` in
+ * OnClickDialog.css.
+ *
+ * It is counted in the height for the same reason every other constant here is: the
+ * modal is sized to the pixel, so pushing the title down without buying the space takes
+ * it from the field list — the one box in this modal allowed to scroll. Spacing the
+ * header at the cost of scrolling the form is not a fix.
+ */
+export const FORM_HEADER_TOP_PX = 16;
 export const FORM_ACTIONS_PX = 64;
 
 /**
@@ -114,6 +130,7 @@ export function requiredFormModalSize(fields) {
     + CONTROL_COLUMN_WIDTH_PX;
 
   const height = (FORM_PADDING_PX * 2)
+    + FORM_HEADER_TOP_PX
     + FORM_HEADER_PX
     + FORM_ACTIONS_PX
     + (rows * FIELD_ROW_HEIGHT_PX)

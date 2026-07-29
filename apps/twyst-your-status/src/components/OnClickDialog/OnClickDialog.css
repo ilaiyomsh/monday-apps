@@ -572,6 +572,21 @@
 }
 
 /*
+ * Clearance under monday's close button.
+ *
+ * monday draws its X inside the box it gives us, and the title sat directly beneath it —
+ * the two read as one crowded row. Only our side can move, so the header takes a top
+ * margin. The number mirrors FORM_HEADER_TOP_PX in requiredFormModalSize.js, which also
+ * adds it to the requested height; changing it here alone takes the space out of the
+ * scrolling field list instead of out of the modal.
+ *
+ * Scoped to the modal because the fill form is the only surface monday puts an X on.
+ */
+.twyst-required-fields-modal .twyst-form > header {
+  margin-block-start: 16px;
+}
+
+/*
  * Status picker — match discussions TaskTableRow statusMenu / statusOption
  * (monday-native: full-width colored pills, white centered text).
  * Fills the Dialog Design iframe (Custom width/height from Dev Center).
