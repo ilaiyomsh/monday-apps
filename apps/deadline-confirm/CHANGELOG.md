@@ -34,6 +34,20 @@ version — without it there was no way to tell from outside which version a
 container was running, which is precisely what was needed while verifying the
 0.10.0 live deploy.
 
+- **Dropdown open-state is now per CELL, not per item.** An item legitimately
+  appears in two clusters (due to start *and* due to finish). `dd.o` was keyed by
+  `itemId`, so both menus opened on one tap. Key is now
+  `<clusterIndex>_<itemId>`. The selection keys (`v`/`l`/`c`) stay per **item**
+  deliberately — one wire value per task is what makes two conflicting statuses
+  impossible, and the hidden input is still emitted exactly once per item.
+- **Hover and press affordance** on the status triggers, the options and the
+  submit button (`:hover` is permitted in amp4email; clients that ignore it fall
+  back to today's flat look).
+- **In-flight feedback:** a "שולח את העדכונים…" block plus dimming of the submit
+  button and the dropdowns while the request is outstanding. Driven by the
+  `amp-form-submitting` class amp-form stamps on the `<form>` itself, so the
+  indicator cannot desync from the actual request state.
+
 ## 0.10.0 — 2026-07-29 — feat: Gmail sending wired end-to-end (T9/T9b/T9c)
 
 Sending is live. The manual **"שליחה עכשיו"** button in the admin screen now runs

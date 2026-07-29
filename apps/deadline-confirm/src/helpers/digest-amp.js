@@ -259,7 +259,17 @@ const STYLES_BASE = `
         background:transparent;
       }
       .go { margin:8px 0 4px; }
-      .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; }
+      .send { color:#ffffff; border:0; border-radius:8px; padding:11px 18px; font-size:14px; font-weight:bold; cursor:pointer; transition:filter .12s ease, box-shadow .12s ease; }
+      /* Hover affordance. amp4email permits :hover; clients that ignore it
+         simply render the base state, so this degrades to today's behaviour. */
+      .dd-trig:hover, .dd-opt:hover { filter:brightness(1.08); box-shadow:0 1px 4px rgba(0,0,0,0.18); }
+      .send:hover { filter:brightness(1.08); box-shadow:0 2px 6px rgba(0,0,0,0.2); }
+      .dd-trig:active, .dd-opt:active, .send:active { filter:brightness(0.94); }
+      /* In-flight state. amp-form stamps these classes on the <form> itself, so
+         no binding is needed and it cannot desync from the actual request. */
+      form.amp-form-submitting .send { opacity:0.55; cursor:progress; filter:none; box-shadow:none; }
+      form.amp-form-submitting .dd-trig, form.amp-form-submitting .dd-opt { pointer-events:none; opacity:0.75; }
+      .sending { margin-top:10px; font-size:13px; color:#676879; }
       .ok { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#E6F7EF; color:#00754A; font-size:13px; }
       .err { margin:10px 0 2px; padding:9px 12px; border-radius:8px; background:#FDECEE; color:#B4222F; font-size:13px; white-space:pre-wrap; word-break:break-word; }
       .err-detail { display:block; margin-top:6px; font-size:11px; opacity:0.9; font-family:ui-monospace,Menlo,Consolas,monospace; }
@@ -277,9 +287,14 @@ const STYLES_BASE = `
  * @param {object} task
  * @param {boolean} includeHidden emit the wire hidden input once per item
  */
-function renderLabelDropdown(fieldName, buttons, palette, task, includeHidden) {
+function renderLabelDropdown(fieldName, buttons, palette, task, includeHidden, clusterIndex) {
   const id = String(task.itemId);
-  const idBind = escapeBindStr(id);
+  // The OPEN/CLOSED key is per CELL, not per item: an item may legitimately
+  // appear in two clusters (it is due to start and due to finish), and keying
+  // `dd.o` by itemId alone made both menus open on one tap. The selection keys
+  // (v/l/c) stay per ITEM on purpose — one wire value per task is what makes
+  // two conflicting statuses impossible.
+  const idBind = escapeBindStr(`${clusterIndex}_${id}`);
   const vKey = `v${id}`;
   const lKey = `l${id}`;
   const cKey = `c${id}`;
@@ -325,7 +340,7 @@ ${options}
  * @param {Set<string>} emittedHidden
  * @param {Array<{ id: string, label: string, color: string }>} palette
  */
-function renderClusterTable(section, emittedHidden, palette) {
+function renderClusterTable(section, emittedHidden, palette, clusterIndex) {
   const buttons = resolveSectionButtons(section);
   if (buttons.length === 0) return '';
 
@@ -343,7 +358,7 @@ function renderClusterTable(section, emittedHidden, palette) {
       return `            <tr>
               <td class="name">&#8207;${escapeHtml(task.name)}</td>
               <td class="date">${formatDate(task.date) || '—'}</td>
-${renderLabelDropdown(fieldName, buttons, palette, task, includeHidden)}
+${renderLabelDropdown(fieldName, buttons, palette, task, includeHidden, clusterIndex)}
             </tr>`;
     })
     .join('\n');
@@ -423,7 +438,7 @@ export function renderDigestAmp({
   const emittedHidden = new Set();
   const clusters = (recipient.sections ?? [])
     .filter((section) => section.tasks && section.tasks.length > 0)
-    .map((section) => renderClusterTable(section, emittedHidden, palette))
+    .map((section, clusterIndex) => renderClusterTable(section, emittedHidden, palette, clusterIndex))
     .filter((html) => html.length > 0)
     .join('\n');
 
@@ -455,6 +470,7 @@ export function renderDigestAmp({
         <input type="hidden" name="sig" value="${escapeHtml(signed.signature)}">
 ${clusters}
         <div class="go"><input class="send" type="submit" style="background:${SUBMIT_COLOR}" value="${SUBMIT_LABEL}"></div>
+        <div submitting><div class="sending">שולח את העדכונים…</div></div>
         <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
         <div submit-error><template type="amp-mustache"><div class="err">{{message}}{{#detail}}<span class="err-detail">{{detail}}</span>{{/detail}}</div></template></div>
       </form>
