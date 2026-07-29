@@ -2,6 +2,86 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.10.3 — 2026-07-29 — add an inert `text/html` fallback part (INTERNAL_ERROR hypothesis)
+
+The digest now goes out as **three** parts — `text/plain` → `text/x-amp-html` →
+`text/html` — instead of two.
+
+**Why.** Gmail answers our dynamic part with `INTERNAL_ERROR`, which Google
+documents as "Something unexpected happened in Gmail" — a catch-all with no
+diagnostic content. The *identical* AMP document rendered correctly when the
+same bytes were sent through the AMP playground, so the document is valid and
+the difference is in the message around it. Comparing the two delivered
+messages left exactly three differences:
+
+| Difference | Status |
+|---|---|
+| transfer encoding (base64 vs quoted-printable) | eliminated — base64 shipped in 0.10.1, no change |
+| authentication headers | blocked on DKIM/SPF DNS we do not control yet |
+| **presence of a `text/html` part** | **this change** |
+
+The message that rendered carried plain → amp → **html**; ours carried plain →
+amp only. The part order here mirrors it exactly.
+
+**This is a hypothesis under test, and the code says so.** Google's docs state
+the html part should not be required: `MALFORMED` is defined as "more than one
+`text/x-amp-html` part **or no fallback `text/html` or `text/plain` part**", so
+plain alone satisfies the written rule — and a structural fault would have
+produced `MALFORMED`, not `INTERNAL_ERROR`. The header comment in
+`mime-alternative.js` records this so the part is not later removed as dead
+weight without re-running the experiment.
+
+It earns its place regardless: per Gmail's tips page the inbox preheader is
+taken from the `text/html` or `text/plain` part, and a formatted fallback beats
+raw text in every non-AMP client.
+
+**D1/D2 is not weakened.** The locked decision bans an *actionable* `text/html`
+body — the `/confirm` link family that carried a secret in a URL. The new part
+is derived from the plain-text digest and is inert: no anchors, no forms, no
+scripts, no remote images, and hostile item names are escaped. Those are
+assertions in `tests/digest-html-fallback.test.js`, not promises in a comment.
+
+test-guard: DONE on both touched modules, 4 mutations KILLED, 0 survivors.
+752 tests passing (50 files).
+
+## 0.10.2 — 2026-07-29 — fix: the admin screen failed on first open, and a successful save reported failure
+
+Two symptoms, `secure_storage_get_failed: An issue occurred while accessing
+secure storage` on `<account>:config` — a key that certainly existed. Three
+independent defects.
+
+- **A cold-start authentication herd — the reason FIRST OPEN failed every time
+  while a refresh always worked.** The SDK authenticates lazily per instance
+  (`this.connectionData = await authenticate(this.connectionData)`), and
+  `index.js` builds one backend at module scope whose Vault token TTL is hours —
+  so only the very first request ever pays for authentication. But
+  `GET /api/state` fires FOUR reads through `Promise.all` (config, link secret,
+  oauth token, google sender), so on a cold container all four see
+  `connectionData === undefined` and each runs the full path — GCP identity
+  token, Vault GCP login, `lookup-self` — four concurrent authentications racing
+  to assign the same field. The backend now runs the FIRST operation alone and
+  queues everything else behind it; once one completes, the connection is warm
+  and the gate is gone for good. Warm reads stay fully concurrent — serializing
+  them would turn `/api/state` into four sequential round trips per request.
+- **No retry on the hop to SecureStorage.** That message is the apps-sdk's
+  catch-all: `secureStorageFetch` wraps *every* transport failure in it — a
+  Vault 5xx, an expired Vault token surfacing as 403, a socket reset, a
+  non-JSON body (source-verified in `dist/esm/secure-storage/secure-storage.js`).
+  It says nothing about the key, and a single blip took out a whole request.
+  `storage/secure-storage-backend.js` now retries twice with increasing backoff,
+  and only for transport-shaped errors: the SDK's `status` is absent (socket) or
+  ≥ 500. A 400/404 is deterministic and still fails on the first attempt.
+  A recovered blip emits a WARN (ships to Axiom), so a degrading hop is visible
+  before it starts failing requests.
+- **A save that SUCCEEDED was reported as failed.** `onSave` in the admin SPA
+  ran the post-save `loadState()` refresh *inside* the save `try`, so a failure
+  in the refresh overwrote the `saved` status with an error — after the config
+  had already been written and re-synced from the PUT response. The operator
+  re-saved a config that was already stored. The refresh is now its own
+  transaction: it logs `post_save_refresh_failed` and leaves the status `saved`.
+
+No change to the digest, the AMP part, or the send path.
+
 ## 0.10.1 — 2026-07-29 — fix: Gmail refused the AMP part (INTERNAL_ERROR)
 
 The first real send worked — mail delivered, plain fallback rendered — but Gmail
