@@ -42,6 +42,57 @@ Write rules that apply to every column type:
   — needs the column's current `revision` (optimistic concurrency). Re-send the FULL labels
   array (including deactivated) — a partial send DROPS labels. New label omits `id`. You
   cannot delete a label that is an item's current value or the column default.
+- **`index` must be unique across the WHOLE array — deactivated rows included.**
+  Incident-verified 2026-07-29 (twyst-your-status 3.9.0, production): `INVALID_INPUT` /
+  `errors: ["Indexes should be unique"]`. `color` carries the same rule
+  (`"Colors should be unique"`) — **docs-confirmed 2026-07-29**, and the docs give the
+  reason: see the colour↔id coupling below. **Neither uniqueness rule is in the SDL** —
+  `UpdateStatusLabelInput` only says `index: Int!` is REQUIRED on every row, deactivated
+  ones included, which is precisely why an invisible row can collide. They are server-side
+  validations you meet as runtime errors. This is the trap that follows from the
+  deactivated rows are invisible in any settings UI, so a collision with one is unreachable
+  from what the screen shows. Two shapes, each needing only a label removed at some point
+  in the past:
+  - a new label given `max(active index) + 1` collides with a deactivated row above every
+    active one — i.e. the label removed last was the last in the list (observed payload:
+    `[0, 1, 2, 2, 3]`);
+  - renumbering the actives to `0..n-1` on a reorder collides with a deactivated row inside
+    that range — a removed MIDDLE label (`[0, 1, 2, 1]`).
+  **Fix pattern:** treat the payload as ONE index space — actives `0..n-1` in display
+  order, deactivated packed above them. Rewriting a deactivated row's `index` is safe:
+  `index` is display order, and a status CELL references its label by **id** (see the
+  `{"index": <labelId>}` quirk below). Same class of bug as the managed-column
+  `labels_positions_v2` note at the end of this section. The packing also stays in range
+  by construction: `index` is bounded **0–39** and a column holds at most **40** labels
+  (`get_column_type_schema(type: status)` → `maxItems: 40`, `index` min 0 / max 39), so
+  `0..(total-1)` always fits — and it is strictly tighter than the sparse indexes a
+  long-lived column accumulates.
+- **`label` is capped at 30 characters** (docs + `get_column_type_schema`). Guard it in the
+  UI; there is no truncation on the way in.
+- **monday DOCUMENTS that a label's `id` comes from its colour's numeric id at creation** —
+  verbatim: "The numeric ID for a color also serves as the label ID when creating labels…
+  This means each color can only be used once per status column." Note this is a THIRD
+  relation, orthogonal to the `id` vs `index` distinction below: `index` is display
+  position, `id` is the stable key, and the claim here is `id` ↔ the **colour enum's own
+  number** (0–19, 101–110, 151–160).
+  Corroborated: monday's own `update_status_column` example sends `{id: 7, color:
+  bright_blue}` and `bright_blue` is 7 — a sequential counter would have produced 3 or 4;
+  their `id`-vs-`index` example lists Done/Working/Stuck as ids 1/0/2 at positions 0/1/2,
+  exactly the permutation the coupling predicts; and there are exactly 40 colours against a
+  40-label cap.
+  **Not universal, and not verified for the UPDATE path.** Counter-example in the same docs:
+  "The default empty label uses ID 5", while the empty label renders grey `#c4c4c4` — not a
+  colour in the enum at all, let alone `explosive`(5). And "when creating labels" is what
+  the sentence says; adding a label to an existing column via `update_status_column` has not
+  been probed. Treat as a strong lead, not a contract. Consequences IF it holds when adding
+  a label to an existing column:
+  - a colour dedupe pass is not cosmetic — it decides the new label's **identity**;
+  - pick a new label's colour from the ones unused by **every** label (deactivated
+    included), and avoid any colour whose numeric id equals an existing label `id` — a
+    long-lived column can have a row whose colour was changed after creation, so
+    "colour free" and "id free" are not the same question. Not yet probed: whether monday
+    errors or silently reuses the id in that case (a silent reuse would hand an old
+    label's identity, and any id-keyed app config, to the new one).
 - **Colors:** read-time `settings.labels[].color` is a NUMERIC index; write mutations want
   the enum NAME (`done_green`, `working_orange`, `stuck_red`, `dark_blue`, `purple`...). The
   index maps to `StatusColumnColors` introspection order — build the lookup by introspecting
