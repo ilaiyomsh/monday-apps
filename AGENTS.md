@@ -117,8 +117,9 @@ other app uses it. A repo gets exactly ONE Pages site, so the workflow stages ea
 into its own subdirectory (`_site/<app>/`) rather than spending the whole site on one
 app; the root is a small static index. `base: './'` in its `vite.config.js` is what
 makes the bundle work at any depth — **never make it an absolute `/`**, which breaks
-every asset outside the root. The SPA `404.html` must sit INSIDE the app's directory
-(Pages serves the nearest one). Keep the path filter narrow: only this app's `dist`. It needs the repository's
+every asset outside the root. **`404.html` is honoured ONLY at the site root** — Pages
+does not resolve a nearest-directory 404 (verified live), so the workflow writes the site
+index there and no per-app 404 exists. Keep the path filter narrow: only this app's `dist`. It needs the repository's
 Pages **Source = GitHub Actions** (a repo setting); with the legacy "Deploy from a
 branch" source it builds the repo root as Jekyll and ignores the artifact. Sourcemaps
 follow the CDN contract: `hidden`, archived 90 days by commit SHA, then deleted from

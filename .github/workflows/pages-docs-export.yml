@@ -116,14 +116,21 @@ jobs:
           set -euo pipefail
           mkdir -p _site/docs-export
           cp -R apps/docs-export/dist/. _site/docs-export/
-          # SPA fallback: Pages serves the NEAREST 404.html for an unknown path, so this
-          # one must live INSIDE the app's directory — a copy at the site root would not
-          # catch a deep link under /docs-export/.
-          cp _site/docs-export/index.html _site/docs-export/404.html
+          # No per-app 404.html on purpose. GitHub Pages honours ONLY a 404.html at the
+          # SITE ROOT — it does not look for the nearest one per directory (that is
+          # Apache/nginx behaviour). A copy in here would be a file that silently does
+          # nothing. Verified live: /docs-export/<unknown> served GitHub's own error page.
+          # docs-export also has no client-side router, so a deep link into it is not a
+          # real scenario — it is always loaded at its directory root.
 
       # Without this the site root is a bare GitHub 404, which reads as "the deploy
       # broke". Static, hand-written, and deliberately tiny: it is a directory, not a
       # product surface. Add a line here when a second app joins.
+      #
+      # The same page is also written to 404.html, which IS honoured at the site root —
+      # so any unknown path lands on the directory instead of GitHub's error page. It is
+      # deliberately not one app's index: that would hand every unknown path to
+      # docs-export and mislead once a second app exists.
       - name: Write the site index
         run: |
           set -euo pipefail
@@ -156,6 +163,7 @@ jobs:
           </body>
           </html>
           HTML
+          cp _site/index.html _site/404.html
 
       - name: Verify what is about to be published
         run: |
@@ -163,8 +171,8 @@ jobs:
           echo "--- _site tree ---"
           find _site -maxdepth 2 -type d | sort
           test -f _site/index.html
+          test -f _site/404.html
           test -f _site/docs-export/index.html
-          test -f _site/docs-export/404.html
           # Belt-and-braces: the strip step above ran against dist/, so re-check the
           # directory that is actually uploaded.
           remaining="$(find _site -name '*.map' -type f | wc -l | tr -d ' ')"

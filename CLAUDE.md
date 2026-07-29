@@ -113,8 +113,12 @@ monday CDN, not a replacement, and it is the ONLY app that uses it.
 - **`base: './'` in `vite.config.js` is load-bearing.** Relative asset URLs resolve at
   any depth, which is what let the app move from `/` to `/docs-export/` with no rebuild
   and no app-code change. An absolute `/` breaks every asset outside the root.
-- The SPA `404.html` lives INSIDE each app's directory — Pages serves the nearest one,
-  so a copy at the site root would not catch a deep link under `/docs-export/`.
+- **`404.html` only works at the SITE ROOT.** Pages does NOT look for the nearest
+  `404.html` per directory (that is Apache/nginx behaviour) — verified live: an unknown
+  path under `/docs-export/` got GitHub's own error page, not the app. The workflow
+  therefore writes the site index to `_site/404.html`, so any unknown path lands on the
+  directory. It deliberately is NOT one app's index, which would hand every unknown path
+  to `docs-export`. An app that ever needs real deep links cannot get them this way.
 - Triggers on push to `develop` under `apps/docs-export/**` (plus
   `packages/error-kit/**`), publishes **only** `apps/docs-export/dist`, and has
   `workflow_dispatch`. Keep the path filter narrow: nothing else in this monorepo
