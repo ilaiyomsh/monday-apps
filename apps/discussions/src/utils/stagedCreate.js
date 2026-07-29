@@ -34,8 +34,34 @@ export function applyStageAdvance(discussion, id, stamp) {
 }
 
 /**
- * A background stage FAILED for `id`. The people were never written, so the
- * pending copy must go — and the card refetches to show what monday actually has.
+ * The LAST stage landed for `id`: everything the form collected is now really on
+ * the board, so the card re-reads and BOTH pieces of optimistic state go — the
+ * pending people (monday now serves the real ones) and `__building`.
+ *
+ * round306 (PR review) — this exists so completion no longer runs through the
+ * generic save handler. That handler closes whatever create/edit modal is open,
+ * hides the list and selects this discussion; since the tail can finish seconds
+ * after the handoff (the agenda readiness wait alone can run ~5s), a user who
+ * moved on in the meantime was yanked back here and lost the newer form's unsaved
+ * input. Like the other stage helpers, this is id-GUARDED: a different (or no)
+ * open discussion returns the SAME object, so the caller's setState is a no-op.
+ */
+export function applyStageComplete(discussion, id, stamp) {
+  if (!discussion) return discussion;
+  if (id != null && String(discussion.id) !== String(id)) return discussion;
+  const next = { ...discussion, __reloadStamp: stamp };
+  delete next.__pendingPeople;
+  delete next.__building;
+  return next;
+}
+
+/**
+ * A background stage FAILED for `id`. The pending copy must go and the card
+ * refetches, so it shows what monday actually has. Note that "a stage failed" does
+ * NOT mean nothing was written — the agenda and the people are independent writes,
+ * so the people may well have landed while the agenda is what failed. That is
+ * exactly why the pending copy is dropped in favour of a re-read rather than being
+ * kept or trusted.
  * `__building` goes too: whatever is on the board is all there will be, and
  * leaving the loader spinning forever would strand the user.
  */

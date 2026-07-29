@@ -150,6 +150,30 @@ describe('אחראי — the row is reconciled with the active scope (finding D)
     expect(result.current.items).toEqual([]);
   });
 
+  // round306 PR review — the scope decision must follow the SERVER, not the request.
+  it("scope 'mine': a FAILED write keeps the row (the board still has me as אחראי)", async () => {
+    sdk.updateExecute = vi.fn(async () => { throw new Error('rejected'); });
+    const { result } = await mounted({ scope: 'mine' });
+    await act(async () => { await result.current.updateTaskAssignee('1', [{ id: OTHER }]); });
+    // reverted AND still listed — dropping it would hide a task that is still mine
+    expect(result.current.items.map((t) => t.id)).toEqual(['1']);
+    expect(result.current.items[0].responsibilityID).toEqual([{ id: ME }]);
+  });
+
+  it("scope 'others': a FAILED write to take the task myself keeps it listed", async () => {
+    sdk.discussionsExecute = vi.fn(async () => ({
+      items: [{ id: 'd1', discussionLeadID: [{ id: ME }], tasksBoardLinkID: { ids: ['7'] } }],
+    }));
+    apiMock.mockResolvedValue({
+      items: [{ id: '7', name: 'משימה של אחר', column_values: [{ id: 'people_col', __parsed: [{ id: OTHER }] }] }],
+    });
+    const { result } = await mounted({ scope: 'others' });
+    await waitFor(() => expect(result.current.items.map((t) => t.id)).toEqual(['7']));
+    sdk.updateExecute = vi.fn(async () => { throw new Error('rejected'); });
+    await act(async () => { await result.current.updateTaskAssignee('7', [{ id: ME }]); });
+    expect(result.current.items.map((t) => t.id)).toEqual(['7']);
+  });
+
   it("scope 'led': the row stays whoever is responsible (the scope is the discussion, not אחראי)", async () => {
     sdk.discussionsExecute = vi.fn(async () => ({
       items: [{ id: 'd1', discussionLeadID: [{ id: ME }], tasksBoardLinkID: { ids: ['7'] } }],
