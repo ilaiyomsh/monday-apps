@@ -9,9 +9,14 @@ Operator setup lives in `README.md`.
 
 One-click status actions from email (monday code server + admin view), **V6 —
 AMP-only with per-message signed manifest**.
-The digest is sent as `multipart/alternative`: a non-actionable `text/plain`
-fallback (task list only, no links/credentials) plus a `text/x-amp-html` part
-that Gmail renders as dynamic email. The AMP form posts to **`POST /amp/confirm`**
+The digest is sent as `multipart/alternative` with **three** parts, in the order
+`text/plain` → `text/x-amp-html` → `text/html` (0.10.3): a non-actionable plain
+fallback (task list only, no links/credentials), the part Gmail renders as
+dynamic email, and a non-actionable HTML fallback **derived from the plain part**
+(`helpers/digest-html-fallback.js`). That order mirrors the only message Gmail
+has been observed to render our AMP document from; see the header comment in
+`helpers/mime-alternative.js` — it is a live hypothesis about `INTERNAL_ERROR`,
+not decoration, so do not drop the HTML part. The AMP form posts to **`POST /amp/confirm`**
 — the app's **only** public write endpoint. Each message carries one HMAC
 signature over an explicit manifest of authorized (task × button) pairs; the
 base link secret never leaves the server (D3).
@@ -21,7 +26,10 @@ SecureStorage keys. App ID **11704868**, dev-center slug
 `yomsheni-il_status-email`.
 
 **Locked decisions (V6 — docs/v6-amp-only-decisions.md) — do not "improve":**
-- AMP-only: no actionable `text/html` body, no `/confirm` route family (D1/D2).
+- AMP-only: no **actionable** `text/html` body, no `/confirm` route family
+  (D1/D2). Since 0.10.3 an INERT `text/html` fallback IS shipped — derived from
+  the plain part, no anchors/forms/scripts/remote images, asserted in
+  `tests/digest-html-fallback.test.js`. D1/D2 bans actionable HTML, not HTML.
 - One signature per message over a signed manifest; slot derived from scheduled
   send hour (`digest.sendHour`, default 8, Asia/Jerusalem) (D5/D6/D10).
 - Link secret is write-only — never returned by any endpoint; rotation is the
@@ -60,6 +68,7 @@ src/
 │   ├── gmail-sender.js       # THE send funnel (emailSender seam): RFC822 + users.messages.send
 │   └── providers/google/oauth.js  # Google token transport (exchange / refresh / auth URL)
 ├── helpers/                  # pages (oauth only), rate-limit, digest-plain, digest-amp,
+│                             # digest-html-fallback (inert text/html part), mime-alternative,
 │                             # digest-email (legacy send path until Gmail T9), amp-cors, logger, environment
 ├── storage/                  # secure-storage-backend (prod) / memory-backend (dev+tests)
 └── client/admin/             # React 19 + Vite 7 + @vibe/core SPA → public/admin/
