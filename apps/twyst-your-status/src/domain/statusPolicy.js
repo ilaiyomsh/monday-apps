@@ -110,6 +110,9 @@ export function normalizeStatusLabels(columnSettings) {
       color,
       colorValue,
       isDone: label.is_done === true,
+      // Read so a save can send it BACK: update_status_column replaces the labels
+      // array, so a field left out of the payload is cleared, not preserved.
+      description: typeof label.description === 'string' ? label.description : undefined,
       isDeactivated: label.is_deactivated === true,
     }];
   });

@@ -80,19 +80,51 @@ Write rules that apply to every column type:
   their `id`-vs-`index` example lists Done/Working/Stuck as ids 1/0/2 at positions 0/1/2,
   exactly the permutation the coupling predicts; and there are exactly 40 colours against a
   40-label cap.
-  **Not universal, and not verified for the UPDATE path.** Counter-example in the same docs:
-  "The default empty label uses ID 5", while the empty label renders grey `#c4c4c4` — not a
-  colour in the enum at all, let alone `explosive`(5). And "when creating labels" is what
-  the sentence says; adding a label to an existing column via `update_status_column` has not
-  been probed. Treat as a strong lead, not a contract. Consequences IF it holds when adding
-  a label to an existing column:
+  **PROBE-VERIFIED on the UPDATE path — 2026-07-29** (live board, five discriminating
+  probes; the earlier "strong lead, not a contract" hedge was too weak). Adding a label to
+  an EXISTING column via `update_status_column` assigns `id` = the numeric id of the colour
+  sent, and **rejects the whole mutation when that id is already taken**:
+  `INVALID_ARGUMENT_EXCEPTION` / `"request to change default status label color"` — a
+  message that names neither the colour nor the id, so it reads as unrelated to the real
+  cause. The open question above is answered: monday **errors**, it does not silently reuse.
+  The probe series, each run identical but for the new label's colour:
+
+  | new label colour | enum id | label ids already on the column | result |
+  |---|---|---|---|
+  | `purple` | 4 | 0,1,2,3,7 | accepted → **id 4** |
+  | `purple` | 4 | 0,1,2,3,**4**(deactivated),7 | **rejected** |
+  | `explosive` | 5 | 0,1,2,3,4,7 | accepted → **id 5** |
+  | `blackish` | 10 | 0,1,2,3,4,5,7 | accepted → **id 10** (not the next free id, 6) |
+  | `grass_green` | 6 | 0,1,2,3,4,5,7,10 | accepted → **id 6** |
+
+  `blackish` is the decisive one: a next-free-id scheme would have produced 6, so the id
+  really does come from the colour. Consequences, now load-bearing rather than conditional:
   - a colour dedupe pass is not cosmetic — it decides the new label's **identity**;
-  - pick a new label's colour from the ones unused by **every** label (deactivated
-    included), and avoid any colour whose numeric id equals an existing label `id` — a
-    long-lived column can have a row whose colour was changed after creation, so
-    "colour free" and "id free" are not the same question. Not yet probed: whether monday
-    errors or silently reuses the id in that case (a silent reuse would hand an old
-    label's identity, and any id-keyed app config, to the new one).
+  - pick a new label's colour from the ones whose numeric id is not an existing label `id`,
+    **deactivated rows included** — NOT merely "a colour no active label uses". These are
+    different questions, and picking on the wrong one is a guaranteed rejection: removing a
+    label frees its COLOUR while its ID stays taken, so the freed colour is exactly the one
+    a lowest-free-colour picker reaches for next. On a default column (ids 0,1,2 with
+    colours 0,1,2) removing any label makes the next add fail every time.
+  - the coupling is creation-only: an existing label's colour can be changed afterwards
+    (probe-verified — id 4 was moved to `dark_purple`(14) and accepted), so on a long-lived
+    column `id` and colour need not agree, and "colour free" ≠ "id free".
+  - **id 5 is reserved for the default empty label** and behaves specially: a label created
+    there cannot be deleted (`"Unable to delete a label already in use"`, even with no item
+    referencing it), and monday overrides its colour to grey `#c4c4c4` regardless of the
+    enum sent. It shows up in `labels_positions_v2` without a `labels` entry on a column
+    that has never had a label removed — do not read that as evidence of a deletion.
+- **Omitting a label from the array DELETES it** (the array is a full replace), and the
+  delete is refused with `"Unable to delete a label already in use"` when the label is in
+  use. Probe-verified 2026-07-29: deactivated labels CAN be deleted this way, and "in use"
+  is broader than "some item's current value" — id 5 (the reserved empty label) refused
+  deletion with all four items either empty or pointing at other labels.
+- **`is_done` and `description` are write-or-lose.** `UpdateStatusLabelInput` accepts both,
+  and a payload that omits them **clears** them: the column's `done_colors` was reset from
+  `[1]` to `[]` by a labels mutation that sent only `id/color/label/index/is_deactivated`
+  (probe-verified 2026-07-29). Any read-modify-write of labels must carry `is_done` and
+  `description` back, or saving an unrelated label edit silently drops the "Done"
+  designation and every label description on the column.
 - **Colors:** read-time `settings.labels[].color` is a NUMERIC index; write mutations want
   the enum NAME (`done_green`, `working_orange`, `stuck_red`, `dark_blue`, `purple`...). The
   index maps to `StatusColumnColors` introspection order — build the lookup by introspecting

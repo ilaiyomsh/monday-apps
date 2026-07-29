@@ -169,6 +169,69 @@ export const VIBE_STATUS_COLOR_NAMES = MONDAY_STATUS_COLORS.map((entry) => (
 
 
 /**
+ * monday's reserved slot for the default EMPTY label.
+ *
+ * A label created into it (i.e. with `explosive`, colour 5) cannot be deleted afterwards
+ * — `"Unable to delete a label already in use"` even with no item referencing it — and
+ * monday overrides its colour to grey `#c4c4c4` whatever enum was sent. That is what
+ * produced the "picked purple, board shows grey, settings shows orange" report: grey is
+ * monday's override, orange is `explosive` re-derived from the stored colour index.
+ * Probe-verified 2026-07-29; see monday-api references/column-formats.md.
+ */
+export const RESERVED_EMPTY_LABEL_ID = 5;
+
+/**
+ * The numeric id of a status colour — which IS the id monday assigns a label created
+ * with that colour.
+ * @param {string|number|undefined|null} colorEnum
+ * @returns {number|null}
+ */
+export function statusColorEnumId(colorEnum) {
+  const normalized = tryNormalizeStatusColorEnum(colorEnum);
+  if (normalized == null) return null;
+  const entry = MONDAY_STATUS_COLORS.find((candidate) => candidate.enum === normalized);
+  return entry ? entry.id : null;
+}
+
+/**
+ * Choose the colour for a label about to be CREATED.
+ *
+ * Two separate questions have to come out clean, and conflating them is the bug this
+ * function exists to prevent:
+ *   - is the colour free? (monday requires colours unique across the whole column)
+ *   - is the colour's own numeric id free as a LABEL id? (that id is what the new label
+ *     gets, and a taken one — active OR deactivated — rejects the mutation)
+ *
+ * Removing a label frees its colour and keeps its id, so on a natural column the freed
+ * colour is precisely the one a colours-only picker reaches for first. Every label id
+ * ever used stays taken, so this walks by id-freeness, not by colour-freeness alone.
+ *
+ * @param {Array<{ id: string|number, colorValue?: string|number, color?: string,
+ *   isDeactivated?: boolean }>} allLabels every label on the column, deactivated included
+ * @returns {string} a StatusColumnColors enum name
+ */
+export function pickColorForNewLabel(allLabels) {
+  const labels = Array.isArray(allLabels) ? allLabels : [];
+
+  const takenIds = new Set([RESERVED_EMPTY_LABEL_ID]);
+  const usedColors = new Set();
+  labels.forEach((label) => {
+    const numericId = Number(label?.id);
+    if (Number.isInteger(numericId)) takenIds.add(numericId);
+    const color = tryNormalizeStatusColorEnum(label?.colorValue ?? label?.color);
+    if (color != null) usedColors.add(color);
+  });
+
+  const free = MONDAY_STATUS_COLORS.find((entry) => (
+    !takenIds.has(entry.id) && !usedColors.has(entry.enum)
+  ));
+  if (!free) {
+    throw new Error('No monday status color remains whose id is free for a new label');
+  }
+  return free.enum;
+}
+
+/**
  * @param {Iterable<string>} usedEnums
  * @returns {string} next free StatusColumnColors enum name
  */
