@@ -2,6 +2,31 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.10.2 — 2026-07-29 — fix: a transient SecureStorage blip failed the admin screen
+
+Saving settings on live reported `השמירה נכשלה` with
+`secure_storage_get_failed: An issue occurred while accessing secure storage`
+on `<account>:config` — a key that certainly existed. Two independent defects.
+
+- **No retry on the hop to SecureStorage.** That message is the apps-sdk's
+  catch-all: `secureStorageFetch` wraps *every* transport failure in it — a
+  Vault 5xx, an expired Vault token surfacing as 403, a socket reset, a
+  non-JSON body (source-verified in `dist/esm/secure-storage/secure-storage.js`).
+  It says nothing about the key, and a single blip took out a whole request.
+  `storage/secure-storage-backend.js` now retries twice with increasing backoff,
+  and only for transport-shaped errors: the SDK's `status` is absent (socket) or
+  ≥ 500. A 400/404 is deterministic and still fails on the first attempt.
+  A recovered blip emits a WARN (ships to Axiom), so a degrading hop is visible
+  before it starts failing requests.
+- **A save that SUCCEEDED was reported as failed.** `onSave` in the admin SPA
+  ran the post-save `loadState()` refresh *inside* the save `try`, so a failure
+  in the refresh overwrote the `saved` status with an error — after the config
+  had already been written and re-synced from the PUT response. The operator
+  re-saved a config that was already stored. The refresh is now its own
+  transaction: it logs `post_save_refresh_failed` and leaves the status `saved`.
+
+No change to the digest, the AMP part, or the send path.
+
 ## 0.10.1 — 2026-07-29 — fix: Gmail refused the AMP part (INTERNAL_ERROR)
 
 The first real send worked — mail delivered, plain fallback rendered — but Gmail
