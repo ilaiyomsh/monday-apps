@@ -29,11 +29,14 @@ const TEMPLATE = {
 
 beforeEach(() => {
   api.mockReset();
-  api.mockImplementation(async (query) =>
-    query.includes('create_item')
-      ? { create_item: { id: 'T-new' } }
-      : { create_subitem: { id: 'P-new' } }
-  );
+  api.mockImplementation(async (query) => {
+    const topicAliases = [...query.matchAll(/\b(topic\d+)\s*:\s*create_item\s*\(/g)].map((match) => match[1]);
+    if (topicAliases.length) {
+      return Object.fromEntries(topicAliases.map((alias) => [alias, { id: `T-${alias}` }]));
+    }
+    const pointAliases = [...query.matchAll(/\b(point\d+_\d+)\s*:\s*create_subitem\s*\(/g)].map((match) => match[1]);
+    return Object.fromEntries(pointAliases.map((alias) => [alias, { id: `P-${alias}` }]));
+  });
 });
 
 describe('createTopicsFromTemplate — onProgress', () => {
@@ -56,6 +59,22 @@ describe('createTopicsFromTemplate — onProgress', () => {
 
   it('still resolves counts when onProgress is omitted (no throw)', async () => {
     await expect(createTopicsFromTemplate('D1', TEMPLATE)).resolves.toMatchObject({ topics: 2, points: 3 });
+  });
+
+  it('topicIds stay in TEMPLATE order even when alias keys arrive in reverse order', async () => {
+    api.mockReset();
+    api.mockImplementation(async (query) => {
+      if (query.includes('create_item')) {
+        return {
+          topic1: { id: 'T-second' },
+          topic0: { id: 'T-first' },
+        };
+      }
+      const pointAliases = [...query.matchAll(/\b(point\d+_\d+)\s*:\s*create_subitem\s*\(/g)].map((match) => match[1]);
+      return Object.fromEntries(pointAliases.map((alias) => [alias, { id: `P-${alias}` }]));
+    });
+    const res = await createTopicsFromTemplate('D1', TEMPLATE);
+    expect(res.topicIds).toEqual(['T-first', 'T-second']);
   });
 
   it('a throwing onProgress never breaks the creation flow', async () => {

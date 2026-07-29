@@ -64,6 +64,21 @@ export async function saveTopicOrder(discussionId, topicIds) {
   await persist(discussionId, { ...current, topics: topicIds.map(String) });
 }
 
+/** Persist the complete order for a newly-created discussion in one write.
+ * Fresh discussions cannot have an existing order, so reading storage first
+ * only adds another serialized iframe bridge round-trip. */
+export async function saveFreshTopicOrder(discussionId, order) {
+  if (!discussionId) return;
+  const topics = Array.isArray(order?.topics) ? order.topics.map(String) : [];
+  const points = {};
+  if (order?.points && typeof order.points === 'object') {
+    Object.entries(order.points).forEach(([topicId, pointIds]) => {
+      points[String(topicId)] = Array.isArray(pointIds) ? pointIds.map(String) : [];
+    });
+  }
+  await persist(discussionId, { topics, points });
+}
+
 /** Persist a new point order for one topic (array of point ids). */
 export async function savePointOrder(discussionId, topicId, pointIds) {
   if (!discussionId || !topicId) return;

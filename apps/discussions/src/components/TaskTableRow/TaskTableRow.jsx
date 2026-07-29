@@ -51,6 +51,8 @@ export const TaskTableRow = memo(function TaskTableRow({
   onStatusChange,
   onPriorityChange,
   onAssigneeChange,
+  // round306 — שותפים inline edit (gated per row by editTaskPartners).
+  onPartnersChange,
   onDeadlineChange,
   onRenameTask,
   onDeleteTask,
@@ -329,6 +331,25 @@ export const TaskTableRow = memo(function TaskTableRow({
         </div>
       </div>
     ),
+    // round306 — שותפים (partnersID): the SAME cell as אחראי above, minus `single`
+    // (a task has several partners). Editable only when the permission gate
+    // handed the handler down; read-only avatars otherwise.
+    partners: (
+      <div key="partners" className={grid.taskCell}>
+        <div className={styles.assigneeCell}>
+          {onPartnersChange ? (
+            <PersonPicker
+              selected={task.partnersID || []}
+              onChange={(p) => onPartnersChange(task.id, p)}
+              boardKey="tasks"
+              accountWide
+            />
+          ) : (
+            <PersonList people={task.partnersID} size="sm" showNames max={2} />
+          )}
+        </div>
+      </div>
+    ),
     // deadline — with a hover X to clear the column
     deadline: (
       <div key="deadline" className={`${grid.taskCell} ${styles.deadlineCell}`}>
@@ -488,7 +509,7 @@ export const TaskTableRow = memo(function TaskTableRow({
 
   const orderedKeys = columns || [
     ...(selectable ? ['sel'] : []),
-    'name', 'assignee', 'deadline', 'status',
+    'name', 'assignee', 'partners', 'deadline', 'status',
     ...(showPriority ? ['priority'] : []),
     ...(showSourceDiscussion ? ['source'] : []),
   ];

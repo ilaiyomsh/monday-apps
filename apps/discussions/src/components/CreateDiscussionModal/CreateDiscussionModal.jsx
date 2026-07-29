@@ -18,7 +18,7 @@ import { useUsers } from '@generated/utils/mondayApi/hooks/use-users.js';
 import { useTemplates } from '@generated/contexts/TemplatesContext.jsx';
 import { useSettings } from '@generated/contexts/SettingsContext.jsx';
 import { PREVIOUS_TASKS_MODES } from '@generated/utils/mondayApi/boards.config.js';
-import { createTopicsFromTemplate, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
+import { createTopicsFromTemplate, linkTemplateTopics, readDiscussionTopicsAsTemplate } from '@generated/utils/templates.js';
 import { parseExternalParticipants, formatExternalParticipants } from '@generated/utils/externalParticipants.js';
 import { PersonPicker } from '@generated/components/PersonPicker';
 import { DatePickerPopover } from '@generated/components/DatePickerPopover';
@@ -103,7 +103,7 @@ async function resolvePreviousDiscussion(discussionId, onResolved) {
 // empty date and the name selected for immediate editing.
 // `prefill` ({date:'YYYY-MM-DD', time:'HH:MM'}) seeds a PLAIN create — set when
 // the user clicks an empty hour slot in the calendar's week view.
-export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion = null, duplicateFrom = null, prefill = null, canManageSettings = false }) {
+export function CreateDiscussionModal({ open, onClose, onCreated, onOptimisticCreate = null, onStageAdvance = null, onStageError = null, editDiscussion = null, duplicateFrom = null, prefill = null, canManageSettings = false }) {
   const isEdit = !!editDiscussion;
   const isDuplicate = !isEdit && !!duplicateFrom;
   const { currentUser } = useMondayContext();
@@ -183,6 +183,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const { options: typeOptions, loading: typeOptionsLoading } = useDropdownOptions('discussions', 'discussionTypeID');
   const titleRef = useRef(null);
   const timeMenuRef = useRef(null);
+  // If the root discussion was saved but template seeding failed, retain its id
+  // and the per-alias checkpoint so a retry resumes instead of duplicating the
+  // discussion or already-created topics/points.
+  const creationResumeRef = useRef(null);
+  const creationSessionRef = useRef(null);
 
   // Hide "דיון קודם" when the Previous-tasks tab won't use the link for this
   // discussion: always in DISCUSSION_TYPE mode, and — in AUTO mode — only while a
@@ -249,6 +254,20 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     }
     loadDiscussions();
   }, [open, hidePreviousDiscussion]);
+
+  // Reset resumable creation state only when the logical modal session changes
+  // (closed/reopened or a different source discussion). Parent rerenders often
+  // replace prop objects with equivalent copies; resetting on object identity
+  // could otherwise lose a saved root id after a partial failure.
+  useEffect(() => {
+    const sessionKey = open
+      ? `${isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create')}:${editDiscussion?.id || duplicateFrom?.id || 'new'}`
+      : null;
+    if (creationSessionRef.current !== sessionKey) {
+      creationSessionRef.current = sessionKey;
+      creationResumeRef.current = null;
+    }
+  }, [open, isEdit, isDuplicate, editDiscussion?.id, duplicateFrom?.id]);
 
   // Seed the form when opening: prefill from editDiscussion (edit), from
   // duplicateFrom (duplicate), or clear (plain create).
@@ -436,8 +455,34 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
   const handleSubmit = async () => {
     // Name, date AND time are required — every discussion is scheduled at an hour.
     if (!name.trim() || !date || !time) return;
+    const submitStartedAt = Date.now();
+    let submitSucceeded = false;
+    // round300 — when the optimistic path hands off, the synchronous flow returns
+    // before the write resolves, so the finally's total would log a misleading
+    // ok=false. This flag makes the finally skip it; the background closure emits
+    // the REAL total (round299's health metric stays accurate).
+    let optimisticHandoff = false;
     try {
       setCreating(true);
+      const submissionKey = JSON.stringify({
+        mode: isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create'),
+        sourceId: isEdit ? editDiscussion?.id : duplicateFrom?.id,
+        name: name.trim(),
+        date,
+        time,
+        lead: lead.map((person) => String(person.id)),
+        coordinator: coordinator.map((person) => String(person.id)),
+        participants: participants.map((person) => String(person.id)),
+        externalParticipants,
+        discussionType,
+        previousDiscussionId,
+        templateId,
+        typeTopics,
+      });
+      let resume = creationResumeRef.current;
+      if (resume && resume.submissionKey !== submissionKey) {
+        throw new Error('הדיון כבר נוצר חלקית. כדי למנוע כפילות, יש לסגור את הטופס ולפתוח דיון חדש לפני שינוי הפרטים.');
+      }
       // Item 6 — real step progress: 1 step for the item save + one per
       // topic/point the picked template will create (refined live by
       // createTopicsFromTemplate's onProgress, which knows the sanitized total).
@@ -445,9 +490,21 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // round127 — duplicate: read the source topics BEFORE creating the item so
       // plannedSteps counts every clone step (the bar used to fake 100% after
       // the item save, seconds before the clone even started).
-      const duplicateTemplate = isDuplicate ? await readDiscussionTopicsAsTemplate(duplicateFrom.id) : null;
-      const plannedTopics = pickedTemplate?.topics
-        || (typeTopics?.length ? typeTopics : (duplicateTemplate?.topics || []));
+      const duplicateReadStartedAt = Date.now();
+      const duplicateTemplate = isDuplicate
+        ? (resume?.duplicateTemplate || await readDiscussionTopicsAsTemplate(duplicateFrom.id))
+        : null;
+      if (isDuplicate && !resume?.duplicateTemplate) {
+        logger.health?.('discussion_create_phase', {
+          step: 'duplicate_read',
+          duration_ms: Date.now() - duplicateReadStartedAt,
+        });
+      }
+      const primaryTopics = pickedTemplate?.topics || (typeTopics?.length ? typeTopics : []);
+      const plannedTopics = [
+        ...primaryTopics,
+        ...(duplicateTemplate?.topics || []),
+      ];
       const plannedSteps = 1 + plannedTopics.reduce((n, t) => n + 1 + (t.points?.length || 0), 0);
       setCreateProgress({ done: 0, total: plannedSteps });
       const onTemplateProgress = ({ done, total }) =>
@@ -523,27 +580,306 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
         },
       });
 
+      // round301 — STAGED create (plain NEW discussion only; edit + duplicate keep
+      // the awaited flow below). round300 opened the card instantly but EMPTY: the
+      // whole write ran in the background, so a template discussion showed no
+      // topics until a minute later. Now the work is ordered by how much the user
+      // needs it, per the owner's spec:
+      //   Stage 1 (awaited — the card opens only after this): the root item with
+      //           the BASICS (name/date/type/previous/creator) + ALL topics, created
+      //           but not yet connected. round304 sizes this at ~40% of the wait.
+      //   Stage 2 (background): every point, then the connection of the topics to
+      //           the discussion (linkLast), resumed from stage 1's checkpoint so
+      //           nothing is created twice.
+      //   Stage 3 (background, last): the people columns — lead, coordinator,
+      //           participants, external participants.
+      // Stage 2/3 completion bumps a reload stamp on the card so the late arrivals
+      // actually show up without a manual refresh.
+      if (!isEdit && !isDuplicate && onOptimisticCreate) {
+        // Stage 3 payload — pulled OUT of the create so the root item lands fast.
+        // discussionCreatorID deliberately stays in stage 1: it is the permission
+        // anchor (canEdit reads creator), so it must exist the moment the card opens.
+        const rootPayload = { ...payload };
+        const peoplePayload = {};
+        for (const key of ['discussionLeadID', 'discussionCoordinatorID', 'participantsID', 'externalParticipantsID']) {
+          if (key in rootPayload) {
+            peoplePayload[key] = rootPayload[key];
+            delete rootPayload[key];
+          }
+        }
+        // The people the user picked are shown from this shape until stage 3 has
+        // actually written them (see DiscussionCard's __pendingPeople merge), so
+        // the header never blanks out while the write is still in flight.
+        const pendingPeople = {
+          discussionLeadID: lead,
+          discussionCoordinatorID: coordinator,
+          participantsID: participants,
+          externalParticipantsID: formatExternalParticipants(externalParticipants),
+        };
+        const optimisticShape = {
+          name: name.trim(),
+          discussionDateID: date ? composeLocalDate(date, time) : null,
+          ...pendingPeople,
+          ...(typeIsSubmittable ? { discussionTypeID: discussionType } : {}),
+        };
+        // Template inputs are captured here (submit-time) so the form reset below
+        // can't affect the staged writes.
+        const stageTemplate = pickedTemplate || (typeTopics?.length ? { topics: typeTopics } : null);
+        // A retry after a PARTIAL stage 1 must resume, never start over: the root
+        // item may already exist. Same contract the awaited path uses, and the
+        // submissionKey guard above already refuses a retry with edited details.
+        let newId = resume?.savedId || null;
+        let stage1Checkpoint = resume?.templateResumeState || null;
+        const rememberRoot = (checkpoint) => {
+          if (!newId) return;
+          creationResumeRef.current = {
+            ...(creationResumeRef.current || {}),
+            submissionKey,
+            savedId: String(newId),
+            rootSaved: true,
+            templateResumeState: checkpoint || null,
+          };
+        };
+        try {
+          if (!resume?.rootSaved) {
+            const rootSavedAt = Date.now();
+            const created = await board.item().create(rootPayload).execute();
+            newId = created.id;
+            rememberRoot(null);
+            logger.health?.('discussion_create_phase', {
+              step: 'staged_root_save', duration_ms: Date.now() - rootSavedAt,
+            });
+          }
+          // round304 (owner spec) — REBALANCE the wait. round303 awaited only the
+          // root item here, which the owner measured as ~15% of the wait in the
+          // card vs ~85% under the card's loader; the ask is ~40/60. So the awaited
+          // part now also creates every TOPIC (no points, no connection yet): that
+          // is the second of the agenda's round-trips, and it moves the split
+          // without giving up round303's win — the points and the connection
+          // (linkLast) still run in the background, so the agenda still pops in
+          // COMPLETE on one fetch instead of filling in topic by topic.
+          if (stageTemplate) {
+            const topicsAt = Date.now();
+            await createTopicsFromTemplate(newId, stageTemplate, {
+              freshDiscussion: true,
+              // Topics ONLY — every point is deferred to the background pass, which
+              // resumes from this pass's checkpoint so nothing is created twice.
+              pointTopicIndexes: [],
+              // …and NOTHING is connected here (PR-review fix): the relation is the
+              // card's read path, so linking now would serve empty topics before
+              // their points exist. The background pass owns the connection.
+              skipLink: true,
+              resumeState: stage1Checkpoint,
+              onCheckpoint: (cp) => { stage1Checkpoint = cp; rememberRoot(cp); },
+              // A real bar in the card for the part the user is actually waiting on.
+              onProgress: setCreateProgress,
+            });
+            logger.health?.('discussion_create_phase', {
+              step: 'staged_topics_awaited', duration_ms: Date.now() - topicsAt,
+            });
+          }
+        } catch (err) {
+          // Either the root create or the awaited topic pass failed. Both are
+          // resumable (rememberRoot persisted the checkpoint) and nothing was handed
+          // off yet, so surface it on the FORM (the modal is still open) exactly like
+          // the awaited path does.
+          rememberRoot(err?.templateResumeState || stage1Checkpoint);
+          throw err;
+        }
+        // Stage 1 is on the board and about to be owned by the card — this form is
+        // done with it, so the resume slot must not leak into the next creation.
+        creationResumeRef.current = null;
+        // Hand off — the card opens now with the real id. `__building` tells it the
+        // rest is still on its way, so ניהול דיון runs the app's standard loading
+        // animation instead of showing a half-built agenda; it clears when the last
+        // stage lands (or fails).
+        optimisticHandoff = true;
+        onOptimisticCreate({
+          ...optimisticShape,
+          id: newId,
+          __pendingPeople: pendingPeople,
+          // Only TEMPLATE work gates the agenda view. The people write changes the
+          // header, not the agenda, so it must not hold the loader up.
+          __building: Boolean(stageTemplate),
+        });
+        // Reset the form for next time (the modal is unmounting).
+        setName(''); setDate(''); setTime(''); setLead([]); setCoordinator([]);
+        setParticipants([]); setExternalParticipants([]); setExternalDraft('');
+        setDiscussionType(null); setTypeTopics(null); setPreviousDiscussionId('none');
+        setTemplateId('none'); setCreating(false); setCreateProgress(null);
+        (async () => {
+          const bgStartedAt = Date.now();
+          let bgOk = false;
+          try {
+            // Stage 2 — the REST of the agenda, built while the discussion card
+            // shows the standard loading animation: every point (the topics already
+            // exist from the awaited pass and come back through the checkpoint), and
+            // only then the connection to the discussion (linkLast). Because the
+            // link is the card's read path, the agenda appears complete in one shot.
+            if (stageTemplate) {
+              const stage2At = Date.now();
+              // With linkLast a mid-run failure leaves created topics INVISIBLE
+              // (they exist but are not connected, and the card reads through the
+              // connection). So: one resumed retry — the checkpoint guarantees
+              // nothing is created twice — and if that fails too, a best-effort
+              // salvage link of whatever WAS created, so no real item is stranded
+              // unreachable. Only then does the failure surface.
+              const buildAgenda = () => createTopicsFromTemplate(newId, stageTemplate, {
+                freshDiscussion: true,
+                linkLast: true,
+                resumeState: stage1Checkpoint,
+                onCheckpoint: (cp) => { stage1Checkpoint = cp; },
+              });
+              try {
+                await buildAgenda();
+              } catch (firstErr) {
+                if (!firstErr?.__loggedId) logger.warn('CreateDiscussionModal', 'בניית האג׳נדה נכשלה — ניסיון חוזר מה-checkpoint', firstErr);
+                if (firstErr?.templateResumeState) stage1Checkpoint = firstErr.templateResumeState;
+                try {
+                  await buildAgenda();
+                } catch (secondErr) {
+                  if (secondErr?.templateResumeState) stage1Checkpoint = secondErr.templateResumeState;
+                  try {
+                    const salvaged = await linkTemplateTopics(newId, stage1Checkpoint);
+                    logger.warn('CreateDiscussionModal', `בניית האג׳נדה נכשלה פעמיים — ${salvaged} נושאים שנוצרו קושרו לדיון כדי שלא יאבדו`, secondErr);
+                  } catch (salvageErr) {
+                    if (!salvageErr?.__loggedId) logger.error('CreateDiscussionModal', 'גם קישור ההצלה של נושאי האג׳נדה נכשל', salvageErr);
+                  }
+                  throw secondErr;
+                }
+              }
+              logger.health?.('discussion_create_phase', {
+                step: 'staged_agenda_link_last', duration_ms: Date.now() - stage2At,
+              });
+              // monday is read-after-write lagged: a resolved create_item/create_subitem
+              // does not mean the relation and subitems are READABLE yet. Now that this
+              // wait costs the user nothing (the loader is already running) we hold the
+              // loader until the board really serves the agenda back, instead of
+              // dropping the user onto a half-empty one.
+              const readinessAt = Date.now();
+              const wantTopics = (stageTemplate.topics || []).length;
+              const wantPoints = (stageTemplate.topics || [])
+                .reduce((n, t) => n + (t.points?.length || 0), 0);
+              let confirmed = false;
+              for (let attempt = 0; attempt < 10; attempt += 1) {
+                try {
+                  const readBack = await readDiscussionTopicsAsTemplate(newId);
+                  const got = readBack?.topics || [];
+                  const gotPoints = got.reduce((n, t) => n + (t.points?.length || 0), 0);
+                  if (got.length >= wantTopics && gotPoints >= wantPoints) { confirmed = true; break; }
+                } catch (err) {
+                  if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי הדיון נכשלה — ממשיך להמתין', err);
+                }
+                await new Promise((resolve) => { setTimeout(resolve, 500); });
+              }
+              logger.health?.('discussion_create_phase', {
+                step: 'staged_readiness', duration_ms: Date.now() - readinessAt, ok: confirmed,
+              });
+              // Reveal the agenda without waiting for the people write.
+              onStageAdvance?.({ id: newId, stage: 2 });
+              if (!confirmed) {
+                // The budget ran out before the board served the full agenda back.
+                // We still reveal (an endless loader would strand the user), but a
+                // single one-shot refetch could land on the same stale read, so
+                // schedule one more pass instead of leaving points missing until the
+                // user reopens the discussion.
+                logger.warn('CreateDiscussionModal', 'סדר היום עדיין לא נקרא במלואו מהלוח — מתוזמנת קריאה נוספת');
+                setTimeout(() => onStageAdvance?.({ id: newId, stage: 2, retry: true }), 4000);
+              }
+            }
+            // Stage 3 — people last.
+            if (Object.keys(peoplePayload).length) {
+              const stage3At = Date.now();
+              await board.item(newId).update(peoplePayload).execute();
+              logger.health?.('discussion_create_phase', {
+                step: 'staged_people', duration_ms: Date.now() - stage3At,
+              });
+            }
+            bgOk = true;
+            // Clears __pendingPeople and refetches, so the card now shows what
+            // monday actually stores.
+            onCreated({ ...optimisticShape, id: newId }, { isEdit: false, isDuplicate: false });
+          } catch (err) {
+            if (!err?.__loggedId) logger.error('CreateDiscussionModal', 'הדיון נוצר, אך השלמת הנושאים/המשתתפים ברקע נכשלה', err);
+            // The discussion EXISTS (stage 1 succeeded) — do not revert the card;
+            // only report, so the user can retry the missing parts in place.
+            onStageError?.({ id: newId });
+          } finally {
+            // Stage 2+3 total, measured over the BACKGROUND tail only and tagged so
+            // it stays distinguishable from the awaited flow's total.
+            logger.health?.('discussion_create_total', {
+              duration_ms: Date.now() - bgStartedAt,
+              ok: bgOk,
+              operation: 'create',
+              optimistic: true,
+              staged_tail: true,
+            });
+          }
+        })();
+        return;
+      }
+
       // NO create_labels_if_missing here: a freshly-added "סוג" label was
       // already created on the column by handleAddType (addDropdownLabel) — and
       // on a MANAGED column the flag can't create labels anyway (it fails the
       // whole save with ColumnValueException; 2026-07-12 incident).
-      let savedId;
-      if (isEdit) {
-        await board.item(editDiscussion.id).update(payload).execute();
-        savedId = editDiscussion.id;
-      } else {
-        const created = await board.item().create(payload).execute();
-        savedId = created.id;
+      const rootSaveStartedAt = Date.now();
+      let savedId = resume?.savedId || (isEdit ? editDiscussion.id : null);
+      const resumedRoot = Boolean(resume?.rootSaved);
+      if (!resumedRoot) {
+        if (isEdit) {
+          await board.item(editDiscussion.id).update(payload).execute();
+          savedId = editDiscussion.id;
+        } else {
+          const created = await board.item().create(payload).execute();
+          savedId = created.id;
+        }
+        resume = {
+          ...(resume || {}),
+          submissionKey,
+          savedId: String(savedId),
+          duplicateTemplate,
+          rootSaved: true,
+          templateResumeState: resume?.templateResumeState || null,
+        };
+        creationResumeRef.current = resume;
       }
+      logger.health?.('discussion_create_phase', {
+        step: resumedRoot ? 'root_resume' : 'root_save',
+        duration_ms: Date.now() - rootSaveStartedAt,
+        operation: isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create'),
+      });
       setCreateProgress((p) => (p ? { ...p, done: 1 } : { done: 1, total: 1 }));
 
-      // Optionally seed topics + points. A manual topic-template pick takes
-      // precedence; otherwise fall back to topics auto-filled from the unified
-      // type template (typeTopics). (create: always; edit: applies onto the item.)
-      if (savedId && pickedTemplate) {
-        await createTopicsFromTemplate(savedId, pickedTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
-      } else if (savedId && typeTopics?.length) {
-        await createTopicsFromTemplate(savedId, { topics: typeTopics }, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
+      // Seed every planned topic in ONE resumable pipeline. The helper batches
+      // actual GraphQL mutations (not Promise.all over SDK calls, which monday's
+      // iframe bridge serializes). A checkpoint is retained after each batch.
+      if (savedId && plannedTopics.length) {
+        const seedStartedAt = Date.now();
+        let seedSucceeded = false;
+        try {
+          await createTopicsFromTemplate(savedId, { topics: plannedTopics }, {
+            onProgress: onTemplateProgress,
+            freshDiscussion: !isEdit,
+            resumeState: resume?.templateResumeState || null,
+            onCheckpoint: (nextState) => {
+              if (
+                creationResumeRef.current?.savedId === String(savedId)
+                && creationResumeRef.current?.submissionKey === submissionKey
+              ) {
+                creationResumeRef.current.templateResumeState = nextState;
+              }
+            },
+          });
+          seedSucceeded = true;
+        } finally {
+          logger.health?.('discussion_create_phase', {
+            step: 'template_seed',
+            duration_ms: Date.now() - seedStartedAt,
+            items: plannedSteps - 1,
+            ok: seedSucceeded,
+          });
+        }
       }
 
       // Duplicate: clone the source discussion's topics + points onto the new
@@ -552,16 +888,33 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // monday reads lag writes, and opening the card early is what showed an
       // empty discussion "filling in slowly".
       if (savedId && isDuplicate && duplicateTemplate?.topics?.length) {
-        await createTopicsFromTemplate(savedId, duplicateTemplate, { onProgress: onTemplateProgress, creatorId: currentUser?.id != null ? String(currentUser.id) : null });
+        const readinessStartedAt = Date.now();
+        const expectedTopicCount = plannedTopics.length;
+        const expectedPointCount = plannedTopics.reduce(
+          (count, topic) => count + (topic.points?.length || 0),
+          0
+        );
         for (let attempt = 0; attempt < 10; attempt += 1) {
           try {
             const readBack = await readDiscussionTopicsAsTemplate(savedId);
-            if ((readBack?.topics?.length || 0) >= duplicateTemplate.topics.length) break;
+            const readableTopics = readBack?.topics || [];
+            const readablePointCount = readableTopics.reduce(
+              (count, topic) => count + (topic.points?.length || 0),
+              0
+            );
+            if (
+              readableTopics.length >= expectedTopicCount
+              && readablePointCount >= expectedPointCount
+            ) break;
           } catch (err) {
             if (!err?.__loggedId) logger.warn('CreateDiscussionModal', 'קריאת אימות של נושאי השכפול נכשלה — ממשיך להמתין', err);
           }
           await new Promise((resolve) => { setTimeout(resolve, 1000); });
         }
+        logger.health?.('discussion_create_phase', {
+          step: 'duplicate_readiness',
+          duration_ms: Date.now() - readinessStartedAt,
+        });
       }
 
       // Item 6 — the fun part: full bar + a confetti burst before handing off
@@ -569,9 +922,11 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       // celebration window — the discussion is already saved at this point.
       setCreateProgress((p) => (p ? { ...p, done: p.total } : { done: 1, total: 1 }));
       if (!isEdit) {
+        // round298 — the discussion is ALREADY saved here; drop the blocking
+        // celebration wait entirely so the card opens the instant the save
+        // resolves (owner: creation still felt slow). A brief confetti still
+        // flashes but never delays the hand-off.
         setCelebrate(true);
-        await new Promise((resolve) => { setTimeout(resolve, 1500); });
-        setCelebrate(false);
       }
 
       setName('');
@@ -586,6 +941,8 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
       setTypeTopics(null);
       setPreviousDiscussionId('none');
       setTemplateId('none');
+      submitSucceeded = true;
+      creationResumeRef.current = null;
       // Hand back the discussion shape so the caller can refresh the open card
       // (edit) or open the freshly created/duplicated one immediately (create /
       // duplicate — savedId is the new item's id). Second arg tells the caller
@@ -616,6 +973,13 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
     } catch (err) {
       logger.error('CreateDiscussionModal', isEdit ? 'שגיאה בעדכון הדיון' : 'שגיאה ביצירת הדיון', err);
     } finally {
+      if (!optimisticHandoff) {
+        logger.health?.('discussion_create_total', {
+          duration_ms: Date.now() - submitStartedAt,
+          ok: submitSucceeded,
+          operation: isEdit ? 'edit' : (isDuplicate ? 'duplicate' : 'create'),
+        });
+      }
       setCreating(false);
       setCreateProgress(null);
       setCelebrate(false);
@@ -1026,7 +1390,16 @@ export function CreateDiscussionModal({ open, onClose, onCreated, editDiscussion
                       placeholder={externalParticipants.length ? 'שם נוסף…' : 'שם מלא… (Enter להוספה)'}
                       onChange={(e) => setExternalDraft(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && externalDraft.trim()) {
+                        // round296 — Enter here ADDS a chip; it must NOT bubble to the
+                        // modal-level onFormKeyDown (which would submit/create the
+                        // discussion). preventDefault alone doesn't stop bubbling, so a
+                        // single Enter both added a name AND created the discussion —
+                        // aborting further additions and dropping the just-typed name.
+                        // stopPropagation on EVERY Enter keeps this field submit-inert;
+                        // only clicking "צור דיון" creates. (owner-reported)
+                        if (e.key !== 'Enter' || e.shiftKey) return;
+                        e.stopPropagation();
+                        if (externalDraft.trim()) {
                           e.preventDefault();
                           setExternalParticipants((list) => [...list, externalDraft.trim()]);
                           setExternalDraft('');

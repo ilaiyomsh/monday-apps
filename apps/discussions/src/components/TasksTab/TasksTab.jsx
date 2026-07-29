@@ -79,6 +79,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     updateTaskStatus,
     updateTaskPriority,
     updateTaskAssignee,
+    updateTaskPartners,
     updateTaskDeadline,
     updateTasksStatusBatch,
     updateTasksAssigneeBatch,
@@ -121,7 +122,8 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
   const onSortChange = ({ col, dir }) => setSort({ col, dir: dir || firstSortDir(col), active: true });
   const clearSort = () => setSort({ col: null, dir: null, active: false });
   // Show the read-only priority column only when the owner mapped priorityID.
-  const showPriority = !!getColumns('tasks').priorityID?.id;
+  const taskCols = getColumns('tasks') || {};
+  const showPriority = !!taskCols.priorityID?.id;
 
   // --- Hide columns (round 47) ------------------------------------------------
   // monday-style column show/hide, OWNER-gated (canManageSettings) at the render
@@ -135,6 +137,8 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     { key: 'name', label: 'שם', icon: 'text', locked: true },
     showPriority && { key: 'priority', label: 'עדיפות', icon: 'status' },
     { key: 'assignee', label: 'אחראי', icon: 'person' },
+    // round306 — hideable like every other column; shown only when mapped.
+    taskCols.partnersID?.id && { key: 'partners', label: 'שותפים', icon: 'person' },
     { key: 'deadline', label: 'דד ליין', icon: 'date' },
     { key: 'status', label: 'סטאטוס', icon: 'status' },
   ].filter(Boolean);
@@ -267,6 +271,11 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
       return;
     }
     for (const id of targetIds) await updateTaskAssignee(id, people);
+  });
+  // round306 — שותפים: bulk-aware like the others (no batch helper needed — the
+  // per-item write is the same one-mutation call).
+  const applyPartnersChange = useStableHandler(async (taskId, people) => {
+    for (const id of resolveTargetIds(taskId, 'editTaskPartners')) await updateTaskPartners(id, people);
   });
   const applyDeadlineChange = useStableHandler(async (taskId, date) => {
     const targetIds = resolveTargetIds(taskId, 'editTaskDeadline');
@@ -414,6 +423,7 @@ export function TasksTab({ data, discussionId = null, onNewTask, onInlineCreateT
     onStatusChange: applyStatusChange,
     onPriorityChange: applyPriorityChange,
     onAssigneeChange: applyAssigneeChange,
+    onPartnersChange: applyPartnersChange,
     onDeadlineChange: applyDeadlineChange,
     onRenameTask: applyRename,
     // Optimistic-create error recovery (temp row whose create failed) —

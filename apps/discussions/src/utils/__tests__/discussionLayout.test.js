@@ -82,6 +82,26 @@ describe('discussionLayout — pure layout math (round241)', () => {
     });
   });
 
+  describe('round296 — default ratio from preferences', () => {
+    it('DEFAULT_LAYOUT opens at 60% agenda (0.6)', () => {
+      expect(DEFAULT_LAYOUT.ratio).toBe(0.6);
+    });
+    it('a MISSING ratio falls back to the passed default (not the hard-coded 0.6)', () => {
+      expect(normalizeLayout(null, 0.4).ratio).toBe(0.4);
+      expect(normalizeLayout({ stacked: true }, 0.35).ratio).toBe(0.35);
+    });
+    it('a STORED per-discussion ratio WINS over the default (override is per-discussion)', () => {
+      expect(normalizeLayout({ ratio: 0.7 }, 0.35).ratio).toBe(0.7);
+    });
+    it('the fallback default is itself clamped into [MIN_RATIO, MAX_RATIO]', () => {
+      expect(normalizeLayout(null, 0.95).ratio).toBe(MAX_RATIO);
+      expect(normalizeLayout({ stacked: false }, 0.05).ratio).toBe(MIN_RATIO);
+    });
+    it('with no default passed, a missing ratio uses DEFAULT_LAYOUT.ratio', () => {
+      expect(normalizeLayout({ boxHeight: 600 }).ratio).toBe(DEFAULT_LAYOUT.ratio);
+    });
+  });
+
   describe('ratioFromDrag', () => {
     it('adds the drag fraction (delta / width) to the start ratio', () => {
       // +100px over a 1000px row → +0.1

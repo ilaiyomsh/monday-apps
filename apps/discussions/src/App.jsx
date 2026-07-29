@@ -27,6 +27,7 @@ import { prefetchDiscussions } from './hooks/useDiscussions.js';
 import { useUsageTracker } from './hooks/useUsageTracker.js';
 import logger from './utils/logger.js';
 import { installChromeNarrowWatcher } from './utils/chromeNarrow.js';
+import { applyStageAdvance, applyStageFailure } from './utils/stagedCreate.js';
 import { ToastContainer } from './components/Toast';
 import { ErrorDetailsModal } from './components/ErrorDetailsModal';
 import { SettingsModal } from './components/SettingsModal';
@@ -584,9 +585,15 @@ export default function App() {
     let cancelled = false;
     const warm = () => {
       if (cancelled) return;
-      prefetchMyTasks({ currentUser, context }).catch(() => {});
-      prefetchMyDecisions('decider', { currentUser, context }).catch(() => {});
-      prefetchDashboard({ currentUser, context }).catch(() => {});
+      prefetchMyTasks({ currentUser, context }).catch((err) =>
+        logger.warn('App', 'idle prefetchMyTasks warm failed', err)
+      );
+      prefetchMyDecisions('decider', { currentUser, context }).catch((err) =>
+        logger.warn('App', 'idle prefetchMyDecisions warm failed', err)
+      );
+      prefetchDashboard({ currentUser, context }).catch((err) =>
+        logger.warn('App', 'idle prefetchDashboard warm failed', err)
+      );
     };
     let idleId = null;
     let timerId = null;
@@ -665,7 +672,7 @@ export default function App() {
         if (cancelled) return;
         applyLocation(res?.data || res || {});
       })
-      .catch(() => {});
+      .catch((err) => logger.warn('App', 'initial location read failed', err));
 
     const unsubscribe = monday.listen('location', (res) => {
       applyLocation(res?.data || res || {});
@@ -728,7 +735,10 @@ export default function App() {
       // Create / duplicate: open the new discussion immediately — on נושאים.
       if (updated?.id) {
         setCreatedTabTarget({ id: String(updated.id), tab: 'topics' });
-        setSelectedDiscussion(updated);
+        // round301 — a fresh stamp (and no __pendingPeople) so the card refetches
+        // once the LAST stage has written everything: from here on the card shows
+        // what monday actually stores, not what the form optimistically claimed.
+        setSelectedDiscussion({ ...updated, __reloadStamp: Date.now() });
         setShowList(false);
       }
       // No success toast on a plain CREATE — opening the freshly created
@@ -736,6 +746,34 @@ export default function App() {
       // notice (a distinct action), and edit keeps 'הדיון עודכן בהצלחה' above.
       if (meta.isDuplicate) notify('הדיון שוכפל בהצלחה');
     }
+  };
+
+  // round301 — STAGED create: the card opens as soon as stage 1 is on the board
+  // (root item + all topics + the first topic's points), carrying the REAL id, so
+  // its data hooks fetch a usable agenda right away. Stage 2 (remaining points)
+  // and stage 3 (people) land behind it — see CreateDiscussionModal.
+  const handleOptimisticCreate = (stagedShape) => {
+    setShowCreate(false);
+    setEditDiscussion(null);
+    setDuplicateFrom(null);
+    setCreatePrefill(null);
+    setSelectedDiscussion(stagedShape);
+    setShowList(false);
+    setCreatedTabTarget({ id: String(stagedShape.id), tab: 'topics' });
+    setRefreshKey((k) => k + 1);
+  };
+  // A later stage finished — bump the card's reload stamp so the newly created
+  // rows appear without the user having to reopen the discussion.
+  const handleStageAdvance = ({ id }) => {
+    setSelectedDiscussion((prev) => applyStageAdvance(prev, id, Date.now()));
+  };
+  // Stage 2/3 failed. The discussion ITSELF exists (stage 1 succeeded), so the card
+  // stays open — we only tell the user which part did not finish. applyStageFailure
+  // drops the pending people: they were never written, and keeping them would leave
+  // the card showing roles that do not exist in monday.
+  const handleStageError = ({ id } = {}) => {
+    setSelectedDiscussion((prev) => applyStageFailure(prev, id, Date.now()));
+    notify('הדיון נוצר, אך השלמת הנושאים או המשתתפים נכשלה — רעננו ובדקו', 'error');
   };
 
   const handleCopyDiscussionLink = async (discussionId, tab) => {
@@ -1051,6 +1089,9 @@ export default function App() {
         prefill={createPrefill}
         onClose={() => { setShowCreate(false); setEditDiscussion(null); setDuplicateFrom(null); setCreatePrefill(null); }}
         onCreated={handleSaved}
+        onOptimisticCreate={handleOptimisticCreate}
+        onStageAdvance={handleStageAdvance}
+        onStageError={handleStageError}
         canManageSettings={canManageSettings}
       />
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { Box, Button, Skeleton } from '@vibe/core';
 import { CloseSmall } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
@@ -6,6 +6,8 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Cell, 
 import { TaskTable } from '@generated/components/TaskTable';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
+import { useSavedViews } from '@generated/hooks/useSavedViews.js';
+import { useBatchTargets } from '@generated/hooks/useBatchTargets.js';
 import { getColumns } from '@api/board-config-store.js';
 import {
   NO_STATUS_KEY, DELAYED_COLOR, DELAYED_LABEL,
@@ -44,13 +46,27 @@ function ChartTooltipContent({ active, payload, label }) {
 }
 
 // `data` is the shared useTasks() result, prefetched in DiscussionCard.
-export function EffectivenessTab({ data, canManageSettings = false, onNotify }) {
+// `canTask(cap, task)` comes from DiscussionCard bound to this discussion — the
+// drill-down table is the SAME TaskTable as the משימות tab, so every inline
+// editor must answer to the same per-task capability instead of the allow-all
+// default (round306 review: without it a viewer got a live שותפים/אחראי picker).
+export function EffectivenessTab({ data, canTask = () => true, canManageSettings = false, onNotify }) {
   const {
-    items, loading, updateTaskStatus, updateTaskPriority, updateTaskAssignee, updateTaskDeadline,
+    items, loading, updateTaskStatus, updateTaskPriority, updateTaskAssignee, updateTaskPartners, updateTaskDeadline,
     updateTasksStatusBatch, updateTasksAssigneeBatch, updateTasksDeadlineBatch, softDeleteTasks,
   } = data;
   const { options, labelById, doneId } = useStatusOptions();
   const { settings } = useSettings();
+  // Column visibility is a property of the TASKS table, not of one tab: the
+  // drill-down table already shares its widths + column order with the משימות
+  // tab (same tableId 'tasks'), so it reads that tab's saved hiddenColumns too.
+  // Hiding שותפים (or any column) in משימות therefore hides it here as well —
+  // this view has no panel of its own by design (a read-only drill-down).
+  const { view: tasksTabView } = useSavedViews('tasksTab', { canManageSettings });
+  const hiddenColumns = useMemo(
+    () => new Set(Array.isArray(tasksTabView?.hiddenColumns) ? tasksTabView.hiddenColumns : []),
+    [tasksTabView]
+  );
   const [groupMode, setGroupMode] = useState('status'); // 'status' | 'person'
   // selection: { type: 'status'|'person', value: string } | null
   // For status, value is the label id as a string (or NO_STATUS_KEY).
@@ -60,6 +76,12 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
   // bar changes so the checkboxes don't carry over between drill-downs.
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const listRef = useRef(null);
+  // id→task, so the per-row capability check can run from a bare id (bulk paths).
+  const itemById = useMemo(() => {
+    const m = new Map();
+    items.forEach((t) => m.set(String(t.id), t));
+    return m;
+  }, [items]);
 
   // Which statuses mean "done" for the delayed KPI — owner-picked in Settings
   // (preferences.delayedDoneStatusIds), falling back to the is_done label.
@@ -169,29 +191,49 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
   // Bulk edit (mirrors הנחיות קודמות): editing one selected row applies the change
   // to the WHOLE selection; a single-row edit otherwise. Status/assignee/deadline
   // use the batch endpoints when >1; priority has no batch so it loops.
-  const resolveTargetIds = (originId) =>
-    (selectedIds.size > 1 && selectedIds.has(originId)) ? [...selectedIds] : [originId];
+  // round306 review — the fan-out goes through the SHARED permission-aware
+  // resolver (`useBatchTargets`), exactly as in the משימות tab: gating the row
+  // editors alone would still let an allowed row's edit write to disallowed rows
+  // in a mixed selection. A mixed selection applies to the allowed subset only.
+  const allow = useCallback(
+    (cap, taskId) => canTask(cap, itemById.get(String(taskId))),
+    [canTask, itemById]
+  );
+  const resolveTargetIds = useBatchTargets(selectedIds, allow);
   const applyStatusChange = async (taskId, status) => {
-    const ids = resolveTargetIds(taskId);
+    const ids = resolveTargetIds(taskId, 'editTaskStatus');
+    if (ids.length === 0) return;
     if (ids.length > 1 && updateTasksStatusBatch) return updateTasksStatusBatch(ids, status);
     for (const id of ids) await updateTaskStatus(id, status);
   };
   const applyPriorityChange = async (taskId, value) => {
-    for (const id of resolveTargetIds(taskId)) await updateTaskPriority(id, value);
+    for (const id of resolveTargetIds(taskId, 'editTaskPriority')) await updateTaskPriority(id, value);
   };
   const applyAssigneeChange = async (taskId, people) => {
-    const ids = resolveTargetIds(taskId);
+    const ids = resolveTargetIds(taskId, 'editTaskAssignee');
+    if (ids.length === 0) return;
     if (ids.length > 1 && updateTasksAssigneeBatch) return updateTasksAssigneeBatch(ids, people);
     for (const id of ids) await updateTaskAssignee(id, people);
   };
+  // round306 — שותפים, same bulk-over-selection shape as the others.
+  const applyPartnersChange = async (taskId, people) => {
+    for (const id of resolveTargetIds(taskId, 'editTaskPartners')) await updateTaskPartners?.(id, people);
+  };
   const applyDeadlineChange = async (taskId, date) => {
-    const ids = resolveTargetIds(taskId);
+    const ids = resolveTargetIds(taskId, 'editTaskDeadline');
+    if (ids.length === 0) return;
     if (ids.length > 1 && updateTasksDeadlineBatch) return updateTasksDeadlineBatch(ids, date);
     for (const id of ids) await updateTaskDeadline(id, date);
   };
+  // Only the selected rows the user may delete (mixed selection → the allowed
+  // subset; none allowed → the action is disabled).
+  const deletableSelectedIds = useMemo(
+    () => [...selectedIds].filter((id) => allow('deleteTask', id)),
+    [selectedIds, allow]
+  );
   const clearSelection = () => setSelectedIds(new Set());
   const deleteSelected = () => {
-    const ids = [...selectedIds];
+    const ids = deletableSelectedIds;
     if (ids.length === 0 || !softDeleteTasks) return;
     clearSelection();
     const { undo } = softDeleteTasks(ids);
@@ -219,6 +261,13 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
   }
 
   const hasChart = groupMode === 'status' ? statusData.length > 0 : personData.length > 0;
+  // Checkboxes exist only to drive the bulk edit/delete above — hide them when
+  // this user may do none of those to any shown row (mirrors TasksTab.canSelect).
+  const TASK_EDIT_CAPS = [
+    'editTaskStatus', 'editTaskPriority', 'editTaskDeadline',
+    'editTaskAssignee', 'editTaskPartners', 'deleteTask',
+  ];
+  const canSelect = filteredTasks.some((t) => TASK_EDIT_CAPS.some((cap) => canTask(cap, t)));
 
   return (
     <div className={styles.root}>
@@ -344,7 +393,7 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
             </Button>
           </div>
           <SelectionActionBar count={selectedIds.size} onClear={clearSelection} ariaLabel="פעולות על משימות נבחרות">
-            <Button kind={"secondary"} size={"small"} onClick={deleteSelected}>מחיקה</Button>
+            <Button kind={"secondary"} size={"small"} disabled={deletableSelectedIds.length === 0} onClick={deleteSelected}>מחיקה</Button>
           </SelectionActionBar>
           <div className={styles.taskStack}>
             {/* Same row component as the Tasks board; multi-select drives bulk
@@ -352,12 +401,15 @@ export function EffectivenessTab({ data, canManageSettings = false, onNotify }) 
             <TaskTable
               tasks={filteredTasks}
               showPriority={!!getColumns('tasks').priorityID?.id}
+              canTask={canTask}
+              hiddenColumns={hiddenColumns}
               canManageSettings={canManageSettings}
               onStatusChange={applyStatusChange}
               onPriorityChange={applyPriorityChange}
               onAssigneeChange={applyAssigneeChange}
+              onPartnersChange={applyPartnersChange}
               onDeadlineChange={applyDeadlineChange}
-              selectable={true}
+              selectable={canSelect}
               selectedIds={selectedIds}
               onToggleSelect={(id, checked) => setSelectedIds((prev) => {
                 const n = new Set(prev);

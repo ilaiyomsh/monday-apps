@@ -257,7 +257,13 @@ export function useDiscussionMonths(refreshToken = 0) {
  * Returns null while loading / if not found. The api() funnel logs failures, so
  * here we only re-log un-logged ones and otherwise leave details null.
  */
-export function useDiscussionDetails(discussionId) {
+/**
+ * `reloadStamp` (round301) re-runs the fetch for the SAME discussion id. The
+ * staged create writes a discussion in three passes, so the card must be able to
+ * re-read it once a later pass lands — without it, everything created after the
+ * card opened stayed invisible until the discussion was reopened.
+ */
+export function useDiscussionDetails(discussionId, reloadStamp = null) {
   const [details, setDetails] = useState(null);
 
   useEffect(() => {
@@ -273,7 +279,7 @@ export function useDiscussionDetails(discussionId) {
       }
     })();
     return () => { cancelled = true; };
-  }, [discussionId]);
+  }, [discussionId, reloadStamp]);
 
   return details;
 }

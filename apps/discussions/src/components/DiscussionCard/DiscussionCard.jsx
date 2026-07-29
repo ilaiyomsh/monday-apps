@@ -226,11 +226,17 @@ export function DiscussionCard({
   // The list is lean (id/name/date); pull the rest of the discussion's columns
   // on click and merge them over the list item. `overrides` holds optimistic
   // inline edits (title / description) until the next select.
-  const details = useDiscussionDetails(discussion?.id);
+  // round301 — `__reloadStamp` refetches the SAME discussion when a background
+  // creation stage has just written more of it (staged create).
+  const details = useDiscussionDetails(discussion?.id, discussion?.__reloadStamp);
   const [overrides, setOverrides] = useState({});
   useEffect(() => { setOverrides({}); }, [discussion?.id]);
   const data = useMemo(
-    () => ({ ...discussion, ...(details || {}), ...overrides }),
+    // round301 — `__pendingPeople` are the roles/participants the staged create has
+    // NOT written yet. They must win over `details` (which correctly reports them
+    // as still empty), or the header would blank them out mid-creation and then
+    // pop them back once stage 3 lands.
+    () => ({ ...discussion, ...(details || {}), ...(discussion?.__pendingPeople || {}), ...overrides }),
     [discussion, details, overrides]
   );
 
@@ -477,7 +483,7 @@ export function DiscussionCard({
     prunePointItems(id, {
       decisions: decisionsData.items.map((d) => String(d.id)),
       tasks: tasksData.items.map((t) => String(t.id)),
-    }).catch(() => {});
+    }).catch((err) => logger.warn('DiscussionCard', 'prunePointItems housekeeping failed', err));
     // items are read at run time; depending on them would re-run on every
     // optimistic change — the loading transition is the correct, race-free trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -693,7 +699,9 @@ export function DiscussionCard({
     const recordPointItem = (itemId) => {
       if (!pointIsReal || itemId == null) return;
       setPointItemsByPoint((prev) => mergePointItemIn(prev, pointRealId, kind, itemId));
-      addPointItem(discussion.id, pointRealId, kind, itemId).catch(() => {});
+      addPointItem(discussion.id, pointRealId, kind, itemId).catch((err) =>
+        logger.warn('DiscussionCard', 'recordPointItem persist failed', err)
+      );
     };
     // In-flight the instant we submit (before the awaited create resolves).
     if (statusKey) setPointCreateState(statusKey, 'pending');
@@ -1024,7 +1032,7 @@ export function DiscussionCard({
           <div className={`${styles.tabPane} ${styles.tabPaneWide}`}>
             {/* round135 — lazy chunk (see the lazy() declaration above). */}
             <Suspense fallback={null}>
-              <EffectivenessTab data={tasksData} canManageSettings={canManageSettings} onNotify={onNotify} />
+              <EffectivenessTab data={tasksData} canTask={canTask} canManageSettings={canManageSettings} onNotify={onNotify} />
             </Suspense>
           </div>
         )}

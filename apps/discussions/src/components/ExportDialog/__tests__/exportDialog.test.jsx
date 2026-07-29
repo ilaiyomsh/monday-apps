@@ -96,14 +96,17 @@ describe('ExportDialog (round207)', () => {
     expect(h.tabProps.current.assets).toEqual({ headerLogo: 'global' });
   });
 
-  it('הפק מסמך: persists the per-discussion template, delivers with {template, assets, discussionId}, notifies and closes', async () => {
+  it('הפק מסמך: delivers with {template, assets, discussionId}, notifies and closes — without freezing an override', async () => {
     const props = renderDialog();
     await screen.findByTestId('export-template-tab');
 
     fireEvent.click(screen.getByRole('button', { name: 'הפק מסמך' }));
 
     await waitFor(() => expect(props.onClose).toHaveBeenCalled());
-    expect(h.saveDiscussionExportTemplate).toHaveBeenCalledWith('42', h.tabProps.current.template);
+    // round304 — the template was NOT edited in this dialog, so no per-discussion
+    // override is written. Persisting it on every produce is what froze discussions
+    // onto the then-current default and shadowed their TYPE's export template.
+    expect(h.saveDiscussionExportTemplate).not.toHaveBeenCalled();
     expect(h.deliverDiscussionDocx).toHaveBeenCalledWith(MODEL, 'real.docx', {
       template: h.tabProps.current.template,
       assets: { headerLogo: 'global' },
@@ -111,7 +114,7 @@ describe('ExportDialog (round207)', () => {
     });
     // Assets untouched in the dialog → no per-discussion assets override written.
     expect(h.saveDiscussionExportAssets).not.toHaveBeenCalled();
-    expect(props.onNotify).toHaveBeenCalledWith('הדיון יוצא ל-DOCS בהצלחה');
+    expect(props.onNotify).toHaveBeenCalledWith('המסמך הופק בהצלחה');
   });
 
   it('a stored per-discussion template wins over the instance default', async () => {

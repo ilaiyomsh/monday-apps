@@ -18,11 +18,21 @@
  * per-entry timestamp (older than the hard max age → dropped). A stale entry
  * (older than the TTL) is STILL returned for seeding — the caller always
  * revalidates — it is merely flagged `stale`.
+ *
+ * Every failure path is RECORDED at warn level (never a toast): the cache is
+ * advisory, so a private-mode / quota / corrupt-entry failure must degrade to a
+ * plain cache MISS — but silently swallowing it would hide a storage problem
+ * that makes every personal view slow to paint.
  */
+import logger from './logger.js';
 
 // Bump when the cached row shape changes (e.g. the fetched columns change), so
 // old entries from a previous deploy are ignored instead of mis-seeding.
-export const VIEW_CACHE_VERSION = 1;
+//   2 — round305: the My Tasks rows gained partnersID (+ taskViewersID /
+//       taskEditorsID for the permission scan). A v1 entry would seed rows with
+//       NO partners, so the שותפים cell would open empty and an edit made from
+//       that state would replace the real partner list.
+export const VIEW_CACHE_VERSION = 2;
 
 // Key namespace. Full key: `disc.viewcache.<view>[.<subTab>].<userId>.<boardId>`.
 const PREFIX = 'disc.viewcache';
@@ -38,8 +48,10 @@ function getStore() {
   try {
     if (typeof window === 'undefined') return null;
     return window.localStorage || null;
-  } catch {
-    return null; // access to localStorage can itself throw (sandboxed iframes)
+  } catch (err) {
+    // access to localStorage can itself throw (sandboxed iframes)
+    logger.warn('viewCache', 'localStorage לא נגיש — הזנת הקאש מושבתת', err);
+    return null;
   }
 }
 
@@ -106,14 +118,16 @@ export function readViewCache(key, { ttlMs = VIEW_CACHE_TTL_MS, now = Date.now()
   let raw;
   try {
     raw = store.getItem(key);
-  } catch {
+  } catch (err) {
+    logger.warn('viewCache', 'קריאת הקאש נכשלה — ממשיכים ללא הזנה', err);
     return null;
   }
   if (!raw) return null;
   let parsed;
   try {
     parsed = JSON.parse(raw, reviveDates); // revive tagged Date fields back into real Dates
-  } catch {
+  } catch (err) {
+    logger.warn('viewCache', 'הרשומה בקאש פגומה — מטופלת כהחמצה', err);
     return null; // corrupt entry — treat as a miss
   }
   if (!parsed || parsed.version !== VIEW_CACHE_VERSION || !Array.isArray(parsed.items)) return null;
@@ -121,7 +135,11 @@ export function readViewCache(key, { ttlMs = VIEW_CACHE_TTL_MS, now = Date.now()
   const age = now - ts;
   if (!(age >= 0) || age > VIEW_CACHE_MAX_AGE_MS) {
     // Missing/negative/too-old timestamp — drop it and miss.
-    try { store.removeItem(key); } catch { /* ignore */ }
+    try {
+      store.removeItem(key);
+    } catch (err) {
+      logger.warn('viewCache', 'מחיקת רשומת קאש שפג תוקפה נכשלה', err);
+    }
     return null;
   }
   return {
@@ -141,13 +159,15 @@ export function writeViewCache(key, items, cursor = null, { now = Date.now() } =
   try {
     // Tag Date fields (tagDates) so they survive as real Dates on read.
     raw = JSON.stringify(tagDates({ version: VIEW_CACHE_VERSION, ts: now, items, cursor: cursor ?? null }));
-  } catch {
+  } catch (err) {
+    logger.warn('viewCache', 'סריאליזציית שורות לקאש נכשלה — הקאש לא עודכן', err);
     return false; // non-serializable row (shouldn't happen for plain data)
   }
   try {
     store.setItem(key, raw);
     return true;
-  } catch {
+  } catch (err) {
+    logger.warn('viewCache', 'כתיבת הקאש נכשלה (מכסה/מצב פרטי) — התצוגה תיטען מהשרת', err);
     return false; // quota / private mode — cache is purely advisory
   }
 }
@@ -156,7 +176,11 @@ export function writeViewCache(key, items, cursor = null, { now = Date.now() } =
 export function clearViewCache(key) {
   const store = getStore();
   if (!store || !key) return;
-  try { store.removeItem(key); } catch { /* ignore */ }
+  try {
+    store.removeItem(key);
+  } catch (err) {
+    logger.warn('viewCache', 'מחיקת רשומת קאש נכשלה', err);
+  }
 }
 
 // Reconcile a background cache-seeded revalidate. The fresh server page is

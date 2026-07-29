@@ -3,7 +3,7 @@ import { משימות1Board, דיונים1Board } from '@api/BoardSDK.js';
 import { api, parseValue, cvSelection } from '../utils/mondayApi/monday-client.js';
 import { getBoardId, getColumns } from '../utils/mondayApi/board-config-store.js';
 import { makeViewCacheKey, readViewCache, writeViewCache, reconcileSeeded } from '../utils/viewCache.js';
-import { computeLedDiscussionIds, collectLedTaskIds } from '../utils/ledDiscussions.js';
+import { computeLedDiscussionIds, collectLedTaskIds, mapLedTaskDiscussionRoles } from '../utils/ledDiscussions.js';
 import logger from '../utils/logger.js';
 
 /*
@@ -47,7 +47,10 @@ const LAST_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 // priorityID is a SECOND status column (its label order = priorityID order).
 // taskCreatorID is fetched for the PERMISSION resolution only (the task-tier
 // "creator" role in resolveCan) — it isn't rendered as a column here.
-const RENDERED_COLUMNS = ['responsibilityID', 'taskCreatorID', 'deadlineID', 'statusID', 'discussionLinkID', 'taskNotesID', 'priorityID'];
+// round305 — partnersID (שותפים) rides along so the personal table can render +
+// edit it; taskViewersID/taskEditorsID come too because the permission resolver
+// scans the task's own role columns in this (discussion-less) surface.
+const RENDERED_COLUMNS = ['responsibilityID', 'partnersID', 'taskCreatorID', 'deadlineID', 'statusID', 'discussionLinkID', 'taskNotesID', 'priorityID', 'taskViewersID', 'taskEditorsID'];
 
 // round272 — is the current user among a task's responsibility people? Drives
 // the "משימות של אחרים" scope, which is the led-discussion tasks MINUS the ones
@@ -131,6 +134,10 @@ async function fetchLedTasksPage(userId) {
   const ledIds = computeLedDiscussionIds(discussions, userId);
   const taskIds = collectLedTaskIds(discussions, ledIds);
   if (!taskIds.length) return [];
+  // round305 — the parent discussion's role people per task: this surface has no
+  // discussion object, and שותפים is editable by the discussion's lead/
+  // coordinator/creator, so the rows carry those roles for the resolver.
+  const rolesByTask = mapLedTaskDiscussionRoles(discussions, ledIds);
 
   const tCols = getColumns('tasks') || {};
   const colIds = RENDERED_COLUMNS.map((a) => tCols?.[a]?.id).filter(Boolean);
@@ -153,6 +160,8 @@ async function fetchLedTasksPage(userId) {
       const col = tCols?.[alias];
       if (col?.id) mapped[alias] = parseValue(col.type, byCol[col.id]);
     });
+    const roles = rolesByTask.get(String(item.id));
+    if (roles) mapped.__discussionRoles = roles;
     tasks.push(mapped);
   }));
   return tasks;
@@ -432,6 +441,45 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     }
   }, []);
 
+  // round305/306 — optimistic inline edit of a PEOPLE column (partnersID שותפים /
+  // responsibilityID אחראי). formatValue('people') accepts ids or [{id}], so the
+  // PersonPicker selection goes straight through; revert on failure.
+  const updatePeopleColumn = useCallback((alias, label) => async (taskId, people) => {
+    const next = Array.isArray(people) ? people : [];
+    const prev = itemsRef.current; // synchronous pre-edit snapshot for revert
+    dirtyIdsRef.current.add(String(taskId)); // protect this row from a seeded revalidate
+    setItems((current) =>
+      current.map((t) => (String(t.id) === String(taskId) ? { ...t, [alias]: next } : t))
+    );
+    try {
+      await new משימות1Board().item(taskId).update({ [alias]: next }).execute();
+    } catch (err) {
+      logger.error('useMyTasks', `Error updating task ${label}`, err);
+      setItems(prev);
+    }
+  }, []);
+  const updateTaskPartners = useCallback(
+    (taskId, people) => updatePeopleColumn('partnersID', 'partners')(taskId, people),
+    [updatePeopleColumn]
+  );
+  // round306 (PR review) — reassigning אחריות can move the task OUT of the active
+  // scope: the 'mine' page is server-filtered to "responsible = me", and the
+  // 'others' scope is explicitly "led tasks I am NOT responsible for". Updating the
+  // column in place would leave the row visible (and editable) in a scope it no
+  // longer belongs to until the next refetch, so the row is dropped here.
+  const updateTaskAssignee = useCallback(
+    async (taskId, people) => {
+      await updatePeopleColumn('responsibilityID', 'assignee')(taskId, people);
+      const next = Array.isArray(people) ? people : [];
+      const holdsMe = !!userId && next.some((p) => String(p?.id) === String(userId));
+      const leftScope = (scope === 'mine' && !holdsMe) || (scope === 'others' && holdsMe);
+      if (leftScope) {
+        setItems((current) => current.filter((t) => String(t.id) !== String(taskId)));
+      }
+    },
+    [updatePeopleColumn, scope, userId]
+  );
+
   // Deferred bulk delete with an undo window (mirrors useTasks.softDeleteTasks):
   // rows vanish optimistically now, the real delete_item fires only after
   // DELETE_GRACE_MS, and the returned undo() (wired to the toast's "בטל") cancels
@@ -545,6 +593,8 @@ export function useMyTasks({ currentUser, context, taskCreatorId = null, search 
     updateTaskNotes,
     updateTaskDeadline,
     updateTaskName,
+    updateTaskPartners,
+    updateTaskAssignee,
     softDeleteTasks,
     createTask,
     refresh,
