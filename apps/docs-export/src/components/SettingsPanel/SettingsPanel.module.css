@@ -8,11 +8,24 @@
  * mirror wrongly for exactly that user.
  */
 
+/*
+ * The inline padding is OURS, not Vibe's. Measured in the browser: this app's
+ * `ModalContent` renders with an empty className and `padding: 0`, so without this
+ * every label sits flush against the modal border (Vibe's own ModalFooter DOES carry
+ * its 20px/24px, which is why the footer alone looked right). If a future Vibe
+ * version starts padding ModalContent, this becomes double padding — drop it then.
+ */
 .sections {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding-block-end: 8px;
+  padding-inline: 24px;
+  padding-block: 4px 8px;
+}
+
+/* Same story as .sections — ModalHeader arrives unpadded here. */
+.header {
+  padding: 24px 24px 4px;
 }
 
 .section {
@@ -159,4 +172,28 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/*
+ * WHY this exists (measured in the browser, not guessed):
+ *
+ * Vibe v4 components combine `width: 100%` with their own padding and rely on the
+ * HOST APP declaring `box-sizing: border-box` globally — monday's own shell does.
+ * This app's `src/index.css` does NOT, so every such component renders WIDER than
+ * its container: the stock ModalFooter overflowed by 48px (2 x 24px padding) and
+ * AttentionBox by 32px (2 x 16px), which pushed the whole settings surface out past
+ * the modal's edge.
+ *
+ * The modal is portaled to <body>, so there is no ancestor of ours to fix it on —
+ * hence this subtree rule, applied through the Modal's own className.
+ *
+ * The proper fix is one global rule in `src/index.css` (which is not this
+ * component's file to change, and which every other Vibe surface in the app needs
+ * just as much). When that lands, this block becomes redundant and should go.
+ */
+.modal,
+.modal *,
+.modal *::before,
+.modal *::after {
+  box-sizing: border-box;
 }

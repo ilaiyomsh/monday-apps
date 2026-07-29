@@ -140,6 +140,35 @@ describe('mounting', () => {
     );
   });
 
+  it('groups each dropdown by the types that suit ITS OWN role', async () => {
+    renderPanel();
+    await waitFor(() => expect(screen.getByTestId('board-name')).toBeInTheDocument());
+
+    /** Option ids under a named optgroup of one role's dropdown. */
+    const grouped = (label, groupLabel) => {
+      const group = [...roleSelect(label).querySelectorAll('optgroup')].find(
+        (g) => g.getAttribute('label') === groupLabel
+      );
+      return group ? [...group.querySelectorAll('option')].map((o) => o.value) : null;
+    };
+
+    // committee wants a mirror; report wants text/long_text; date wants a date.
+    expect(grouped('שם הועדה האזורית', 'עמודות מתאימות')).toEqual(['mirror_committee']);
+    // report accepts text AND long_text, so both suitable columns land first.
+    expect(grouped('דיווח', 'עמודות מתאימות')).toEqual(['text_action', 'long_text_report']);
+    expect(grouped('תאריך דיווח', 'עמודות מתאימות')).toEqual(['date_report']);
+    expect(grouped('עמודת האחראי', 'עמודות מתאימות')).toEqual(['people_owner']);
+    // Nothing is hidden — the unsuitable columns are still offered, just second.
+    expect(grouped('דיווח', 'עמודות נוספות')).toEqual([
+      'name',
+      'mirror_committee',
+      'date_report',
+      'people_owner',
+    ]);
+    // `action` accepts any type, so its dropdown is a single ungrouped list.
+    expect(roleSelect('פעולה').querySelectorAll('optgroup')).toHaveLength(0);
+  });
+
   it('shows each stored mapping as the selected option', async () => {
     renderPanel();
     await waitFor(() => expect(screen.getByTestId('board-name')).toBeInTheDocument());

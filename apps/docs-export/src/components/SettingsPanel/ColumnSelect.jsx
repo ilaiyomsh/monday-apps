@@ -33,11 +33,16 @@ import styles from './SettingsPanel.module.css';
  * @param {string} [props.warning] - '' when the pick is sensible
  */
 export function ColumnSelect({ id, label, hint, value, onChange, groups, disabled, warning }) {
-  const preferred = groups?.preferred ?? [];
-  const other = groups?.other ?? [];
-  // With no type opinion for the role every column lands in `preferred`, and a
-  // single unnamed group reads better than one labelled "suitable".
-  const grouped = other.length > 0;
+  // EMPTY groups are dropped, and a lone group is rendered flat with no label. Both
+  // cases are real: a role with no type opinion (`action`) puts everything in
+  // `preferred`, and a board with no mirror column at all leaves `preferred` empty
+  // for `committee` — an <optgroup label="suitable columns"> holding nothing would
+  // tell the owner the opposite of the truth.
+  const named = [
+    { label: 'עמודות מתאימות', columns: groups?.preferred ?? [] },
+    { label: 'עמודות נוספות', columns: groups?.other ?? [] },
+  ].filter((group) => group.columns.length > 0);
+  const grouped = named.length > 1;
 
   return (
     <div className={styles.row}>
@@ -55,30 +60,21 @@ export function ColumnSelect({ id, label, hint, value, onChange, groups, disable
         onChange={(event) => onChange(event.target.value)}
       >
         <option value="">— בחרו עמודה —</option>
-        {grouped ? (
-          <>
-            <optgroup label="עמודות מתאימות">
-              {preferred.map((column) => (
-                <option key={column.id} value={column.id}>
-                  {columnLabel(column)}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="עמודות נוספות">
-              {other.map((column) => (
-                <option key={column.id} value={column.id}>
-                  {columnLabel(column)}
-                </option>
-              ))}
-            </optgroup>
-          </>
-        ) : (
-          preferred.map((column) => (
-            <option key={column.id} value={column.id}>
-              {columnLabel(column)}
-            </option>
-          ))
-        )}
+        {grouped
+          ? named.map((group) => (
+              <optgroup label={group.label} key={group.label}>
+                {group.columns.map((column) => (
+                  <option key={column.id} value={column.id}>
+                    {columnLabel(column)}
+                  </option>
+                ))}
+              </optgroup>
+            ))
+          : (named[0]?.columns ?? []).map((column) => (
+              <option key={column.id} value={column.id}>
+                {columnLabel(column)}
+              </option>
+            ))}
       </select>
 
       {hint ? (

@@ -73,5 +73,19 @@ export default defineConfig({
     globals: true,
     css: { modules: { classNameStrategy: 'non-scoped' } },
     exclude: ['**/node_modules/**', '**/dist/**', '**/.claude/**'],
+    // vitest's default is 5000ms, which is NOT enough here and produced a real
+    // flake: the SettingsPanel / ReportView suites drive @vibe/core Dropdowns and
+    // Modals through userEvent in jsdom, and individual cases legitimately take
+    // 800-1800ms each. Under parallel load (a busy dev machine, or a shared CI
+    // runner) they spike past 5s and a `waitFor` aborts — observed as
+    // "keeps הפק דוח disabled until a committee is selected" timing out in a full
+    // run while passing 3/3 in isolation.
+    //
+    // This raises a TIMEOUT, not an expectation: no assertion is relaxed, and a
+    // genuinely broken component still fails, just without a false negative from
+    // scheduling noise. Keep the value here rather than per-test so the whole
+    // Vibe-driven suite is covered uniformly.
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 });

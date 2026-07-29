@@ -125,9 +125,11 @@ export function SettingsPanel({ settings, updateSettings, forced = false, onClos
       size="large"
       alertModal={forced}
       onClose={forced ? undefined : onClose}
+      className={styles.modal}
       data-testid="settings-panel"
     >
       <ModalHeader
+        className={styles.header}
         title="הגדרות הפקת דוח"
         description={
           forced
@@ -184,7 +186,11 @@ export function SettingsPanel({ settings, updateSettings, forced = false, onClos
 
           {errors.length > 0 ? (
             <div className={styles.errors} data-testid="settings-errors">
-              <AttentionBox type="warning" title="חסרים פרטים כדי לשמור" icon={false}>
+              <AttentionBox
+                type="warning"
+                title="חסרים פרטים כדי לשמור"
+                icon={false}
+              >
                 <Flex direction="column" gap={4} align="start">
                   {errors.map((message) => (
                     <Text type="text3" key={message}>
@@ -197,7 +203,12 @@ export function SettingsPanel({ settings, updateSettings, forced = false, onClos
           ) : null}
 
           {saveError ? (
-            <AttentionBox type="negative" text={saveError} icon={false} data-testid="save-error" />
+            <AttentionBox
+              type="negative"
+              text={saveError}
+              icon={false}
+              data-testid="save-error"
+            />
           ) : null}
         </div>
       </ModalContent>
