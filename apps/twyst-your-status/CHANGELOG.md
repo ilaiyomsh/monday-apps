@@ -1,5 +1,18 @@
 # Changelog
 
+## 3.10.1
+
+- **Breathing room between monday's close button and the required-fields title** (owner
+  request). The X is drawn by monday inside the box it hands us, and our `עמודות חובה`
+  heading sat directly beneath it, so the two read as one crowded row. The heading now
+  clears it by 16px — 36px from the top of the modal instead of 20.
+- The gap is bought in the modal's requested height, not just styled. This modal is sized
+  to the pixel, so pushing the heading down without paying for the space would have taken
+  it from the field list — the one box here allowed to scroll — answering a spacing request
+  by making the form scroll. `FORM_HEADER_TOP_PX` is counted in `requiredFormModalSize`
+  and mirrored by the stylesheet rule, the same contract every other constant in that
+  module follows.
+
 ## 3.10.0
 
 Owner-reported: a new label showed one colour in settings, a different one on the board,
