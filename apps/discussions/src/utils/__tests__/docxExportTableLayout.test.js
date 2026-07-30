@@ -3,7 +3,7 @@ import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import { Packer } from 'docx';
 import {
   __testHooks, buildDiscussionModel,
-  scaleColumnWidths, resolveTableWidthDxa, DEFAULT_TABLE_WIDTH_DXA,
+  scaleColumnWidths, resolveTableWidthDxa, GENERATED_PAGE_WIDTH_DXA,
 } from '../docxExport.js';
 import { templateTextWidthDxa } from '../docxTemplateMerge.js';
 
@@ -102,18 +102,30 @@ describe('templateTextWidthDxa', () => {
 });
 
 describe('resolveTableWidthDxa', () => {
-  it('falls back to the default when there is no uploaded template', () => {
-    expect(resolveTableWidthDxa(null)).toBe(DEFAULT_TABLE_WIDTH_DXA);
-    expect(resolveTableWidthDxa({})).toBe(DEFAULT_TABLE_WIDTH_DXA);
-    expect(DEFAULT_TABLE_WIDTH_DXA).toBe(9629);
+  const upload = { headerMode: 'upload' };
+
+  it('uses the GENERATED page width in config mode — the page the export lands on', () => {
+    expect(resolveTableWidthDxa(null, null)).toBe(GENERATED_PAGE_WIDTH_DXA);
+    expect(resolveTableWidthDxa({}, { headerMode: 'config' })).toBe(GENERATED_PAGE_WIDTH_DXA);
+    // A4 (11906) less docx's default 1" margins. PR review: the first cut used 9629
+    // here, which overflowed the text area by 603 DXA.
+    expect(GENERATED_PAGE_WIDTH_DXA).toBe(9026);
   });
 
-  it("uses the template's own text width when one is uploaded", () => {
-    expect(resolveTableWidthDxa({ templateDocx: toB64(templateBytes()) })).toBe(10080);
+  it("uses the template's own text width in UPLOAD mode", () => {
+    expect(resolveTableWidthDxa({ templateDocx: toB64(templateBytes()) }, upload)).toBe(10080);
   });
 
-  it('falls back to the default on an unreadable template instead of throwing', () => {
-    expect(resolveTableWidthDxa({ templateDocx: 'not-base64-docx!!' })).toBe(DEFAULT_TABLE_WIDTH_DXA);
+  it('IGNORES a stale upload once the owner switches back to "עיצוב כאן"', () => {
+    // switching back changes only headerMode; assets.templateDocx stays behind, and
+    // sizing tables for a page that is never used is exactly the bug.
+    const stale = { templateDocx: toB64(templateBytes({ page: 16839, left: 720, right: 720 })) };
+    expect(resolveTableWidthDxa(stale, { headerMode: 'config' })).toBe(GENERATED_PAGE_WIDTH_DXA);
+    expect(resolveTableWidthDxa(stale, upload)).toBe(15399); // …but honoured in upload mode
+  });
+
+  it('falls back to the generated width on an unreadable template instead of throwing', () => {
+    expect(resolveTableWidthDxa({ templateDocx: 'not-base64-docx!!' }, upload)).toBe(GENERATED_PAGE_WIDTH_DXA);
   });
 });
 
@@ -130,8 +142,8 @@ describe('the rendered tables (round308)', () => {
       { key: 'decisions', enabled: true, label: 'החלטות' },
     ],
   };
-  const xmlOf = async (assets) => {
-    const { doc } = await __testHooks.buildExportDoc(model(), template, assets);
+  const xmlOf = async (assets, over = {}) => {
+    const { doc } = await __testHooks.buildExportDoc(model(), { ...template, ...over }, assets);
     return strFromU8(unzipSync(new Uint8Array(await Packer.toBuffer(doc)))['word/document.xml']);
   };
   // every <w:tblW w:w="N"> in document order
@@ -162,11 +174,24 @@ describe('the rendered tables (round308)', () => {
     const widths = tableWidths(await xmlOf(null));
     expect(widths).toHaveLength(2);
     expect(widths[0]).toBe(widths[1]);
-    expect(widths[0]).toBe(DEFAULT_TABLE_WIDTH_DXA);
+    expect(widths[0]).toBe(GENERATED_PAGE_WIDTH_DXA);
   });
 
   it('spans the page — wider than the previous 7200 DXA layout', async () => {
     expect(tableWidths(await xmlOf(null))[0]).toBeGreaterThan(7200);
+  });
+
+  it('NEVER exceeds the page it is emitted onto — read back from the sectPr', async () => {
+    // The regression this guards: a table wider than the text area does not shrink
+    // under layout:fixed, it runs into the margins. Deriving the bound from the
+    // emitted section also means a docx default change fails here, loudly.
+    const xml = await xmlOf(null);
+    const page = Number(xml.match(/<w:pgSz[^>]*\sw:w="(\d+)"/)[1]);
+    const left = Number(xml.match(/<w:pgMar[^>]*\sw:left="(\d+)"/)[1]);
+    const right = Number(xml.match(/<w:pgMar[^>]*\sw:right="(\d+)"/)[1]);
+    const textWidth = page - left - right;
+    expect(textWidth).toBe(GENERATED_PAGE_WIDTH_DXA);
+    tableWidths(xml).forEach((w) => expect(w).toBeLessThanOrEqual(textWidth));
   });
 
   it('makes each grid sum to the declared table width (no stretched column)', async () => {
@@ -177,7 +202,7 @@ describe('the rendered tables (round308)', () => {
 
   it("follows an uploaded template's page width", async () => {
     const assets = { templateDocx: toB64(templateBytes({ left: 1440, right: 1440 })) };
-    const widths = tableWidths(await xmlOf(assets));
+    const widths = tableWidths(await xmlOf(assets, { headerMode: 'upload' }));
     expect(widths[0]).toBe(9027);
     expect(widths[1]).toBe(9027); // still identical to each other
   });

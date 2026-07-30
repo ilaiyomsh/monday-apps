@@ -71,9 +71,17 @@ const HEADER_FILL = '4F6B8F';
 const TASK_COL_RATIOS = [0.058884, 0.381660, 0.206116, 0.161906, 0.191434];
 // #, decision text, decider — from [707, 6387, 2256].
 const DECISION_COL_RATIOS = [0.075615, 0.683102, 0.241283];
-// Used when there is no uploaded template to measure (config-header mode, or an
-// unreadable file): the reference document's own text width, A4 less its margins.
-export const DEFAULT_TABLE_WIDTH_DXA = 9629;
+/*
+ * The CONFIG-mode page, in DXA. buildExportDoc does not configure a page, so docx
+ * emits its own default — A4 (11906) with 1" (1440) margins — leaving 9026 of text.
+ *
+ * PR review caught this: the first cut used 9629 here (the reference template's
+ * number), which is 603 DXA WIDER than the generated text area. Under layout:fixed
+ * that does not shrink to fit — the table simply runs into the margins. The pinning
+ * test reads the width back out of the emitted <w:sectPr>, so a docx default change
+ * fails loudly instead of silently overflowing every export.
+ */
+export const GENERATED_PAGE_WIDTH_DXA = 9026;
 
 /**
  * Distribute `total` DXA across `ratios`, returning INTEGER widths that sum to
@@ -96,18 +104,28 @@ export function scaleColumnWidths(ratios, total) {
 }
 
 /**
- * The width both tables span, in DXA: the uploaded template's text width when we
- * can read one, else the default. Kept in one place so the two tables can never
- * drift apart.
+ * The width both tables span, in DXA. Kept in one place so the two tables can never
+ * drift apart, and keyed off the page the export will ACTUALLY land on:
+ *
+ *   · upload mode — the body is spliced into the owner's file and inherits its
+ *     sectPr, so the template's text width is the real one.
+ *   · anything else — the generated page above.
+ *
+ * The headerMode check is not redundant (PR review): switching back to "עיצוב כאן"
+ * changes only headerMode and LEAVES assets.templateDocx in place, so a stale
+ * landscape or wide-margin upload would otherwise size tables for a page that is
+ * never used.
  */
-export function resolveTableWidthDxa(assets) {
+export function resolveTableWidthDxa(assets, template) {
+  const headerMode = template?.headerMode || DEFAULT_EXPORT_TEMPLATE.headerMode;
+  if (headerMode !== 'upload') return GENERATED_PAGE_WIDTH_DXA;
   const b64 = assets?.templateDocx;
-  if (!b64) return DEFAULT_TABLE_WIDTH_DXA;
+  if (!b64) return GENERATED_PAGE_WIDTH_DXA;
   try {
-    return templateTextWidthDxa(base64ToU8(b64)) || DEFAULT_TABLE_WIDTH_DXA;
+    return templateTextWidthDxa(base64ToU8(b64)) || GENERATED_PAGE_WIDTH_DXA;
   } catch (err) {
-    logger.warn('docxExport', 'קריאת רוחב העמוד מהתבנית נכשלה — נעשה שימוש ברוחב ברירת המחדל', err);
-    return DEFAULT_TABLE_WIDTH_DXA;
+    logger.warn('docxExport', 'קריאת רוחב העמוד מהתבנית נכשלה — נעשה שימוש ברוחב העמוד שנוצר', err);
+    return GENERATED_PAGE_WIDTH_DXA;
   }
 }
 
@@ -536,7 +554,7 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   } = docx;
   // round308 — one width for BOTH tables, taken from the uploaded template's own
   // text width when there is one. Resolved once here so they cannot drift apart.
-  const tableWidth = resolveTableWidthDxa(assets);
+  const tableWidth = resolveTableWidthDxa(assets, template);
 
   // RTL direction only — NO explicit w:jc. In an RTL paragraph the natural
   // alignment is the leading (right) edge; setting w:jc="right" would be read as
