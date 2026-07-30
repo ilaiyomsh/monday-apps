@@ -72,6 +72,31 @@ const TASK_COL_RATIOS = [0.058884, 0.381660, 0.206116, 0.161906, 0.191434];
 // #, decision text, decider — from [707, 6387, 2256].
 const DECISION_COL_RATIOS = [0.075615, 0.683102, 0.241283];
 /*
+ * round309 (owner spec) — the number column is SHARED by both tables: same width
+ * in משימות and in החלטות. The reference document had it 707 in one and 567 in the
+ * other, which read as two unrelated grids stacked down the page. This is the
+ * tasks table's ratio, and `withSharedNumberRatio` re-fits any other table's
+ * remaining columns around it, so the two "#" columns are identical by
+ * construction rather than by a second hand-tuned number.
+ */
+export const NUM_COL_RATIO = TASK_COL_RATIOS[0];
+
+/**
+ * Return `ratios` with its FIRST entry forced to `numRatio`, the rest rescaled to
+ * fill what is left while keeping their proportions to each other. Pure; returns a
+ * copy unchanged when there is nothing sensible to rescale (fewer than two columns,
+ * a non-positive tail, or a numRatio that would leave no room).
+ */
+export function withSharedNumberRatio(ratios, numRatio = NUM_COL_RATIO) {
+  const list = Array.isArray(ratios) ? ratios.slice() : [];
+  if (list.length < 2 || !(numRatio > 0) || numRatio >= 1) return list;
+  const rest = list.slice(1);
+  const restSum = rest.reduce((a, b) => a + b, 0);
+  if (!(restSum > 0)) return list;
+  const share = (1 - numRatio) / restSum;
+  return [numRatio, ...rest.map((r) => r * share)];
+}
+/*
  * The CONFIG-mode page, in DXA. buildExportDoc does not configure a page, so docx
  * emits its own default — A4 (11906) with 1" (1440) margins — leaving 9026 of text.
  *
@@ -549,7 +574,7 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   const {
     Document, Packer, Paragraph, TextRun, ExternalHyperlink, HeadingLevel, AlignmentType, UnderlineType,
     Table, TableRow, TableCell, WidthType, TableLayoutType,
-    VerticalAlignTable, BorderStyle,
+    VerticalAlignTable, BorderStyle, LineRuleType,
     Header, Footer, ImageRun, PageNumber,
   } = docx;
   // round308 — one width for BOTH tables, taken from the uploaded template's own
@@ -573,6 +598,38 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   const run = (text, extra) => new TextRun({ text: String(text ?? ''), rightToLeft: true, font: FONT, ...extra });
   const para = (text, extra) => new Paragraph({ ...RTL, children: [run(text, extra)] });
   const heading = (text, level) => new Paragraph({ ...RTL, heading: level, children: [run(text)] });
+
+  /*
+   * One table cell, shared by the משימות and החלטות tables (they were byte-identical
+   * copies; keeping one means the two tables cannot drift apart).
+   *
+   * round259 (owner spec) — header cells ALWAYS centered horizontally; body cells
+   * centered EXCEPT text columns (task name, person names), which keep the RTL
+   * natural leading edge like the document body. `center` toggles that.
+   *
+   * round309 (owner spec) — text sits in the true vertical middle of the cell.
+   * `w:vAlign=center` alone was NOT enough: it centers the paragraph BLOCK, and a
+   * paragraph inherits `spacing after` + a >single `line` rule from the Normal
+   * style — Word's own default is after=160/line=259, and in UPLOAD mode
+   * docxTemplateMerge keeps the TEMPLATE's styles.xml, so whatever the owner's file
+   * declares applied here. That trailing space rides inside the centered block and
+   * pushes the glyphs upward. Zeroing before/after and pinning single line spacing
+   * makes the block equal to the text, so vAlign genuinely centers it — and the
+   * symmetric 90 DXA top/bottom cell margins then read as equal padding.
+   */
+  const tableCell = (text, widthDxa, isHeader, center) => new TableCell({
+    width: { size: widthDxa, type: WidthType.DXA },
+    verticalAlign: VerticalAlignTable.CENTER,
+    shading: isHeader ? { type: 'clear', color: 'auto', fill: HEADER_FILL } : undefined,
+    margins: { marginUnitType: WidthType.DXA, top: 90, bottom: 90, left: 130, right: 130 },
+    children: [new Paragraph({
+      ...RTL,
+      ...(center ? { alignment: AlignmentType.CENTER } : {}),
+      spacing: { before: 0, after: 0, line: 240, lineRule: LineRuleType.AUTO },
+      keepNext: true,
+      children: [run(text, isHeader ? { bold: true, color: 'FFFFFF' } : undefined)],
+    })],
+  });
 
   // ---- summary HTML -> docx paragraphs. The monday Update body carries rich
   // formatting (per summaryHtml.js): h1-3, p, strong/b, em/i, u, s/del,
@@ -775,38 +832,24 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
       out.push(para('אין משימות.'));
       return out;
     }
-    // round259 (owner spec) — header cells ALWAYS centered; body cells centered
-    // EXCEPT text columns (the task name + the assignee), which are right-aligned
-    // (RTL natural leading edge, like the document body). `center` toggles it.
-    const cell = (text, widthDxa, isHeader, center) => new TableCell({
-      width: { size: widthDxa, type: WidthType.DXA },
-      verticalAlign: VerticalAlignTable.CENTER,
-      shading: isHeader ? { type: 'clear', color: 'auto', fill: HEADER_FILL } : undefined,
-      margins: { marginUnitType: WidthType.DXA, top: 90, bottom: 90, left: 130, right: 130 },
-      children: [new Paragraph({
-        ...RTL,
-        ...(center ? { alignment: AlignmentType.CENTER } : {}),
-        keepNext: true,
-        children: [run(text, isHeader ? { bold: true, color: 'FFFFFF' } : undefined)],
-      })],
-    });
     // round308 — resolved from the shared page-derived total, so this table and the
     // decisions table below span exactly the same width.
-    const W = scaleColumnWidths(TASK_COL_RATIOS, tableWidth);
+    // round309 — and through the SAME number-column ratio, so the "#" columns match.
+    const W = scaleColumnWidths(withSharedNumberRatio(TASK_COL_RATIOS), tableWidth);
     // round191 — the "מדיון קודם" column was removed (owner request); 5 columns now.
     // round308 — the number column's header is "#" (owner spec).
     const headers = ['#', 'משימה', 'אחראי', 'דד ליין', 'סטטוס'];
     // round259 — every header cell centered.
-    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, W[i], true, true)) })];
+    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => tableCell(h, W[i], true, true)) })];
     model.tasks.forEach((t, i) => {
       rows.push(new TableRow({
         cantSplit: true,
         children: [
-          cell(String(i + 1), W[0], false, true),   // מס׳ — center
-          cell(t.name, W[1], false, false),          // משימה — right (text)
-          cell(t.assigneesText, W[2], false, false), // אחראי — right (text)
-          cell(t.deadlineText, W[3], false, true),   // דד ליין — center (date)
-          cell(t.status || '—', W[4], false, true),  // סטטוס — center
+          tableCell(String(i + 1), W[0], false, true),   // # — center
+          tableCell(t.name, W[1], false, false),         // משימה — right (text)
+          tableCell(t.assigneesText, W[2], false, false), // אחראי — right (text)
+          tableCell(t.deadlineText, W[3], false, true),  // דד ליין — center (date)
+          tableCell(t.status || '—', W[4], false, true), // סטטוס — center
         ],
       }));
     });
@@ -825,41 +868,29 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   };
 
   // round192 — decisions table (owner request): same monday-board look as the tasks
-  // table (heading kept with the table via keepNext/cantSplit). Columns:
-  // מס׳ · החלטה · מחליט. round259 (owner spec) — headers ALWAYS centered; body text
-  // columns (החלטה + מחליט, person text) right-aligned; the numeric מס׳ centered; the
-  // whole table centered between the page margins.
+  // table (heading kept with the table via keepNext/cantSplit), same `tableCell`, and
+  // since round309 the same "#" column width. Columns: # · נוסח ההחלטה · גורם מחליט.
   const buildDecisions = (section) => {
     const out = [new Paragraph({ ...RTL, keepNext: true, heading: HeadingLevel.HEADING_2, children: [run(section?.label || 'החלטות')] })];
     if (!model.decisions.length) {
       out.push(para('אין החלטות.'));
       return out;
     }
-    const cell = (text, widthDxa, isHeader, center) => new TableCell({
-      width: { size: widthDxa, type: WidthType.DXA },
-      verticalAlign: VerticalAlignTable.CENTER,
-      shading: isHeader ? { type: 'clear', color: 'auto', fill: HEADER_FILL } : undefined,
-      margins: { marginUnitType: WidthType.DXA, top: 90, bottom: 90, left: 130, right: 130 },
-      children: [new Paragraph({
-        ...RTL,
-        ...(center ? { alignment: AlignmentType.CENTER } : {}),
-        keepNext: true,
-        children: [run(text, isHeader ? { bold: true, color: 'FFFFFF' } : undefined)],
-      })],
-    });
-    const W = scaleColumnWidths(DECISION_COL_RATIOS, tableWidth);
+    // round309 — the "#" column takes the TASKS table's ratio; נוסח ההחלטה and
+    // גורם מחליט absorb the difference in proportion to each other.
+    const W = scaleColumnWidths(withSharedNumberRatio(DECISION_COL_RATIOS), tableWidth);
     // round193 — three columns only (date + status were removed).
     // round308 — owner spec renamed all three: "#", "נוסח ההחלטה", "גורם מחליט".
     const headers = ['#', 'נוסח ההחלטה', 'גורם מחליט'];
     // round259 — every header cell centered.
-    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => cell(h, W[i], true, true)) })];
+    const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: headers.map((h, i) => tableCell(h, W[i], true, true)) })];
     model.decisions.forEach((d, i) => {
       rows.push(new TableRow({
         cantSplit: true,
         children: [
-          cell(String(i + 1), W[0], false, true),    // מס׳ — center
-          cell(d.name, W[1], false, false),          // החלטה — right (text)
-          cell(d.deciderText, W[2], false, false),   // מחליט — right (person text)
+          tableCell(String(i + 1), W[0], false, true),  // # — center
+          tableCell(d.name, W[1], false, false),        // נוסח ההחלטה — right (text)
+          tableCell(d.deciderText, W[2], false, false), // גורם מחליט — right (person text)
         ],
       }));
     });
