@@ -57,7 +57,10 @@
      .inner — which decenters the whole splash, against the same request's "sit
      centered", and can clip the wordmark in the inline variant whose host is only
      min-height: 260px. */
-  margin-bottom: 20px;
+  /* round320 (owner request) — higher still: 20px → 40px, taking the logo↔mark seam
+     from 40px to 60px. The sharing described above still holds, so this raises the
+     logo another 10px and drops the mark 10px. */
+  margin-bottom: 40px;
   animation: bl-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 

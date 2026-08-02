@@ -68,6 +68,36 @@ export function isComponentVisible(preferences, key) {
   return preferences?.visibleComponents?.[key] !== false;
 }
 
+/** The three triple-box pane keys, in display order (רקע → התייחסויות → סיכום). */
+export const BOX_LABEL_KEYS = ['background', 'references', 'summary'];
+
+/**
+ * round314 — resolve the owner-set titles of the three panes, ALWAYS returning a
+ * usable name for each key.
+ *
+ * A stored value wins only when it is a non-blank string; anything else (missing,
+ * empty, whitespace, a number that survived a bad write) falls back to the shipped
+ * default, because a nameless tab is unusable and there is no UI to recover from one.
+ * Trimmed on the way out so a stray space cannot shift the tab band.
+ *
+ * Pure — the reason it lives here beside DEFAULT_PREFERENCES rather than inside the
+ * component: the same rules have to hold for the tab band and for anything else that
+ * later wants to name a box.
+ *
+ * @param {object|null|undefined} preferences settings.preferences
+ * @returns {{ background: string, references: string, summary: string }}
+ */
+export function resolveBoxLabels(preferences) {
+  const stored = preferences?.boxLabels;
+  const out = {};
+  BOX_LABEL_KEYS.forEach((key) => {
+    const raw = stored?.[key];
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    out[key] = trimmed || DEFAULT_PREFERENCES.boxLabels[key];
+  });
+  return out;
+}
+
 export const DEFAULT_PREFERENCES = {
   previousTasksMode: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION,
   // round296 — default width split of the ניהול-דיון row: the AGENDA box's share
@@ -83,6 +113,18 @@ export const DEFAULT_PREFERENCES = {
   // (parallel to the title). Stored as a small downscaled data-URI (self-contained,
   // no asset hosting); null = no logo. Set only by owners in Settings → העדפות.
   logoUrl: null,
+  /*
+   * round314 (owner request) — the three panes of the triple box carry OWNER-SET
+   * titles. The defaults are the names the app shipped with, so an instance that
+   * never touches this reads exactly as before. Per instance, like every other
+   * preference; a blank or whitespace-only entry falls back to the default rather
+   * than rendering a nameless tab (see resolveBoxLabels).
+   *
+   * Deliberately SEPARATE from the export template's per-section labels: those are
+   * per discussion TYPE, so binding the on-screen names to them would make a box
+   * rename itself when the discussion's type changes.
+   */
+  boxLabels: { background: 'רקע', references: 'התייחסויות', summary: 'סיכום' },
   // Whether the top-level "המשימות שלי" (My Tasks) view toggle is shown. Default
   // OFF so existing instances keep their current behavior (the tab is opt-in per
   // instance, enabled by the owner in Settings → העדפות).
@@ -120,6 +162,34 @@ export const ACCESS_ROLE_SOURCE_OPTIONS = [
   { alias: 'discussionCreatorID', label: 'יוצר הדיון' },
   { alias: 'participantsID', label: 'משתתפים' },
 ];
+
+/**
+ * round317 (owner request) — make the auto-fill roles of the tasks ACCESS columns
+ * REAL STORED STATE at install time: יוצר + מנהל/מוביל + מרכז דיון checked on
+ * "יכולת עריכה", משתתפים on "יכולת צפייה".
+ *
+ * Until now these three were only a FALLBACK: nothing was stored, and both the
+ * mapping UI (accessRolesFor) and task creation (DiscussionCard) reached for
+ * DEFAULT_PREFERENCES when the key was missing. That renders the same ✓ marks, but
+ * it is not the same thing — the install's configuration did not actually say so, it
+ * was inferred, so it was invisible in an exported settings JSON and would change
+ * under anyone's feet the day the defaults change.
+ *
+ * Merged PER KEY on purpose: an access column the owner has already configured
+ * keeps its list — including an EMPTY one, which is a deliberate "fill nothing" —
+ * while a key that was never set gets the shipped default. That is what makes this
+ * safe to run on a top-up of an existing instance and not just a fresh install.
+ *
+ * Pure.
+ */
+export function withSeededAccessRoles(preferences) {
+  const stored = preferences?.accessRoleSources || {};
+  const next = { ...stored };
+  Object.entries(DEFAULT_PREFERENCES.accessRoleSources || {}).forEach(([accessAlias, roles]) => {
+    if (!Array.isArray(next[accessAlias])) next[accessAlias] = [...roles];
+  });
+  return { ...(preferences || {}), accessRoleSources: next };
+}
 
 // Union the people off a discussion record for the given role aliases, deduped
 // by id, preserving first-seen order (round 78 access auto-fill). Pure — used by
@@ -182,11 +252,69 @@ export const EXPORT_FONTS = {
 };
 export const DEFAULT_EXPORT_FONT = 'brand';
 
+/*
+ * round315 (owner request) — how ONE participant is written in the export's
+ * "פרטי הדיון" block. The owner composes a person out of ordered PARTS taken from
+ * the monday user profile:
+ *   'name'         the user's name (always available)
+ *   'title'        the profile's Title field
+ *   'cf:<metaId>'  any account custom profile field (user.custom_field_values,
+ *                  keyed by custom_field_meta_id — see userProfiles.js)
+ * Each part carries the separator that precedes it, which is what makes
+ * "מר עידו פיוטרקובסקי, מנהל מחלקת מכירות" expressible: a space before the name,
+ * a comma before the title. The separator of the FIRST part is never used.
+ */
+export const PARTICIPANT_PART_NAME = 'name';
+export const PARTICIPANT_PART_TITLE = 'title';
+export const PARTICIPANT_CF_PREFIX = 'cf:';
+export const PARTICIPANT_SEPARATORS = [
+  { value: ', ', label: 'פסיק' },
+  { value: ' ', label: 'רווח' },
+  { value: ' — ', label: 'מקף' },
+  { value: '', label: 'ללא' },
+];
+export const DEFAULT_PARTICIPANT_SEPARATOR = ', ';
+// The shipped composition: the name alone — byte-for-byte today's export.
+export const DEFAULT_PARTICIPANT_PARTS = [{ key: PARTICIPANT_PART_NAME, sep: DEFAULT_PARTICIPANT_SEPARATOR }];
+
+/*
+ * round316 (owner request) — the same two controls (line-per-person + profile
+ * parts) apply to EVERY people row of "פרטי הדיון", not just משתתפים: also
+ * מוביל/מנהל הדיון and מרכז הדיון. Maps the meta FIELD key to the model list that
+ * carries those people as objects; a field key absent from here is an ordinary
+ * text row (date, type, previous discussion) and keeps its simple rendering.
+ */
+export const PEOPLE_META_FIELDS = {
+  participantsText: 'participants',
+  leadText: 'lead',
+  coordinatorText: 'coordinator',
+};
+
+/*
+ * round319 (owner request) — ONE setting for how every person in the export is
+ * written, replacing round316's per-row copy of it. The rows keep what is genuinely
+ * theirs (label, enabled, order); the FORMAT is a property of "a person", not of
+ * which column they came from, so configuring "מר/גברת + שם" once now covers
+ * משתתפים, מוביל דיון and מרכז דיון instead of three boxes kept in sync by hand.
+ *
+ * `includeExternal` folds the free-text external participants into the participants
+ * list instead of the separate "משתתפים חיצוניים" row (round211). Default false:
+ * every stored template keeps the output it has today, and the owner opts in.
+ */
+export const DEFAULT_PEOPLE_FORMAT = {
+  perLine: false,
+  parts: DEFAULT_PARTICIPANT_PARTS,
+  includeExternal: false,
+};
+export const isPeopleMetaField = (key) => Object.prototype.hasOwnProperty.call(PEOPLE_META_FIELDS, key);
+
 export const DEFAULT_EXPORT_TEMPLATE = {
   defaultFormat: EXPORT_FORMATS.DOCX,
   headerMode: EXPORT_HEADER_MODES.CONFIG,
   // Selected export font key (see EXPORT_FONTS). Default = brand (today's output).
   font: DEFAULT_EXPORT_FONT,
+  // round319 — how EVERY person in the document is written (see DEFAULT_PEOPLE_FORMAT).
+  people: DEFAULT_PEOPLE_FORMAT,
   // Body sections in render order. `enabled:false` drops a section entirely.
   // round203 — the "פתיחה" (freeText) section was RETIRED (owner request);
   // seedExportTemplate drops it from previously-stored templates.
@@ -198,8 +326,19 @@ export const DEFAULT_EXPORT_TEMPLATE = {
       // its value exists (never "סוג: null"), matching today's behavior.
       fields: [
         { key: 'dateText', enabled: true, label: 'תאריך' },
+        // round315/round316/round319 — how a person is WRITTEN (line-per-person and
+        // the profile parts) is no longer a property of the row: it lives once on
+        // `people` above and applies to all three of these.
         { key: 'participantsText', enabled: true, label: 'משתתפים' },
         { key: 'leadText', enabled: true, label: 'מוביל דיון' },
+        /*
+         * round316 — מרכז דיון (discussionCoordinatorID) joins the metadata block.
+         * Enabled by default like every other meta row, which costs nothing for an
+         * instance that leaves the column unmapped or empty: a row with no value is
+         * never emitted (see buildMeta). seedExportTemplate back-fills it into
+         * templates saved before this round.
+         */
+        { key: 'coordinatorText', enabled: true, label: 'מרכז דיון' },
         { key: 'typesText', enabled: true, label: 'סוג' },
         { key: 'previousText', enabled: true, label: 'דיון קודם' },
       ],

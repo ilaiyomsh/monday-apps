@@ -28,6 +28,7 @@ import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 const DOC = 'word/document.xml';
 const DOC_RELS = 'word/_rels/document.xml.rels';
 const STYLES = 'word/styles.xml';
+const SETTINGS = 'word/settings.xml';
 
 // Inner flow content of a <w:body> EXCLUDING its trailing <w:sectPr> (the section
 // properties, which we never take from the generated doc).
@@ -104,17 +105,20 @@ function mergeMissingStyles(tplStylesXml, genStylesXml) {
  * template with wider margins would overflow the page, and one with narrower
  * margins would leave a gap. The tables ask for this and scale to it.
  *
- * Reads pgSz@w minus pgMar@left/@right off the LAST sectPr (the body-level one).
+ * Reads pgSz@w minus pgMar@left/@right off the LAST sectPr (the body-level one),
+ * minus the binding GUTTER (round311 — see below).
  * Returns null when the file is unreadable, the attributes are missing, or the
  * result is implausible — the caller then keeps its own default rather than
  * emitting a table wider than the paper.
  */
 export function templateTextWidthDxa(templateBytes) {
   let xml;
+  let gutterAtTop = false;
   try {
     const tpl = unzipSync(templateBytes);
     if (!tpl[DOC]) return null;
     xml = strFromU8(tpl[DOC]);
+    gutterAtTop = readsGutterAtTop(tpl);
   } catch {
     // Not a readable zip. The splice itself reports the real failure; here a null
     // just means "no better number than the default".
@@ -133,10 +137,41 @@ export function templateTextWidthDxa(templateBytes) {
   const left = num(/<w:pgMar[^>]*\sw:left="(\d+)"/);
   const right = num(/<w:pgMar[^>]*\sw:right="(\d+)"/);
   if (page == null || left == null || right == null) return null;
-  const width = page - left - right;
+  /*
+   * round311 (PR review) — the GUTTER is binding space reserved IN ADDITION to
+   * the left/right margins, so `page - left - right` overstates the usable text
+   * column by exactly the gutter. Under `layout: fixed` an over-wide table does
+   * not shrink to fit; it runs into the reserved edge. docx-js writes
+   * w:gutter="0" and most templates leave it there, so this only bites a file set
+   * up for binding — but the helper's contract is "the width the export actually
+   * lands on", and that has to hold for those too.
+   *
+   * The exception is `w:gutterAtTop`, which moves the reservation to the TOP
+   * margin: then it costs height, not width, and subtracting it would UNDER-size
+   * every table. That flag is document-level (word/settings.xml), not part of
+   * sectPr — hence the separate read above.
+   */
+  const gutter = num(/<w:pgMar[^>]*\sw:gutter="(\d+)"/) ?? 0;
+  const width = page - left - right - (gutterAtTop ? 0 : gutter);
   // Sanity window: ~2.5cm to ~40cm of text. Outside it we are reading something
   // that is not a page, so do not trust it.
   return width >= 1440 && width <= 22680 ? width : null;
+}
+
+/*
+ * Is `w:gutterAtTop` on? It lives in word/settings.xml as a CT_OnOff toggle, so
+ * a bare <w:gutterAtTop/> means ON and an explicit w:val of 0/false/off means
+ * OFF. Absent settings part, unreadable bytes or an absent element all mean OFF,
+ * which is Word's default and the conservative answer: the gutter then reduces
+ * the width, so a table can only come out narrower than the page, never wider.
+ */
+function readsGutterAtTop(unzipped) {
+  const part = unzipped[SETTINGS];
+  if (!part) return false;
+  const m = strFromU8(part).match(/<w:gutterAtTop\b([^>]*)>/);
+  if (!m) return false;
+  const off = m[1].match(/w:val="([^"]*)"/);
+  return !off || !['0', 'false', 'off'].includes(off[1]);
 }
 
 /**

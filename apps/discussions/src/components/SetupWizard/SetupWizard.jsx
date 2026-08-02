@@ -4,6 +4,7 @@ import { PartyProgress } from '@generated/components/PartyProgress';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
 import { provisionAllBoards } from '../../utils/mondayApi/provisionBoards.js';
+import { withSeededAccessRoles } from '../../utils/mondayApi/boards.config.js';
 import { api } from '../../utils/mondayApi/monday-client.js';
 import logger from '../../utils/logger.js';
 import styles from './SetupWizard.module.css';
@@ -68,7 +69,7 @@ function optionsForField(field, boardColumns) {
  * `existingConfig` null the behavior is byte-for-byte the first-run flow.
  */
 export function SetupWizard({ onManual, existingConfig = null, onDone = null, title }) {
-  const { updateSettings } = useSettings();
+  const { settings, updateSettings } = useSettings();
   const { context } = useMondayContext();
 
   // TOP-UP derivations (all inert on first-run, where existingConfig is null).
@@ -208,7 +209,14 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
         onProgress: (step, total, label, boardPhase) =>
           setProgress({ step, total, boardPhase: boardPhase || label }),
       });
-      await updateSettings(config);
+      /*
+       * round317 (owner request) — persist the access-column auto-fill roles as
+       * REAL state: יוצר + מוביל/מנהל + מרכז דיון on "יכולת עריכה", משתתפים on
+       * "יכולת צפייה". They were only ever a fallback (nothing stored), so the
+       * install's own configuration never said so. Merged per key, which is what
+       * lets a TOP-UP run this too without overriding a choice the owner made.
+       */
+      await updateSettings({ ...config, preferences: withSeededAccessRoles(settings?.preferences) });
       // TOP-UP: the caller closes the panel (settings already refreshed). FIRST-RUN:
       // isConfigured now true → SettingsGate re-renders children, unmounting us.
       if (onDone) onDone();
@@ -217,7 +225,7 @@ export function SetupWizard({ onManual, existingConfig = null, onDone = null, ti
       setErrorMsg(err?.message || 'אירעה שגיאה בהקמת הלוחות');
       setPhase('error');
     }
-  }, [context, updateSettings, tasksMode, tasksBoardId, columnMap, existingConfig, onDone]);
+  }, [context, settings, updateSettings, tasksMode, tasksBoardId, columnMap, existingConfig, onDone]);
 
   return (
     <div dir="rtl" className={isTopUp ? styles.rootEmbedded : styles.root}>
