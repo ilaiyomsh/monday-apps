@@ -163,6 +163,34 @@ export const ACCESS_ROLE_SOURCE_OPTIONS = [
   { alias: 'participantsID', label: 'משתתפים' },
 ];
 
+/**
+ * round317 (owner request) — make the auto-fill roles of the tasks ACCESS columns
+ * REAL STORED STATE at install time: יוצר + מנהל/מוביל + מרכז דיון checked on
+ * "יכולת עריכה", משתתפים on "יכולת צפייה".
+ *
+ * Until now these three were only a FALLBACK: nothing was stored, and both the
+ * mapping UI (accessRolesFor) and task creation (DiscussionCard) reached for
+ * DEFAULT_PREFERENCES when the key was missing. That renders the same ✓ marks, but
+ * it is not the same thing — the install's configuration did not actually say so, it
+ * was inferred, so it was invisible in an exported settings JSON and would change
+ * under anyone's feet the day the defaults change.
+ *
+ * Merged PER KEY on purpose: an access column the owner has already configured
+ * keeps its list — including an EMPTY one, which is a deliberate "fill nothing" —
+ * while a key that was never set gets the shipped default. That is what makes this
+ * safe to run on a top-up of an existing instance and not just a fresh install.
+ *
+ * Pure.
+ */
+export function withSeededAccessRoles(preferences) {
+  const stored = preferences?.accessRoleSources || {};
+  const next = { ...stored };
+  Object.entries(DEFAULT_PREFERENCES.accessRoleSources || {}).forEach(([accessAlias, roles]) => {
+    if (!Array.isArray(next[accessAlias])) next[accessAlias] = [...roles];
+  });
+  return { ...(preferences || {}), accessRoleSources: next };
+}
+
 // Union the people off a discussion record for the given role aliases, deduped
 // by id, preserving first-seen order (round 78 access auto-fill). Pure — used by
 // DiscussionCard to build a new task's viewers/editors from the configured roles.
