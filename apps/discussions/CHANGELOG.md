@@ -10,6 +10,20 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.3.8 — 2026-07-30
+
+- round310: **מרווח גדול יותר בין הלוגו לאנימציה במסך הטעינה** (בקשת הבעלים).
+  `.inner` משתמש ב-`gap: 20px` אחד לכל שלושת הילדים (לוגו · סמל · Meetings), אז
+  הגדלת ה-gap הייתה מרחיקה גם את הסמל מהכיתוב. במקום זה נוסף `margin-bottom: 20px`
+  ל-`.logo` בלבד — הלוגו נשאר במקומו, המרווח שמתחתיו מוכפל ל-40px והסמל יורד;
+  המרווח בין הסמל ל-Meetings נשאר 20px. המרכוז האופקי מגיע כבר מ-`align-items:
+  center` על `.inner`, ותוכן ה-SVG סימטרי סביב 50,50, כך שהסמל ממורכז בפועל.
+  שינוי CSS בלבד — ה-DOM זהה ו-13 הבדיקות של `brandLoaderMark` נשארו ירוקות
+  (נרשם waiver ב-test-guard: אין תנאים, אין חשבון, אין מיפוי מפתחות).
+- אושר ע"י הבעלים ונסגר מ-round307: `SPIN.cycleMs = 4200` נשאר כפי שהוא
+  (הפרשנות ל-"420 MS" שבמפרט), והלוגו בספלאש ובדשבורד נשאר **אחד משותף**
+  (`preferences.logoUrl`, פר-אינסטנס) — אין צורך במפתח נפרד.
+
 ## 2.3.7 — 2026-07-30
 
 - round309: **שתי תיקוני ליטוש בטבלאות סיכום ה-Word** (משוב הבעלים על round308).
