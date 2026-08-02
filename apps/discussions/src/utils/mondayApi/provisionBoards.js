@@ -310,6 +310,20 @@ async function readColumns(boardId) {
 async function ensureColumn(boardId, existing, title, columnType, defaults) {
   const hit = (existing || []).find((c) => c.title === title && c.type === columnType);
   if (hit) return String(hit.id);
+  return createColumn(boardId, existing, title, columnType, defaults);
+}
+
+/**
+ * Create a column unconditionally. Split out of ensureColumn (round313, PR review)
+ * because the relation path needs a DIFFERENT reuse rule — see
+ * ensureRelationColumn — and must not fall back into the title+type reuse that
+ * ensureColumn performs, which would hand it the very column it just rejected.
+ *
+ * `defaults` is echoed into the cache entry as `settings_str` so a later
+ * settingsPointTo() on a column created in THIS run recognises its target instead of
+ * creating a duplicate.
+ */
+async function createColumn(boardId, existing, title, columnType, defaults) {
   const data = await api(
     `mutation ($boardId: ID!, $title: String!, $type: ColumnType!, $defaults: JSON) {
       create_column(board_id: $boardId, title: $title, column_type: $type, defaults: $defaults) { id }
@@ -319,7 +333,8 @@ async function ensureColumn(boardId, existing, title, columnType, defaults) {
   );
   const id = data?.create_column?.id;
   if (!id) throw new Error(`create_column לא החזיר מזהה עבור "${title}"`);
-  if (existing) existing.push({ id, title, type: columnType }); // keep cache fresh
+  // keep cache fresh
+  if (existing) existing.push({ id, title, type: columnType, settings_str: defaults || undefined });
   return String(id);
 }
 
@@ -438,8 +453,22 @@ function settingsPointTo(col, targetBoardId) {
 // Create a bidirectional connect-boards column (reflection column auto-created on
 // the target board). Reused if a matching one already exists. Falls back to an
 // unlinked column only if the linked shape is rejected by the API.
-async function ensureRelationColumn(boardId, existing, title, targetBoardId) {
-  const hit = (existing || []).find((c) => c.title === title && c.type === 'board_relation');
+export async function ensureRelationColumn(boardId, existing, title, targetBoardId) {
+  /*
+   * round313 (PR review) — title+type is NOT a safe reuse rule for a relation. The
+   * tasks board can be an EXISTING board the owner connected (tasks.mode 'connect'),
+   * where a board_relation already titled "נושאים לדיון" and pointing somewhere else
+   * is entirely plausible. Adopting it would persist an unrelated column as
+   * topicsLinkID, and every task→topic write would then land on the wrong board —
+   * worse than the missing column round313 set out to fix.
+   *
+   * settingsPointTo already existed for exactly this question (it backs
+   * mapReflection); the reuse path now asks it too, and a non-matching column is
+   * left alone rather than hijacked.
+   */
+  const hit = (existing || []).find((c) => (
+    c.title === title && c.type === 'board_relation' && settingsPointTo(c, targetBoardId)
+  ));
   if (hit) return String(hit.id);
   const defaults = JSON.stringify({
     boardIds: [Number(targetBoardId)],
@@ -447,14 +476,18 @@ async function ensureRelationColumn(boardId, existing, title, targetBoardId) {
     allowCreateReflectionColumn: true,
   });
   try {
-    return await ensureColumn(boardId, existing, title, 'board_relation', defaults);
+    // createColumn, NOT ensureColumn: the latter reuses by title+type and would
+    // return the very column rejected above.
+    return await createColumn(boardId, existing, title, 'board_relation', defaults);
   } catch (err) {
     // Linking shape rejected by this API version — create the column unlinked so
     // the owner can finish it in Settings, but don't fail the whole run.
     if (!err?.__loggedId) {
       logger.warn(MODULE, `יצירת קישור "${title}" עם boardIds נכשלה — יוצר עמודה לא-מקושרת`, err);
     }
-    return await ensureColumn(boardId, existing, title, 'board_relation');
+    // Also createColumn: an unlinked column is what this path is FOR, and reusing a
+    // same-titled relation here would re-introduce exactly the hijack above.
+    return await createColumn(boardId, existing, title, 'board_relation');
   }
 }
 

@@ -10,6 +10,27 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.4.2 — 2026-08-02
+
+- round313 המשך (ממצא P2 מביקורת ה-PR): **קישור לוחות ימוצא מחדש רק אם הוא באמת
+  מצביע על הלוח הנכון.** `ensureRelationColumn` מיצא כל `board_relation` שהתאים
+  ב-(כותרת, סוג) בלבד. לוח המשימות יכול להיות **לוח קיים שהבעלים חיבר**
+  (`tasks.mode: 'connect'`), ושם קישור שכבר נקרא "נושאים לדיון" ומצביע ללוח אחר
+  הוא לגמרי סביר — אימוץ שלו היה שומר עמודה זרה כ-`topicsLinkID`, וכל כתיבת
+  משימה→נושא הייתה נוחתת על הלוח הלא נכון. זה כשל גרוע יותר מהעמודה החסרה
+  שround313 בא לתקן, והקישור שהוספתי הוא בדיוק זה שנוגע בו.
+  - `settingsPointTo` כבר היה קיים לשאלה הזאת (הוא מגבה את `mapReflection`) —
+    עכשיו גם מסלול המיצוי שואל אותו, ועמודה שלא מתאימה נשארת בשקט במקומה במקום
+    להיחטף.
+  - החצי הפחות מובן מאליו: אחרי הדחייה, **היצירה לא יכולה לעבור דרך
+    `ensureColumn`** — הוא מיצא לפי (כותרת, סוג) והיה מחזיר בדיוק את העמודה
+    שנדחתה. לכן נחלץ `createColumn` שיוצר תמיד, והוא גם רושם את ה-defaults
+    כ-`settings_str` במטמון, כדי שקריאה שנייה באותה ריצה תזהה את העמודה שהיא
+    עצמה יצרה ולא תשכפל קישור.
+- בדיקות: `provisionRelationReuse.test.js` (10) — 4 נראו נכשלות לפני התיקון,
+  2 מוטציות חוסלו (חזרה ל-`ensureColumn` ביצירה; מטמון בלי `settings_str`).
+  הסוויטה המלאה 1479 ירוקות.
+
 ## 2.4.1 — 2026-08-02
 
 - round313: **סגירת 7 העמודות הלא-מוקמות שround312 חשף.** לא הוספתי את כולן
