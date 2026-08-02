@@ -409,6 +409,20 @@ export function UpdatesTripleBox({
     showSummary && { key: 'summary', title: labels.summary, hook: summary, canEdit: editSummaryPane, placeholder: 'כתבו כאן את סיכום הדיון…' },
   ].filter(Boolean), [showBackground, showReferences, showSummary, background, references, summary, editBackground, editReferences, editSummaryPane, labels]);
 
+  /*
+   * round314 (PR review on #541) — the tablist's accessible name is DERIVED from the
+   * panes that are actually rendered. It used to be the hardcoded "רקע, התייחסויות
+   * וסיכום", which a rename made simply wrong for a screen reader (the group was
+   * announced by names none of its tabs carried) and which was already stale for an
+   * instance that hid a pane. Hebrew list form: comma-separated, "ו" glued to the
+   * last item; one pane gets its name alone, with no dangling conjunction.
+   */
+  const tabsLabel = useMemo(() => {
+    const titles = panes.map((p) => p.title);
+    if (titles.length < 2) return titles[0] || '';
+    return `${titles.slice(0, -1).join(', ')} ו${titles[titles.length - 1]}`;
+  }, [panes]);
+
   const [activeKey, setActiveKey] = useState(panes[0]?.key || 'background');
   useEffect(() => { setActiveKey(panes[0]?.key || 'background'); }, [discussionId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -428,7 +442,7 @@ export function UpdatesTripleBox({
 
   return (
     <div className={styles.tripleBox} dir="rtl">
-      <div className={styles.tripleTabs} role="tablist" aria-label="רקע, התייחסויות וסיכום">
+      <div className={styles.tripleTabs} role="tablist" aria-label={tabsLabel}>
         {panes.map((p) => (
           <button
             key={p.key}

@@ -123,6 +123,47 @@ describe('the ניהול-דיון tab band uses the owner-set names', () => {
     expect([...wraps].filter((w) => w.style.display !== 'none').length).toBe(1);
   });
 
+  /*
+   * round314 (PR review on #541, P2) — the tablist's accessible name was the
+   * hardcoded "רקע, התייחסויות וסיכום". After a rename a screen reader announced
+   * the group by names that no longer exist on any of its tabs; the same label was
+   * also already stale for an instance that HID a pane.
+   */
+  it('announces the tab group by the names its tabs actually carry', async () => {
+    const { container } = mount({ boxLabels: { background: 'סקירה', references: 'הערות', summary: 'מה סוכם' } });
+    await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(3));
+    expect(container.querySelector('[role="tablist"]').getAttribute('aria-label'))
+      .toBe('סקירה, הערות ומה סוכם');
+  });
+
+  it('keeps the original announcement when nothing was renamed', async () => {
+    const { container } = mount(undefined);
+    await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(3));
+    expect(container.querySelector('[role="tablist"]').getAttribute('aria-label'))
+      .toBe('רקע, התייחסויות וסיכום');
+  });
+
+  it('announces only the panes that are actually shown', async () => {
+    const { container } = render(
+      <SettingsContext.Provider value={withPrefs({ boxLabels: { summary: 'מה סוכם' } })}>
+        <UpdatesTripleBox discussionId="D1" canEdit showReferences={false} />
+      </SettingsContext.Provider>,
+    );
+    await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(2));
+    expect(container.querySelector('[role="tablist"]').getAttribute('aria-label'))
+      .toBe('רקע ומה סוכם');
+  });
+
+  it('announces a single remaining pane without a dangling conjunction', async () => {
+    const { container } = render(
+      <SettingsContext.Provider value={withPrefs({ boxLabels: { background: 'סקירה' } })}>
+        <UpdatesTripleBox discussionId="D1" canEdit showReferences={false} showSummary={false} />
+      </SettingsContext.Provider>,
+    );
+    await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(1));
+    expect(container.querySelector('[role="tablist"]').getAttribute('aria-label')).toBe('סקירה');
+  });
+
   it('leaves the editor placeholders alone — they explain what to write, which a rename does not change', async () => {
     mount({ boxLabels: { background: 'סקירה' } });
     await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(3));
