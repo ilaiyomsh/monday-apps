@@ -10,6 +10,22 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.6.0 — 2026-08-02
+
+- round320 (בקשות בעלים): **הלוגו במסך הטעינה עולה עוד קצת, ואפשר לסדר מחדש את
+  השורות בתוך "פרטי הדיון" בתבנית הייצוא.**
+  - **לוגו הטעינה:** `margin-bottom` על `.logo` מ-20px ל-40px, כלומר המרווח
+    לוגו↔סמל מ-40px ל-60px. כמו ב-round310, שני וריאנטי ה-loader ממרכזים את
+    `.inner` אנכית, ולכן התוספת **מתחלקת**: הלוגו עולה 10px והסמל יורד 10px. כדי
+    להעלות את הלוגו בלי להזיז את הסמל צריך לעגן את המחסנית למעלה — מה ש-round310
+    שקל ודחה, כי זה מבטל את המרכוז ועלול לחתוך את ה-wordmark בווריאנט המוטבע.
+  - **סדר השורות בפרטי הדיון:** ידית גרירה לכל שורה, באותו `DndContext` של
+    הסקשנים. מזהה הגרירה של שורה נושא קידומת (`metafield:`) — בלעדיה שורה
+    ושדה-סקשן באותו שם היו מתנגשים ו-dnd-kit היה מדווח על סקשן כיעד של שורה.
+    שחרור של שורה על סקשן (או להפך) הוא no-op ולא הזזה של הרשימה הלא-נכונה.
+    המנוע כבר מייצר את השורות לפי הסדר השמור (`buildMeta` עובר על `section.fields`)
+    וה-seed כבר שימר אותו — מה שחסר היה דרך *לשנות* אותו.
+
 ## 2.5.0 — 2026-08-02
 
 - round319 (בקשת בעלים): **הגדרה אחת של "אנשים" לכל בעלי התפקידים בייצוא, ואפשרות
