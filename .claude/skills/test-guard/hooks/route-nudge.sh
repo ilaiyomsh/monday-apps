@@ -114,8 +114,13 @@ find_gate_dir() { # $1 = abs source path
   # (1) armed gate — some state dir points its armed.src at S.
   for d in "$STATE_ROOT"/*/; do
     [ -d "$d" ] || continue
-    [ -f "${d}armed.src" ] || continue
-    if [ "$(cat "${d}armed.src" 2>/dev/null)" = "$S" ]; then
+    if [ -f "${d}armed.src" ] && [ "$(cat "${d}armed.src" 2>/dev/null)" = "$S" ]; then
+      printf '%s\n' "${d%/}"
+      return 0
+    fi
+    # …or a source this gate has already KILLED a mutation in (amendment 11): one test
+    # file may gate several modules, and armed.src remembers only the last of them.
+    if [ -f "${d}gated-srcs.txt" ] && grep -qxF "$S" "${d}gated-srcs.txt" 2>/dev/null; then
       printf '%s\n' "${d%/}"
       return 0
     fi

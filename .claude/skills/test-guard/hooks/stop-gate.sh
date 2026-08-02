@@ -85,6 +85,14 @@ build_index() {
     if [ -n "$tp" ]; then PATH_KEYS+=("$tp"); PATH_DIRS+=("$d"); fi
     as=""; [ -f "$d/armed.src" ] && IFS= read -r as < "$d/armed.src" 2>/dev/null
     if [ -n "$as" ]; then ARMED_KEYS+=("$as"); ARMED_DIRS+=("$d"); fi
+    # Every source this gate has KILLED a mutation in, not just the last one armed
+    # (amendment 11 — closes known gap 9: one test file gating several modules used to
+    # lose the mapping for all but the last, reporting DONE modules as untracked).
+    if [ -f "$d/gated-srcs.txt" ]; then
+      while IFS= read -r as; do
+        [ -n "$as" ] && { ARMED_KEYS+=("$as"); ARMED_DIRS+=("$d"); }
+      done < "$d/gated-srcs.txt"
+    fi
   done
 }
 
