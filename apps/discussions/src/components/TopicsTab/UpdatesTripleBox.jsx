@@ -9,6 +9,8 @@ import { uploadFileToUpdateSeamless } from '@api/fileUpload.js';
 import lazyRetry from '@generated/utils/lazyRetry.js';
 import logger from '@generated/utils/logger.js';
 import { BrandLoader } from '@components/BrandLoader';
+import { useSettings } from '@generated/contexts/SettingsContext.jsx';
+import { resolveBoxLabels } from '@api/boards.config.js';
 import styles from './TopicsTab.module.css';
 
 // Same lazy TipTap editor everywhere (shared chunk).
@@ -384,6 +386,7 @@ export function UpdatesTripleBox({
   // agenda box (owner request: a pencil on each box). Null for non-owners.
   headerTools = null,
 }) {
+  const { settings } = useSettings();
   const background = useBackground(showBackground ? discussionId : null);
   const references = useReferences(showReferences ? discussionId : null);
   const summary = useSummary(showSummary ? discussionId : null);
@@ -392,11 +395,19 @@ export function UpdatesTripleBox({
   const editReferences = canEditReferences ?? canEdit;
   const editSummaryPane = canEditSummary ?? canEdit;
 
+  /*
+   * round314 — the titles are OWNER-SET (Settings → העדפות), resolved through
+   * resolveBoxLabels so a blank entry falls back to the shipped name instead of
+   * rendering a nameless tab. The PLACEHOLDERS keep their original wording on
+   * purpose: they explain what to write in the pane, which a rename does not change.
+   */
+  const labels = useMemo(() => resolveBoxLabels(settings?.preferences), [settings?.preferences]);
+
   const panes = useMemo(() => [
-    showBackground && { key: 'background', title: 'רקע', hook: background, canEdit: editBackground, placeholder: 'כתבו כאן רקע והכנה לדיון…' },
-    showReferences && { key: 'references', title: 'התייחסויות', hook: references, canEdit: editReferences, placeholder: 'כתבו כאן התייחסויות של משתתפי הדיון…' },
-    showSummary && { key: 'summary', title: 'סיכום', hook: summary, canEdit: editSummaryPane, placeholder: 'כתבו כאן את סיכום הדיון…' },
-  ].filter(Boolean), [showBackground, showReferences, showSummary, background, references, summary, editBackground, editReferences, editSummaryPane]);
+    showBackground && { key: 'background', title: labels.background, hook: background, canEdit: editBackground, placeholder: 'כתבו כאן רקע והכנה לדיון…' },
+    showReferences && { key: 'references', title: labels.references, hook: references, canEdit: editReferences, placeholder: 'כתבו כאן התייחסויות של משתתפי הדיון…' },
+    showSummary && { key: 'summary', title: labels.summary, hook: summary, canEdit: editSummaryPane, placeholder: 'כתבו כאן את סיכום הדיון…' },
+  ].filter(Boolean), [showBackground, showReferences, showSummary, background, references, summary, editBackground, editReferences, editSummaryPane, labels]);
 
   const [activeKey, setActiveKey] = useState(panes[0]?.key || 'background');
   useEffect(() => { setActiveKey(panes[0]?.key || 'background'); }, [discussionId]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -1059,6 +1059,17 @@
   margin-top: 8px;
   color: var(--secondary-text-color, #676879);
 }
+/* round314 — the three box-name fields on one line, each taking an equal share and
+   wrapping together on a narrow modal rather than one field dropping alone. */
+.boxLabelsRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.boxLabelsRow > * {
+  flex: 1 1 140px;
+  min-width: 0;
+}
 .logoError {
   display: block;
   margin-top: 6px;

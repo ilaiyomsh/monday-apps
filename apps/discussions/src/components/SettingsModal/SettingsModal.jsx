@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, TabPanels, TabPanel } from '@vibe/core';
+import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, TabPanels, TabPanel, TextField } from '@vibe/core';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS } from '../../utils/mondayApi/boards.config.js';
 
 // Round 78: the effective auto-fill role list for a tasks access column
 // (taskViewersID / taskEditorsID) — the stored preference, or the default when
@@ -26,6 +26,22 @@ export function withLogo(preferences, dataUrl) {
 }
 export function withoutLogo(preferences) {
   return { ...preferences, logoUrl: null };
+}
+
+/*
+ * round314 — set ONE triple-box title. Pure.
+ *
+ * The RAW text is stored, untrimmed and empty-allowed, so the field behaves like a
+ * text field while typing (trimming as you type eats spaces between words, and
+ * blocking empty makes the box impossible to clear). resolveBoxLabels is what turns a
+ * blank back into the shipped default at READ time, so the two halves are: store what
+ * was typed, render something usable. An unknown key is ignored rather than written —
+ * the three keys are a closed set (BOX_LABEL_KEYS).
+ */
+export function withBoxLabel(preferences, key, value) {
+  if (!BOX_LABEL_KEYS.includes(key)) return preferences;
+  const base = { ...DEFAULT_PREFERENCES.boxLabels, ...(preferences?.boxLabels || {}) };
+  return { ...preferences, boxLabels: { ...base, [key]: typeof value === 'string' ? value : '' } };
 }
 
 // NEXT preferences object (pure — the component wraps it in setPreferences).
@@ -1436,6 +1452,36 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       {logoError ? (
                         <Text type={"text2"} className={styles.logoError}>{logoError}</Text>
                       ) : null}
+                    </div>
+                  </div>
+                  {/* round314 (owner request) — rename the three panes of the triple
+                      box. Stored per instance on preferences.boxLabels; a field left
+                      blank falls back to the shipped name (resolveBoxLabels), so the
+                      tab band can never end up with a nameless tab. The PLACEHOLDER of
+                      each editor keeps its original wording — it explains what to
+                      write there, which renaming the box does not change. */}
+                  <div className={`${styles.prefRow} ${styles.prefRowStack}`}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>שמות התיבות</Text>
+                    </div>
+                    <div className={`${styles.prefControl} ${styles.prefControlFull}`}>
+                      <div className={styles.boxLabelsRow}>
+                        {BOX_LABEL_KEYS.map((key) => (
+                          <TextField
+                            key={key}
+                            title={DEFAULT_PREFERENCES.boxLabels[key]}
+                            placeholder={DEFAULT_PREFERENCES.boxLabels[key]}
+                            value={preferences.boxLabels?.[key] ?? ''}
+                            onChange={(val) => setPreferences((p) => withBoxLabel(p, key, val))}
+                            size={"small"}
+                          />
+                        ))}
+                      </div>
+                      <Text type={"text2"} className={styles.logoHint}>
+                        שמות שלושת החלקים בתיבה של ניהול הדיון. שדה שיישאר ריק יחזור
+                        לשם המקורי. אלה שמות התצוגה בלבד — שמות החלקים בקובץ הסיכום
+                        נקבעים בנפרד בתבנית הייצוא של כל סוג דיון.
+                      </Text>
                     </div>
                   </div>
                   {/* round205 — per-component visibility (owner request; this
