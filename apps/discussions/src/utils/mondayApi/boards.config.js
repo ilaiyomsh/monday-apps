@@ -68,6 +68,36 @@ export function isComponentVisible(preferences, key) {
   return preferences?.visibleComponents?.[key] !== false;
 }
 
+/** The three triple-box pane keys, in display order (רקע → התייחסויות → סיכום). */
+export const BOX_LABEL_KEYS = ['background', 'references', 'summary'];
+
+/**
+ * round314 — resolve the owner-set titles of the three panes, ALWAYS returning a
+ * usable name for each key.
+ *
+ * A stored value wins only when it is a non-blank string; anything else (missing,
+ * empty, whitespace, a number that survived a bad write) falls back to the shipped
+ * default, because a nameless tab is unusable and there is no UI to recover from one.
+ * Trimmed on the way out so a stray space cannot shift the tab band.
+ *
+ * Pure — the reason it lives here beside DEFAULT_PREFERENCES rather than inside the
+ * component: the same rules have to hold for the tab band and for anything else that
+ * later wants to name a box.
+ *
+ * @param {object|null|undefined} preferences settings.preferences
+ * @returns {{ background: string, references: string, summary: string }}
+ */
+export function resolveBoxLabels(preferences) {
+  const stored = preferences?.boxLabels;
+  const out = {};
+  BOX_LABEL_KEYS.forEach((key) => {
+    const raw = stored?.[key];
+    const trimmed = typeof raw === 'string' ? raw.trim() : '';
+    out[key] = trimmed || DEFAULT_PREFERENCES.boxLabels[key];
+  });
+  return out;
+}
+
 export const DEFAULT_PREFERENCES = {
   previousTasksMode: PREVIOUS_TASKS_MODES.LINKED_DISCUSSION,
   // round296 — default width split of the ניהול-דיון row: the AGENDA box's share
@@ -83,6 +113,18 @@ export const DEFAULT_PREFERENCES = {
   // (parallel to the title). Stored as a small downscaled data-URI (self-contained,
   // no asset hosting); null = no logo. Set only by owners in Settings → העדפות.
   logoUrl: null,
+  /*
+   * round314 (owner request) — the three panes of the triple box carry OWNER-SET
+   * titles. The defaults are the names the app shipped with, so an instance that
+   * never touches this reads exactly as before. Per instance, like every other
+   * preference; a blank or whitespace-only entry falls back to the default rather
+   * than rendering a nameless tab (see resolveBoxLabels).
+   *
+   * Deliberately SEPARATE from the export template's per-section labels: those are
+   * per discussion TYPE, so binding the on-screen names to them would make a box
+   * rename itself when the discussion's type changes.
+   */
+  boxLabels: { background: 'רקע', references: 'התייחסויות', summary: 'סיכום' },
   // Whether the top-level "המשימות שלי" (My Tasks) view toggle is shown. Default
   // OFF so existing instances keep their current behavior (the tab is opt-in per
   // instance, enabled by the owner in Settings → העדפות).
