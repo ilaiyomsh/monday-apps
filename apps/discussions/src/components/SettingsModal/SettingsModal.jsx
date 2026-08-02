@@ -275,6 +275,15 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // lives on `preferences.logoUrl` and is persisted by the modal's שמור.
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoError, setLogoError] = useState(null);
+  /*
+   * round311 (PR review) — generation counter that INVALIDATES a logo decode still
+   * in flight. App.jsx keeps this modal permanently mounted with
+   * `isOpen={showSettings}`, so closing does not unmount it and a pending
+   * `fileToLogoDataUrl` still resolves into live draft state. Close → reopen →
+   * decode finishes put the cancelled logo into the NEW editing session, where an
+   * unrelated שמור would persist it. Bumped by the re-seed effect below.
+   */
+  const logoRunRef = useRef(0);
   // round256 — the Templates tab (2) widens to the export size while its type
   // editor is on the "תבנית ייצוא" sub-tab (TemplateManagerModal reports this).
   // round280 — master–detail mapping UI: the selected board tab and the selected
@@ -309,6 +318,15 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // re-seed local draft from the live settings whenever the modal opens
   useEffect(() => {
     if (isOpen) {
+      /*
+       * round311 — the RE-SEED is the invalidation point for an in-flight logo
+       * decode: it replaces the whole draft, so a decode picked against the old
+       * one must not land on this one. Bumping here rather than in a second
+       * effect keyed on close is deliberate — a close with no reopen has no
+       * observable effect either way, because the next open re-seeds regardless,
+       * and the extra effect only made the intent harder to pin down in a test.
+       */
+      logoRunRef.current += 1;
       const seed = settings || buildEmptyConfig();
       const seededBoards = mergeBoardsWithSchema(seed.boards);
       const seededColumns = mergeColumnsWithSchema(seed.columns);
@@ -328,6 +346,10 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       });
       setShowCloseConfirm(false);
       setAssetError(null);
+      // round311 — a logo error from a previous session is not this one's.
+      // `logoBusy` is deliberately NOT reset: while a decode runs the picker must
+      // stay disabled, or a second pick could resolve out of order against it.
+      setLogoError(null);
       loadExportAssets(context)
         .then(setExportAssets)
         .catch((err) => logger.warn('SettingsModal', 'טעינת נכסי הייצוא נכשלה', err));
@@ -1368,15 +1390,28 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                               const file = e.target.files && e.target.files[0];
                               e.target.value = ''; // let the same file be re-picked after a failure
                               if (!file) return;
+                              // round311 — the generation this decode belongs to. If the
+                              // modal is closed, reopened or re-seeded meanwhile, the
+                              // draft it was picked for is gone and the result is dropped
+                              // rather than injected into whatever session is current.
+                              const run = logoRunRef.current;
                               setLogoBusy(true);
                               try {
                                 const dataUrl = await fileToLogoDataUrl(file, { maxPx: LOGO_MAX_PX });
+                                if (logoRunRef.current !== run) return;
                                 setPreferences((p) => withLogo(p, dataUrl));
                                 setLogoError(null);
                               } catch (err) {
+                                // Still logged even when superseded — a decode failure is
+                                // real (error-guard); only the USER-facing message is
+                                // suppressed, since it would point at a session they left.
                                 logger.error('SettingsModal', 'טעינת הלוגו נכשלה', err);
+                                if (logoRunRef.current !== run) return;
                                 setLogoError('לא הצלחנו לקרוא את הקובץ. נסו קובץ תמונה אחר (PNG/JPG/SVG).');
                               } finally {
+                                // Unconditional: the picker is disabled while busy, so no
+                                // newer run can exist to have its flag cleared here, and a
+                                // stuck `true` would lock the row for the rest of the session.
                                 setLogoBusy(false);
                               }
                             }}
