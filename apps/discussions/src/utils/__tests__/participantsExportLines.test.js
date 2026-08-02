@@ -24,12 +24,24 @@ const linesOf = async (model, template) => {
     .filter(Boolean);
 };
 
-// A template whose participants meta field carries `patch`.
-const tplWith = (patch) => ({
+/*
+ * A template with the participants block configured by `patch`.
+ *
+ * round319 — `perLine`/`parts` moved OFF the participants row onto the template's
+ * one `people` setting (label/enabled are still the row's own), so the helper routes
+ * each key to where it now lives and every case below still reads as before.
+ */
+const tplWith = ({ perLine, parts, includeExternal, ...fieldPatch }) => ({
   ...DEFAULT_EXPORT_TEMPLATE,
+  people: {
+    ...DEFAULT_EXPORT_TEMPLATE.people,
+    ...(perLine === undefined ? {} : { perLine }),
+    ...(parts === undefined ? {} : { parts }),
+    ...(includeExternal === undefined ? {} : { includeExternal }),
+  },
   sections: DEFAULT_EXPORT_TEMPLATE.sections.map((s) => (
     s.key === 'meta'
-      ? { ...s, fields: s.fields.map((f) => (f.key === 'participantsText' ? { ...f, ...patch } : f)) }
+      ? { ...s, fields: s.fields.map((f) => (f.key === 'participantsText' ? { ...f, ...fieldPatch } : f)) }
       : s
   )),
 });

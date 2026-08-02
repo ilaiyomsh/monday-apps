@@ -4,7 +4,7 @@ import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, Ta
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField } from '../../utils/mondayApi/boards.config.js';
 
 // Round 78: the effective auto-fill role list for a tasks access column
 // (taskViewersID / taskEditorsID) — the stored preference, or the default when
@@ -108,6 +108,38 @@ export function seedExportTemplate(stored) {
     });
     return { ...s, fields };
   });
+  /*
+   * round319 — the people FORMAT moved off the individual rows onto one
+   * `people` setting. A template stored before this round carries `perLine`/`parts`
+   * on each people row instead, so the first seed after the upgrade adopts them
+   * rather than resetting the owner's configuration to the defaults.
+   *
+   * The participants row wins when rows disagree: it is the one with a real list in
+   * it, so it is the row an owner actually configured. Whichever row is adopted, the
+   * per-row copies are then STRIPPED — leaving them would be a second source of
+   * truth that the editor no longer writes and the renderer no longer reads.
+   */
+  const metaSection = base.sections.find((s) => s?.key === 'meta');
+  if (!stored?.people) {
+    const legacy = (metaSection?.fields || [])
+      .filter((f) => isPeopleMetaField(f?.key))
+      .sort((a, b) => (a.key === 'participantsText' ? -1 : b.key === 'participantsText' ? 1 : 0))
+      .find((f) => Array.isArray(f?.parts) || f?.perLine === true);
+    base.people = {
+      ...DEFAULT_PEOPLE_FORMAT,
+      ...(legacy ? { perLine: legacy.perLine === true } : {}),
+      ...(Array.isArray(legacy?.parts) ? { parts: legacy.parts } : {}),
+    };
+  } else {
+    base.people = { ...DEFAULT_PEOPLE_FORMAT, ...stored.people };
+  }
+  if (metaSection) {
+    metaSection.fields = (metaSection.fields || []).map((f) => {
+      if (!isPeopleMetaField(f?.key)) return f;
+      const { perLine, parts, ...rest } = f;
+      return rest;
+    });
+  }
   base.header = { ...DEFAULT_EXPORT_TEMPLATE.header, ...(stored?.header || {}) };
   base.footer = { ...DEFAULT_EXPORT_TEMPLATE.footer, ...(stored?.footer || {}) };
   return base;

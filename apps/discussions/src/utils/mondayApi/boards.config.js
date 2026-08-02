@@ -289,6 +289,23 @@ export const PEOPLE_META_FIELDS = {
   leadText: 'lead',
   coordinatorText: 'coordinator',
 };
+
+/*
+ * round319 (owner request) — ONE setting for how every person in the export is
+ * written, replacing round316's per-row copy of it. The rows keep what is genuinely
+ * theirs (label, enabled, order); the FORMAT is a property of "a person", not of
+ * which column they came from, so configuring "מר/גברת + שם" once now covers
+ * משתתפים, מוביל דיון and מרכז דיון instead of three boxes kept in sync by hand.
+ *
+ * `includeExternal` folds the free-text external participants into the participants
+ * list instead of the separate "משתתפים חיצוניים" row (round211). Default false:
+ * every stored template keeps the output it has today, and the owner opts in.
+ */
+export const DEFAULT_PEOPLE_FORMAT = {
+  perLine: false,
+  parts: DEFAULT_PARTICIPANT_PARTS,
+  includeExternal: false,
+};
 export const isPeopleMetaField = (key) => Object.prototype.hasOwnProperty.call(PEOPLE_META_FIELDS, key);
 
 export const DEFAULT_EXPORT_TEMPLATE = {
@@ -296,6 +313,8 @@ export const DEFAULT_EXPORT_TEMPLATE = {
   headerMode: EXPORT_HEADER_MODES.CONFIG,
   // Selected export font key (see EXPORT_FONTS). Default = brand (today's output).
   font: DEFAULT_EXPORT_FONT,
+  // round319 — how EVERY person in the document is written (see DEFAULT_PEOPLE_FORMAT).
+  people: DEFAULT_PEOPLE_FORMAT,
   // Body sections in render order. `enabled:false` drops a section entirely.
   // round203 — the "פתיחה" (freeText) section was RETIRED (owner request);
   // seedExportTemplate drops it from previously-stored templates.
@@ -307,11 +326,11 @@ export const DEFAULT_EXPORT_TEMPLATE = {
       // its value exists (never "סוג: null"), matching today's behavior.
       fields: [
         { key: 'dateText', enabled: true, label: 'תאריך' },
-        // round315 — `perLine` puts every participant on its own line under a
-        // "משתתפים:" label; `parts` composes ONE participant (see the constants
-        // above). Both defaults reproduce today's single comma-joined row.
-        { key: 'participantsText', enabled: true, label: 'משתתפים', perLine: false, parts: DEFAULT_PARTICIPANT_PARTS },
-        { key: 'leadText', enabled: true, label: 'מוביל דיון', perLine: false, parts: DEFAULT_PARTICIPANT_PARTS },
+        // round315/round316/round319 — how a person is WRITTEN (line-per-person and
+        // the profile parts) is no longer a property of the row: it lives once on
+        // `people` above and applies to all three of these.
+        { key: 'participantsText', enabled: true, label: 'משתתפים' },
+        { key: 'leadText', enabled: true, label: 'מוביל דיון' },
         /*
          * round316 — מרכז דיון (discussionCoordinatorID) joins the metadata block.
          * Enabled by default like every other meta row, which costs nothing for an
@@ -319,7 +338,7 @@ export const DEFAULT_EXPORT_TEMPLATE = {
          * never emitted (see buildMeta). seedExportTemplate back-fills it into
          * templates saved before this round.
          */
-        { key: 'coordinatorText', enabled: true, label: 'מרכז דיון', perLine: false, parts: DEFAULT_PARTICIPANT_PARTS },
+        { key: 'coordinatorText', enabled: true, label: 'מרכז דיון' },
         { key: 'typesText', enabled: true, label: 'סוג' },
         { key: 'previousText', enabled: true, label: 'דיון קודם' },
       ],
