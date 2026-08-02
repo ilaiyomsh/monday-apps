@@ -212,6 +212,62 @@ function stripDataPrefix(dataUri) {
   return i >= 0 ? String(dataUri).slice(i + 7) : String(dataUri);
 }
 
+/*
+ * round320 (owner request) — the ROWS inside "פרטי הדיון" reorder like the sections
+ * do. One DndContext carries both lists, so a row's drag id is namespaced: a bare
+ * key would collide with a section of the same name, and dnd-kit would happily
+ * report a section as the drop target of a row.
+ */
+export const META_FIELD_DRAG_PREFIX = 'metafield:';
+
+/**
+ * Move one meta row to another's position. Pure, and a no-op — returning the SAME
+ * template object — for a drop on itself or on anything that is not a row here,
+ * which is how the shared drag handler tells "not mine" from "moved".
+ *
+ * @param {object} template
+ * @param {string} fromKey the row being dragged
+ * @param {string} toKey the row it was dropped on
+ */
+export function reorderMetaFields(template, fromKey, toKey) {
+  if (!template || fromKey === toKey) return template;
+  const sections = Array.isArray(template.sections) ? template.sections : [];
+  const meta = sections.find((s) => s?.key === 'meta');
+  const fields = Array.isArray(meta?.fields) ? meta.fields : null;
+  if (!fields) return template;
+  const from = fields.findIndex((f) => f?.key === fromKey);
+  const to = fields.findIndex((f) => f?.key === toKey);
+  if (from < 0 || to < 0) return template;
+  return {
+    ...template,
+    sections: sections.map((s) => (s.key === 'meta' ? { ...s, fields: arrayMove(fields, from, to) } : s)),
+  };
+}
+
+/** One row of פרטי הדיון: grip, enabled checkbox, editable label. */
+function SortableMetaFieldRow({ field, onToggle, onLabel }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: `${META_FIELD_DRAG_PREFIX}${field.key}`,
+  });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  return (
+    <div ref={setNodeRef} style={style} className={styles.metaFieldRow}>
+      <button
+        type="button"
+        className={styles.grip}
+        data-meta-field-grip={field.key}
+        {...attributes}
+        {...listeners}
+        aria-label={`גרור לשינוי סדר ${field.label || field.key}`}
+      >
+        <GripVertical size={14} />
+      </button>
+      <input type="checkbox" checked={field.enabled !== false} onChange={(e) => onToggle(e.target.checked)} />
+      <TextField value={field.label || ''} onChange={onLabel} size="small" />
+    </div>
+  );
+}
+
 function SortableSectionRow({ section, onToggle, onExpandToggle, expanded, children }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.key });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
@@ -299,6 +355,16 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
   const onDragEnd = (event) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
+    // round320 — one context, two lists. A row's id carries the prefix; anything
+    // else is a section. A row dropped on a SECTION (or the reverse) resolves to a
+    // no-op rather than moving the wrong list.
+    const isField = String(active.id).startsWith(META_FIELD_DRAG_PREFIX);
+    if (isField) {
+      if (!String(over.id).startsWith(META_FIELD_DRAG_PREFIX)) return;
+      const strip = (id) => String(id).slice(META_FIELD_DRAG_PREFIX.length);
+      setTemplate((prev) => reorderMetaFields(prev, strip(active.id), strip(over.id)));
+      return;
+    }
     setTemplate((prev) => {
       const keys = prev.sections.map((s) => s.key);
       const from = keys.indexOf(active.id);
@@ -547,12 +613,23 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
             >
               {section.key === 'meta' && metaSection && (
                 <div className={styles.metaFields}>
-                  {(metaSection.fields || []).map((f) => (
-                    <div className={styles.metaFieldRow} key={f.key}>
-                      <input type="checkbox" checked={f.enabled !== false} onChange={(e) => patchMetaField(f.key, { enabled: e.target.checked })} />
-                      <TextField value={f.label || ''} onChange={(val) => patchMetaField(f.key, { label: val })} size="small" />
-                    </div>
-                  ))}
+                  {/* round320 — the rows carry their own SortableContext inside the
+                      SAME DndContext as the sections (see onDragEnd's prefix split),
+                      so "which line is top" is set by dragging, like everywhere else
+                      in this tab. */}
+                  <SortableContext
+                    items={(metaSection.fields || []).map((f) => `${META_FIELD_DRAG_PREFIX}${f.key}`)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {(metaSection.fields || []).map((f) => (
+                      <SortableMetaFieldRow
+                        key={f.key}
+                        field={f}
+                        onToggle={(enabled) => patchMetaField(f.key, { enabled })}
+                        onLabel={(val) => patchMetaField(f.key, { label: val })}
+                      />
+                    ))}
+                  </SortableContext>
                   {/* round319 (owner request) — ONE block, after the rows it governs:
                       how every person in the document is written (line each, which
                       profile parts in which order, the separator before each), and
