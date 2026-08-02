@@ -9,8 +9,10 @@ import {
   buildStatusLabelsUpdatePayload,
   buildUpdateStatusColumnMutation,
   createLabelsDraft,
+  ensureDefaultLabelRow,
   findCreatedLabel,
   hasPendingLabelEdits,
+  insertLabelBeforeDefault,
   pruneSettingsForActiveLabels,
   renumberDraftIndexes,
   reorderLabelsDraft,
@@ -232,53 +234,78 @@ function LabelCard({
 
   const requiredCount = rule.requiredColumnIds?.length ?? 0;
 
+  /*
+   * The grey DEFAULT label — monday's empty status. Its card carries the one thing that
+   * IS editable about it, the text, and nothing that is not: monday forces the colour to
+   * grey and refuses to delete the label once it exists, so a colour picker and a remove
+   * button here would be two controls that lie. Leaving the text empty is a valid state
+   * (and the one a fresh column is in) — nothing is written until something is typed.
+   */
+  const isDefaultLabel = label.isDefaultEmpty === true;
+
   return (
-    <article className={`twyst-label-card${open ? ' is-open' : ''}`}>
+    <article className={`twyst-label-card${open ? ' is-open' : ''}${isDefaultLabel ? ' is-default' : ''}`}>
       <div className="twyst-label-identity">
-        <StatusColorPicker
-          colorValue={label.colorValue}
-          hex={label.color}
-          usedColorEnums={usedColors}
-          disabled={saving}
-          onChange={(next) => onRecolor(label.clientKey, next)}
-        />
+        {isDefaultLabel ? (
+          <span
+            className="twyst-color-circle is-static"
+            style={{ background: label.color }}
+            title="ברירת המחדל של monday — תמיד אפור"
+            aria-hidden="true"
+          />
+        ) : (
+          <StatusColorPicker
+            colorValue={label.colorValue}
+            hex={label.color}
+            usedColorEnums={usedColors}
+            disabled={saving}
+            onChange={(next) => onRecolor(label.clientKey, next)}
+          />
+        )}
         <input
           className="twyst-label-name-input"
           type="text"
           value={label.label}
-          aria-label="שם הלייבל"
+          aria-label={isDefaultLabel ? 'שם לייבל ברירת המחדל' : 'שם הלייבל'}
+          placeholder={isDefaultLabel ? 'ללא טקסט' : undefined}
           disabled={saving}
           onChange={(event) => onRename(label.clientKey, event.target.value)}
         />
         <div className="twyst-label-actions">
-          <div className="twyst-label-order" role="group" aria-label="סדר הלייבל">
-            <button
-              type="button"
-              className="twyst-icon-btn"
-              disabled={saving || isFirst}
-              aria-label="הזז למעלה"
-              onClick={() => onMove(label.clientKey, -1)}
-            >
-              ↑
-            </button>
-            <button
-              type="button"
-              className="twyst-icon-btn"
-              disabled={saving || isLast}
-              aria-label="הזז למטה"
-              onClick={() => onMove(label.clientKey, 1)}
-            >
-              ↓
-            </button>
-          </div>
-          <button
-            type="button"
-            className="twyst-text-btn is-danger"
-            disabled={saving}
-            onClick={() => onRemove(label.clientKey)}
-          >
-            הסרה
-          </button>
+          {isDefaultLabel ? (
+            <span className="twyst-label-default-tag">ברירת מחדל</span>
+          ) : (
+            <>
+              <div className="twyst-label-order" role="group" aria-label="סדר הלייבל">
+                <button
+                  type="button"
+                  className="twyst-icon-btn"
+                  disabled={saving || isFirst}
+                  aria-label="הזז למעלה"
+                  onClick={() => onMove(label.clientKey, -1)}
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  className="twyst-icon-btn"
+                  disabled={saving || isLast}
+                  aria-label="הזז למטה"
+                  onClick={() => onMove(label.clientKey, 1)}
+                >
+                  ↓
+                </button>
+              </div>
+              <button
+                type="button"
+                className="twyst-text-btn is-danger"
+                disabled={saving}
+                onClick={() => onRemove(label.clientKey)}
+              >
+                הסרה
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -457,7 +484,9 @@ function ColumnSettings({ context, variant = 'overlay' }) {
   useEffect(() => {
     if (!statusColumn) return;
     const all = normalizeStatusLabels(statusColumn.settings);
-    const draftLabels = createLabelsDraft(all);
+    // The grey default card is always on screen, whether or not the column has that
+    // label yet — monday shows it too, and it is the only place its text can be set.
+    const draftLabels = ensureDefaultLabelRow(createLabelsDraft(all));
     setLabelsDraft(draftLabels);
     setLabelsBaseline(draftLabels);
   }, [statusColumn]);
@@ -600,8 +629,8 @@ function ColumnSettings({ context, variant = 'overlay' }) {
        * the next save does not resend it.
        */
       const [createdRow] = createLabelsDraft([created]);
-      setLabelsDraft((current) => [...current, { ...createdRow, index: current.length }]);
-      setLabelsBaseline((current) => [...current, { ...createdRow, index: current.length }]);
+      setLabelsDraft((current) => insertLabelBeforeDefault(current, createdRow));
+      setLabelsBaseline((current) => insertLabelBeforeDefault(current, createdRow));
     } catch (err) {
       logger.error('ColumnSettings', 'Failed to create a status label', err);
       const message = err?.message || '';
@@ -633,11 +662,18 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       setSaving(true);
       setSaveError(null);
 
-      if (!labelsDraft || labelsDraft.length === 0) {
+      /*
+       * The default (grey) label is exempt from both rules below. It is allowed to be
+       * nameless — that IS its normal state, and an empty one is simply never written —
+       * so it can neither stand in for the one label a column must have nor block a save
+       * for having no name. A coloured label still must have one.
+       */
+      const coloredDraft = (labelsDraft ?? []).filter((label) => !label.isDefaultEmpty);
+      if (coloredDraft.length === 0) {
         setSaveError('חייבים להשאיר לפחות לייבל פעיל אחד.');
         return;
       }
-      if (labelsDraft.some((label) => !String(label.label || '').trim())) {
+      if (coloredDraft.some((label) => !String(label.label || '').trim())) {
         setSaveError('לכל לייבל חייב להיות שם.');
         return;
       }
@@ -688,7 +724,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
          * after a storage failure, or the validation error below — starts from the
          * persisted state rather than replaying edits that already landed.
          */
-        const reseeded = createLabelsDraft(refreshedLabels);
+        const reseeded = ensureDefaultLabelRow(createLabelsDraft(refreshedLabels));
         setLabelsDraft(reseeded);
         setLabelsBaseline(reseeded);
       }
@@ -742,6 +778,10 @@ function ColumnSettings({ context, variant = 'overlay' }) {
   }
 
   const hiddenSet = new Set(draft.hiddenLabelIds);
+  const lastColoredIndex = labelsDraft.reduce(
+    (last, label, index) => (label.isDefaultEmpty ? last : index),
+    -1,
+  );
 
   return (
     <main className={`twyst-settings${isOverlay ? ' is-overlay' : ''}`} dir="rtl">
@@ -777,6 +817,8 @@ function ColumnSettings({ context, variant = 'overlay' }) {
           </Button>
         </div>
 
+        {/* The grey card is pinned to the bottom, so "last" for the arrows means the
+            last COLOURED label — otherwise the one above it could never move down. */}
         {labelsDraft.map((label, labelIndex) => {
           const usedColors = labelsDraft
             .filter((other) => other.clientKey !== label.clientKey)
@@ -795,7 +837,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
               usedColors={usedColors}
               saving={saving || addingLabel}
               isFirst={labelIndex === 0}
-              isLast={labelIndex === labelsDraft.length - 1}
+              isLast={labelIndex === lastColoredIndex}
               onRename={renameLabel}
               onRecolor={recolorLabel}
               onRemove={removeLabel}

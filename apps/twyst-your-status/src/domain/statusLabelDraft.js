@@ -6,7 +6,11 @@
 
 import { migrateSettings } from './settingsSchema.js';
 import {
+  RESERVED_EMPTY_LABEL_COLOR,
+  RESERVED_EMPTY_LABEL_HEX,
+  RESERVED_EMPTY_LABEL_ID,
   ensureUniqueStatusColors,
+  isReservedEmptyLabelId,
   normalizeStatusColorEnum,
   resolveStatusColorHex,
 } from './statusColors.js';
@@ -22,6 +26,12 @@ export function nextNewLabelClientId() {
 /** Reset only in tests. */
 export function __resetNewLabelSeqForTests() {
   newLabelSeq = 0;
+}
+
+/** One past the highest index in a draft — where the next row sorts. */
+function nextDraftIndex(draft) {
+  return (Array.isArray(draft) ? draft : [])
+    .reduce((max, label) => Math.max(max, Number(label?.index) || 0), -1) + 1;
 }
 
 function draftColorValue(label) {
@@ -47,12 +57,15 @@ function draftColorValue(label) {
  */
 export function createLabelsDraft(liveLabels) {
   const list = Array.isArray(liveLabels) ? liveLabels : [];
-  return list
+  const rows = list
     .filter((label) => !label?.isDeactivated)
     .slice()
     .sort((a, b) => a.index - b.index)
     .map((label) => {
-      const colorValue = draftColorValue(label);
+      // The grey default label is not a colour choice: `explosive` IS monday's reserved
+      // slot, and the platform pins the row to id 5 and hex #c4c4c4 whatever arrives.
+      const isDefaultEmpty = isReservedEmptyLabelId(label.id);
+      const colorValue = isDefaultEmpty ? RESERVED_EMPTY_LABEL_COLOR : draftColorValue(label);
       return {
         clientKey: String(label.id),
         id: String(label.id),
@@ -61,13 +74,79 @@ export function createLabelsDraft(liveLabels) {
         // monday's STORED hex, never one re-derived from the colour index: the platform
         // overrides some colours server-side (the reserved id 5 renders grey whatever
         // enum was sent), and the swatch has to show what the board shows.
-        color: typeof label.color === 'string' ? label.color : (resolveStatusColorHex(colorValue) ?? '#c4c4c4'),
+        color: isDefaultEmpty
+          ? RESERVED_EMPTY_LABEL_HEX
+          : (typeof label.color === 'string' ? label.color : (resolveStatusColorHex(colorValue) ?? '#c4c4c4')),
         colorValue,
         isDone: label.isDone === true,
         description: typeof label.description === 'string' ? label.description : undefined,
         isNew: false,
+        // Set only on the reserved row, so every other draft row keeps the exact shape
+        // its consumers already assert.
+        ...(isDefaultEmpty ? { isDefaultEmpty: true } : {}),
       };
     });
+
+  // Last, whatever index the column stores for it — monday shows the grey label at the
+  // bottom of the list and so do we, and a save renumbers positions from this order.
+  const colored = rows.filter((label) => !label.isDefaultEmpty);
+  const reserved = rows.filter((label) => label.isDefaultEmpty);
+  if (reserved.length === 0) return colored;
+  return [
+    ...colored,
+    ...reserved.map((label) => ({ ...label, index: nextDraftIndex(colored) })),
+  ];
+}
+
+/**
+ * The grey DEFAULT label row, as the settings list always shows it.
+ *
+ * monday does not create that label until somebody names it — a fresh status column comes
+ * back with four labels and no id 5 — so the settings screen synthesises the row rather
+ * than waiting for the API to have one. Nothing is written for a synthesised row that
+ * stays empty (see buildStatusLabelsUpdatePayload): the label cannot be deleted once it
+ * exists, so an admin who never typed in it must not be given one.
+ *
+ * @param {ReturnType<typeof createLabelsDraft>} draft
+ * @returns {ReturnType<typeof createLabelsDraft>}
+ */
+export function ensureDefaultLabelRow(draft) {
+  const list = Array.isArray(draft) ? draft.slice() : [];
+  if (list.some((label) => label?.isDefaultEmpty)) return list;
+  return [...list, {
+    clientKey: String(RESERVED_EMPTY_LABEL_ID),
+    // The id monday WILL assign it. Holding it now means permission rules typed on this
+    // card survive the save that creates the label, instead of being pruned as orphans.
+    id: String(RESERVED_EMPTY_LABEL_ID),
+    index: nextDraftIndex(list),
+    label: '',
+    color: RESERVED_EMPTY_LABEL_HEX,
+    colorValue: RESERVED_EMPTY_LABEL_COLOR,
+    isDone: false,
+    description: undefined,
+    isNew: false,
+    isDefaultEmpty: true,
+  }];
+}
+
+/**
+ * Place a freshly created label ABOVE the grey default row, which stays at the bottom.
+ * Only the default row's index moves; a coloured row keeps the index it already had, so
+ * an unsaved edit elsewhere does not start reading as a reorder.
+ *
+ * @param {ReturnType<typeof createLabelsDraft>} draft
+ * @param {object} row
+ * @returns {ReturnType<typeof createLabelsDraft>}
+ */
+export function insertLabelBeforeDefault(draft, row) {
+  const list = Array.isArray(draft) ? draft.slice() : [];
+  const colored = list.filter((label) => !label?.isDefaultEmpty);
+  const reserved = list.filter((label) => label?.isDefaultEmpty);
+  const withRow = [...colored, { ...row, index: nextDraftIndex(colored) }];
+  return [
+    ...withRow,
+    ...reserved.map((label) => ({ ...label, index: nextDraftIndex(withRow) })),
+  ];
 }
 
 /**
@@ -86,6 +165,18 @@ export function hasPendingLabelEdits(draft, baseline) {
     if (Number(label.index) !== Number(other.index)) return true;
     return String(label.colorValue ?? label.color) !== String(other.colorValue ?? other.color);
   });
+}
+
+/**
+ * The default row the column does not have and the admin left empty — the one row a
+ * payload must leave out entirely.
+ * @param {{ isDefaultEmpty?: boolean, label?: string }} label
+ * @param {Set<number>} existingIds ids monday already has on the column
+ */
+function isUnwrittenEmptyDefault(label, existingIds) {
+  if (!label?.isDefaultEmpty) return false;
+  if (existingIds.has(RESERVED_EMPTY_LABEL_ID)) return false;
+  return String(label.label ?? '').trim() === '';
 }
 
 /**
@@ -124,12 +215,21 @@ export function buildStatusLabelsUpdatePayload(draftActive, liveAll) {
   const activePayload = draft
     .slice()
     .sort((a, b) => a.index - b.index)
+    // An empty default label that monday does not already have is not written at all.
+    // Writing it would CREATE the one label on a status column that can never be deleted
+    // afterwards — for a row the admin never typed a single character into.
+    .filter((label) => !isUnwrittenEmptyDefault(label, existingIds))
     .map((label, orderIndex) => {
       const numericId = Number(label.id);
       const isExisting = Number.isInteger(numericId) && existingIds.has(numericId) && !label.isNew;
       return {
         ...(isExisting ? { id: numericId } : {}),
-        color: normalizeStatusColorEnum(label.colorValue ?? label.color),
+        // Flagged through to ensureUniqueStatusColors, which must not reassign this one:
+        // `explosive` is the slot's identity, not a colour preference.
+        ...(label.isDefaultEmpty ? { isDefaultEmpty: true } : {}),
+        color: label.isDefaultEmpty
+          ? RESERVED_EMPTY_LABEL_COLOR
+          : normalizeStatusColorEnum(label.colorValue ?? label.color),
         label: typeof label.label === 'string' ? label.label : '',
         // The POSITION, not the draft's own index: the draft's number can collide
         // with a deactivated row's (see the note above), and position preserves the
@@ -314,8 +414,13 @@ export function findCreatedLabel(liveBefore, refreshedLabels) {
  * @returns {ReturnType<typeof createLabelsDraft>}
  */
 export function reorderLabelsDraft(draft, clientKey, delta) {
-  const list = Array.isArray(draft) ? draft.slice() : [];
-  const withIndexes = (items) => items.map((label, index) => ({ ...label, index }));
+  const all = Array.isArray(draft) ? draft.slice() : [];
+  // The grey default label sits at the bottom, as it does in monday, and neither moves
+  // nor is moved over — only the coloured labels take part in the reorder.
+  const list = all.filter((label) => !label?.isDefaultEmpty);
+  const reserved = all.filter((label) => label?.isDefaultEmpty);
+  const withIndexes = (items) => [...items, ...reserved]
+    .map((label, index) => ({ ...label, index }));
   const from = list.findIndex((label) => label.clientKey === clientKey);
   const step = Number(delta);
   if (from < 0 || !Number.isInteger(step) || step === 0) {

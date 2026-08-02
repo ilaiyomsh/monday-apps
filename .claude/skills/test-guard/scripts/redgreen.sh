@@ -260,6 +260,14 @@ cmd_fire() {
     tail -n 15 "$mut_out"; rm -f "$mut_out"; exit 1
   fi
   printf 'KILLED|%s\n' "$DESC" >> "$STATE_DIR/kills.log"
+  # Append-only record of every SOURCE this gate has killed a mutation in (contract
+  # amendment 11). `armed.src` holds only the LAST arm, so one test file gating several
+  # modules lost the mapping for the earlier ones and the stop gate called them
+  # "untracked" despite their kills sitting in this very dir (known gap 9, hit three
+  # times). Written on KILL, not on arm: an armed-but-never-fired source proves nothing.
+  if ! grep -qxF "$abs_src" "$STATE_DIR/gated-srcs.txt" 2>/dev/null; then
+    printf '%s\n' "$abs_src" >> "$STATE_DIR/gated-srcs.txt"
+  fi
   echo "MUTATION KILLED by:"; printf '%s\n' "$mut_fails" | head -n 5 | sed 's/^/  ✗ /'
   echo "Restore verified green. Recorded: KILLED — $DESC"
   rm -f "$mut_out"; exit 0
