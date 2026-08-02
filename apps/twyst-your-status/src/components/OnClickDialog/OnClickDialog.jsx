@@ -323,12 +323,13 @@ function OnClickDialog({ context }) {
 
   return (
     <main className="status-picker-dialog" aria-label="בחירת סטטוס" dir="rtl">
-      {pickerModel.currentIsHidden && (
-        <p className="status-picker-note">
-          הסטטוס הנוכחי נקבע מחוץ לבורר (למשל אוטומציה) ואינו מוצג לבחירה.
-        </p>
-      )}
-
+      {/*
+        No note when the CURRENT status is one the admin hid (owner request, round314).
+        The dialog's height is computed from the pills alone (`pickerDialogHeightPx`),
+        so a paragraph above them took the last pill's space to explain a state the
+        user cannot act on anyway. `buildAvailableLabels` still reports
+        `currentIsHidden`; nothing renders from it.
+      */}
       {pickerModel.options.length > 0 ? (
         <div className="status-menu" role="listbox" aria-label="סטטוסים זמינים">
           {pickerModel.options.map((label) => {
