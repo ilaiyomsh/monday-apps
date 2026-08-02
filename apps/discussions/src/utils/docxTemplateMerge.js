@@ -95,6 +95,50 @@ function mergeMissingStyles(tplStylesXml, genStylesXml) {
   return tplStylesXml.replace(/<\/w:styles>/, `${toAdd.join('')}</w:styles>`);
 }
 
+/*
+ * round308 — the TEXT WIDTH of the owner's template, in DXA (twips).
+ *
+ * This matters because the splice below deliberately keeps the TEMPLATE's
+ * <w:sectPr>: page size and margins come from the uploaded file, never from the
+ * app. So "let the tables span the page" cannot be a hardcoded number — a
+ * template with wider margins would overflow the page, and one with narrower
+ * margins would leave a gap. The tables ask for this and scale to it.
+ *
+ * Reads pgSz@w minus pgMar@left/@right off the LAST sectPr (the body-level one).
+ * Returns null when the file is unreadable, the attributes are missing, or the
+ * result is implausible — the caller then keeps its own default rather than
+ * emitting a table wider than the paper.
+ */
+export function templateTextWidthDxa(templateBytes) {
+  let xml;
+  try {
+    const tpl = unzipSync(templateBytes);
+    if (!tpl[DOC]) return null;
+    xml = strFromU8(tpl[DOC]);
+  } catch {
+    // Not a readable zip. The splice itself reports the real failure; here a null
+    // just means "no better number than the default".
+    return null;
+  }
+  const sectIdx = xml.lastIndexOf('<w:sectPr');
+  if (sectIdx < 0) return null;
+  const end = xml.indexOf('</w:sectPr>', sectIdx);
+  const sect = xml.slice(sectIdx, end < 0 ? undefined : end);
+  const num = (re) => {
+    const m = sect.match(re);
+    const n = m ? Number(m[1]) : NaN;
+    return Number.isFinite(n) ? n : null;
+  };
+  const page = num(/<w:pgSz[^>]*\sw:w="(\d+)"/);
+  const left = num(/<w:pgMar[^>]*\sw:left="(\d+)"/);
+  const right = num(/<w:pgMar[^>]*\sw:right="(\d+)"/);
+  if (page == null || left == null || right == null) return null;
+  const width = page - left - right;
+  // Sanity window: ~2.5cm to ~40cm of text. Outside it we are reading something
+  // that is not a page, so do not trust it.
+  return width >= 1440 && width <= 22680 ? width : null;
+}
+
 /**
  * Splice a generated body .docx into an uploaded template .docx (headers/footers
  * only). Both inputs are raw .docx bytes (Uint8Array); returns the merged .docx
