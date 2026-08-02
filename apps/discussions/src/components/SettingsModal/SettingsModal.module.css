@@ -408,10 +408,6 @@
     flex-direction: column;
     align-items: stretch;
   }
-  /* Half of a phone-width modal is not a usable box — the pair stacks. */
-  .prefPair {
-    flex-direction: column;
-  }
 }
 
 @media (max-width: 900px) {
@@ -530,16 +526,25 @@
   gap: 10px;
 }
 /* round318 (owner request) — two short preference boxes on ONE row, half the width
-   each (לוגו + שמות התיבות). `flex-basis: 0` rather than `auto` so the split is a
-   true half-and-half: with `auto` the wider content would claim more than its share.
-   `align-items: stretch` (the default) keeps both boxes the same height even when
-   one grows — a logo thumbnail is taller than a row of small fields. */
+   each (לוגו + שמות התיבות). `align-items: stretch` (the default) keeps both boxes
+   the same height even when one grows — a logo thumbnail is taller than a row of
+   small fields.
+   The split is driven by WRAPPING, not by a viewport media query (PR review): this
+   modal renders `contained` inside the card pane, whose width is the iframe minus a
+   340px sidebar, so a viewport breakpoint reads a width this element never has. Equal
+   `flex-basis` + equal `flex-grow` gives a true half-and-half when both fit on one
+   line, and one-per-line at full width when they do not.
+   340px is not arbitrary: at that basis the narrower half still clears the three
+   name fields inside it (3 × 96px + 2 × 10px gap = 308, plus the row's 12px padding
+   each side = 332), so the pair can never sit side by side in a width that wraps
+   שמות התיבות onto a second line. */
 .prefPair {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 .prefPair > * {
-  flex: 1 1 0;
+  flex: 1 1 340px;
   min-width: 0;
 }
 .prefControlFull {
