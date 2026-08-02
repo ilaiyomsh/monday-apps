@@ -17,7 +17,7 @@
     (חתימה אחת לכל הודעה, manifest של task×button, slot יומי)
 
 Admin View → /admin: OAuth, לוח+כפתורים, מייל מסכם (לוח משתמשים, מקבצים,
-שעת שליחה, תצוגה מקדימה plain+AMP, שליחה ידנית)
+שעת שליחה, תצוגה מקדימה plain+AMP, עורך AMP + שליחת בדיקה, שליחה ידנית)
 ```
 
 **נמחק ב-V6:** `/confirm`, snippet, email-template, Resend.

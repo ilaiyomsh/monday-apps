@@ -32,14 +32,26 @@ import express from 'express';
 import { generateSecret, maskSecret } from '../services/secret.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
 import { renderDigestPlain } from '../helpers/digest-plain.js';
+import { buildMultipartAlternative } from '../helpers/mime-alternative.js';
 import { buildDigest, digestTaskColumnIds, decorateRecipientSections } from '../services/digest-service.js';
 import { runDigestForAccount, todayInJerusalem as todayInJerusalemFromRun } from '../services/digest-run.js';
 import { MondayApiError } from '../services/monday-api.js';
-import { logError } from '../helpers/logger.js';
+import { logError, logInfo } from '../helpers/logger.js';
 
 const BUTTON_ID_RE = /^b_[A-Za-z0-9_-]{4,16}$/;
 const SECTION_ID_RE = /^s_[A-Za-z0-9_-]{4,16}$/;
 const COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+// --- POST /api/digest/send-raw (AMP debug lane) constants -------------------
+/** Single address, no spaces/commas — rejects header injection by construction. */
+const RAW_EMAIL_RE = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
+const HEADER_BREAK_RE = /[\r\n]/;
+const RAW_SUBJECT_MAX = 200;
+/** Far above Gmail's 100KB AMP-part ceiling — a cap on abuse, not on debugging. */
+const RAW_AMP_MAX_BYTES = 1_000_000;
+const RAW_FALLBACK_SUBJECT = '[AMP debug] מייל מסכם';
+const RAW_FALLBACK_PLAIN =
+  'שליחת בדיקה של החלק הדינמי (AMP). בלקוח דואר שלא תומך ב-AMP for Email אין כאן תוכן לצפייה.';
 
 function generateId(prefix) {
   return `${prefix}_${crypto.randomBytes(6).toString('base64url').slice(0, 8)}`;
@@ -331,6 +343,98 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         plain: wanted ? renderPlainFor(wanted) : null,
         amp: wanted ? renderAmpFor(wanted) : null,
       });
+    })
+  );
+
+  // --- AMP debug lane (owner ask 2026-08-02) ---------------------------------
+  // The preview hands the admin the exact amp4email document the renderer
+  // produced; this route sends back whatever the admin edited it into. Gmail's
+  // only diagnostic for a bad dynamic part is `INTERNAL_ERROR`, so bisecting it
+  // means mutating the document by hand and re-sending — which is impossible
+  // while the only send path re-renders from config.
+  //
+  // Deliberately independent of the digest pipeline: no config, no link secret
+  // and no monday token are required, because the point is to test the MESSAGE,
+  // not the data behind it. The one thing it shares with the real send is
+  // buildMultipartAlternative — a debug message assembled differently from the
+  // production one would prove nothing about the production one.
+  //
+  // The admin's bytes are passed through untouched (no re-render, no
+  // normalization); only header-injection and size are refused.
+  router.post(
+    '/api/digest/send-raw',
+    guarded(async (req, res) => {
+      if (!emailSender) {
+        res.status(409).json({ error: 'email_not_configured' });
+        return;
+      }
+      const body = typeof req.body === 'object' && req.body !== null ? req.body : {};
+      const { amp, to, subject, plain } = body;
+
+      if (typeof amp !== 'string' || amp.trim().length === 0) {
+        res.status(400).json({ error: 'invalid_amp', message: 'amp must be a non-empty string' });
+        return;
+      }
+      if (typeof to !== 'string' || !RAW_EMAIL_RE.test(to.trim())) {
+        res.status(400).json({ error: 'invalid_recipient', message: 'to must be a single email address' });
+        return;
+      }
+      if (subject !== undefined && subject !== null) {
+        if (typeof subject !== 'string' || subject.length > RAW_SUBJECT_MAX || HEADER_BREAK_RE.test(subject)) {
+          res.status(400).json({ error: 'invalid_subject', message: 'subject is too long or contains a header break' });
+          return;
+        }
+      }
+      if (plain !== undefined && plain !== null && typeof plain !== 'string') {
+        res.status(400).json({ error: 'invalid_plain', message: 'plain must be a string when present' });
+        return;
+      }
+      const ampBytes = Buffer.byteLength(amp, 'utf8');
+      if (ampBytes > RAW_AMP_MAX_BYTES) {
+        res.status(413).json({ error: 'amp_too_large', message: `amp part is ${ampBytes} bytes (max ${RAW_AMP_MAX_BYTES})` });
+        return;
+      }
+
+      const config = await storage.forAccount(req.session.accountId).getConfig();
+      const configuredSubject = typeof config?.digest?.subject === 'string' ? config.digest.subject.trim() : '';
+      const finalSubject =
+        typeof subject === 'string' && subject.trim().length > 0
+          ? subject
+          : configuredSubject.length > 0
+            ? configuredSubject
+            : RAW_FALLBACK_SUBJECT;
+      const finalPlain = typeof plain === 'string' && plain.length > 0 ? plain : RAW_FALLBACK_PLAIN;
+
+      const mime = buildMultipartAlternative({ plain: finalPlain, amp });
+      let sent;
+      try {
+        sent = await emailSender.send({
+          accountId: req.session.accountId,
+          to: to.trim(),
+          subject: finalSubject,
+          plain: finalPlain,
+          amp,
+          mime,
+        });
+      } catch (err) {
+        const message = String(err?.message ?? err);
+        logError('admin_api', 'raw amp send failed', {
+          accountId: req.session.accountId,
+          code: err?.code,
+          error: message,
+        });
+        // 502, not 500: the failure belongs to Gmail, and its message IS the
+        // debug output the operator came here for. Never swallowed.
+        res.status(502).json({ error: 'send_failed', message, code: err?.code ?? null });
+        return;
+      }
+
+      logInfo('admin_api', 'raw amp sent', {
+        accountId: req.session.accountId,
+        ampBytes,
+        messageId: sent?.id,
+      });
+      res.json({ ok: true, id: sent?.id ?? null, to: to.trim(), subject: finalSubject, ampBytes });
     })
   );
 

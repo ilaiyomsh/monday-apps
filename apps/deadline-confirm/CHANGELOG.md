@@ -2,6 +2,51 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.11.0 — 2026-08-02 — editable AMP code box in the preview + send-as-typed debug lane
+
+Clicking **"תצוגה מקדימה"** in the מייל מסכם tab now also opens the full
+amp4email document the app just built, in an editable box, with a recipient, a
+subject and a **"שליחת הקוד הערוך"** button next to it.
+
+**Why.** Gmail's only diagnostic for a dynamic part it dislikes is
+`INTERNAL_ERROR` — a documented catch-all with no content (see 0.10.3). Bisecting
+it means changing one thing in the document and re-sending, and that was
+impossible: every send path re-rendered the document from config, so the only
+knob was the config. The AMP playground round-trip that we used instead is a
+different sender, a different DKIM alignment and a different MIME assembly — it
+cannot answer "does *this* byte sequence render from *our* mailbox".
+
+**What it does.** `POST /api/digest/send-raw` takes the box's contents and ships
+them **byte for byte**: no re-render, no normalization, not even a `trim()` (the
+suite pins that with a fixture that carries deliberate surrounding whitespace).
+The document is wrapped by the *same* `buildMultipartAlternative` the real digest
+uses, so the message differs from a production one in exactly one respect — the
+AMP part is whatever the operator typed.
+
+The lane is deliberately **independent of the digest pipeline**: no saved config,
+no link secret and no monday token are required, because the subject under test
+is the message, not the data behind it. It does need a connected Gmail mailbox —
+it sends from the tenant's own sender, which is the whole point of testing DKIM
+alignment.
+
+**Failures are surfaced, not swallowed.** A Gmail rejection answers **502
+`send_failed`** carrying the provider's own message straight through to the pink
+box in the admin UI; that text is the debug output the operator came for.
+Guards ahead of it: `invalid_amp` / `invalid_recipient` / `invalid_subject`
+(400 — the recipient regex refuses header injection by construction) and
+`amp_too_large` above 1MB (413).
+
+**Express's JSON body limit moved to 2mb.** This is a product requirement, not
+tuning: the default is 100kb, which is *below* a realistic digest document, so at
+the default the new route would have rejected exactly the documents worth
+debugging. An oversized body now answers 413 `payload_too_large` instead of 500.
+The urlencoded parser keeps its default — `/amp/confirm` is the public write path
+and its bodies are a handful of short fields.
+
+The editor also shows the live UTF-8 byte count, flags the 100KB Gmail AMP-part
+ceiling before a send that would fail, marks when the text differs from what the
+renderer produced, and offers a one-click restore.
+
 ## 0.10.3 — 2026-07-29 — add an inert `text/html` fallback part (INTERNAL_ERROR hypothesis)
 
 The digest now goes out as **three** parts — `text/plain` → `text/x-amp-html` →
