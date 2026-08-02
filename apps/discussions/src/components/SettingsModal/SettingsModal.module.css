@@ -60,8 +60,10 @@
    (card-pane) overlay too; it must beat the generic `.overlayContained .modal`
    width above (higher specificity), so pin BOTH dimensions here. */
 .overlayContained .modalSquare {
-  width: min(744px, 98%);
-  height: min(744px, 98%);
+  /* round318 — tracks .modalSquare's +20% (744 → 893) so the contained overlay does
+     not silently keep the old default. */
+  width: min(893px, 98%);
+  height: min(893px, 98%);
   max-height: 100%;
 }
 
@@ -104,9 +106,11 @@
    Content scrolls internally (see `.content`), so a fixed square never clips. */
 .modalSquare {
   /* round290 (owner request) — +20% on the non-full tabs (mapping / preferences /
-     templates / permissions): 620 → 744. */
-  width: min(744px, 94vw);
-  height: min(744px, 94vh);
+     templates / permissions): 620 → 744.
+     round318 (owner request) — another +20%: 744 → 893. The viewport caps below are
+     what keep it from overflowing a small screen, so the default can grow freely. */
+  width: min(893px, 94vw);
+  height: min(893px, 94vh);
 }
 
 .header {
@@ -345,6 +349,13 @@
   gap: 12px;
   margin-top: 16px;
   padding-top: 12px;
+  /* round318 (owner request) — a gutter between the boxes' edge and this pane's own
+     scrollbar, which in RTL sits on the LEFT: `inline-end` is that side, and stays
+     correct if the pane is ever rendered LTR. `scrollbar-gutter: stable` reserves the
+     track even when the content is short, so the boxes do not shift sideways the
+     moment the list grows past the fold. */
+  padding-inline-end: 10px;
+  scrollbar-gutter: stable;
   border-top: 1px solid var(--ui-border-color, #c3c6d4);
 }
 
@@ -513,6 +524,28 @@
   flex-direction: column;
   align-items: stretch;
   gap: 10px;
+}
+/* round318 (owner request) — two short preference boxes on ONE row, half the width
+   each (לוגו + שמות התיבות). `align-items: stretch` (the default) keeps both boxes
+   the same height even when one grows — a logo thumbnail is taller than a row of
+   small fields.
+   The split is driven by WRAPPING, not by a viewport media query (PR review): this
+   modal renders `contained` inside the card pane, whose width is the iframe minus a
+   340px sidebar, so a viewport breakpoint reads a width this element never has. Equal
+   `flex-basis` + equal `flex-grow` gives a true half-and-half when both fit on one
+   line, and one-per-line at full width when they do not.
+   340px is not arbitrary: at that basis the narrower half still clears the three
+   name fields inside it (3 × 96px + 2 × 10px gap = 308, plus the row's 12px padding
+   each side = 332), so the pair can never sit side by side in a width that wraps
+   שמות התיבות onto a second line. */
+.prefPair {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.prefPair > * {
+  flex: 1 1 340px;
+  min-width: 0;
 }
 .prefControlFull {
   flex: 1 1 auto;
@@ -1054,10 +1087,21 @@
   opacity: 0;
   pointer-events: none;
 }
-.logoHint {
-  display: block;
-  margin-top: 8px;
-  color: var(--secondary-text-color, #676879);
+/* round318 — `.logoHint` is gone with the two paragraphs it styled (לוגו and
+   שמות התיבות); nothing else used it. `.prefHint` remains for the rows that still
+   caption a control. */
+/* round314 — the three box-name fields on one line, each taking an equal share and
+   wrapping together on a narrow modal rather than one field dropping alone. */
+.boxLabelsRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.boxLabelsRow > * {
+  /* round318 — basis 140px → 96px: the box is half-width now, and at 140 the three
+     fields no longer fit on one line, so the row wrapped to two. */
+  flex: 1 1 96px;
+  min-width: 0;
 }
 .logoError {
   display: block;

@@ -309,3 +309,59 @@
   border-radius: 100px;
   transition: width 0.2s ease;
 }
+
+/* round315 — the participants sub-editor: "כל משתתף בשורה נפרדת" + the ordered
+   profile parts that compose one participant. Indented under the משתתפים row so it
+   reads as belonging to it, and scoped tight so the meta list stays scannable. */
+.participantParts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 22px 8px 0;
+  padding-inline-start: 8px;
+  border-inline-start: 2px solid var(--ui-border-color, #d0d4e4);
+}
+.partRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.partRow input[type='checkbox'] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--primary-color, #0073ea);
+  flex-shrink: 0;
+}
+.partLabel {
+  font-size: 13px;
+  color: var(--primary-text-color, #323338);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.partSep {
+  font-size: 12px;
+  padding: 2px 6px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 4px;
+  background: var(--primary-background-color, #fff);
+  color: var(--primary-text-color, #323338);
+}
+/* The move buttons are neutral, not destructive — override .iconBtn's red hover. */
+.partMove {
+  display: inline-flex;
+  gap: 2px;
+}
+.partMove .iconBtn {
+  width: 22px;
+  height: 22px;
+  font-size: 13px;
+  line-height: 1;
+}
+.partMove .iconBtn:hover:not(:disabled) {
+  background: var(--primary-background-hover-color, #f5f6f8);
+  color: var(--primary-text-color, #323338);
+}
+.partMove .iconBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
