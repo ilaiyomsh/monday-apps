@@ -249,6 +249,20 @@ export const DEFAULT_PARTICIPANT_SEPARATOR = ', ';
 // The shipped composition: the name alone — byte-for-byte today's export.
 export const DEFAULT_PARTICIPANT_PARTS = [{ key: PARTICIPANT_PART_NAME, sep: DEFAULT_PARTICIPANT_SEPARATOR }];
 
+/*
+ * round316 (owner request) — the same two controls (line-per-person + profile
+ * parts) apply to EVERY people row of "פרטי הדיון", not just משתתפים: also
+ * מוביל/מנהל הדיון and מרכז הדיון. Maps the meta FIELD key to the model list that
+ * carries those people as objects; a field key absent from here is an ordinary
+ * text row (date, type, previous discussion) and keeps its simple rendering.
+ */
+export const PEOPLE_META_FIELDS = {
+  participantsText: 'participants',
+  leadText: 'lead',
+  coordinatorText: 'coordinator',
+};
+export const isPeopleMetaField = (key) => Object.prototype.hasOwnProperty.call(PEOPLE_META_FIELDS, key);
+
 export const DEFAULT_EXPORT_TEMPLATE = {
   defaultFormat: EXPORT_FORMATS.DOCX,
   headerMode: EXPORT_HEADER_MODES.CONFIG,
@@ -269,7 +283,15 @@ export const DEFAULT_EXPORT_TEMPLATE = {
         // "משתתפים:" label; `parts` composes ONE participant (see the constants
         // above). Both defaults reproduce today's single comma-joined row.
         { key: 'participantsText', enabled: true, label: 'משתתפים', perLine: false, parts: DEFAULT_PARTICIPANT_PARTS },
-        { key: 'leadText', enabled: true, label: 'מוביל דיון' },
+        { key: 'leadText', enabled: true, label: 'מוביל דיון', perLine: false, parts: DEFAULT_PARTICIPANT_PARTS },
+        /*
+         * round316 — מרכז דיון (discussionCoordinatorID) joins the metadata block.
+         * Enabled by default like every other meta row, which costs nothing for an
+         * instance that leaves the column unmapped or empty: a row with no value is
+         * never emitted (see buildMeta). seedExportTemplate back-fills it into
+         * templates saved before this round.
+         */
+        { key: 'coordinatorText', enabled: true, label: 'מרכז דיון', perLine: false, parts: DEFAULT_PARTICIPANT_PARTS },
         { key: 'typesText', enabled: true, label: 'סוג' },
         { key: 'previousText', enabled: true, label: 'דיון קודם' },
       ],

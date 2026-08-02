@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 /*
@@ -132,13 +132,19 @@ describe('the editor as rendered', () => {
     fireEvent.click(screen.getByLabelText('עוד'));
     await waitFor(() => expect(screen.getByText('כל משתתף בשורה נפרדת')).toBeTruthy());
   };
+  /*
+   * round316 — every PEOPLE row (משתתפים / מוביל דיון / מרכז דיון) now renders its
+   * own copy of this editor, so the part names repeat across the modal. Queries are
+   * scoped to the participants block, which is the one these tests are about.
+   */
+  const block = () => within(document.querySelector('[data-people-field="participantsText"]'));
 
   it('offers the per-line choice and the account custom field once the metas load', async () => {
     render(<Host />);
     await openMeta();
-    await waitFor(() => expect(screen.getByText('Pluga')).toBeTruthy());
-    expect(screen.getByText('שם')).toBeTruthy();
-    expect(screen.getByText('תפקיד (Title)')).toBeTruthy();
+    await waitFor(() => expect(block().getByText('Pluga')).toBeTruthy());
+    expect(block().getByText('שם')).toBeTruthy();
+    expect(block().getByText('תפקיד (Title)')).toBeTruthy();
   });
 
   it('turning on "כל משתתף בשורה נפרדת" writes perLine into the template', async () => {
@@ -153,7 +159,7 @@ describe('the editor as rendered', () => {
     let latest = null;
     render(<Host onChange={(t) => { latest = t; }} />);
     await openMeta();
-    fireEvent.click(screen.getByLabelText('תפקיד (Title)'));
+    fireEvent.click(block().getByLabelText('תפקיד (Title)'));
     await waitFor(() => expect(participantsField(latest).parts.map((p) => p.key)).toEqual(['name', 'title']));
   });
 
@@ -161,9 +167,9 @@ describe('the editor as rendered', () => {
     let latest = null;
     render(<Host onChange={(t) => { latest = t; }} />);
     await openMeta();
-    fireEvent.click(screen.getByLabelText('תפקיד (Title)'));
-    await waitFor(() => expect(screen.getByLabelText('הקדם את תפקיד (Title)')).toBeTruthy());
-    fireEvent.click(screen.getByLabelText('הקדם את תפקיד (Title)'));
+    fireEvent.click(block().getByLabelText('תפקיד (Title)'));
+    await waitFor(() => expect(block().getByLabelText('הקדם את תפקיד (Title)')).toBeTruthy());
+    fireEvent.click(block().getByLabelText('הקדם את תפקיד (Title)'));
     await waitFor(() => expect(participantsField(latest).parts.map((p) => p.key)).toEqual(['title', 'name']));
   });
 
@@ -172,9 +178,9 @@ describe('the editor as rendered', () => {
     render(<Host onChange={(t) => { latest = t; }} />);
     await openMeta();
     // The first (and only) selected part has nothing before it → no separator.
-    expect(screen.queryByLabelText('מפריד לפני שם')).toBeNull();
-    fireEvent.click(screen.getByLabelText('תפקיד (Title)'));
-    const sep = await waitFor(() => screen.getByLabelText('מפריד לפני תפקיד (Title)'));
+    expect(block().queryByLabelText('מפריד לפני שם')).toBeNull();
+    fireEvent.click(block().getByLabelText('תפקיד (Title)'));
+    const sep = await waitFor(() => block().getByLabelText('מפריד לפני תפקיד (Title)'));
     fireEvent.change(sep, { target: { value: ' ' } });
     await waitFor(() => expect(participantsField(latest).parts[1].sep).toBe(' '));
   });

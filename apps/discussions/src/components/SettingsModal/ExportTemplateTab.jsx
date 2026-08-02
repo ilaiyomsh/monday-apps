@@ -15,6 +15,7 @@ import {
   PARTICIPANT_CF_PREFIX,
   PARTICIPANT_SEPARATORS,
   DEFAULT_PARTICIPANT_SEPARATOR,
+  isPeopleMetaField,
 } from '../../utils/mondayApi/boards.config.js';
 import { resolveParticipantParts, partCustomFieldId } from '../../utils/participantFormat.js';
 import { fetchUserCustomFieldMetas } from '../../utils/mondayApi/userProfiles.js';
@@ -32,6 +33,16 @@ const FONT_OPTIONS = Object.entries(EXPORT_FONTS).map(([value, f]) => ({ value, 
  * rules hold in all three places this tab is rendered (Settings, a discussion
  * TYPE's template, the per-export dialog).
  */
+/*
+ * round316 — the per-line checkbox names the people it splits: "כל משתתף" for the
+ * participants row, "כל אדם" for the single-role rows (מוביל דיון / מרכז דיון),
+ * which usually hold one person but may hold several.
+ */
+const PER_LINE_LABELS = {
+  participantsText: 'כל משתתף בשורה נפרדת',
+  _default: 'כל אדם בשורה נפרדת',
+};
+
 const PART_LABELS = {
   [PARTICIPANT_PART_NAME]: 'שם',
   [PARTICIPANT_PART_TITLE]: 'תפקיד (Title)',
@@ -350,14 +361,17 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
   const renderParticipantParts = (field) => {
     const rows = participantPartRows(field, cfMetas);
     return (
-      <div className={styles.participantParts}>
+      // round316 — one block per PEOPLE row; the data attribute names which row it
+      // belongs to, since the same part names (שם / תפקיד / a custom field) now
+      // appear once per row and would otherwise be indistinguishable.
+      <div className={styles.participantParts} data-people-field={field.key}>
         <label className={styles.check}>
           <input
             type="checkbox"
             checked={field.perLine === true}
             onChange={(e) => patchMetaField(field.key, { perLine: e.target.checked })}
           />
-          <span>כל משתתף בשורה נפרדת</span>
+          <span>{PER_LINE_LABELS[field.key] || PER_LINE_LABELS._default}</span>
         </label>
         {rows.map((row) => (
           <div key={row.key} className={styles.partRow}>
@@ -524,11 +538,12 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
                         <input type="checkbox" checked={f.enabled !== false} onChange={(e) => patchMetaField(f.key, { enabled: e.target.checked })} />
                         <TextField value={f.label || ''} onChange={(val) => patchMetaField(f.key, { label: val })} size="small" />
                       </div>
-                      {/* round315 (owner request) — how a participant is written:
-                          one line each, and which profile parts compose the person
-                          (name / Title / any account custom field) in which order,
-                          with the separator that precedes each part. */}
-                      {f.key === 'participantsText' && renderParticipantParts(f)}
+                      {/* round315/round316 (owner request) — how a PERSON is written
+                          in this row (משתתפים / מוביל דיון / מרכז דיון): one line
+                          each, and which profile parts compose them (name / Title /
+                          any account custom field) in which order, with the
+                          separator that precedes each part. */}
+                      {isPeopleMetaField(f.key) && renderParticipantParts(f)}
                     </React.Fragment>
                   ))}
                 </div>
