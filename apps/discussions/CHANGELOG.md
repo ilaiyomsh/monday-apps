@@ -10,6 +10,25 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.4.7 — 2026-08-02
+
+- round318 (בקשת בעלים, מצילום מסך): **"לוגו" ו"שמות התיבות" יושבות זו לצד זו,
+  חצי רוחב כל אחת, בלי המלל המסביר; תיבת ההגדרות גדלה ב-20% ויש שוליים נקיים
+  מול פס הגלילה.**
+  - **הצמד:** שתי השורות עטופות ב-`.prefPair` עם `flex: 1 1 0` — בסיס 0 ולא
+    `auto`, אחרת התיבה עם התוכן הרחב יותר הייתה לוקחת יותר מחצי. מתחת ל-768px
+    הצמד נערם, כי חצי מרוחב של טלפון אינו תיבה שמישה.
+  - **המלל ירד משתיהן.** הפסקה של הלוגו והפסקה של שמות התיבות נמחקו; כפתור
+    ההעלאה ושלושת השדות עם ה-placeholder שלהם כבר אומרים מה הם. `.logoHint`
+    נמחק מה-CSS — לא נשאר לו שימוש. הודעת השגיאה של הלוגו נשארה.
+  - **שלושת השדות נשארים בשורה אחת** בחצי הרוחב: `flex-basis` ירד מ-140px
+    ל-96px, אחרת הם היו נשברים לשתי שורות בדיוק בגלל הצמצום.
+  - **גודל ברירת המחדל:** `.modalSquare` 744 → 893 (עוד 20% מעל round290),
+    וגם ה-`.overlayContained` שלו, אחרת התצוגה המוכלת הייתה נשארת על הישן.
+  - **שוליים מול פס הגלילה:** ל-`.prefs` נוסף `padding-inline-end: 10px` —
+    ב-RTL זה הצד השמאלי, שם יושב הפס — ו-`scrollbar-gutter: stable`, כדי
+    שהתיבות לא יזוזו הצידה ברגע שהרשימה עוברת את הקיפול.
+
 ## 2.4.6 — 2026-08-02
 
 - round317 (בקשת בעלים): **ההקמה שומרת את תפקידי המילוי-האוטומטי של עמודות
