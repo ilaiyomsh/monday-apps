@@ -1,5 +1,26 @@
 # Changelog
 
+## 3.11.0
+
+- **The text of the default (grey) label is now editable here**, like it is in a normal
+  status column's settings (owner request). Its card is always in the list, at the bottom
+  where monday shows it, with no colour picker and no remove button: the platform forces
+  the colour to grey `#c4c4c4` whatever enum is sent, and a label in that slot can never
+  be deleted afterwards. Two controls that would lie are two controls we do not draw.
+- **An empty default label is never written.** monday does not create it until it is
+  given a name — a fresh status column comes back with its four labels and no id 5 — so
+  the row the settings screen shows is synthesised, and a save that leaves it untouched
+  sends nothing. Otherwise merely opening the settings would hand the admin the one label
+  on the column that cannot be removed. Type a name and it is created (`color: explosive`,
+  no id — monday derives id 5 from the colour); clear the name on a label that already
+  exists and it is written as `label: ""`, which the platform keeps with its id intact.
+- The empty-name validation now applies to coloured labels only, `explosive` is reserved
+  out of every other label's colour picker, and the grey card is pinned to the bottom of
+  the list — the arrows neither move it nor move a coloured label past it.
+- All of it goes through the same `update_status_column` the app already used; no new
+  API path. Behaviour verified against the live API in the sandbox workspace (2026-07):
+  same id and hex across a rename, `id: 5` intact after clearing to `""`.
+
 ## 3.10.1
 
 - **Breathing room between monday's close button and the required-fields title** (owner

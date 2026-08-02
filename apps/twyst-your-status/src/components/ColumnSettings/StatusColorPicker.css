@@ -10,6 +10,18 @@
   background: #c4c4c4;
 }
 
+/* The default (grey) label's swatch: monday forces the colour, so the circle is a
+   readout, not a control — no pointer, no hover affordance. */
+.twyst-color-circle.is-static {
+  display: inline-block;
+  cursor: default;
+  box-sizing: border-box;
+}
+
+.twyst-color-circle.is-static:hover {
+  box-shadow: 0 0 0 1px var(--ui-border-color, #c3c6d4);
+}
+
 .twyst-color-circle:hover:not(:disabled) {
   box-shadow: 0 0 0 2px var(--primary-color, #0073ea);
 }

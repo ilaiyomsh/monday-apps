@@ -164,6 +164,17 @@
   color: #b42318;
 }
 
+/* The default (grey) label's card: same row, no reorder and no remove — monday keeps
+   this label at the bottom and never lets it go. The tag says why the buttons are gone. */
+.twyst-label-default-tag {
+  font-size: 12px;
+  color: #737373;
+  background: #f5f5f5;
+  border-radius: 6px;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
 .twyst-label-access {
   display: flex;
   flex-direction: column;
