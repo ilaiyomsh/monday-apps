@@ -27,9 +27,13 @@
  */
 
 import { api } from './monday-client.js';
+import { detectManagedDropdownColumnId, findManagedDropdownColumnByTitle } from './managedColumns.js';
 import logger from '../logger.js';
 
 const MODULE = 'provisionBoards';
+// The account-level managed dropdown's title. One constant so the create and the
+// idempotent title lookup can never drift apart (round312).
+const MANAGED_TYPE_TITLE = 'סוג דיון';
 
 /*
  * Status column (tasks.statusID) — exact label set, display order and colors the
@@ -113,6 +117,12 @@ export const PROVISION_SPEC = {
       // coordinator could never be assigned out of the box.
       { alias: 'discussionCoordinatorID', type: 'people', title: 'מרכז דיון' },
       { alias: 'participantsID', type: 'people', title: 'משתתפים' },
+      // round312 — EXTERNAL participants (round211). The alias has been in
+      // COLUMN_SCHEMA since round211 but was never provisioned, so on every fresh
+      // install the column did not exist and nothing could be mapped to it — the
+      // whole external-participants feature silently hid (owner-reported from a new
+      // account install). long_text holding comma-separated names.
+      { alias: 'externalParticipantsID', type: 'long_text', title: 'משתתפים חיצוניים' },
       { alias: 'creationDateID', type: 'date', title: 'תאריך יצירה' },
       { alias: 'discussionDateID', type: 'date', title: 'תאריך הדיון' },
       { alias: 'summaryFileID', type: 'file', title: 'קובץ סיכום (DOCS)' },
@@ -155,9 +165,27 @@ export const PROVISION_SPEC = {
     // discussionLinkID (back-link to discussions) is created as the reflection of
     // discussions.topicsBoardLinkID — see above.
     relations: [],
+    /*
+     * round312 — COLUMN_SCHEMA.topics declares SEVEN subitem aliases; this list
+     * carried only two, so on a fresh install monday's default English subitem
+     * columns (Owner/Status/Date) were all the board had and the other five aliases
+     * stayed unmapped (owner-reported: "the subitem column names are not in Hebrew
+     * and are not mapped"). All seven are provisioned now.
+     */
     subitems: [
       { alias: 'pointNotForDiscussionID', type: 'checkbox', title: 'האם להציג' },
       { alias: 'pointCreationDateID', type: 'date', title: 'תאריך יצירה' }, // round115
+      { alias: 'pointCheckedID', type: 'checkbox', title: 'האם נידונה' },
+      { alias: 'pointCreatorID', type: 'people', title: 'יוצר' },
+      { alias: 'pointResponsesID', type: 'long_text', title: 'התייחסויות' },
+    ],
+    // round312 — the two subitem-level connect-boards columns. They live on the
+    // topics SUBITEMS board (a point links to its own decisions/tasks), which the
+    // top-level `relations` loop cannot reach: that loop only knows the four main
+    // boards. Handled by a dedicated pass keyed on the subitems board id.
+    subitemRelations: [
+      { alias: 'pointDecisionsLinkID', target: 'decisions', title: 'החלטות' },
+      { alias: 'pointTasksLinkID', target: 'tasks', title: 'משימות' },
     ],
   },
   tasks: {
@@ -166,6 +194,10 @@ export const PROVISION_SPEC = {
       { alias: 'taskCreatorID', type: 'people', title: 'יוצר' },
       { alias: 'taskCreationDateID', type: 'date', title: 'תאריך יצירה' }, // round115
       { alias: 'responsibilityID', type: 'people', title: 'אחריות' },
+      // round312 — "שותפים" (round305). Same gap as externalParticipantsID: the
+      // alias reached COLUMN_SCHEMA but not this spec, so a fresh tasks board had
+      // no partners column and the "המשימות שלי" partners cell had nothing to map.
+      { alias: 'partnersID', type: 'people', title: 'שותפים' },
       { alias: 'deadlineID', type: 'date', title: 'דד ליין' },
       { alias: 'statusID', type: 'status', title: 'סטאטוס', defaults: STATUS_DEFAULTS },
       { alias: 'detailsID', type: 'long_text', title: 'מקור המשימה' },
@@ -215,7 +247,10 @@ function countSteps(tasks, createDiscussionsBoard = false) {
     } else if (!(key === 'tasks' && tasks?.mode === 'connect')) n += 1;
     n += spec.columns.length;
     n += (spec.relations || []).length;
-    if (spec.subitems) n += 1 + spec.subitems.length; // enable subitems + its columns
+    // enable subitems (once) + its own columns + (round312) its connect-boards columns
+    if (spec.subitems || spec.subitemRelations) {
+      n += 1 + (spec.subitems || []).length + (spec.subitemRelations || []).length;
+    }
   }
   n += 2; // managed type column "סוג דיון": account-level dropdown on discussions + the SAME column attached to tasks (round126)
   return n;
@@ -270,19 +305,37 @@ async function ensureColumn(boardId, existing, title, columnType, defaults) {
  * attach_dropdown_managed_column (board) → the board column instance. Created
  * EMPTY (no preset labels — each account defines its own types); labels are
  * added later via update_dropdown_managed_column using the persisted UUID.
- * Retry-safe: if a dropdown titled "סוג דיון"/"סוג" already exists on the board,
- * reuse it (managedColumnId unknown → null; the app can detect/persist it later).
+ * round312 (owner decision 2026-08-02: "the discussion-type column is ALWAYS
+ * managed") — this used to adopt ANY board dropdown titled "סוג דיון"/"סוג" as the
+ * type column, returning managedColumnId: null. On a customer's real board "סוג" is
+ * an ordinary column name, so the app happily mapped a PLAIN dropdown as the type
+ * column; adding a type then took the board-level update_dropdown_column path,
+ * which is what failed in the new account. An existing column is now adopted only
+ * when it can be tied to a managed column — by the caller's known UUID, or by
+ * label-signature detection. Otherwise a managed column is attached and mapped.
+ *
+ * Idempotence without a UUID comes from a title lookup on the ACCOUNT
+ * (findManagedDropdownColumnByTitle): detection cannot recognise an EMPTY managed
+ * column, so a bare re-run would otherwise mint a second account-level "סוג דיון"
+ * — clutter the app cannot clean up.
  */
 export async function ensureManagedTypeColumn(boardId, existing, knownManagedId = null) {
   const hit = (existing || []).find(
     (c) => c.type === 'dropdown' && (c.title === 'סוג דיון' || c.title === 'סוג')
   );
-  if (hit) return { id: String(hit.id), managedColumnId: knownManagedId };
-  let managedColumnId = knownManagedId;
+  if (hit) {
+    if (knownManagedId) return { id: String(hit.id), managedColumnId: String(knownManagedId) };
+    const detected = await detectManagedDropdownColumnId(boardId, String(hit.id));
+    if (detected) return { id: String(hit.id), managedColumnId: String(detected) };
+    logger.warn(MODULE, 'קיימת עמודת dropdown רגילה בשם סוג/סוג דיון — מחוברת עמודה מנוהלת במקומה', {
+      boardId: String(boardId), plainColumnId: String(hit.id), plainTitle: hit.title,
+    });
+  }
+  let managedColumnId = knownManagedId || (await findManagedDropdownColumnByTitle(MANAGED_TYPE_TITLE));
   if (!managedColumnId) {
     const created = await api(
       `mutation ($t: String!) { create_dropdown_managed_column(title: $t) { id } }`,
-      { t: 'סוג דיון' },
+      { t: MANAGED_TYPE_TITLE },
       'create_dropdown_managed_column'
     );
     managedColumnId = created?.create_dropdown_managed_column?.id;
@@ -569,12 +622,24 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       columns.discussions.discussionTypeID?.managedColumnId ||
       existingConfig?.columns?.discussions?.discussionTypeID?.managedColumnId ||
       null;
+    /*
+     * round312 — always go through ensureManagedTypeColumn, even with no known
+     * UUID: it now resolves the account's managed column by title itself, so the
+     * tasks board gets the SAME managed column as discussions instead of a plain
+     * dropdown bridged by text. The plain fallback stays for the one case that
+     * genuinely cannot be managed — an account where creating an account-level
+     * column is not permitted — because failing there would abort the whole
+     * install over a column the by-text bridge can live without.
+     */
     let tt;
-    if (knownManagedId) {
+    try {
       tt = await ensureManagedTypeColumn(boardIds.tasks, existingByBoard.tasks, knownManagedId);
-    } else {
-      logger.warn(MODULE, 'UUID של עמודת הסוג המנוהלת לא ידוע — נוצרת עמודת dropdown רגילה במשימות (גישור לפי טקסט)');
-      tt = { id: await ensureColumn(boardIds.tasks, existingByBoard.tasks, 'סוג דיון', 'dropdown'), managedColumnId: null };
+    } catch (err) {
+      logger.warn(MODULE, 'לא ניתן לחבר עמודה מנוהלת במשימות — נוצרת עמודת dropdown רגילה (גישור לפי טקסט)', err);
+      tt = {
+        id: await ensureColumn(boardIds.tasks, existingByBoard.tasks, MANAGED_TYPE_TITLE, 'dropdown'),
+        managedColumnId: null,
+      };
     }
     columns.tasks.taskTypeID = {
       id: tt.id, type: 'dropdown', title: 'סוג דיון', verified: true, managedColumnId: tt.managedColumnId,
@@ -582,16 +647,21 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
     tick('עמודת סוג דיון במשימות (אותה עמודה מנוהלת)');
   }
 
-  // 3) subitems (topics): enable + add its checkbox columns
+  // 3) subitems (topics): enable + add its own columns, plus (round312) the two
+  // per-POINT connect-boards columns, which live on the SUBITEMS board and so are
+  // out of reach of the main `relations` pass below.
   for (const key of BOARD_ORDER) {
     const subSpec = PROVISION_SPEC[key].subitems;
-    if (!subSpec) continue;
+    const subRelSpec = PROVISION_SPEC[key].subitemRelations || [];
+    if (!subSpec && !subRelSpec.length) continue;
     // TOP-UP: only the subitem columns not already mapped need work; if every one
     // is already mapped, skip enabling/reading the subitems board entirely.
-    const subMissing = existingConfig
-      ? subSpec.filter((col) => !hasId(existingConfig.columns?.[key]?.[col.alias]))
-      : subSpec;
-    if (!subMissing.length) continue;
+    const unmapped = (list) => (existingConfig
+      ? list.filter((col) => !hasId(existingConfig.columns?.[key]?.[col.alias]))
+      : list);
+    const subMissing = unmapped(subSpec || []);
+    const subRelMissing = unmapped(subRelSpec);
+    if (!subMissing.length && !subRelMissing.length) continue;
     setPhase(PHASE_LABELS[key]);
     const subBoardId = await ensureSubitemsBoard(boardIds[key]);
     tick('הופעלו תת-פריטים');
@@ -600,6 +670,17 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       const id = await ensureColumn(subBoardId, subExisting, col.title, col.type, col.defaults);
       columns[key][col.alias] = { id, type: col.type, title: col.title, verified: true, subitems: true };
       tick(`עמודת תת-פריט: ${col.title}`);
+    }
+    // The app only ever READS/WRITES the subitems side of these two, and a
+    // reflection on the decisions/tasks board would be noise there — so they are
+    // created UNLINKED-back (ensureRelationColumn's linked shape targets the board;
+    // the reflection it may create is simply never mapped).
+    for (const rel of subRelMissing) {
+      const id = await ensureRelationColumn(subBoardId, subExisting, rel.title, boardIds[rel.target]);
+      columns[key][rel.alias] = {
+        id, type: 'board_relation', title: rel.title, verified: true, subitems: true,
+      };
+      tick(`עמודת קישור בתת-פריט: ${rel.title}`);
     }
   }
 

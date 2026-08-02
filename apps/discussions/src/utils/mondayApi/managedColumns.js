@@ -166,6 +166,50 @@ function dropdownBoardLabels(col) {
 }
 
 /**
+ * round312 — find the ACCOUNT's managed dropdown column by exact TITLE.
+ *
+ * Why a title lookup exists at all: label-signature detection
+ * (detectManagedDropdownColumnId below) needs the column to HAVE labels, so it
+ * cannot recognise a freshly created, still-empty managed column. Provisioning
+ * needs exactly that recognition to stay idempotent — without it, a re-run
+ * (or a top-up on an install whose UUID was never persisted) would mint a SECOND
+ * account-level "סוג דיון" column, and account-level clutter cannot be cleaned up
+ * from inside the app.
+ *
+ * Exactly one match → its id. Zero or several → null: with duplicates there is no
+ * safe way to pick, and guessing would attach the wrong shared column to a
+ * customer's board. Best-effort — any API failure returns null, and the caller
+ * then treats the column as regular rather than breaking provisioning.
+ *
+ * @param {string} title
+ * @returns {Promise<string|null>}
+ */
+export async function findManagedDropdownColumnByTitle(title) {
+  const wanted = String(title || '').trim();
+  if (!wanted) return null;
+  try {
+    const data = await api(
+      `query { managed_column(state: active) { id title settings_json } }`,
+      {},
+      'findManagedDropdownColumnByTitle'
+    );
+    const hits = (data?.managed_column || []).filter(
+      (m) => m?.settings_json?.type === 'dropdown' && String(m?.title || '').trim() === wanted
+    );
+    if (hits.length === 1) return String(hits[0].id);
+    if (hits.length > 1) {
+      logger.warn('managedColumns', 'כמה עמודות מנוהלות עם אותה כותרת — לא ניתן לבחור אחת', {
+        title: wanted, count: hits.length,
+      });
+    }
+    return null;
+  } catch (err) {
+    logger.warn('managedColumns', 'חיפוש עמודה מנוהלת לפי כותרת נכשל', err);
+    return null;
+  }
+}
+
+/**
  * Detect the account managed DROPDOWN column backing a board dropdown column,
  * returning its UUID (or null). The dropdown analog of detectManagedColumnId,
  * but MORE ROBUST about reading the board column's labels: a board dropdown
