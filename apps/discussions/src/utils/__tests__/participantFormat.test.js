@@ -27,9 +27,9 @@ const IDO = {
 };
 const NO_TITLE = { id: '2', name: 'דנה כהן', title: '', customFields: {} };
 
-const participantsField = () => DEFAULT_EXPORT_TEMPLATE.sections
-  .find((s) => s.key === 'meta').fields
-  .find((f) => f.key === 'participantsText');
+// round319 — the composition moved off the participants ROW onto the template's one
+// people setting; the row itself now carries only label/enabled.
+const shippedPeople = () => DEFAULT_EXPORT_TEMPLATE.people;
 
 describe('the shipped default composition', () => {
   it('is the NAME alone, so an untouched instance exports exactly as before', () => {
@@ -37,10 +37,10 @@ describe('the shipped default composition', () => {
     expect(formatParticipantLabel(IDO, DEFAULT_PARTICIPANT_PARTS)).toBe('עידו פיוטרקובסקי');
   });
 
-  it('is what the default template ships on the participants meta field', () => {
-    const field = participantsField();
-    expect(field.perLine).toBe(false);
-    expect(resolveParticipantParts(field).map((p) => p.key)).toEqual(['name']);
+  it('is what the default template ships as its ONE people setting', () => {
+    const people = shippedPeople();
+    expect(people.perLine).toBe(false);
+    expect(resolveParticipantParts(people).map((p) => p.key)).toEqual(['name']);
   });
 });
 

@@ -15,9 +15,9 @@ import {
   PARTICIPANT_CF_PREFIX,
   PARTICIPANT_SEPARATORS,
   DEFAULT_PARTICIPANT_SEPARATOR,
-  isPeopleMetaField,
 } from '../../utils/mondayApi/boards.config.js';
-import { resolveParticipantParts, partCustomFieldId } from '../../utils/participantFormat.js';
+import { resolveParticipantParts, resolvePeopleFormat, partCustomFieldId } from '../../utils/participantFormat.js';
+import logger from '../../utils/logger.js';
 import { fetchUserCustomFieldMetas } from '../../utils/mondayApi/userProfiles.js';
 import { computeFloatingPosition } from '../../utils/overlayPlacement.js';
 import { estimateAssetsBytes, EXPORT_ASSETS_MAX_BYTES } from '../../utils/exportAssets.js';
@@ -34,14 +34,11 @@ const FONT_OPTIONS = Object.entries(EXPORT_FONTS).map(([value, f]) => ({ value, 
  * TYPE's template, the per-export dialog).
  */
 /*
- * round316 — the per-line checkbox names the people it splits: "כל משתתף" for the
- * participants row, "כל אדם" for the single-role rows (מוביל דיון / מרכז דיון),
- * which usually hold one person but may hold several.
+ * round316/round319 — the per-line checkbox governs every person in the document
+ * now (משתתפים, מוביל דיון, מרכז דיון), so it is named for people rather than for
+ * one row's role.
  */
-const PER_LINE_LABELS = {
-  participantsText: 'כל משתתף בשורה נפרדת',
-  _default: 'כל אדם בשורה נפרדת',
-};
+const PER_LINE_LABEL = 'כל אדם בשורה נפרדת';
 
 const PART_LABELS = {
   [PARTICIPANT_PART_NAME]: 'שם',
@@ -290,18 +287,13 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
           : s
       ),
     }));
-  // round315 — same as patchMetaField, but the next field is DERIVED from the live
-  // one by a pure helper (participant parts). Passing a pre-computed field object as
-  // a patch would write back a snapshot from render time; this always reads current.
-  const patchMetaFieldWith = (fieldKey, fn) =>
-    setTemplate((prev) => ({
-      ...prev,
-      sections: prev.sections.map((s) =>
-        s.key === 'meta'
-          ? { ...s, fields: (s.fields || []).map((f) => (f.key === fieldKey ? fn(f) : f)) }
-          : s
-      ),
-    }));
+  // round319 — the ONE people format (was round315's per-field copy). `…With` derives
+  // the next value from the LIVE one via a pure helper; passing a pre-computed object
+  // would write back a snapshot from render time.
+  const patchPeople = (patch) =>
+    setTemplate((prev) => ({ ...prev, people: { ...resolvePeopleFormat(prev), ...patch } }));
+  const patchPeopleWith = (fn) =>
+    setTemplate((prev) => ({ ...prev, people: fn(resolvePeopleFormat(prev)) }));
   const patchBand = (band, patch) => setTemplate((prev) => ({ ...prev, [band]: { ...prev[band], ...patch } }));
 
   const onDragEnd = (event) => {
@@ -354,31 +346,54 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
   const [cfMetas, setCfMetas] = useState([]);
   useEffect(() => {
     let alive = true;
-    fetchUserCustomFieldMetas().then((list) => { if (alive) setCfMetas(list || []); });
+    // The rejection path was floating (error-guard, caught on this round's edit):
+    // userProfiles.js already logs the failure, but an unhandled rejection still
+    // reached the global handler as a second, contextless report. Swallowing is not
+    // an option either — this records WHERE it was swallowed and why that is safe.
+    fetchUserCustomFieldMetas()
+      .then((list) => { if (alive) setCfMetas(list || []); })
+      .catch((err) => {
+        logger.warn('ExportTemplateTab', 'טעינת שדות הפרופיל נכשלה; נשארים עם שם + תפקיד', err);
+      });
     return () => { alive = false; };
   }, []);
 
-  const renderParticipantParts = (field) => {
-    const rows = participantPartRows(field, cfMetas);
+  /*
+   * round319 (owner request) — ONE "אנשים" block for the whole document, replacing
+   * round316's block per people row. The format is a property of "a person", not of
+   * the column they came from, so it is configured once and applies to משתתפים,
+   * מוביל דיון and מרכז דיון alike.
+   */
+  const renderPeopleFormat = () => {
+    const people = resolvePeopleFormat(template);
+    const rows = participantPartRows(people, cfMetas);
     return (
-      // round316 — one block per PEOPLE row; the data attribute names which row it
-      // belongs to, since the same part names (שם / תפקיד / a custom field) now
-      // appear once per row and would otherwise be indistinguishable.
-      <div className={styles.participantParts} data-people-field={field.key}>
+      <div className={styles.participantParts} data-people-field="all">
+        <Text type="text2" weight="medium">אנשים</Text>
         <label className={styles.check}>
           <input
             type="checkbox"
-            checked={field.perLine === true}
-            onChange={(e) => patchMetaField(field.key, { perLine: e.target.checked })}
+            checked={people.perLine === true}
+            onChange={(e) => patchPeople({ perLine: e.target.checked })}
           />
-          <span>{PER_LINE_LABELS[field.key] || PER_LINE_LABELS._default}</span>
+          <span>{PER_LINE_LABEL}</span>
+        </label>
+        {/* The externals are free text with no monday profile, so the parts above
+            cannot apply to them — merged, they appear as the plain names typed. */}
+        <label className={styles.check}>
+          <input
+            type="checkbox"
+            checked={people.includeExternal === true}
+            onChange={(e) => patchPeople({ includeExternal: e.target.checked })}
+          />
+          <span>משתתפים חיצוניים כחלק מרשימת המשתתפים</span>
         </label>
         {rows.map((row) => (
           <div key={row.key} className={styles.partRow}>
             <input
               type="checkbox"
               checked={row.selected}
-              onChange={() => patchMetaFieldWith(field.key, (live) => toggleParticipantPart(live, row.key, row.label))}
+              onChange={() => patchPeopleWith((live) => toggleParticipantPart(live, row.key, row.label))}
               aria-label={row.label}
             />
             <span className={styles.partLabel}>{row.label}</span>
@@ -386,7 +401,7 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
               <select
                 className={styles.partSep}
                 value={row.sep}
-                onChange={(e) => patchMetaFieldWith(field.key, (live) => setParticipantPartSep(live, row.key, e.target.value))}
+                onChange={(e) => patchPeopleWith((live) => setParticipantPartSep(live, row.key, e.target.value))}
                 aria-label={`מפריד לפני ${row.label}`}
               >
                 {PARTICIPANT_SEPARATORS.map((s) => (
@@ -400,14 +415,14 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
                   type="button"
                   className={styles.iconBtn}
                   disabled={!row.canUp}
-                  onClick={() => patchMetaFieldWith(field.key, (live) => moveParticipantPart(live, row.key, -1))}
+                  onClick={() => patchPeopleWith((live) => moveParticipantPart(live, row.key, -1))}
                   aria-label={`הקדם את ${row.label}`}
                 >↑</button>
                 <button
                   type="button"
                   className={styles.iconBtn}
                   disabled={!row.canDown}
-                  onClick={() => patchMetaFieldWith(field.key, (live) => moveParticipantPart(live, row.key, 1))}
+                  onClick={() => patchPeopleWith((live) => moveParticipantPart(live, row.key, 1))}
                   aria-label={`אחר את ${row.label}`}
                 >↓</button>
               </span>
@@ -533,19 +548,17 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
               {section.key === 'meta' && metaSection && (
                 <div className={styles.metaFields}>
                   {(metaSection.fields || []).map((f) => (
-                    <React.Fragment key={f.key}>
-                      <div className={styles.metaFieldRow}>
-                        <input type="checkbox" checked={f.enabled !== false} onChange={(e) => patchMetaField(f.key, { enabled: e.target.checked })} />
-                        <TextField value={f.label || ''} onChange={(val) => patchMetaField(f.key, { label: val })} size="small" />
-                      </div>
-                      {/* round315/round316 (owner request) — how a PERSON is written
-                          in this row (משתתפים / מוביל דיון / מרכז דיון): one line
-                          each, and which profile parts compose them (name / Title /
-                          any account custom field) in which order, with the
-                          separator that precedes each part. */}
-                      {isPeopleMetaField(f.key) && renderParticipantParts(f)}
-                    </React.Fragment>
+                    <div className={styles.metaFieldRow} key={f.key}>
+                      <input type="checkbox" checked={f.enabled !== false} onChange={(e) => patchMetaField(f.key, { enabled: e.target.checked })} />
+                      <TextField value={f.label || ''} onChange={(val) => patchMetaField(f.key, { label: val })} size="small" />
+                    </div>
                   ))}
+                  {/* round319 (owner request) — ONE block, after the rows it governs:
+                      how every person in the document is written (line each, which
+                      profile parts in which order, the separator before each), and
+                      whether the external participants join the משתתפים list. Was a
+                      block per people row until round316. */}
+                  {renderPeopleFormat()}
                 </div>
               )}
             </SortableSectionRow>

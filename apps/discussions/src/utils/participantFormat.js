@@ -44,6 +44,26 @@ export function resolveParticipantParts(field) {
   return clean.length ? clean : DEFAULT_PARTICIPANT_PARTS;
 }
 
+/**
+ * The ONE people format a template carries (round319): how every person in the
+ * document is written, and whether the external participants join the participants
+ * list instead of getting their own row.
+ *
+ * `includeExternal` is coerced rather than trusted: it decides whether two lists
+ * become one, and a stored `"false"` (or any truthy leftover) merging them would be
+ * a document the owner never asked for.
+ *
+ * @param {{ people?: { perLine?: boolean, parts?: Array, includeExternal?: boolean } }} template
+ */
+export function resolvePeopleFormat(template) {
+  const people = template && typeof template === 'object' ? template.people : null;
+  return {
+    perLine: people?.perLine === true,
+    parts: resolveParticipantParts(people),
+    includeExternal: people?.includeExternal === true,
+  };
+}
+
 export function isKnownPartKey(key) {
   if (key === PARTICIPANT_PART_NAME || key === PARTICIPANT_PART_TITLE) return true;
   return typeof key === 'string' && key.startsWith(PARTICIPANT_CF_PREFIX) && key.length > PARTICIPANT_CF_PREFIX.length;

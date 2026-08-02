@@ -37,12 +37,26 @@ const linesOf = async (model, template) => {
 };
 
 const metaFields = (tpl) => tpl.sections.find((s) => s.key === 'meta').fields;
-// A template with `patch` applied to ONE meta field.
-const tplField = (fieldKey, patch) => ({
+/*
+ * A template with `patch` applied to ONE meta field.
+ *
+ * round319 — the people FORMAT (`perLine`/`parts`) is no longer per row: it lives
+ * once on `template.people` and governs all three. The helper still takes a field
+ * key so each case reads as "configured via this row", but the format keys are
+ * routed to the shared setting — which is exactly why the two "independently"
+ * cases below were rewritten rather than repaired.
+ */
+const tplField = (fieldKey, { perLine, parts, includeExternal, ...fieldPatch }) => ({
   ...DEFAULT_EXPORT_TEMPLATE,
+  people: {
+    ...DEFAULT_EXPORT_TEMPLATE.people,
+    ...(perLine === undefined ? {} : { perLine }),
+    ...(parts === undefined ? {} : { parts }),
+    ...(includeExternal === undefined ? {} : { includeExternal }),
+  },
   sections: DEFAULT_EXPORT_TEMPLATE.sections.map((s) => (
     s.key === 'meta'
-      ? { ...s, fields: s.fields.map((f) => (f.key === fieldKey ? { ...f, ...patch } : f)) }
+      ? { ...s, fields: s.fields.map((f) => (f.key === fieldKey ? { ...f, ...fieldPatch } : f)) }
       : s
   )),
 });
@@ -74,12 +88,16 @@ describe('which meta rows are people rows', () => {
     expect(isPeopleMetaField('typesText')).toBe(false);
   });
 
-  it('ships all three with the neutral defaults (one row, name only)', () => {
+  it('ships the neutral defaults ONCE, not per row (round319)', () => {
+    expect(DEFAULT_EXPORT_TEMPLATE.people.perLine).toBe(false);
+    expect(DEFAULT_EXPORT_TEMPLATE.people.parts).toEqual(DEFAULT_PARTICIPANT_PARTS);
+    // The rows themselves no longer carry a format — that is the whole point of
+    // the change: one setting, not three to keep in sync.
     metaFields(DEFAULT_EXPORT_TEMPLATE)
       .filter((f) => isPeopleMetaField(f.key))
       .forEach((f) => {
-        expect(f.perLine).toBe(false);
-        expect(f.parts).toEqual(DEFAULT_PARTICIPANT_PARTS);
+        expect(f.perLine).toBeUndefined();
+        expect(f.parts).toBeUndefined();
       });
   });
 
@@ -124,14 +142,19 @@ describe('the lead and coordinator rows in the rendered document', () => {
     expect(lines).toContain('מרכז דיון: נועה אביב');
   });
 
-  it('per-line on מוביל דיון — a label line then one line per person', async () => {
+  it('per-line — a label line then one line per person, on every row at once', async () => {
     const lines = await linesOf(modelOf(), tplField('leadText', { perLine: true }));
     const at = lines.indexOf('מוביל דיון:');
     expect(at).toBeGreaterThanOrEqual(0);
     expect(lines[at + 1]).toBe('שירה לוי');
     expect(lines[at + 2]).toBe('אורי דגן');
-    // …and the participants row is untouched by the lead's setting.
-    expect(lines).toContain('משתתפים: עידו פיוטרקובסקי');
+    /*
+     * round319 INVERTED this assertion. It used to read "…and the participants row
+     * is untouched by the lead's setting" — per-row independence was the round316
+     * contract. The owner asked for one setting for all people, so the participants
+     * row now follows it too, and the label-then-lines shape is what proves it.
+     */
+    expect(lines[lines.indexOf('משתתפים:') + 1]).toBe('עידו פיוטרקובסקי');
   });
 
   it('parts on מוביל דיון — the chosen titles, in the chosen order', async () => {
@@ -143,14 +166,16 @@ describe('the lead and coordinator rows in the rendered document', () => {
     expect(lines).toContain('מוביל דיון: גב׳ שירה לוי, מנכ"לית, אורי דגן');
   });
 
-  it('parts on מרכז דיון work independently of the other rows', async () => {
+  it('parts reach EVERY row from the one setting (round319 replaced per-row parts)', async () => {
     const tpl = tplField('coordinatorText', {
       parts: [{ key: 'name', sep: ', ' }, { key: 'title', sep: ' — ' }],
     });
     const lines = await linesOf(modelOf(), tpl);
     expect(lines).toContain('מרכז דיון: נועה אביב — רכזת ישיבות');
-    expect(lines).toContain('משתתפים: עידו פיוטרקובסקי');
-    expect(lines).toContain('מוביל דיון: שירה לוי, אורי דגן');
+    // The same composition, applied to the other two rows. אורי דגן has no Title,
+    // so he stays a bare name — the part is skipped, not written empty.
+    expect(lines).toContain('משתתפים: עידו פיוטרקובסקי — מנהל מחלקת מכירות');
+    expect(lines).toContain('מוביל דיון: שירה לוי — מנכ"לית, אורי דגן');
   });
 
   it('honours a renamed label — the owner who says "מנהל דיון" writes that', async () => {
@@ -186,7 +211,10 @@ describe('the lead and coordinator rows in the rendered document', () => {
     const lines = await linesOf(legacy, tplField('leadText', { perLine: true }));
     expect(lines).toContain('מוביל דיון:');
     expect(lines[lines.indexOf('מוביל דיון:') + 1]).toBe('שירה לוי, אורי דגן');
-    expect(lines).toContain('מרכז דיון: נועה אביב');
+    // round319 — per-line now governs this row too, so the coordinator's flat text
+    // lands UNDER its label rather than beside it. Still the flat text: a model
+    // without the structured lists has no profiles to compose from.
+    expect(lines[lines.indexOf('מרכז דיון:') + 1]).toBe('נועה אביב');
   });
 
   it('the externals split stays a property of the PARTICIPANTS row only', async () => {

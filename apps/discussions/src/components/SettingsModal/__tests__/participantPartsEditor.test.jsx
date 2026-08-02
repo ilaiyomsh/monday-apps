@@ -110,6 +110,8 @@ describe('the pure part editors', () => {
   });
 });
 
+const PER_LINE_TEXT = 'כל אדם בשורה נפרדת';
+
 describe('the editor as rendered', () => {
   const Host = ({ onChange }) => {
     const [template, setTemplate] = React.useState(DEFAULT_EXPORT_TEMPLATE);
@@ -126,18 +128,19 @@ describe('the editor as rendered', () => {
       />
     );
   };
-  const participantsField = (tpl) => tpl.sections.find((s) => s.key === 'meta').fields.find((f) => f.key === 'participantsText');
+  /*
+   * round319 — the composition is read off the template's ONE people setting. It was
+   * `participantsText`'s own until round316; the editor no longer writes there, and
+   * these cases assert the setting the renderer now reads.
+   */
+  const peopleOf = (tpl) => tpl.people;
   // Only the מטא section expands, via the chevron on its row.
   const openMeta = async () => {
     fireEvent.click(screen.getByLabelText('עוד'));
-    await waitFor(() => expect(screen.getByText('כל משתתף בשורה נפרדת')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(PER_LINE_TEXT)).toBeTruthy());
   };
-  /*
-   * round316 — every PEOPLE row (משתתפים / מוביל דיון / מרכז דיון) now renders its
-   * own copy of this editor, so the part names repeat across the modal. Queries are
-   * scoped to the participants block, which is the one these tests are about.
-   */
-  const block = () => within(document.querySelector('[data-people-field="participantsText"]'));
+  // One block for all people rows (was one per row in round316).
+  const block = () => within(document.querySelector('[data-people-field="all"]'));
 
   it('offers the per-line choice and the account custom field once the metas load', async () => {
     render(<Host />);
@@ -147,12 +150,12 @@ describe('the editor as rendered', () => {
     expect(block().getByText('תפקיד (Title)')).toBeTruthy();
   });
 
-  it('turning on "כל משתתף בשורה נפרדת" writes perLine into the template', async () => {
+  it(`turning on "${'כל אדם בשורה נפרדת'}" writes perLine into the ONE people setting`, async () => {
     let latest = null;
     render(<Host onChange={(t) => { latest = t; }} />);
     await openMeta();
-    fireEvent.click(screen.getByText('כל משתתף בשורה נפרדת'));
-    await waitFor(() => expect(participantsField(latest).perLine).toBe(true));
+    fireEvent.click(screen.getByText(PER_LINE_TEXT));
+    await waitFor(() => expect(peopleOf(latest).perLine).toBe(true));
   });
 
   it('checking תפקיד appends it to the composition', async () => {
@@ -160,7 +163,7 @@ describe('the editor as rendered', () => {
     render(<Host onChange={(t) => { latest = t; }} />);
     await openMeta();
     fireEvent.click(block().getByLabelText('תפקיד (Title)'));
-    await waitFor(() => expect(participantsField(latest).parts.map((p) => p.key)).toEqual(['name', 'title']));
+    await waitFor(() => expect(peopleOf(latest).parts.map((p) => p.key)).toEqual(['name', 'title']));
   });
 
   it('the arrow reorders the composition', async () => {
@@ -170,7 +173,7 @@ describe('the editor as rendered', () => {
     fireEvent.click(block().getByLabelText('תפקיד (Title)'));
     await waitFor(() => expect(block().getByLabelText('הקדם את תפקיד (Title)')).toBeTruthy());
     fireEvent.click(block().getByLabelText('הקדם את תפקיד (Title)'));
-    await waitFor(() => expect(participantsField(latest).parts.map((p) => p.key)).toEqual(['title', 'name']));
+    await waitFor(() => expect(peopleOf(latest).parts.map((p) => p.key)).toEqual(['title', 'name']));
   });
 
   it('the separator dropdown appears only for a part that FOLLOWS another', async () => {
@@ -182,6 +185,6 @@ describe('the editor as rendered', () => {
     fireEvent.click(block().getByLabelText('תפקיד (Title)'));
     const sep = await waitFor(() => block().getByLabelText('מפריד לפני תפקיד (Title)'));
     fireEvent.change(sep, { target: { value: ' ' } });
-    await waitFor(() => expect(participantsField(latest).parts[1].sep).toBe(' '));
+    await waitFor(() => expect(peopleOf(latest).parts[1].sep).toBe(' '));
   });
 });

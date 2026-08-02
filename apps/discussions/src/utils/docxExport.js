@@ -39,7 +39,7 @@ import { loadBackgroundUpdateId } from './backgroundStore.js';
 import { getItemUpdate } from './mondayApi/updates.js';
 import { isSummaryHtmlEmpty } from './summaryHtml.js';
 import { parseExternalParticipants } from './externalParticipants.js';
-import { formatParticipantLabels, resolveParticipantParts } from './participantFormat.js';
+import { formatParticipantLabels, resolvePeopleFormat } from './participantFormat.js';
 import { fetchUserProfiles } from './mondayApi/userProfiles.js';
 import { uploadFileToColumnSeamless, clearFileColumn } from './mondayApi/fileUpload.js';
 import { spliceBodyIntoTemplate, templateTextWidthDxa } from './docxTemplateMerge.js';
@@ -804,6 +804,9 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   const buildMeta = (section) => {
     const out = [];
     const fields = Array.isArray(section?.fields) ? section.fields : [];
+    // round319 — ONE people format for the whole document, read once here rather
+    // than per row: every people row writes its people the same way.
+    const { perLine, parts, includeExternal } = resolvePeopleFormat(template);
     for (const f of fields) {
       if (!f || f.enabled === false) continue;
       const value = model[f.key];
@@ -818,27 +821,37 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
        */
       if (isPeopleMetaField(f.key)) {
         const people = model[PEOPLE_META_FIELDS[f.key]];
-        const perLine = f.perLine === true;
         /*
          * Prefer the structured list (it carries the profile data the parts are
          * composed from) and fall back to the flat text for a model built before
          * round315 / without profiles, so an old caller renders exactly as it did.
          */
         const labels = Array.isArray(people) && people.length
-          ? formatParticipantLabels(people, resolveParticipantParts(f))
+          ? formatParticipantLabels(people, parts)
           : (value ? [value] : []);
         const ext = f.key === 'participantsText' ? model.externalParticipantsText : '';
+        // External participants are free text (no monday profile), so the PARTS
+        // never apply to them — inventing a Title for a name typed by hand would
+        // put somebody else's title on them.
+        const extNames = Array.isArray(model.externalParticipants) && model.externalParticipants.length
+          ? model.externalParticipants
+          : (ext ? [ext] : []);
+        /*
+         * round319 — the externals either JOIN the participants list or keep
+         * round211's separate row. Merged, the row is not re-labelled "פנימיים"
+         * either: there is no second group left to tell it apart from.
+         */
+        if (ext && includeExternal) {
+          out.push(...peopleBlock(f.label || '', [...labels, ...extNames], perLine));
+          continue;
+        }
         const label = ext && (!f.label || f.label === 'משתתפים')
           ? 'משתתפים פנימיים'
           : (f.label || '');
         out.push(...peopleBlock(label, labels, perLine));
-        // External participants are free text (no monday profile), so the PARTS
-        // never apply to them — but the per-line choice does, or the block would
-        // read half one way and half the other.
         if (ext) {
-          const extNames = Array.isArray(model.externalParticipants) && model.externalParticipants.length
-            ? model.externalParticipants
-            : [ext];
+          // The per-line choice DOES apply to them, or the block would read half
+          // one way and half the other.
           out.push(...peopleBlock('משתתפים חיצוניים', perLine ? extNames : [ext], perLine));
         }
         continue;
