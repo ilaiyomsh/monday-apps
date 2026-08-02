@@ -19,6 +19,12 @@ export function computeScaledSize(w, h, max) {
   };
 }
 
+// round307 — the cap the Settings upload uses. The splash renders the logo inside
+// a 190x56 CSS-pixel box, so 320px on the long edge is already >2x for retina and
+// keeps the stored data-URI small: the value rides inside the settings JSON, which
+// SettingsGate BLOCKS RENDER on, so a fat logo would slow every app boot.
+export const LOGO_MAX_PX = 320;
+
 // Read an image File, downscale to fit `maxPx`, and resolve a PNG data-URI.
 export function fileToLogoDataUrl(file, { maxPx = 320, type = 'image/png' } = {}) {
   return new Promise((resolve, reject) => {
