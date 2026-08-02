@@ -37,6 +37,7 @@ const META_SAMPLE = {
   dateText: 'יום שני, 1 ביולי 2026',
   participantsText: 'דנה כהן, יוסי לוי, מיכל בר',
   leadText: 'עידו פיוטרקובסקי',
+  coordinatorText: 'נועה אביב',
   typesText: 'ישיבת הנהלה',
   previousText: 'סיכום רבעון קודם',
 };
@@ -66,6 +67,9 @@ const LIVE_SAMPLE_INPUTS = {
       { id: '3', name: 'מיכל בר' },
     ],
     discussionLeadID: [{ id: '4', name: 'עידו פיוטרקובסקי' }],
+    // round316 — מרכז דיון in the sample too, so its row (and its own line/parts
+    // controls) are visible in the preview instead of only in a real discussion.
+    discussionCoordinatorID: [{ id: '5', name: 'נועה אביב' }],
   },
   /*
    * round315 — sample PROFILE data for the participants, so choosing תפקיד or a
@@ -78,6 +82,8 @@ const LIVE_SAMPLE_INPUTS = {
     1: { title: 'מנהלת מחלקת מכירות', customFields: {} },
     2: { title: 'סמנכ"ל תפעול', customFields: {} },
     3: { title: '', customFields: {} },
+    4: { title: 'מנכ"ל', customFields: {} },
+    5: { title: 'רכזת ישיבות הנהלה', customFields: {} },
   },
   topics: [
     { name: 'תקציב רבעוני', _subitems: [{ name: 'אישור מסגרת התקציב' }, { name: 'חריגות ותיקונים נדרשים' }] },

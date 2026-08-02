@@ -88,6 +88,26 @@ export function seedExportTemplate(stored) {
       present.add(def.key);
     }
   });
+  /*
+   * round316 — back-fill META FIELDS the same way sections are back-filled above.
+   * Until now a stored meta section kept its `fields` array verbatim, so a field
+   * added to the schema later (coordinatorText) was invisible to every existing
+   * instance — the owner would never see the row, let alone its controls. Each
+   * missing field is inserted near its DEFAULT position; the fields the instance
+   * already has keep their order, label, and per-field settings (they own those).
+   */
+  base.sections = base.sections.map((s) => {
+    if (s?.key !== 'meta') return s;
+    const defFields = DEFAULT_EXPORT_TEMPLATE.sections.find((d) => d.key === 'meta')?.fields || [];
+    const fields = Array.isArray(s.fields) ? s.fields.map((f) => ({ ...f })) : defFields.map((f) => ({ ...f }));
+    const present = new Set(fields.map((f) => f?.key));
+    defFields.forEach((def, idx) => {
+      if (present.has(def.key)) return;
+      fields.splice(Math.min(idx, fields.length), 0, { ...def });
+      present.add(def.key);
+    });
+    return { ...s, fields };
+  });
   base.header = { ...DEFAULT_EXPORT_TEMPLATE.header, ...(stored?.header || {}) };
   base.footer = { ...DEFAULT_EXPORT_TEMPLATE.footer, ...(stored?.footer || {}) };
   return base;
