@@ -1401,6 +1401,12 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       preferences.logoUrl — per instance, so every discussions view
                       carries its own logo. Shown on the loading splash (above the
                       mark) and on the dashboard. "שמור" persists it with the rest. */}
+                  {/* round318 (owner request) — לוגו and שמות התיבות share one row,
+                      half the width each. Both are short controls that were each
+                      spending a full-width box, and the explanatory paragraphs they
+                      carried are gone with the width: the upload button and the three
+                      placeholder-bearing fields already say what they are. */}
+                  <div className={styles.prefPair}>
                   <div className={`${styles.prefRow} ${styles.prefRowStack}`}>
                     <div className={styles.prefLabel}>
                       <Text type={"text2"}>לוגו</Text>
@@ -1465,10 +1471,6 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                         ) : null}
                         {logoBusy ? <Text type={"text2"}>מעבד…</Text> : null}
                       </div>
-                      <Text type={"text2"} className={styles.logoHint}>
-                        מוצג במסך הטעינה (מעל הסמל) ובדשבורד. הקובץ מוקטן ונשמר בהגדרות של
-                        התצוגה הזו, כך שלכל תצוגת דיונים יכול להיות לוגו משלה.
-                      </Text>
                       {logoError ? (
                         <Text type={"text2"} className={styles.logoError}>{logoError}</Text>
                       ) : null}
@@ -1497,12 +1499,8 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                           />
                         ))}
                       </div>
-                      <Text type={"text2"} className={styles.logoHint}>
-                        שמות שלושת החלקים בתיבה של ניהול הדיון. שדה שיישאר ריק יחזור
-                        לשם המקורי. אלה שמות התצוגה בלבד — שמות החלקים בקובץ הסיכום
-                        נקבעים בנפרד בתבנית הייצוא של כל סוג דיון.
-                      </Text>
                     </div>
+                  </div>
                   </div>
                   {/* round205 — per-component visibility (owner request; this
                       whole modal is owner-gated): which app surfaces exist for
