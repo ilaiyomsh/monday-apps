@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, TabPanels, TabPanel } from '@vibe/core';
+import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, TabPanels, TabPanel, TextField } from '@vibe/core';
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
-import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible } from '../../utils/mondayApi/boards.config.js';
+import { buildEmptyConfig, DEFAULT_PREFERENCES, PREVIOUS_TASKS_MODES, DEFAULT_PERMISSIONS, DEFAULT_PERMISSION_SEED, DEFAULT_EXPORT_TEMPLATE, ACCESS_ROLE_SOURCE_OPTIONS, APP_COMPONENTS, isComponentVisible, BOX_LABEL_KEYS, DEFAULT_PEOPLE_FORMAT, isPeopleMetaField } from '../../utils/mondayApi/boards.config.js';
 
 // Round 78: the effective auto-fill role list for a tasks access column
 // (taskViewersID / taskEditorsID) — the stored preference, or the default when
@@ -26,6 +26,22 @@ export function withLogo(preferences, dataUrl) {
 }
 export function withoutLogo(preferences) {
   return { ...preferences, logoUrl: null };
+}
+
+/*
+ * round314 — set ONE triple-box title. Pure.
+ *
+ * The RAW text is stored, untrimmed and empty-allowed, so the field behaves like a
+ * text field while typing (trimming as you type eats spaces between words, and
+ * blocking empty makes the box impossible to clear). resolveBoxLabels is what turns a
+ * blank back into the shipped default at READ time, so the two halves are: store what
+ * was typed, render something usable. An unknown key is ignored rather than written —
+ * the three keys are a closed set (BOX_LABEL_KEYS).
+ */
+export function withBoxLabel(preferences, key, value) {
+  if (!BOX_LABEL_KEYS.includes(key)) return preferences;
+  const base = { ...DEFAULT_PREFERENCES.boxLabels, ...(preferences?.boxLabels || {}) };
+  return { ...preferences, boxLabels: { ...base, [key]: typeof value === 'string' ? value : '' } };
 }
 
 // NEXT preferences object (pure — the component wraps it in setPreferences).
@@ -72,6 +88,58 @@ export function seedExportTemplate(stored) {
       present.add(def.key);
     }
   });
+  /*
+   * round316 — back-fill META FIELDS the same way sections are back-filled above.
+   * Until now a stored meta section kept its `fields` array verbatim, so a field
+   * added to the schema later (coordinatorText) was invisible to every existing
+   * instance — the owner would never see the row, let alone its controls. Each
+   * missing field is inserted near its DEFAULT position; the fields the instance
+   * already has keep their order, label, and per-field settings (they own those).
+   */
+  base.sections = base.sections.map((s) => {
+    if (s?.key !== 'meta') return s;
+    const defFields = DEFAULT_EXPORT_TEMPLATE.sections.find((d) => d.key === 'meta')?.fields || [];
+    const fields = Array.isArray(s.fields) ? s.fields.map((f) => ({ ...f })) : defFields.map((f) => ({ ...f }));
+    const present = new Set(fields.map((f) => f?.key));
+    defFields.forEach((def, idx) => {
+      if (present.has(def.key)) return;
+      fields.splice(Math.min(idx, fields.length), 0, { ...def });
+      present.add(def.key);
+    });
+    return { ...s, fields };
+  });
+  /*
+   * round319 — the people FORMAT moved off the individual rows onto one
+   * `people` setting. A template stored before this round carries `perLine`/`parts`
+   * on each people row instead, so the first seed after the upgrade adopts them
+   * rather than resetting the owner's configuration to the defaults.
+   *
+   * The participants row wins when rows disagree: it is the one with a real list in
+   * it, so it is the row an owner actually configured. Whichever row is adopted, the
+   * per-row copies are then STRIPPED — leaving them would be a second source of
+   * truth that the editor no longer writes and the renderer no longer reads.
+   */
+  const metaSection = base.sections.find((s) => s?.key === 'meta');
+  if (!stored?.people) {
+    const legacy = (metaSection?.fields || [])
+      .filter((f) => isPeopleMetaField(f?.key))
+      .sort((a, b) => (a.key === 'participantsText' ? -1 : b.key === 'participantsText' ? 1 : 0))
+      .find((f) => Array.isArray(f?.parts) || f?.perLine === true);
+    base.people = {
+      ...DEFAULT_PEOPLE_FORMAT,
+      ...(legacy ? { perLine: legacy.perLine === true } : {}),
+      ...(Array.isArray(legacy?.parts) ? { parts: legacy.parts } : {}),
+    };
+  } else {
+    base.people = { ...DEFAULT_PEOPLE_FORMAT, ...stored.people };
+  }
+  if (metaSection) {
+    metaSection.fields = (metaSection.fields || []).map((f) => {
+      if (!isPeopleMetaField(f?.key)) return f;
+      const { perLine, parts, ...rest } = f;
+      return rest;
+    });
+  }
   base.header = { ...DEFAULT_EXPORT_TEMPLATE.header, ...(stored?.header || {}) };
   base.footer = { ...DEFAULT_EXPORT_TEMPLATE.footer, ...(stored?.footer || {}) };
   return base;
@@ -275,6 +343,15 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // lives on `preferences.logoUrl` and is persisted by the modal's שמור.
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoError, setLogoError] = useState(null);
+  /*
+   * round311 (PR review) — generation counter that INVALIDATES a logo decode still
+   * in flight. App.jsx keeps this modal permanently mounted with
+   * `isOpen={showSettings}`, so closing does not unmount it and a pending
+   * `fileToLogoDataUrl` still resolves into live draft state. Close → reopen →
+   * decode finishes put the cancelled logo into the NEW editing session, where an
+   * unrelated שמור would persist it. Bumped by the re-seed effect below.
+   */
+  const logoRunRef = useRef(0);
   // round256 — the Templates tab (2) widens to the export size while its type
   // editor is on the "תבנית ייצוא" sub-tab (TemplateManagerModal reports this).
   // round280 — master–detail mapping UI: the selected board tab and the selected
@@ -309,6 +386,15 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
   // re-seed local draft from the live settings whenever the modal opens
   useEffect(() => {
     if (isOpen) {
+      /*
+       * round311 — the RE-SEED is the invalidation point for an in-flight logo
+       * decode: it replaces the whole draft, so a decode picked against the old
+       * one must not land on this one. Bumping here rather than in a second
+       * effect keyed on close is deliberate — a close with no reopen has no
+       * observable effect either way, because the next open re-seeds regardless,
+       * and the extra effect only made the intent harder to pin down in a test.
+       */
+      logoRunRef.current += 1;
       const seed = settings || buildEmptyConfig();
       const seededBoards = mergeBoardsWithSchema(seed.boards);
       const seededColumns = mergeColumnsWithSchema(seed.columns);
@@ -328,6 +414,10 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       });
       setShowCloseConfirm(false);
       setAssetError(null);
+      // round311 — a logo error from a previous session is not this one's.
+      // `logoBusy` is deliberately NOT reset: while a decode runs the picker must
+      // stay disabled, or a second pick could resolve out of order against it.
+      setLogoError(null);
       loadExportAssets(context)
         .then(setExportAssets)
         .catch((err) => logger.warn('SettingsModal', 'טעינת נכסי הייצוא נכשלה', err));
@@ -1343,6 +1433,12 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                       preferences.logoUrl — per instance, so every discussions view
                       carries its own logo. Shown on the loading splash (above the
                       mark) and on the dashboard. "שמור" persists it with the rest. */}
+                  {/* round318 (owner request) — לוגו and שמות התיבות share one row,
+                      half the width each. Both are short controls that were each
+                      spending a full-width box, and the explanatory paragraphs they
+                      carried are gone with the width: the upload button and the three
+                      placeholder-bearing fields already say what they are. */}
+                  <div className={styles.prefPair}>
                   <div className={`${styles.prefRow} ${styles.prefRowStack}`}>
                     <div className={styles.prefLabel}>
                       <Text type={"text2"}>לוגו</Text>
@@ -1368,15 +1464,28 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                               const file = e.target.files && e.target.files[0];
                               e.target.value = ''; // let the same file be re-picked after a failure
                               if (!file) return;
+                              // round311 — the generation this decode belongs to. If the
+                              // modal is closed, reopened or re-seeded meanwhile, the
+                              // draft it was picked for is gone and the result is dropped
+                              // rather than injected into whatever session is current.
+                              const run = logoRunRef.current;
                               setLogoBusy(true);
                               try {
                                 const dataUrl = await fileToLogoDataUrl(file, { maxPx: LOGO_MAX_PX });
+                                if (logoRunRef.current !== run) return;
                                 setPreferences((p) => withLogo(p, dataUrl));
                                 setLogoError(null);
                               } catch (err) {
+                                // Still logged even when superseded — a decode failure is
+                                // real (error-guard); only the USER-facing message is
+                                // suppressed, since it would point at a session they left.
                                 logger.error('SettingsModal', 'טעינת הלוגו נכשלה', err);
+                                if (logoRunRef.current !== run) return;
                                 setLogoError('לא הצלחנו לקרוא את הקובץ. נסו קובץ תמונה אחר (PNG/JPG/SVG).');
                               } finally {
+                                // Unconditional: the picker is disabled while busy, so no
+                                // newer run can exist to have its flag cleared here, and a
+                                // stuck `true` would lock the row for the rest of the session.
                                 setLogoBusy(false);
                               }
                             }}
@@ -1394,14 +1503,36 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
                         ) : null}
                         {logoBusy ? <Text type={"text2"}>מעבד…</Text> : null}
                       </div>
-                      <Text type={"text2"} className={styles.logoHint}>
-                        מוצג במסך הטעינה (מעל הסמל) ובדשבורד. הקובץ מוקטן ונשמר בהגדרות של
-                        התצוגה הזו, כך שלכל תצוגת דיונים יכול להיות לוגו משלה.
-                      </Text>
                       {logoError ? (
                         <Text type={"text2"} className={styles.logoError}>{logoError}</Text>
                       ) : null}
                     </div>
+                  </div>
+                  {/* round314 (owner request) — rename the three panes of the triple
+                      box. Stored per instance on preferences.boxLabels; a field left
+                      blank falls back to the shipped name (resolveBoxLabels), so the
+                      tab band can never end up with a nameless tab. The PLACEHOLDER of
+                      each editor keeps its original wording — it explains what to
+                      write there, which renaming the box does not change. */}
+                  <div className={`${styles.prefRow} ${styles.prefRowStack}`}>
+                    <div className={styles.prefLabel}>
+                      <Text type={"text2"}>שמות התיבות</Text>
+                    </div>
+                    <div className={`${styles.prefControl} ${styles.prefControlFull}`}>
+                      <div className={styles.boxLabelsRow}>
+                        {BOX_LABEL_KEYS.map((key) => (
+                          <TextField
+                            key={key}
+                            title={DEFAULT_PREFERENCES.boxLabels[key]}
+                            placeholder={DEFAULT_PREFERENCES.boxLabels[key]}
+                            value={preferences.boxLabels?.[key] ?? ''}
+                            onChange={(val) => setPreferences((p) => withBoxLabel(p, key, val))}
+                            size={"small"}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                   </div>
                   {/* round205 — per-component visibility (owner request; this
                       whole modal is owner-gated): which app surfaces exist for

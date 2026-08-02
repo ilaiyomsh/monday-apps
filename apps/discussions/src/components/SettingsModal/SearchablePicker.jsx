@@ -1,4 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+// `React` is imported by name because the vitest config in vite.config.js uses the
+// CLASSIC JSX runtime, so JSX here compiles to React.createElement — without it any
+// test that mounts this picker (or anything containing it, e.g. SettingsModal)
+// dies with "React is not defined". The production build uses the automatic
+// runtime, where the import is simply unused. round311.
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './SearchablePicker.module.css';
 
