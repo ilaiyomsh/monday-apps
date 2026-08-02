@@ -67,6 +67,18 @@ const LIVE_SAMPLE_INPUTS = {
     ],
     discussionLeadID: [{ id: '4', name: 'עידו פיוטרקובסקי' }],
   },
+  /*
+   * round315 — sample PROFILE data for the participants, so choosing תפקיד or a
+   * custom field visibly changes the preview instead of looking like it did nothing.
+   * The custom-field keys are the SAMPLE's own ids; a real export keys them by the
+   * account's custom_field_meta_id, and a part pointing at a field this sample has
+   * no value for simply falls back to the name — exactly like a real profile gap.
+   */
+  participantProfiles: {
+    1: { title: 'מנהלת מחלקת מכירות', customFields: {} },
+    2: { title: 'סמנכ"ל תפעול', customFields: {} },
+    3: { title: '', customFields: {} },
+  },
   topics: [
     { name: 'תקציב רבעוני', _subitems: [{ name: 'אישור מסגרת התקציב' }, { name: 'חריגות ותיקונים נדרשים' }] },
     { name: 'גיוס ותפעול', _subitems: [{ name: 'סטטוס משרות פתוחות' }] },
