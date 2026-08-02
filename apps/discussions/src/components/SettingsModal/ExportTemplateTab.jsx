@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button, ButtonGroup, Text, Toggle, TextField, TextArea, Dialog, DialogContentContainer } from '@vibe/core';
 import { DndContext, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
@@ -10,13 +10,101 @@ import {
   EXPORT_TEXT_ALIGN,
   EXPORT_FONTS,
   DEFAULT_EXPORT_FONT,
+  PARTICIPANT_PART_NAME,
+  PARTICIPANT_PART_TITLE,
+  PARTICIPANT_CF_PREFIX,
+  PARTICIPANT_SEPARATORS,
+  DEFAULT_PARTICIPANT_SEPARATOR,
 } from '../../utils/mondayApi/boards.config.js';
+import { resolveParticipantParts, partCustomFieldId } from '../../utils/participantFormat.js';
+import { fetchUserCustomFieldMetas } from '../../utils/mondayApi/userProfiles.js';
 import { computeFloatingPosition } from '../../utils/overlayPlacement.js';
 import { estimateAssetsBytes, EXPORT_ASSETS_MAX_BYTES } from '../../utils/exportAssets.js';
 import ExportPreview from './ExportPreview.jsx';
 import styles from './ExportTemplateTab.module.css';
 
 const FONT_OPTIONS = Object.entries(EXPORT_FONTS).map(([value, f]) => ({ value, label: f.label, css: f.css }));
+
+/*
+ * round315 — the participants sub-editor of the מטא section. All four helpers are
+ * PURE functions of the meta FIELD (the object holding label/enabled/perLine/parts)
+ * so the composition can be tested without mounting the editor, and so the same
+ * rules hold in all three places this tab is rendered (Settings, a discussion
+ * TYPE's template, the per-export dialog).
+ */
+const PART_LABELS = {
+  [PARTICIPANT_PART_NAME]: 'שם',
+  [PARTICIPANT_PART_TITLE]: 'תפקיד (Title)',
+};
+
+/**
+ * The rows to render: the SELECTED parts in their stored order first, then every
+ * remaining available part. `metas` are the account's custom profile fields
+ * ([{ id, title }]); a selected part whose meta is gone keeps its stored label so
+ * the owner can still see and remove it instead of finding a bare id.
+ */
+export function participantPartRows(field, metas = []) {
+  const selected = resolveParticipantParts(field);
+  const available = [
+    { key: PARTICIPANT_PART_NAME, label: PART_LABELS[PARTICIPANT_PART_NAME] },
+    { key: PARTICIPANT_PART_TITLE, label: PART_LABELS[PARTICIPANT_PART_TITLE] },
+    ...(Array.isArray(metas) ? metas : []).map((m) => ({
+      key: `${PARTICIPANT_CF_PREFIX}${m.id}`,
+      label: m.title || String(m.id),
+    })),
+  ];
+  const labelFor = (part) => {
+    const hit = available.find((a) => a.key === part.key);
+    if (hit) return hit.label;
+    return part.label || PART_LABELS[part.key] || partCustomFieldId(part.key) || part.key;
+  };
+  const rows = selected.map((part, idx) => ({
+    key: part.key,
+    label: labelFor(part),
+    selected: true,
+    sep: typeof part.sep === 'string' ? part.sep : DEFAULT_PARTICIPANT_SEPARATOR,
+    first: idx === 0,
+    canUp: idx > 0,
+    canDown: idx < selected.length - 1,
+  }));
+  const taken = new Set(selected.map((p) => p.key));
+  available.forEach((a) => {
+    if (taken.has(a.key)) return;
+    rows.push({ key: a.key, label: a.label, selected: false, sep: DEFAULT_PARTICIPANT_SEPARATOR, first: false, canUp: false, canDown: false });
+  });
+  return rows;
+}
+
+/** Add a part at the END of the composition, or remove it. Pure. */
+export function toggleParticipantPart(field, key, label = '') {
+  const parts = resolveParticipantParts(field);
+  const has = parts.some((p) => p.key === key);
+  const next = has
+    ? parts.filter((p) => p.key !== key)
+    : [...parts, { key, sep: DEFAULT_PARTICIPANT_SEPARATOR, ...(label ? { label } : {}) }];
+  // An empty composition would export a list of blank lines; the resolver already
+  // falls back to the name, and storing that explicitly keeps the UI honest.
+  return { ...field, parts: next };
+}
+
+/** Move a part one step within the composition (dir -1 up / +1 down). Pure. */
+export function moveParticipantPart(field, key, dir) {
+  const parts = resolveParticipantParts(field);
+  const from = parts.findIndex((p) => p.key === key);
+  const to = from + (dir < 0 ? -1 : 1);
+  if (from < 0 || to < 0 || to >= parts.length) return field;
+  const next = parts.slice();
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return { ...field, parts: next };
+}
+
+/** Set the separator written BEFORE one part. Pure. */
+export function setParticipantPartSep(field, key, sep) {
+  const parts = resolveParticipantParts(field);
+  if (!parts.some((p) => p.key === key)) return field;
+  return { ...field, parts: parts.map((p) => (p.key === key ? { ...p, sep: typeof sep === 'string' ? sep : DEFAULT_PARTICIPANT_SEPARATOR } : p)) };
+}
 
 // Font picker built on @vibe Dialog (like the status/priority pickers) so its
 // menu is PORTALLED and never clipped by the Settings modal's overflow. Opens
@@ -191,6 +279,18 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
           : s
       ),
     }));
+  // round315 — same as patchMetaField, but the next field is DERIVED from the live
+  // one by a pure helper (participant parts). Passing a pre-computed field object as
+  // a patch would write back a snapshot from render time; this always reads current.
+  const patchMetaFieldWith = (fieldKey, fn) =>
+    setTemplate((prev) => ({
+      ...prev,
+      sections: prev.sections.map((s) =>
+        s.key === 'meta'
+          ? { ...s, fields: (s.fields || []).map((f) => (f.key === fieldKey ? fn(f) : f)) }
+          : s
+      ),
+    }));
   const patchBand = (band, patch) => setTemplate((prev) => ({ ...prev, [band]: { ...prev[band], ...patch } }));
 
   const onDragEnd = (event) => {
@@ -234,6 +334,75 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
   };
 
   const metaSection = sections.find((s) => s.key === 'meta');
+
+  /*
+   * round315 — the account's user-profile custom fields, loaded once when this tab
+   * mounts. Empty on failure (logged in userProfiles.js), which leaves the owner
+   * with שם + תפקיד — the feature degrades, it does not break the editor.
+   */
+  const [cfMetas, setCfMetas] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    fetchUserCustomFieldMetas().then((list) => { if (alive) setCfMetas(list || []); });
+    return () => { alive = false; };
+  }, []);
+
+  const renderParticipantParts = (field) => {
+    const rows = participantPartRows(field, cfMetas);
+    return (
+      <div className={styles.participantParts}>
+        <label className={styles.check}>
+          <input
+            type="checkbox"
+            checked={field.perLine === true}
+            onChange={(e) => patchMetaField(field.key, { perLine: e.target.checked })}
+          />
+          <span>כל משתתף בשורה נפרדת</span>
+        </label>
+        {rows.map((row) => (
+          <div key={row.key} className={styles.partRow}>
+            <input
+              type="checkbox"
+              checked={row.selected}
+              onChange={() => patchMetaFieldWith(field.key, (live) => toggleParticipantPart(live, row.key, row.label))}
+              aria-label={row.label}
+            />
+            <span className={styles.partLabel}>{row.label}</span>
+            {row.selected && !row.first && (
+              <select
+                className={styles.partSep}
+                value={row.sep}
+                onChange={(e) => patchMetaFieldWith(field.key, (live) => setParticipantPartSep(live, row.key, e.target.value))}
+                aria-label={`מפריד לפני ${row.label}`}
+              >
+                {PARTICIPANT_SEPARATORS.map((s) => (
+                  <option key={s.label} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            )}
+            {row.selected && (
+              <span className={styles.partMove}>
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  disabled={!row.canUp}
+                  onClick={() => patchMetaFieldWith(field.key, (live) => moveParticipantPart(live, row.key, -1))}
+                  aria-label={`הקדם את ${row.label}`}
+                >↑</button>
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  disabled={!row.canDown}
+                  onClick={() => patchMetaFieldWith(field.key, (live) => moveParticipantPart(live, row.key, 1))}
+                  aria-label={`אחר את ${row.label}`}
+                >↓</button>
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   const renderBand = (band) => {
     const cfg = template?.[band] || {};
@@ -350,10 +519,17 @@ export default function ExportTemplateTab({ template, setTemplate, assets, setAs
               {section.key === 'meta' && metaSection && (
                 <div className={styles.metaFields}>
                   {(metaSection.fields || []).map((f) => (
-                    <div key={f.key} className={styles.metaFieldRow}>
-                      <input type="checkbox" checked={f.enabled !== false} onChange={(e) => patchMetaField(f.key, { enabled: e.target.checked })} />
-                      <TextField value={f.label || ''} onChange={(val) => patchMetaField(f.key, { label: val })} size="small" />
-                    </div>
+                    <React.Fragment key={f.key}>
+                      <div className={styles.metaFieldRow}>
+                        <input type="checkbox" checked={f.enabled !== false} onChange={(e) => patchMetaField(f.key, { enabled: e.target.checked })} />
+                        <TextField value={f.label || ''} onChange={(val) => patchMetaField(f.key, { label: val })} size="small" />
+                      </div>
+                      {/* round315 (owner request) — how a participant is written:
+                          one line each, and which profile parts compose the person
+                          (name / Title / any account custom field) in which order,
+                          with the separator that precedes each part. */}
+                      {f.key === 'participantsText' && renderParticipantParts(f)}
+                    </React.Fragment>
                   ))}
                 </div>
               )}

@@ -224,6 +224,31 @@ export const EXPORT_FONTS = {
 };
 export const DEFAULT_EXPORT_FONT = 'brand';
 
+/*
+ * round315 (owner request) — how ONE participant is written in the export's
+ * "פרטי הדיון" block. The owner composes a person out of ordered PARTS taken from
+ * the monday user profile:
+ *   'name'         the user's name (always available)
+ *   'title'        the profile's Title field
+ *   'cf:<metaId>'  any account custom profile field (user.custom_field_values,
+ *                  keyed by custom_field_meta_id — see userProfiles.js)
+ * Each part carries the separator that precedes it, which is what makes
+ * "מר עידו פיוטרקובסקי, מנהל מחלקת מכירות" expressible: a space before the name,
+ * a comma before the title. The separator of the FIRST part is never used.
+ */
+export const PARTICIPANT_PART_NAME = 'name';
+export const PARTICIPANT_PART_TITLE = 'title';
+export const PARTICIPANT_CF_PREFIX = 'cf:';
+export const PARTICIPANT_SEPARATORS = [
+  { value: ', ', label: 'פסיק' },
+  { value: ' ', label: 'רווח' },
+  { value: ' — ', label: 'מקף' },
+  { value: '', label: 'ללא' },
+];
+export const DEFAULT_PARTICIPANT_SEPARATOR = ', ';
+// The shipped composition: the name alone — byte-for-byte today's export.
+export const DEFAULT_PARTICIPANT_PARTS = [{ key: PARTICIPANT_PART_NAME, sep: DEFAULT_PARTICIPANT_SEPARATOR }];
+
 export const DEFAULT_EXPORT_TEMPLATE = {
   defaultFormat: EXPORT_FORMATS.DOCX,
   headerMode: EXPORT_HEADER_MODES.CONFIG,
@@ -240,7 +265,10 @@ export const DEFAULT_EXPORT_TEMPLATE = {
       // its value exists (never "סוג: null"), matching today's behavior.
       fields: [
         { key: 'dateText', enabled: true, label: 'תאריך' },
-        { key: 'participantsText', enabled: true, label: 'משתתפים' },
+        // round315 — `perLine` puts every participant on its own line under a
+        // "משתתפים:" label; `parts` composes ONE participant (see the constants
+        // above). Both defaults reproduce today's single comma-joined row.
+        { key: 'participantsText', enabled: true, label: 'משתתפים', perLine: false, parts: DEFAULT_PARTICIPANT_PARTS },
         { key: 'leadText', enabled: true, label: 'מוביל דיון' },
         { key: 'typesText', enabled: true, label: 'סוג' },
         { key: 'previousText', enabled: true, label: 'דיון קודם' },

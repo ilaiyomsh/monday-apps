@@ -39,6 +39,8 @@ import { loadBackgroundUpdateId } from './backgroundStore.js';
 import { getItemUpdate } from './mondayApi/updates.js';
 import { isSummaryHtmlEmpty } from './summaryHtml.js';
 import { parseExternalParticipants } from './externalParticipants.js';
+import { formatParticipantLabels, resolveParticipantParts } from './participantFormat.js';
+import { fetchUserProfiles } from './mondayApi/userProfiles.js';
 import { uploadFileToColumnSeamless, clearFileColumn } from './mondayApi/fileUpload.js';
 import { spliceBodyIntoTemplate, templateTextWidthDxa } from './docxTemplateMerge.js';
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
@@ -284,7 +286,7 @@ function formatHeDate(value) {
  * shaping is testable without docx. The summary stays as HTML (`summaryHtml`) and
  * is converted to docx inside renderDocx (needs the docx classes + DOMParser).
  */
-export function buildDiscussionModel({ discussion, topics = [], summaryHtml = '', referencesHtml = '', backgroundHtml = '', tasks = [], decisions = [], previousDiscussionName = '', typeLabel = '' }) {
+export function buildDiscussionModel({ discussion, topics = [], summaryHtml = '', referencesHtml = '', backgroundHtml = '', tasks = [], decisions = [], previousDiscussionName = '', typeLabel = '', participantProfiles = null }) {
   const participants = Array.isArray(discussion?.participantsID) ? discussion.participantsID : [];
   const lead = Array.isArray(discussion?.discussionLeadID) ? discussion.discussionLeadID : [];
   // "סוג" is a status column — its value is a label id; the caller resolves the
@@ -294,10 +296,33 @@ export function buildDiscussionModel({ discussion, topics = [], summaryHtml = ''
     title: discussion?.name || 'דיון',
     dateText: formatHeDate(discussion?.discussionDateID),
     participantsText: participants.map((p) => p?.name).filter(Boolean).join(', '),
+    /*
+     * round315 — the participants as OBJECTS, so the renderer can compose each one
+     * from the profile parts the owner chose (name / Title / custom fields) and
+     * optionally write a line each. `participantsText` above stays as it was: it is
+     * still what an older caller (or a model built without profiles) renders, and
+     * the renderer falls back to it when this list is absent.
+     * A profile that failed to load simply contributes no title — the person keeps
+     * their name (see participantFormat.formatParticipantLabel).
+     */
+    participants: participants
+      .filter((p) => p && (p.name || p.id != null))
+      .map((p) => {
+        const profile = participantProfiles?.[String(p.id)] || null;
+        return {
+          id: p.id != null ? String(p.id) : '',
+          name: p.name || '',
+          title: profile?.title || '',
+          customFields: profile?.customFields || {},
+        };
+      }),
     // round211 — EXTERNAL participants (text-only names, comma-separated in a
     // long_text column). When present, the meta renderer splits the participants
     // row into פנימיים/חיצוניים (see buildMeta).
     externalParticipantsText: parseExternalParticipants(discussion?.externalParticipantsID).join(', '),
+    // round315 — the same names unjoined, so a per-line participants block can put
+    // each external guest on its own line instead of re-splitting a joined string.
+    externalParticipants: parseExternalParticipants(discussion?.externalParticipantsID),
     leadText: lead.map((p) => p?.name).filter(Boolean).join(', '),
     typesText,
     previousText: previousDiscussionName || '',
@@ -754,6 +779,19 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
   // their order, and their labels come from the template's meta section.
   const metaPara = (label, value) =>
     new Paragraph({ ...RTL, children: [run(`${label}: `, { bold: true }), run(value)] });
+  // round315 — the label of a per-line block stands alone ("משתתפים:"), with the
+  // people underneath. No trailing space: nothing follows it on that line.
+  const metaLabelPara = (label) =>
+    new Paragraph({ ...RTL, children: [run(`${label}:`, { bold: true })] });
+  const metaLinePara = (value) =>
+    new Paragraph({ ...RTL, indent: { start: 360 }, children: [run(value)] });
+  // One participants block: either the classic single row, or a label line plus a
+  // line per person. `labels` are already composed strings.
+  const peopleBlock = (label, labels, perLine) => {
+    if (!labels.length) return [];
+    if (!perLine) return [metaPara(label, labels.join(', '))];
+    return [metaLabelPara(label), ...labels.map(metaLinePara)];
+  };
   const buildMeta = (section) => {
     const out = [];
     const fields = Array.isArray(section?.fields) ? section.fields : [];
@@ -766,13 +804,29 @@ async function buildExportDoc(model, template = DEFAULT_EXPORT_TEMPLATE, assets 
       // externals the row renders exactly as before.
       if (f.key === 'participantsText') {
         const ext = model.externalParticipantsText;
-        if (value) {
-          const label = ext && (!f.label || f.label === 'משתתפים')
-            ? 'משתתפים פנימיים'
-            : (f.label || '');
-          out.push(metaPara(label, value));
+        const perLine = f.perLine === true;
+        /*
+         * round315 — prefer the structured participants (they carry the profile
+         * data the parts are composed from) and fall back to the flat text for a
+         * model built before this round / without profiles, so an old caller keeps
+         * rendering exactly as it did.
+         */
+        const labels = Array.isArray(model.participants) && model.participants.length
+          ? formatParticipantLabels(model.participants, resolveParticipantParts(f))
+          : (value ? [value] : []);
+        const label = ext && (!f.label || f.label === 'משתתפים')
+          ? 'משתתפים פנימיים'
+          : (f.label || '');
+        out.push(...peopleBlock(label, labels, perLine));
+        // External participants are free text (no monday profile), so the PARTS
+        // never apply to them — but the per-line choice does, or the block would
+        // read half one way and half the other.
+        if (ext) {
+          const extNames = Array.isArray(model.externalParticipants) && model.externalParticipants.length
+            ? model.externalParticipants
+            : [ext];
+          out.push(...peopleBlock('משתתפים חיצוניים', perLine ? extNames : [ext], perLine));
         }
-        if (ext) out.push(metaPara('משתתפים חיצוניים', ext));
         continue;
       }
       if (value) out.push(metaPara(f.label || '', value));
@@ -1093,6 +1147,17 @@ export async function assembleDiscussionModel(discussion) {
   ]);
   const previousTasks = previous?.id ? await fetchTasksOfDiscussion(previous.id) : [];
   const mergedDiscussion = { ...discussion, ...(fullDiscussion || {}) };
+  /*
+   * round315 — the participants' PROFILE data (Title + custom fields). Fetched
+   * unconditionally rather than only when the template asks for it, because the
+   * model is assembled ONCE and then rendered against a template the dialog can
+   * still change (and the per-type template differs from the general one) — a
+   * model that lacks the profiles would silently render names only. One extra
+   * query per export, best-effort: on failure the parts degrade to the name.
+   */
+  const participantProfiles = await fetchUserProfiles(
+    (Array.isArray(mergedDiscussion.participantsID) ? mergedDiscussion.participantsID : []).map((p) => p?.id)
+  );
   // "סוג" is a dropdown value = the label TEXT on the item — use it directly.
   const typeLabel = mergedDiscussion.discussionTypeID || '';
 
@@ -1106,6 +1171,7 @@ export async function assembleDiscussionModel(discussion) {
     decisions,
     previousDiscussionName: previous?.name || '',
     typeLabel,
+    participantProfiles,
   });
 
   return { model, filename: buildFilename(discussion) };
