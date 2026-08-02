@@ -46,6 +46,14 @@ const EXEMPT = {
   ]),
   topics: new Set([
     'discussionLinkID',      // reflection of discussions.topicsBoardLinkID
+    'tasksLinkID',           // reflection of the round313 tasks.topicsLinkID relation
+    /*
+     * round313 — DEAD schema entries, verified by grep: nothing outside
+     * boards.config.js references either, and neither is a row in
+     * TOPICS_SETTINGS_FIELDS, so no surface can even map them. Provisioning them
+     * would put columns nobody reads on a customer's board.
+     */
+    'topicDetailID', 'counterID',
   ]),
   tasks: new Set([
     'taskTypeID',            // the SAME managed dropdown as discussions
@@ -54,30 +62,43 @@ const EXEMPT = {
     // the owner chooses which existing column to use, so creating one would be
     // presumptuous rather than helpful.
     'taskNotesID', 'priorityID', 'taskViewersID',
+    // round313 — dead schema entry: no reference anywhere outside boards.config.js.
+    'phaseID',
   ]),
   decisions: new Set([
     'discussionLinkID',      // reflection of discussions.decisionsBoardLinkID
     'pointLinkID',           // per-point link, written from the topics side
+    /*
+     * round313 — RETIRED, not forgotten. SettingsModal states it outright: the
+     * decisions priority column "was dropped from the UI … it is excluded from the
+     * MAPPING screen too. The alias stays in COLUMN_SCHEMA … so
+     * useDecisions/useMyDecisions references never break". Creating a column for a
+     * retired feature would resurrect it by the back door; the remaining readers all
+     * gate on the mapping being present (e.g. PreviousTasksTab's
+     * `decCols.decisionPriorityID?.id &&`) and degrade cleanly without it.
+     */
+    'decisionPriorityID',
   ]),
 };
 
 /*
- * KNOWN GAP BASELINE — aliases the schema declares, the wizard does NOT create, and
- * round312 deliberately did not touch. Surfaced BY the invariant below while fixing
- * the three the owner reported; left alone because whether each is a live feature or
- * a vestigial entry from the Vibe export is a product question, not a code one
- * (`tasks.topicsLinkID` still carries its generated title "link to נושאים לדיון1",
- * which rather suggests the latter). Raised with the owner separately.
+ * round313 — the baseline is EMPTY, and that is the point.
  *
- * Pinned as an EXACT set on purpose: adding a new alias without provisioning it
- * fails here, and provisioning one of these fails too — which is the nudge to
- * delete it from this list. Either way the set cannot drift in silence.
+ * round312 pinned seven aliases here as "surfaced but not yet judged". Each has now
+ * been resolved on evidence rather than left in limbo: `topics.topicPriorityID` and
+ * `tasks.topicsLinkID` were LIVE code paths and are provisioned (the latter brings
+ * `topics.tasksLinkID` with it as its reflection); the other four are dead or
+ * retired and are named in EXEMPT above with the reason.
+ *
+ * Keeping the (now empty) map rather than deleting the mechanism is deliberate: the
+ * next alias that arrives unprovisioned lands here as a failure with nowhere to hide,
+ * and adding to this list again has to be an explicit, argued act.
  */
 const KNOWN_UNPROVISIONED = {
   discussions: [],
-  topics: ['topicPriorityID', 'tasksLinkID', 'topicDetailID', 'counterID'],
-  tasks: ['topicsLinkID', 'phaseID'],
-  decisions: ['decisionPriorityID'],
+  topics: [],
+  tasks: [],
+  decisions: [],
 };
 
 const specAliases = (key) => new Set([
@@ -178,5 +199,55 @@ describe('relation targets', () => {
         expect(PROVISIONED_BOARDS).toContain(rel.target);
       });
     });
+  });
+
+  it('every declared reflection names a real board + alias', () => {
+    // a reflection whose alias is not in COLUMN_SCHEMA is mapped into a key nothing
+    // reads — the write lands and the feature still looks broken
+    PROVISIONED_BOARDS.forEach((key) => {
+      (PROVISION_SPEC[key].relations || []).forEach((rel) => {
+        if (!rel.reflection) return;
+        expect(PROVISIONED_BOARDS).toContain(rel.reflection.board);
+        expect(COLUMN_SCHEMA[rel.reflection.board]).toHaveProperty(rel.reflection.alias);
+        expect(rel.reflection.title.trim()).not.toBe('');
+      });
+    });
+  });
+});
+
+describe('the task → topic link (round313)', () => {
+  it('is a tasks-side relation pointing at the topics board', () => {
+    // useTasks writes relations.topicsLinkID on every task created from a topic;
+    // unprovisioned, that write resolved to no column and did nothing
+    const rel = PROVISION_SPEC.tasks.relations.find((r) => r.alias === 'topicsLinkID');
+    expect(rel).toBeTruthy();
+    expect(rel.target).toBe('topics');
+  });
+
+  it('carries the reflection that maps the topics-side back-link', () => {
+    // one bidirectional relation closes BOTH previously-unprovisioned aliases
+    const rel = PROVISION_SPEC.tasks.relations.find((r) => r.alias === 'topicsLinkID');
+    expect(rel.reflection).toEqual(
+      expect.objectContaining({ board: 'topics', alias: 'tasksLinkID' }),
+    );
+  });
+
+  it('does not collide with a title already used on either board', () => {
+    const rel = PROVISION_SPEC.tasks.relations.find((r) => r.alias === 'topicsLinkID');
+    const titlesOn = (key) => [
+      ...(PROVISION_SPEC[key].columns || []),
+      ...(PROVISION_SPEC[key].relations || []),
+    ].map((c) => c.title);
+    // ensureColumn matches by (title, type): a clash would silently reuse the wrong column
+    expect(titlesOn('tasks').filter((t) => t === rel.title)).toHaveLength(1);
+    expect(titlesOn('topics')).not.toContain(rel.reflection.title);
+  });
+});
+
+describe('the per-topic priority column (round313)', () => {
+  it('is provisioned as a status column on the topics board', () => {
+    const col = PROVISION_SPEC.topics.columns.find((c) => c.alias === 'topicPriorityID');
+    expect(col).toBeTruthy();
+    expect(col.type).toBe('status');
   });
 });
