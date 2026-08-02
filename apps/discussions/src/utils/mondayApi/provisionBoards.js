@@ -161,6 +161,11 @@ export const PROVISION_SPEC = {
       { alias: 'topicCreatorID', type: 'people', title: 'יוצר' },
       { alias: 'topicCreationDateID', type: 'date', title: 'תאריך יצירה' }, // round115
       { alias: 'topicNotForDiscussionID', type: 'checkbox', title: 'האם להציג' },
+      // round313 — per-topic priority. Live: TopicsTab renders the cell off
+      // `useStatusOptions('topics','topicPriorityID')`, useTopics writes it, and it is
+      // a mappable row in TOPICS_SETTINGS_FIELDS — but it was never provisioned, so on
+      // a fresh install the cell had no column and simply never appeared.
+      { alias: 'topicPriorityID', type: 'status', title: 'עדיפות' },
     ],
     // discussionLinkID (back-link to discussions) is created as the reflection of
     // discussions.topicsBoardLinkID — see above.
@@ -214,7 +219,26 @@ export const PROVISION_SPEC = {
     ],
     // discussionLinkID (back-link to discussions) is the reflection of
     // discussions.tasksBoardLinkID — see above.
-    relations: [],
+    relations: [
+      /*
+       * round313 — task → the TOPIC it was created from. useTasks:454 writes it on
+       * every task created out of a topic (`relations.topicsLinkID = { linkedItems:
+       * [{ id: topicId }] }`, where topicId is the topic ITEM's id — TopicsTab:1240),
+       * but the column was never provisioned and is deliberately absent from the tasks
+       * mapping screen, so that write resolved to no column and was a silent no-op on
+       * every install: the task→topic link was never recorded anywhere.
+       *
+       * Bidirectional, so the reflection monday creates on the topics board becomes
+       * `topics.tasksLinkID` ("חיבור למשימות") — the topics-side alias that was equally
+       * unprovisioned. One relation closes both.
+       */
+      {
+        alias: 'topicsLinkID',
+        target: 'topics',
+        title: 'נושאים לדיון',
+        reflection: { board: 'topics', alias: 'tasksLinkID', title: 'משימות' },
+      },
+    ],
   },
   decisions: {
     name: 'החלטות',

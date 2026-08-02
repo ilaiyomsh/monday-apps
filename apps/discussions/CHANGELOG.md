@@ -10,6 +10,38 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.4.1 — 2026-08-02
+
+- round313: **סגירת 7 העמודות הלא-מוקמות שround312 חשף.** לא הוספתי את כולן
+  להקמה — הכרעתי כל אחת לפי מה שהקוד באמת עושה איתה (grep על כל הקוד, בלי הקבצים
+  שרק מגדירים אותן):
+  - **מוקמות עכשיו (היו פיצ'רים חיים ושבורים):**
+    1. **`topics.topicPriorityID`** (עדיפות, status) — `TopicsTab` מרנדר את התא,
+       `useTopics` כותב אליו, והוא שורה ממופה ב-`TOPICS_SETTINGS_FIELDS`. הוא פשוט
+       לא נוצר בהקמה, כך שבכל התקנה חדשה התא לא הופיע בכלל.
+    2. **`tasks.topicsLinkID`** — `useTasks` כותב אותו בכל משימה שנוצרת מנושא
+       (`relations.topicsLinkID`, עם ה-id של **הנושא** עצמו). העמודה לא הוקמה
+       ובכוונה לא מופיעה במסך המיפוי, ולכן הכתיבה נפתרה לאפס עמודה — **הקישור
+       משימה→נושא מעולם לא נרשם בשום מקום**. הוקם כקישור דו-כיווני, וה-reflection
+       שmonday יוצרת בלוח הנושאים ממופה כ-**`topics.tasksLinkID`** — כלומר קישור
+       אחד סוגר שני aliases.
+  - **לא מוקמות, עם נימוק מתועד בבדיקה:**
+    3. **`decisions.decisionPriorityID`** — **פיצ'ר שהוצא משימוש**, לא נשכח.
+       `SettingsModal` אומר זאת מפורשות: העמודה הוסרה מה-UI ולכן גם ממסך המיפוי,
+       וה-alias נשאר רק כדי שהפניות לא ישברו. יצירת עמודה עבורו הייתה מחזירה
+       פיצ'ר מהדלת האחורית; הקוראים שנשארו מותנים במיפוי (`decCols.decisionPriorityID?.id &&`)
+       ומתנוונים בשקט בלעדיו.
+    4. **`topics.topicDetailID`, `topics.counterID`, `tasks.phaseID`** — **מתות**:
+       אפס הפניות בכל הקוד, ואף אחת מהן אינה שורה במסכי המיפוי. הקמתן הייתה
+       מוסיפה עמודות שאף אחד לא קורא ללוח של לקוח.
+- **ה-baseline בבדיקה ירד ל-ריק.** המנגנון נשאר במקום דווקא כדי שה-alias הבא
+  שיגיע בלי הקמה ייפול, ושהוספה חוזרת לרשימה תהיה מעשה מוצהר ומנומק.
+- בדיקות: 5 נוספו ל-`provisionSpecCoverage.test.js` (17 בסך הכול), כולל אימות
+  שכל reflection מצביע על board+alias אמיתיים ושכותרת הקישור החדש לא מתנגשת
+  בכותרת קיימת באף אחד משני הלוחות (`ensureColumn` מתאים לפי (כותרת, סוג), כך
+  שהתנגשות הייתה משתמשת בעמודה הלא-נכונה בשקט). 6 נראו נכשלות לפני המימוש,
+  2 מוטציות חוסלו.
+
 ## 2.4.0 — 2026-08-02
 
 - round312: **ארבעה כשלים שהתגלו בהתקנה בחשבון חדש** (דיווח הבעלים). לשלושת
