@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.11.1
+
+- **The picker no longer explains that the current status was set outside it** (owner
+  request). The sentence "הסטטוס הנוכחי נקבע מחוץ לבורר (למשל אוטומציה) ואינו מוצג
+  לבחירה" is gone. It appeared whenever the status the item already holds is one the
+  admin hid — and it described a state the user cannot act on, in a dialog whose height
+  is computed from the pills alone (`pickerDialogHeightPx` counts option/gap/padding and
+  nothing for prose), so it was taking the last pill's space to say it.
+- The view-only note is untouched, and `buildAvailableLabels` still reports
+  `currentIsHidden` — nothing renders from it now.
+
 ## 3.11.0
 
 - **The text of the default (grey) label is now editable here**, like it is in a normal
