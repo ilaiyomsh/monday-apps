@@ -10,6 +10,31 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.4.6 — 2026-08-02
+
+- round317 (בקשת בעלים): **ההקמה שומרת את תפקידי המילוי-האוטומטי של עמודות
+  הגישה בלוח המשימות — יוצר + מוביל/מנהל + מרכז דיון על "יכולת עריכה", ומשתתפים
+  על "יכולת צפייה".**
+  - **מה נמצא בבדיקה:** שלושת ה-✓ על "יכולת עריכה" הם ברירת המחדל של האפליקציה
+    (`DEFAULT_PREFERENCES.accessRoleSources`) והם גם מה שהמסך מציג — אימתתי את זה
+    ברינדור אמיתי של מסך ההגדרות על instance שרק הוקם. **אבל שום דבר לא נשמר**:
+    גם התצוגה וגם יצירת המשימה נפלו על ברירת המחדל כשהמפתח חסר. זה מציג את אותם
+    סימונים, אבל זו לא אותה משמעות — ההגדרה של ההתקנה לא *אמרה* את זה, אלא הוסק,
+    ולכן זה לא הופיע ב-JSON של ההגדרות והיה משתנה מעצמו ביום שברירות המחדל ישתנו.
+  - **מעכשיו זה state אמיתי**: `withSeededAccessRoles` (טהור) ממוזג
+    **מפתח-מפתח** ב-`SetupWizard`, כלומר עמודת גישה שהבעלים כבר הגדיר שומרת על
+    הרשימה שלו — **כולל רשימה ריקה**, שהיא החלטה מכוונת של "אל תמלא כלום" — ומפתח
+    שמעולם לא הוגדר מקבל את ברירת המחדל. זה מה שמאפשר להריץ את זה גם ב-top-up של
+    instance קיים ולא רק בהתקנה חדשה.
+  - בדיקות: `accessRolesSeed.test.js` (7) + `installSeedsAccessRoles.test.jsx` (3)
+    + `accessRoleChips.test.jsx` (5 — רינדור אמיתי של המיפוי, בדיוק מה שהבעלים
+    רואה). 6 מוטציות חוסלו. **מוטציה אחת שרדה בסבב הראשון**: הסרת ה-fallback
+    מ-`accessRolesFor` לא הפילה כלום, כי מסך ההגדרות זורע את הטיוטה שלו
+    כ-`{...DEFAULT_PREFERENCES, ...stored}` ולכן לא מגיע ל-fallback בכלל. הוספתי
+    את המסלול שבו ה-fallback **כן** נדרש — instance שהגדיר accessRoleSources רק
+    לעמודה האחרת, שאז המיזוג השטוח משאיר את מפתח העריכה חסר — והמוטציה חוסלה.
+  - הסוויטה המלאה: 1609 בדיקות ירוקות.
+
 ## 2.4.5 — 2026-08-02
 
 - round316 (בקשת בעלים): **אותן שתי הבקרות של round315 חלות עכשיו על כל שורת
