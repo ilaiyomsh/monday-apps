@@ -46,6 +46,11 @@
   max-width: 190px;
   max-height: 56px;
   object-fit: contain;
+  /* round310 (owner request) — the logo keeps its place and the MARK drops: extra
+     breathing room goes below the logo only, doubling that one gap to 40px while
+     the mark↔wordmark gap stays at the shared 20px. A larger `gap` on .inner would
+     have spread every seam apart instead. */
+  margin-bottom: 20px;
   animation: bl-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
