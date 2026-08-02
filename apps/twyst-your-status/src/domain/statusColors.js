@@ -181,6 +181,23 @@ export const VIBE_STATUS_COLOR_NAMES = MONDAY_STATUS_COLORS.map((entry) => (
 export const RESERVED_EMPTY_LABEL_ID = 5;
 
 /**
+ * The colour that IS that slot. Sending it is how a default label gets created; monday
+ * then pins the label to id 5 and renders it grey whatever enum arrived.
+ */
+export const RESERVED_EMPTY_LABEL_COLOR = 'explosive';
+
+/** The grey monday forces on it — the swatch the board shows. */
+export const RESERVED_EMPTY_LABEL_HEX = '#c4c4c4';
+
+/**
+ * @param {string|number|undefined|null} id
+ * @returns {boolean} true for monday's default (grey) label
+ */
+export function isReservedEmptyLabelId(id) {
+  return Number(id) === RESERVED_EMPTY_LABEL_ID;
+}
+
+/**
  * The numeric id of a status colour — which IS the id monday assigns a label created
  * with that colour.
  * @param {string|number|undefined|null} colorEnum
@@ -251,7 +268,7 @@ export function pickUnusedStatusColor(usedEnums) {
 /**
  * monday update_status_column rejects payloads where any two labels share a
  * color (including deactivated). Keep active colors stable; reassign collisions.
- * @param {Array<{ color: string, isDeactivated?: boolean }>} payload
+ * @param {Array<{ color: string, isDeactivated?: boolean, isDefaultEmpty?: boolean }>} payload
  */
 export function ensureUniqueStatusColors(payload) {
   const list = Array.isArray(payload) ? payload : [];
@@ -263,8 +280,18 @@ export function ensureUniqueStatusColors(payload) {
   });
 
   const used = new Set();
+  // The default (grey) label claims its color BEFORE anyone else. `explosive` is not a
+  // preference there, it is the reserved slot itself — reassigning it would turn the
+  // default label into an ordinary one, so a collision moves the other label instead.
+  list.forEach((label) => {
+    if (!label?.isDefaultEmpty) return;
+    const color = tryNormalizeStatusColorEnum(label?.color);
+    if (color != null) used.add(color);
+  });
+
   const assignUnique = (label) => {
     let color = tryNormalizeStatusColorEnum(label?.color);
+    if (label?.isDefaultEmpty && color != null) return { ...label, color };
     if (color == null || used.has(color)) {
       color = pickUnusedStatusColor(used);
     }
