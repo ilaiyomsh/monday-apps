@@ -146,6 +146,8 @@ describe('buildDigest — show-by-status classification', () => {
             sectionId: 's_start001',
             title: 'משימות שנדרש להתחיל וטרם התחילו:',
             dateColumnTitle: 'תאריך התחלה',
+            noteColumnId: null,
+            noteColumnTitle: '',
             buttonId: 'b_start001',
             buttonIds: ['b_start001'],
             tasks: [
@@ -162,6 +164,8 @@ describe('buildDigest — show-by-status classification', () => {
             sectionId: 's_done0001',
             title: 'משימות שנדרש לסיים וטרם בוצעו:',
             dateColumnTitle: 'תאריך סיום',
+            noteColumnId: null,
+            noteColumnTitle: '',
             buttonId: 'b_done0001',
             buttonIds: ['b_done0001'],
             tasks: [

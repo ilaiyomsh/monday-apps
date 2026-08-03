@@ -152,6 +152,19 @@ function validateConfig(body) {
       ) {
         return { field: 'digest.sections' };
       }
+      // Optional per-cluster note column: mapping it makes a per-task text
+      // field mandatory in the email. Absent/null/'' = no mapping, which is
+      // what every config saved before this feature carries.
+      let noteColumnId = null;
+      let noteColumnTitle = '';
+      if (s.noteColumnId !== undefined && s.noteColumnId !== null && s.noteColumnId !== '') {
+        if (!isNonEmptyString(s.noteColumnId)) return { field: 'digest.sections' };
+        // The title becomes the email column header — a mapping without one
+        // would render a nameless column, so it is required, not defaulted.
+        if (!isNonEmptyString(s.noteColumnTitle, 255)) return { field: 'digest.sections' };
+        noteColumnId = s.noteColumnId;
+        noteColumnTitle = s.noteColumnTitle;
+      }
       sections.push({
         id: s.id ?? generateId('s'),
         title: s.title,
@@ -160,6 +173,8 @@ function validateConfig(body) {
         buttonId: sectionButtonIds[0],
         buttonIds: sectionButtonIds,
         includeStatusLabelIds: [...s.includeStatusLabelIds],
+        noteColumnId,
+        noteColumnTitle,
       });
     }
     if (new Set(sections.map((s) => s.id)).size !== sections.length) {

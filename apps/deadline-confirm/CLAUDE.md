@@ -95,6 +95,20 @@ src/
   email on two rows → two messages); rows with ≠1 person skipped as
   `multi_person`. Pending = date ≤ today (Asia/Jerusalem) AND status in
   section's `includeStatusLabelIds`.
+- **Per-task required note (0.12.0):** a digest section MAY map
+  `noteColumnId` + `noteColumnTitle` (a TEXT column on the TASKS board). When it
+  does, every row of that cluster gets a text field in the AMP table and the task
+  **cannot be marked without it**. Enforcement is in three places and all three
+  matter: `[disabled]` on the submit (UX only — AMP runs in the reader's client),
+  `routes/amp.js` per-item refusal (the authority), and a final guard inside
+  `performAction`. Status + note go out in ONE `change_multiple_column_values`
+  write, so a marked task can never lack its note; the value **overwrites** the
+  column. Target column resolves from the SELECTED BUTTON's section (the wire
+  carries no cluster identity) — a button shared by two mapped clusters takes the
+  first. Wire field: `note_<itemId>`, ONE per item even across clusters. Cap 500
+  chars. `already_done` still short-circuits: no mark, so no note write.
+  **`required=` is deliberately NOT used** — one bulk form per message means it
+  would block rows the reader never marked.
 - **V6 preview:** `GET /api/digest/preview` → `{ plain, amp }` (no `html`).
 - **AMP debug lane:** `POST /api/digest/send-raw` `{ amp, to, subject?, plain? }`
   sends the operator's **edited** amp4email document **byte for byte** (no

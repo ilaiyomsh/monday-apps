@@ -9,6 +9,9 @@ export interface DigestSectionDraft {
   title: string;
   dateColumnId: string | null;
   dateColumnTitle: string; // captured when the date column is picked
+  /** Text column for the per-task required note; null = no field, no requirement. */
+  noteColumnId: string | null;
+  noteColumnTitle: string; // captured when the note column is picked → email header
   /** @deprecated prefer buttonIds — kept in sync as buttonIds[0] */
   buttonId: string | null;
   /** Action buttons for this cluster's label dropdown. First drives status filter. */
@@ -79,6 +82,8 @@ export function newDigestSection(title = ''): DigestSectionDraft {
     title,
     dateColumnId: null,
     dateColumnTitle: '',
+    noteColumnId: null,
+    noteColumnTitle: '',
     buttonId: null,
     buttonIds: [],
     includeStatusLabelIds: [],
@@ -126,6 +131,9 @@ export function digestFromConfig(digest: DigestConfig | null | undefined): Diges
       return {
         ...s,
         dateColumnTitle: s.dateColumnTitle ?? '',
+        // Pre-0.12.0 configs carry neither key — normalize, never undefined.
+        noteColumnId: s.noteColumnId ?? null,
+        noteColumnTitle: s.noteColumnTitle ?? '',
         buttonIds,
         buttonId: buttonIds[0] ?? s.buttonId ?? null,
         includeStatusLabelIds: Array.isArray(s.includeStatusLabelIds) ? [...s.includeStatusLabelIds] : [],
@@ -168,6 +176,8 @@ function digestToConfig(digest: DigestDraft): DigestConfig | null {
         title: s.title,
         dateColumnId: s.dateColumnId as string,
         dateColumnTitle: s.dateColumnTitle,
+        noteColumnId: s.noteColumnId,
+        noteColumnTitle: s.noteColumnTitle,
         buttonId: buttonIds[0] as string,
         buttonIds,
         includeStatusLabelIds: [...s.includeStatusLabelIds],
