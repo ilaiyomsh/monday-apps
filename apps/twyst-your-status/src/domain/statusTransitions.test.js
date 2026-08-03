@@ -132,9 +132,12 @@ describe('buildAvailableLabels — what the picker offers after each label', () 
 
 describe('pruneSettingsForActiveLabels — transitions when labels come and go', () => {
   it('drops removed labels from every nextLabelIds list', () => {
+    // Label 3 survives unlisted, so the trimmed list is still a real restriction.
+    // (A trim that ends up covering EVERY surviving target canonicalizes away
+    // instead — statusTransitionsCanonical.test.js, from the Codex PR review.)
     const pruned = pruneSettingsForActiveLabels(
       settingsWith({ 0: { nextLabelIds: ['1', '2'] } }),
-      ['0', '1'],
+      ['0', '1', '3'],
     );
     expect(pruned.labels['0'].nextLabelIds).toEqual(['1']);
   });
@@ -155,9 +158,11 @@ describe('pruneSettingsForActiveLabels — transitions when labels come and go',
     // earns its place as a target by being ACTIVE, like any other id — force-keeping
     // it left phantom targets behind the name-then-clear flow. The rule KEY '5' is
     // still always kept (the case above this one).
+    // Label 2 survives unlisted so the list stays non-exhaustive (an exhaustive
+    // one canonicalizes to "no field" — statusTransitionsCanonical.test.js).
     const pruned = pruneSettingsForActiveLabels(
       settingsWith({ 0: { nextLabelIds: ['1', '5'] } }),
-      ['0', '1', '5'],
+      ['0', '1', '2', '5'],
     );
     expect(pruned.labels['0'].nextLabelIds).toEqual(['1', '5']);
   });

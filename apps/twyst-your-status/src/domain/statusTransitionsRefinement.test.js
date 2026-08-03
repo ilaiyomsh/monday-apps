@@ -69,9 +69,11 @@ describe("prune — '5' as a transition target follows reality, the rule key nev
   it("drops '5' from target lists when the caller does not list it as active", () => {
     // The named-then-cleared flow: the grey label will NOT exist after this save,
     // so a rule allowing a transition to it allows nothing and only skews counts.
+    // Label 2 survives unlisted in both cases, keeping the lists non-exhaustive —
+    // an exhaustive one canonicalizes away (statusTransitionsCanonical.test.js).
     const pruned = pruneSettingsForActiveLabels(
       settingsWith({ 0: { nextLabelIds: ['1', '5'] } }),
-      ['0', '1'],
+      ['0', '1', '2'],
     );
     expect(pruned.labels['0'].nextLabelIds).toEqual(['1']);
   });
@@ -79,7 +81,7 @@ describe("prune — '5' as a transition target follows reality, the rule key nev
   it("keeps '5' as a target when the id-5 label is active on the column", () => {
     const pruned = pruneSettingsForActiveLabels(
       settingsWith({ 0: { nextLabelIds: ['1', '5'] } }),
-      ['0', '1', '5'],
+      ['0', '1', '2', '5'],
     );
     expect(pruned.labels['0'].nextLabelIds).toEqual(['1', '5']);
   });
@@ -113,9 +115,12 @@ describe('prune — a restriction emptied by label removal unrestricts instead o
   });
 
   it('a partially survivable restriction is only trimmed, never dropped', () => {
+    // Label 3 survives unlisted — still a real restriction. When the survivors
+    // COVER every target the field canonicalizes away instead (Codex PR review;
+    // pinned in statusTransitionsCanonical.test.js).
     const pruned = pruneSettingsForActiveLabels(
       settingsWith({ 0: { nextLabelIds: ['1', '2'] } }),
-      ['0', '1'],
+      ['0', '1', '3'],
     );
     expect(pruned.labels['0'].nextLabelIds).toEqual(['1']);
   });

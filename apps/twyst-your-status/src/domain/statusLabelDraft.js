@@ -342,6 +342,25 @@ export function pruneSettingsForActiveLabels(settings, activeLabelIds) {
       labels[key] = rest;
       return;
     }
+    /*
+     * Canonical form (Codex PR review, confirmed): the editor's ONE spelling of
+     * "unrestricted" is no field at all — its all-checked state stores null so a
+     * label added later is allowed. A list that covers every possible target for
+     * this source (everything active except the source itself) is that same state
+     * in different bytes, and pruning could mint it: delete the one label the
+     * admin had unchecked and the survivors are all listed — the editor shows
+     * all-checked, SAYS unrestricted, yet the next label added would be silently
+     * blocked. Non-empty is required: an explicit terminal [] on a column with no
+     * other labels covers everything only vacuously, and it must stay terminal.
+     */
+    const nextSet = new Set(nextLabelIds);
+    const coversEveryTarget = nextLabelIds.length > 0
+      && [...keepTargets].every((id) => id === key || nextSet.has(id));
+    if (coversEveryTarget) {
+      const { nextLabelIds: dropped, ...rest } = rule;
+      labels[key] = rest;
+      return;
+    }
     labels[key] = { ...rule, nextLabelIds };
   });
   return {
