@@ -10,6 +10,18 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.6.11 — 2026-08-03
+
+- round331 (בקשת בעלים): **רווח בין השעה לשלוש הנקודות.** ה-hover של round330 נתן
+  ל-⋯ בדיוק את הרוחב שלו (`6px` היסט + `28px` כפתור = 34px), כלומר השעה נעצרה
+  **צמודה** אליו — היה מקום ללחוץ, אבל לא היה אוויר. ה-hover גדל ל-
+  `calc(6px + 28px + 10px)`.
+  - ה-**10px** אינם מספר חדש: זה ה-`gap` של `.item` עצמו, אותו קצב שכבר מפריד בין
+    שם הדיון לשעה. הסכום נכתב מפורש ולא מקוצר ל-44px, כדי שהקשר לכל אחד משלושת
+    הרכיבים ישרוד שינוי בו.
+  - test-guard: **waiver** מתועד — ערך אחד, CSS בלבד; jsdom לא מחיל CSS modules ולא
+    hover. אומת בבילד שהכלל נארז. הסוויטה המלאה נשארה ירוקה.
+
 ## 2.6.10 — 2026-08-03
 
 - round330 (שלוש בקשות בעלים): **השעה יוצאת לקצה ונשארת גלויה, בגודל של שם הדיון,

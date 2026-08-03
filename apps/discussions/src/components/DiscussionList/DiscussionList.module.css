@@ -625,12 +625,19 @@
  * timestamp moves left and the button is clean to click. `:focus-within` covers
  * the keyboard path, where the kebab is also revealed.
  *
- * 34px = `.itemActions` right: 6px + `.kebabBtn` 28px. Stated as the sum rather
- * than the literal so the relationship survives a change to either.
+ * The sum is written out rather than collapsed to a literal so the relationship
+ * survives a change to any of its parts:
+ *
+ *   6px   `.itemActions` right offset
+ *   28px  `.kebabBtn` width
+ *   10px  BREATHING ROOM between the timestamp and the ⋯ (round331, owner request).
+ *         Without it the two land flush — the ⋯ had room to be clicked, but no air
+ *         around it. 10px is `.item`'s own flex `gap`, i.e. the same rhythm that
+ *         already separates the name from the timestamp, rather than a new number.
  */
 .itemWrap:hover .item,
 .itemWrap:focus-within .item {
-  --row-pad-right: calc(6px + 28px);
+  --row-pad-right: calc(6px + 28px + 10px);
 }
 /* round117/round125 — hover-only scrollbar, no stepper arrows (owner request).
    round125 rewrite: in Chromium, setting the STANDARD scrollbar-width/color
