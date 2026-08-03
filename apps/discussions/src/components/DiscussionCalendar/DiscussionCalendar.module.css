@@ -1,8 +1,27 @@
+/*
+ * round323 (PR review, P2) — THE CALENDAR OWNS ITS CANVAS.
+ *
+ * This whole component was drawn for a WHITE canvas and never said so: the day
+ * headers are white, the cells are transparent, and the borders alone are the
+ * grid. It only looked right because its ancestor happened to be white.
+ *
+ * round321 painted that ancestor grey (`--allgrey-background-color`, the list's
+ * ground) and the calendar renders INSIDE it — in place of the row list, not next
+ * to it. Two things broke at once: `MonthGrid`'s `.calMCellOut` marks out-of-month
+ * days with that exact same grey, so in-month and out-of-month cells became
+ * indistinguishable; and the week body, transparent except for its sticky header,
+ * turned grey underneath a white header.
+ *
+ * Declaring the surface here rather than scoping round321's grey in DiscussionList
+ * is the fix that keeps the calendar correct under ANY ancestor: the grey exists to
+ * separate the LIST from the work area, and in calendar mode there is no list.
+ */
 .calRoot {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+  background: var(--primary-background-color, #fff);
 }
 
 .calHeader {

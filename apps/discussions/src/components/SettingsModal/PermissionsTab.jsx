@@ -52,14 +52,36 @@ function EyeOffIcon() {
  * the parent SettingsModal draft and persists as one `permissions` object.
  */
 
+/* round332 (owner request, approved mock) — the explanatory captions
+   ("התפקידים נקבעים לפי עמודות האנשים…") are GONE: the owner judged them noise,
+   and the matrix's own role columns already say it. The head is chevron + title. */
 const TIERS = [
-  { id: 'disc', title: 'דיון ונושאים', sub: 'התפקידים נקבעים לפי עמודות האנשים של כל דיון' },
-  { id: 'task', title: 'שדות משימה', sub: 'התפקידים נקבעים לפי עמודות האנשים של כל משימה' },
-  { id: 'decision', title: 'שדות החלטה', sub: 'התפקידים נקבעים לפי עמודות האנשים של כל החלטה' },
+  { id: 'disc', title: 'דיון ונושאים' },
+  { id: 'task', title: 'שדות משימה' },
+  { id: 'decision', title: 'שדות החלטה' },
 ];
 
 // Which board's columns back each people-column tier (system is synthetic).
 const TIER_BOARD_KEY = { disc: 'discussions', task: 'tasks', decision: 'decisions' };
+
+/* round333 (owner request) — fixed reading order for the discussions matrix,
+   right to left: יוצר → מנהל → מרכז → משתתפים. The live people-column list
+   arrives in BOARD order, which is whatever order the columns were created in —
+   not a reading order. Aliases absent from this list keep their relative board
+   order after the known ones (stable sort). */
+const ROLE_ALIAS_ORDER = {
+  discussions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID', 'participantsID'],
+};
+
+function sortRolesByPreferredOrder(boardKey, roles) {
+  const order = ROLE_ALIAS_ORDER[boardKey];
+  if (!order) return roles;
+  const rank = (r) => {
+    const i = order.indexOf(r.alias);
+    return i === -1 ? order.length : i;
+  };
+  return [...roles].sort((a, b) => rank(a) - rank(b));
+}
 
 // The system tier is NOT a people-column role; it is a single global pseudo-role
 // stored under this fixed key so its grants persist alongside the people roles.
@@ -93,7 +115,7 @@ function buildTierRoles(boardKey, columns) {
   const live = getPeopleColumns(boardKey);
   if (live.length) {
     const seenKeys = new Set();
-    return live
+    const roles = live
       .map((col) => {
         const alias = aliasByColId[col.id];
         return alias
@@ -101,10 +123,14 @@ function buildTierRoles(boardKey, columns) {
           : { key: `${boardKey}:${col.id}`, boardKey, alias: col.id, title: col.title || col.id };
       })
       .filter((r) => (seenKeys.has(r.key) ? false : (seenKeys.add(r.key), true)));
+    return sortRolesByPreferredOrder(boardKey, roles);
   }
-  return roleSources
-    .filter((alias) => isPeopleType(cfg[alias]?.type))
-    .map((alias) => ({ key: `${boardKey}:${alias}`, boardKey, alias, title: cfg[alias]?.title || alias }));
+  return sortRolesByPreferredOrder(
+    boardKey,
+    roleSources
+      .filter((alias) => isPeopleType(cfg[alias]?.type))
+      .map((alias) => ({ key: `${boardKey}:${alias}`, boardKey, alias, title: cfg[alias]?.title || alias }))
+  );
 }
 
 /** Checked iff the stored value is exactly `true` (an explicit grant). */
@@ -253,45 +279,67 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
     );
   };
 
-  // round246 — a tier's cap rows, grouped by component with a SUB-HEADING row
-  // per group (shown only when the tier has more than one group).
-  const renderGroupedTbody = (roles, caps) => {
-    const groups = groupCapabilities(caps);
-    const showSub = groups.length > 1;
-    return (
-      <tbody>
-        {groups.map((grp) => (
-          <React.Fragment key={grp.group}>
-            {showSub && (
-              <tr className={styles.mxGroupRow}>
-                <td className={styles.mxGroupCell} colSpan={roles.length + 1}>{grp.label}</td>
-              </tr>
-            )}
-            {grp.caps.map((cap) => (
-              <tr key={cap.id}>
-                <td className={styles.mxAction}>{cap.label}</td>
-                {roles.map((role) => renderCell(role.key, cap.id, isRoleHidden(role.key)))}
-              </tr>
-            ))}
-          </React.Fragment>
-        ))}
-      </tbody>
-    );
-  };
+  /*
+   * round246 — a tier's cap rows, grouped by component.
+   * round335 (owner request) — the group label moved from a full-width row ABOVE
+   * its rows to a BOXED CELL BESIDE them: a `th` with `rowSpan` on the group's
+   * first row. In an RTL table the first cell of a row is the RIGHTMOST one, so
+   * the label lands on the right with all of its rows to its left, and the reader
+   * no longer has to remember which heading they passed on the way down.
+   *
+   * `scope="rowgroup"` is the accessible counterpart — it tells a screen reader
+   * this cell heads every row of its group, which a `colSpan` heading row never said.
+   *
+   * ONE `<tbody>` PER GROUP, and that is not cosmetic (PR review on 2.6.16, correct):
+   * `scope="rowgroup"` scopes a header to the containing HTML row group — the
+   * `<tbody>` — NOT to the rows its `rowSpan` happens to cover. With every group in
+   * a single `<tbody>`, the FIRST heading would be announced for every later row too
+   * and the later headings would overlap it, i.e. exactly the wrong associations. A
+   * `<table>` may hold any number of `<tbody>` elements, so one per group makes the
+   * HTML row group and the logical group the same thing.
+   *
+   * A single-capability group (משימות, החלטות) gets a one-row-tall box. Left as
+   * is by owner decision — no artificial min-height to fake a uniform scale.
+   */
+  const renderGroupedTbody = (roles, groups, showGroupCol) => (
+    <>
+      {groups.map((grp, gi) => (
+        <tbody key={grp.group}>
+          {grp.caps.map((cap, i) => (
+            <tr key={cap.id}>
+              {showGroupCol && i === 0 && (
+                <th
+                  scope="rowgroup"
+                  rowSpan={grp.caps.length}
+                  className={`${styles.mxGroupCell} ${gi === groups.length - 1 ? styles.mxGroupCellLast : ''}`}
+                >
+                  {grp.label}
+                </th>
+              )}
+              <td className={styles.mxAction}>{cap.label}</td>
+              {roles.map((role) => renderCell(role.key, cap.id, isRoleHidden(role.key)))}
+            </tr>
+          ))}
+        </tbody>
+      ))}
+    </>
+  );
 
-  // round246 — a collapsible section header (chevron + title + optional caption).
-  const sectionHead = (id, title, sub) => {
+  // round246 — a collapsible section header (chevron + title).
+  // round332 — the caption arg is gone (owner request), and the head is no longer
+  // a bordered box of its own: it is the top of the section CARD (`.mxSec`), so an
+  // open table reads as pouring out of its head rather than floating under it.
+  const sectionHead = (id, title) => {
     const open = expanded.has(id);
     return (
       <button
         type="button"
-        className={styles.secHead}
+        className={`${styles.secHead} ${open ? styles.secHeadOpen : ''}`}
         onClick={() => toggleSection(id)}
         aria-expanded={open}
       >
         <DropdownChevronDown className={`${styles.secChevron} ${open ? '' : styles.secChevronClosed}`} />
         <span className={styles.mxTitle}>{title}</span>
-        {sub && <span className={styles.secSub}>{sub}</span>}
       </button>
     );
   };
@@ -326,7 +374,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
           if (tier.id === 'task') {
             return (
               <div key={tier.id} className={styles.mxSec}>
-                {sectionHead(tier.id, tier.title, tier.sub)}
+                {sectionHead(tier.id, tier.title)}
                 {open && (
                   <div className={styles.taskRuleCard}>
                     <div className={styles.taskRuleLine}>
@@ -347,14 +395,20 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
             );
           }
           if (!roles.length || !caps.length) return null;
+          // round335 — the group column exists only when the tier HAS more than one
+          // group; a single-group tier would just get an empty rail. thead and tbody
+          // must agree on it or every row is off by one column.
+          const groups = groupCapabilities(caps);
+          const showGroupCol = groups.length > 1;
           return (
             <div key={tier.id} className={styles.mxSec}>
-              {sectionHead(tier.id, tier.title, tier.sub)}
+              {sectionHead(tier.id, tier.title)}
               {open && (
               <>
               <table className={styles.mxTable}>
                 <thead>
                   <tr>
+                    {showGroupCol && <th className={styles.mxGroupHead} />}
                     <th className={styles.mxActionTh} />
                     {roles.map((role) => {
                       const hidden = isRoleHidden(role.key);
@@ -375,14 +429,11 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
                     })}
                   </tr>
                 </thead>
-                {renderGroupedTbody(roles, caps)}
+                {renderGroupedTbody(roles, groups, showGroupCol)}
               </table>
-              {tier.id === 'disc' && (
-                <div className={styles.mxNote}>
-                  דיון שעמודת "מרכז דיון" שלו ריקה — אף אחד לא מקבל בו את הרשאות המרכז; שאר התפקידים עובדים כרגיל.
-                  בעלי הלוח (Owners) תמיד מורשים הכל ואינם מוגבלים ע"י הטבלאות.
-                </div>
-              )}
+              {/* round333 (owner request) — the empty-coordinator/Owners-bypass
+                  footnote is GONE. The BEHAVIOUR it described is unchanged and
+                  enforced in usePermission's resolver; only the caption left. */}
               </>
               )}
             </div>
@@ -391,22 +442,29 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
 
         {/* ===== system tier: Members / Super Members / Owners ===== */}
         <div className={styles.mxSec}>
-          {sectionHead('system', 'מערכת (כלל-האפליקציה)', 'פעולות גלובליות — לפי תפקיד האפליקציה')}
+          {sectionHead('system', 'מערכת (כלל-האפליקציה)')}
           {expanded.has('system') && (
           <table className={styles.mxTable}>
             <thead>
+              {/* round333 (owner request) — reading order right-to-left: Owners,
+                  then Super Members, then Members. The table is RTL, so DOM order
+                  IS the visual right-to-left order; the body cells below follow
+                  the same order. */}
               <tr>
                 <th className={styles.mxActionTh} />
-                <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Members</span><small className={styles.mxRoleSmall}>כל משתמשי הלוח</small></th>
-                <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Super Members</span><small className={styles.mxRoleSmall}>חברי-על</small></th>
                 <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Owners</span><small className={styles.mxRoleSmall}>בעלי הלוח</small></th>
+                <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Super Members</span><small className={styles.mxRoleSmall}>חברי-על</small></th>
+                <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Members</span><small className={styles.mxRoleSmall}>כל משתמשי הלוח</small></th>
               </tr>
             </thead>
             <tbody>
               {systemCaps.map((cap) => (
                 <tr key={cap.id}>
                   <td className={styles.mxAction}>{cap.label}</td>
-                  {renderCell(SYSTEM_ROLE_KEY, cap.id, false)}
+                  {/* round333 — Owners first (rightmost), matching the header. */}
+                  <td className={styles.mxTd}>
+                    <span className={`${styles.mxCell} ${styles.mxOn} ${styles.mxLocked}`} title="בעלי הלוח תמיד מורשים">✓<span className={styles.mxAlways}>תמיד</span></span>
+                  </td>
                   {/* Super members = regular members PLUS the two defining caps
                       (locked ✓); every other system cap follows the Members cell. */}
                   <td className={styles.mxTd}>
@@ -414,9 +472,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
                       ? <span className={`${styles.mxCell} ${styles.mxOn} ${styles.mxLocked}`} title="יכולת מגדירה של חבר-על — תמיד מורשה">✓<span className={styles.mxAlways}>תמיד</span></span>
                       : <span className={`${styles.mxCell} ${styles.mxInherit}`} title="כמו Members">כמו חברים</span>}
                   </td>
-                  <td className={styles.mxTd}>
-                    <span className={`${styles.mxCell} ${styles.mxOn} ${styles.mxLocked}`} title="בעלי הלוח תמיד מורשים">✓<span className={styles.mxAlways}>תמיד</span></span>
-                  </td>
+                  {renderCell(SYSTEM_ROLE_KEY, cap.id, false)}
                 </tr>
               ))}
             </tbody>
@@ -424,9 +480,12 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
           )}
         </div>
 
-        {/* ===== app roles — user assignment (round219: compact) ===== */}
-        <div className={styles.appRolesSec}>
-          <div className={styles.mxTitle}>תפקידי האפליקציה — שיוך משתמשים</div>
+        {/* ===== app roles — user assignment (round219: compact) =====
+            round332 — a REAL section like every other: the same collapsible card
+            head instead of a bare bold title (owner request). */}
+        <div className={styles.mxSec}>
+          {sectionHead('roles', 'תפקידי האפליקציה — שיוך משתמשים')}
+          {expanded.has('roles') && (
           <div className={styles.appRolesGrid}>
             <div className={styles.appRoleCard}>
               <div className={styles.appRoleHead}><span className={`${styles.appRoleBadge} ${styles.badgeOwner}`}>OWNERS · MEMBERS</span> אנשים בלוח</div>
@@ -453,6 +512,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
               />
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>

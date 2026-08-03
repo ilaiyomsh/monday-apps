@@ -1,6 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Heading, Text, Flex, ButtonGroup, TabsContext, TabList, Tab, TabPanels, TabPanel, TextField } from '@vibe/core';
+import { Warning, MoveArrowRight } from '@vibe/icons';
+
+/*
+ * round334 — a diskette glyph for "שמירה ויציאה". @vibe/icons carries no floppy
+ * (checked the whole set: Check / MoveArrow* / Navigation* and nothing else), so
+ * it is drawn here, the same way BoardPeoplePicker draws its crown and
+ * PermissionsTab its eye. One path with `evenodd`, so the shutter and the label
+ * are HOLES in the body silhouette rather than stacked shapes — that keeps it a
+ * single-colour glyph that inherits the button's text colour like a Vibe icon.
+ */
+function Diskette({ size = 16 }) {
+  return (
+    <svg viewBox="0 0 20 20" width={size} height={size} fill="currentColor" fillRule="evenodd" clipRule="evenodd" aria-hidden="true">
+      <path d="M4.75 3h6.6L17 8.65v7.6A1.75 1.75 0 0 1 15.25 18H4.75A1.75 1.75 0 0 1 3 16.25V4.75A1.75 1.75 0 0 1 4.75 3ZM6.85 4.5h4.3v2.9h-4.3V4.5Zm-.1 12h6.5v-3.6h-6.5v3.6Z" />
+    </svg>
+  );
+}
 import { useStatusOptions } from '@generated/hooks/useStatusOptions';
 import { useSettings } from '../../contexts/SettingsContext.jsx';
 import { useMondayContext } from '../../contexts/MondayContext.jsx';
@@ -834,14 +851,28 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       className={styles.confirmOverlay}
       onClick={(e) => { if (e.target === e.currentTarget) setShowCloseConfirm(false); }}
     >
+      {/* round334 — one centre axis (glyph, title, question, rule) over ONE action
+          row of three EQUAL thirds. RTL DOM order is right-to-left, so the buttons
+          read המשך עריכה · יציאה ללא שמירה · שמירה ויציאה. The arrow sits FIRST inside
+          its button (= rightmost) and the diskette LAST inside its own (= leftmost);
+          the middle button is deliberately icon-less. `MoveArrowRight` points the way
+          it means here: in RTL, rightwards is backwards — back to editing. */}
       <div className={styles.confirmDialog} role="dialog" aria-modal="true" aria-label="שינויים שלא נשמרו" dir="rtl">
-        <Heading type="h4">יש שינויים שלא נשמרו</Heading>
-        <Text>לשמור את השינויים לפני היציאה?</Text>
-        <Flex justify="end" gap={8} className={styles.confirmActions}>
-          <Button kind="tertiary" onClick={() => setShowCloseConfirm(false)}>המשך עריכה</Button>
-          <Button kind="secondary" onClick={() => { setShowCloseConfirm(false); onClose?.(); }}>יציאה ללא שמירה</Button>
-          <Button kind="primary" loading={saving} disabled={saving || logoBusy} onClick={saveAndClose}>שמירה ויציאה</Button>
-        </Flex>
+        <span className={styles.confirmGlyph} aria-hidden="true"><Warning size={24} /></span>
+        <Heading type="h4" className={styles.confirmTitle}>יש שינויים שלא נשמרו</Heading>
+        <Text color="secondary" className={styles.confirmText}>לשמור את השינויים לפני היציאה?</Text>
+        <div className={styles.confirmRule} />
+        <div className={styles.confirmActions}>
+          <Button className={`${styles.confirmBtn} ${styles.confirmBtnFramed}`} kind="tertiary" onClick={() => setShowCloseConfirm(false)}>
+            <MoveArrowRight size={16} />
+            המשך עריכה
+          </Button>
+          <Button className={styles.confirmBtn} kind="secondary" onClick={() => { setShowCloseConfirm(false); onClose?.(); }}>יציאה ללא שמירה</Button>
+          <Button className={styles.confirmBtn} kind="primary" loading={saving} disabled={saving || logoBusy} onClick={saveAndClose}>
+            שמירה ויציאה
+            <Diskette />
+          </Button>
+        </div>
       </div>
     </div>,
     document.body
