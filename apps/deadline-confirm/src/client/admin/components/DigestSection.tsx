@@ -108,6 +108,7 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const peopleOptions = usersColumns.filter((c) => c.type === 'people').map((c) => toOption(c.id, c.title));
   const emailOptions = usersColumns.filter((c) => c.type === 'email').map((c) => toOption(c.id, c.title));
   const dateOptions = tasksColumns.filter((c) => c.type === 'date').map((c) => toOption(c.id, c.title));
+  const textOptions = tasksColumns.filter((c) => c.type === 'text').map((c) => toOption(c.id, c.title));
   const buttonOptions = buttons
     .filter((b) => b.name.trim().length > 0)
     .map((b) => toOption(b.id, b.name));
@@ -387,6 +388,36 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                       הסרה
                     </Button>
                   )}
+                </div>
+                <div className="dc-row">
+                  <div className="dc-field" style={{ minWidth: 280 }}>
+                    <label>עמודת טקסט חובה (אופציונלי)</label>
+                    <Dropdown
+                      placeholder={
+                        tasksColumnsLoading
+                          ? 'טוען…'
+                          : textOptions.length === 0
+                            ? 'אין עמודות טקסט בלוח'
+                            : 'ללא — אין שדה טקסט'
+                      }
+                      disabled={tasksColumnsLoading || textOptions.length === 0}
+                      options={textOptions}
+                      value={findOption(textOptions, section.noteColumnId)}
+                      onChange={(opt: Option | null) =>
+                        patchSection(section.id, {
+                          noteColumnId: opt?.value ?? null,
+                          // capture the board column title → email header
+                          noteColumnTitle: opt?.label ?? '',
+                        })
+                      }
+                      clearable
+                    />
+                    <div className="dc-hint">
+                      כשבוחרים עמודה, כל שורה במקבץ מקבלת שדה טקסט במייל — <b>אי אפשר לסמן משימה
+                      בלי למלא אותו</b>, וכפתור האישור נשאר מנוטרל עד שכל השורות שסומנו מולאו.
+                      הערך נכתב לעמודה הזו ודורס את מה שהיה בה. ריק = אין שדה ואין חובה.
+                    </div>
+                  </div>
                 </div>
                 <div className="dc-row">
                   <div className="dc-field" style={{ minWidth: 320, flex: 1 }}>

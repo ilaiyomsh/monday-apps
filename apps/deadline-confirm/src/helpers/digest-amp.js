@@ -20,6 +20,17 @@ const SUBMIT_COLOR = '#0073ea';
 const NEUTRAL_STATUS = '#c4c4c4';
 const TRIGGER_EMPTY = '—';
 const STATUS_HEADER = 'סטטוס';
+const NOTE_PLACEHOLDER = 'חובה למילוי';
+
+/**
+ * A cluster requires a per-task note when it maps a text column.
+ * @param {object} section
+ * @returns {boolean}
+ */
+function sectionNoteColumn(section) {
+  const id = section?.noteColumnId;
+  return typeof id === 'string' && id.length > 0 ? id : null;
+}
 
 /** YYYY-MM-DD → DD/MM/YYYY (unset → ''). */
 function formatDate(date) {
@@ -213,7 +224,34 @@ function buildDropdownState(recipient) {
       state[`c${id}`] = cls;
     }
   }
+  // n<id> exists only for items whose cluster maps a text column — the gate
+  // expression reads these keys, and a key that is never seeded reads as
+  // undefined (not ''), which would leave the submit button stuck.
+  for (const id of noteRequiredItemIds(recipient)) state[`n${id}`] = '';
   return state;
+}
+
+/**
+ * Item ids that owe a note, in first-appearance order. An item in two mapped
+ * clusters appears ONCE: the wire carries one note per task, exactly like it
+ * carries one status selection per task.
+ * @param {object} recipient
+ * @returns {string[]}
+ */
+function noteRequiredItemIds(recipient) {
+  const ids = [];
+  const seen = new Set();
+  for (const section of recipient.sections ?? []) {
+    if (!section.tasks || section.tasks.length === 0) continue;
+    if (!sectionNoteColumn(section)) continue;
+    for (const task of section.tasks) {
+      const id = String(task.itemId);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
 }
 
 const STYLES_BASE = `
@@ -277,6 +315,26 @@ const STYLES_BASE = `
 `;
 
 /**
+ * Note-column styles. Emitted ONLY when this message actually requires a note —
+ * a tenant that maps no text column ships neither the markup nor the rules, and
+ * the document stays exactly the size it was before the feature.
+ */
+const STYLES_NOTES = `
+      td.note-cell { padding:8px; width:210px; text-align:right; }
+      .note-in {
+        width:190px; max-width:100%; height:34px; box-sizing:border-box;
+        padding:0 10px; border:1px solid #D0D4E4; border-radius:4px;
+        font-size:13px; color:#323338; background:#ffffff; text-align:right;
+        font-family:Figtree,Roboto,"Noto Sans Hebrew",Arial,Helvetica,sans-serif;
+      }
+      /* Bound class: a marked row with an empty note is the ONLY thing holding
+         the submit button down, so it has to be findable at a glance. */
+      .note-in.note-missing { border-color:#E2445C; background:#FDECEE; }
+      /* The submit's disabled state is bound, so this styles the gate itself. */
+      .send[disabled] { opacity:0.45; cursor:not-allowed; filter:grayscale(1); box-shadow:none; }
+`;
+
+/**
  * amp-bind dropdown: closed trigger shows CURRENT status; tap opens colored
  * options. Selecting updates the cell via [text]/[class] and sets the wire
  * value. Leaving the trigger untouched keeps v="" (= no write for that item).
@@ -336,11 +394,40 @@ ${options}
 }
 
 /**
+ * The note cell for one row. The VISIBLE input is deliberately nameless: two
+ * named inputs for one item (a task listed in two mapped clusters) would submit
+ * the key twice. It writes to shared state instead, and one hidden field per
+ * item carries that state to the wire — the same split the dropdown uses.
+ *
+ * `required` is NOT used. This is one bulk form for the whole message, so a
+ * required attribute would block submission over rows the reader never marked;
+ * the gate has to be conditional, which is what the submit binding does.
+ *
+ * @param {object} task
+ * @param {boolean} includeHidden emit the wire hidden input once per item
+ */
+function renderNoteCell(task, includeHidden) {
+  const id = String(task.itemId);
+  const nKey = `n${id}`;
+  const vKey = `v${id}`;
+  const hidden = includeHidden
+    ? `\n                <input type="hidden" name="${escapeHtml(`note_${id}`)}" value="" [value]="dd.${nKey}">`
+    : '';
+  return `              <td class="note-cell">
+                <input type="text" class="note-in" placeholder="${escapeHtml(NOTE_PLACEHOLDER)}"
+                       [class]="dd.${vKey} != '' && dd.${nKey} == '' ? 'note-in note-missing' : 'note-in'"
+                       on="input-throttled:AMP.setState({dd:{${nKey}:event.value}})">${hidden}
+              </td>`;
+}
+
+/**
  * @param {object} section
  * @param {Set<string>} emittedHidden
  * @param {Array<{ id: string, label: string, color: string }>} palette
+ * @param {number} clusterIndex
+ * @param {Set<string>} emittedNotes item ids whose hidden note field already exists
  */
-function renderClusterTable(section, emittedHidden, palette, clusterIndex) {
+function renderClusterTable(section, emittedHidden, palette, clusterIndex, emittedNotes) {
   const buttons = resolveSectionButtons(section);
   if (buttons.length === 0) return '';
 
@@ -348,6 +435,11 @@ function renderClusterTable(section, emittedHidden, palette, clusterIndex) {
     section.dateColumnTitle && String(section.dateColumnTitle).length > 0
       ? String(section.dateColumnTitle)
       : 'תאריך';
+  const notesRequired = Boolean(sectionNoteColumn(section));
+  const noteHeader =
+    section.noteColumnTitle && String(section.noteColumnTitle).length > 0
+      ? String(section.noteColumnTitle)
+      : 'הערה';
 
   const rows = section.tasks
     .map((task) => {
@@ -355,25 +447,48 @@ function renderClusterTable(section, emittedHidden, palette, clusterIndex) {
       const fieldName = escapeHtml(`item_${itemId}`);
       const includeHidden = !emittedHidden.has(itemId);
       if (includeHidden) emittedHidden.add(itemId);
+      let noteCell = '';
+      if (notesRequired) {
+        const includeNoteHidden = !emittedNotes.has(itemId);
+        if (includeNoteHidden) emittedNotes.add(itemId);
+        noteCell = `\n${renderNoteCell(task, includeNoteHidden)}`;
+      }
       return `            <tr>
               <td class="name">&#8207;${escapeHtml(task.name)}</td>
-              <td class="date">${formatDate(task.date) || '—'}</td>
+              <td class="date">${formatDate(task.date) || '—'}</td>${noteCell}
 ${renderLabelDropdown(fieldName, buttons, palette, task, includeHidden, clusterIndex)}
             </tr>`;
     })
     .join('\n');
+
+  const noteHeaderCell = notesRequired
+    ? `\n              <th class="note-h">&#8207;${escapeHtml(noteHeader)}</th>`
+    : '';
 
   return `        <div class="cluster">
           <p class="cluster-title">&#8207;${escapeHtml(section.title)}</p>
           <table class="board">
             <tr>
               <th class="name-h">&#8207;שם הפעולה</th>
-              <th>&#8207;${escapeHtml(dateHeader)}</th>
+              <th>&#8207;${escapeHtml(dateHeader)}</th>${noteHeaderCell}
               <th class="status-h">&#8207;${STATUS_HEADER}</th>
             </tr>
 ${rows}
           </table>
         </div>`;
+}
+
+/**
+ * amp-bind expression for the submit button's [disabled], or '' when nothing in
+ * this message requires a note. Reads: "some row is marked but has no note".
+ * @param {object} recipient
+ * @returns {string}
+ */
+function buildNoteGate(recipient) {
+  const clauses = noteRequiredItemIds(recipient).map(
+    (id) => `(dd.v${id} != '' && dd.n${id} == '')`
+  );
+  return clauses.join(' || ');
 }
 
 /**
@@ -434,13 +549,22 @@ export function renderDigestAmp({
   const ddState = buildDropdownState(recipient);
   const palette = allRecipientButtons(recipient);
   const colorCss = buildColorClassCss(collectColors(recipient));
-  const styles = `${STYLES_BASE}\n      ${colorCss}`;
+  const notesInPlay = noteRequiredItemIds(recipient).length > 0;
+  const styles = `${STYLES_BASE}${notesInPlay ? STYLES_NOTES : ''}\n      ${colorCss}`;
   const emittedHidden = new Set();
+  const emittedNotes = new Set();
   const clusters = (recipient.sections ?? [])
     .filter((section) => section.tasks && section.tasks.length > 0)
-    .map((section, clusterIndex) => renderClusterTable(section, emittedHidden, palette, clusterIndex))
+    .map((section, clusterIndex) =>
+      renderClusterTable(section, emittedHidden, palette, clusterIndex, emittedNotes)
+    )
     .filter((html) => html.length > 0)
     .join('\n');
+  const noteGate = buildNoteGate(recipient);
+  const submitBinding = noteGate ? ` [disabled]="${noteGate}"` : '';
+  const noteHint = noteGate
+    ? '<p class="lead">&#8207;בשורות שיש בהן שדה טקסט — חובה למלא אותו כדי לסמן את המשימה. כפתור האישור נשאר מנוטרל עד שכל שורה מסומנת מולאה.</p>'
+    : '';
 
   return `<!doctype html>
 <html amp4email lang="he">
@@ -460,6 +584,7 @@ export function renderDigestAmp({
     <div class="wrap">
       <p class="hi">&#8207;שלום ${escapeHtml(recipient.name)},</p>
       <p class="lead">&#8207;לחצו על תגית הסטטוס לבחירה מהתפריט הנפתח, ואז על אישור — כל העדכונים נשמרים מיד, בלי לצאת מהמייל.</p>
+      ${noteHint}
       <form method="post"
             action-xhr="${escapeHtml(baseUrl)}${AMP_ENDPOINT_PATH}"
             enctype="application/x-www-form-urlencoded">
@@ -469,7 +594,7 @@ export function renderDigestAmp({
         <input type="hidden" name="s" value="${escapeHtml(signed.slot)}">
         <input type="hidden" name="sig" value="${escapeHtml(signed.signature)}">
 ${clusters}
-        <div class="go"><input class="send" type="submit" style="background:${SUBMIT_COLOR}" value="${SUBMIT_LABEL}"></div>
+        <div class="go"><input class="send" type="submit" style="background:${SUBMIT_COLOR}" value="${SUBMIT_LABEL}"${submitBinding}></div>
         <div submitting><div class="sending">שולח את העדכונים…</div></div>
         <div submit-success><template type="amp-mustache"><div class="ok">{{message}}</div></template></div>
         <div submit-error><template type="amp-mustache"><div class="err">{{message}}{{#detail}}<span class="err-detail">{{detail}}</span>{{/detail}}</div></template></div>

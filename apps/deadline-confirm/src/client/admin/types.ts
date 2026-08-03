@@ -52,6 +52,15 @@ export interface DigestSectionConfig {
   title: string;
   dateColumnId: string;
   dateColumnTitle: string; // the board column's title, captured at save → email <th>
+  /**
+   * Text column on the TASKS board this cluster maps. When set, the email adds a
+   * text field per row and a task cannot be marked without filling it; the value
+   * is written to this column (overwriting it) alongside the status.
+   * null/absent = no field, no requirement (every pre-0.12.0 config).
+   */
+  noteColumnId?: string | null;
+  /** The board column's title, captured at save → the email column header. */
+  noteColumnTitle?: string;
   /** Primary button — used for the status-column filter (includeStatusLabelIds). */
   buttonId: string;
   /**
@@ -165,7 +174,7 @@ export interface StatusLabel {
 export interface BoardColumn {
   id: string;
   title: string;
-  type: 'status' | 'people' | 'date' | 'email'; // email: v4 digest users board
+  type: 'status' | 'people' | 'date' | 'email' | 'text'; // email: users board · text: per-task note
   labels: StatusLabel[]; // parsed from settings.labels, status columns only
 }
 

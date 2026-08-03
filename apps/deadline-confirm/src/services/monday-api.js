@@ -38,6 +38,15 @@ const SET_STATUS_MUTATION = `mutation SetStatus($boardId: ID!, $itemId: ID!, $co
   change_column_value(board_id: $boardId, item_id: $itemId, column_id: $columnId, value: $value) { id }
 }`;
 
+// Status + note in ONE write. The product rule is "a task cannot be marked
+// without its note", so two sequential mutations could leave a marked task with
+// no note when the second fails — and the reader would have no way to tell.
+// Write formats (monday-api skill, column-formats.md): status
+// `{ index: <labelId> }`, text a plain string.
+const SET_COLUMNS_MUTATION = `mutation SetColumns($boardId: ID!, $itemId: ID!, $columnValues: JSON!) {
+  change_multiple_column_values(board_id: $boardId, item_id: $itemId, column_values: $columnValues) { id }
+}`;
+
 const ADD_UPDATE_MUTATION = `mutation AddUpdate($itemId: ID!, $body: String!) {
   create_update(item_id: $itemId, body: $body) { id }
 }`;
@@ -234,6 +243,20 @@ export function createMondayApi({ fetchImpl, url = MONDAY_API_URL } = {}) {
         token,
         query: SET_STATUS_MUTATION,
         variables: { boardId, itemId, columnId, value: JSON.stringify({ index: toLabelId }) },
+      });
+    },
+
+    /**
+     * Several columns on one item, atomically. `values` is keyed by column id
+     * with each column's own write shape; it is serialized here because
+     * `column_values` is a JSON *string* argument, not a nested input object.
+     * @param {{ token: string, boardId: string, itemId: string, values: Record<string, unknown> }} p
+     */
+    async changeColumns({ token, boardId, itemId, values }) {
+      await graphql({
+        token,
+        query: SET_COLUMNS_MUTATION,
+        variables: { boardId, itemId, columnValues: JSON.stringify(values) },
       });
     },
 

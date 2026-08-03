@@ -191,6 +191,10 @@ export function buildDigest({ config, tasks, users, today }) {
         sectionId: section.id,
         title: section.title,
         dateColumnTitle: section.dateColumnTitle ?? '',
+        // Per-cluster required note: the renderer needs the mapping to emit the
+        // text field, and its title to head the column.
+        noteColumnId: section.noteColumnId ?? null,
+        noteColumnTitle: section.noteColumnTitle ?? '',
         buttonId: section.buttonId,
         buttonIds: sectionActionButtonIds(section),
         tasks: mine.map(({ itemId, name, date, dates, statusText }) => ({
