@@ -798,7 +798,12 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
       await updateSettings({ boards, columns: columnsToSave, preferences, permissions, exportTemplate });
       // Success toast (top of the app, same funnel as every other notification).
       onNotify?.('הגדרות נשמרו בהצלחה', 'success');
-      onClose();
+      // Optional-chained (PR review on round337, correct): the FORCED first-run
+      // mount has no onClose at all — there, saving flips isConfigured and the
+      // SettingsGate unmounts this modal by itself. A bare onClose() threw a
+      // TypeError AFTER the successful save, and the catch below presented the
+      // already-persisted save as a failure.
+      onClose?.();
     } catch (err) {
       logger.error('SettingsModal', 'שמירת ההגדרות נכשלה', err);
       setActiveTab(3);

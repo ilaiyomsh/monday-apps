@@ -37,6 +37,7 @@ vi.mock('../../../utils/mondayApi/board-config-store.js', () => ({
 import { SettingsModal } from '../SettingsModal.jsx';
 import { SettingsProvider } from '../../../contexts/SettingsContext.jsx';
 import { MondayContext } from '../../../contexts/MondayContext.jsx';
+import logger from '../../../utils/logger.js';
 
 function mount(props) {
   const ctxValue = { context: { instanceId: 'i1', boardId: 'b1' }, currentUser: null, isMobile: false };
@@ -63,5 +64,24 @@ describe('round337 — forced mount hides the close button', () => {
   it('still renders the סגירה button on a normal mount (onClose given)', async () => {
     await act(async () => { mount({ onClose: () => {} }); });
     expect(screen.getByLabelText('סגירה')).toBeInTheDocument();
+  });
+
+  /*
+   * Added after the PR review on round337, which was right: handleSave called
+   * onClose() BARE, so on the forced mount (no onClose) pressing שמור persisted
+   * the settings, showed the success toast — and then threw a TypeError that the
+   * catch logged and presented as "שמירת ההגדרות נכשלה". A brand new user's very
+   * first save looked like a failure even though it had already succeeded.
+   */
+  it('saves cleanly on the forced mount — no error logged after a successful save', async () => {
+    const errSpy = vi.spyOn(logger, 'error');
+    await act(async () => { mount({}); });
+    await act(async () => {
+      screen.getByText('שמור').closest('button').click();
+    });
+    expect(storage.setItem).toHaveBeenCalled();
+    const saveFailures = errSpy.mock.calls.filter((c) => String(c[1]).includes('שמירת ההגדרות נכשלה'));
+    expect(saveFailures).toHaveLength(0);
+    errSpy.mockRestore();
   });
 });
