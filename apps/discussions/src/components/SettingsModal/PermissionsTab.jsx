@@ -52,10 +52,13 @@ function EyeOffIcon() {
  * the parent SettingsModal draft and persists as one `permissions` object.
  */
 
+/* round332 (owner request, approved mock) — the explanatory captions
+   ("התפקידים נקבעים לפי עמודות האנשים…") are GONE: the owner judged them noise,
+   and the matrix's own role columns already say it. The head is chevron + title. */
 const TIERS = [
-  { id: 'disc', title: 'דיון ונושאים', sub: 'התפקידים נקבעים לפי עמודות האנשים של כל דיון' },
-  { id: 'task', title: 'שדות משימה', sub: 'התפקידים נקבעים לפי עמודות האנשים של כל משימה' },
-  { id: 'decision', title: 'שדות החלטה', sub: 'התפקידים נקבעים לפי עמודות האנשים של כל החלטה' },
+  { id: 'disc', title: 'דיון ונושאים' },
+  { id: 'task', title: 'שדות משימה' },
+  { id: 'decision', title: 'שדות החלטה' },
 ];
 
 // Which board's columns back each people-column tier (system is synthetic).
@@ -279,19 +282,21 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
     );
   };
 
-  // round246 — a collapsible section header (chevron + title + optional caption).
-  const sectionHead = (id, title, sub) => {
+  // round246 — a collapsible section header (chevron + title).
+  // round332 — the caption arg is gone (owner request), and the head is no longer
+  // a bordered box of its own: it is the top of the section CARD (`.mxSec`), so an
+  // open table reads as pouring out of its head rather than floating under it.
+  const sectionHead = (id, title) => {
     const open = expanded.has(id);
     return (
       <button
         type="button"
-        className={styles.secHead}
+        className={`${styles.secHead} ${open ? styles.secHeadOpen : ''}`}
         onClick={() => toggleSection(id)}
         aria-expanded={open}
       >
         <DropdownChevronDown className={`${styles.secChevron} ${open ? '' : styles.secChevronClosed}`} />
         <span className={styles.mxTitle}>{title}</span>
-        {sub && <span className={styles.secSub}>{sub}</span>}
       </button>
     );
   };
@@ -326,7 +331,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
           if (tier.id === 'task') {
             return (
               <div key={tier.id} className={styles.mxSec}>
-                {sectionHead(tier.id, tier.title, tier.sub)}
+                {sectionHead(tier.id, tier.title)}
                 {open && (
                   <div className={styles.taskRuleCard}>
                     <div className={styles.taskRuleLine}>
@@ -349,7 +354,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
           if (!roles.length || !caps.length) return null;
           return (
             <div key={tier.id} className={styles.mxSec}>
-              {sectionHead(tier.id, tier.title, tier.sub)}
+              {sectionHead(tier.id, tier.title)}
               {open && (
               <>
               <table className={styles.mxTable}>
@@ -391,7 +396,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
 
         {/* ===== system tier: Members / Super Members / Owners ===== */}
         <div className={styles.mxSec}>
-          {sectionHead('system', 'מערכת (כלל-האפליקציה)', 'פעולות גלובליות — לפי תפקיד האפליקציה')}
+          {sectionHead('system', 'מערכת (כלל-האפליקציה)')}
           {expanded.has('system') && (
           <table className={styles.mxTable}>
             <thead>
@@ -424,9 +429,12 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
           )}
         </div>
 
-        {/* ===== app roles — user assignment (round219: compact) ===== */}
-        <div className={styles.appRolesSec}>
-          <div className={styles.mxTitle}>תפקידי האפליקציה — שיוך משתמשים</div>
+        {/* ===== app roles — user assignment (round219: compact) =====
+            round332 — a REAL section like every other: the same collapsible card
+            head instead of a bare bold title (owner request). */}
+        <div className={styles.mxSec}>
+          {sectionHead('roles', 'תפקידי האפליקציה — שיוך משתמשים')}
+          {expanded.has('roles') && (
           <div className={styles.appRolesGrid}>
             <div className={styles.appRoleCard}>
               <div className={styles.appRoleHead}><span className={`${styles.appRoleBadge} ${styles.badgeOwner}`}>OWNERS · MEMBERS</span> אנשים בלוח</div>
@@ -453,6 +461,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
               />
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>
