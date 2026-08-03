@@ -1,7 +1,7 @@
 {
   "name": "discussions-app",
   "private": true,
-  "version": "2.6.18",
+  "version": "2.6.19",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,7 @@
     "tunnel": "mapps tunnel:create -p 5180 -a 11457413",
     "app:versions": "mapps app-version:list -i 11457413",
     "app:features": "mapps app-features:list -a 11457413 -i 15112863",
-    "lint": "eslint .",
+    "lint": "eslint . --quiet",
     "type-check": "echo no-typescript"
   },
   "dependencies": {

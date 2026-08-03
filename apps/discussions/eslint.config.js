@@ -65,6 +65,15 @@ export default [
       // eslint-disable directives for this rule (dependency arrays trimmed on
       // purpose). Enabling the plugin is what makes those directives MEAN
       // something again — until now they referenced a rule that did not exist.
+      //
+      // OWNER DECISION (2026-08-03, round338): the ~20 standing warnings are
+      // IGNORED for now — the `lint` script runs `eslint . --quiet`, which
+      // shows errors only. The rule stays configured (not 'off') so the 31
+      // inline disables remain "used" and `npx eslint .` without --quiet still
+      // lists the warnings for whoever wants them. Revisit trigger, in the
+      // owner's words: "כשיהיה באג שלא נמצא לו פיתרון הולם" — a stale-value /
+      // stale-render bug with no better explanation means dropping --quiet and
+      // auditing these first.
       'react-hooks/exhaustive-deps': 'warn',
       // Usage-linking only, NOT the plugin's style opinions: with plain espree a
       // `<DiscussionList />` does not count as a USE of the DiscussionList

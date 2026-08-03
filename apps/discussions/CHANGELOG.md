@@ -10,6 +10,16 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.6.19 — 2026-08-03
+
+- round338 (החלטת בעלים): **אזהרות `exhaustive-deps` מושתקות עד להחלטה אחרת.**
+  סקריפט ה-lint רץ עם `--quiet` — שגיאות עדיין מפילות את השער, אזהרות לא
+  מודפסות. הכלל נשאר מוגדר (לא כובה) כדי ש-31 הערות ההשתקה המנומקות בקוד
+  יישארו "בשימוש", ומי שרוצה לראות את האזהרות מריץ `npx eslint .` בלי `--quiet`.
+  טריגר לפתיחה מחדש, במילות הבעלים: "כשיהיה באג שלא נמצא לו פיתרון הולם" —
+  באג של ערך-ישן/רינדור-ישן בלי הסבר טוב יותר אומר להוריד את `--quiet` ולבקר
+  את 20 האזהרות קודם. ההחלטה מתועדת גם בהערה בתוך `eslint.config.js`.
+
 ## 2.6.18 — 2026-08-03
 
 - round337 (בעלים: "לתקן ככל האפשר את הכל" מדוח סריקת הקוד, מלבד איחוד טאבי
