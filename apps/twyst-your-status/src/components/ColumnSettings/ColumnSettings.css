@@ -1,47 +1,82 @@
-/* Settings UI — calm Vercel/dashboard density: soft canvas, compact identity
-   rows, capped controls, expandable permissions (guidelines: labels, hit
-   targets, no stretched dead fields). */
+/* Settings UI — round321 redesign (owner request: "הכי נעים ופשוט לניהול").
+   One token block drives the whole screen; everything else reads from it, so the
+   palette/radius/spacing stay a system rather than per-rule choices. The layout
+   language: white cards on a faintly blue-grey canvas, one hairline per card
+   between identity and configuration, and the configuration itself grouped into
+   an inset panel — hierarchy from contrast, not from more borders. */
 
 .twyst-settings {
+  --tw-accent: #0073ea;
+  /* Text sitting ON --tw-accent-soft needs its own darker step for AA (5.4:1). */
+  --tw-accent-strong: #0060b9;
+  --tw-accent-soft: #e6f1fd;
+  --tw-canvas: #f7f8fa;
+  --tw-card: #ffffff;
+  --tw-inset: #fafbfd;
+  --tw-border: rgba(9, 30, 66, 0.12);
+  --tw-border-strong: rgba(9, 30, 66, 0.25);
+  --tw-border-soft: rgba(9, 30, 66, 0.07);
+  --tw-text: #1f2430;
+  /* round321 review — both muted tones meet WCAG AA (4.5:1) on every ground
+     they sit on: mute 5.7/5.5 and faint 4.85/4.68 on card/inset (measured). */
+  --tw-text-mute: #5f6774;
+  --tw-text-faint: #6a7280;
+  --tw-danger: #d83a52;
+  --tw-radius-card: 14px;
+  --tw-radius-ctl: 8px;
+
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 100vh;
   box-sizing: border-box;
-  color: var(--primary-text-color, #171717);
-  background: #fafafa;
+  color: var(--primary-text-color, var(--tw-text));
+  background: var(--tw-canvas);
 }
 
 .twyst-settings.is-overlay {
   min-height: 100vh;
 }
 
+/* ---------------------------------------------------------------- header */
+
 .twyst-settings-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 14px 20px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--tw-border-soft);
   flex: 0 0 auto;
-  background: #fff;
+  background: var(--tw-card);
+}
+
+.twyst-settings-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.twyst-settings-subtitle {
+  font-size: 12px;
+  color: var(--tw-text-mute);
 }
 
 .twyst-settings-close {
   width: 32px;
   height: 32px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--tw-radius-ctl);
   background: transparent;
-  color: #737373;
+  color: var(--tw-text-mute);
   font-size: 22px;
   line-height: 1;
   cursor: pointer;
 }
 
 .twyst-settings-close:hover:not(:disabled) {
-  background: #f5f5f5;
-  color: #171717;
+  background: var(--tw-canvas);
+  color: var(--tw-text);
 }
 
 .twyst-settings-close:disabled {
@@ -49,11 +84,14 @@
   cursor: not-allowed;
 }
 
+/* ---------------------------------------------------------------- body */
+
 .twyst-settings-body {
   flex: 1 1 auto;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 16px 20px 24px;
+  scrollbar-gutter: stable;
+  padding: 18px 24px 28px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -65,25 +103,72 @@
 
 .twyst-settings-toolbar {
   display: flex;
-  justify-content: flex-start;
-  margin-block-end: 4px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-block-end: 2px;
 }
 
+.twyst-settings-toolbar-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.twyst-settings-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tw-text);
+}
+
+.twyst-settings-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--tw-accent-soft);
+  color: var(--tw-accent-strong);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- cards */
+
 .twyst-label-card {
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border: 1px solid var(--tw-border-soft);
+  border-radius: var(--tw-radius-card);
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  gap: 10px;
+  background: var(--tw-card);
+  box-shadow: 0 1px 2px rgba(9, 30, 66, 0.04);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.twyst-label-card:hover {
+  border-color: var(--tw-border);
+}
+
+.twyst-label-card.is-open {
+  border-color: rgba(0, 115, 234, 0.35);
+  box-shadow: 0 2px 10px rgba(9, 30, 66, 0.07);
+}
+
+/* The grey DEFAULT card reads as a system row: dashed frame, canvas fill. */
+.twyst-label-card.is-default {
+  border-style: dashed;
+  background: var(--tw-inset);
 }
 
 .twyst-label-identity {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -92,24 +177,37 @@
   max-width: 100%;
   flex: 0 1 220px;
   min-width: 120px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--tw-radius-ctl);
   padding: 7px 10px;
   font: inherit;
   font-size: 14px;
-  background: #fff;
+  font-weight: 500;
+  background: transparent;
   color: inherit;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.twyst-label-name-input:hover:not(:disabled),
+.twyst-label-name-input:focus {
+  border-color: var(--tw-border);
+  background: var(--tw-card);
+}
+
+.twyst-label-name-input::placeholder {
+  color: var(--tw-text-faint);
+  font-weight: 400;
 }
 
 .twyst-label-name-input:focus-visible {
-  outline: 2px solid #0070f3;
+  outline: 2px solid var(--tw-accent);
   outline-offset: 1px;
 }
 
 .twyst-label-actions {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   margin-inline-start: auto;
   flex: 0 0 auto;
 }
@@ -118,17 +216,20 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  padding-inline-end: 4px;
+  border-inline-end: 1px solid var(--tw-border-soft);
+  margin-inline-end: 4px;
 }
 
 .twyst-icon-btn,
 .twyst-text-btn {
   border: 1px solid transparent;
   background: transparent;
-  color: #525252;
+  color: var(--tw-text-mute);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
-  border-radius: 8px;
+  border-radius: var(--tw-radius-ctl);
   min-height: 28px;
   padding: 0 8px;
   touch-action: manipulation;
@@ -144,49 +245,57 @@
 
 .twyst-icon-btn:hover:not(:disabled),
 .twyst-text-btn:hover:not(:disabled) {
-  background: #f5f5f5;
-  color: #171717;
+  background: var(--tw-canvas);
+  color: var(--tw-text);
+}
+
+.twyst-icon-btn.is-danger:hover:not(:disabled) {
+  background: rgba(216, 58, 82, 0.08);
+  color: var(--tw-danger);
 }
 
 .twyst-icon-btn:focus-visible,
 .twyst-text-btn:focus-visible {
-  outline: 2px solid #0070f3;
+  outline: 2px solid var(--tw-accent);
   outline-offset: 1px;
 }
 
 .twyst-icon-btn:disabled,
 .twyst-text-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .twyst-text-btn.is-danger {
-  color: #b42318;
+  color: var(--tw-danger);
 }
 
 /* The default (grey) label's card: same row, no reorder and no remove — monday keeps
    this label at the bottom and never lets it go. The tag says why the buttons are gone. */
 .twyst-label-default-tag {
-  font-size: 12px;
-  color: #737373;
-  background: #f5f5f5;
-  border-radius: 6px;
-  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--tw-text-mute);
+  background: var(--tw-card);
+  border: 1px solid var(--tw-border-soft);
+  border-radius: 999px;
+  padding: 3px 10px;
   white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------- access */
 
 .twyst-label-access {
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding-block-start: 2px;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid var(--tw-border-soft);
 }
 
 .twyst-label-access-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
   padding-block-start: 8px;
@@ -198,21 +307,85 @@
   gap: 8px;
   cursor: pointer;
   font-size: 13px;
-  color: #404040;
+  color: var(--tw-text-mute);
   min-height: 28px;
 }
 
 .twyst-check input {
-  width: 16px;
-  height: 16px;
-  accent-color: #0070f3;
+  width: 15px;
+  height: 15px;
+  accent-color: var(--tw-accent);
 }
 
+/* One quiet pill per active restriction — the card's state without opening it. */
+.twyst-summary-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.twyst-summary-chip {
+  font-size: 11px;
+  color: var(--tw-text-mute);
+  background: var(--tw-canvas);
+  border: 1px solid var(--tw-border-soft);
+  border-radius: 999px;
+  padding: 2px 9px;
+  white-space: nowrap;
+}
+
+.twyst-accordion-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+
+.twyst-accordion-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  font-size: 10px;
+  color: var(--tw-text-mute);
+  /* dir="rtl"-only UI: the collapsed disclosure points LEFT (rotate(+90deg) turns
+     the ▾ glyph counter to the reading direction — review-confirmed RTL fix). */
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+
+.twyst-accordion-chevron.is-open {
+  transform: rotate(0deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .twyst-accordion-chevron,
+  .twyst-label-card,
+  .twyst-label-name-input {
+    transition: none;
+  }
+}
+
+/* ---------------------------------------------------------------- panel */
+
+/* The whole configuration sits in ONE inset panel: the grouping is the design. */
 .twyst-permissions {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 4px 0 2px;
+  padding: 14px;
+  background: var(--tw-inset);
+  border: 1px solid var(--tw-border-soft);
+  border-radius: 10px;
+}
+
+.twyst-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--tw-text-faint);
 }
 
 .twyst-field {
@@ -225,8 +398,15 @@
 .twyst-field-label {
   font-size: 12px;
   font-weight: 500;
-  color: #737373;
+  color: var(--tw-text-mute);
   letter-spacing: 0.01em;
+}
+
+.twyst-field-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--tw-text-faint);
+  line-height: 1.45;
 }
 
 .twyst-field-actors,
@@ -234,29 +414,11 @@
   max-width: 320px;
 }
 
-.twyst-field-required {
+.twyst-field-required,
+.twyst-field-transitions {
   max-width: 320px;
-}
-
-.twyst-accordion-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.twyst-accordion-chevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  font-size: 10px;
-  color: #737373;
-  transform: rotate(-90deg);
-  transition: transform 120ms ease;
-}
-
-.twyst-accordion-chevron.is-open {
-  transform: rotate(0deg);
+  padding-block-start: 10px;
+  border-top: 1px solid var(--tw-border-soft);
 }
 
 .twyst-collapse-toggle {
@@ -279,7 +441,7 @@
 }
 
 .twyst-collapse-toggle:focus-visible {
-  outline: 2px solid #0070f3;
+  outline: 2px solid var(--tw-accent);
   outline-offset: 1px;
   border-radius: 6px;
 }
@@ -292,11 +454,71 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 999px;
-  background: #f0f0f0;
-  color: #525252;
+  background: var(--tw-accent-soft);
+  color: var(--tw-accent-strong);
   font-size: 11px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
+
+/* ------------------------------------------------------------ transitions */
+
+.twyst-transition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.twyst-transition-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 3px 10px;
+  border: 1px solid var(--tw-border-soft);
+  border-radius: var(--tw-radius-ctl);
+  background: var(--tw-card);
+  font-size: 13px;
+  color: var(--tw-text);
+  cursor: pointer;
+  transition: border-color 100ms ease;
+}
+
+.twyst-transition-chip:hover {
+  border-color: var(--tw-border);
+}
+
+.twyst-transition-chip:has(input:not(:checked)) {
+  /* Muted, not faint: this is an interactive control's name and must stay AA. */
+  color: var(--tw-text-mute);
+  background: transparent;
+}
+
+.twyst-transition-chip input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--tw-accent);
+  flex: 0 0 auto;
+}
+
+.twyst-transition-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.twyst-transition-chip:has(input:not(:checked)) .twyst-transition-dot {
+  opacity: 0.35;
+}
+
+.twyst-transition-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- select */
 
 .twyst-select-trigger {
   display: inline-flex;
@@ -306,24 +528,24 @@
   width: 100%;
   max-width: 320px;
   min-height: 36px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
+  border: 1px solid var(--tw-border);
+  border-radius: var(--tw-radius-ctl);
   padding: 7px 10px;
   font: inherit;
   font-size: 13px;
-  background: #fff;
+  background: var(--tw-card);
   color: inherit;
   cursor: pointer;
   text-align: start;
 }
 
 .twyst-select-trigger:hover:not(:disabled) {
-  border-color: rgba(0, 0, 0, 0.22);
+  border-color: var(--tw-border-strong);
 }
 
 .twyst-select-trigger.is-open,
 .twyst-select-trigger:focus-visible {
-  outline: 2px solid #0070f3;
+  outline: 2px solid var(--tw-accent);
   outline-offset: 1px;
   border-color: transparent;
 }
@@ -340,12 +562,12 @@
 }
 
 .twyst-select-value.is-placeholder {
-  color: #a3a3a3;
+  color: var(--tw-text-faint);
 }
 
 .twyst-select-chevron {
   flex: 0 0 auto;
-  color: #737373;
+  color: var(--tw-text-mute);
   font-size: 11px;
 }
 
@@ -353,10 +575,10 @@
   max-height: 220px;
   overflow: auto;
   overscroll-behavior: contain;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
+  border: 1px solid rgba(9, 30, 66, 0.1);
+  border-radius: var(--tw-radius-ctl);
   background: #fff;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 24px rgba(9, 30, 66, 0.14);
   padding: 4px;
 }
 
@@ -376,12 +598,12 @@
 }
 
 .twyst-select-option:hover {
-  background: #f5f5f5;
+  background: #f5f6f8;
 }
 
 .twyst-select-option.is-active {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: #e6f1fd;
+  color: #0060b9;
 }
 
 .twyst-select-empty {
@@ -391,6 +613,8 @@
   text-align: center;
 }
 
+/* ---------------------------------------------------------------- lists */
+
 .twyst-check-list {
   display: flex;
   flex-direction: column;
@@ -398,10 +622,10 @@
   max-height: 132px;
   overflow: auto;
   overscroll-behavior: contain;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 8px;
+  border: 1px solid var(--tw-border-soft);
+  border-radius: var(--tw-radius-ctl);
   padding: 4px;
-  background: #fafafa;
+  background: var(--tw-card);
 }
 
 .twyst-check-row {
@@ -412,18 +636,18 @@
   padding: 2px 8px;
   border-radius: 6px;
   font-size: 13px;
-  color: #262626;
+  color: var(--tw-text);
   cursor: pointer;
 }
 
 .twyst-check-row:hover {
-  background: #f0f0f0;
+  background: var(--tw-canvas);
 }
 
 .twyst-check-row input {
   width: 14px;
   height: 14px;
-  accent-color: #0070f3;
+  accent-color: var(--tw-accent);
   flex: 0 0 auto;
 }
 
@@ -434,25 +658,29 @@
 .twyst-field-empty {
   margin: 0;
   font-size: 12px;
-  color: #a3a3a3;
+  color: var(--tw-text-faint);
 }
+
+/* ---------------------------------------------------------------- footer */
 
 .twyst-settings-footer {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 20px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 12px 24px;
+  border-top: 1px solid var(--tw-border-soft);
   flex: 0 0 auto;
-  background: #fff;
+  background: var(--tw-card);
 }
 
 .twyst-version {
   margin-inline-start: auto;
   font-size: 11px;
-  color: #a3a3a3;
+  color: var(--tw-text-faint);
   font-variant-numeric: tabular-nums;
 }
+
+/* ---------------------------------------------------------------- narrow */
 
 @media (max-width: 640px) {
   .twyst-settings-header,
@@ -464,6 +692,7 @@
   .twyst-field-actors,
   .twyst-field-people-gate,
   .twyst-field-required,
+  .twyst-field-transitions,
   .twyst-select-trigger {
     max-width: none;
   }
@@ -483,41 +712,34 @@
 .dark-app-theme .twyst-settings,
 .night-app-theme .twyst-settings,
 .black-app-theme .twyst-settings {
-  background: var(--primary-background-color, #111);
-  color: var(--primary-text-color, #fafafa);
+  --tw-canvas: #181b22;
+  --tw-card: #1f232c;
+  --tw-inset: #232833;
+  --tw-border: rgba(255, 255, 255, 0.16);
+  --tw-border-soft: rgba(255, 255, 255, 0.09);
+  --tw-text: #eceef2;
+  --tw-text-mute: #a5abb8;
+  --tw-text-faint: #9aa2b1;
+  /* Light-blue accent text for dark grounds: 6.1:1 on the badge fill (measured). */
+  --tw-accent: #82b8ff;
+  --tw-accent-strong: #82b8ff;
+  --tw-accent-soft: rgba(59, 130, 246, 0.18);
+  --tw-border-strong: rgba(255, 255, 255, 0.3);
+  background: var(--primary-background-color, var(--tw-canvas));
+  color: var(--primary-text-color, var(--tw-text));
 }
 
-.dark-app-theme .twyst-settings-header,
-.dark-app-theme .twyst-settings-footer,
-.dark-app-theme .twyst-label-card,
-.night-app-theme .twyst-settings-header,
-.night-app-theme .twyst-settings-footer,
-.night-app-theme .twyst-label-card,
-.black-app-theme .twyst-settings-header,
-.black-app-theme .twyst-settings-footer,
-.black-app-theme .twyst-label-card {
-  background: var(--secondary-background-color, #1a1a1a);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.dark-app-theme .twyst-label-name-input,
-.dark-app-theme .twyst-select-trigger,
 .dark-app-theme .twyst-select-menu,
-.dark-app-theme .twyst-check-list,
-.dark-app-theme .twyst-collapse-count,
-.night-app-theme .twyst-label-name-input,
-.night-app-theme .twyst-select-trigger,
 .night-app-theme .twyst-select-menu,
-.night-app-theme .twyst-check-list,
-.night-app-theme .twyst-collapse-count,
-.black-app-theme .twyst-label-name-input,
-.black-app-theme .twyst-select-trigger,
-.black-app-theme .twyst-select-menu,
-.black-app-theme .twyst-check-list,
-.black-app-theme .twyst-collapse-count {
-  background: var(--primary-background-color, #111);
+.black-app-theme .twyst-select-menu {
+  background: #232833;
   border-color: rgba(255, 255, 255, 0.14);
-  color: inherit;
+}
+
+.dark-app-theme .twyst-select-option,
+.night-app-theme .twyst-select-option,
+.black-app-theme .twyst-select-option {
+  color: #eceef2;
 }
 
 .dark-app-theme .twyst-select-option:hover,

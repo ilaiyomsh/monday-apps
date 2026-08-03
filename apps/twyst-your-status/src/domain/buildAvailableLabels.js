@@ -17,6 +17,7 @@
 
 import { actorMatchesPeopleAssignments } from './peopleColumnGate.js';
 import { getLabelRule, isOpenAllowlist, migrateSettings } from './settingsSchema.js';
+import { RESERVED_EMPTY_LABEL_ID } from './statusColors.js';
 
 function normalizeNonNegativeInteger(value) {
   if (typeof value === 'number') {
@@ -105,11 +106,36 @@ export function buildAvailableLabels({
     : normalizedLabels.find((label) => String(label.id) === currentLabelId) ?? null;
   const itemContext = { peopleByColumnId: peopleByColumnId ?? {} };
 
+  /*
+   * round321 — transition restriction. The SOURCE of the transition is the current
+   * label; an EMPTY status resolves to the reserved default id (5), because the grey
+   * default label is that state's face on the board — an item explicitly holding the
+   * id-5 label lands on the same rule directly, which is the point. A source rule
+   * with no `nextLabelIds` array (every pre-round321 blob) restricts nothing.
+   */
+  const sourceRule = getLabelRule(migrated, currentLabelId ?? String(RESERVED_EMPTY_LABEL_ID));
+  const allowedNext = Array.isArray(sourceRule.nextLabelIds)
+    ? new Set(sourceRule.nextLabelIds.map(String))
+    : null;
+
   const options = normalizedLabels.filter((label) => {
     if (label?.isDeactivated) return false;
     const labelId = String(label.id);
     if (currentLabelId !== null && labelId === currentLabelId) return false;
+    /*
+     * The empty≡grey identity, completed on the OPTIONS side (round321 review):
+     * an empty status already LOOKS like the id-5 label, so that label is its
+     * "current" one and is excluded exactly as every non-empty status excludes its
+     * own. Without this, the named grey label was offered from empty cells right up
+     * until the default card carried any restriction — at which point it vanished,
+     * with no checkbox anywhere that could bring it back ('5' cannot be a target on
+     * its own card).
+     */
+    if (currentLabelId === null && labelId === String(RESERVED_EMPTY_LABEL_ID)) return false;
     if (hiddenIds.has(labelId)) return false;
+    // Composes with (never replaces) the filters below: a listed-but-hidden label
+    // stays hidden, a listed label outside the actor's allowlist stays blocked.
+    if (allowedNext !== null && !allowedNext.has(labelId)) return false;
     const rule = getLabelRule(migrated, labelId);
     return isActorAllowedForLabel(rule, actor, itemContext);
   });
