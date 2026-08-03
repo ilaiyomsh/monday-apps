@@ -1,29 +1,104 @@
+/*
+ * round321 (owner request, approved mock "הצעה B") — the list is separated from the
+ * work area by GROUND, the way monday's own side menu is: a slightly darker surface
+ * and NO rule between them. The vertical border and the hairline under the icon row
+ * are gone; what used to be a line is now a change of background.
+ *
+ * The knock-on effects are not cosmetic and are handled below: every control that
+ * read as "a control" because it carried a light-grey fill (the search field, the
+ * icon-button hover) would dissolve into this ground, and the row states have to
+ * re-tier — white can no longer mean "resting row".
+ *
+ * TOKEN CHOICE (PR review, verified against @vibe/core tokens.css): the grey surface
+ * is `--allgrey-background-color`, NOT `--secondary-background-color` — the latter
+ * resolves to #ffffff in the light theme, so the fallback would never have applied
+ * and the list would have stayed white with its border already removed, i.e. no
+ * separation at all. The three row tiers below use tokens from the same family:
+ *
+ *   ground   --allgrey-background-color                    #f6f7fb
+ *   hover    --ui-background-color                         #e7e9ef
+ *   selected --primary-background-hover-on-secondary-color  #dcdfec
+ *
+ * The ladder is monotonic — each tier one step further from the ground — which is
+ * what keeps "hovered" and "selected" tellable apart.
+ *
+ * CORRECTED in round325: earlier revisions of this comment claimed the ladder
+ * "moves together in a monday dark/black theme". It does not, because this app
+ * never applies a Vibe theme class at all — so these tokens always resolve to the
+ * light values above. See the round325 note further down before writing anything
+ * theme-conditional here.
+ */
 .root {
   display: flex;
   flex-direction: column;
   height: 100%;
-  border-right: 1px solid var(--ui-border-color, #d0d4e4);
-  background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
+  background-color: var(--allgrey-background-color, #f6f7fb);
 }
 
 /* round175 (variant B) — the header's own card frame (border/radius/shadow/gap)
-   was removed for a flatter, smoother look (owner request). The controls now sit
-   directly on the list background, separated from the rows below by a single
-   hairline. */
+   was removed for a flatter, smoother look (owner request). The hairline that used
+   to separate it from the rows is gone (round321); what separates them now is the
+   band below. */
+/*
+ * round322 (owner request, approved mock "הצעה A") — the icon row is a white BAND
+ * again, and the grey list starts under it. round321 gave the row the list's ground
+ * and took away its hairline, which cost it the prominence it used to have; this is
+ * monday's own pattern (a white top bar over a grey nav) and restores that
+ * prominence WITHOUT bringing the separating line back.
+ *
+ * The shadow is a 1px lip, not a card shadow — Vibe's smallest token is
+ * `--box-shadow-medium` (0 6px 20px), far too heavy for the edge of a band.
+ *
+ * CORRECTED in round325: this comment used to add that "in a dark monday theme the
+ * band's own surface #181b34 contrasts with the ground #30324e". That reasoning was
+ * void — the app applies no theme class, so the band is #ffffff on #f6f7fb always.
+ */
 .header {
   flex: none;
-  background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
-  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+  background-color: var(--primary-background-color, #ffffff);
+  box-shadow: 0 1px 2px rgba(29, 30, 45, 0.06);
 }
 
 .headerInner {
   /* round190 — align the icon row with the discussion title on the right (the
-     DiscussionCard header starts its 36px title 16px below the card top) and make
-     the three white gaps UNIFORM at 16px: card-top→icon-row (this top padding),
-     icon-row→separator (this bottom padding), and separator→first-discussion
+     DiscussionCard header starts its 36px title 16px below the card top) and keep
+     the vertical gaps UNIFORM at 16px: band-top→icon-row (this top padding),
+     icon-row→band-bottom (this bottom padding), and band→first-discussion
      (.list padding-top). The icon controls are 36px tall = the title's min-height,
      so both rows sit at the same height. */
+  /*
+   * round322 (owner request) — the PHYSICAL RIGHT inset is 42px, not 14px, so the
+   * blue + ends exactly where the rows' time ends: the rows sit at .list 8px +
+   * .item 34px = 42px from the sidebar edge, and the + used to hang 28px further
+   * out than every date under it. Physical (not logical) on purpose: the + is on
+   * the right whichever way this subtree's direction resolves.
+   *
+   * The LEFT stays 14px. The ‹ collapse arrow is the app's own navigation, not a
+   * list item, so it has nothing to line up with — and moving it in would take
+   * another 28px off the search field for nothing.
+   *
+   * 42px is the NO-SCROLLBAR figure; the @supports block under .scroll raises it
+   * to 52px wherever the gutter can be reserved unconditionally. See there.
+   *
+   * round326 (PR review, P2) — the wide inset is granted only under `.is-desktop`,
+   * and 14px is the BASE. On the monday mobile app `.sidebar` is `width: 100%`
+   * (App.module.css — only `:global(.is-desktop) .sidebar` takes `--sidebar-w`), so
+   * round324's SIDEBAR_MIN_W clamp does not reach that path at all: on a 320px
+   * device the mobile shell's 6px frame padding and borders leave ~306px, while the
+   * toolbar needs 242 + 52 + 14 = 308. round322 broke that — at 14px the toolbar
+   * needed 270px and fit comfortably.
+   *
+   * Granting on `.is-desktop` rather than removing on `.mobile-app` is deliberate:
+   * anything that is not positively flagged desktop keeps the narrow-safe value, so
+   * a future layout mode cannot inherit an overflow. `.is-desktop`/`.mobile-app` are
+   * set on `.appShell` from App.jsx's `layoutClass` — verified applied, unlike the
+   * theme class in round325.
+   */
   padding: 16px 14px;
+}
+
+:global(.is-desktop) .headerInner {
+  padding-right: 42px;
 }
 
 /* round176 — the top card is ONE icon-only row (owner request). Actions cluster
@@ -70,6 +145,9 @@
 }
 .iconBtn:hover,
 .iconBtnOpen {
+  /* round322 — back to the translucent grey, for the same reason as the search
+     field: these buttons sit on the white band again, and round321's white hover
+     would be invisible there. */
   background: var(--primary-background-hover-color, #f4f5f8);
   color: var(--primary-text-color, #323338);
 }
@@ -285,7 +363,12 @@
   padding-inline-start: 30px;
   /* room for the clear-X pinned at the inline-end (left in RTL) */
   padding-inline-end: 28px;
-  /* variant B — flat: no border, subtle grey fill (matches the other controls). */
+  /* round322 — back to the translucent grey fill. round321 made this WHITE because
+     the row had moved onto the grey ground and a grey field would have dissolved
+     into it; the band restores the white surface underneath, so white-on-white
+     would now be the invisible one. The token is translucent (rgba grey), so it
+     reads as a field on whatever the band is painted — which today is always
+     #ffffff, since no theme class is applied (round325). */
   border: 1px solid transparent;
   border-radius: 8px;
   background: var(--primary-background-hover-color, #f1f2f6);
@@ -314,7 +397,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-small, 8px);
-  /* headerInner already supplies the gap before the header rule. */
+  /* headerInner already supplies the gap to the band's bottom edge. */
   padding-bottom: 0;
 }
 .calendarFilterRow .searchWrap {
@@ -449,6 +532,37 @@
   flex: 1 1 auto;
   overflow-y: auto;
 }
+/*
+ * round322 (PR review, P2) — THE SCROLLBAR GUTTER IS PART OF THE ALIGNMENT.
+ *
+ * `.header` is a SIBLING of `.scroll`, so a reserved scrollbar narrows the rows
+ * but not the icon row. And the bar here IS space-taking, not an overlay: styling
+ * `::-webkit-scrollbar` below opts Chromium out of overlay scrollbars. `.root`
+ * carries no `direction`, and the app shell is `dir="ltr"`, so that 10px is taken
+ * from the PHYSICAL RIGHT — exactly the edge round322 aligns on. Without this the
+ * date would sit at 8 + 34 + 10 = 52px once the list outgrows one screen while the
+ * + stayed at 42px, i.e. the alignment the owner approved would silently depend on
+ * how many discussions exist and on the OS.
+ *
+ * So the gutter is reserved ALWAYS and the header is inset to match. Nothing is
+ * visible in it when there is nothing to scroll — the thumb is transparent until
+ * `.root:hover` — it is 10px of the list's own ground.
+ *
+ * Both rules live under one @supports on purpose: where `scrollbar-gutter` is
+ * unavailable the pair degrades to the pre-review behaviour (42px, aligned for a
+ * short list) rather than to a NEW 10px misalignment in the opposite direction.
+ */
+@supports (scrollbar-gutter: stable) {
+  .scroll {
+    scrollbar-gutter: stable;
+  }
+  /* round326 — `.is-desktop` here too, matching the base rule: the 52px inset must
+     never reach the mobile shell, where there is not room for it. */
+  :global(.is-desktop) .headerInner {
+    /* 8px (.list) + 34px (.item) + 10px (the gutter reserved just above) */
+    padding-right: 52px;
+  }
+}
 /* round117/round125 — hover-only scrollbar, no stepper arrows (owner request).
    round125 rewrite: in Chromium, setting the STANDARD scrollbar-width/color
    properties DISABLES all ::-webkit-scrollbar customization — which is why the
@@ -528,9 +642,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* round190 — top padding 16px so the gap from the separator line to the topmost
-     discussion matches the two header gaps above it (uniform 16px). Sides/bottom
-     stay 8px. */
+  /* round190 — top padding 16px so the gap from the band's bottom edge to the
+     topmost discussion matches the two header gaps above it (uniform 16px).
+     Sides/bottom stay 8px — the 8px here plus .item's 34px is the 42px inset that
+     round322 gave .headerInner, which is what lines the + up with the times. */
   padding: 16px 8px 8px;
 }
 
@@ -704,9 +819,11 @@
      date's gap off the right edge (owner request — symmetric breathing room). */
   padding: 10px 34px;
   /* round133 (approved mock): FRAMELESS rows — no border, no shadow; only the
-     type-color rail marks the row, and states are told apart by background
-     alone (rest = white, hover = light gray, selected = darker gray below). */
-  background: var(--primary-background-color, #fff);
+     type-color rail marks the row, and states are told apart by background alone.
+     round321 — the resting row is now TRANSPARENT rather than white: the list's own
+     grey ground shows through, so only hover and selection paint anything. A white
+     resting row on a grey list would read as four selected rows. */
+  background: transparent;
   border: none;
   border-radius: 10px;
   cursor: pointer;
@@ -721,7 +838,9 @@
 }
 
 .item:hover {
-  background-color: var(--primary-background-hover-color, #f5f6f8);
+  /* round321 — one step off the ground (was one step off white). Token for its
+     name, not for adaptation: no theme class is ever applied (round325). */
+  background-color: var(--ui-background-color, #e7e9ef);
 }
 
 /* round133 — frameless rows carry no hover shadow/lift (the background tint is
@@ -730,9 +849,48 @@
 /* Selected row (round133 variant A, softened in round134 to the approved
    "אפשרות 1" tone): a darker neutral fill on the whole row — no border, no
    blue tint; the color pill stays (and grows slightly, see .rail). */
+/* round321 — the selection is the FURTHEST tier from the ground, exactly as in
+   monday's side menu (#f6f7fb → #e7e9ef → #dcdfec). A token rather than a literal
+   because that is the right name for the value — NOT because it adapts: see the
+   round325 note below, this app never applies a theme class, so these resolve to
+   the light values always. */
 .itemSelected {
-  background: #eceef2;
+  background: var(--primary-background-hover-on-secondary-color, #dcdfec);
 }
+
+/*
+ * round325 (PR review, P2) — THIS APP HAS NO THEME. Read this before writing any
+ * theme-conditional CSS here.
+ *
+ * round324 added `:global(.hacker_theme-app-theme)` overrides to fix a real token
+ * collision in Vibe's hacker theme. They were DEAD CODE and have been removed:
+ * `app-theme` appears nowhere in this app. `MondayProvider` stores the SDK context
+ * but never reads `context.theme`, nothing sets a class on `<html>`/`<body>`, and
+ * Vibe's `ThemeProvider` is not mounted. monday cannot reach into the iframe's DOM
+ * to do it either — the app has to opt in, and it never has.
+ *
+ * The consequence is bigger than one dead selector, so it is written down here
+ * rather than rediscovered: **every Vibe token in this app always resolves to the
+ * `:root` (light) value.** The ladder above is therefore ALWAYS
+ * #f6f7fb → #e7e9ef → #dcdfec, in every account, whatever theme the user picked in
+ * monday. Comments in round321/round322 that reasoned about how the ladder "inverts
+ * in a dark theme" described a mechanism this app does not have; they have been
+ * corrected in place.
+ *
+ * The tokens stay anyway — they cost nothing, they are the right names, and they
+ * become correct the day theming is wired. What must not happen again is CSS whose
+ * only job is to fire under a theme class that never appears.
+ *
+ * Wiring `context.theme` through to the Vibe class is a genuine feature (the app
+ * currently ignores the user's monday theme entirely) and an owner decision, not a
+ * review fix — it would change the app's appearance for every dark-theme user. It
+ * is reported, not implemented here. When it IS wired, the hacker theme needs the
+ * collision handled: `--allgrey-background-color` and `--primary-background-color`
+ * are both #282a36 there (ground == band), and `--ui-background-color` and
+ * `--primary-background-hover-on-secondary-color` are both #4b4e69 (hover ==
+ * selected). `--primary-selected-color` is the only token that differs from the
+ * hover token in all four themes.
+ */
 
 /* Left color rail — round134 (approved mock, "אפשרות 1"): a small ROUNDED PILL
    (4×20px, fully rounded ends) vertically centered on the row, instead of the
