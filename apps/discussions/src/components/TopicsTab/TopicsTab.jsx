@@ -535,12 +535,14 @@ function SortableTopicSection({
 }
 
 export function TopicsTab({
-  discussion, createTask, onNotify, onNotifyLoading, onDismissToast,
+  // createTask stays in the signature (DiscussionCard passes it) — nothing here
+  // consumes it since the new-task FAB moved out of this tab (round337 note).
+  discussion, createTask: _createTask, onNotify, onNotifyLoading, onDismissToast,
   // Granular discussion-tier caps. Each equals the legacy canEdit while the
   // permissions feature is off, so behavior is unchanged; Phase 3 lets a role
   // grant some and not others.
   addTopicOrPoint = true, editTopicOrPoint = true, deleteTopicOrPoint = true,
-  checkPoint = true, editResponses = true, // editResponses kept for prop compat (התייחסויות column removed from display)
+  checkPoint = true, editResponses: _editResponses = true, // kept for prop compat (התייחסויות column removed from display)
   // Hide/show a topic or point (item 10) — a FIXED rule (discussion lead /
   // coordinator / owner), computed by DiscussionCard, independent of
   // editTopicOrPoint. Defaults true for back-compat in tests/harnesses.

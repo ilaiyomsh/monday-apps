@@ -58,7 +58,7 @@ export const assertNoGraphQLErrors = (res, { functionName = null, query = null, 
                 });
             // בליעה שקטה מכוונת: כשל defineProperty (אובייקט קפוא) רק מוותר על
             // האופטימיזציה של dedup — השגיאה עצמה נזרקת ונרשמת בהמשך ממילא.
-            // eslint-disable-next-line no-restricted-syntax
+             
             } catch { /* לא חוסם */ }
         }
         throw apiErr;

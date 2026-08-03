@@ -2,20 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## ⚠️ Parallel work in progress (coordination note)
-
-Two agents are working on this repo at the same time, each in its own git worktree:
-
-- **This dir** (`apps/discussions`, branch `feat/board-permissions`) — board **permissions**:
-  `SettingsModal/PermissionsTab`, `BoardPeoplePicker`, `subscribers.js`, `usersStore.js`, `BoardSDK.js`,
-  `monday-client.js`.
-- **`apps/discussions-topics`** (branch `feat/topics`) — **נושאים לדיון (topics)**:
-  `TopicsTab`, `hooks/useTopics.js`, the topics board, and related topic ordering/templates.
-
-To avoid collisions: stay within your area's files. Watch for shared touch-points — `DiscussionCard`'s
-`canEdit` gate threads into `TopicsTab`, and both areas may reach into `BoardSDK.js` — coordinate before
-editing those. Merge via git when both branches are done. Remove this note once the parallel work is over.
-
 ## What this is
 
 `discussions` (ניהול דיונים) is a monday.com **client-side board-view app** — React 19 + Vite 8,
@@ -37,8 +23,8 @@ npm run tunnel         # expose :5180 to monday for in-product testing (app 1145
 
 Run a **single test**:
 ```bash
-npx vitest run src/components/__tests__/componentRender.smoke.test.jsx   # one file
-npx vitest run -t "renders the status text"                              # by test-name pattern
+npx vitest run src/components/SettingsGate/__tests__/settingsGate.test.jsx   # one file
+npx vitest run -t "renders the status text"                                  # by test-name pattern
 ```
 
 There is **no separate `vitest.config.js`** — test config lives in the `test:` block of
@@ -62,13 +48,18 @@ These appear everywhere, including `index.jsx` importing the app as `@generated/
 ### Boot order is load-bearing — see `src/index.jsx`
 `@vibe/core/tokens` → `index.css` → `init` (window.global polyfill) → `i18n` →
 `setupGlobalErrorHandlers()` (before React mounts) → `<ErrorBoundary><MondayProvider>
-<SettingsProvider><SettingsGate><TemplatesProvider><App/>`. **`SettingsGate` blocks render**
-until settings are loaded and published to the SDK store, so every API call already has its
-board/column mapping: it shows a `<Loader>` while loading, and if nothing is stored yet
-(`isConfigured === false`) it **force-mounts `SettingsModal`** (no `onClose`) so the owner must
-map boards/columns before any app content or SDK call runs. `TemplatesProvider` sits *inside* the
-gate (it reads `monday.storage` but, unlike settings, never blocks render — see below). Reordering
-or skipping a step breaks styling or SDK init.
+<SettingsProvider><SettingsGate><TemplatesProvider><App/>`. **`SettingsGate`**
+(`components/SettingsGate` — extracted from index.jsx in round337 so it is testable) **blocks
+render** until settings are loaded and published to the SDK store, so every API call already has
+its board/column mapping. Its branch ORDER is the point: `<Loader>` while loading; a **FAILED
+load** (`loadError` from SettingsContext) shows `NetworkErrorScreen` with a retry — NOT the
+first-run wizard (round337: before that, a transient storage failure at boot showed a configured
+user the wizard, one click from provisioning duplicate boards); nothing stored → `SetupWizard`,
+whose manual path **force-mounts `SettingsModal` with NO `onClose` prop at all** (a no-op function
+is truthy and used to leave a dead X rendered — the modal now hides the X when `onClose` is
+absent). `TemplatesProvider` sits *inside* the gate (it reads `monday.storage` but, unlike
+settings, never blocks render — see below). Reordering or skipping a step breaks styling or SDK
+init.
 
 ### Settings-driven board/column mapping — the central idea
 Nothing hardcodes board or column IDs. The code refers to columns by per-board **aliases** that
@@ -222,8 +213,9 @@ Every error converges on **`logger.emit`** (`src/utils/logger.js`), which stamps
 dedup and fans out to sinks. `useUiErrorSink` (mounted once) registers a sink that turns every
 `ERROR`-level record into a Hebrew **toast** with a "details" action (`ErrorDetailsModal`).
 Layered catches all feed the same logger: `ErrorBoundary` (render crashes), `globalErrorHandler`
-(`window.onerror`/`unhandledrejection`), `safeApi` (API), `SettingsContext` (storage), and
-`NetworkErrorScreen` (boot-time storage failure). `lazyRetry` handles code-split chunk-load
+(`window.onerror`/`unhandledrejection`), `safeApi` (API), and `SettingsContext` (storage — its
+`loadError` drives `NetworkErrorScreen`, mounted by `SettingsGate` on a boot-time load failure;
+until round337 that screen existed but was mounted by NOTHING). `lazyRetry` handles code-split chunk-load
 failures with one sessionStorage-guarded reload. The remote `flush` transport is stubbed (no URL
 wired yet).
 

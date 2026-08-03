@@ -4,7 +4,6 @@
 // a multi-selection that CONTAINS the origin row fans the edit out to the whole
 // selection; anything else targets the origin alone; a capability filters the
 // set to the allowed subset (mixed selections silently skip the rest).
-import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useBatchTargets } from '../useBatchTargets.js';
