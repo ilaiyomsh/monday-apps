@@ -279,31 +279,43 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
     );
   };
 
-  // round246 — a tier's cap rows, grouped by component with a SUB-HEADING row
-  // per group (shown only when the tier has more than one group).
-  const renderGroupedTbody = (roles, caps) => {
-    const groups = groupCapabilities(caps);
-    const showSub = groups.length > 1;
-    return (
-      <tbody>
-        {groups.map((grp) => (
-          <React.Fragment key={grp.group}>
-            {showSub && (
-              <tr className={styles.mxGroupRow}>
-                <td className={styles.mxGroupCell} colSpan={roles.length + 1}>{grp.label}</td>
-              </tr>
-            )}
-            {grp.caps.map((cap) => (
-              <tr key={cap.id}>
-                <td className={styles.mxAction}>{cap.label}</td>
-                {roles.map((role) => renderCell(role.key, cap.id, isRoleHidden(role.key)))}
-              </tr>
-            ))}
-          </React.Fragment>
-        ))}
-      </tbody>
-    );
-  };
+  /*
+   * round246 — a tier's cap rows, grouped by component.
+   * round335 (owner request) — the group label moved from a full-width row ABOVE
+   * its rows to a BOXED CELL BESIDE them: a `th` with `rowSpan` on the group's
+   * first row. In an RTL table the first cell of a row is the RIGHTMOST one, so
+   * the label lands on the right with all of its rows to its left, and the reader
+   * no longer has to remember which heading they passed on the way down.
+   *
+   * `scope="rowgroup"` is the accessible counterpart — it tells a screen reader
+   * this cell heads every row it spans, which a `colSpan` heading row never said.
+   *
+   * A single-capability group (משימות, החלטות) gets a one-row-tall box. Left as
+   * is by owner decision — no artificial min-height to fake a uniform scale.
+   */
+  const renderGroupedTbody = (roles, groups, showGroupCol) => (
+    <tbody>
+      {groups.map((grp, gi) => (
+        <React.Fragment key={grp.group}>
+          {grp.caps.map((cap, i) => (
+            <tr key={cap.id}>
+              {showGroupCol && i === 0 && (
+                <th
+                  scope="rowgroup"
+                  rowSpan={grp.caps.length}
+                  className={`${styles.mxGroupCell} ${gi === groups.length - 1 ? styles.mxGroupCellLast : ''}`}
+                >
+                  {grp.label}
+                </th>
+              )}
+              <td className={styles.mxAction}>{cap.label}</td>
+              {roles.map((role) => renderCell(role.key, cap.id, isRoleHidden(role.key)))}
+            </tr>
+          ))}
+        </React.Fragment>
+      ))}
+    </tbody>
+  );
 
   // round246 — a collapsible section header (chevron + title).
   // round332 — the caption arg is gone (owner request), and the head is no longer
@@ -375,6 +387,11 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
             );
           }
           if (!roles.length || !caps.length) return null;
+          // round335 — the group column exists only when the tier HAS more than one
+          // group; a single-group tier would just get an empty rail. thead and tbody
+          // must agree on it or every row is off by one column.
+          const groups = groupCapabilities(caps);
+          const showGroupCol = groups.length > 1;
           return (
             <div key={tier.id} className={styles.mxSec}>
               {sectionHead(tier.id, tier.title)}
@@ -383,6 +400,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
               <table className={styles.mxTable}>
                 <thead>
                   <tr>
+                    {showGroupCol && <th className={styles.mxGroupHead} />}
                     <th className={styles.mxActionTh} />
                     {roles.map((role) => {
                       const hidden = isRoleHidden(role.key);
@@ -403,7 +421,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
                     })}
                   </tr>
                 </thead>
-                {renderGroupedTbody(roles, caps)}
+                {renderGroupedTbody(roles, groups, showGroupCol)}
               </table>
               {/* round333 (owner request) — the empty-coordinator/Owners-bypass
                   footnote is GONE. The BEHAVIOUR it described is unchanged and
