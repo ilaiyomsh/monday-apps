@@ -137,13 +137,27 @@
 .dividerHandle {
   display: none;
 }
+/*
+ * round328 (owner request, approved from a rendered mock) — the circle carries the
+ * LIST's ground and no border.
+ *
+ * Where it actually sits (measured, and the reason no border is needed): the button
+ * is anchored to `.appFrame` at `top: 12px` with height 22px, so it occupies
+ * y ∈ [12, 34] — entirely inside the icon row's white band, which is
+ * 16 + 36 + 16 = 68px tall. So its left neighbour is the WHITE band, not the grey
+ * rows, and its right neighbour is the white card. #f6f7fb reads as a chip against
+ * white on both sides, which is exactly what makes the 1px border redundant
+ * (owner: "לעיגול יהיה רקע … מסגרת לא תידרש").
+ *
+ * The shadow stays, reduced to a 1px lip rather than the 4px-offset float: with the
+ * border gone the shadow is the only thing giving the circle an edge, and a lip is
+ * the same language as the band's own edge (round322). One line to drop entirely.
+ */
 .collapseBtn {
-  /* monday-style circular navigation toggle (a chevron in a bordered circle,
-     no text label) — small circle, solid white fill. */
   border-radius: 50% !important;
-  border: 1px solid var(--ui-border-color, #d0d4e4) !important;
-  background: #fff !important;
-  box-shadow: var(--box-shadow-small, 0 4px 8px rgba(0, 0, 0, 0.16));
+  border: 0 !important;
+  background: var(--allgrey-background-color, #f6f7fb) !important;
+  box-shadow: 0 1px 3px rgba(29, 30, 45, 0.18);
   /* Force a compact circle regardless of the Vibe size preset. */
   width: 22px !important;
   height: 22px !important;
@@ -157,7 +171,12 @@
   color: var(--icon-color, #676879);
 }
 .collapseBtn:hover {
-  background: var(--primary-background-hover-color, #f5f6f8) !important;
+  /* round328 — one step DOWN the same ladder round321 gave the rows
+     (#f6f7fb → #e7e9ef), not the old `--primary-background-hover-color`: that
+     token is a TRANSLUCENT grey, and `background` replaces the fill rather than
+     layering over it, so on the white band it resolved to ≈#f0f0f2 — all but
+     identical to the circle's new resting #f6f7fb, i.e. no hover at all. */
+  background: var(--ui-background-color, #e7e9ef) !important;
 }
 /* Shrink the chevron itself to match the smaller circle. */
 .collapseBtn :global(svg),
@@ -248,7 +267,20 @@
 :global(.is-desktop) .collapseBtn {
   position: absolute;
   top: 12px;
-  left: 50%;
+  /*
+   * round328 (owner: "מרכז העיגול … בדיוק על מרכז הפס, כרגע הוא נוטה ימינה") —
+   * centred on the RULE, not on the grab strip. Two numbers were set independently
+   * and drifted apart:
+   *
+   *   the visible rule   `.dividerHandleResizable::before`, 2px at the seam → centre seam + 1px
+   *   the circle (was)   `left: 50%` inside a 16px strip that starts at the seam → centre seam + 8px
+   *
+   * — a 7px lean to the right. `left: 1px` puts the circle's centre on the rule's
+   * own centre. It costs nothing elsewhere: the strip stays 16px on the card side
+   * (round166 moved it there so it would stop stealing the list scrollbar's
+   * pointer), and the circle sits ABOVE the scroll container's y-range anyway.
+   */
+  left: 1px;
   transform: translateX(-50%);
   /* While expanded the collapse arrow is hidden by default and only reveals
      when the cursor is over the discussions column (or the divider strip) —

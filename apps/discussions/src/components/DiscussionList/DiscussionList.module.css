@@ -568,15 +568,48 @@
  * papered over: CSS cannot read Firefox's thin width, and guessing it is exactly
  * the kind of unverifiable claim round325 was about.
  */
+/*
+ * round329 (owner request: "שיהיו רחוקים מקצה העמודה ימינה בדיוק כמו שהקצה השמאלי
+ * רחוק מהקצה השמאלי", answered "42") — the RIGHT inset stops paying for the gutter
+ * twice.
+ *
+ * The owner's reference is the discussion NAME, which sits 42px from the column's
+ * left edge (`.list` 8 + `.item` 34). The time and the + sat at 52px, because the
+ * reserved gutter was ADDED on top of that same 8 + 34 instead of being absorbed by
+ * it. So the fix takes the 10px out of `.list`'s right padding rather than adding it
+ * to the header: `10 (gutter) + 0 (.list) + 34 (.item) = 44px`.
+ *
+ * WHY 44 AND NOT THE 42 THAT WAS ASKED FOR — the honest number. `.item`'s 34px right
+ * padding is load-bearing, not decoration: the hover kebab is `right: 6px` and 28px
+ * wide, so it spans 6→34, and the time's right edge sits exactly at 34 with the two
+ * flush. The time STAYS VISIBLE on hover (owner decision — see the note by
+ * `.itemDate`; the older "fades on hover" comment above `.itemActions` is stale), so
+ * the slot is what keeps the kebab off the time. Reaching 42 needs
+ * `42 − 10 − 8 = 24px` of padding, which puts the kebab 10px ON TOP of the visible
+ * time. 44 is therefore the closest value that leaves the kebab, the always-visible
+ * time and the stable gutter all intact — a 2px residue against the name's 42.
+ *
+ * The + and the time stay aligned with each other, which is what round322 was for:
+ * both are 44 here, and both fall back to 42 together on an engine with no reserved
+ * gutter (see round327 — Firefox takes that branch, where 42 is exact while the list
+ * fits).
+ */
 @supports (scrollbar-gutter: stable) and selector(::-webkit-scrollbar) {
   .scroll {
     scrollbar-gutter: stable;
   }
-  /* round326 — `.is-desktop` here too, matching the base rule: the 52px inset must
+  /* Absorb the reserved gutter instead of stacking on it: the row card now reaches
+     to the gutter's inner edge, so the time lands at 10 + 0 + 34 = 44px. The kebab
+     rides with the card (it is positioned against `.item`), so its clearance from
+     the time is unchanged. */
+  .list {
+    padding-right: 0;
+  }
+  /* round326 — `.is-desktop` here too, matching the base rule: the wide inset must
      never reach the mobile shell, where there is not room for it. */
   :global(.is-desktop) .headerInner {
-    /* 8px (.list) + 34px (.item) + 10px (the gutter reserved just above) */
-    padding-right: 52px;
+    /* 10px (the gutter reserved just above) + 0 (.list) + 34px (.item) */
+    padding-right: 44px;
   }
 }
 /* round117/round125 — hover-only scrollbar, no stepper arrows (owner request).
@@ -677,8 +710,13 @@
 }
 
 /* Row kebab affordance — appears on row hover/focus at the card's far-right
-   (trailing, in the LTR row) corner. The date sits in that same slot, so it
-   fades on hover (see .itemWrap:hover .itemDate) to avoid a visual collision. */
+   (trailing, in the LTR row) corner.
+   round329 — CORRECTED: this used to say the date "fades on hover (see
+   .itemWrap:hover .itemDate)". There is no such rule and there has not been one;
+   the date STAYS VISIBLE, and what prevents the collision is `.item`'s 34px right
+   padding reserving this 28px slot beside it (the authoritative note lives by
+   `.itemDate`). The stale version cost real time in round329, which nearly shrank
+   that padding on the belief that a fade would cover it. */
 .itemActions {
   position: absolute;
   top: 50%;
