@@ -326,7 +326,26 @@
   text-align: right;
 }
 
-.mxSec { margin-bottom: 18px; }
+/*
+ * round332 (owner request, approved mock) — each section is ONE CARD: the head is
+ * the card's top and the table pours out of it, instead of a bordered head with a
+ * separate bordered table floating underneath.
+ *
+ * `overflow: clip`, NOT `hidden`, and this is load-bearing: the role header row is
+ * `position: sticky` against `.matrixScroll`, and an `overflow: hidden` ancestor
+ * BETWEEN a sticky element and its scroll container silently kills the stickiness
+ * (hidden makes the card itself the nearest scrollport). `clip` clips the table's
+ * square corners to the card radius WITHOUT creating a scroll container, so the
+ * round219 frozen header survives. An engine without `clip` support merely paints
+ * square corner pixels at the card's bottom — cosmetic, not broken.
+ */
+.mxSec {
+  margin-bottom: 14px;
+  border: 1px solid var(--ui-border-color, #d0d4e4);
+  border-radius: 10px;
+  background: var(--primary-background-color, #fff);
+  overflow: clip;
+}
 .mxTitle {
   font-size: 14.5px;
   font-weight: 700;
@@ -334,22 +353,25 @@
   margin-bottom: 2px;
 }
 
-/* round246 — collapsible section header: chevron + title + optional caption.
-   The whole strip is the toggle; tables render only when the section is open. */
+/* round246 — collapsible section header; the whole strip is the toggle.
+   round332 — no border/radius of its own anymore: it IS the card's top. The
+   caption (`secSub`) and its rule are gone (owner request). */
 .secHead {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--ui-border-color, #d0d4e4);
-  border-radius: 8px;
-  background: var(--primary-background-hover-color, #f7f8fa);
+  padding: 13px 18px;
+  border: none;
+  background: var(--primary-background-color, #fff);
   cursor: pointer;
   text-align: start;
+  transition: background 0.12s ease;
 }
 .secHead:hover { background: var(--primary-background-hover-color, #f0f1f3); }
 .secHead .mxTitle { margin-bottom: 0; }
+/* the seam the open table pours out of */
+.secHeadOpen { border-bottom: 1px solid var(--ui-border-color, #e6e9f2); }
 .secChevron {
   flex-shrink: 0;
   color: var(--secondary-text-color, #676879);
@@ -357,29 +379,26 @@
 }
 /* chevron points down when open; rotate to point at the start (RTL: right) when closed */
 .secChevronClosed { transform: rotate(90deg); }
-.secSub {
-  font-size: 12px;
-  color: var(--secondary-text-color, #9699a6);
-  margin-inline-start: auto;
-  text-align: end;
-}
 
-/* round246 — sub-heading row inside a matrix, one per component group. */
+/* round246 — sub-heading row inside a matrix, one per component group.
+   round332 — a quiet padded label instead of a full-width grey band; the card
+   already separates sections, so the band was double chrome. */
 .mxGroupRow td.mxGroupCell {
-  background: var(--primary-background-hover-color, #eef0f4);
+  background: transparent;
   font-size: 12px;
   font-weight: 700;
   color: var(--secondary-text-color, #676879);
   text-align: start;
-  padding: 6px 10px;
+  padding: 10px 18px 5px;
+  letter-spacing: 0.02em;
 }
 
-/* round246 — the "שדות משימה" tier's plain-language rule card (no matrix). */
+/* round246 — the "שדות משימה" tier's plain-language rule card (no matrix).
+   round332 — it lives INSIDE the section card now, so it carries no border of
+   its own; the card's 18px side padding aligns it with the head's title. */
 .taskRuleCard {
-  border: 1px solid var(--ui-border-color, #d0d4e4);
-  border-top: none;
-  border-radius: 0 0 8px 8px;
-  padding: 12px 14px;
+  border: none;
+  padding: 14px 18px 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -413,7 +432,15 @@
 .mxSub { font-size: 12px; color: var(--secondary-text-color, #9699a6); }
 
 .mxTable { border-collapse: collapse; width: 100%; }
-.mxTable th, .mxTable td { border: 1px solid var(--ui-border-color, #e6e9f2); font-size: 13px; }
+/* round332 — the inner GRID is gone: rows separate on a single horizontal hairline
+   and the row hover carries the rest; the card border is the only outer frame. The
+   first/last cells take the head's 18px so the table aligns with the title. */
+.mxTable th, .mxTable td { border: none; font-size: 13px; }
+.mxTable tbody tr { border-bottom: 1px solid var(--layout-border-color, #eef0f6); }
+.mxTable tbody tr:last-child { border-bottom: none; }
+.mxTable tbody tr:hover { background: #fafbfd; }
+.mxTable th:first-child, .mxTable td:first-child { padding-inline-start: 18px; }
+.mxTable th:last-child, .mxTable td:last-child { padding-inline-end: 18px; }
 /* round219 — the role-header row stays FROZEN at the top of the shared scroll
    container (.matrixScroll) while that table's body scrolls beneath it, up to
    the end of the table. border-collapse drops a sticky cell's own borders, so
@@ -456,9 +483,11 @@
 
 .mxAction {
   text-align: right;
-  padding: 7px 12px;
+  padding: 8px 12px;
   color: var(--primary-text-color, #323338);
-  background: #fcfcfe;
+  /* round332 — transparent: the old #fcfcfe column tint fought the new row hover
+     (#fafbfd) and existed to soften the grid, which is gone. */
+  background: transparent;
 }
 .mxTd { text-align: center; padding: 0; }
 .mxCell {
@@ -484,21 +513,22 @@
 .mxInherit:hover { background: transparent; }
 .mxAlways { font-size: 10px; font-weight: 600; color: #9fb3c8; }
 .mxNote {
-  margin-top: 8px;
+  /* round332 — inside the section card: flush to its edges, separated by the same
+     hairline the rows use, no second rounded box. */
+  margin-top: 0;
   font-size: 11.5px;
   color: var(--secondary-text-color, #676879);
   background: #f6f7fb;
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-top: 1px solid var(--layout-border-color, #eef0f6);
+  border-radius: 0;
+  padding: 9px 18px;
   line-height: 1.6;
 }
 
-/* ===== app roles (bottom) — round219: simpler, tighter, more elegant ===== */
-.appRolesSec {
-  border-top: 1px solid var(--ui-border-color, #e6e9f2);
-  padding-top: 14px;
-  margin-top: 4px;
-}
+/* ===== app roles (bottom) — round219: simpler, tighter, more elegant =====
+   round332 — `.appRolesSec` is GONE: the section is a regular `.mxSec` card with
+   the shared collapsible head, exactly like the matrices above it (owner request:
+   "תחת כותרת בסגנון דומה לשאר הכותרות"). The grid is now the card's body. */
 .appRolesGrid {
   /* round289 (owner request) — stack the cards in ONE column so the SUPER MEMBERS
      card sits BELOW OWNERS·MEMBERS instead of beside it (side-by-side clipped it
@@ -507,6 +537,7 @@
   grid-template-columns: 1fr;
   gap: 12px;
   align-items: start;
+  padding: 14px 18px 16px;
 }
 .appRoleCard {
   border: 1px solid var(--ui-border-color, #e6e9f2);
