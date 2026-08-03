@@ -470,7 +470,12 @@
    first/last cells take the head's 18px so the table aligns with the title. */
 .mxTable th, .mxTable td { border: none; font-size: 13px; }
 .mxTable tbody tr { border-bottom: 1px solid var(--layout-border-color, #eef0f6); }
-.mxTable tbody tr:last-child { border-bottom: none; }
+/* round335 — `tbody:last-of-type`, not a bare `tbody`: since each capability group
+   is now its OWN `<tbody>` (so `scope="rowgroup"` associates correctly), a bare
+   `tbody tr:last-child` would strip the separator at every GROUP boundary, leaving
+   a line that exists only across the 136px heading column and nowhere else. Only
+   the very last row of the very last group closes on the card's own edge. */
+.mxTable tbody:last-of-type tr:last-child { border-bottom: none; }
 .mxTable tbody tr:hover { background: #fafbfd; }
 .mxTable th:first-child, .mxTable td:first-child { padding-inline-start: 18px; }
 .mxTable th:last-child, .mxTable td:last-child { padding-inline-end: 18px; }

@@ -135,6 +135,24 @@ describe('round335 — group heading as a rowspanning side cell', () => {
     expect(cell.getAttribute('rowspan')).toBe('1');
   });
 
+  /*
+   * Added after the PR review on 2.6.16, which was right: `scope="rowgroup"` scopes
+   * a header to the containing HTML row group — the `<tbody>` — NOT to the rows its
+   * `rowSpan` covers. All groups in one `<tbody>` therefore announces the FIRST
+   * heading for every later row and lets the later headings overlap it. The fix is
+   * one `<tbody>` per group, and this is what stops a refactor collapsing them back.
+   */
+  it('gives every group its OWN tbody, with exactly one heading in each', async () => {
+    const table = await openDiscTier();
+    const bodies = Array.from(table.querySelectorAll('tbody'));
+    expect(bodies.length).toBeGreaterThan(1);
+    for (const tb of bodies) {
+      expect(tb.querySelectorAll('th[scope="rowgroup"]')).toHaveLength(1);
+    }
+    // Every heading in the table is accounted for by exactly one tbody.
+    expect(table.querySelectorAll('th[scope="rowgroup"]').length).toBe(bodies.length);
+  });
+
   it('keeps thead and tbody on the same column count', async () => {
     const table = await openDiscTier();
     const headCells = table.querySelectorAll('thead tr > *').length;

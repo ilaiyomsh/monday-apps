@@ -288,15 +288,23 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
    * no longer has to remember which heading they passed on the way down.
    *
    * `scope="rowgroup"` is the accessible counterpart — it tells a screen reader
-   * this cell heads every row it spans, which a `colSpan` heading row never said.
+   * this cell heads every row of its group, which a `colSpan` heading row never said.
+   *
+   * ONE `<tbody>` PER GROUP, and that is not cosmetic (PR review on 2.6.16, correct):
+   * `scope="rowgroup"` scopes a header to the containing HTML row group — the
+   * `<tbody>` — NOT to the rows its `rowSpan` happens to cover. With every group in
+   * a single `<tbody>`, the FIRST heading would be announced for every later row too
+   * and the later headings would overlap it, i.e. exactly the wrong associations. A
+   * `<table>` may hold any number of `<tbody>` elements, so one per group makes the
+   * HTML row group and the logical group the same thing.
    *
    * A single-capability group (משימות, החלטות) gets a one-row-tall box. Left as
    * is by owner decision — no artificial min-height to fake a uniform scale.
    */
   const renderGroupedTbody = (roles, groups, showGroupCol) => (
-    <tbody>
+    <>
       {groups.map((grp, gi) => (
-        <React.Fragment key={grp.group}>
+        <tbody key={grp.group}>
           {grp.caps.map((cap, i) => (
             <tr key={cap.id}>
               {showGroupCol && i === 0 && (
@@ -312,9 +320,9 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
               {roles.map((role) => renderCell(role.key, cap.id, isRoleHidden(role.key)))}
             </tr>
           ))}
-        </React.Fragment>
+        </tbody>
       ))}
-    </tbody>
+    </>
   );
 
   // round246 — a collapsible section header (chevron + title).

@@ -10,6 +10,25 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.6.17 — 2026-08-03
+
+- round335 המשך (ממצא ביקורת Codex על 2.6.16 — **אמיתי ונקודתי**): **כל קבוצת
+  הרשאות ב-`<tbody>` נפרד, כדי ש-`scope="rowgroup"` יקשר נכון.**
+  - `scope="rowgroup"` מקשר כותרת לקבוצת השורות **של ה-HTML** — כלומר ל-`<tbody>`
+    המכיל — ולא לשורות שה-`rowSpan` שלה מכסה. כשכל הקבוצות יושבות ב-`<tbody>` אחד,
+    קורא מסך היה מכריז את הכותרת **הראשונה** גם על כל השורות המאוחרות, והכותרות
+    המאוחרות היו חופפות לה. כלומר בדיוק הקישורים ההפוכים ממה שהשינוי ניסה לתת.
+  - `<table>` יכול להכיל כל מספר של `<tbody>`, ולכן קבוצה אחת לכל `<tbody>` הופכת
+    את קבוצת ה-HTML ואת הקבוצה הלוגית לאותו דבר. אין שינוי חזותי.
+  - **תיקון CSS שנגרר מזה:** `.mxTable tbody tr:last-child { border-bottom: none }`
+    הפך ל-`tbody:last-of-type tr:last-child`. בלי זה קו ההפרדה היה נעלם בכל **גבול
+    קבוצה** ולא רק בתחתית הטבלה, ונשאר קו שקיים רק לרוחב עמודת הכותרת (136px)
+    ובשום מקום אחר — פגם חזותי שנולד מתיקון נגישות.
+  - בדיקה נוספת ל-`permissionsRowGroup.test.jsx` (סה"כ 6): כל קבוצה מקבלת `tbody`
+    משלה ובכל `tbody` יש בדיוק כותרת אחת. נרשם `amend-intent` + `green --amended`,
+    והמוטציה "כל הקבוצות חוזרות ל-`tbody` אחד" נהרגה **על ידי האסרשן החדש** — כלומר
+    התיקון עצמו מוגן, לא רק מתועד.
+
 ## 2.6.16 — 2026-08-03
 
 - round336 (בקשת בעלים, חלופה A מההדמיה): **שורת הדיון בתפריט הצד מקבלת את גובה
