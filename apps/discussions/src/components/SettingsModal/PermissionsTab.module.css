@@ -457,14 +457,18 @@
   padding: 7px 8px;
   text-align: center;
   white-space: nowrap;
-  box-shadow:
-    inset 0 -1px 0 var(--ui-border-color, #e6e9f2),
-    inset 0 1px 0 var(--ui-border-color, #e6e9f2);
+  /* round333 — bottom seam only. The old top inset drew a second line right under
+     the card head's own border-bottom, which is the "extra strip" the owner saw. */
+  box-shadow: inset 0 -1px 0 var(--ui-border-color, #e6e9f2);
 }
 .mxActionTh {
+  /* round333 (owner request) — the header row is ONE grey band edge to edge: this
+     empty action-column header used to stay white, which read as a broken strip
+     above the role titles. Same background + sticky border treatment as .mxRoleTh. */
   border: none !important;
-  background: var(--primary-background-color, #fff);
+  background: #f6f7fb;
   width: 240px;
+  box-shadow: inset 0 -1px 0 var(--ui-border-color, #e6e9f2);
 }
 .mxRoleName { vertical-align: middle; }
 .mxRoleSmall { display: block; font-weight: 500; color: #9699a6; font-size: 10.5px; margin-top: 1px; }
