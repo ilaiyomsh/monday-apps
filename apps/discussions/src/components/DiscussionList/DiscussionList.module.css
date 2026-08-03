@@ -79,8 +79,26 @@
    *
    * 42px is the NO-SCROLLBAR figure; the @supports block under .scroll raises it
    * to 52px wherever the gutter can be reserved unconditionally. See there.
+   *
+   * round326 (PR review, P2) — the wide inset is granted only under `.is-desktop`,
+   * and 14px is the BASE. On the monday mobile app `.sidebar` is `width: 100%`
+   * (App.module.css — only `:global(.is-desktop) .sidebar` takes `--sidebar-w`), so
+   * round324's SIDEBAR_MIN_W clamp does not reach that path at all: on a 320px
+   * device the mobile shell's 6px frame padding and borders leave ~306px, while the
+   * toolbar needs 242 + 52 + 14 = 308. round322 broke that — at 14px the toolbar
+   * needed 270px and fit comfortably.
+   *
+   * Granting on `.is-desktop` rather than removing on `.mobile-app` is deliberate:
+   * anything that is not positively flagged desktop keeps the narrow-safe value, so
+   * a future layout mode cannot inherit an overflow. `.is-desktop`/`.mobile-app` are
+   * set on `.appShell` from App.jsx's `layoutClass` — verified applied, unlike the
+   * theme class in round325.
    */
-  padding: 16px 42px 16px 14px;
+  padding: 16px 14px;
+}
+
+:global(.is-desktop) .headerInner {
+  padding-right: 42px;
 }
 
 /* round176 — the top card is ONE icon-only row (owner request). Actions cluster
@@ -538,7 +556,9 @@
   .scroll {
     scrollbar-gutter: stable;
   }
-  .headerInner {
+  /* round326 — `.is-desktop` here too, matching the base rule: the 52px inset must
+     never reach the mobile shell, where there is not room for it. */
+  :global(.is-desktop) .headerInner {
     /* 8px (.list) + 34px (.item) + 10px (the gutter reserved just above) */
     padding-right: 52px;
   }

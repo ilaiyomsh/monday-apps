@@ -57,6 +57,12 @@ export const TOOLBAR_MIN_CONTENT_W = 242;
  * width BEFORE round322, and round322 widened it to 68px. A saved width under
  * the new floor is raised to it (readSavedWidth clamps both ends), which is the
  * intended repair — that width was already broken.
+ *
+ * round326 — this floor is DESKTOP-ONLY, by construction: it clamps `--sidebar-w`,
+ * and only `:global(.is-desktop) .sidebar` consumes that var (App.module.css). On
+ * the monday mobile app `.sidebar` is `width: 100%`, so nothing here protects it —
+ * the toolbar is kept inside a 320px device by gating the wide header inset on
+ * `.is-desktop` in DiscussionList.module.css instead.
  */
 const SIDEBAR_MIN_W = 310;
 const SIDEBAR_MAX_W = 720;
