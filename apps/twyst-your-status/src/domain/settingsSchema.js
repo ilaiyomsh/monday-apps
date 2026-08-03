@@ -75,6 +75,17 @@ export function normalizeLabelRule(rawRule) {
     allowedTeamIds: normalizeIdentifierList(rawRule.allowedTeamIds),
     requiredColumnIds: normalizeIdentifierList(rawRule.requiredColumnIds),
     requiredPeopleColumnIds: normalizeIdentifierList(rawRule.requiredPeopleColumnIds),
+    /*
+     * round321 — transition restriction: after this label, ONLY these labels are
+     * offered. Present ONLY as an array (empty = terminal status; nothing may
+     * follow). Absence — not null, not undefined-valued — is the unrestricted
+     * default: several suites pin the rule as exactly the four keys above, and
+     * every settings blob stored before this round has no such key, so key-absence
+     * is what "no restriction" has to look like.
+     */
+    ...(Array.isArray(rawRule.nextLabelIds)
+      ? { nextLabelIds: normalizeLabelIdList(rawRule.nextLabelIds) }
+      : {}),
   };
 }
 

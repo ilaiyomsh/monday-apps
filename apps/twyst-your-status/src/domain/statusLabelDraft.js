@@ -305,14 +305,48 @@ export function pruneSettingsForActiveLabels(settings, activeLabelIds) {
     hiddenLabelIds: [],
     labels: {},
   };
-  const keep = new Set((activeLabelIds ?? []).map(String));
+  /*
+   * round321 — two keep-sets with different jobs (review-confirmed distinction):
+   *
+   * `keepTargets` is the caller's list verbatim — a transition may only point at a
+   * label that really exists (or will exist after this save). '5' earns its place
+   * here like anyone else; force-keeping it left a phantom target behind the
+   * name-then-clear flow, one the editor could never show and the counts kept
+   * counting.
+   *
+   * `keepKeys` additionally always holds the reserved id: the rule keyed '5'
+   * governs what may be picked from an EMPTY status, its card is always on the
+   * settings screen (round313), and the refreshed active ids after a labels
+   * mutation list only labels monday really has — so a save that never created the
+   * grey label would otherwise silently discard the empty state's configuration.
+   */
+  const keepTargets = new Set((activeLabelIds ?? []).map(String));
+  const keepKeys = new Set([...keepTargets, String(RESERVED_EMPTY_LABEL_ID)]);
   const labels = {};
   Object.entries(migrated.labels).forEach(([key, rule]) => {
-    if (keep.has(key)) labels[key] = rule;
+    if (!keepKeys.has(key)) return;
+    if (!Array.isArray(rule.nextLabelIds)) {
+      labels[key] = rule;
+      return;
+    }
+    const nextLabelIds = rule.nextLabelIds.filter((id) => keepTargets.has(id));
+    if (nextLabelIds.length === 0 && rule.nextLabelIds.length > 0) {
+      /*
+       * The restriction was emptied BY this prune — every label it pointed at is
+       * gone. Keeping the empty list would silently convert "only via X" into a
+       * TERMINAL status the moment X is deleted; unrestricting is the smaller
+       * surprise. A stored [] (deliberately terminal) takes the branch above this
+       * one untouched, because 0 === 0.
+       */
+      const { nextLabelIds: dropped, ...rest } = rule;
+      labels[key] = rest;
+      return;
+    }
+    labels[key] = { ...rule, nextLabelIds };
   });
   return {
     version: migrated.version,
-    hiddenLabelIds: migrated.hiddenLabelIds.filter((id) => keep.has(id)),
+    hiddenLabelIds: migrated.hiddenLabelIds.filter((id) => keepKeys.has(id)),
     labels,
   };
 }
