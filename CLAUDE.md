@@ -199,6 +199,12 @@ packages/shared                     EMPTY STUB — see below
   red as yours until proven otherwise.
 - **Known-red baseline:** tracker carries 2 deferred failing tests
   (FOLLOW-UPS F1). Not your breakage — do not "fix" them without the owner.
+- **amp4email validation** (`amp4email document validation` job, deadline-confirm
+  only): renders the digest's AMP documents and runs the OFFICIAL validator.
+  Exit code IS the contract — **1 = an invalid document, and the job fails**;
+  **3 = the validator could not be fetched** (it loads from `cdn.ampproject.org`),
+  reported and never fatal, so a CDN outage cannot block unrelated PRs. Run it
+  locally with `pnpm --filter ./apps/deadline-confirm run validate:amp`.
 - **test-guard:** red gate for new code; retrofits prove themselves with ≥2
   killed mutations per changed module; never weaken a locked test file;
   sanctioned exits only (`amend-intent` / waiver, both logged).

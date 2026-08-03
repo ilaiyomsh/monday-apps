@@ -47,6 +47,28 @@ import { renderHtmlFallback } from './digest-html-fallback.js';
 const BASE64_LINE_LENGTH = 76;
 
 /**
+ * Selectable part orders — a DEBUG-lane knob, not a production setting.
+ *
+ * The order above is a hypothesis with TWO variables in it: the message that
+ * rendered differed from ours in the part order AND in the sending identity /
+ * DKIM. A competing claim says the AMP part must come LAST, which is also the
+ * more literal reading of multipart/alternative (the last part is the most
+ * preferred). Settling that needs the same document sent from the same mailbox
+ * with only the order changed — that is what these are for.
+ *
+ * `plain-amp-html` stays the DEFAULT and the only order production sending uses,
+ * because it is the one backed by the captured message. Nothing here changes
+ * that until an experiment says otherwise.
+ *
+ * - plain-amp-html — current default; the captured, rendering order.
+ * - plain-html-amp — the competing claim: AMP last.
+ * - plain-amp      — the 2-part message that got INTERNAL_ERROR (control).
+ */
+export const PART_ORDERS = ['plain-amp-html', 'plain-html-amp', 'plain-amp'];
+
+export const DEFAULT_PART_ORDER = 'plain-amp-html';
+
+/**
  * UTF-8 → base64, wrapped at 76 characters with CRLF separators.
  * @param {string} text
  * @returns {string}
@@ -61,15 +83,22 @@ function encodeBase64Body(text) {
 }
 
 /**
- * @param {{ plain: string, amp: string }} p
+ * @param {{ plain: string, amp: string, order?: string }} p
+ *   `order` is a debug-lane knob (see PART_ORDERS); omit it for production.
  * @returns {{ contentType: string, body: string }}
  */
-export function buildMultipartAlternative({ plain, amp }) {
+export function buildMultipartAlternative({ plain, amp, order = DEFAULT_PART_ORDER }) {
   if (typeof plain !== 'string' || plain.length === 0) {
     throw new Error('buildMultipartAlternative: plain part is required');
   }
   if (typeof amp !== 'string' || amp.length === 0) {
     throw new Error('buildMultipartAlternative: amp part is required');
+  }
+  // Never fall back to the default on an unknown value: an experiment that
+  // silently reported the wrong variant is worse than no experiment, because
+  // the conclusion would look supported.
+  if (!PART_ORDERS.includes(order)) {
+    throw new Error(`buildMultipartAlternative: unknown part order "${order}"`);
   }
   const boundary = `dc_${crypto.randomBytes(12).toString('hex')}`;
   /** @param {string} contentType @param {string} payload */
@@ -82,12 +111,16 @@ export function buildMultipartAlternative({ plain, amp }) {
       encodeBase64Body(payload),
       '',
     ].join('\r\n');
-  const parts = [
-    part('text/plain', plain),
-    part('text/x-amp-html', amp),
-    part('text/html', renderHtmlFallback(plain)),
-    `--${boundary}--\r\n`,
-  ];
+  const plainPart = part('text/plain', plain);
+  const ampPart = part('text/x-amp-html', amp);
+  const htmlPart = part('text/html', renderHtmlFallback(plain));
+  const bodyParts =
+    order === 'plain-html-amp'
+      ? [plainPart, htmlPart, ampPart]
+      : order === 'plain-amp'
+        ? [plainPart, ampPart]
+        : [plainPart, ampPart, htmlPart];
+  const parts = [...bodyParts, `--${boundary}--\r\n`];
   return {
     contentType: `multipart/alternative; boundary="${boundary}"`,
     body: parts.join(''),

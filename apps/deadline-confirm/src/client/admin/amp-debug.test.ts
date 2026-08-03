@@ -9,6 +9,9 @@ import {
   ampSizeWarning,
   validateRawSend,
   defaultDebugSubject,
+  PART_ORDER_OPTIONS,
+  DEFAULT_PART_ORDER,
+  isPartOrder,
 } from './amp-debug';
 
 describe('ampByteLength', () => {
@@ -47,6 +50,41 @@ describe('validateRawSend', () => {
     const error = validateRawSend(input);
     expect(error).toBeTruthy();
     expect(error).toMatch(/[֐-׿]/);
+  });
+});
+
+describe('PART_ORDER_OPTIONS', () => {
+  // These values are sent verbatim to the server, which REFUSES anything it does
+  // not recognize. A drifted string here surfaces as a 400 on a send the operator
+  // believed was a valid variant, so the exact set is pinned.
+  it('offers exactly the three orders the server accepts', () => {
+    expect(PART_ORDER_OPTIONS.map((o) => o.value)).toEqual([
+      'plain-amp-html',
+      'plain-html-amp',
+      'plain-amp',
+    ]);
+  });
+
+  it('defaults to the production order, so a debug send is production-shaped unless changed', () => {
+    expect(DEFAULT_PART_ORDER).toBe('plain-amp-html');
+    expect(PART_ORDER_OPTIONS[0].value).toBe(DEFAULT_PART_ORDER);
+  });
+
+  it('labels every option with something a human can tell apart', () => {
+    for (const option of PART_ORDER_OPTIONS) {
+      expect(option.label.length).toBeGreaterThan(0);
+      expect(option.label).toContain('plain');
+    }
+  });
+});
+
+describe('isPartOrder', () => {
+  it('accepts every offered order', () => {
+    for (const option of PART_ORDER_OPTIONS) expect(isPartOrder(option.value)).toBe(true);
+  });
+
+  it.each(['amp-first', '', 'plain', 'PLAIN-AMP-HTML'])('rejects %o', (value) => {
+    expect(isPartOrder(value)).toBe(false);
   });
 });
 

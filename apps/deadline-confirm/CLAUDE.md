@@ -110,7 +110,24 @@ src/
   **`required=` is deliberately NOT used** — one bulk form per message means it
   would block rows the reader never marked.
 - **V6 preview:** `GET /api/digest/preview` → `{ plain, amp }` (no `html`).
-- **AMP debug lane:** `POST /api/digest/send-raw` `{ amp, to, subject?, plain? }`
+- **amp4email validation:** `npm run validate:amp` renders five structurally
+  distinct digest documents through the REAL renderer and validates them with the
+  official validator (`AMP4EMAIL` format). Exit **0** valid · **1** invalid (a real
+  defect) · **3** validator unfetchable from `cdn.ampproject.org` (nothing assessed
+  — never treat as a verdict). Wired as the `amp4email document validation` CI job.
+  **This is the first thing to run on an `INTERNAL_ERROR`:** Gmail's error carries
+  no content, so an invalid document and a rejected envelope are indistinguishable
+  from the inbox, and only the validator separates them.
+- **MIME part order is a debug knob, not a setting:** `PART_ORDERS` in
+  `helpers/mime-alternative.js` — `plain-amp-html` (DEFAULT, the only order
+  production sends, backed by the captured message that rendered) ·
+  `plain-html-amp` (the competing claim: AMP last, which is also the more literal
+  reading of multipart/alternative) · `plain-amp` (2-part control that got
+  `INTERNAL_ERROR`). An unknown order is REFUSED, never defaulted — a silently
+  substituted variant would make an experiment report a structure it never sent.
+  The original evidence is CONFOUNDED (the rendering message differed in both
+  order and sender/DKIM); `send-raw`'s `order` field exists to vary one at a time.
+- **AMP debug lane:** `POST /api/digest/send-raw` `{ amp, to, subject?, plain?, order? }`
   sends the operator's **edited** amp4email document **byte for byte** (no
   re-render) through the same `buildMultipartAlternative` + Gmail funnel. Needs
   neither config nor link secret nor monday token — it tests the MESSAGE, not the

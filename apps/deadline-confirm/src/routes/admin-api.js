@@ -32,7 +32,11 @@ import express from 'express';
 import { generateSecret, maskSecret } from '../services/secret.js';
 import { renderDigestAmp } from '../helpers/digest-amp.js';
 import { renderDigestPlain } from '../helpers/digest-plain.js';
-import { buildMultipartAlternative } from '../helpers/mime-alternative.js';
+import {
+  buildMultipartAlternative,
+  PART_ORDERS,
+  DEFAULT_PART_ORDER,
+} from '../helpers/mime-alternative.js';
 import { buildDigest, digestTaskColumnIds, decorateRecipientSections } from '../services/digest-service.js';
 import { runDigestForAccount, todayInJerusalem as todayInJerusalemFromRun } from '../services/digest-run.js';
 import { MondayApiError } from '../services/monday-api.js';
@@ -384,7 +388,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         return;
       }
       const body = typeof req.body === 'object' && req.body !== null ? req.body : {};
-      const { amp, to, subject, plain } = body;
+      const { amp, to, subject, plain, order } = body;
 
       if (typeof amp !== 'string' || amp.trim().length === 0) {
         res.status(400).json({ error: 'invalid_amp', message: 'amp must be a non-empty string' });
@@ -404,6 +408,18 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         res.status(400).json({ error: 'invalid_plain', message: 'plain must be a string when present' });
         return;
       }
+      // MIME part order (debug experiment — see helpers/mime-alternative.js).
+      // Refused rather than defaulted when unrecognized: an experiment that
+      // silently sent a different structure than it reported would produce a
+      // conclusion that looks supported and is not.
+      const partOrder = order === undefined || order === null ? DEFAULT_PART_ORDER : order;
+      if (!PART_ORDERS.includes(partOrder)) {
+        res.status(400).json({
+          error: 'invalid_order',
+          message: `order must be one of: ${PART_ORDERS.join(', ')}`,
+        });
+        return;
+      }
       const ampBytes = Buffer.byteLength(amp, 'utf8');
       if (ampBytes > RAW_AMP_MAX_BYTES) {
         res.status(413).json({ error: 'amp_too_large', message: `amp part is ${ampBytes} bytes (max ${RAW_AMP_MAX_BYTES})` });
@@ -420,7 +436,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
             : RAW_FALLBACK_SUBJECT;
       const finalPlain = typeof plain === 'string' && plain.length > 0 ? plain : RAW_FALLBACK_PLAIN;
 
-      const mime = buildMultipartAlternative({ plain: finalPlain, amp });
+      const mime = buildMultipartAlternative({ plain: finalPlain, amp, order: partOrder });
       let sent;
       try {
         sent = await emailSender.send({
@@ -436,6 +452,7 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
         logError('admin_api', 'raw amp send failed', {
           accountId: req.session.accountId,
           code: err?.code,
+          order: partOrder,
           error: message,
         });
         // 502, not 500: the failure belongs to Gmail, and its message IS the
@@ -447,9 +464,19 @@ export function createAdminRouter({ storage, api, env, requireSession, emailSend
       logInfo('admin_api', 'raw amp sent', {
         accountId: req.session.accountId,
         ampBytes,
+        order: partOrder,
         messageId: sent?.id,
       });
-      res.json({ ok: true, id: sent?.id ?? null, to: to.trim(), subject: finalSubject, ampBytes });
+      // `order` is echoed on purpose: three near-identical debug emails are
+      // otherwise indistinguishable in the inbox.
+      res.json({
+        ok: true,
+        id: sent?.id ?? null,
+        to: to.trim(),
+        subject: finalSubject,
+        ampBytes,
+        order: partOrder,
+      });
     })
   );
 

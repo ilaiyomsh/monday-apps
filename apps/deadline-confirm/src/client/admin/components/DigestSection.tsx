@@ -16,7 +16,14 @@ import type { DigestDraft, DigestSectionDraft } from '../draft';
 import { newDigestSection } from '../draft';
 import { apiFetch, ApiError, formatApiFailure } from '../services/api';
 import { fetchBoardColumns } from '../services/monday';
-import { ampByteLength, ampSizeWarning, defaultDebugSubject, validateRawSend } from '../amp-debug';
+import {
+  ampByteLength,
+  ampSizeWarning,
+  defaultDebugSubject,
+  validateRawSend,
+  PART_ORDER_OPTIONS,
+  DEFAULT_PART_ORDER,
+} from '../amp-debug';
 import logger from '../utils/logger';
 
 interface Option {
@@ -71,6 +78,7 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
   const [ampDraft, setAmpDraft] = useState('');
   const [ampTo, setAmpTo] = useState('');
   const [ampSubject, setAmpSubject] = useState('');
+  const [ampOrder, setAmpOrder] = useState<string>(DEFAULT_PART_ORDER);
   const [rawSending, setRawSending] = useState(false);
   const [rawResult, setRawResult] = useState<DigestRawSendResponse | null>(null);
   const [rawError, setRawError] = useState<string | null>(null);
@@ -192,6 +200,7 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
           amp: ampDraft,
           to: ampTo.trim(),
           subject: ampSubject,
+          order: ampOrder,
           // Same plain part the real message carries, so the only variable
           // under test is the AMP document itself.
           plain: preview?.plain ?? undefined,
@@ -611,6 +620,19 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                         <label>נושא</label>
                         <TextField value={ampSubject} placeholder="נושא" onChange={setAmpSubject} />
                       </div>
+                      <div className="dc-field" style={{ minWidth: 300 }}>
+                        <label>מבנה ה-MIME (ניסוי)</label>
+                        <Dropdown
+                          options={PART_ORDER_OPTIONS.map((o) => toOption(o.value, o.label))}
+                          value={
+                            PART_ORDER_OPTIONS.map((o) => toOption(o.value, o.label)).find(
+                              (o) => o.value === ampOrder
+                            ) ?? null
+                          }
+                          onChange={(opt: Option | null) => setAmpOrder(opt?.value ?? DEFAULT_PART_ORDER)}
+                          clearable={false}
+                        />
+                      </div>
                       <Button
                         kind={Button.kinds.PRIMARY}
                         size="small"
@@ -645,9 +667,17 @@ export function DigestSection({ boards, tasksColumns, tasksColumnsLoading, butto
                     {rawResult && (
                       <div className="dc-success">
                         נשלח ✓ — {rawResult.to} · {rawResult.ampBytes.toLocaleString('en-US')} bytes ·
-                        Gmail message id: <code>{rawResult.id ?? '—'}</code>
+                        מבנה: <code>{rawResult.order}</code> · Gmail message id:{' '}
+                        <code>{rawResult.id ?? '—'}</code>
                       </div>
                     )}
+                    <div className="dc-hint">
+                      <b>הניסוי:</b> ג׳ימייל מחזיר <code>INTERNAL_ERROR</code> בלי שום פירוט, ולכן
+                      מסמך לא-ולידי ומבנה שנדחה נראים זהים מתיבת הדואר. שלחו את <b>אותו מסמך</b>
+                      בשלושת המבנים לאותה כתובת — כך משתנה רק המבנה, בזמן שהשולח וה-DKIM נשארים
+                      קבועים (מה שהניסוי המקורי לא הצליח לבודד). לפני זה כדאי להריץ{' '}
+                      <code>npm run validate:amp</code>, שאומר אם המסמך עצמו ולידי.
+                    </div>
 
                     <div className="dc-hint">
                       השליחה יוצאת מתיבת ה-Gmail המחוברת של הארגון ובאותו מבנה MIME של המייל האמיתי

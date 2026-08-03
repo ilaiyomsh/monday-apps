@@ -124,6 +124,8 @@ export interface DigestRawSendResponse {
   subject: string;
   /** UTF-8 size of the amp part actually shipped. */
   ampBytes: number;
+  /** MIME part order actually used — echoed so inbox messages are tellable apart. */
+  order: string;
 }
 
 export interface DigestSendResult extends DigestRecipientSummary {

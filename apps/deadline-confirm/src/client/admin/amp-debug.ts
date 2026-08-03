@@ -37,3 +37,27 @@ export function defaultDebugSubject(configured: string | null | undefined): stri
   const trimmed = (configured ?? '').trim();
   return trimmed.length > 0 ? trimmed : '[AMP debug] מייל מסכם';
 }
+
+/**
+ * MIME part orders the debug lane can send (mirrors PART_ORDERS on the server,
+ * which REFUSES anything it does not recognize — a drifted string here shows up
+ * as a 400 on a send the operator believed was a valid variant).
+ *
+ * These exist for ONE experiment: the message Gmail was observed to render
+ * differed from ours in both the part order and the sending identity, so the
+ * current order is a hypothesis with two variables in it. Sending the same
+ * document from the same mailbox in all three structures is what separates them.
+ * `plain-amp-html` is the default and the only order production uses.
+ */
+export const PART_ORDER_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: 'plain-amp-html', label: 'plain → amp → html (ברירת מחדל — מה שנתפס כמרנדר)' },
+  { value: 'plain-html-amp', label: 'plain → html → amp (הטענה הנגדית: AMP אחרון)' },
+  { value: 'plain-amp', label: 'plain → amp (שני חלקים — הביקורת שקיבלה INTERNAL_ERROR)' },
+];
+
+export const DEFAULT_PART_ORDER = 'plain-amp-html';
+
+/** True for a value the server will accept as an order. */
+export function isPartOrder(value: string): boolean {
+  return PART_ORDER_OPTIONS.some((o) => o.value === value);
+}

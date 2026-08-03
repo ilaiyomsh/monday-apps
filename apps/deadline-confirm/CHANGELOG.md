@@ -2,6 +2,65 @@
 
 *Auto-generated. Source: `~/.change-tracker/changes.db`*
 
+## 0.13.0 — 2026-08-03 — validate the AMP document, and make the part-order claim testable
+
+Two instruments for the `INTERNAL_ERROR` hunt. Neither changes what production
+sends.
+
+**1. `npm run validate:amp` — ask the official validator instead of guessing.**
+Renders five structurally distinct digest documents through the REAL renderer
+(no note column · note column mapped · multi-button dropdown + notes · one
+cluster mapped and one not · the same task in two mapped clusters) and validates
+each as `AMP4EMAIL`.
+
+This should have existed first. Gmail's only diagnostic is `INTERNAL_ERROR`, a
+documented catch-all with no content — so **an invalid document and a rejected
+envelope look identical from the inbox**, and every conclusion drawn from that
+inbox is a guess. The validator names the rule and the line.
+
+The **exit code is the contract**, because the two failure modes deserve
+different treatment:
+
+| exit | meaning | CI |
+|---|---|---|
+| 0 | every sample is valid | pass |
+| 1 | a document is INVALID | **fails the build** |
+| 3 | the validator itself could not be fetched | reported, never fatal |
+
+Code 3 exists because the validator loads from `cdn.ampproject.org` at runtime.
+Failing on it would couple every PR in the monorepo to an external CDN, and — worse
+— would report a document problem that was never actually assessed. Wired as its
+own CI job (`amp4email document validation`) so a CDN outage cannot stall the
+blocking type-check/lint/build job either.
+
+**2. Selectable MIME part order — the experiment the investigation never ran.**
+
+The evidence behind the current order is **confounded**, and the code now says so
+plainly. The message Gmail *did* render (the playground's send, 0.10.3) differed
+from ours in the part order **and** in the sending identity/DKIM. Two variables,
+one observation. A competing claim says the AMP part must come **last**
+(`plain → html → amp`) — which is also the more literal reading of
+`multipart/alternative`, where the last part is the most preferred one. Both
+readings are defensible a priori, which is exactly why it needs an experiment
+rather than an argument.
+
+`buildMultipartAlternative` now takes an `order`, and `POST /api/digest/send-raw`
+accepts it, so the same document can be sent from the same mailbox in all three
+structures — varying the structure and nothing else:
+
+- `plain-amp-html` — **the default, and the only order production sends.**
+- `plain-html-amp` — the competing claim.
+- `plain-amp` — the 2-part control that got `INTERNAL_ERROR`.
+
+An unrecognized order is **refused**, never quietly replaced by the default: an
+experiment that reported a structure it did not send is worse than no experiment,
+because the wrong conclusion would look supported. The response and the log echo
+the order actually used, since three near-identical debug emails are otherwise
+impossible to tell apart in an inbox.
+
+The admin box gets a variant dropdown next to the recipient and subject, and a
+note pointing at `validate:amp` as the step to run first.
+
 ## 0.12.0 — 2026-08-03 — a required text field per task, mapped to a board text column
 
 A digest cluster can now map a **text column on the tasks board**. When it does,

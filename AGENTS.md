@@ -180,6 +180,12 @@ apps.
   as yours until proven otherwise.
 - **Known-red baseline:** tracker carries 2 deferred failing tests (FOLLOW-UPS F1).
   Not your breakage — do not "fix" them without the owner.
+- **amp4email validation** (`amp4email document validation` job, deadline-confirm
+  only): renders the digest's AMP documents and runs the OFFICIAL validator. Exit
+  code IS the contract — **1 = an invalid document, and the job fails**; **3 = the
+  validator could not be fetched** (it loads from `cdn.ampproject.org`), reported
+  and never fatal, so a CDN outage cannot block unrelated PRs. Locally:
+  `pnpm --filter ./apps/deadline-confirm run validate:amp`.
 - **Onboarding-debt expiry:** any stubbed check must be logged in
   `apps/axis/docs/FOLLOW-UPS.md` with a re-enable plan. Standing debt: planner lint
   268, day-off lint 8.
