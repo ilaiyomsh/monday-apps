@@ -10,6 +10,29 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.6.6 — 2026-08-03
+
+- round326 (ממצא P2 מביקורת #558): **היישור של round322 שבר את שורת הכלים באפליקציית
+  המובייל של מאנדיי, ותיקון הרוחב של round324 לא הגן על המסלול הזה בכלל.**
+  - **למה round324 לא עזר שם:** הרצפה שהוא קבע חוסמת את `--sidebar-w`, ורק
+    `:global(.is-desktop) .sidebar` צורך את המשתנה הזה. באפליקציית המובייל
+    `.sidebar` הוא `width: 100%` — כלומר הקלמפ של `SIDEBAR_MIN_W` לא נוגע במסלול
+    הזה **בכלל**.
+  - **החשבון:** במכשיר של 320px, מסגרת המובייל (`--frame-pad: 6px` ועוד גבולות)
+    משאירה כ-306px, ושורת הכלים דורשת 242 + 52 + 14 = **308**. כלומר בקרות הקצה
+    נחתכות. **זו רגרסיה שround322 הכניס** — ב-14px השורה דרשה 270px ונכנסה
+    בנוחות.
+  - **התיקון:** ה-inset הרחב מוענק רק תחת `.is-desktop`, ו-**14px הוא הבסיס**
+    (גם בכלל של 42px וגם בזה של 52px שתחת ה-`@supports`). **הענקה** תחת
+    `.is-desktop` ולא **הסרה** תחת `.mobile-app` — בכוונה: כל מה שלא מסומן במפורש
+    כדסקטופ מקבל את הערך הבטוח-לצר, כך שמצב פריסה עתידי לא יכול לירוש גלישה.
+  - **אחרי הלקח של round325** אומת שהמחלקות באמת קיימות: `.is-desktop`/`.mobile-app`
+    נקבעות על `.appShell` מתוך `layoutClass` ב-`App.jsx`. הפעם הסלקטור אכן תופס.
+  - test-guard: **waiver** מתועד — הזזת ערכי padding מתחת לסלקטור קיים באפליקציה,
+    בלי לוגיקה; jsdom לא מחיל CSS modules ולא קובע את מחלקת הפריסה. הבדיקה של
+    round324 נשארת תקפה (הרצפה של הדסקטופ עדיין נגזרת מ-242+52+14) ולא נגעה בה.
+    הסוויטה המלאה נשארה ירוקה.
+
 ## 2.6.5 — 2026-08-03
 
 - round325 (ממצא P2 מביקורת #557 — הממצא הכי חשוב מכל הסבב): **לאפליקציה הזאת אין
