@@ -13,16 +13,20 @@
  * is `--allgrey-background-color`, NOT `--secondary-background-color` — the latter
  * resolves to #ffffff in the light theme, so the fallback would never have applied
  * and the list would have stayed white with its border already removed, i.e. no
- * separation at all. The three row tiers below use tokens from the same family, so a
- * monday dark/black theme moves the whole ladder together instead of painting light
- * greys under light text:
+ * separation at all. The three row tiers below use tokens from the same family:
  *
- *   ground   --allgrey-background-color                    #f6f7fb / #30324e / #2c2c2c
- *   hover    --ui-background-color                         #e7e9ef / #434660 / #4d4d4d
- *   selected --primary-background-hover-on-secondary-color  #dcdfec / #4b4e69 / #636363
+ *   ground   --allgrey-background-color                    #f6f7fb
+ *   hover    --ui-background-color                         #e7e9ef
+ *   selected --primary-background-hover-on-secondary-color  #dcdfec
  *
- * In every theme the ladder stays monotonic — each tier one step further from the
- * ground — which is what keeps "hovered" and "selected" tellable apart.
+ * The ladder is monotonic — each tier one step further from the ground — which is
+ * what keeps "hovered" and "selected" tellable apart.
+ *
+ * CORRECTED in round325: earlier revisions of this comment claimed the ladder
+ * "moves together in a monday dark/black theme". It does not, because this app
+ * never applies a Vibe theme class at all — so these tokens always resolve to the
+ * light values above. See the round325 note further down before writing anything
+ * theme-conditional here.
  */
 .root {
   display: flex;
@@ -43,9 +47,11 @@
  * prominence WITHOUT bringing the separating line back.
  *
  * The shadow is a 1px lip, not a card shadow — Vibe's smallest token is
- * `--box-shadow-medium` (0 6px 20px), far too heavy for the edge of a band. In a
- * dark monday theme the shadow all but vanishes, which is fine: there the band's own
- * surface (#181b34) already contrasts hard with the ground (#30324e).
+ * `--box-shadow-medium` (0 6px 20px), far too heavy for the edge of a band.
+ *
+ * CORRECTED in round325: this comment used to add that "in a dark monday theme the
+ * band's own surface #181b34 contrasts with the ground #30324e". That reasoning was
+ * void — the app applies no theme class, so the band is #ffffff on #f6f7fb always.
  */
 .header {
   flex: none;
@@ -343,7 +349,8 @@
      the row had moved onto the grey ground and a grey field would have dissolved
      into it; the band restores the white surface underneath, so white-on-white
      would now be the invisible one. The token is translucent (rgba grey), so it
-     reads as a field on any band color, in any monday theme. */
+     reads as a field on whatever the band is painted — which today is always
+     #ffffff, since no theme class is applied (round325). */
   border: 1px solid transparent;
   border-radius: 8px;
   background: var(--primary-background-hover-color, #f1f2f6);
@@ -811,8 +818,8 @@
 }
 
 .item:hover {
-  /* round321 — one step off the ground (was one step off white). Token, not a
-     literal, so a dark theme moves it with the ground (see .root). */
+  /* round321 — one step off the ground (was one step off white). Token for its
+     name, not for adaptation: no theme class is ever applied (round325). */
   background-color: var(--ui-background-color, #e7e9ef);
 }
 
@@ -823,41 +830,47 @@
    "אפשרות 1" tone): a darker neutral fill on the whole row — no border, no
    blue tint; the color pill stays (and grows slightly, see .rail). */
 /* round321 — the selection is the FURTHEST tier from the ground, exactly as in
-   monday's side menu (light: #f6f7fb → #e7e9ef → #dcdfec). Also a token, so the
-   ladder inverts correctly in a dark theme instead of staying light. */
+   monday's side menu (#f6f7fb → #e7e9ef → #dcdfec). A token rather than a literal
+   because that is the right name for the value — NOT because it adapts: see the
+   round325 note below, this app never applies a theme class, so these resolve to
+   the light values always. */
 .itemSelected {
   background: var(--primary-background-hover-on-secondary-color, #dcdfec);
 }
 
 /*
- * round324 (PR review, P2) — THE HACKER THEME COLLAPSES THE LADDER.
+ * round325 (PR review, P2) — THIS APP HAS NO THEME. Read this before writing any
+ * theme-conditional CSS here.
  *
- * round321's three tiers assume the three tokens hold three different values.
- * Verified against the installed @vibe/core tokens.css, that holds in the three
- * themes monday exposes — but NOT in `.hacker_theme-app-theme`, where:
+ * round324 added `:global(.hacker_theme-app-theme)` overrides to fix a real token
+ * collision in Vibe's hacker theme. They were DEAD CODE and have been removed:
+ * `app-theme` appears nowhere in this app. `MondayProvider` stores the SDK context
+ * but never reads `context.theme`, nothing sets a class on `<html>`/`<body>`, and
+ * Vibe's `ThemeProvider` is not mounted. monday cannot reach into the iframe's DOM
+ * to do it either — the app has to opt in, and it never has.
  *
- *   --allgrey-background-color                    #282a36   ground
- *   --primary-background-color                    #282a36   ← same as the ground
- *   --ui-background-color                         #4b4e69   hover
- *   --primary-background-hover-on-secondary-color #4b4e69   ← same as the hover
+ * The consequence is bigger than one dead selector, so it is written down here
+ * rather than rediscovered: **every Vibe token in this app always resolves to the
+ * `:root` (light) value.** The ladder above is therefore ALWAYS
+ * #f6f7fb → #e7e9ef → #dcdfec, in every account, whatever theme the user picked in
+ * monday. Comments in round321/round322 that reasoned about how the ladder "inverts
+ * in a dark theme" described a mechanism this app does not have; they have been
+ * corrected in place.
  *
- * So two things collapse at once there: a hovered row is indistinguishable from
- * the selected row, and round322's white band is indistinguishable from the
- * ground it is supposed to sit above.
+ * The tokens stay anyway — they cost nothing, they are the right names, and they
+ * become correct the day theming is wired. What must not happen again is CSS whose
+ * only job is to fire under a theme class that never appears.
  *
- * Fixed by theme, not globally, because the alternative is re-picking the tokens
- * for every theme — and the light/dark/black ladders are the ones the owner
- * approved from a rendered mock. `--primary-selected-color` is the only token
- * that differs from `--ui-background-color` in ALL FOUR themes (#9f4077 here), so
- * it carries the selection; the band gets back the hairline that round321 removed,
- * on the honest principle that where two surfaces collide, a line does the work.
+ * Wiring `context.theme` through to the Vibe class is a genuine feature (the app
+ * currently ignores the user's monday theme entirely) and an owner decision, not a
+ * review fix — it would change the app's appearance for every dark-theme user. It
+ * is reported, not implemented here. When it IS wired, the hacker theme needs the
+ * collision handled: `--allgrey-background-color` and `--primary-background-color`
+ * are both #282a36 there (ground == band), and `--ui-background-color` and
+ * `--primary-background-hover-on-secondary-color` are both #4b4e69 (hover ==
+ * selected). `--primary-selected-color` is the only token that differs from the
+ * hover token in all four themes.
  */
-:global(.hacker_theme-app-theme) .itemSelected {
-  background: var(--primary-selected-color, #9f4077);
-}
-:global(.hacker_theme-app-theme) .header {
-  border-bottom: 1px solid var(--layout-border-color, #414458);
-}
 
 /* Left color rail — round134 (approved mock, "אפשרות 1"): a small ROUNDED PILL
    (4×20px, fully rounded ends) vertically centered on the row, instead of the
