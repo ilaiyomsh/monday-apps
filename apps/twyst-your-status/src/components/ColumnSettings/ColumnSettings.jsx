@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { AttentionBox, Button, Heading } from '@vibe/core';
 import { validateSettings } from '../../domain/settingsSchema';
 import { isSupportedFormColumnType } from '../../domain/columnFields';
-import { pickColorForNewLabel, resolveStatusColorHex } from '../../domain/statusColors';
+import { RESERVED_EMPTY_LABEL_ID, pickColorForNewLabel, resolveStatusColorHex } from '../../domain/statusColors';
 import {
   buildCreateLabelPayload,
   buildStatusLabelsUpdatePayload,
@@ -176,6 +176,29 @@ function SelectDropdown({
   );
 }
 
+/** Small inline SVG icons — the text glyphs (↑ ↓ הסרה) read as an afterthought. */
+function ChevronUpIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M3.5 10 8 5.5 12.5 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function ChevronDownIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M3.5 6 8 10.5 12.5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M2.5 4h11M6.5 4V2.8a.8.8 0 0 1 .8-.8h1.4a.8.8 0 0 1 .8.8V4m2.7 0-.5 9.2a1 1 0 0 1-1 .95H5.3a1 1 0 0 1-1-.95L3.8 4M6.5 7v4M9.5 7v4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function LabelCard({
   label,
   hidden,
@@ -186,6 +209,7 @@ function LabelCard({
   columns,
   peopleColumns,
   usedColors,
+  transitionTargets,
   saving,
   isFirst,
   isLast,
@@ -199,6 +223,7 @@ function LabelCard({
   // Accordion closed by default for every label — never auto-open on config.
   const [open, setOpen] = useState(false);
   const [requiredOpen, setRequiredOpen] = useState(false);
+  const [transitionsOpen, setTransitionsOpen] = useState(false);
 
   const selectedActors = useMemo(() => {
     const people = (rule.allowedUserIds ?? []).map((id) => {
@@ -223,6 +248,25 @@ function LabelCard({
     ...peopleColumns.map((column) => ({ value: column.id, label: column.title })),
   ]), [peopleColumns]);
 
+  /*
+   * round321 — transitions. The rule field is an ARRAY only while restricted
+   * (see settingsSchema); no array = every target allowed, which is what the
+   * all-checked checklist stores back as `null` so old blobs stay byte-identical.
+   */
+  const restricted = Array.isArray(rule.nextLabelIds);
+  const allowedNext = restricted ? new Set(rule.nextLabelIds.map(String)) : null;
+  const isTargetChecked = (id) => (allowedNext === null ? true : allowedNext.has(String(id)));
+  const toggleTarget = (id) => {
+    const next = transitionTargets
+      .filter((target) => (String(target.id) === String(id)
+        ? !isTargetChecked(target.id)
+        : isTargetChecked(target.id)))
+      .map((target) => String(target.id));
+    onChangeRule(label.id, {
+      nextLabelIds: next.length === transitionTargets.length ? null : next,
+    });
+  };
+
   const summaryBits = [];
   if (hidden) summaryBits.push('מוסתר');
   if (rule.allowedUserIds?.length || rule.allowedTeamIds?.length) {
@@ -231,8 +275,10 @@ function LabelCard({
   }
   if (gatePeopleTitle) summaryBits.push(gatePeopleTitle);
   if (rule.requiredColumnIds?.length) summaryBits.push(`${rule.requiredColumnIds.length} שדות חובה`);
+  if (restricted) summaryBits.push(rule.nextLabelIds.length > 0 ? `מעברים: ${rule.nextLabelIds.length}` : 'ללא מעברים');
 
   const requiredCount = rule.requiredColumnIds?.length ?? 0;
+  const cardName = label.isDefaultEmpty === true && !label.label.trim() ? 'ברירת המחדל' : label.label;
 
   /*
    * The grey DEFAULT label — monday's empty status. Its card carries the one thing that
@@ -282,27 +328,31 @@ function LabelCard({
                   className="twyst-icon-btn"
                   disabled={saving || isFirst}
                   aria-label="הזז למעלה"
+                  title="הזז למעלה"
                   onClick={() => onMove(label.clientKey, -1)}
                 >
-                  ↑
+                  <ChevronUpIcon />
                 </button>
                 <button
                   type="button"
                   className="twyst-icon-btn"
                   disabled={saving || isLast}
                   aria-label="הזז למטה"
+                  title="הזז למטה"
                   onClick={() => onMove(label.clientKey, 1)}
                 >
-                  ↓
+                  <ChevronDownIcon />
                 </button>
               </div>
               <button
                 type="button"
-                className="twyst-text-btn is-danger"
+                className="twyst-icon-btn is-danger"
                 disabled={saving}
+                aria-label="הסרה"
+                title="הסרה"
                 onClick={() => onRemove(label.clientKey)}
               >
-                הסרה
+                <TrashIcon />
               </button>
             </>
           )}
@@ -327,6 +377,18 @@ function LabelCard({
             />
             <span>מוסתר בבורר</span>
           </label>
+          {/* The configuration at a glance, without opening anything: one quiet chip
+              per active restriction. Rendered beside the toggle (not inside it) so a
+              chip's text never leaks into the button's accessible name. */}
+          {!open && summaryBits.length > 0 && (
+            <span className="twyst-summary-chips" aria-hidden="false">
+              {summaryBits.map((bit, chipIndex) => (
+                // Index-qualified key: one bit is an admin-chosen people-column
+                // TITLE, which may equal another bit's literal text (review P3).
+                <span key={`${chipIndex}-${bit}`} className="twyst-summary-chip">{bit}</span>
+              ))}
+            </span>
+          )}
           <button
             type="button"
             className="twyst-text-btn twyst-accordion-toggle"
@@ -336,12 +398,12 @@ function LabelCard({
           >
             <span className={`twyst-accordion-chevron${open ? ' is-open' : ''}`} aria-hidden="true">▾</span>
             {open ? 'הסתר הרשאות' : 'הרשאות'}
-            {!open && summaryBits.length > 0 ? ` · ${summaryBits.join(' · ')}` : ''}
           </button>
         </div>
 
         {open && (
           <div className="twyst-permissions">
+            <div className="twyst-section-title">מי רשאי לבחור את הלייבל</div>
             <div className="twyst-field twyst-field-actors">
               <span className="twyst-field-label">אנשים וצוותים מורשים</span>
               <PersonPicker
@@ -406,6 +468,72 @@ function LabelCard({
                   emptyText="אין עמודות זמינות"
                   onChange={(next) => onChangeRule(label.id, { requiredColumnIds: next })}
                 />
+              )}
+            </div>
+
+            {/*
+              round321 — transitions FROM this label: which labels the picker offers
+              once this one is the current status. All checked = unrestricted (stored
+              as no rule at all); a subset = only those; none = a terminal status.
+              The default (grey) card is the EMPTY state's source — its rule, keyed
+              by the reserved id 5, governs what may be picked first.
+            */}
+            <div className="twyst-field twyst-field-transitions">
+              <button
+                type="button"
+                className="twyst-collapse-toggle"
+                aria-expanded={transitionsOpen}
+                disabled={saving}
+                onClick={() => setTransitionsOpen((current) => !current)}
+              >
+                <span className={`twyst-accordion-chevron${transitionsOpen ? ' is-open' : ''}`} aria-hidden="true">▾</span>
+                <span className="twyst-field-label">מעברים מותרים</span>
+                {restricted && (
+                  <span className="twyst-collapse-count">{rule.nextLabelIds.length}</span>
+                )}
+              </button>
+              {transitionsOpen && (
+                transitionTargets.length === 0 ? (
+                  <div className="twyst-transition-list">
+                    <p className="twyst-field-empty">אין לייבלים נוספים בעמודה.</p>
+                    {/* A stored restriction with zero visible targets would otherwise
+                        be UNCLEARABLE — the checkboxes are the only other writer. */}
+                    {restricted && (
+                      <button
+                        type="button"
+                        className="twyst-text-btn"
+                        disabled={saving}
+                        onClick={() => onChangeRule(label.id, { nextLabelIds: null })}
+                      >
+                        ביטול ההגבלה
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    className="twyst-transition-list"
+                    role="group"
+                    aria-label={`מעברים מותרים מ${cardName}`}
+                  >
+                    <p className="twyst-field-hint">
+                      אחרי הלייבל הזה יוצעו בבורר רק הלייבלים המסומנים. השארת כולם
+                      מסומנים = ללא הגבלה.
+                    </p>
+                    {transitionTargets.map((target) => (
+                      <label key={target.id} className="twyst-transition-chip">
+                        <input
+                          type="checkbox"
+                          aria-label={target.label}
+                          checked={isTargetChecked(target.id)}
+                          disabled={saving}
+                          onChange={() => toggleTarget(target.id)}
+                        />
+                        <span className="twyst-transition-dot" style={{ background: target.color }} aria-hidden="true" />
+                        <span className="twyst-transition-name">{target.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -681,7 +809,17 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       // Every card on screen already carries a real monday id — labels are created on
       // the "add label" click, not here — so the rules in `draft` are keyed correctly
       // from the start and nothing needs remapping after the mutation.
-      let activeLabelIds = labelsDraft.map((label) => String(label.id));
+      //
+      // round321 — the synthesized default row counts as ACTIVE only when the id-5
+      // label exists (or is being named right now): prune trims transition targets
+      // to this list, and a '5' that will not exist after the save must not survive
+      // as a target nothing can ever reach (the rule KEY '5' is kept by prune
+      // itself, unconditionally).
+      const defaultIsReal = normalizeStatusLabels(statusColumn.settings)
+        .some((live) => !live.isDeactivated && String(live.id) === String(RESERVED_EMPTY_LABEL_ID));
+      let activeLabelIds = labelsDraft
+        .filter((label) => !label.isDefaultEmpty || label.label.trim() !== '' || defaultIsReal)
+        .map((label) => String(label.id));
 
       if (hasPendingLabelEdits(labelsDraft, labelsBaseline)) {
         const revisionData = await mondayService.query(GET_STATUS_COLUMN_REVISION, {
@@ -783,6 +921,27 @@ function ColumnSettings({ context, variant = 'overlay' }) {
     -1,
   );
 
+  /*
+   * round321 — the labels a transition may point AT: every row except the source
+   * itself, and except a default row that neither exists on the LIVE column nor is
+   * being named in this visit. Existence comes from the live ids, not the draft
+   * name (review-confirmed): an id-5 label whose text was cleared (round313) is
+   * still a real label the picker offers, so it must stay targetable — keying off
+   * the name alone made it silently drop out of every restriction it appeared in.
+   */
+  const liveHasDefaultLabel = normalizeStatusLabels(statusColumn.settings)
+    .some((live) => !live.isDeactivated && String(live.id) === String(RESERVED_EMPTY_LABEL_ID));
+  const transitionTargetsFor = (source) => labelsDraft
+    .filter((other) => other.clientKey !== source.clientKey)
+    .filter((other) => !other.isDefaultEmpty || other.label.trim() !== '' || liveHasDefaultLabel)
+    .map((other) => ({
+      id: String(other.id),
+      label: other.label.trim() || 'ברירת מחדל',
+      color: other.color,
+    }));
+
+  const coloredCount = labelsDraft.filter((label) => !label.isDefaultEmpty).length;
+
   return (
     <main className={`twyst-settings${isOverlay ? ' is-overlay' : ''}`} dir="rtl">
       <header className="twyst-settings-header">
@@ -795,7 +954,12 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         >
           ×
         </button>
-        <Heading type="h4">הגדרות</Heading>
+        <div className="twyst-settings-heading">
+          <Heading type="h4">הגדרות</Heading>
+          <span className="twyst-settings-subtitle">
+            לייבלים, הרשאות ומעברים של עמודת הסטטוס
+          </span>
+        </div>
       </header>
 
       <div className="twyst-settings-body">
@@ -804,6 +968,10 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         )}
 
         <div className="twyst-settings-toolbar">
+          <div className="twyst-settings-toolbar-title">
+            <span className="twyst-settings-section-title">לייבלים</span>
+            <span className="twyst-settings-count">{coloredCount}</span>
+          </div>
           {/* `loading` is the spinner ON the button: creating a label is a round trip
               now, and the wait has to be visible where the click happened. */}
           <Button
@@ -835,6 +1003,7 @@ function ColumnSettings({ context, variant = 'overlay' }) {
               columns={formColumns}
               peopleColumns={peopleColumns}
               usedColors={usedColors}
+              transitionTargets={transitionTargetsFor(label)}
               saving={saving || addingLabel}
               isFirst={labelIndex === 0}
               isLast={labelIndex === lastColoredIndex}

@@ -54,6 +54,17 @@ const settingsList = (live) => ensureDefaultLabelRow(createLabelsDraft(live));
 const defaultRowOf = (draft) => draft.find((label) => label.isDefaultEmpty);
 const activeOf = (payload) => payload.filter((label) => !label.isDeactivated);
 
+describe('the reserved-slot constants', () => {
+  it('are the values the probe recorded, not whatever the module happens to export', () => {
+    // Asserted as literals here — and as literals in every row expectation below —
+    // because comparing a produced colour against the constant that produced it passes
+    // for any value the constant takes (gap pattern P4). `explosive` is the write value
+    // monday keys the slot on; #c4c4c4 is the grey it forces and the board shows.
+    expect(RESERVED_EMPTY_LABEL_COLOR).toBe('explosive');
+    expect(RESERVED_EMPTY_LABEL_HEX).toBe('#c4c4c4');
+  });
+});
+
 describe('isReservedEmptyLabelId', () => {
   it('matches id 5 as a number and as the string the draft carries, and nothing else', () => {
     expect(isReservedEmptyLabelId(5)).toBe(true);
@@ -78,8 +89,8 @@ describe('createLabelsDraft — the default label among the coloured ones', () =
       // are), so it sorts last through renumberDraftIndexes and a save writes it last.
       index: 3,
       label: 'טרם עודכן',
-      color: RESERVED_EMPTY_LABEL_HEX,
-      colorValue: RESERVED_EMPTY_LABEL_COLOR,
+      color: '#c4c4c4',
+      colorValue: 'explosive',
       isDone: false,
       description: undefined,
       isNew: false,
@@ -107,8 +118,8 @@ describe('ensureDefaultLabelRow', () => {
       id: '5',
       index: 2,
       label: '',
-      color: RESERVED_EMPTY_LABEL_HEX,
-      colorValue: RESERVED_EMPTY_LABEL_COLOR,
+      color: '#c4c4c4',
+      colorValue: 'explosive',
       isDone: false,
       description: undefined,
       isNew: false,
@@ -148,7 +159,7 @@ describe('buildStatusLabelsUpdatePayload — when the default label gets written
     );
 
     expect(payload.map((label) => label.label)).toEqual(['ממתין', 'בוצע']);
-    expect(payload.some((label) => label.color === RESERVED_EMPTY_LABEL_COLOR)).toBe(false);
+    expect(payload.some((label) => label.color === 'explosive')).toBe(false);
   });
 
   it('treats whitespace as still-empty and writes nothing for it', () => {
@@ -164,7 +175,7 @@ describe('buildStatusLabelsUpdatePayload — when the default label gets written
     const created = payload.find((label) => label.label === 'טרם עודכן');
 
     expect(created).toEqual({
-      color: RESERVED_EMPTY_LABEL_COLOR,
+      color: 'explosive',
       label: 'טרם עודכן',
       // Last of the actives, so it lands where the settings screen shows it.
       index: 2,
@@ -184,7 +195,7 @@ describe('buildStatusLabelsUpdatePayload — when the default label gets written
     const reserved = payload.find((label) => label.id === 5);
 
     expect(reserved.label).toBe('');
-    expect(reserved.color).toBe(RESERVED_EMPTY_LABEL_COLOR);
+    expect(reserved.color).toBe('explosive');
     expect(reserved.isDeactivated).toBe(false);
   });
 
@@ -195,7 +206,7 @@ describe('buildStatusLabelsUpdatePayload — when the default label gets written
 
     expect(payload.find((label) => label.id === 5)).toMatchObject({
       label: 'עוד לא התחלנו',
-      color: RESERVED_EMPTY_LABEL_COLOR,
+      color: 'explosive',
       index: 2,
     });
     // …and the coloured labels keep their own ids and order.
@@ -221,7 +232,7 @@ describe('buildCreateLabelPayload with a default label on the column', () => {
 
     expect(reserved).toBeDefined();
     expect(reserved.label).toBe('טרם עודכן');
-    expect(reserved.color).toBe(RESERVED_EMPTY_LABEL_COLOR);
+    expect(reserved.color).toBe('explosive');
   });
 });
 
@@ -301,8 +312,8 @@ describe('ensureUniqueStatusColors — explosive belongs to the default label', 
       },
     ]);
 
-    expect(unique.find((label) => label.isDefaultEmpty).color).toBe(RESERVED_EMPTY_LABEL_COLOR);
-    expect(unique.find((label) => label.id === 2).color).not.toBe(RESERVED_EMPTY_LABEL_COLOR);
+    expect(unique.find((label) => label.isDefaultEmpty).color).toBe('explosive');
+    expect(unique.find((label) => label.id === 2).color).not.toBe('explosive');
     expect(unique.find((label) => label.id === 2).label).toBe('תקוע');
   });
 

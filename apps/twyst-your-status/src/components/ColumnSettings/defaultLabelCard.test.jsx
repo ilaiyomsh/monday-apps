@@ -56,9 +56,24 @@ const STATUS_COLUMN = statusColumnProbe.query.boards[0].columns[0];
 const STATUS_COLUMN_ID = STATUS_COLUMN.id;
 /** ids 0,1,2 and no id 5 — the probe column has never had a default label. */
 const LIVE_LABELS = STATUS_COLUMN.settings.labels;
-/** The same column after somebody named the grey label. monday reports it grey. */
+/**
+ * The same column after somebody named the grey label.
+ *
+ * Built by spreading a CAPTURED label row and overriding only the five fields the
+ * 2026-07 probe reported for the default slot (`id: 5`, `color: 5`, the name, its index,
+ * and monday's forced `hex: #c4c4c4`) — so the row carries every other field exactly as
+ * the recorded response has it, and a future re-capture that adds a field propagates
+ * here instead of being silently missing. A fresh capture of this exact row is not
+ * available: the scratch boards were deleted after the probe, and this session has no
+ * MONDAY_TOKEN (cloud sessions never do), so re-probing is impossible from here.
+ */
 const NAMED_DEFAULT = {
-  id: 5, color: 5, label: 'טרם עודכן', index: 3, is_done: false, is_deactivated: false, hex: '#c4c4c4',
+  ...LIVE_LABELS[0],
+  id: 5,
+  color: 5,
+  label: 'טרם עודכן',
+  index: LIVE_LABELS.length,
+  hex: '#c4c4c4',
 };
 
 const CONTEXT = {
