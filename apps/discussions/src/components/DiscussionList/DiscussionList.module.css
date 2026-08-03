@@ -98,7 +98,9 @@
 }
 
 :global(.is-desktop) .headerInner {
-  padding-right: 42px;
+  /* round330 — 20px, the timestamps' resting inset (`.list` 8 + `.item` 12 here),
+     so the + keeps landing on the same edge they do. */
+  padding-right: 20px;
 }
 
 /* round176 — the top card is ONE icon-only row (owner request). Actions cluster
@@ -598,19 +600,37 @@
   .scroll {
     scrollbar-gutter: stable;
   }
-  /* Absorb the reserved gutter instead of stacking on it: the row card now reaches
-     to the gutter's inner edge, so the time lands at 10 + 0 + 34 = 44px. The kebab
-     rides with the card (it is positioned against `.item`), so its clearance from
-     the time is unchanged. */
+  /* Absorb the reserved gutter instead of stacking on it: the row card reaches to
+     the gutter's inner edge, 10px from the column edge. */
   .list {
     padding-right: 0;
+  }
+  /* round330 — the RESTING right inset is 20px, mirroring the color rail's 20px on
+     the left (`.list` 8 + `.rail` 12) so the row breathes the same on both sides.
+     10px of that is the gutter, so the row's own padding is 10px. */
+  .item {
+    --row-pad-right: 10px;
   }
   /* round326 — `.is-desktop` here too, matching the base rule: the wide inset must
      never reach the mobile shell, where there is not room for it. */
   :global(.is-desktop) .headerInner {
-    /* 10px (the gutter reserved just above) + 0 (.list) + 34px (.item) */
-    padding-right: 44px;
+    /* 20px, the same edge the timestamps rest on, so the + stays aligned with them */
+    padding-right: 20px;
   }
+}
+
+/*
+ * round330 — the SLIDE. While the row is hovered (which is exactly when the ⋯
+ * appears) the row's right padding grows back to the kebab's full slot, so the
+ * timestamp moves left and the button is clean to click. `:focus-within` covers
+ * the keyboard path, where the kebab is also revealed.
+ *
+ * 34px = `.itemActions` right: 6px + `.kebabBtn` 28px. Stated as the sum rather
+ * than the literal so the relationship survives a change to either.
+ */
+.itemWrap:hover .item,
+.itemWrap:focus-within .item {
+  --row-pad-right: calc(6px + 28px);
 }
 /* round117/round125 — hover-only scrollbar, no stepper arrows (owner request).
    round125 rewrite: in Chromium, setting the STANDARD scrollbar-width/color
@@ -867,11 +887,30 @@
   gap: 10px;
   width: 100%;
   box-sizing: border-box;
-  /* extra right padding reserves the far-right slot for the hover kebab so it
-     never overlaps the (now always-visible) date/time. round121: the LEFT
-     padding matches it, so the name's gap off the 6px color rail echoes the
-     date's gap off the right edge (owner request — symmetric breathing room). */
+  /*
+   * round330 (owner request) — the right padding is no longer a PERMANENT 34px
+   * reservation for the hover kebab; it is `--row-pad-right`, which grows to 34px
+   * only while the row is hovered.
+   *
+   * That is what lets the timestamp sit near the column edge at rest AND stay
+   * visible (the owner's earlier decision) instead of having to fade: when the ⋯
+   * appears, the padding grows, the date — pinned to the content edge by
+   * `margin-inline-start: auto` — slides left with it, and the ⋯ gets a clean
+   * 34px (6px offset + 28px button) with nothing underneath.
+   *
+   * Padding rather than a `transform` on the date, deliberately: a transform does
+   * not change layout, so the date would slide straight over the NAME's ellipsis.
+   * Growing the padding re-flows the name's box, so the two can never overlap.
+   * The transition below animates it.
+   *
+   * round121's note that the LEFT padding mirrors the right no longer holds — the
+   * two are now independent, and the left is the fixed one.
+   */
   padding: 10px 34px;
+  /* Base (no reserved gutter): `.list`'s 8px + 12px = the same 20px resting inset
+     the @supports branch reaches with 10px behind the gutter. */
+  --row-pad-right: 12px;
+  padding-right: var(--row-pad-right);
   /* round133 (approved mock): FRAMELESS rows — no border, no shadow; only the
      type-color rail marks the row, and states are told apart by background alone.
      round321 — the resting row is now TRANSPARENT rather than white: the list's own
@@ -884,7 +923,9 @@
   text-align: start;
   box-shadow: none;
   transition: background-color var(--motion-productive-medium, 0.2s) ease,
-    transform var(--motion-productive-medium, 0.2s) ease;
+    transform var(--motion-productive-medium, 0.2s) ease,
+    /* round330 — the date's slide out of the ⋯'s way */
+    padding-right var(--motion-productive-medium, 0.2s) ease;
   /* Anchor for the centered color pill (round134); the overflow clip is kept
      so nothing can ever paint past the row's rounded corners. */
   position: relative;
@@ -988,8 +1029,19 @@
 .itemDate {
   flex-shrink: 0;
   margin-inline-start: auto;
-  /* round134 — smaller + lighter so the discussion name is the clear anchor. */
-  font-size: 11.5px;
+  /*
+   * round330 (owner request) — the date/time now reads at the SAME SIZE as the
+   * discussion name: 14px, matching `.itemName` exactly.
+   *
+   * This reverses round134's size decision ("smaller + lighter so the name is the
+   * clear anchor") but only its SIZE half — the lighter colour stays, so the name
+   * is still the anchor of the row, now by weight of colour rather than by scale.
+   *
+   * It costs ~16px of width (the string grows from ~75px to ~91px). `.itemName`
+   * carries `flex: 1` + `text-overflow: ellipsis`, so a long name truncates a
+   * little earlier; nothing overflows.
+   */
+  font-size: 14px;
   color: var(--placeholder-color, #9699a6);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
