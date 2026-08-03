@@ -829,6 +829,36 @@
   background: var(--primary-background-hover-on-secondary-color, #dcdfec);
 }
 
+/*
+ * round324 (PR review, P2) — THE HACKER THEME COLLAPSES THE LADDER.
+ *
+ * round321's three tiers assume the three tokens hold three different values.
+ * Verified against the installed @vibe/core tokens.css, that holds in the three
+ * themes monday exposes — but NOT in `.hacker_theme-app-theme`, where:
+ *
+ *   --allgrey-background-color                    #282a36   ground
+ *   --primary-background-color                    #282a36   ← same as the ground
+ *   --ui-background-color                         #4b4e69   hover
+ *   --primary-background-hover-on-secondary-color #4b4e69   ← same as the hover
+ *
+ * So two things collapse at once there: a hovered row is indistinguishable from
+ * the selected row, and round322's white band is indistinguishable from the
+ * ground it is supposed to sit above.
+ *
+ * Fixed by theme, not globally, because the alternative is re-picking the tokens
+ * for every theme — and the light/dark/black ladders are the ones the owner
+ * approved from a rendered mock. `--primary-selected-color` is the only token
+ * that differs from `--ui-background-color` in ALL FOUR themes (#9f4077 here), so
+ * it carries the selection; the band gets back the hairline that round321 removed,
+ * on the honest principle that where two surfaces collide, a line does the work.
+ */
+:global(.hacker_theme-app-theme) .itemSelected {
+  background: var(--primary-selected-color, #9f4077);
+}
+:global(.hacker_theme-app-theme) .header {
+  border-bottom: 1px solid var(--layout-border-color, #414458);
+}
+
 /* Left color rail — round134 (approved mock, "אפשרות 1"): a small ROUNDED PILL
    (4×20px, fully rounded ends) vertically centered on the row, instead of the
    old full-height 6px strip. Quieter: the color marks the row without spanning
