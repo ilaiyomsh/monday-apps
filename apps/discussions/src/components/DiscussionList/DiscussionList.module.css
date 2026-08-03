@@ -32,24 +32,46 @@
 }
 
 /* round175 (variant B) — the header's own card frame (border/radius/shadow/gap)
-   was removed for a flatter, smoother look (owner request). The controls now sit
-   directly on the list background, separated from the rows below by a single
-   hairline. */
+   was removed for a flatter, smoother look (owner request). The hairline that used
+   to separate it from the rows is gone (round321); what separates them now is the
+   band below. */
+/*
+ * round322 (owner request, approved mock "הצעה A") — the icon row is a white BAND
+ * again, and the grey list starts under it. round321 gave the row the list's ground
+ * and took away its hairline, which cost it the prominence it used to have; this is
+ * monday's own pattern (a white top bar over a grey nav) and restores that
+ * prominence WITHOUT bringing the separating line back.
+ *
+ * The shadow is a 1px lip, not a card shadow — Vibe's smallest token is
+ * `--box-shadow-medium` (0 6px 20px), far too heavy for the edge of a band. In a
+ * dark monday theme the shadow all but vanishes, which is fine: there the band's own
+ * surface (#181b34) already contrasts hard with the ground (#30324e).
+ */
 .header {
   flex: none;
-  /* round321 — transparent (not white): the icon row belongs to the list's ground,
-     and its separating hairline is gone with it. */
-  background-color: transparent;
+  background-color: var(--primary-background-color, #ffffff);
+  box-shadow: 0 1px 2px rgba(29, 30, 45, 0.06);
 }
 
 .headerInner {
   /* round190 — align the icon row with the discussion title on the right (the
-     DiscussionCard header starts its 36px title 16px below the card top) and make
-     the three white gaps UNIFORM at 16px: card-top→icon-row (this top padding),
-     icon-row→separator (this bottom padding), and separator→first-discussion
+     DiscussionCard header starts its 36px title 16px below the card top) and keep
+     the vertical gaps UNIFORM at 16px: band-top→icon-row (this top padding),
+     icon-row→band-bottom (this bottom padding), and band→first-discussion
      (.list padding-top). The icon controls are 36px tall = the title's min-height,
      so both rows sit at the same height. */
-  padding: 16px 14px;
+  /*
+   * round322 (owner request) — the PHYSICAL RIGHT inset is 42px, not 14px, so the
+   * blue + ends exactly where the rows' time ends: the rows sit at .list 8px +
+   * .item 34px = 42px from the sidebar edge, and the + used to hang 28px further
+   * out than every date under it. Physical (not logical) on purpose: the + is on
+   * the right whichever way this subtree's direction resolves.
+   *
+   * The LEFT stays 14px. The ‹ collapse arrow is the app's own navigation, not a
+   * list item, so it has nothing to line up with — and moving it in would take
+   * another 28px off the search field for nothing.
+   */
+  padding: 16px 42px 16px 14px;
 }
 
 /* round176 — the top card is ONE icon-only row (owner request). Actions cluster
@@ -96,11 +118,10 @@
 }
 .iconBtn:hover,
 .iconBtnOpen {
-  /* round321 — was a light grey ≈ the new ground, so hover read as nothing. The
-     PAGE surface lifts the button off the list instead: it is white in the light
-     theme and near-black in a dark one, so it contrasts with the grey ground either
-     way (#ffffff / #181b34 / #111111). */
-  background: var(--primary-background-color, #ffffff);
+  /* round322 — back to the translucent grey, for the same reason as the search
+     field: these buttons sit on the white band again, and round321's white hover
+     would be invisible there. */
+  background: var(--primary-background-hover-color, #f4f5f8);
   color: var(--primary-text-color, #323338);
 }
 /* "+" — the only filled control: creates a discussion. */
@@ -315,13 +336,14 @@
   padding-inline-start: 30px;
   /* room for the clear-X pinned at the inline-end (left in RTL) */
   padding-inline-end: 28px;
-  /* round321 — the PAGE surface + a hairline, because the ground is now grey: the
-     old light-grey fill was the thing that made this read as an input, and on the
-     new ground it disappears. Token, so it stays a contrasting surface in a dark
-     theme too. Same reason monday's own side-menu search is a filled field. */
-  border: 1px solid var(--ui-border-color, #e2e4ec);
+  /* round322 — back to the translucent grey fill. round321 made this WHITE because
+     the row had moved onto the grey ground and a grey field would have dissolved
+     into it; the band restores the white surface underneath, so white-on-white
+     would now be the invisible one. The token is translucent (rgba grey), so it
+     reads as a field on any band color, in any monday theme. */
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: var(--primary-background-color, #ffffff);
+  background: var(--primary-background-hover-color, #f1f2f6);
   color: var(--text-color, #323338);
   font-size: var(--font-size-general-label, 14px);
   font-family: var(--font-family);
@@ -347,7 +369,7 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-small, 8px);
-  /* headerInner already supplies the gap before the header rule. */
+  /* headerInner already supplies the gap to the band's bottom edge. */
   padding-bottom: 0;
 }
 .calendarFilterRow .searchWrap {
@@ -561,9 +583,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* round190 — top padding 16px so the gap from the separator line to the topmost
-     discussion matches the two header gaps above it (uniform 16px). Sides/bottom
-     stay 8px. */
+  /* round190 — top padding 16px so the gap from the band's bottom edge to the
+     topmost discussion matches the two header gaps above it (uniform 16px).
+     Sides/bottom stay 8px — the 8px here plus .item's 34px is the 42px inset that
+     round322 gave .headerInner, which is what lines the + up with the times. */
   padding: 16px 8px 8px;
 }
 
