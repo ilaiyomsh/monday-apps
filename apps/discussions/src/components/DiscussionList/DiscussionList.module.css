@@ -70,6 +70,9 @@
    * The LEFT stays 14px. The ‹ collapse arrow is the app's own navigation, not a
    * list item, so it has nothing to line up with — and moving it in would take
    * another 28px off the search field for nothing.
+   *
+   * 42px is the NO-SCROLLBAR figure; the @supports block under .scroll raises it
+   * to 52px wherever the gutter can be reserved unconditionally. See there.
    */
   padding: 16px 42px 16px 14px;
 }
@@ -503,6 +506,35 @@
 .scroll {
   flex: 1 1 auto;
   overflow-y: auto;
+}
+/*
+ * round322 (PR review, P2) — THE SCROLLBAR GUTTER IS PART OF THE ALIGNMENT.
+ *
+ * `.header` is a SIBLING of `.scroll`, so a reserved scrollbar narrows the rows
+ * but not the icon row. And the bar here IS space-taking, not an overlay: styling
+ * `::-webkit-scrollbar` below opts Chromium out of overlay scrollbars. `.root`
+ * carries no `direction`, and the app shell is `dir="ltr"`, so that 10px is taken
+ * from the PHYSICAL RIGHT — exactly the edge round322 aligns on. Without this the
+ * date would sit at 8 + 34 + 10 = 52px once the list outgrows one screen while the
+ * + stayed at 42px, i.e. the alignment the owner approved would silently depend on
+ * how many discussions exist and on the OS.
+ *
+ * So the gutter is reserved ALWAYS and the header is inset to match. Nothing is
+ * visible in it when there is nothing to scroll — the thumb is transparent until
+ * `.root:hover` — it is 10px of the list's own ground.
+ *
+ * Both rules live under one @supports on purpose: where `scrollbar-gutter` is
+ * unavailable the pair degrades to the pre-review behaviour (42px, aligned for a
+ * short list) rather than to a NEW 10px misalignment in the opposite direction.
+ */
+@supports (scrollbar-gutter: stable) {
+  .scroll {
+    scrollbar-gutter: stable;
+  }
+  .headerInner {
+    /* 8px (.list) + 34px (.item) + 10px (the gutter reserved just above) */
+    padding-right: 52px;
+  }
 }
 /* round117/round125 — hover-only scrollbar, no stepper arrows (owner request).
    round125 rewrite: in Chromium, setting the STANDARD scrollbar-width/color
