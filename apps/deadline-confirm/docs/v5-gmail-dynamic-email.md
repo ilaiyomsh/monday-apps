@@ -111,6 +111,15 @@ and published as a DNS TXT record before registration can pass.
 
 ## 5. Phase 2 — the production sending path
 
+> **DISPROVEN 2026-08-03 — `users.messages.send` cannot deliver AMP.** It strips
+> the `text/x-amp-html` part on external delivery, rebuilding the message with its
+> own boundary; the byte-identical message over raw SMTP kept all three parts.
+> SMTP is also not a drop-in: `AUTH XOAUTH2` rejects `gmail.send` and demands the
+> restricted `https://mail.google.com/` scope. The surviving channels have no
+> Google OAuth in the send path at all. See
+> **`docs/amp-email-verified-findings.md`** §2 and §5. The paragraph below is kept
+> for history; do not implement it.
+
 Gmail's compose UI cannot attach an AMP MIME part; sending must be
 programmatic. Chosen direction: a **dedicated Google Workspace mailbox** (e.g.
 `deadline@…`) sent through the **Gmail API `users.messages.send`** with raw

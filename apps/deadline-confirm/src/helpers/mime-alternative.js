@@ -3,29 +3,30 @@
 // Gmail send funnel (T9) wraps this body into an RFC822 message; this helper
 // only builds the alternative parts.
 //
-// THE ORDER IS EVIDENCE, NOT TASTE. It mirrors the one message we have ever
-// observed Gmail render our AMP document from — the AMP playground's send of
-// the identical document, captured 2026-07-29 — which came through as
-// plain, then x-amp-html, then html. Our own 2-part message (plain + amp, no
-// text/html) was answered with INTERNAL_ERROR, Gmail's documented catch-all
-// ("Something unexpected happened in Gmail").
+// THE ORDER IS NOT THE INTERNAL_ERROR FIX — that hypothesis was DISPROVEN by
+// live sends on 2026-08-03 (docs/amp-email-verified-findings.md). A 5-variant
+// matrix — no extensions / 2 parts only / quoted-printable / `⚡4email` spelling
+// / amp-before-plain — failed IDENTICALLY, which is what a sender-side condition
+// looks like, not a MIME one. The real causes were the send channel (the Gmail
+// API strips the text/x-amp-html part on external delivery) and the sender
+// domain's SPF. Do not re-litigate the ordering as an INTERNAL_ERROR remedy.
 //
-// Google's docs say the html part should not be required: MALFORMED is defined
-// as "more than one text/x-amp-html part OR no fallback text/html or
-// text/plain part", so text/plain alone satisfies the written rule. The html
-// part is therefore a HYPOTHESIS UNDER TEST for the INTERNAL_ERROR — do not
-// remove it as dead weight without re-running that experiment. It also earns
-// its place independently: per Gmail's tips page the inbox preheader is taken
-// from the text/html or text/plain part.
+// The order and the html part still earn their place on their own merits:
+// Google's docs define MALFORMED as "more than one text/x-amp-html part OR no
+// fallback text/html or text/plain part", so text/plain alone satisfies the
+// written rule — but per Gmail's tips page the inbox preheader is taken from the
+// text/html or text/plain part, and some clients render only the LAST part, which
+// is why the inert html part goes last. Keep it.
 //
 // The html part is DERIVED from the plain part (digest-html-fallback.js) and is
 // inert — no anchors, forms, scripts or remote images. V6's D1/D2 bans an
 // ACTIONABLE text/html body (the /confirm link family that put a secret in a
 // URL), not an html body.
 //
-// Both parts are BASE64, not 8bit. That is load-bearing, not tidiness — it is
-// the fix for Gmail answering INTERNAL_ERROR on the dynamic part while the
-// fallback rendered fine (0.10.1):
+// Both parts are BASE64, not 8bit. This too was once believed to be the
+// INTERNAL_ERROR fix (0.10.1) and is NOT — quoted-printable failed identically in
+// the 2026-08-03 matrix. Base64 stays because the reasons below are correct on
+// their own terms, independent of that error:
 //
 //  1. The rendered AMP document comes from a template literal, so its line
 //     endings are bare LF. RFC 5322 requires CRLF in a message body, so an
