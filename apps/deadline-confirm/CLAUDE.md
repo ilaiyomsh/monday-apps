@@ -72,6 +72,7 @@ src/
 │                             # digest-email (legacy send path until Gmail T9), amp-cors, logger, environment
 ├── storage/                  # secure-storage-backend (prod) / memory-backend (dev+tests)
 └── client/admin/             # React 19 + Vite 7 + @vibe/core SPA → public/admin/
+                              # amp-debug.ts — pure rules behind the AMP editor (size/guards)
                               # two tabs — "הגדרות" + "מייל מסכם" (DigestSection)
 ```
 
@@ -95,6 +96,15 @@ src/
   `multi_person`. Pending = date ≤ today (Asia/Jerusalem) AND status in
   section's `includeStatusLabelIds`.
 - **V6 preview:** `GET /api/digest/preview` → `{ plain, amp }` (no `html`).
+- **AMP debug lane:** `POST /api/digest/send-raw` `{ amp, to, subject?, plain? }`
+  sends the operator's **edited** amp4email document **byte for byte** (no
+  re-render) through the same `buildMultipartAlternative` + Gmail funnel. Needs
+  neither config nor link secret nor monday token — it tests the MESSAGE, not the
+  data. Guards: `invalid_amp` / `invalid_recipient` / `invalid_subject` (400),
+  `amp_too_large` >1MB (413), `email_not_configured` (409), `send_failed` (502
+  carrying Gmail's own message — that message IS the debug output). Because of it
+  `express.json()` runs at a **2mb** limit, not express's 100kb default, and an
+  oversized body answers 413 `payload_too_large` instead of 500.
   **`POST /api/secret/rotate` → `{ ok: true, secret: '****xxxx' }`** (masked
   only — full secret never leaves the server).
 - **V6 scheduler:** `POST /mndy-cronjob/digest-send` (+ `/scheduler/digest-send`)

@@ -106,6 +106,17 @@ export interface DigestPreviewResponse {
   amp: string | null;
 }
 
+/** POST /api/digest/send-raw — the AMP debug lane (edited document, sent as typed). */
+export interface DigestRawSendResponse {
+  ok: boolean;
+  /** Gmail message id, or null if the provider returned none. */
+  id: string | null;
+  to: string;
+  subject: string;
+  /** UTF-8 size of the amp part actually shipped. */
+  ampBytes: number;
+}
+
 export interface DigestSendResult extends DigestRecipientSummary {
   ok: boolean;
   error?: string;
