@@ -19,14 +19,6 @@ const DEFAULT_LIMIT = 25;
 function colMap(boardKey) {
   return getColumns(boardKey);
 }
-function realColumnIds(boardKey) {
-  // An alias may map SEVERAL columns via `ids` (multi-column people mapping,
-  // e.g. tasks.taskViewersID) — fetch every one of them, not just the primary.
-  return Object.values(colMap(boardKey))
-    .flatMap((c) => (Array.isArray(c?.ids) && c.ids.length ? c.ids : [c?.id]))
-    .filter((id) => Boolean(id));
-}
-
 export function mapItem(boardKey, it) {
   const cfg = colMap(boardKey);
   const byId = {};

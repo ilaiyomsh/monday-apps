@@ -72,6 +72,13 @@ export function SettingsProvider({ children }) {
   const { context } = useMondayContext();
   const [settings, setSettings] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  // round337 (audit finding #1) — a FAILED load is not the same as "nothing
+  // stored". Before this flag existed the two were indistinguishable: both left
+  // settings null, so a transient storage/network failure at boot showed a
+  // fully-configured user the FIRST-RUN wizard (whose auto-provision button
+  // would create duplicate boards). The gate branches on this to show
+  // NetworkErrorScreen + retry instead. Holds the caught error (truthy) or null.
+  const [loadError, setLoadError] = useState(null);
   // The storage key we last loaded under (not a boolean latch): if the real
   // monday context arrives AFTER the 4s watchdog installed an empty `{}` (which
   // resolves to the 'default' key), the key changes and we MUST reload so a
@@ -98,13 +105,21 @@ export function SettingsProvider({ children }) {
 
     try {
       const res = await withTimeout(monday.storage.getItem(key));
+      setLoadError(null);
       if (res?.data?.value) {
         const saved = JSON.parse(res.data.value);
         // One-time alias rename migration: stored mappings are keyed by the OLD
         // column aliases (column1, tasksLink, …). Re-key them to the current
         // aliases so the renamed schema resolves without losing any mapping.
         const { columns: migratedColumns, changed } = migrateColumnAliases(saved.columns || {});
-        const migrated = changed ? { ...saved, columns: migratedColumns } : saved;
+        // round337 — reconcileColumns FINALLY runs. It sat here fully written,
+        // with the comment above it explaining why skipping it is a bug, and
+        // nothing ever called it (caught by the first run of the new eslint
+        // gate). Stored `id`/`verified`/owner titles persist; `type` is forced
+        // from the CODE schema so a schema type change (e.g. dropdown→status)
+        // reaches already-configured instances instead of the stale stored
+        // type silently driving parse/format forever.
+        const migrated = { ...saved, columns: reconcileColumns(changed ? migratedColumns : (saved.columns || {})) };
         // Debug: expose on window so the console can read it regardless of log
         // level — `copy(window.__appSettings)`.
         if (typeof window !== 'undefined') window.__appSettings = migrated;
@@ -130,9 +145,11 @@ export function SettingsProvider({ children }) {
         setSettings(null);
       }
     } catch (err) {
-      // storage unavailable / parse error — treat as unconfigured; logged
-      // (round135) so a broken storage read is visible, not silent.
-      logger.warn('SettingsContext', 'טעינת ההגדרות מ-storage נכשלה — האפליקציה תיפתח כלא-מוגדרת', err);
+      // storage unavailable / parse error — recorded as a LOAD FAILURE, not as
+      // "unconfigured" (round337): the gate shows the retry screen instead of
+      // the first-run wizard. Logged (round135) so it is visible, not silent.
+      logger.warn('SettingsContext', 'טעינת ההגדרות מ-storage נכשלה — יוצג מסך שגיאת רשת עם ניסיון חוזר', err);
+      setLoadError(err);
       setSettings(null);
     } finally {
       setIsLoading(false);
@@ -149,6 +166,14 @@ export function SettingsProvider({ children }) {
     loadedKeyRef.current = key;
     load();
   }, [context, load]);
+
+  // round337 — manual retry for the boot-failure screen. Flips isLoading back on
+  // FIRST so the gate returns to its <Loader> branch for the duration of the
+  // re-read instead of leaving a stale error screen up; load()'s finally clears it.
+  const retry = useCallback(() => {
+    setIsLoading(true);
+    return load();
+  }, [load]);
 
   const updateSettings = useCallback(
     async (partial) => {
@@ -219,7 +244,7 @@ export function SettingsProvider({ children }) {
   }, [settings]);
 
   return (
-    <SettingsContext.Provider value={{ settings, permissions, isConfigured, isLoading, updateSettings }}>
+    <SettingsContext.Provider value={{ settings, permissions, isConfigured, isLoading, loadError, retry, updateSettings }}>
       {children}
     </SettingsContext.Provider>
   );
@@ -239,6 +264,8 @@ export function useSettings() {
       permissions: DEFAULT_PERMISSIONS,
       isConfigured: false,
       isLoading: false,
+      loadError: null,
+      retry: () => {},
       updateSettings: async () => null,
     };
   }

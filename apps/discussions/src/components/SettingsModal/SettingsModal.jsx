@@ -1000,9 +1000,14 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
           aria-label="ניהול תבניות"
         >
           <div className={styles.header}>
-            <button type="button" className={styles.closeButton} onClick={attemptClose} aria-label="סגירה">
-              ×
-            </button>
+            {/* round337 — same no-onClose ⇒ no-X contract as the main surface
+                (templatesOnly is never force-mounted today, but the two surfaces
+                must not drift on this). */}
+            {onClose && (
+              <button type="button" className={styles.closeButton} onClick={attemptClose} aria-label="סגירה">
+                ×
+              </button>
+            )}
             <Heading type="h4">ניהול תבניות</Heading>
           </div>
           <div className={styles.content}>
@@ -1064,9 +1069,15 @@ export function SettingsModal({ isOpen, onClose, onNotify, templatesOnly = false
         aria-label="הגדרות"
       >
         <div className={styles.header}>
-          <button type="button" className={styles.closeButton} onClick={attemptClose} aria-label="סגירה">
-            ×
-          </button>
+          {/* round337 (audit #2) — no X when there is no onClose: the first-run
+              forced mount is not dismissable, and a rendered-but-dead close
+              button reads as broken. attemptClose's !onClose guard stays as
+              defense in depth behind this. */}
+          {onClose && (
+            <button type="button" className={styles.closeButton} onClick={attemptClose} aria-label="סגירה">
+              ×
+            </button>
+          )}
           <Heading type="h4">הגדרות</Heading>
         </div>
         <div className={styles.content}>

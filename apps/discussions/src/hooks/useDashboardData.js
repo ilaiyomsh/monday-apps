@@ -30,7 +30,7 @@ async function loadAll(makeQuery, label) {
   let cursor = null;
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const q = makeQuery(cursor);
-    // eslint-disable-next-line no-await-in-loop
+     
     const res = await q.execute();
     all = all.concat(res.items || []);
     cursor = res.cursor || null;
