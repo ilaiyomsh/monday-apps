@@ -14,7 +14,6 @@ export function applyColumnOrder(visibleKeys, storedOrder = [], pinned = ['name'
   const visible = Array.isArray(visibleKeys) ? visibleKeys : [];
   const stored = Array.isArray(storedOrder) ? storedOrder : [];
   const pinSet = new Set(pinned);
-  const visSet = new Set(visible);
 
   const pinnedVisible = visible.filter((k) => pinSet.has(k));
   const movable = visible.filter((k) => !pinSet.has(k));

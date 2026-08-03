@@ -70,7 +70,9 @@ function readLinkedIds(columnValues, columnId) {
 // create builds a template discussion in passes — all topics + the first topic's
 // points before the card opens, the remaining points after — so the card needs a
 // way to re-read the board when a later pass finishes.
-export function useTopics(discussionId, { onSuccess, onLoading, onDismiss, reloadKey = null } = {}) {
+// (round337) onSuccess/onLoading/onDismiss stay in the signature as documented
+// API surface — callers pass them — but nothing inside consumes them today.
+export function useTopics(discussionId, { onSuccess: _onSuccess, onLoading: _onLoading, onDismiss: _onDismiss, reloadKey = null } = {}) {
   const { currentUser } = useMondayContext();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -201,9 +203,9 @@ export function useTopics(discussionId, { onSuccess, onLoading, onDismiss, reloa
   }, [discussionId, reloadKey]);
 
   useEffect(() => {
-    let cancelled = false;
+    // round337 — the old `cancelled` flag here was write-only: the cleanup set
+    // it and fetchTopics never read it, so it cancelled nothing. Removed.
     fetchTopics({ showLoader: true });
-    return () => { cancelled = true; };
   }, [fetchTopics]);
 
   // Keep the items mirror current for the id resolver below.

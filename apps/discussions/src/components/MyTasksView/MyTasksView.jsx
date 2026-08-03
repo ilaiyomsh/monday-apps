@@ -440,7 +440,6 @@ export function MyTasksView({ canManageSettings = false, onBackToDiscussions, on
 
   // ---- group handlers (session-only; persisting is the explicit Save action) ----
   const setGroupCol = useCallback((col) => { setGroup({ col, order: firstGroupOrder(col) }); setCollapsed({}); }, []);
-  const setGroupOrder = useCallback((order) => setGroup((g) => ({ ...g, order })), []);
   const clearGroup = useCallback(() => { setGroup({ col: 'none' }); setCollapsed({}); }, []);
 
   const fc = filterCount(filter);

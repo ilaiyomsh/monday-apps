@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { Button, Text, Dropdown } from '@vibe/core';
 import { DropdownChevronDown, Filter } from '@vibe/icons';
 import { SelectionActionBar } from '@generated/components/SelectionActionBar';
@@ -119,7 +119,7 @@ const decRangeLabel = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.label
 const decRangeIcon = (key) => DEADLINE_RANGES.find((r) => r.key === key)?.icon || 'date';
 
 
-export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUndo, onNotify, onNotifyLoading, onDismissToast, canTask = () => true, canCreateTask = true, canEditDiscussion = true, canDecision = () => true, canReorderColumns, canManageSettings = false }) {
+export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUndo, onNotify, onNotifyLoading: _onNotifyLoading, onDismissToast: _onDismissToast, canTask = () => true, canCreateTask = true, canEditDiscussion = true, canDecision = () => true, canReorderColumns, canManageSettings = false }) {
   // Load-time grouping/filter = the shared saved view (empty default otherwise);
   // in-session changes are local until someone with permission hits Save.
   const { view: savedView, canSave: canSaveView, saveView } = useSavedViews('previousTasks', { canManageSettings });
@@ -130,7 +130,6 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
   const [collapsed, setCollapsed] = useState({});
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [carrying, setCarrying] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const { colorById, labelById, orderById, doneId, options: statusOptions } = useStatusOptions();
   const { isMobile } = useViewport();
   // Show the read-only priority column only when the owner mapped priorityID.
@@ -1036,11 +1035,11 @@ export function PreviousTasksTab({ discussion, onCarryForward, onCarryForwardUnd
             discussion-to-discussion link — meaningless in by-type mode,
             where there is no "next" discussion, so hide it there. */}
         {!byType && canCreateTask && (
-          <Button kind={"primary"} size={"small"} loading={carrying} disabled={carrying || deleting} onClick={moveSelectedToNext}>
+          <Button kind={"primary"} size={"small"} loading={carrying} disabled={carrying} onClick={moveSelectedToNext}>
             העבר לדיון הבא
           </Button>
         )}
-        <Button kind={"secondary"} size={"small"} loading={deleting} disabled={carrying || deleting || deletableSelectedIds.length === 0} onClick={deleteSelectedTasks}>
+        <Button kind={"secondary"} size={"small"} disabled={carrying || deletableSelectedIds.length === 0} onClick={deleteSelectedTasks}>
           מחיקה
         </Button>
       </SelectionActionBar>
