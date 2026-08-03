@@ -1,19 +1,25 @@
 /**
  * stores — the guard's storage seams, multi-tenant by explicit accountId.
  *
- * tokenStore / enrollmentStore — SecureStorage-backed (per APP, so every key is
- *   `${accountId}:` prefixed — root CLAUDE.md storage rules). PLATFORM TRAP
- *   (incident-verified 2026-07-15, mapps cli.md): production apps-sdk
- *   SecureStorage 0.1.4 wraps primitives — `{ value: 'str' }` comes back
- *   verbatim — while the local shim does not. unwrapStoredValue() is the one
- *   place that difference is allowed to exist.
+ * IDENTITY MODEL (owner decision, round322 — no separate "bot" identity):
+ * a REVERT is written with the COLUMN'S PRIMARY OWNER's token, so monday
+ * records the revert as that owner (the person the settings screen designated).
+ * There is no service account. Two token roles, both real owners:
+ *   - a per-owner token  `${accountId}:token:${userId}` — used to write a revert
+ *     AS that owner when they are the column's primary;
+ *   - an account READER  `${accountId}:token:default`   — any authorized owner's
+ *     token, used only for READS (labels, item values, rules) and for creating
+ *     webhooks. Reads need no particular identity.
+ * An owner "authorizes the guard" once (their own monday OAuth — not a bot);
+ * that stores their per-owner token AND refreshes the account reader.
  *
  * rulesStore — reads the SAME rules blob the picker writes via client
- *   monday.storage: key `twystStatus:<boardId>:<columnId>`, JSON string value,
- *   read server-side through @mondaycom/apps-sdk Storage(token). A missing or
- *   corrupted blob reads as null (unguarded column) — corruption is LOGGED,
- *   never thrown; an infrastructure REJECTION is rethrown (the caller owns
- *   fail-soft policy, the store must not swallow outages as "no rules").
+ *   monday.storage: key `twystStatus:<boardId>:<columnId>`. Corruption is
+ *   LOGGED, never thrown; an infrastructure REJECTION is rethrown.
+ *
+ * PLATFORM TRAP (incident-verified 2026-07-15, mapps cli.md): production
+ * apps-sdk SecureStorage 0.1.4 wraps primitives — `{ value: 'str' }` comes
+ * back verbatim. unwrapStoredValue() is the one place that difference lives.
  */
 
 /** Unwrap apps-sdk 0.1.4's `{ value: ... }` primitive wrapping (both shapes). */
@@ -25,20 +31,32 @@ export function unwrapStoredValue(raw) {
   return raw;
 }
 
+function validToken(record) {
+  if (!record || typeof record !== 'object') return null;
+  if (typeof record.token !== 'string' || record.token === '') return null;
+  return record;
+}
+
 /**
  * @param {{ secureStorage: { get(k): Promise<any>, set(k,v): Promise<any> } }} deps
  */
 export function createTokenStore({ secureStorage }) {
+  const userKey = (accountId, userId) => `${accountId}:token:${userId}`;
+  const readerKey = (accountId) => `${accountId}:token:default`;
   return {
-    async getActivation(accountId) {
-      const record = unwrapStoredValue(await secureStorage.get(`${accountId}:activation`));
-      // A broken record must read as "not activated", never as a usable token.
-      if (!record || typeof record !== 'object') return null;
-      if (typeof record.token !== 'string' || record.token === '') return null;
-      return record;
+    /** Any authorized owner's token, for reads + webhook creation. */
+    async getReaderToken(accountId) {
+      return validToken(unwrapStoredValue(await secureStorage.get(readerKey(accountId))));
     },
-    async setActivation(accountId, record) {
-      await secureStorage.set(`${accountId}:activation`, record);
+    /** The token to write a revert AS this specific owner; null if unauthorized. */
+    async getOwnerToken(accountId, userId) {
+      const record = validToken(unwrapStoredValue(await secureStorage.get(userKey(accountId, userId))));
+      return record ? record.token : null;
+    },
+    /** One owner authorizes: stores their per-owner token AND the account reader. */
+    async setOwnerToken(accountId, userId, record) {
+      await secureStorage.set(userKey(accountId, userId), record);
+      await secureStorage.set(readerKey(accountId), { ...record, userId: String(userId) });
     },
   };
 }

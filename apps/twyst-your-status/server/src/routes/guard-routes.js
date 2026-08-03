@@ -103,12 +103,12 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ap
         return;
       }
 
-      const activation = await tokenStore.getActivation(session.accountId);
-      if (!activation) {
+      const reader = await tokenStore.getReaderToken(session.accountId);
+      if (!reader) {
         res.status(409).json({ error: 'not_activated' });
         return;
       }
-      if (!(await isBoardOwner(activation.token, boardId, session.userId))) {
+      if (!(await isBoardOwner(reader.token, boardId, session.userId))) {
         res.status(403).json({ error: 'not_board_owner' });
         return;
       }
@@ -120,7 +120,7 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ap
       }
 
       const url = `${env.baseUrl}/api/guard/webhook?account=${encodeURIComponent(session.accountId)}`;
-      const webhookId = await api.createColumnWebhook(activation.token, boardId, columnId, url);
+      const webhookId = await api.createColumnWebhook(reader.token, boardId, columnId, url);
       await enrollmentStore.set(session.accountId, boardId, columnId, webhookId);
       logger.info('column enrolled', TAG, { accountId: session.accountId, boardId, columnId, webhookId });
       res.status(200).json({ ok: true, webhookId });
@@ -137,8 +137,8 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ap
       const boardId = String(req.query.boardId ?? '').trim();
       const columnId = String(req.query.columnId ?? '').trim();
 
-      const activation = await tokenStore.getActivation(session.accountId);
-      if (!activation) {
+      const reader = await tokenStore.getReaderToken(session.accountId);
+      if (!reader) {
         res.status(200).json({ activated: false, enrolled: false });
         return;
       }

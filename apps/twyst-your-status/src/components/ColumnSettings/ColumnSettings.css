@@ -136,6 +136,81 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* -------------------------------------------------------------- owners */
+
+.twyst-owners {
+  border: 1px solid var(--tw-border-soft);
+  border-radius: var(--tw-radius-card);
+  background: var(--tw-inset);
+  padding: 14px 16px;
+  margin-block-end: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.twyst-owners-note {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--tw-text-mute);
+}
+
+.twyst-owners-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.twyst-owner-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--tw-border-soft);
+  border-radius: var(--tw-radius-ctl);
+  background: var(--tw-card);
+}
+
+.twyst-owner-name {
+  flex: 1 1 auto;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tw-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.twyst-owner-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--tw-text-mute);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.twyst-owner-remove {
+  border: 1px solid var(--tw-border);
+  background: transparent;
+  color: var(--tw-danger);
+  border-radius: var(--tw-radius-ctl);
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.twyst-owner-remove:disabled {
+  color: var(--tw-text-faint);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 /* ---------------------------------------------------------------- cards */
 
 .twyst-label-card {

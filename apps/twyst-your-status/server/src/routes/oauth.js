@@ -100,16 +100,18 @@ export function createOauthRouter({ tokenStore, api, env, fetchImpl, logger }) {
       }
 
       const me = await api.me(token);
-      await tokenStore.setActivation(pending.accountId, {
+      // The authorizing user is a real OWNER lending their identity to reverts —
+      // stored per-user AND as the account reader (services/stores.js).
+      await tokenStore.setOwnerToken(pending.accountId, String(me.id), {
         token,
-        botUserId: String(me.id),
-        botName: me?.name ?? '',
+        userId: String(me.id),
+        userName: me?.name ?? '',
         activatedAt: new Date().toISOString(),
       });
-      logger.info('guard activated for account', TAG, {
-        accountId: pending.accountId, botUserId: String(me.id),
+      logger.info('guard authorized by owner', TAG, {
+        accountId: pending.accountId, userId: String(me.id),
       });
-      sendPage(res, 200, page('השומר חובר בהצלחה', 'אפשר לסגור את הלשונית ולחזור למסך ההגדרות.'));
+      sendPage(res, 200, page('חובר בהצלחה', 'ביטולים אוטומטיים של שינויים לא-חוקיים יירשמו על שמך כשתהיה הבעלים הראשי. אפשר לסגור את הלשונית.'));
     } catch (err) {
       logger.error('oauth callback failed', TAG, { error: String(err?.message ?? err) });
       sendPage(res, 502, page('החיבור נכשל', 'שגיאה בלתי צפויה — נסה שוב.'));

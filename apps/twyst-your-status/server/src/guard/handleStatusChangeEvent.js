@@ -1,30 +1,38 @@
 /**
  * handleStatusChangeEvent — the watchdog orchestrator (DI factory).
  *
- * One instance per process handles every change_status_column_value delivery:
- *   1. Resolve the account's stored OAuth token; no token → log + skip (fail-soft:
- *      an unactivated account is not an error storm).
- *   2. Loop guard: an event whose userId is the guard's own bot user is the echo
- *      of a revert — skip silently, or reverts would revert themselves forever.
- *   3. Load the column's rules (same twystStatus:<boardId>:<columnId> blob the
- *      picker reads); no rules → column unguarded → skip.
- *   4. Gather exactly what the verdict needs (labels always; actor teams only when
- *      some rule names teams; people columns only when the target rule gates on
- *      them; required-field values only when the target rule requires fields).
+ * Identity model (owner decision, round322): a revert is written AS the column's
+ * PRIMARY OWNER, so monday records it under the person the settings screen
+ * designated. There is no bot/service account.
+ *
+ * Per delivery:
+ *   1. Account READER token (any authorized owner); none → skip (unactivated).
+ *   2. Load the column's rules (same twystStatus:<board>:<column> blob the picker
+ *      reads) with the reader token; no rules → column unguarded → skip.
+ *   3. Resolve the PRIMARY OWNER from the rules' owner list. LOOP GUARD: an event
+ *      whose actor IS the primary owner is the echo of our own revert — skip, or
+ *      reverts would revert themselves forever.
+ *   4. Gather only what the verdict needs (labels always; actor teams only when a
+ *      rule names teams; people columns / required-field values only when the
+ *      target rule gates on them) — all via the reader token.
  *   5. evaluate() — allowed → done.
- *   6. Revert path (reasons 'not-offered' / 'required-fields-empty' ONLY):
- *      re-read the CURRENT cell value first and revert only while it still holds
- *      the illegal label — never clobber a newer, possibly-legal change (stale
- *      webhook / rapid sequence). Then notify the acting user (exact copy below).
- *      'required-fields-unknown' is logged, never reverted (see evaluateStatusChange).
- *   7. Per-item serialization: deliveries for the same board+item+column run one
- *      at a time (rapid changes must not interleave their read-then-revert).
+ *   6. Revert path (reasons 'not-offered' / 'required-fields-empty' ONLY): the
+ *      revert must be written with the PRIMARY OWNER's own token so monday
+ *      attributes it to them. No primary-owner token (they have not authorized)
+ *      → log and SKIP the revert (fail-open, and loop-safe: a revert written as
+ *      the reader would echo as a non-primary user the loop guard cannot catch).
+ *      Re-read the cell first and revert only while it still holds the illegal
+ *      label (stale/rapid-change guard). Then notify the acting user.
+ *      'required-fields-unknown' is logged, never reverted.
+ *   7. Per-item serialization: same board+item+column deliveries run one at a time.
  *
  * Every failure is caught and logged — the HTTP layer ack'd 202 long ago, and a
  * throw here would only become an unhandledRejection (error-guard funnel rule).
  *
  * REVERT_NOTIFICATION_TEXT is the owner's exact copy (2026-08-03) — do not edit.
  */
+
+import { normalizeOwners } from '../../../src/domain/columnOwners.js';
 
 export const REVERT_NOTIFICATION_TEXT =
   'השינוי שבוצע בוטל - מכיוון שאינו עומד בהגדרות העמודה';
@@ -34,21 +42,12 @@ export const REVERTABLE_REASONS = ['not-offered', 'required-fields-empty'];
 
 /**
  * @param {{
- *   api: object,          // monday-api funnel (createMondayApi)
- *   tokenStore: object,   // getToken(accountId), getBotUserId(accountId)
- *   rulesStore: object,   // getRules(token, boardId, columnId)
- *   logger: object,
- *   evaluate?: Function,  // evaluateStatusChange (injectable for tests)
+ *   api: object, tokenStore: object, rulesStore: object, logger: object,
+ *   evaluate?: Function,
  * }} deps
- * @returns {(event: {
- *   accountId: string, userId: string|number, boardId: string|number,
- *   pulseId: string|number, columnId: string,
- *   value: object|null, previousValue: object|null,
- * }) => Promise<void>}
  */
 export function createStatusChangeHandler({ api, tokenStore, rulesStore, logger, evaluate }) {
   const TAG = 'guard';
-  /** Per-item promise chains — same board+item+column runs strictly one at a time. */
   const lanes = new Map();
 
   const labelIdOf = (statusValue) => {
@@ -58,7 +57,6 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, logger,
       : null;
   };
 
-  /** Does any rule in the blob name a team allowlist? (fetch teams only then) */
   const rulesNameTeams = (rules) => Object.values(rules?.labels ?? {})
     .some((rule) => Array.isArray(rule?.allowedTeamIds) && rule.allowedTeamIds.length > 0);
 
@@ -69,18 +67,21 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, logger,
     const columnId = String(event.columnId);
     const actingUserId = String(event.userId);
 
-    const activation = await tokenStore.getActivation(accountId);
-    if (!activation) {
+    const reader = await tokenStore.getReaderToken(accountId);
+    if (!reader) {
       logger.info('event skipped: account not activated', TAG, { accountId, boardId, columnId });
       return;
     }
-    // Loop guard — our own revert comes back as an event by the bot user; policing
-    // it would revert the revert, forever.
-    if (actingUserId === String(activation.botUserId)) return;
+    const readToken = reader.token;
 
-    const { token } = activation;
-    const rules = await rulesStore.getRules(token, boardId, columnId);
+    const rules = await rulesStore.getRules(readToken, boardId, columnId);
     if (!rules) return; // unguarded column
+
+    const owners = normalizeOwners(rules.owners);
+    const primaryOwnerId = owners?.primaryOwnerId ?? null;
+    // Loop guard: our own revert comes back as an event authored by the primary
+    // owner. Skip it — policing it would revert the revert, forever.
+    if (primaryOwnerId !== null && actingUserId === primaryOwnerId) return;
 
     const previousLabelId = labelIdOf(event.previousValue);
     const newLabelId = labelIdOf(event.value);
@@ -93,20 +94,18 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, logger,
       ? targetRule.requiredColumnIds
       : [];
 
-    const labels = await api.getColumnLabels(token, boardId, columnId);
+    const labels = await api.getColumnLabels(readToken, boardId, columnId);
     const teamIds = rulesNameTeams(rules)
-      ? await api.getUserTeamIds(token, actingUserId)
+      ? await api.getUserTeamIds(readToken, actingUserId)
       : [];
 
     let peopleByColumnId = {};
     let requiredFieldValues = requiredColumnIds.length > 0 ? [] : null;
     if (peopleColumnIds.length > 0 || requiredColumnIds.length > 0) {
-      const itemContext = await api.getItemGuardContext(token, itemId, {
+      const itemContext = await api.getItemGuardContext(readToken, itemId, {
         peopleColumnIds,
         requiredColumnIds,
       });
-      // Item unreadable while its rule demands fields → evaluate must see "unknown",
-      // not "empty" — a revert on OUR read failure would punish a legal change.
       peopleByColumnId = itemContext?.peopleByColumnId ?? {};
       requiredFieldValues = itemContext === null && requiredColumnIds.length > 0
         ? null
@@ -131,17 +130,34 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, logger,
       return;
     }
 
-    // Stale guard: only revert while the cell still holds the illegal value —
-    // never clobber a newer (possibly legal) change from a rapid sequence.
-    const currentLabelId = await api.getCurrentStatusLabelId(token, itemId, columnId);
+    // The revert must be written AS the primary owner (attribution). Without a
+    // primary owner, or without that owner's token, we cannot attribute — and
+    // reverting as anyone else breaks the loop guard — so skip, loudly.
+    if (primaryOwnerId === null) {
+      logger.warn('illegal change NOT reverted: column has no owners configured', TAG, {
+        accountId, boardId, itemId, columnId,
+      });
+      return;
+    }
+    const primaryToken = await tokenStore.getOwnerToken(accountId, primaryOwnerId);
+    if (!primaryToken) {
+      logger.warn('illegal change NOT reverted: primary owner has not authorized the guard', TAG, {
+        accountId, boardId, itemId, columnId, primaryOwnerId,
+      });
+      return;
+    }
+
+    // Stale guard: only revert while the cell still holds the illegal value.
+    const currentLabelId = await api.getCurrentStatusLabelId(readToken, itemId, columnId);
     if (currentLabelId !== newLabelId) return;
 
-    await api.revertStatus(token, boardId, itemId, columnId, previousLabelId);
+    await api.revertStatus(primaryToken, boardId, itemId, columnId, previousLabelId);
     logger.info('illegal status change reverted', TAG, {
-      accountId, boardId, itemId, columnId, actingUserId, previousLabelId, newLabelId, reason: verdict.reason,
+      accountId, boardId, itemId, columnId, actingUserId, primaryOwnerId,
+      previousLabelId, newLabelId, reason: verdict.reason,
     });
     try {
-      await api.notifyUser(token, event.userId, itemId, REVERT_NOTIFICATION_TEXT);
+      await api.notifyUser(primaryToken, event.userId, itemId, REVERT_NOTIFICATION_TEXT);
     } catch (err) {
       // The revert already landed — a failed notification must not fail the event.
       logger.error('revert notification failed', TAG, {
@@ -154,15 +170,11 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, logger,
     const laneKey = `${event?.boardId}:${event?.pulseId}:${event?.columnId}`;
     const previous = lanes.get(laneKey) ?? Promise.resolve();
     const run = previous.then(() => process(event)).catch((err) => {
-      // Fail-soft funnel: the HTTP layer ack'd long ago; a throw here would only
-      // become an unhandledRejection. Log with enough context to triage.
       logger.error('status-change handling failed', TAG, {
         boardId: String(event?.boardId), itemId: String(event?.pulseId),
         columnId: String(event?.columnId), error: String(err?.message ?? err),
       });
     });
-    // The lane must survive a failed run (the catch above already absorbed any
-    // rejection, so this finally-chained promise cannot reject either).
     const settled = run.finally(() => {
       if (lanes.get(laneKey) === settled) lanes.delete(laneKey);
     });

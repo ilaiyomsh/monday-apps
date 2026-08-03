@@ -1,7 +1,7 @@
 /**
  * OAuth route contract for the guard service: GET /oauth/start (session-token
  * gated redirect to monday's authorize endpoint) and GET /oauth/callback
- * (single-use state, token exchange via injected fetchImpl, activation persist).
+ * (single-use state, token exchange via injected fetchImpl, owner-token persist).
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -14,7 +14,11 @@ const CLIENT_SECRET = 'clisec';
 function makeDeps(envOverrides = {}) {
   return {
     handleEvent: vi.fn().mockResolvedValue(undefined),
-    tokenStore: { getActivation: vi.fn(), setActivation: vi.fn() },
+    tokenStore: {
+      getReaderToken: vi.fn(),
+      getOwnerToken: vi.fn(),
+      setOwnerToken: vi.fn(),
+    },
     enrollmentStore: { get: vi.fn(), set: vi.fn() },
     api: {
       getBoardOwnership: vi.fn(),
@@ -58,7 +62,7 @@ describe('GET /oauth/start', () => {
     expect(res.status).toBe(401);
   });
 
-  it('redirects a valid session token to monday authorize with client_id, response_type=code, a non-empty state, and the webhook+notification scopes', async () => {
+  it('redirects a valid session token to monday authorize with client_id, response_type=code, a non-empty state, and the notification scope', async () => {
     const deps = makeDeps();
     const app = createApp(deps);
 
@@ -74,29 +78,28 @@ describe('GET /oauth/start', () => {
     expect(url.searchParams.get('state')).toBeTruthy();
     expect(url.searchParams.get('state')).not.toBe('');
     const scope = url.searchParams.get('scope');
-    expect(scope).toContain('webhooks:write');
     expect(scope).toContain('notifications:write');
   });
 });
 
 describe('GET /oauth/callback', () => {
-  it('rejects an unknown state with 4xx and never persists an activation', async () => {
+  it('rejects an unknown state with 4xx and never persists an owner token', async () => {
     const deps = makeDeps();
     const app = createApp(deps);
 
     const res = await request(app).get('/oauth/callback?code=thecode&state=never-issued-state');
 
     expect([400, 401]).toContain(res.status);
-    expect(deps.tokenStore.setActivation).not.toHaveBeenCalled();
+    expect(deps.tokenStore.setOwnerToken).not.toHaveBeenCalled();
   });
 
-  it('exchanges the code at monday token endpoint, resolves the bot identity, persists the activation, and responds 200 html (full flow)', async () => {
+  it('exchanges the code at monday token endpoint, resolves the owner identity, persists the owner token, and responds 200 html (full flow)', async () => {
     const deps = makeDeps();
     deps.fetchImpl.mockResolvedValue({
       ok: true,
       json: async () => ({ access_token: 'newtok' }),
     });
-    deps.api.me.mockResolvedValue({ id: 314, name: 'Guard Bot' });
+    deps.api.me.mockResolvedValue({ id: 314, name: 'Owner' });
     const app = createApp(deps);
 
     const state = await startAndGrabState(app);
@@ -122,19 +125,20 @@ describe('GET /oauth/callback', () => {
     expect(bodyStr).toContain('clisec');
 
     expect(deps.api.me).toHaveBeenCalledWith('newtok');
-    expect(deps.tokenStore.setActivation).toHaveBeenCalledWith(
+    expect(deps.tokenStore.setOwnerToken).toHaveBeenCalledWith(
       '999',
-      expect.objectContaining({ token: 'newtok', botUserId: '314' })
+      '314',
+      expect.objectContaining({ token: 'newtok', userId: '314' })
     );
   });
 
-  it('consumes state on first use: replaying the same callback returns 4xx and setActivation stays at exactly one call', async () => {
+  it('consumes state on first use: replaying the same callback returns 4xx and setOwnerToken stays at exactly one call', async () => {
     const deps = makeDeps();
     deps.fetchImpl.mockResolvedValue({
       ok: true,
       json: async () => ({ access_token: 'newtok' }),
     });
-    deps.api.me.mockResolvedValue({ id: 314, name: 'Guard Bot' });
+    deps.api.me.mockResolvedValue({ id: 314, name: 'Owner' });
     const app = createApp(deps);
 
     const state = await startAndGrabState(app);
@@ -145,6 +149,6 @@ describe('GET /oauth/callback', () => {
 
     const replay = await request(app).get(callbackPath);
     expect([400, 401]).toContain(replay.status);
-    expect(deps.tokenStore.setActivation).toHaveBeenCalledTimes(1);
+    expect(deps.tokenStore.setOwnerToken).toHaveBeenCalledTimes(1);
   });
 });

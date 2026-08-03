@@ -191,11 +191,29 @@ in **parallel**.
   key to a stale value with no effect left to fire: a permanently blank dialog with
   the overlay already down. Pinned by `pickerRequestPhases.test.jsx`.
 
-## Who may configure — board owners only (3.7.0)
+## Who may configure — the column's OWNERS (round322; board-owner gate is the fallback)
 
-The settings shell (`/settings`) offers its button only to a **board owner**; everyone else
-gets `Only board owners can configure` in its place. The decision is one pure function,
-`src/domain/boardOwnerAccess.js`, fed by `src/services/boardOwnerGate.js`.
+Owner decision (round322): each column carries its OWN owner list. The settings shell
+(`/settings`) offers its button only to a listed **column owner**; everyone else sees
+`רק בעלי העמודה יכולים לנהל את ההגדרות` and is not exposed to the settings at all.
+
+- **The gate is `services/settingsAccess.loadSettingsAccess`.** It reads the column's
+  stored `owners` (`domain/columnOwners`): an ADOPTED column (owners present) admits only
+  its listed owners; an UNADOPTED column (legacy blob / never configured) falls back to
+  the legacy **board-owner** gate below, so the board's owners can do — and, by saving,
+  CLAIM — the first setup. The first configurer becomes owner #1 and the PRIMARY owner
+  (`bootstrapOwners`), seeded into the draft the moment the screen opens.
+- **The PRIMARY owner is the guard's revert identity.** `owners.primaryOwnerId` is the
+  user a guard revert is written AS (see Limits / docs/GUARD-ACTIVATION.md). Owner-list
+  edits go through the pure mutations `addOwner`/`removeOwner`/`setPrimaryOwner`, which hold
+  the invariants: always exactly one primary, never left owner-less, crown moves only by an
+  explicit act. `migrateSettings` carries `owners` only when present, so every pre-round322
+  blob keeps its exact 3-key shape (18 suites toEqual it).
+
+### Legacy board-owner gate (fallback for unadopted columns)
+
+The decision is one pure function, `src/domain/boardOwnerAccess.js`, fed by
+`src/services/boardOwnerGate.js`.
 
 - **An owner is a user owner OR a member of an owning TEAM.** `boards { owners { id } }`
   answers the first; monday also lets a board be owned by teams (`team_owners`), and a
@@ -370,7 +388,11 @@ every change — whoever made it, from whatever surface, including the cold-load
 window before the app feature binds — against the SAME rules (the bundle inlines
 `src/domain/`), and REVERTS an illegal change to its previous value with a
 notification to the acting user (owner copy, pinned in code:
-"השינוי שבוצע בוטל - מכיוון שאינו עומד בהגדרות העמודה"). Correction, not
+"השינוי שבוצע בוטל - מכיוון שאינו עומד בהגדרות העמודה"). The revert is written AS the
+column's PRIMARY OWNER (monday attributes a write to the token's user, so the revert
+needs that owner's token — the primary owner authorizes once, no bot/service identity;
+if they have not authorized, the guard logs and does NOT revert, fail-open and
+loop-safe). Correction, not
 prevention: the illegal value is visible until the revert lands, a guard outage
 means no enforcement (fail-open), and creation-time values (forms/duplicate/
 import) emit no change event — out of v1 scope by owner decision. Activation and

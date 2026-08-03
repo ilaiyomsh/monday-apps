@@ -32,7 +32,11 @@ function eventBody() {
 function makeDeps(envOverrides = {}) {
   return {
     handleEvent: vi.fn().mockResolvedValue(undefined),
-    tokenStore: { getActivation: vi.fn(), setActivation: vi.fn() },
+    tokenStore: {
+      getReaderToken: vi.fn(),
+      getOwnerToken: vi.fn(),
+      setOwnerToken: vi.fn(),
+    },
     enrollmentStore: { get: vi.fn(), set: vi.fn() },
     api: {
       getBoardOwnership: vi.fn(),
@@ -208,14 +212,14 @@ describe('POST /api/guard/enroll', () => {
       .send(enrollBody);
     expect(badAuth.status).toBe(401);
 
-    expect(deps.tokenStore.getActivation).not.toHaveBeenCalled();
+    expect(deps.tokenStore.getReaderToken).not.toHaveBeenCalled();
     expect(deps.api.createColumnWebhook).not.toHaveBeenCalled();
     expect(deps.enrollmentStore.set).not.toHaveBeenCalled();
   });
 
-  it('responds 409 { error: "not_activated" } and skips webhook creation when the account has no stored activation', async () => {
+  it('responds 409 { error: "not_activated" } and skips webhook creation when the account has no reader token', async () => {
     const deps = makeDeps();
-    deps.tokenStore.getActivation.mockResolvedValue(null);
+    deps.tokenStore.getReaderToken.mockResolvedValue(null);
     const app = createApp(deps);
 
     const res = await request(app)
@@ -225,13 +229,13 @@ describe('POST /api/guard/enroll', () => {
 
     expect(res.status).toBe(409);
     expect(res.body).toEqual({ error: 'not_activated' });
-    expect(deps.tokenStore.getActivation).toHaveBeenCalledWith('999');
+    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledWith('999');
     expect(deps.api.createColumnWebhook).not.toHaveBeenCalled();
   });
 
   it('responds 403 { error: "not_board_owner" } when the actor is neither an owner nor in any owning team', async () => {
     const deps = makeDeps();
-    deps.tokenStore.getActivation.mockResolvedValue({ token: 'tok', botUserId: '1' });
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '50' });
     deps.api.getBoardOwnership.mockResolvedValue({ ownerIds: ['77'], teamOwnerIds: [] });
     deps.api.getUserTeamIds.mockResolvedValue([]);
     const app = createApp(deps);
@@ -250,7 +254,7 @@ describe('POST /api/guard/enroll', () => {
 
   it('creates the column webhook with the account-qualified callback URL, persists the enrollment, and responds 200 with the webhook id (happy path)', async () => {
     const deps = makeDeps();
-    deps.tokenStore.getActivation.mockResolvedValue({ token: 'tok', botUserId: '1' });
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '50' });
     deps.api.getBoardOwnership.mockResolvedValue({ ownerIds: ['41'], teamOwnerIds: [] });
     deps.enrollmentStore.get.mockResolvedValue(null);
     deps.api.createColumnWebhook.mockResolvedValue('55501');
@@ -274,7 +278,7 @@ describe('POST /api/guard/enroll', () => {
 
   it('grants ownership through team membership: a user whose team id appears in teamOwnerIds enrolls with 200', async () => {
     const deps = makeDeps();
-    deps.tokenStore.getActivation.mockResolvedValue({ token: 'tok', botUserId: '1' });
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '50' });
     deps.api.getBoardOwnership.mockResolvedValue({ ownerIds: [], teamOwnerIds: ['9'] });
     deps.api.getUserTeamIds.mockResolvedValue(['9']);
     deps.enrollmentStore.get.mockResolvedValue(null);
@@ -299,7 +303,7 @@ describe('POST /api/guard/enroll', () => {
 
   it('is idempotent: an already-enrolled column returns 200 with the existing webhook id and never calls createColumnWebhook again', async () => {
     const deps = makeDeps();
-    deps.tokenStore.getActivation.mockResolvedValue({ token: 'tok', botUserId: '1' });
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '50' });
     deps.api.getBoardOwnership.mockResolvedValue({ ownerIds: ['41'], teamOwnerIds: [] });
     deps.enrollmentStore.get.mockResolvedValue('55501');
     const app = createApp(deps);
@@ -318,9 +322,9 @@ describe('POST /api/guard/enroll', () => {
 describe('GET /api/guard/status', () => {
   const statusPath = '/api/guard/status?boardId=5098&columnId=status_col';
 
-  it('reports activated: true, enrolled: true when the account is activated and the column is enrolled', async () => {
+  it('reports activated: true, enrolled: true when the account has a reader token and the column is enrolled', async () => {
     const deps = makeDeps();
-    deps.tokenStore.getActivation.mockResolvedValue({ token: 'tok', botUserId: '1' });
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '50' });
     deps.enrollmentStore.get.mockResolvedValue('55501');
     const app = createApp(deps);
 
@@ -330,9 +334,9 @@ describe('GET /api/guard/status', () => {
     expect(res.body).toEqual({ activated: true, enrolled: true });
   });
 
-  it('reports activated: false, enrolled: false when the account has no activation', async () => {
+  it('reports activated: false, enrolled: false when the account has no reader token', async () => {
     const deps = makeDeps();
-    deps.tokenStore.getActivation.mockResolvedValue(null);
+    deps.tokenStore.getReaderToken.mockResolvedValue(null);
     deps.enrollmentStore.get.mockResolvedValue(null);
     const app = createApp(deps);
 
@@ -349,6 +353,6 @@ describe('GET /api/guard/status', () => {
     const res = await request(app).get(statusPath);
 
     expect(res.status).toBe(401);
-    expect(deps.tokenStore.getActivation).not.toHaveBeenCalled();
+    expect(deps.tokenStore.getReaderToken).not.toHaveBeenCalled();
   });
 });

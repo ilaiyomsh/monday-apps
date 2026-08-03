@@ -91,55 +91,134 @@ describe('unwrapStoredValue', () => {
 describe('createTokenStore', () => {
   const record = { token: 'tok-abc', botUserId: '3' };
 
-  it('getActivation reads the exact key <accountId>:activation and returns the record', async () => {
+  // -- getReaderToken --------------------------------------------------------
+
+  it('getReaderToken reads the exact key <accountId>:token:default and returns the unwrapped record', async () => {
     const secureStorage = makeSecureStorage(record);
     const store = createTokenStore({ secureStorage });
 
-    const result = await store.getActivation('999');
+    const result = await store.getReaderToken('999');
 
-    expect(secureStorage.get).toHaveBeenCalledWith('999:activation');
+    expect(secureStorage.get).toHaveBeenCalledWith('999:token:default');
     expect(result).toEqual({ token: 'tok-abc', botUserId: '3' });
   });
 
-  it('getActivation unwraps a backend-wrapped { value: record } to the record', async () => {
+  it('getReaderToken unwraps a backend-wrapped { value: record } to the record', async () => {
     const secureStorage = makeSecureStorage({ value: record });
     const store = createTokenStore({ secureStorage });
 
-    await expect(store.getActivation('999')).resolves.toEqual({
+    await expect(store.getReaderToken('999')).resolves.toEqual({
       token: 'tok-abc',
       botUserId: '3',
     });
   });
 
-  it('getActivation returns null when storage has nothing (null)', async () => {
+  it('getReaderToken returns null when storage has nothing (null)', async () => {
     const store = createTokenStore({ secureStorage: makeSecureStorage(null) });
-    await expect(store.getActivation('999')).resolves.toBeNull();
+    await expect(store.getReaderToken('999')).resolves.toBeNull();
   });
 
-  it('getActivation returns null when storage has nothing (undefined)', async () => {
+  it('getReaderToken returns null when storage has nothing (undefined)', async () => {
     const store = createTokenStore({ secureStorage: makeSecureStorage(undefined) });
-    await expect(store.getActivation('999')).resolves.toBeNull();
+    await expect(store.getReaderToken('999')).resolves.toBeNull();
   });
 
-  it('getActivation returns null for a record with no token field', async () => {
+  it('getReaderToken returns null for a record with no token field', async () => {
     const store = createTokenStore({ secureStorage: makeSecureStorage({ botUserId: '3' }) });
-    await expect(store.getActivation('999')).resolves.toBeNull();
+    await expect(store.getReaderToken('999')).resolves.toBeNull();
   });
 
-  it('getActivation returns null for a record with an empty-string token', async () => {
+  it('getReaderToken returns null for a record with an empty-string token', async () => {
     const store = createTokenStore({
       secureStorage: makeSecureStorage({ token: '', botUserId: '3' }),
     });
-    await expect(store.getActivation('999')).resolves.toBeNull();
+    await expect(store.getReaderToken('999')).resolves.toBeNull();
   });
 
-  it('setActivation writes the record under the exact key <accountId>:activation', async () => {
+  // -- getOwnerToken ---------------------------------------------------------
+
+  it('getOwnerToken reads the exact key <accountId>:token:<userId> and returns the bare token string', async () => {
+    const secureStorage = makeSecureStorage(record);
+    const store = createTokenStore({ secureStorage });
+
+    const result = await store.getOwnerToken('999', '41');
+
+    expect(secureStorage.get).toHaveBeenCalledWith('999:token:41');
+    expect(result).toBe('tok-abc');
+  });
+
+  it('getOwnerToken unwraps a backend-wrapped { value: record } to the bare token string', async () => {
+    const secureStorage = makeSecureStorage({ value: record });
+    const store = createTokenStore({ secureStorage });
+
+    await expect(store.getOwnerToken('999', '41')).resolves.toBe('tok-abc');
+  });
+
+  it('getOwnerToken returns null (not the record) when storage has nothing (null)', async () => {
+    const store = createTokenStore({ secureStorage: makeSecureStorage(null) });
+    await expect(store.getOwnerToken('999', '41')).resolves.toBeNull();
+  });
+
+  it('getOwnerToken returns null when storage has nothing (undefined)', async () => {
+    const store = createTokenStore({ secureStorage: makeSecureStorage(undefined) });
+    await expect(store.getOwnerToken('999', '41')).resolves.toBeNull();
+  });
+
+  it('getOwnerToken returns null for a record with no token field', async () => {
+    const store = createTokenStore({ secureStorage: makeSecureStorage({ botUserId: '3' }) });
+    await expect(store.getOwnerToken('999', '41')).resolves.toBeNull();
+  });
+
+  it('getOwnerToken returns null for a record with an empty-string token', async () => {
+    const store = createTokenStore({
+      secureStorage: makeSecureStorage({ token: '', botUserId: '3' }),
+    });
+    await expect(store.getOwnerToken('999', '41')).resolves.toBeNull();
+  });
+
+  // -- setOwnerToken ---------------------------------------------------------
+
+  it('setOwnerToken writes the owner record under the exact key <accountId>:token:<userId>', async () => {
     const secureStorage = makeSecureStorage(null);
     const store = createTokenStore({ secureStorage });
 
-    await store.setActivation('999', record);
+    await store.setOwnerToken('999', '41', record);
 
-    expect(secureStorage.set).toHaveBeenCalledWith('999:activation', record);
+    expect(secureStorage.set).toHaveBeenCalledWith('999:token:41', record);
+  });
+
+  it('setOwnerToken also refreshes the reader key <accountId>:token:default with the record plus a stringified userId', async () => {
+    const secureStorage = makeSecureStorage(null);
+    const store = createTokenStore({ secureStorage });
+
+    await store.setOwnerToken('999', '41', record);
+
+    expect(secureStorage.set).toHaveBeenCalledWith(
+      '999:token:default',
+      expect.objectContaining({ token: 'tok-abc', botUserId: '3', userId: '41' })
+    );
+  });
+
+  it('setOwnerToken stringifies a numeric userId when refreshing the reader key', async () => {
+    const secureStorage = makeSecureStorage(null);
+    const store = createTokenStore({ secureStorage });
+
+    await store.setOwnerToken('999', 41, record);
+
+    const readerCall = secureStorage.set.mock.calls.find(([key]) => key === '999:token:default');
+    expect(readerCall).toBeDefined();
+    expect(readerCall[1]).toEqual(expect.objectContaining({ userId: '41' }));
+  });
+
+  it('setOwnerToken performs BOTH writes — owner key and reader key', async () => {
+    const secureStorage = makeSecureStorage(null);
+    const store = createTokenStore({ secureStorage });
+
+    await store.setOwnerToken('999', '41', record);
+
+    const keysWritten = secureStorage.set.mock.calls.map(([key]) => key);
+    expect(keysWritten).toContain('999:token:41');
+    expect(keysWritten).toContain('999:token:default');
   });
 });
 

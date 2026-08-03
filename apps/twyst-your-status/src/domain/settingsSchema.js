@@ -20,6 +20,7 @@
  * can still set them.
  */
 
+import { normalizeOwners } from './columnOwners.js';
 import logger from '../utils/logger.js';
 
 export const CURRENT_VERSION = 1;
@@ -138,10 +139,16 @@ export function migrateSettings(raw) {
     });
   }
 
+  // Per-column owners (round322). Carried ONLY when a valid record is present:
+  // absence stays absent so every pre-round322 blob keeps its exact 3-key shape
+  // (18 suites toEqual it) and an unadopted column falls back to the legacy gate.
+  const owners = normalizeOwners(raw.owners);
+
   return {
     version: CURRENT_VERSION,
     hiddenLabelIds: normalizeLabelIdList(raw.hiddenLabelIds ?? []),
     labels,
+    ...(owners ? { owners } : {}),
   };
 }
 
