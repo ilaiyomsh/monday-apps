@@ -380,17 +380,50 @@
 /* chevron points down when open; rotate to point at the start (RTL: right) when closed */
 .secChevronClosed { transform: rotate(90deg); }
 
-/* round246 — sub-heading row inside a matrix, one per component group.
-   round332 — a quiet padded label instead of a full-width grey band; the card
-   already separates sections, so the band was double chrome. */
-.mxGroupRow td.mxGroupCell {
-  background: transparent;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--secondary-text-color, #676879);
-  text-align: start;
-  padding: 10px 18px 5px;
-  letter-spacing: 0.02em;
+/* round246 — sub-heading per component group inside a matrix.
+   round332 — a quiet padded label instead of a full-width grey band.
+   round335 (owner request) — it is no longer a ROW at all: it is a boxed cell in
+   the leading (RTL: rightmost) column, `rowSpan`-ned over every row of its group.
+   The label is centred on BOTH axes so a two-line title sits in the middle of its
+   box rather than hanging from the top — owner explicitly wanted the wrap and the
+   centring together.
+
+   `border-bottom` is set explicitly rather than inherited from `.mxTable tbody tr`:
+   with `border-collapse: collapse` the row separator of an INTERMEDIATE row would
+   otherwise cut straight through a spanning cell. Only the cell's own bottom edge
+   (the group's last row) draws a line.
+
+   The selectors carry `tbody`/`thead` deliberately: `.mxTable th:first-child` sets
+   `padding-inline-start: 18px` at the same specificity and appears LATER in this
+   file, so a bare `.mxTable th.mxGroupCell` would lose the tie and the centred
+   label would sit visibly off-centre. */
+.mxTable tbody th.mxGroupCell {
+  width: 136px;
+  vertical-align: middle;
+  text-align: center;
+  background: var(--allgrey-background-color, #f6f7fb);
+  padding: 12px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--primary-text-color, #323338);
+  border-inline-start: 1px solid var(--ui-border-color, #e6e9f2) !important;
+  border-bottom: 1px solid var(--ui-border-color, #e6e9f2) !important;
+}
+/* The LAST group's box closes on the card's own bottom edge, so its own line would
+   double up. Flagged from JSX rather than by a `:last-child` selector, because the
+   last group's cell sits on its group's FIRST row — which is not the table's last
+   row whenever that group has more than one capability. */
+.mxTable tbody th.mxGroupCellLast {
+  border-bottom: none !important;
+}
+/* thead's placeholder above the group column, so the grey header band stays
+   unbroken from edge to edge and its seam lines up with the cells below. */
+.mxTable thead th.mxGroupHead {
+  width: 136px;
+  padding: 0;
+  background: var(--allgrey-background-color, #f6f7fb);
+  border-inline-start: 1px solid var(--ui-border-color, #e6e9f2) !important;
 }
 
 /* round246 — the "שדות משימה" tier's plain-language rule card (no matrix).
@@ -437,7 +470,12 @@
    first/last cells take the head's 18px so the table aligns with the title. */
 .mxTable th, .mxTable td { border: none; font-size: 13px; }
 .mxTable tbody tr { border-bottom: 1px solid var(--layout-border-color, #eef0f6); }
-.mxTable tbody tr:last-child { border-bottom: none; }
+/* round335 — `tbody:last-of-type`, not a bare `tbody`: since each capability group
+   is now its OWN `<tbody>` (so `scope="rowgroup"` associates correctly), a bare
+   `tbody tr:last-child` would strip the separator at every GROUP boundary, leaving
+   a line that exists only across the 136px heading column and nowhere else. Only
+   the very last row of the very last group closes on the card's own edge. */
+.mxTable tbody:last-of-type tr:last-child { border-bottom: none; }
 .mxTable tbody tr:hover { background: #fafbfd; }
 .mxTable th:first-child, .mxTable td:first-child { padding-inline-start: 18px; }
 .mxTable th:last-child, .mxTable td:last-child { padding-inline-end: 18px; }
