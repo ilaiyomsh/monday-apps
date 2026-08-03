@@ -64,6 +64,25 @@ const TIERS = [
 // Which board's columns back each people-column tier (system is synthetic).
 const TIER_BOARD_KEY = { disc: 'discussions', task: 'tasks', decision: 'decisions' };
 
+/* round333 (owner request) — fixed reading order for the discussions matrix,
+   right to left: יוצר → מנהל → מרכז → משתתפים. The live people-column list
+   arrives in BOARD order, which is whatever order the columns were created in —
+   not a reading order. Aliases absent from this list keep their relative board
+   order after the known ones (stable sort). */
+const ROLE_ALIAS_ORDER = {
+  discussions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID', 'participantsID'],
+};
+
+function sortRolesByPreferredOrder(boardKey, roles) {
+  const order = ROLE_ALIAS_ORDER[boardKey];
+  if (!order) return roles;
+  const rank = (r) => {
+    const i = order.indexOf(r.alias);
+    return i === -1 ? order.length : i;
+  };
+  return [...roles].sort((a, b) => rank(a) - rank(b));
+}
+
 // The system tier is NOT a people-column role; it is a single global pseudo-role
 // stored under this fixed key so its grants persist alongside the people roles.
 const SYSTEM_ROLE_KEY = 'system:system';
@@ -96,7 +115,7 @@ function buildTierRoles(boardKey, columns) {
   const live = getPeopleColumns(boardKey);
   if (live.length) {
     const seenKeys = new Set();
-    return live
+    const roles = live
       .map((col) => {
         const alias = aliasByColId[col.id];
         return alias
@@ -104,10 +123,14 @@ function buildTierRoles(boardKey, columns) {
           : { key: `${boardKey}:${col.id}`, boardKey, alias: col.id, title: col.title || col.id };
       })
       .filter((r) => (seenKeys.has(r.key) ? false : (seenKeys.add(r.key), true)));
+    return sortRolesByPreferredOrder(boardKey, roles);
   }
-  return roleSources
-    .filter((alias) => isPeopleType(cfg[alias]?.type))
-    .map((alias) => ({ key: `${boardKey}:${alias}`, boardKey, alias, title: cfg[alias]?.title || alias }));
+  return sortRolesByPreferredOrder(
+    boardKey,
+    roleSources
+      .filter((alias) => isPeopleType(cfg[alias]?.type))
+      .map((alias) => ({ key: `${boardKey}:${alias}`, boardKey, alias, title: cfg[alias]?.title || alias }))
+  );
 }
 
 /** Checked iff the stored value is exactly `true` (an explicit grant). */
@@ -382,12 +405,9 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
                 </thead>
                 {renderGroupedTbody(roles, caps)}
               </table>
-              {tier.id === 'disc' && (
-                <div className={styles.mxNote}>
-                  דיון שעמודת "מרכז דיון" שלו ריקה — אף אחד לא מקבל בו את הרשאות המרכז; שאר התפקידים עובדים כרגיל.
-                  בעלי הלוח (Owners) תמיד מורשים הכל ואינם מוגבלים ע"י הטבלאות.
-                </div>
-              )}
+              {/* round333 (owner request) — the empty-coordinator/Owners-bypass
+                  footnote is GONE. The BEHAVIOUR it described is unchanged and
+                  enforced in usePermission's resolver; only the caption left. */}
               </>
               )}
             </div>
@@ -400,18 +420,25 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
           {expanded.has('system') && (
           <table className={styles.mxTable}>
             <thead>
+              {/* round333 (owner request) — reading order right-to-left: Owners,
+                  then Super Members, then Members. The table is RTL, so DOM order
+                  IS the visual right-to-left order; the body cells below follow
+                  the same order. */}
               <tr>
                 <th className={styles.mxActionTh} />
-                <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Members</span><small className={styles.mxRoleSmall}>כל משתמשי הלוח</small></th>
-                <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Super Members</span><small className={styles.mxRoleSmall}>חברי-על</small></th>
                 <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Owners</span><small className={styles.mxRoleSmall}>בעלי הלוח</small></th>
+                <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Super Members</span><small className={styles.mxRoleSmall}>חברי-על</small></th>
+                <th className={styles.mxRoleTh}><span className={styles.mxRoleName}>Members</span><small className={styles.mxRoleSmall}>כל משתמשי הלוח</small></th>
               </tr>
             </thead>
             <tbody>
               {systemCaps.map((cap) => (
                 <tr key={cap.id}>
                   <td className={styles.mxAction}>{cap.label}</td>
-                  {renderCell(SYSTEM_ROLE_KEY, cap.id, false)}
+                  {/* round333 — Owners first (rightmost), matching the header. */}
+                  <td className={styles.mxTd}>
+                    <span className={`${styles.mxCell} ${styles.mxOn} ${styles.mxLocked}`} title="בעלי הלוח תמיד מורשים">✓<span className={styles.mxAlways}>תמיד</span></span>
+                  </td>
                   {/* Super members = regular members PLUS the two defining caps
                       (locked ✓); every other system cap follows the Members cell. */}
                   <td className={styles.mxTd}>
@@ -419,9 +446,7 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
                       ? <span className={`${styles.mxCell} ${styles.mxOn} ${styles.mxLocked}`} title="יכולת מגדירה של חבר-על — תמיד מורשה">✓<span className={styles.mxAlways}>תמיד</span></span>
                       : <span className={`${styles.mxCell} ${styles.mxInherit}`} title="כמו Members">כמו חברים</span>}
                   </td>
-                  <td className={styles.mxTd}>
-                    <span className={`${styles.mxCell} ${styles.mxOn} ${styles.mxLocked}`} title="בעלי הלוח תמיד מורשים">✓<span className={styles.mxAlways}>תמיד</span></span>
-                  </td>
+                  {renderCell(SYSTEM_ROLE_KEY, cap.id, false)}
                 </tr>
               ))}
             </tbody>
