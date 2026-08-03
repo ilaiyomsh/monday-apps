@@ -363,10 +363,25 @@ owners only — an owner who holds the board through a team would not see the bu
 
 ## Limits
 
-Protection applies only inside this app's picker. Direct board edits, API writes,
-and automations are not blocked (no server webhook/rollback).
+Client-side protection applies only inside this app's picker — but since round322
+the app also carries a **guard server** (monday-code component of this same App ID,
+`server/`): a `change_status_column_value` webhook per enrolled column re-validates
+every change — whoever made it, from whatever surface, including the cold-load
+window before the app feature binds — against the SAME rules (the bundle inlines
+`src/domain/`), and REVERTS an illegal change to its previous value with a
+notification to the acting user (owner copy, pinned in code:
+"השינוי שבוצע בוטל - מכיוון שאינו עומד בהגדרות העמודה"). Correction, not
+prevention: the illegal value is visible until the revert lands, a guard outage
+means no enforcement (fail-open), and creation-time values (forms/duplicate/
+import) emit no change event — out of v1 scope by owner decision. Activation and
+enrollment: docs/GUARD-ACTIVATION.md; architecture record:
+docs/BYPASS-PROOF-DECISION.md. Note the guard ENFORCES hiddenLabelIds too —
+supersedes the older "automation/API may still set them" contract for enrolled
+columns.
 
-The owner gate is the same kind of protection: a client-side gate on a client-only app. It
-withholds the UI, it does not defend the storage key — anyone able to call monday's storage
-API with this app's context could still write the configuration. Making that impossible
-needs a server, which this app deliberately does not have.
+The owner gate is still a client-side gate: it withholds the UI, it does not defend
+the storage key — anyone able to call monday's storage API with this app's context
+could still write the configuration. The guard server narrows the blast radius (its
+ENROLL endpoint verifies board ownership server-side), but rules storage itself is
+still client-writable; moving rules to server-authoritative storage is the recorded
+next hardening step in docs/BYPASS-PROOF-DECISION.md.

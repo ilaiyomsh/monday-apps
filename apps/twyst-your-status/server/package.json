@@ -1,0 +1,31 @@
+{
+  "name": "twyst-your-status-guard",
+  "version": "1.0.0",
+  "description": "Guard service for twyst-your-status — validates every status change against the column rules and reverts illegal ones (monday code)",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^20.0.0"
+  },
+  "scripts": {
+    "start": "node ./dist/index.js",
+    "dev:server": "node ./src/index.js",
+    "build": "node ./build.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@mondaycom/apps-sdk": "^0.1.4",
+    "express": "^4.18.0",
+    "jsonwebtoken": "^9.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "supertest": "^7.0.0",
+    "vitest": "^3.0.0"
+  }
+}

@@ -1,0 +1,12 @@
+# code:push archive control — this file takes precedence over .gitignore
+# (mapps cli.md, log-verified 2026-07-15). The shipped artifact is the
+# CI-built dist/index.js bundle + package manifests; the buildpack's remote
+# `npm run build` detects the missing client sources and keeps the bundle
+# (see build.mjs). src/ and tests/ reference ../src/domain outside this
+# directory and must not confuse the remote workspace.
+node_modules/
+tests/
+src/
+coverage/
+eslint.config.js
+.mappsignore

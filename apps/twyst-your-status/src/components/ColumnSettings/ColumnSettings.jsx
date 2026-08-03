@@ -22,6 +22,7 @@ import {
   GET_BOARD_SETTINGS_METADATA,
   GET_STATUS_COLUMN_REVISION,
 } from '../../services/graphqlQueries';
+import { enrollColumnGuard } from '../../services/guardEnroll';
 import mondayService from '../../services/mondayService';
 import { loadAccountTeams } from '../../services/teamsAccess';
 import useColumnSettings from '../../hooks/useColumnSettings';
@@ -884,6 +885,11 @@ function ColumnSettings({ context, variant = 'overlay' }) {
         return;
       }
       await mondayService.setColumnConfig(boardId, columnId, next);
+
+      // round322: best-effort guard enrollment — registers the server watchdog's
+      // webhook on this column. Fire-and-forget BY CONTRACT: enrollColumnGuard
+      // returns a status and never throws, and the save must not wait on it.
+      void enrollColumnGuard({ boardId, columnId });
 
       mondayService.showNotice('ההגדרות נשמרו');
       await dismiss({ saved: true });
