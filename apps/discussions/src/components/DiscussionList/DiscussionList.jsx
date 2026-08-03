@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useDiscussions, useDiscussionMonths } from '@generated/hooks/useDiscussions';
-import { Button, Text, IconButton } from '@vibe/core';
+import { Button } from '@vibe/core';
 import { CloseSmall, Search } from '@vibe/icons';
 import { HighlightedText } from '@generated/components/HighlightedText';
 import { EmptyState } from '@generated/components/EmptyState';
@@ -17,22 +17,12 @@ import { usePermission, useIsSuperMember } from '@generated/hooks/usePermission.
 import { canExportDiscussion } from '../../utils/exportGate.js';
 import styles from './DiscussionList.module.css';
 
-/* List-row subtitle: short weekday + "DD/MM", plus " · HH:MM" when the date
-   column carries a real time part ("יום ב׳ 07/07 · 09:00" — mockup dateLabel).
-   fmtTimeLabel reads the hasTime flag off the ORIGINAL Date, so this must get
-   the item's own discussionDateID object (never a clone). */
-function fmtListDate(d) {
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const weekday = d.toLocaleDateString('he-IL', { weekday: 'short' }); // "יום ב׳"
-  const time = fmtTimeLabel(d);
-  return time ? `${weekday} ${dd}/${mm} · ${time}` : `${weekday} ${dd}/${mm}`;
-}
-
+/* (round337) fmtListDate — the pre-round67 weekday variant — was deleted as dead
+   code: round67's compact format below replaced its only call site. */
 /* Compact list-row date (round 67): "DD/MM · HH:MM", or just "DD/MM" when the
    date column has no real time part. Drops the weekday so the name + date fit on
    ONE line in the new LTR soft-card row. Reuses fmtTimeLabel for the has-time
-   check (same ORIGINAL-Date requirement as fmtListDate above). */
+   check (ORIGINAL-Date requirement: fmtTimeLabel reads hasTime off the item's own Date). */
 function fmtListDateCompact(d) {
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
@@ -733,7 +723,7 @@ export function DiscussionList({
           <EmptyState>לא נמצאו דיונים</EmptyState>
         ) : (
           <div className={styles.list}>
-            {items.map((item, idx) => {
+            {items.map((item) => {
               const accent = discussionAccentColor(item, typeColor);
               const isSelected = selectedId === item.id;
               return (

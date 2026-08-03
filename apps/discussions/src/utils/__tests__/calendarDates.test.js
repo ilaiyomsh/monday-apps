@@ -2,7 +2,7 @@ process.env.TZ = 'Asia/Jerusalem';
 
 import { describe, it, expect } from 'vitest';
 import {
-  startOfDay, addDays, addMonths, sameDay, dayKey, startOfWeek, weekDays, workWeekDays,
+  addDays, dayKey, startOfWeek, weekDays, workWeekDays,
   monthGridDays, rangeForView, fmtMonthTitle, fmtWeekRangeTitle,
   groupItemsByDay, itemHasTime, layoutDayEvents,
 } from '../calendarDates.js';

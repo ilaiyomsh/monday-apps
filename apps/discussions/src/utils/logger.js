@@ -128,7 +128,7 @@ const dispatchToSinks = (record) => {
     } catch (sinkError) {
       // sink כושל לא יזרוק חזרה ולא ירשם דרך logger (מניעת רקורסיה).
       // נשתמש ב-console.error הגולמי כדי לא לאבד את הכשל לחלוטין.
-      // eslint-disable-next-line no-console
+       
       console.error('[logger] sink threw and was suppressed:', sinkError);
     }
   }
