@@ -10,6 +10,28 @@
   - _Why:_ `app-errors` ships a single minified `stack1` frame, so `index-<hash>.js:LINE:COL` crash locations were uninvestigable.
   - _Done:_ Part of the portfolio-wide symbolication rollout; see `docs/LOGGING-ARCHITECTURE.md` §6. Re-mapping is automatic per build (fresh artifact keyed by commit SHA — nothing mapped by hand).
 
+## 2.6.7 — 2026-08-03
+
+- round327 (ממצא P2 מביקורת #560): **ה-52px של round322 נכון רק במנוע שבו פס
+  הגלילה הוא באמת 10px — ובפיירפוקס הוא לא.**
+  - **מה נשבר:** ה-52px הוא `8 + 34 + 10`, וה-10 נכון רק במקום שבו
+    `.scroll::-webkit-scrollbar { width: 10px }` באמת חל. פיירפוקס **תומך**
+    ב-`scrollbar-gutter` אבל **לא** בפסאודו של webkit, ולכן הוא נופל לענף
+    `@supports not selector(::-webkit-scrollbar)` ומקבל `scrollbar-width: thin` —
+    רוחב שהדפדפן קובע, ולא 10px. כלומר הוא שמר גאטר "דק" בזמן שהכותרת זזה 10px
+    קבועים, וה-+ והשעות היו לא מיושרים **בכל אורך רשימה**.
+  - **התיקון:** ה-`@supports` קיבל `and selector(::-webkit-scrollbar)`. זה לא
+    קוסמטיקה — זה בדיוק התנאי שבו החשבון של 52px תקף. הענף הזה כבר משמש בקובץ
+    להפרדה בין Chromium לפיירפוקס מ-round125, כלומר מדובר בבדיקה שהתנהגותה כבר
+    אומתה כאן.
+  - **מה פיירפוקס מקבל במקום:** אין שמירת גאטר, הכותרת על 42px — מיושר בזמן
+    שהרשימה נכנסת למסך, ומוסט ברוחב הפס הדק כשהיא גולשת. זו ההתנהגות שלפני
+    round322, כלומר **בלי רגרסיה**. וזה נאמר במפורש בקוד ולא מטואטח: CSS לא יכול
+    לקרוא את הרוחב ה"דק" של פיירפוקס, וניחוש שלו הוא בדיוק סוג הקביעה
+    הלא-מאומתת שround325 עסק בה.
+  - test-guard: **waiver** מתועד — הוספת conjunct אחד ל-`@supports` קיים; jsdom
+    לא מחיל CSS modules. הסוויטה המלאה נשארה ירוקה.
+
 ## 2.6.6 — 2026-08-03
 
 - round326 (ממצא P2 מביקורת #558): **היישור של round322 שבר את שורת הכלים באפליקציית

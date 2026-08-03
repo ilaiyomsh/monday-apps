@@ -551,8 +551,24 @@
  * Both rules live under one @supports on purpose: where `scrollbar-gutter` is
  * unavailable the pair degrades to the pre-review behaviour (42px, aligned for a
  * short list) rather than to a NEW 10px misalignment in the opposite direction.
+ *
+ * round327 (PR review, P2) — `and selector(::-webkit-scrollbar)` IS THE POINT OF
+ * THIS QUERY, not decoration. The 52px is `8 + 34 + 10`, and that 10 is only true
+ * where `.scroll::-webkit-scrollbar { width: 10px }` below actually applies.
+ * Firefox supports `scrollbar-gutter` but NOT the webkit pseudo, so it takes the
+ * `@supports not selector(::-webkit-scrollbar)` branch further down and gets
+ * `scrollbar-width: thin` — a browser-defined width that is not 10px. Without this
+ * conjunct Firefox reserved a thin gutter while the header moved a hard-coded 10px,
+ * so the + and the timestamps were misaligned by the difference at EVERY list
+ * length.
+ *
+ * What Firefox gets instead: no reserved gutter, header at 42px — exact while the
+ * list fits, off by the thin-scrollbar width once it overflows. That is the
+ * pre-round322 behaviour, i.e. no regression, and it is stated plainly rather than
+ * papered over: CSS cannot read Firefox's thin width, and guessing it is exactly
+ * the kind of unverifiable claim round325 was about.
  */
-@supports (scrollbar-gutter: stable) {
+@supports (scrollbar-gutter: stable) and selector(::-webkit-scrollbar) {
   .scroll {
     scrollbar-gutter: stable;
   }
