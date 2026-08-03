@@ -13,10 +13,13 @@ The digest is sent as `multipart/alternative` with **three** parts, in the order
 `text/plain` → `text/x-amp-html` → `text/html` (0.10.3): a non-actionable plain
 fallback (task list only, no links/credentials), the part Gmail renders as
 dynamic email, and a non-actionable HTML fallback **derived from the plain part**
-(`helpers/digest-html-fallback.js`). That order mirrors the only message Gmail
-has been observed to render our AMP document from; see the header comment in
-`helpers/mime-alternative.js` — it is a live hypothesis about `INTERNAL_ERROR`,
-not decoration, so do not drop the HTML part. The AMP form posts to **`POST /amp/confirm`**
+(`helpers/digest-html-fallback.js`). Keep all three — the HTML part sources the
+inbox preheader and some clients render only the last part — but **the order is
+NOT the `INTERNAL_ERROR` fix**: that hypothesis, and the base64-CTE one, were both
+disproven by live sends on 2026-08-03. Read
+**`docs/amp-email-verified-findings.md`** before any AMP work; it is the measured
+account of what actually blocks rendering (the Gmail API strips the AMP part; SPF
+must pass on its own; a self-send can never render). The AMP form posts to **`POST /amp/confirm`**
 — the app's **only** public write endpoint. Each message carries one HMAC
 signature over an explicit manifest of authorized (task × button) pairs; the
 base link secret never leaves the server (D3).
