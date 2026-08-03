@@ -1,9 +1,34 @@
+/*
+ * round321 (owner request, approved mock "הצעה B") — the list is separated from the
+ * work area by GROUND, the way monday's own side menu is: a slightly darker surface
+ * and NO rule between them. The vertical border and the hairline under the icon row
+ * are gone; what used to be a line is now a change of background.
+ *
+ * The knock-on effects are not cosmetic and are handled below: every control that
+ * read as "a control" because it carried a light-grey fill (the search field, the
+ * icon-button hover) would dissolve into this ground, and the row states have to
+ * re-tier — white can no longer mean "resting row".
+ *
+ * TOKEN CHOICE (PR review, verified against @vibe/core tokens.css): the grey surface
+ * is `--allgrey-background-color`, NOT `--secondary-background-color` — the latter
+ * resolves to #ffffff in the light theme, so the fallback would never have applied
+ * and the list would have stayed white with its border already removed, i.e. no
+ * separation at all. The three row tiers below use tokens from the same family, so a
+ * monday dark/black theme moves the whole ladder together instead of painting light
+ * greys under light text:
+ *
+ *   ground   --allgrey-background-color                    #f6f7fb / #30324e / #2c2c2c
+ *   hover    --ui-background-color                         #e7e9ef / #434660 / #4d4d4d
+ *   selected --primary-background-hover-on-secondary-color  #dcdfec / #4b4e69 / #636363
+ *
+ * In every theme the ladder stays monotonic — each tier one step further from the
+ * ground — which is what keeps "hovered" and "selected" tellable apart.
+ */
 .root {
   display: flex;
   flex-direction: column;
   height: 100%;
-  border-right: 1px solid var(--ui-border-color, #d0d4e4);
-  background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
+  background-color: var(--allgrey-background-color, #f6f7fb);
 }
 
 /* round175 (variant B) — the header's own card frame (border/radius/shadow/gap)
@@ -12,8 +37,9 @@
    hairline. */
 .header {
   flex: none;
-  background-color: var(--primary-background-color, var(--ui-background-color, #ffffff));
-  border-bottom: 1px solid var(--ui-border-color, #e6e9ef);
+  /* round321 — transparent (not white): the icon row belongs to the list's ground,
+     and its separating hairline is gone with it. */
+  background-color: transparent;
 }
 
 .headerInner {
@@ -70,7 +96,11 @@
 }
 .iconBtn:hover,
 .iconBtnOpen {
-  background: var(--primary-background-hover-color, #f4f5f8);
+  /* round321 — was a light grey ≈ the new ground, so hover read as nothing. The
+     PAGE surface lifts the button off the list instead: it is white in the light
+     theme and near-black in a dark one, so it contrasts with the grey ground either
+     way (#ffffff / #181b34 / #111111). */
+  background: var(--primary-background-color, #ffffff);
   color: var(--primary-text-color, #323338);
 }
 /* "+" — the only filled control: creates a discussion. */
@@ -285,10 +315,13 @@
   padding-inline-start: 30px;
   /* room for the clear-X pinned at the inline-end (left in RTL) */
   padding-inline-end: 28px;
-  /* variant B — flat: no border, subtle grey fill (matches the other controls). */
-  border: 1px solid transparent;
+  /* round321 — the PAGE surface + a hairline, because the ground is now grey: the
+     old light-grey fill was the thing that made this read as an input, and on the
+     new ground it disappears. Token, so it stays a contrasting surface in a dark
+     theme too. Same reason monday's own side-menu search is a filled field. */
+  border: 1px solid var(--ui-border-color, #e2e4ec);
   border-radius: 8px;
-  background: var(--primary-background-hover-color, #f1f2f6);
+  background: var(--primary-background-color, #ffffff);
   color: var(--text-color, #323338);
   font-size: var(--font-size-general-label, 14px);
   font-family: var(--font-family);
@@ -704,9 +737,11 @@
      date's gap off the right edge (owner request — symmetric breathing room). */
   padding: 10px 34px;
   /* round133 (approved mock): FRAMELESS rows — no border, no shadow; only the
-     type-color rail marks the row, and states are told apart by background
-     alone (rest = white, hover = light gray, selected = darker gray below). */
-  background: var(--primary-background-color, #fff);
+     type-color rail marks the row, and states are told apart by background alone.
+     round321 — the resting row is now TRANSPARENT rather than white: the list's own
+     grey ground shows through, so only hover and selection paint anything. A white
+     resting row on a grey list would read as four selected rows. */
+  background: transparent;
   border: none;
   border-radius: 10px;
   cursor: pointer;
@@ -721,7 +756,9 @@
 }
 
 .item:hover {
-  background-color: var(--primary-background-hover-color, #f5f6f8);
+  /* round321 — one step off the ground (was one step off white). Token, not a
+     literal, so a dark theme moves it with the ground (see .root). */
+  background-color: var(--ui-background-color, #e7e9ef);
 }
 
 /* round133 — frameless rows carry no hover shadow/lift (the background tint is
@@ -730,8 +767,11 @@
 /* Selected row (round133 variant A, softened in round134 to the approved
    "אפשרות 1" tone): a darker neutral fill on the whole row — no border, no
    blue tint; the color pill stays (and grows slightly, see .rail). */
+/* round321 — the selection is the FURTHEST tier from the ground, exactly as in
+   monday's side menu (light: #f6f7fb → #e7e9ef → #dcdfec). Also a token, so the
+   ladder inverts correctly in a dark theme instead of staying light. */
 .itemSelected {
-  background: #eceef2;
+  background: var(--primary-background-hover-on-secondary-color, #dcdfec);
 }
 
 /* Left color rail — round134 (approved mock, "אפשרות 1"): a small ROUNDED PILL
