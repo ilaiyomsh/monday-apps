@@ -24,11 +24,14 @@
 /* round334 — the dialog is built around ONE vertical centre axis. Before this it
    was `text-align: right` with a `justify="end"` action row, which in an RTL box
    pushes the buttons LEFT: title in one corner, actions in the opposite one.
-   Widened 420 → 560px so all three actions fit ONE row as equal thirds (owner
-   request): 560 - 52 padding - 20 gaps = 488 / 3 ≈ 162px per button, which clears
-   the longest label ("יציאה ללא שמירה", ~108px at 14px + 28px button padding). */
+   Widened 420 → 600px so all three actions fit ONE row as equal thirds (owner
+   request). A Vibe `medium` button is `font: 400 16px/22px` with `padding: 8px 16px`,
+   so the widest action ("יציאה ללא שמירה", ~118px of Hebrew at 16px + 32px padding)
+   needs ~150px, and the two icon-bearing ones ~150px too (label + 16px glyph + 6px
+   gap + padding). 600 - 52 padding - 20 gaps = 528 / 3 = 176px per button — real
+   headroom over 150, not the 6px a 560px card would have left. */
 .confirmDialog {
-  width: min(560px, 94vw);
+  width: min(600px, 94vw);
   background: var(--primary-background-color, #fff);
   border-radius: 14px;
   box-shadow: var(--box-shadow-large, 0 12px 40px rgba(0, 0, 0, 0.28));
@@ -74,20 +77,26 @@
 }
 .confirmActions {
   display: flex;
+  /* The row STACKS rather than overflows in a narrow iframe — see .confirmBtn's
+     min-width. One row wherever one row fits; 2+1 (then 1+1+1) where it cannot. */
+  flex-wrap: wrap;
   gap: 10px;
   width: 100%;
 }
-/* Equal thirds: `flex: 1 1 0` + `min-width: 0` so no label wins extra width off
-   its intrinsic size. `nowrap` keeps the row one line high — if a translation ever
-   outgrows its third the label ellipsizes instead of breaking the row in two. */
+/* Equal thirds: `flex-basis: 0` + `flex-grow: 1`, so every button gets the same
+   width regardless of how long its own label is.
+   The min-width is load-bearing, not decoration. Vibe's `.button` sets
+   `min-width: auto` — the intrinsic label width — and Vibe also sets
+   `white-space: nowrap`, so overriding that floor to 0 (as the first cut of this
+   round did) does NOT ellipsize the label: it has the text paint straight out of
+   the button and into its neighbour once a third drops below ~150px, which happens
+   in a board-view iframe around 510px wide. Keeping a real floor makes the row wrap
+   instead. `min(…, 100%)` is the escape hatch for a container narrower than one
+   button, where a hard 150px would itself overflow. */
 .confirmBtn {
   flex: 1 1 0;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  min-width: min(150px, 100%);
   gap: 6px;
-  white-space: nowrap;
 }
 /* The icons are plain children (Vibe's leftIcon/rightIcon props are PHYSICAL and
    would need flipping per direction), so DOM order places them: arrow first =
