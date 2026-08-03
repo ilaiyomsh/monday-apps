@@ -149,6 +149,9 @@ export function migrateSettings(raw) {
     hiddenLabelIds: normalizeLabelIdList(raw.hiddenLabelIds ?? []),
     labels,
     ...(owners ? { owners } : {}),
+    // round323 — auto-revert flag the guard reads. Carried ONLY when strictly
+    // true, so a monitoring-only column keeps the exact shape it had before.
+    ...(raw.autoRevert === true ? { autoRevert: true } : {}),
   };
 }
 

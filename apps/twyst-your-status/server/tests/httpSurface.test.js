@@ -38,6 +38,8 @@ function makeDeps(envOverrides = {}) {
       setOwnerToken: vi.fn(),
     },
     enrollmentStore: { get: vi.fn(), set: vi.fn() },
+    rulesStore: { getRules: vi.fn() },
+    bypassLog: { queryRange: vi.fn() },
     api: {
       getBoardOwnership: vi.fn(),
       getUserTeamIds: vi.fn(),
@@ -354,5 +356,170 @@ describe('GET /api/guard/status', () => {
 
     expect(res.status).toBe(401);
     expect(deps.tokenStore.getReaderToken).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /api/guard/bypasses', () => {
+  const BOARD_ID = '5098';
+  const COLUMN_ID = 'status_col';
+  const FROM = '1000';
+  const TO = '2000';
+  const bypassesPath = `/api/guard/bypasses?boardId=${BOARD_ID}&columnId=${COLUMN_ID}&from=${FROM}&to=${TO}`;
+
+  /** rules blob whose owners list does NOT include the requesting user (41) */
+  function rulesOwnedByOthers() {
+    return {
+      version: 1,
+      hiddenLabelIds: [],
+      labels: {},
+      owners: { ownerIds: ['77'], primaryOwnerId: '77' },
+    };
+  }
+
+  /** rules blob whose owners list DOES include the requesting user (41) */
+  function rulesOwnedByRequester() {
+    return {
+      version: 1,
+      hiddenLabelIds: [],
+      labels: {},
+      owners: { ownerIds: ['41', '50'], primaryOwnerId: '50' },
+    };
+  }
+
+  it('rejects with 401 and touches nothing when the Authorization header is missing', async () => {
+    const deps = makeDeps();
+    const app = createApp(deps);
+
+    const res = await request(app).get(bypassesPath);
+
+    expect(res.status).toBe(401);
+    expect(deps.tokenStore.getReaderToken).not.toHaveBeenCalled();
+    expect(deps.rulesStore.getRules).not.toHaveBeenCalled();
+    expect(deps.bypassLog.queryRange).not.toHaveBeenCalled();
+  });
+
+  it('rejects with 401 and touches nothing when the session token is signed with the wrong secret', async () => {
+    const deps = makeDeps();
+    const app = createApp(deps);
+
+    const res = await request(app)
+      .get(bypassesPath)
+      .set('Authorization', sessionToken('not-the-client-secret'));
+
+    expect(res.status).toBe(401);
+    expect(deps.tokenStore.getReaderToken).not.toHaveBeenCalled();
+    expect(deps.rulesStore.getRules).not.toHaveBeenCalled();
+    expect(deps.bypassLog.queryRange).not.toHaveBeenCalled();
+  });
+
+  it('rejects with 400 { error: "bad_request" } and never queries the log when columnId is missing', async () => {
+    const deps = makeDeps();
+    const app = createApp(deps);
+
+    const res = await request(app)
+      .get(`/api/guard/bypasses?boardId=${BOARD_ID}&from=${FROM}&to=${TO}`)
+      .set('Authorization', sessionToken());
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'bad_request' });
+    expect(deps.bypassLog.queryRange).not.toHaveBeenCalled();
+  });
+
+  it('rejects with 400 { error: "bad_request" } and never queries the log when from is not a numeric value', async () => {
+    const deps = makeDeps();
+    const app = createApp(deps);
+
+    const res = await request(app)
+      .get(`/api/guard/bypasses?boardId=${BOARD_ID}&columnId=${COLUMN_ID}&from=notanumber&to=${TO}`)
+      .set('Authorization', sessionToken());
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'bad_request' });
+    expect(deps.bypassLog.queryRange).not.toHaveBeenCalled();
+  });
+
+  it('rejects with 400 { error: "bad_request" } and never queries the log when to is not a numeric value', async () => {
+    const deps = makeDeps();
+    const app = createApp(deps);
+
+    const res = await request(app)
+      .get(`/api/guard/bypasses?boardId=${BOARD_ID}&columnId=${COLUMN_ID}&from=${FROM}&to=notanumber`)
+      .set('Authorization', sessionToken());
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'bad_request' });
+    expect(deps.bypassLog.queryRange).not.toHaveBeenCalled();
+  });
+
+  it('responds 409 { error: "not_activated" } and never queries the log when the account has no reader token', async () => {
+    const deps = makeDeps();
+    deps.tokenStore.getReaderToken.mockResolvedValue(null);
+    const app = createApp(deps);
+
+    const res = await request(app).get(bypassesPath).set('Authorization', sessionToken());
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: 'not_activated' });
+    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledWith('999');
+    expect(deps.bypassLog.queryRange).not.toHaveBeenCalled();
+  });
+
+  it('responds 403 { error: "not_column_owner" } and never queries the log when the requester is not in the rules owner list', async () => {
+    const deps = makeDeps();
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '50' });
+    deps.rulesStore.getRules.mockResolvedValue(rulesOwnedByOthers());
+    const app = createApp(deps);
+
+    const res = await request(app).get(bypassesPath).set('Authorization', sessionToken());
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'not_column_owner' });
+    expect(deps.rulesStore.getRules).toHaveBeenCalledWith('tok', BOARD_ID, COLUMN_ID);
+    expect(deps.bypassLog.queryRange).not.toHaveBeenCalled();
+  });
+
+  it('responds 403 { error: "not_column_owner" } and never queries the log when the column is unadopted (rules is null)', async () => {
+    const deps = makeDeps();
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '50' });
+    deps.rulesStore.getRules.mockResolvedValue(null);
+    const app = createApp(deps);
+
+    const res = await request(app).get(bypassesPath).set('Authorization', sessionToken());
+
+    expect(res.status).toBe(403);
+    expect(res.body).toEqual({ error: 'not_column_owner' });
+    expect(deps.rulesStore.getRules).toHaveBeenCalledWith('tok', BOARD_ID, COLUMN_ID);
+    expect(deps.bypassLog.queryRange).not.toHaveBeenCalled();
+  });
+
+  it('responds 200 with { count, events } and queries the log with numeric from/to when the requester is a column owner (happy path)', async () => {
+    const deps = makeDeps();
+    const events = [
+      { at: 1100, userId: 41, from: 'ממתין', to: 'בוצע' },
+      { at: 1900, userId: 50, from: 'בעבודה', to: 'בוצע' },
+    ];
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '50' });
+    deps.rulesStore.getRules.mockResolvedValue(rulesOwnedByRequester());
+    deps.bypassLog.queryRange.mockResolvedValue(events);
+    const app = createApp(deps);
+
+    const res = await request(app).get(bypassesPath).set('Authorization', sessionToken());
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ count: 2, events });
+    expect(deps.bypassLog.queryRange).toHaveBeenCalledWith('999', BOARD_ID, COLUMN_ID, 1000, 2000);
+  });
+
+  it('responds 502 { error: "bypasses_failed" } when the log query rejects', async () => {
+    const deps = makeDeps();
+    deps.tokenStore.getReaderToken.mockResolvedValue({ token: 'tok', userId: '50' });
+    deps.rulesStore.getRules.mockResolvedValue(rulesOwnedByRequester());
+    deps.bypassLog.queryRange.mockRejectedValue(new Error('log store down'));
+    const app = createApp(deps);
+
+    const res = await request(app).get(bypassesPath).set('Authorization', sessionToken());
+
+    expect(res.status).toBe(502);
+    expect(res.body).toEqual({ error: 'bypasses_failed' });
   });
 });

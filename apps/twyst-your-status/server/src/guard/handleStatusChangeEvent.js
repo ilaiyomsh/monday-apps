@@ -32,7 +32,20 @@
  * REVERT_NOTIFICATION_TEXT is the owner's exact copy (2026-08-03) — do not edit.
  */
 
+import { classifyViolation, estimateSurface } from '../../../src/domain/bypassReason.js';
+import { isFieldValueEmpty, prefillFieldValue } from '../../../src/domain/columnFields.js';
 import { normalizeOwners } from '../../../src/domain/columnOwners.js';
+
+/** Which of a label's required columns were actually empty at change time. */
+function collectEmptyFieldIds(requiredColumnIds, requiredFieldValues) {
+  if (!Array.isArray(requiredColumnIds) || requiredColumnIds.length === 0) return [];
+  const byId = new Map((Array.isArray(requiredFieldValues) ? requiredFieldValues : []).map((f) => [String(f.columnId), f]));
+  return requiredColumnIds.filter((columnId) => {
+    const field = byId.get(String(columnId));
+    if (!field) return true; // missing/unreadable → counts as empty (fail-closed)
+    return isFieldValueEmpty(field.type, prefillFieldValue(field.type, field.columnValue));
+  }).map(String);
+}
 
 export const REVERT_NOTIFICATION_TEXT =
   'השינוי שבוצע בוטל - מכיוון שאינו עומד בהגדרות העמודה';
@@ -46,7 +59,7 @@ export const REVERTABLE_REASONS = ['not-offered', 'required-fields-empty'];
  *   evaluate?: Function,
  * }} deps
  */
-export function createStatusChangeHandler({ api, tokenStore, rulesStore, logger, evaluate }) {
+export function createStatusChangeHandler({ api, tokenStore, rulesStore, bypassLog, logger, evaluate, now = () => Date.now() }) {
   const TAG = 'guard';
   const lanes = new Map();
 
@@ -122,7 +135,6 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, logger,
       requiredFieldValues,
     });
     if (verdict.allowed) return;
-
     if (!REVERTABLE_REASONS.includes(verdict.reason)) {
       logger.warn('illegal change NOT reverted (verdict is not revert-worthy)', TAG, {
         accountId, boardId, itemId, columnId, reason: verdict.reason,
@@ -130,40 +142,62 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, logger,
       return;
     }
 
-    // The revert must be written AS the primary owner (attribution). Without a
-    // primary owner, or without that owner's token, we cannot attribute — and
-    // reverting as anyone else breaks the loop guard — so skip, loudly.
-    if (primaryOwnerId === null) {
-      logger.warn('illegal change NOT reverted: column has no owners configured', TAG, {
-        accountId, boardId, itemId, columnId,
-      });
-      return;
-    }
-    const primaryToken = await tokenStore.getOwnerToken(accountId, primaryOwnerId);
-    if (!primaryToken) {
-      logger.warn('illegal change NOT reverted: primary owner has not authorized the guard', TAG, {
-        accountId, boardId, itemId, columnId, primaryOwnerId,
-      });
-      return;
+    // ---- decide whether a revert happens (auto-revert is opt-in, default off) ----
+    // A revert must be written AS the primary owner (attribution). It happens only
+    // when: auto-revert is enabled for this column, an owner is configured, that
+    // owner authorized the guard, AND the cell still holds the illegal value.
+    const autoRevert = rules.autoRevert === true;
+    let reverted = false;
+    if (autoRevert && primaryOwnerId !== null) {
+      const primaryToken = await tokenStore.getOwnerToken(accountId, primaryOwnerId);
+      if (!primaryToken) {
+        logger.warn('auto-revert on, but primary owner has not authorized the guard', TAG, {
+          accountId, boardId, itemId, columnId, primaryOwnerId,
+        });
+      } else {
+        const currentLabelId = await api.getCurrentStatusLabelId(readToken, itemId, columnId);
+        if (currentLabelId === newLabelId) {
+          await api.revertStatus(primaryToken, boardId, itemId, columnId, previousLabelId);
+          reverted = true;
+          logger.info('illegal status change reverted', TAG, {
+            accountId, boardId, itemId, columnId, actingUserId, primaryOwnerId,
+            previousLabelId, newLabelId, reason: verdict.reason,
+          });
+          try {
+            await api.notifyUser(primaryToken, event.userId, itemId, REVERT_NOTIFICATION_TEXT);
+          } catch (err) {
+            // The revert already landed — a failed notification must not fail the event.
+            logger.error('revert notification failed', TAG, {
+              accountId, itemId, error: String(err?.message ?? err),
+            });
+          }
+        }
+      }
     }
 
-    // Stale guard: only revert while the cell still holds the illegal value.
-    const currentLabelId = await api.getCurrentStatusLabelId(readToken, itemId, columnId);
-    if (currentLabelId !== newLabelId) return;
-
-    await api.revertStatus(primaryToken, boardId, itemId, columnId, previousLabelId);
-    logger.info('illegal status change reverted', TAG, {
-      accountId, boardId, itemId, columnId, actingUserId, primaryOwnerId,
-      previousLabelId, newLabelId, reason: verdict.reason,
+    // ---- record the bypass ALWAYS (monitoring is independent of auto-revert) ----
+    // The record carries ids + names + the specific violation; the settings
+    // monitor resolves user names and renders the Hebrew explanation client-side.
+    const labelsById = {};
+    for (const l of labels) labelsById[String(l.id)] = l.label ?? '';
+    const emptyFieldIds = collectEmptyFieldIds(requiredColumnIds, requiredFieldValues);
+    const classification = classifyViolation(
+      { settings: rules, actor: { userId: actingUserId, teamIds }, previousLabelId, newLabelId, peopleByColumnId, emptyFieldIds },
+      verdict,
+    );
+    await bypassLog.append(accountId, boardId, columnId, {
+      ts: now(),
+      itemId,
+      itemName: event.itemName ?? event.pulseName ?? '',
+      userId: actingUserId,
+      fromLabelId: previousLabelId,
+      fromLabelName: previousLabelId === null ? '' : (labelsById[previousLabelId] ?? ''),
+      toLabelId: newLabelId,
+      toLabelName: newLabelId === null ? '' : (labelsById[newLabelId] ?? ''),
+      classification,
+      surface: estimateSurface(event.app),
+      reverted,
     });
-    try {
-      await api.notifyUser(primaryToken, event.userId, itemId, REVERT_NOTIFICATION_TEXT);
-    } catch (err) {
-      // The revert already landed — a failed notification must not fail the event.
-      logger.error('revert notification failed', TAG, {
-        accountId, itemId, error: String(err?.message ?? err),
-      });
-    }
   }
 
   return function handle(event) {

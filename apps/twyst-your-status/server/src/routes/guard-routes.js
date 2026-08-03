@@ -25,11 +25,12 @@
  */
 
 import express from 'express';
+import { normalizeOwners } from '../../../src/domain/columnOwners.js';
 import { verifySessionToken, verifyWebhookJwt } from '../middlewares/auth.js';
 
 const TAG = 'guard-routes';
 
-export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, api, env, logger }) {
+export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, rulesStore, bypassLog, api, env, logger }) {
   const router = express.Router();
 
   router.post('/api/guard/webhook', (req, res) => {
@@ -63,9 +64,14 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ap
         userId: event.userId,
         boardId: event.boardId,
         pulseId: event.pulseId,
+        pulseName: event.pulseName,
         columnId: event.columnId,
         value: event.value ?? null,
         previousValue: event.previousValue ?? null,
+        // `pulseName`/`app` ride the change_status_column_value payload — item
+        // name for the record, app for the honest api-vs-native surface guess.
+        itemName: event.pulseName ?? '',
+        app: event.app,
       })).catch((err) => {
         // handleEvent is fail-soft by contract; this is the last-resort funnel
         // so a rejection can never become an unhandledRejection.
@@ -127,6 +133,42 @@ export function createGuardRouter({ handleEvent, tokenStore, enrollmentStore, ap
     } catch (err) {
       logger.error('enroll failed', TAG, { error: String(err?.message ?? err) });
       res.status(502).json({ error: 'enroll_failed' });
+    }
+  });
+
+  // The monitor's data: bypass events for a column in a date window. Owner-only
+  // (a listed COLUMN owner — the same authority the settings screen enforces).
+  router.get('/api/guard/bypasses', async (req, res) => {
+    try {
+      const session = requireSession(req, res);
+      if (!session) return;
+      const boardId = String(req.query.boardId ?? '').trim();
+      const columnId = String(req.query.columnId ?? '').trim();
+      const fromMs = Number(req.query.from);
+      const toMs = Number(req.query.to);
+      if (boardId === '' || columnId === '' || !Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+        res.status(400).json({ error: 'bad_request' });
+        return;
+      }
+
+      const reader = await tokenStore.getReaderToken(session.accountId);
+      if (!reader) {
+        res.status(409).json({ error: 'not_activated' });
+        return;
+      }
+      // Authorize against the column's own owner list (read from the rules blob).
+      const rules = await rulesStore.getRules(reader.token, boardId, columnId);
+      const owners = normalizeOwners(rules?.owners);
+      if (!owners || !owners.ownerIds.includes(String(session.userId))) {
+        res.status(403).json({ error: 'not_column_owner' });
+        return;
+      }
+
+      const events = await bypassLog.queryRange(session.accountId, boardId, columnId, fromMs, toMs);
+      res.status(200).json({ count: events.length, events });
+    } catch (err) {
+      logger.error('bypasses query failed', TAG, { error: String(err?.message ?? err) });
+      res.status(502).json({ error: 'bypasses_failed' });
     }
   });
 

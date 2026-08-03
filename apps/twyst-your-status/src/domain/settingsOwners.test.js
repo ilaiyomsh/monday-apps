@@ -33,6 +33,14 @@ describe('migrateSettings — owners', () => {
     expect('owners' in migrated).toBe(false);
   });
 
+  it('carries autoRevert only when strictly true — a monitoring column keeps its lean shape', () => {
+    expect(migrateSettings({ version: 1, hiddenLabelIds: [], labels: {}, autoRevert: true }).autoRevert).toBe(true);
+    expect('autoRevert' in migrateSettings({ version: 1, hiddenLabelIds: [], labels: {}, autoRevert: false })).toBe(false);
+    expect('autoRevert' in migrateSettings({ version: 1, hiddenLabelIds: [], labels: {} })).toBe(false);
+    // a non-boolean truthy value is NOT carried — the guard reads it as a strict flag
+    expect('autoRevert' in migrateSettings({ version: 1, hiddenLabelIds: [], labels: {}, autoRevert: 'yes' })).toBe(false);
+  });
+
   it('keeps owners beside labels and hidden ids without disturbing them', () => {
     const migrated = migrateSettings({
       version: 1,

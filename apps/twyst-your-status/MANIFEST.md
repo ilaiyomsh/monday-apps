@@ -392,7 +392,15 @@ notification to the acting user (owner copy, pinned in code:
 column's PRIMARY OWNER (monday attributes a write to the token's user, so the revert
 needs that owner's token — the primary owner authorizes once, no bot/service identity;
 if they have not authorized, the guard logs and does NOT revert, fail-open and
-loop-safe). Correction, not
+loop-safe). **Auto-revert is OPT-IN (round323): `settings.autoRevert` gates it, default
+off = MONITORING ONLY.** Every detected bypass is RECORDED to a per-column audit log
+regardless; the revert only fires when the owner turned auto-revert on. The settings
+screen carries an owners-only **bypass monitor** (count by week/month/year/custom, with
+per-event drill-down: when, item, who, and the specific rule broken) so owners decide on
+the number. Source labelling is honest — the webhook's `app` field splits API from a
+native editor, and nothing finer (mobile vs the cold-load window are indistinguishable).
+Endpoint `GET /api/guard/bypasses` (owner-auth) feeds it; `src/domain/reportingPeriod.js`
++ `bypassReason.js` + `services/bypassMonitor.js` are the tested pieces. Correction, not
 prevention: the illegal value is visible until the revert lands, a guard outage
 means no enforcement (fail-open), and creation-time values (forms/duplicate/
 import) emit no change event — out of v1 scope by owner decision. Activation and

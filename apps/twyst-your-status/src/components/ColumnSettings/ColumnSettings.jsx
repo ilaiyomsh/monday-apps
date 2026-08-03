@@ -31,6 +31,7 @@ import {
 } from '../../services/graphqlQueries';
 import { enrollColumnGuard } from '../../services/guardEnroll';
 import mondayService from '../../services/mondayService';
+import BypassMonitor from './BypassMonitor';
 import { loadAccountTeams } from '../../services/teamsAccess';
 import useColumnSettings from '../../hooks/useColumnSettings';
 import logger from '../../utils/logger';
@@ -669,6 +670,23 @@ function ColumnSettings({ context, variant = 'overlay' }) {
   // round322 — owner-list edits go through the pure domain mutations, which hold
   // the invariants (always one primary, never owner-less, crown moves only here).
   const draftOwners = normalizeOwners(draft?.owners);
+
+  // round323 — id→name maps the bypass monitor resolves its records against.
+  const labelsById = useMemo(() => {
+    const map = {};
+    (labelsDraft ?? []).forEach((label) => { map[String(label.id)] = label.label; });
+    return map;
+  }, [labelsDraft]);
+  const columnsById = useMemo(() => {
+    const map = {};
+    (metadata?.columns ?? []).forEach((column) => { map[String(column.id)] = column.title; });
+    return map;
+  }, [metadata]);
+  const usersById = useMemo(() => {
+    const map = {};
+    (metadata?.users ?? []).forEach((user) => { map[String(user.id)] = user.name; });
+    return map;
+  }, [metadata]);
   const addOwnerId = (userId) => setDraft((current) => ({ ...current, owners: addOwner(current.owners, userId) }));
   const removeOwnerId = (userId) => setDraft((current) => ({ ...current, owners: removeOwner(current.owners, userId) }));
   const makePrimaryOwner = (userId) => setDraft((current) => ({ ...current, owners: setPrimaryOwner(current.owners, userId) }));
@@ -890,7 +908,13 @@ function ColumnSettings({ context, variant = 'overlay' }) {
       // so the stored blob keeps who may configure and who reverts are written as.
       const pruned = pruneSettingsForActiveLabels(draft, activeLabelIds);
       const savedOwners = normalizeOwners(draft.owners);
-      const next = savedOwners ? { ...pruned, owners: savedOwners } : pruned;
+      const next = {
+        ...pruned,
+        ...(savedOwners ? { owners: savedOwners } : {}),
+        // round323 — auto-revert is a per-column setting the guard reads; carry
+        // it only when true so a monitoring-only column keeps its lean blob.
+        ...(draft.autoRevert === true ? { autoRevert: true } : {}),
+      };
       const { ok, problems } = validateSettings(next, metadata.columns);
       if (!ok) {
         logger.warn('ColumnSettings', 'Settings failed validation', { problems });
@@ -1054,7 +1078,28 @@ function ColumnSettings({ context, variant = 'overlay' }) {
               );
             })}
           </ul>
+
+          <label className="twyst-autorevert">
+            <input
+              type="checkbox"
+              checked={draft?.autoRevert === true}
+              disabled={saving}
+              onChange={(event) => setDraft((current) => ({ ...current, autoRevert: event.target.checked }))}
+            />
+            <span className="twyst-autorevert-text">
+              <b>החזרה אוטומטית של עקיפות</b>
+              <span>כשדלוק, שינוי סטטוס שעוקף את ההגדרות (מהנייד או בטעינת הלוח) יוחזר תוך שניות על שם הבעלים הראשי, והמשתמש יקבל הודעה. כשכבוי — העקיפות רק נספרות בניטור שלמטה.</span>
+            </span>
+          </label>
         </section>
+
+        <BypassMonitor
+          boardId={boardId}
+          columnId={columnId}
+          labelsById={labelsById}
+          columnsById={columnsById}
+          usersById={usersById}
+        />
 
         <div className="twyst-settings-toolbar">
           <div className="twyst-settings-toolbar-title">

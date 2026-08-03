@@ -16,7 +16,7 @@ import logger from './helpers/logger.js';
 import { evaluateStatusChange } from './guard/evaluateStatusChange.js';
 import { createStatusChangeHandler } from './guard/handleStatusChangeEvent.js';
 import { createMondayApi } from './services/monday-api.js';
-import { createEnrollmentStore, createRulesStore, createTokenStore } from './services/stores.js';
+import { createBypassLog, createEnrollmentStore, createRulesStore, createTokenStore } from './services/stores.js';
 
 const env = {
   clientId: process.env.MONDAY_CLIENT_ID ?? '',
@@ -31,9 +31,10 @@ const api = createMondayApi({ logger });
 const tokenStore = createTokenStore({ secureStorage });
 const enrollmentStore = createEnrollmentStore({ secureStorage });
 const rulesStore = createRulesStore({ storageFactory: (token) => new Storage(token), logger });
-const handleEvent = createStatusChangeHandler({ api, tokenStore, rulesStore, logger, evaluate: evaluateStatusChange });
+const bypassLog = createBypassLog({ secureStorage, logger });
+const handleEvent = createStatusChangeHandler({ api, tokenStore, rulesStore, bypassLog, logger, evaluate: evaluateStatusChange });
 
-const app = createApp({ handleEvent, tokenStore, enrollmentStore, api, env, logger });
+const app = createApp({ handleEvent, tokenStore, enrollmentStore, rulesStore, bypassLog, api, env, logger });
 
 const port = Number(process.env.PORT ?? 8080);
 app.listen(port, () => {
