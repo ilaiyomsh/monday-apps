@@ -38,7 +38,27 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 // (when nothing is saved) comes from the CSS `--sidebar-w` responsive var.
 // List and calendar modes remember separate widths: the calendar opens at 60%
 // of the screen on each toggle and may be dragged wider than the list's 720px cap.
-const SIDEBAR_MIN_W = 240;
+/*
+ * round324 (PR review, P2) — the minimum is DERIVED, not chosen.
+ *
+ * The icon row's non-shrinkable content is fixed by DiscussionList.module.css:
+ *   .actions      4 controls × 36px + 3 gaps × 6px      = 162px
+ *   .personalBtn  avatar 30 + gap 4 + chevron 18 + pad 8 =  60px
+ *   .bar          2 gaps × 10px                          =  20px
+ * The search field between them is `flex: 1; min-width: 0`, so it is the only
+ * part that yields — once it hits zero the row OVERFLOWS.
+ */
+export const TOOLBAR_MIN_CONTENT_W = 242;
+/*
+ * …plus .headerInner's insets: 14px left, and since round322 42px right — 52px
+ * where the scrollbar gutter is reserved. 242 + 52 + 14 = 308.
+ *
+ * The old floor was 240px, which never fit: the row overflowed by 30px at that
+ * width BEFORE round322, and round322 widened it to 68px. A saved width under
+ * the new floor is raised to it (readSavedWidth clamps both ends), which is the
+ * intended repair — that width was already broken.
+ */
+const SIDEBAR_MIN_W = 310;
 const SIDEBAR_MAX_W = 720;
 // Calendar mode needs real estate: it can't be dragged narrower than the grid
 // stays readable, and it OPENS at 60% of the container on each switch to calendar.
@@ -88,7 +108,11 @@ function hasSavedAppView() {
   }
 }
 
-function readSavedWidth(key, maxW, minW = SIDEBAR_MIN_W) {
+export { SIDEBAR_MIN_W };
+
+// Exported for the round324 geometry test — the clamp is the only thing that
+// enforces the derived minimum on a width saved by an earlier version.
+export function readSavedWidth(key, maxW, minW = SIDEBAR_MIN_W) {
   try {
     const raw = window.localStorage.getItem(key);
     const n = raw == null ? NaN : Number(raw);
