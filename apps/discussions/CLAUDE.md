@@ -224,6 +224,17 @@ code searched the wrong place and then created "בסיס מידע" somewhere the
 workspace ⇒ no folder, boards at the root, warning logged. Every step is fail-soft: folder
 placement is cosmetic, the returned mapping is not, so nothing here may abort an install.
 
+**The folder needs an OAuth SCOPE the app must declare: `workspaces:write`.** `boards:write`
+does not cover `create_folder` — without it monday refuses every folder attempt, the fail-soft
+path leaves the boards at the workspace root, and nothing looks broken. That is exactly what
+happened across rounds 339/342/345, three "the folder still isn't there" reports against code
+that was already correct. A probe with a personal token CANNOT reproduce it (full permissions).
+round346 therefore makes the failure loud: `ensureProvisionFolder` returns
+`{ folderId, reason }`, and provisioning emits ONE `logger.error` — which the funnel turns into
+a Hebrew toast and ships to Axiom — naming `workspaces:write` when the platform answer looks
+like an authorization refusal. The scope itself is a Developer Center setting; agents never
+touch it.
+
 There is **no settings button** for this any more (round345 removed the round342 one) — if you are
 tempted to add one, make provisioning do it instead.
 

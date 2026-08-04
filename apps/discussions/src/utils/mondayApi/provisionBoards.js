@@ -443,6 +443,15 @@ export async function moveBoardsIntoFolder(boardIds, folderId) {
   return { moved, failed };
 }
 
+/**
+ * Find or create the "בסיס מידע" folder in a KNOWN workspace.
+ *
+ * @param {string|null} workspaceId a real workspace id — null/'' is refused (see below)
+ * @returns {Promise<{folderId: string|null, reason: string|null}>} `reason` is a
+ *   Hebrew, owner-facing explanation whenever `folderId` is null (round346: the install
+ *   used to swallow this, which is how three rounds of "the folder still isn't there" went
+ *   undiagnosed).
+ */
 export async function ensureProvisionFolder(workspaceId) {
   /*
    * round345 — NO workspace, NO folder. Verified against the live API: `folders(
@@ -455,7 +464,7 @@ export async function ensureProvisionFolder(workspaceId) {
    */
   if (!workspaceId) {
     logger.warn(MODULE, 'מרחב העבודה לא זוהה — לא נוצרת תיקייה, הלוחות ייווצרו בשורש');
-    return null;
+    return { folderId: null, reason: 'מרחב העבודה של הלוחות לא זוהה' };
   }
   try {
     /*
@@ -483,7 +492,7 @@ export async function ensureProvisionFolder(workspaceId) {
     }
     if (existing?.id) {
       logger.info(MODULE, 'תיקיית בסיס המידע קיימת — הלוחות ייווצרו בתוכה', { folderId: existing.id });
-      return String(existing.id);
+      return { folderId: String(existing.id), reason: null };
     }
     const vars = { name: PROVISION_FOLDER_NAME };
     if (workspaceId) vars.ws = String(workspaceId);
@@ -495,13 +504,34 @@ export async function ensureProvisionFolder(workspaceId) {
     const id = created?.create_folder?.id;
     if (!id) throw new Error('create_folder לא החזיר מזהה');
     logger.info(MODULE, 'נוצרה תיקיית בסיס מידע', { folderId: id });
-    return String(id);
+    return { folderId: String(id), reason: null };
   } catch (err) {
     // Cosmetic grouping only — the install proceeds with boards at the workspace
     // root rather than failing. Logged (never silent) so the reason is visible.
     logger.warn(MODULE, 'יצירת/איתור תיקיית "בסיס מידע" נכשלה — הלוחות ייווצרו ישירות במרחב העבודה', err);
-    return null;
+    return { folderId: null, reason: describeFolderFailure(err) };
   }
+}
+
+/*
+ * round346 — turn a folder failure into a sentence the OWNER can act on.
+ *
+ * Three installs in a row produced loose boards while every code path looked right, because
+ * the real cause was never in the code: `create_folder` requires the **`workspaces:write`**
+ * OAuth scope (monday docs, confirmed 2026-08-04), which `boards:write` does not cover. The
+ * app's API calls run with the app's granted scopes, so without it EVERY folder attempt fails
+ * — and because folder placement is deliberately fail-soft, the install looked successful.
+ *
+ * A missing scope is not something the app can fix at runtime; it is a Developer Center
+ * setting. So the one thing that helps is saying so, out loud, where the owner will see it.
+ */
+export function describeFolderFailure(err) {
+  const text = `${err?.message || ''} ${JSON.stringify(err?.response || '')}`.toLowerCase();
+  if (/unauthorized|permission|forbidden|scope|not allowed/.test(text)) {
+    return 'לאפליקציה חסרה הרשאת workspaces:write — בלעדיה monday לא מאפשר ליצור תיקייה. '
+      + 'יש להוסיף את ההרשאה לאפליקציה ב-Developer Center ולאשר אותה מחדש בהתקנה.';
+  }
+  return `יצירת התיקייה נכשלה: ${err?.message || 'שגיאה לא מזוהה'}`;
 }
 
 async function createBoard(name, workspaceId, folderId = null) {
@@ -815,7 +845,10 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
    * workspace root with a warning, and never aborts an install.
    */
   let resolvedWorkspaceId = await resolveWorkspaceId(discussionsBoardId, workspaceId);
-  let folderId = resolvedWorkspaceId ? await ensureProvisionFolder(resolvedWorkspaceId) : null;
+  let folder = resolvedWorkspaceId
+    ? await ensureProvisionFolder(resolvedWorkspaceId)
+    : { folderId: null, reason: 'מרחב העבודה של הלוחות לא זוהה' };
+  let folderId = folder.folderId;
   // Roles whose board was CREATED inside the folder — the rest get moved in at the end.
   const createdInFolder = new Set();
   if (createDiscussionsBoard && !(existingConfig && hasIdEarly(existingConfig.boards?.discussions))) {
@@ -826,7 +859,10 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
     if (!resolvedWorkspaceId) {
       // Step 3: the board we just created is now the authoritative source for the workspace.
       resolvedWorkspaceId = await resolveWorkspaceId(boardIds.discussions, null);
-      folderId = resolvedWorkspaceId ? await ensureProvisionFolder(resolvedWorkspaceId) : null;
+      folder = resolvedWorkspaceId
+        ? await ensureProvisionFolder(resolvedWorkspaceId)
+        : { folderId: null, reason: 'מרחב העבודה של הלוחות לא זוהה' };
+      folderId = folder.folderId;
     }
   } else {
     boardIds.discussions = String(
@@ -886,7 +922,29 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       setPhase('מרכז את הלוחות בתיקייה…');
       const { moved, failed } = await moveBoardsIntoFolder(leftovers, folderId);
       logger.info(MODULE, 'ריכוז לוחות קיימים בתיקיית בסיס המידע', { moved, failed });
+      if (failed.length) {
+        // Same reasoning as the folder itself: say it, don't let it look like success.
+        logger.error(
+          MODULE,
+          `הלוחות נוצרו, אך ${failed.length} מהם לא נכנסו לתיקייה "${PROVISION_FOLDER_NAME}". `
+          + 'ייתכן שחסרה לאפליקציה הרשאה להעביר לוחות.'
+        );
+      }
     }
+  }
+
+  /*
+   * round346 — the install must not report success while the folder silently did not happen.
+   * ONE error-level line, which the logger funnel turns into a Hebrew toast and ships to
+   * Axiom. Deliberately not a throw: the mapping is valid and the app works — the boards are
+   * just not grouped, and aborting an otherwise-good install over folder cosmetics would be
+   * the worse failure.
+   */
+  if (!folderId) {
+    logger.error(
+      MODULE,
+      `הלוחות נוצרו, אבל לא בתוך תיקיית "${PROVISION_FOLDER_NAME}". ${folder.reason || ''}`.trim()
+    );
   }
 
   // 2) simple columns (reusing any already present on each board). For an

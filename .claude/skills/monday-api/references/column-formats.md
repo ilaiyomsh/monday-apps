@@ -385,6 +385,13 @@ query ($ws: [ID]) { folders(workspace_ids: $ws, limit: 100) { id name children {
   silently misses the match.
 - `boards(ids: [...])` answers a **deleted or inaccessible** board id with an **empty list, not an
   error** — so `data.boards[0]` being absent is a failure to handle, never "the board has no X".
+- **`create_folder` needs the `workspaces:write` OAuth SCOPE — `boards:write` does not cover it**
+  (monday docs, confirmed 2026-08-04). An app whose manifest lacks it gets an authorization
+  error on every folder attempt while every board mutation keeps working, so a
+  "create boards inside a folder" flow degrades to loose boards with nothing obviously broken.
+  This cost three rounds of chasing app code that was already correct: if folders fail only in
+  the app but work from a personal-token probe, suspect the scope FIRST — a probe script runs
+  with a full-permission personal token and cannot reproduce it.
 - There is no "create folder if absent" upsert: read `folders` and match by name yourself, or a
   re-run creates a duplicate folder with the same name (monday allows duplicates).
 - `delete_folder(folder_id:)` exists and deleting the folder does NOT delete boards implicitly in
