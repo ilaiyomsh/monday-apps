@@ -344,6 +344,86 @@ export const PROVISION_FOLDER_NAME = 'בסיס מידע';
 const FOLDER_PAGE_SIZE = 100;
 const FOLDER_MAX_PAGES = 20; // 2,000 folders — a runaway guard, not a real limit
 
+/**
+ * round342 — the workspace the boards belong in, resolved from the HOST BOARD.
+ *
+ * The provisioning call passed `context.workspaceId` straight through, and a monday BOARD
+ * VIEW context does not reliably carry one — so in practice it was `undefined`. Two live
+ * probes showed what that costs:
+ *   · `create_folder` with NO workspace_id lands the folder in the MAIN workspace
+ *     (verified: it came back under `folders(workspace_ids: [null])`, not the host's);
+ *   · `create_board` with a `folder_id` INHERITS that folder's workspace.
+ * Together: an account whose discussions board lives outside the main workspace would get
+ * "בסיס מידע" and all four boards created in the MAIN workspace instead — quietly, in the
+ * wrong place. The boards did land in a folder, so nothing looked broken.
+ *
+ * Reading it off the board is authoritative and needs no extra context plumbing. Falls
+ * back to whatever the caller passed (then to null = main) so a failure degrades to the
+ * previous behaviour rather than aborting the install.
+ */
+export async function resolveWorkspaceId(boardId, fallback = null) {
+  if (fallback) return String(fallback);
+  if (!boardId) return null;
+  try {
+    const data = await api(
+      'query ($ids: [ID!]) { boards(ids: $ids) { id workspace { id } } }',
+      { ids: [String(boardId)] },
+      'resolveWorkspaceId'
+    );
+    const ws = data?.boards?.[0]?.workspace?.id;
+    return ws ? String(ws) : null;
+  } catch (err) {
+    logger.warn(MODULE, 'איתור מרחב העבודה של לוח הדיונים נכשל — התיקייה תיווצר במרחב הראשי', err);
+    return null;
+  }
+}
+
+/**
+ * round342 (owner-reported: "הלוחות לא נוצרו בתוך תיקייה") — move boards that ALREADY
+ * exist into "בסיס מידע".
+ *
+ * round339 created the folder only for boards provisioning itself creates, and said so:
+ * relocating a board the account already owns was "left as an owner decision". The owner
+ * has now asked for it, and it is the only thing that helps an instance whose boards were
+ * created by a version that predates the folder — which is every instance installed before
+ * 2.9.0 reached live, since provisioning REUSES an already-mapped board and never
+ * re-creates it.
+ *
+ * Per board fail-soft and independent: one board that refuses to move must not strand the
+ * other three. Returns a summary so the caller can report honestly rather than claiming
+ * success for all four.
+ *
+ * @param {object} config the stored settings' `boards` map ({ [role]: { id } })
+ * @param {string|null} workspaceId resolved workspace (see resolveWorkspaceId)
+ * @returns {Promise<{folderId: string|null, moved: string[], failed: string[]}>}
+ */
+export async function moveBoardsIntoProvisionFolder(config, workspaceId) {
+  const folderId = await ensureProvisionFolder(workspaceId);
+  const moved = [];
+  const failed = [];
+  if (!folderId) return { folderId: null, moved, failed: BOARD_ORDER.slice() };
+  for (const key of BOARD_ORDER) {
+    const boardId = config?.[key]?.id;
+    if (!boardId) continue;
+    try {
+      const res = await api(
+        `mutation ($b: ID!, $attrs: UpdateBoardHierarchyAttributesInput!) {
+          update_board_hierarchy(board_id: $b, attributes: $attrs) { success message }
+        }`,
+        { b: String(boardId), attrs: { folder_id: String(folderId) } },
+        'update_board_hierarchy'
+      );
+      if (res?.update_board_hierarchy?.success) moved.push(key);
+      else failed.push(key);
+    } catch (err) {
+      // One board's failure is not the others' — record and keep going.
+      logger.warn(MODULE, `העברת הלוח "${key}" לתיקייה נכשלה`, err);
+      failed.push(key);
+    }
+  }
+  return { folderId, moved, failed };
+}
+
 export async function ensureProvisionFolder(workspaceId) {
   try {
     /*
@@ -693,15 +773,19 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
    * topics/tasks/decisions land in the folder. All four land there in the
    * CUSTOM-OBJECT install, where the discussions board is created too.
    *
-   * Relocating a board the account already owns is deliberately NOT done here:
-   * `update_board_hierarchy` could move it, but silently moving a board someone
-   * placed on purpose is a surprise that is hard to undo (they would have to
-   * remember where it was). Left as an owner decision.
+   * Relocating a board the account already owns is still NOT done automatically here —
+   * silently moving a board someone placed on purpose is hard to undo. round342 added
+   * `moveBoardsIntoProvisionFolder` for that instead: the same operation, but EXPLICIT,
+   * so it happens because the owner asked rather than as a side effect of a top-up.
    */
-  const folderId = await ensureProvisionFolder(workspaceId);
+  // round342 — resolve the workspace off the HOST BOARD first; a board-view context does
+  // not carry one, and without it the folder (and therefore every board created inside it)
+  // silently lands in the MAIN workspace. See resolveWorkspaceId.
+  const resolvedWorkspaceId = await resolveWorkspaceId(discussionsBoardId, workspaceId);
+  const folderId = await ensureProvisionFolder(resolvedWorkspaceId);
   if (createDiscussionsBoard && !(existingConfig && hasIdEarly(existingConfig.boards?.discussions))) {
     setPhase('מקים את לוח הדיונים…');
-    boardIds.discussions = await createBoard(PROVISION_SPEC.discussions.name, workspaceId, folderId);
+    boardIds.discussions = await createBoard(PROVISION_SPEC.discussions.name, resolvedWorkspaceId, folderId);
     tick('נוצר לוח: דיונים');
   } else {
     boardIds.discussions = String(
@@ -740,7 +824,7 @@ export async function provisionAllBoards({ discussionsBoardId, workspaceId, onPr
       continue;
     }
     setPhase(`יוצר את לוח "${PROVISION_SPEC[key].name}"…`);
-    boardIds[key] = await createBoard(PROVISION_SPEC[key].name, workspaceId, folderId);
+    boardIds[key] = await createBoard(PROVISION_SPEC[key].name, resolvedWorkspaceId, folderId);
     tick(`נוצר לוח: ${PROVISION_SPEC[key].name}`);
   }
 
