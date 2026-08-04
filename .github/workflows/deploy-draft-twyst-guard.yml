@@ -51,7 +51,7 @@ jobs:
       - name: Authenticate mapps CLI (non-interactive)
         run: mapps init -t "$MONDAY_TOKEN"
         env:
-          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
 
       # Server-side push: no -c flag. --verbose is LOAD-BEARING (mapps cli.md):
       # without it a failed server push exits 1 with the reason swallowed.
@@ -62,5 +62,5 @@ jobs:
           -a "$APP_ID"
           --verbose
         env:
-          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
           APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}

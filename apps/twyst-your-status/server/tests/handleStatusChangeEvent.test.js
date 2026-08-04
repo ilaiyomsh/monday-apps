@@ -164,22 +164,46 @@ describe('createStatusChangeHandler', () => {
     expectNoIntervention(deps);
   });
 
-  it('short-circuits the revert echo when the acting user IS the primary owner (numeric event id vs string rule id), never evaluating, recording, or fetching an owner token', async () => {
-    // The revert is written as the primary owner, so its echo arrives with
-    // event.userId === primaryOwnerId. Policing it would loop forever — the
-    // guard compares the two as strings (50 vs '50').
+  it('does NOT exempt the primary owner: a prohibited change they make by hand (no pending revert) is evaluated and RECORDED like anyone else', async () => {
+    // Regression for the "unconditional primary-owner bypass": authoring the
+    // event does not make it a revert echo — only a matching pending revert does.
     const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue(monitorRules()); // monitoring
+    deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
     const handle = createStatusChangeHandler(deps);
 
-    await handle(makeEvent({ userId: 50 })); // rules primaryOwnerId is '50'
+    await handle(makeEvent({ userId: 50 })); // the primary owner, no pending revert
 
-    expect(deps.tokenStore.getReaderToken).toHaveBeenCalledWith(ACCOUNT);
-    expect(deps.rulesStore.getRules).toHaveBeenCalledTimes(1);
-    expect(deps.evaluate).not.toHaveBeenCalled();
-    expect(deps.tokenStore.getOwnerToken).not.toHaveBeenCalled();
-    expect(deps.api.getColumnLabels).not.toHaveBeenCalled();
-    expect(deps.bypassLog.append).not.toHaveBeenCalled();
-    expectNoIntervention(deps);
+    expect(deps.evaluate).toHaveBeenCalledTimes(1);
+    expect(deps.bypassLog.append).toHaveBeenCalledTimes(1);
+    expect(appendedRecord(deps).reverted).toBe(false);
+  });
+
+  it('skips the echo of a revert it just performed (same item/column, value == what it reverted TO, authored by the primary owner)', async () => {
+    // First: an illegal change reverts (autoRevert on) — the guard writes the
+    // previous label '0' as the primary owner. Then monday delivers that write
+    // back as an event (userId 50, value '0'): it must be skipped, not re-recorded.
+    const deps = makeDeps();
+    deps.rulesStore.getRules.mockResolvedValue(autoRules());
+    deps.evaluate.mockReturnValue({ allowed: false, reason: 'not-offered' });
+    deps.api.getCurrentStatusLabelId.mockResolvedValue('2'); // illegal value still current
+    const handle = createStatusChangeHandler(deps);
+
+    await handle(makeEvent()); // 0→2 illegal → reverts to '0', marks the echo
+    expect(deps.api.revertStatus).toHaveBeenCalledTimes(1);
+    expect(deps.bypassLog.append).toHaveBeenCalledTimes(1);
+
+    // The revert echo: the primary owner "changed" 2→0 (our own write).
+    await handle(makeEvent({
+      userId: 50,
+      value: { label: { index: 0, text: 'ממתין' } },
+      previousValue: { label: { index: 2, text: 'בוצע' } },
+    }));
+
+    // No second evaluation, revert, or record for the echo.
+    expect(deps.evaluate).toHaveBeenCalledTimes(1);
+    expect(deps.api.revertStatus).toHaveBeenCalledTimes(1);
+    expect(deps.bypassLog.append).toHaveBeenCalledTimes(1);
   });
 
   it('leaves the item untouched, records nothing, and fetches no owner token when the verdict is allowed', async () => {

@@ -44,21 +44,45 @@ jobs:
       - name: Install monday.com apps CLI
         run: npm install -g @mondaycom/apps-cli
 
+      # Same App ID as the client — twyst-your-status uses a per-app token
+      # secret, so the guard must authenticate with the same one (the generic
+      # MONDAY_TOKEN is a different account and cannot reach this app).
       - name: Authenticate mapps CLI (non-interactive)
         run: mapps init -t "$MONDAY_TOKEN"
         env:
-          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
 
-      # Server-side push: no -c flag; --force targets the latest LIVE version.
+      # PIN the live version. `code:push -a` (with or without --force) resolves
+      # the LATEST version — in the normal two-version layout that is the DRAFT,
+      # so `--force -a` would silently refresh the draft and leave production
+      # untouched (pipeline-model.md §4). Resolve the live id and push with -i,
+      # exactly as the client live workflow does.
+      - name: Resolve LIVE version id (pin the target)
+        id: live
+        run: |
+          set -euo pipefail
+          LIVE_ID="$(mapps app-version:list -i "$APP_ID" 2>/dev/null \
+            | awk -F'│' '$7 ~ /live/ { gsub(/[^0-9]/, "", $3); print $3; exit }')"
+          if [ -z "$LIVE_ID" ]; then
+            echo "::error::app $APP_ID has no LIVE version — first go-live is a deliberate promote (pipeline-model.md §4b); this workflow only refreshes an existing live version."
+            exit 1
+          fi
+          echo "Resolved LIVE version id: $LIVE_ID"
+          echo "live_id=$LIVE_ID" >> "$GITHUB_OUTPUT"
+        env:
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
+          APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}
+
+      # Server-side push: no -c flag; --force refreshes the PINNED live version.
       # --verbose is LOAD-BEARING (mapps cli.md): a failed server push is
       # otherwise silent.
-      - name: 🚨 FORCE push to LIVE version 🚨
+      - name: "🚨 FORCE push to LIVE version (pinned id) 🚨"
         run: >
           mapps code:push
           -d apps/twyst-your-status/server
-          -a "$APP_ID"
+          -i "${{ steps.live.outputs.live_id }}"
           --force
           --verbose
         env:
-          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN }}
+          MONDAY_TOKEN: ${{ secrets.MONDAY_TOKEN_TWYST_YOUR_STATUS }}
           APP_ID: ${{ secrets.APP_TWYST_YOUR_STATUS_ID }}

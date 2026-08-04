@@ -63,6 +63,24 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, bypassL
   const TAG = 'guard';
   const lanes = new Map();
 
+  // Pending reverts, so the loop guard can tell OUR revert echo from a genuine
+  // prohibited edit the primary owner makes by hand. Keyed by board:item:column
+  // → the label id we wrote (the echo will carry it as its new value) + expiry.
+  const pendingReverts = new Map();
+  const REVERT_ECHO_TTL_MS = 60_000;
+  const echoKey = (boardId, itemId, columnId) => `${boardId}:${itemId}:${columnId}`;
+
+  /** Is this event the echo of a revert we just performed? (consumes the marker) */
+  const isRevertEcho = (boardId, itemId, columnId, newLabelId) => {
+    const key = echoKey(boardId, itemId, columnId);
+    const pending = pendingReverts.get(key);
+    if (!pending) return false;
+    if (pending.expiresAt < now()) { pendingReverts.delete(key); return false; }
+    if (pending.labelId !== newLabelId) return false;
+    pendingReverts.delete(key); // one echo per revert
+    return true;
+  };
+
   const labelIdOf = (statusValue) => {
     const index = statusValue?.label?.index;
     return typeof index === 'number' && Number.isInteger(index) && index >= 0
@@ -92,12 +110,20 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, bypassL
 
     const owners = normalizeOwners(rules.owners);
     const primaryOwnerId = owners?.primaryOwnerId ?? null;
-    // Loop guard: our own revert comes back as an event authored by the primary
-    // owner. Skip it — policing it would revert the revert, forever.
-    if (primaryOwnerId !== null && actingUserId === primaryOwnerId) return;
 
     const previousLabelId = labelIdOf(event.previousValue);
     const newLabelId = labelIdOf(event.value);
+
+    // Loop guard — skip ONLY the echo of a revert we just performed: authored by
+    // the primary owner, on the same item/column, whose new value is exactly what
+    // we reverted TO, within the TTL. A genuine prohibited change the primary
+    // owner makes by hand does NOT match (different value / no pending marker), so
+    // it is monitored and reverted like anyone else's — the owner is not exempt.
+    if (primaryOwnerId !== null
+      && actingUserId === String(primaryOwnerId)
+      && isRevertEcho(boardId, itemId, columnId, newLabelId)) {
+      return;
+    }
 
     const targetRule = rules.labels?.[newLabelId ?? '5'] ?? {};
     const peopleColumnIds = Array.isArray(targetRule.requiredPeopleColumnIds)
@@ -157,6 +183,12 @@ export function createStatusChangeHandler({ api, tokenStore, rulesStore, bypassL
       } else {
         const currentLabelId = await api.getCurrentStatusLabelId(readToken, itemId, columnId);
         if (currentLabelId === newLabelId) {
+          // Mark the echo BEFORE writing: monday fires the change event for our
+          // own revert, authored by the primary owner, carrying previousLabelId.
+          pendingReverts.set(echoKey(boardId, itemId, columnId), {
+            labelId: previousLabelId,
+            expiresAt: now() + REVERT_ECHO_TTL_MS,
+          });
           await api.revertStatus(primaryToken, boardId, itemId, columnId, previousLabelId);
           reverted = true;
           logger.info('illegal status change reverted', TAG, {
