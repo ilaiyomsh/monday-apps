@@ -57,10 +57,14 @@ function EyeOffIcon() {
 /* round332 (owner request, approved mock) — the explanatory captions
    ("התפקידים נקבעים לפי עמודות האנשים…") are GONE: the owner judged them noise,
    and the matrix's own role columns already say it. The head is chevron + title. */
+/*
+ * round342 (owner request) — "שים את שדות החלטה יהיו מעל שדות משימה".
+ * The card ORDER on the screen is this array's order.
+ */
 const TIERS = [
   { id: 'disc', title: 'דיון ונושאים' },
-  { id: 'task', title: 'שדות משימה' },
   { id: 'decision', title: 'שדות החלטה' },
+  { id: 'task', title: 'שדות משימה' },
 ];
 
 // Which board's columns back each people-column tier (system is synthetic).
@@ -73,7 +77,32 @@ const TIER_BOARD_KEY = { disc: 'discussions', task: 'tasks', decision: 'decision
    order after the known ones (stable sort). */
 const ROLE_ALIAS_ORDER = {
   discussions: ['discussionCreatorID', 'discussionLeadID', 'discussionCoordinatorID', 'participantsID'],
+  // round342 — the decisions card reads: who created it → who decides → who is affected.
+  decisions: ['decisionCreatorID', 'deciderID', 'affectedID'],
 };
+
+/*
+ * round342 (owner request) — "בשדות החלטה שים את עמודת מושפעים הכי משמאל".
+ *
+ * The matrix is RTL, so LEFTMOST is the LAST column, and it has to stay last even after
+ * the borrowed discussion-manager roles are appended (ROLE_ALIAS_ORDER alone only orders
+ * a board's own roles, so מושפעים would still land before them). Pinning it explicitly is
+ * also the honest layout: מושפעים is the one decision role that grants nothing, so it
+ * belongs at the far edge rather than in the middle of the roles that do.
+ */
+const ROLE_KEYS_PINNED_LAST = ['decisions:affectedID'];
+
+// Exported for tests (mirrors accessRolesFor/toggleAccessRoleSource in SettingsModal):
+// the rule is pure, and asserting it directly beats driving the whole modal to read <th>s.
+export function pinRolesLast(roles) {
+  const pinned = ROLE_KEYS_PINNED_LAST;
+  if (!roles.some((r) => pinned.includes(r.key))) return roles;
+  return [
+    ...roles.filter((r) => !pinned.includes(r.key)),
+    // preserve the declared order among the pinned ones, not the incoming order
+    ...pinned.map((k) => roles.find((r) => r.key === k)).filter(Boolean),
+  ];
+}
 
 function sortRolesByPreferredOrder(boardKey, roles) {
   const order = ROLE_ALIAS_ORDER[boardKey];
@@ -224,10 +253,16 @@ export default function PermissionsTab({ permissions, setPermissions, columns })
     const map = {};
     for (const tier of TIERS) {
       const boardKey = TIER_BOARD_KEY[tier.id];
-      // round341 — the borrowed cross-board roles come AFTER the tier's own, so the
-      // decision's own roles keep the leading columns and the discussion's managers read
-      // as the addition they are.
-      map[tier.id] = [...buildTierRoles(boardKey, columns), ...buildBorrowedRoles(boardKey, columns)];
+      /*
+       * round341 — the borrowed cross-board roles come AFTER the tier's own, so the
+       * decision's own roles keep the leading columns and the discussion's managers read
+       * as the addition they are.
+       * round342 — then pinRolesLast pulls מושפעים past them to the far left (RTL end).
+       */
+      map[tier.id] = pinRolesLast([
+        ...buildTierRoles(boardKey, columns),
+        ...buildBorrowedRoles(boardKey, columns),
+      ]);
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps

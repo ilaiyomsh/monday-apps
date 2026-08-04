@@ -32,7 +32,6 @@ const DISC_CAPS = [
   'editTopicOrPointDiscussed',
   'deleteTopicOrPointDiscussed',
   'checkPoint',
-  'editResponses',
 ];
 const TASK_CAPS = [
   'editTaskStatus',
@@ -172,14 +171,13 @@ describe('DEFAULT_PERMISSION_SEED (LOCKED defaults)', () => {
     }
   });
 
-  it('participants: view/export/createTask/createDecision/addTopicOrPoint/checkPoint/editResponses on; field/summary/edit/delete off', () => {
+  it('participants: view/export/createTask/createDecision/addTopicOrPoint/checkPoint on; field/summary/edit/delete off', () => {
     const caps = DEFAULT_PERMISSION_SEED['discussions:participantsID'].capabilities;
     expect(caps.viewDiscussion).toBe(true);
     expect(caps.createTask).toBe(true);
     expect(caps.createDecision).toBe(true); // createDecision mirrors createTask per role
     expect(caps.addTopicOrPoint).toBe(true);
     expect(caps.checkPoint).toBe(true);
-    expect(caps.editResponses).toBe(true);
     expect(caps.editDiscussionFields).toBe(false);
     expect(caps.editSummary).toBe(false);
     // round340 (owner spec) — exporting the discussion to a document is a publishing

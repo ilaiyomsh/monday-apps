@@ -158,11 +158,10 @@ describe('resolveCan — ready gate (read-only until people cols load)', () => {
 describe('resolveCan — feature on, additive role union', () => {
   const opts = { permissions: ENABLED_SEEDED, canManageSettings: false, isAdmin: false };
 
-  it('participant gets the seeded participant grants (createTask, checkPoint, editResponses, addTopicOrPoint)', () => {
+  it('participant gets the seeded participant grants (createTask, checkPoint, addTopicOrPoint)', () => {
     const ctx = { discussion: disc({ participants: [person(ME)] }), currentUserId: ME };
     expect(resolveCan('createTask', ctx, opts)).toBe(true);
     expect(resolveCan('checkPoint', ctx, opts)).toBe(true);
-    expect(resolveCan('editResponses', ctx, opts)).toBe(true);
     expect(resolveCan('addTopicOrPoint', ctx, opts)).toBe(true);
     // round340 (owner spec) — and the BEFORE-discussed halves of topic/point edit.
     expect(resolveCan('editTopicOrPoint', ctx, opts)).toBe(true);

@@ -561,7 +561,7 @@ export function TopicsTab({
   // mean "before it was discussed"; these two cover after. Defaults true so callers
   // that pass only the pre-split props keep the old behaviour.
   editTopicOrPointDiscussed = true, deleteTopicOrPointDiscussed = true,
-  checkPoint = true, editResponses: _editResponses = true, // kept for prop compat (התייחסויות column removed from display)
+  checkPoint = true,
   // Hide/show a topic or point (item 10) — a FIXED rule (discussion lead /
   // coordinator / owner), computed by DiscussionCard, independent of
   // editTopicOrPoint. Defaults true for back-compat in tests/harnesses.
