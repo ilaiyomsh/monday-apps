@@ -153,6 +153,12 @@ export interface GoogleSenderState {
    * 2026-08-04 change (findings §5) and needs re-consent.
    */
   lastError: string | null;
+  /**
+   * The scope string Google echoed at consent, verbatim (null when never
+   * connected). Shown so a scope mismatch is readable instead of guessed —
+   * scopes are capability names, never credentials.
+   */
+  grantedScope: string | null;
   /** null until connected. false = clicks in the sent mail will 403. */
   senderAllowedForAmp: boolean | null;
 }

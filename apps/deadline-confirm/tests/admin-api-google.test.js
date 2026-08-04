@@ -78,6 +78,7 @@ describe('GET /api/state — google block', () => {
       senderAddress: null,
       senderAllowedForAmp: null,
       lastError: null,
+      grantedScope: null,
     });
   });
 
@@ -130,6 +131,22 @@ describe('GET /api/state — google block', () => {
   it('reports lastError:null when the record carries none', async () => {
     const app = harness({ seed: { [senderKey()]: connectedRecord() } });
     expect(await google(app)).toMatchObject({ lastError: null });
+  });
+
+  // Without this the operator can only see 'broken' and guess which scope
+  // Google actually granted — the blind spot that cost a whole reconnect cycle
+  // on 2026-08-04. Scopes are capability names, so echoing them is safe.
+  it('reports the granted scope VERBATIM so a mismatch is readable, not guessed', async () => {
+    const narrow = 'https://www.googleapis.com/auth/gmail.send openid email';
+    const app = harness({ seed: { [senderKey()]: connectedRecord({ scope: narrow }) } });
+    expect(await google(app)).toMatchObject({ status: 'broken', grantedScope: narrow });
+  });
+
+  it('reports the granted scope of a sufficient grant too — not only on failure', async () => {
+    const app = harness({ seed: { [senderKey()]: connectedRecord() } });
+    const state = await google(app);
+    expect(state.status).toBe('connected');
+    expect(state.grantedScope).toContain('https://mail.google.com/');
   });
 
   it('never surfaces the refresh or access token', async () => {

@@ -11,9 +11,11 @@
 //
 // AUTH XOAUTH2 requires the broad `https://mail.google.com/` scope (findings
 // §5 — the 334 challenge names it; a gmail.send token is rejected). The OAuth
-// layer already grants and persists it (`record.scope`); the pre-flight below
-// refuses a pre-change grant with `google_scope_insufficient` instead of
-// letting the transport fail with an opaque 535.
+// layer grants and persists what Google echoed (`record.scope`), but that
+// string is ADVISORY here: it is unobservable from outside the token response,
+// and refusing on it once blocked a send the server never got to judge
+// (incident 2026-08-04). SMTP AUTH is the authority — a mismatch is logged and
+// quoted into any auth failure, never used to skip the attempt.
 //
 // Transport: nodemailer, auth type OAuth2 with the ACCESS TOKEN ONLY — the
 // token lifecycle (memo, refresh cushion, invalid_grant kill switch) is ours
@@ -85,23 +87,30 @@ export function createSmtpSender({
    * server's own response text rides in the message (same contract as
    * gmail_send_failed: that text IS the operator's debug output).
    */
-  async function mapped(err, accountId, { afterRetry = false } = {}) {
+  async function mapped(err, accountId, { afterRetry = false, grantedScope = '' } = {}) {
     const responseCode = Number(err?.responseCode) || 0;
     const responseText = String(err?.response ?? err?.message ?? err);
     const context = { accountId, code: err?.code, responseCode, response: responseText.slice(0, 200) };
     if (err?.code === 'EAUTH') {
+      // An auth rejection is the ONE place the granted scope is worth quoting:
+      // it is the leading suspect and the operator cannot read it anywhere else
+      // (incident 2026-08-04 — a scope mismatch was invisible for a whole
+      // reconnect cycle). Scopes are capability names, never credentials.
+      const scopeNote = ` [granted scope: ${grantedScope || '(none recorded)'}; SMTP needs ${REQUIRED_SMTP_SCOPE}]`;
       if (afterRetry && responseCode >= 500) {
         // A definitive auth rejection of a FRESH token — the grant no longer
         // authenticates this mailbox. Trip the channel kill switch so
         // /api/state surfaces it instead of a silent nightly failure.
         await tokens.markDisconnected(accountId, 'smtp_auth_failed');
         logError('smtp', 'SMTP auth rejected after a forced refresh — sender disconnected', context);
-        return fail('smtp_auth_failed', `smtp auth failed: ${responseText}`, { status: responseCode });
+        return fail('smtp_auth_failed', `smtp auth failed: ${responseText}${scopeNote}`, {
+          status: responseCode,
+        });
       }
       // 4xx (e.g. 454 temporary auth failure) or no response code at all:
       // transient — one bad minute at Google must not silence a tenant.
       logError('smtp', 'SMTP auth failed (transient)', context);
-      return fail('smtp_auth_transient', `smtp auth failed (transient): ${responseText}`, {
+      return fail('smtp_auth_transient', `smtp auth failed (transient): ${responseText}${scopeNote}`, {
         status: responseCode || undefined,
       });
     }
@@ -126,13 +135,20 @@ export function createSmtpSender({
       const subjectText = assertHeaderSafe({ to, subject });
 
       const { record, accessToken } = await tokens.senderFor(accountId);
-      // Scope pre-flight (findings §5). A record with no scope field at all is
-      // a grant from before the 2026-08-04 scope change — same refusal.
-      if (typeof record.scope !== 'string' || !record.scope.includes(REQUIRED_SMTP_SCOPE)) {
-        throw fail(
-          'google_scope_insufficient',
-          `tenant ${accountId} Google grant lacks ${REQUIRED_SMTP_SCOPE} — reconnect the sender (findings §5)`
-        );
+      // Scope check is ADVISORY, never a gate (incident 2026-08-04). It reads
+      // the scope string Google ECHOED at consent — a value no one outside the
+      // token response can observe — and refusing on it blocked a send that
+      // smtp.gmail.com was never asked to judge. AUTH XOAUTH2 is the authority:
+      // it either accepts the token or names its objection in a 535. So log the
+      // mismatch and attempt the send; `mapped()` folds the granted scope into
+      // an auth failure so the operator sees both sides of the comparison.
+      const grantedScope = typeof record.scope === 'string' ? record.scope : '';
+      if (!grantedScope.includes(REQUIRED_SMTP_SCOPE)) {
+        logInfo('smtp', 'granted scope does not name the SMTP scope — sending anyway, SMTP decides', {
+          accountId,
+          grantedScope: grantedScope || '(none recorded)',
+          required: REQUIRED_SMTP_SCOPE,
+        });
       }
 
       // Raw SMTP stamps nothing, so the Date header is ours to write (the
@@ -150,7 +166,7 @@ export function createSmtpSender({
       try {
         info = await deliver({ senderAddress: record.senderAddress, accessToken, to, raw });
       } catch (err) {
-        if (err?.code !== 'EAUTH') throw await mapped(err, accountId);
+        if (err?.code !== 'EAUTH') throw await mapped(err, accountId, { grantedScope });
         // The server refused the token the store considered valid (revoked
         // mid-run, or clock skew). Force ONE refresh and retry once — never
         // loop. Mirror of the Gmail channel's 401-retry.
@@ -164,7 +180,7 @@ export function createSmtpSender({
             raw,
           });
         } catch (retryErr) {
-          throw await mapped(retryErr, accountId, { afterRetry: true });
+          throw await mapped(retryErr, accountId, { afterRetry: true, grantedScope });
         }
       }
       return { id: info?.messageId };

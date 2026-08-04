@@ -160,6 +160,7 @@ describe('GET /api/state', () => {
         // Added 2026-08-04 with the scope change (findings §5): /api/state
         // surfaces why the sender broke; null when nothing is recorded.
         lastError: null,
+        grantedScope: null,
       },
       baseUrl: 'https://app.example',
     });
@@ -184,6 +185,7 @@ describe('GET /api/state', () => {
         // Added 2026-08-04 with the scope change (findings §5): /api/state
         // surfaces why the sender broke; null when nothing is recorded.
         lastError: null,
+        grantedScope: null,
       },
       baseUrl: 'https://app.example',
     });
@@ -208,6 +210,7 @@ describe('GET /api/state', () => {
         // Added 2026-08-04 with the scope change (findings §5): /api/state
         // surfaces why the sender broke; null when nothing is recorded.
         lastError: null,
+        grantedScope: null,
       },
       baseUrl: 'https://app.example',
     });
@@ -233,6 +236,7 @@ describe('GET /api/state', () => {
         // Added 2026-08-04 with the scope change (findings §5): /api/state
         // surfaces why the sender broke; null when nothing is recorded.
         lastError: null,
+        grantedScope: null,
       },
       baseUrl: 'https://app.example',
     });
@@ -552,6 +556,7 @@ describe('per-session account scoping (v3 isolation)', () => {
         // Added 2026-08-04 with the scope change (findings §5): /api/state
         // surfaces why the sender broke; null when nothing is recorded.
         lastError: null,
+        grantedScope: null,
       },
       baseUrl: 'https://app.example',
     });
